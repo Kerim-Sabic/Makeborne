@@ -23,6 +23,7 @@ import {
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
+import ClientWorkspace from "./client-workspace";
 import {
   ArrowDown,
   ArrowLeft,
@@ -74,6 +75,7 @@ export default function Studio() {
   const [initialStyle, setInitialStyle] = useState("editorial");
   const [initialBrief, setInitialBrief] = useState("");
   const [initialTitle, setInitialTitle] = useState("");
+  const [initialClient, setInitialClient] = useState("");
   const [draftBrief, setDraftBrief] = useState("");
   const [draftKind, setDraftKind] = useState<Kind>("website");
   const [homeHandoff, setHomeHandoff] = useState(false);
@@ -272,6 +274,7 @@ export default function Studio() {
     }
     setInitialBrief("");
     setInitialTitle("");
+    setInitialClient("");
     setDraftBrief("");
     toast(
       "Project created. Your supplied content is ready to edit. No AI generation was performed.",
@@ -661,174 +664,21 @@ export default function Studio() {
               </>
             )}
             {tab === "clients" && (
-              <>
-                <div className="page-heading">
-                  <div>
-                    <div className="eyebrow">CLIENT WORKSPACE</div>
-                    <h1>
-                      {clientDetail
-                        ? workspace.clients.find((c) => c.id === clientDetail)
-                            ?.name
-                        : "Your clients, connected."}
-                    </h1>
-                    <p>
-                      One place for their projects, details, and what happens
-                      next.
-                    </p>
-                  </div>
-                  <button
-                    className="button primary"
-                    onClick={() => setClientModal("new")}
-                  >
-                    <Plus size={17} /> Add client
-                  </button>
-                </div>
-                {clientDetail ? (
-                  <>
-                    <button
-                      className="text-link"
-                      onClick={() => setClientDetail(null)}
-                    >
-                      <ArrowLeft size={16} /> All clients
-                    </button>
-                    <div className="client-profile">
-                      <div>
-                        <span className="eyebrow">CLIENT DETAILS</span>
-                        <h2>
-                          {workspace.clients.find((c) => c.id === clientDetail)
-                            ?.company || "Independent client"}
-                        </h2>
-                        <p>
-                          {workspace.clients.find((c) => c.id === clientDetail)
-                            ?.email || "No email added"}
-                        </p>
-                        <p>
-                          {
-                            workspace.clients.find((c) => c.id === clientDetail)
-                              ?.website
-                          }
-                        </p>
-                        <p>
-                          {workspace.clients.find((c) => c.id === clientDetail)
-                            ?.notes || "No notes added."}
-                        </p>
-                        <button
-                          className="button secondary"
-                          onClick={() =>
-                            setClientModal(
-                              workspace.clients.find(
-                                (c) => c.id === clientDetail,
-                              )!,
-                            )
-                          }
-                        >
-                          Edit details
-                        </button>
-                      </div>
-                      <div>
-                        <span className="eyebrow">CONNECTED PROJECTS</span>
-                        {workspace.projects.filter(
-                          (p) => p.clientId === clientDetail,
-                        ).length === 0 ? (
-                          <p>
-                            No projects linked yet. Choose this client when
-                            creating a project.
-                          </p>
-                        ) : (
-                          workspace.projects
-                            .filter((p) => p.clientId === clientDetail)
-                            .map((p) => (
-                              <button
-                                className="client-project"
-                                key={p.id}
-                                onClick={() => {
-                                  setSelected(p.id);
-                                  setTab("projects");
-                                }}
-                              >
-                                <span>
-                                  <strong>{p.title}</strong>
-                                  <small>
-                                    {kindLabel[p.kind]} ·{" "}
-                                    {p.status.replace("_", " ")} · Updated{" "}
-                                    {date(p.updatedAt)}
-                                  </small>
-                                </span>
-                                <ArrowRight size={18} />
-                              </button>
-                            ))
-                        )}
-                      </div>
-                    </div>
-                    <h2 className="subheading">Recent activity</h2>
-                    <div className="activity-list">
-                      {workspace.projects
-                        .filter((p) => p.clientId === clientDetail)
-                        .flatMap((p) =>
-                          p.activity.map((a) => ({ ...a, project: p.title })),
-                        )
-                        .sort((a, b) => b.at.localeCompare(a.at))
-                        .map((a, i) => (
-                          <div key={i}>
-                            <span className="timeline-dot" />
-                            <div>
-                              <strong>{a.text}</strong>
-                              <p>
-                                {a.project} · {new Date(a.at).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </>
-                ) : workspace.clients.length === 0 ? (
-                  <Empty
-                    icon={Users}
-                    title="A clear home for every client."
-                    text="Save their details and connect every website, book, and presentation to the right person."
-                    action="Add your first client"
-                    onClick={() => setClientModal("new")}
-                  />
-                ) : (
-                  <div className="client-grid">
-                    {workspace.clients.map((c) => (
-                      <button
-                        className="client-card"
-                        key={c.id}
-                        onClick={() => setClientDetail(c.id)}
-                      >
-                        <div className="client-card-top">
-                          <span className="client-avatar">
-                            {c.name.slice(0, 2).toUpperCase()}
-                          </span>
-                          <ArrowUpRight size={18} />
-                        </div>
-                        <h3>{c.name}</h3>
-                        <p>{c.company || "Independent client"}</p>
-                        <div className="client-card-meta">
-                          <span>
-                            {
-                              workspace.projects.filter(
-                                (p) => p.clientId === c.id,
-                              ).length
-                            }{" "}
-                            projects
-                          </span>
-                          <span>
-                            {
-                              workspace.projects.filter(
-                                (p) =>
-                                  p.clientId === c.id && p.kind === "website",
-                              ).length
-                            }{" "}
-                            websites
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
+              <ClientWorkspace
+                clients={workspace.clients}
+                projects={workspace.projects}
+                selectedClientId={clientDetail}
+                onSelectClient={setClientDetail}
+                onEditClient={setClientModal}
+                onAddClient={() => setClientModal("new")}
+                onOpenProject={(id) => { setSelected(id); setTab("projects"); }}
+                onCreateProject={(clientId) => {
+                  setInitialClient(clientId);
+                  setHomeHandoff(false);
+                  setInitialBrief(""); setInitialTitle(""); setInitialStyle("editorial");
+                  setCreating("website");
+                }}
+              />
             )}
             {tab === "styles" && (
               <>
@@ -992,6 +842,7 @@ export default function Studio() {
       </div>
       {creating && (
         <CreateModal
+          initialClient={initialClient}
           initialStyle={initialStyle}
           initialBrief={initialBrief}
           initialTitle={initialTitle}
@@ -999,7 +850,7 @@ export default function Studio() {
           onKind={setCreating}
           clients={workspace.clients}
           styles={workspace.styles}
-          close={() => setCreating(null)}
+          close={() => { setCreating(null); setInitialClient(""); }}
           create={createProject}
         />
       )}
@@ -1008,14 +859,20 @@ export default function Studio() {
           existing={clientModal === "new" ? null : clientModal}
           close={() => setClientModal(null)}
           save={(c) => {
-            setWorkspace((w) => ({
-              ...w,
-              clients: w.clients.some((x) => x.id === c.id)
-                ? w.clients.map((x) => (x.id === c.id ? c : x))
-                : [c, ...w.clients],
-            }));
+            if (!persistenceAllowed) return "Restore your workspace from Settings before saving client details. Your entries are still here.";
+            const next = LocalWorkspaceSchema.safeParse({
+              ...workspace,
+              clients: workspace.clients.some((x) => x.id === c.id)
+                ? workspace.clients.map((x) => (x.id === c.id ? c : x))
+                : [c, ...workspace.clients],
+            });
+            if (!next.success) return "Check the client details. A name is required, and the workspace must stay within its supported limits.";
+            try { localStorage.setItem(storageKey, JSON.stringify(next.data)); }
+            catch { return "Your browser could not save these details. Keep this form open and free storage or export a workspace backup before retrying."; }
+            setWorkspace(next.data);
             setClientModal(null);
             toast("Client details saved on this device.");
+            return null;
           }}
         />
       )}
@@ -1170,6 +1027,7 @@ function creationSeed(brief: string, title: string, style: string) {
 }
 
 function CreateModal({
+  initialClient,
   initialBrief,
   initialTitle,
   initialStyle,
@@ -1180,6 +1038,7 @@ function CreateModal({
   close,
   create,
 }: {
+  initialClient: string;
   initialBrief: string;
   initialTitle: string;
   initialStyle: string;
@@ -1214,9 +1073,9 @@ function CreateModal({
   const [purpose, setPurpose] = useState("");
   const [wording, setWording] = useState("preserve");
   const [styleId, setStyle] = useState(initialStyle);
-  const [clientId, setClient] = useState("");
+  const [clientId, setClient] = useState(initialClient);
   const [seed] = useState(() =>
-    creationSeed(initialBrief, initialTitle, initialStyle),
+    creationSeed(initialBrief, initialTitle, initialStyle + (initialClient ? `::${initialClient}` : "")),
   );
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftWritable, setDraftWritable] = useState(true);
@@ -1572,13 +1431,14 @@ function ClientModal({
 }: {
   existing: Client | null;
   close: () => void;
-  save: (c: Client) => void;
+  save: (c: Client) => string | null;
 }) {
   const [name, setName] = useState(existing?.name || "");
   const [company, setCompany] = useState(existing?.company || "");
   const [email, setEmail] = useState(existing?.email || "");
   const [website, setWebsite] = useState(existing?.website || "");
   const [notes, setNotes] = useState(existing?.notes || "");
+  const [error, setError] = useState("");
   return (
     <Modal close={close} title="Client details">
       <span className="eyebrow">CLIENT RELATIONSHIPS</span>
@@ -1586,7 +1446,7 @@ function ClientModal({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          save({
+          const problem = save({
             id: existing?.id || uid(),
             name: name.trim(),
             company,
@@ -1595,8 +1455,10 @@ function ClientModal({
             notes,
             createdAt: existing?.createdAt || now(),
           });
+          if (problem) setError(problem);
         }}
       >
+        {error && <p className="form-error" role="alert">{error}</p>}
         <label>
           Name
           <input

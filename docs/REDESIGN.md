@@ -33,3 +33,11 @@ White/off-white surfaces, ink text, fine neutral borders, restrained coral accen
 - Six direction snapshots are schema validated and carry optional background/text colours into local previews and HTML/PDF/PPTX/EPUB renderers. Complete gallery compositions are inspiration, not implemented generated layouts.
 - Signup, confirmation, login and recovery code are implemented. Live provider, SMTP, two-tenant RLS and production generation/export jobs remain unverified and gated. See AUTH_SETUP.md.
 - No paid AI calls, purchases or deployment were made. Repository publication is distinct from a production launch.
+
+## Colour and client-workspace refinement
+
+The latest human direction adds more colour and glass to the product. Studio chrome now uses a static blue/coral atmosphere, blue-violet primary actions, translucent navigation/composer surfaces and four softly tinted client counters. Artifact canvases retain their chosen themes. Reduced-transparency and forced-colour fallbacks are included; no continuous decorative animation was added.
+
+The local CRM now has client/project search, per-client format/status filters, actual saved-version counts and recent project activity. New project from a client profile preselects that client, with drafts scoped to that client. Switching clients resets project filters. Client saves validate the workspace and write to browser storage before reporting success; errors keep the form open. These improvements do not enable cloud sync or verified customer approval.
+
+Production build passed. ESLint had no errors and the two existing inline-artwork image warnings. Desktop and 390px mobile studio were visually inspected with no horizontal overflow. The empty-client screen and whitespace-name save guard were checked without creating records in the user's workspace. Populated-client workflow and storage-failure behaviour still need runtime coverage. Live accounts, AI generation, publication and payments remain gated on their documented external configuration and authorization.
