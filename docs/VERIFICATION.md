@@ -39,3 +39,9 @@ Browser verification records are development evidence. Review client data exists
 ## Current capability audit after book metadata persistence
 
 The running development `/api/capabilities` returned HTTP 200: local workspace/manual development exports available; cloud account storage unconfigured, migrations unverified, AI dispatch unavailable, publication unavailable, and payments unavailable. This corroborates the implementation contract's current boundary. Previous visual/build checks must not be used to claim those production capabilities are complete. The next production dependency is configured cloud storage with verified account and tenant isolation flows; paid model calls remain unauthorised.
+
+## Validated local save boundary
+
+All studio local-workspace writes now call `saveLocalWorkspace`, which validates before touching storage. Invalid autosave data keeps the previous valid bytes and displays a persistent validation/recovery message. Editor title, brief, audience, purpose, version-note and review-note inputs now enforce their persisted length limits. Existing data is not truncated.
+
+Production build passed; lint zero errors with two existing image warnings. Six direct assertions using a fake storage adapter verify validation rejection without writes, previous-value preservation, valid serialization, and propagated quota errors. This is unit-level storage-boundary evidence, not a browser quota-failure simulation or proof of every editor action.

@@ -13,6 +13,7 @@ import {
   icons,
   kindLabel,
   storageKey,
+  saveLocalWorkspace,
   type Kind,
   type Block,
   type Client,
@@ -102,6 +103,7 @@ export default function Studio() {
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
+  const [saveInvalid, setSaveInvalid] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [clientDetail, setClientDetail] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -218,10 +220,10 @@ export default function Studio() {
   useEffect(() => {
     if (loaded && persistenceAllowed)
       try {
-        localStorage.setItem(storageKey, JSON.stringify(workspace));
-        queueMicrotask(() => setSaveFailed(false));
-      } catch {
-        queueMicrotask(() => setSaveFailed(true));
+        saveLocalWorkspace(workspace, localStorage);
+        queueMicrotask(() => { setSaveFailed(false); setSaveInvalid(false); });
+      } catch (error) {
+        queueMicrotask(() => { setSaveFailed(true); setSaveInvalid(error instanceof z.ZodError); });
       }
   }, [workspace, loaded, persistenceAllowed]);
   useEffect(() => {
@@ -235,11 +237,13 @@ export default function Studio() {
   }, [saveFailed]);
   function retrySave() {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(workspace));
+      saveLocalWorkspace(workspace, localStorage);
       setSaveFailed(false);
+      setSaveInvalid(false);
       toast("Your workspace is saved in this browser.");
-    } catch {
+    } catch (error) {
       setSaveFailed(true);
+      setSaveInvalid(error instanceof z.ZodError);
     }
   }
   const project = workspace.projects.find((p) => p.id === selected);
@@ -281,7 +285,7 @@ export default function Studio() {
       return false;
     }
     try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
+      saveLocalWorkspace(next, localStorage);
     } catch {
       toast("There is not enough available browser storage to save the safety copy. Your current content is unchanged. Download a workspace backup before continuing.");
       return false;
@@ -298,7 +302,7 @@ export default function Studio() {
     const at = now();
     const next = { ...workspace, projects: workspace.projects.map(item => item.id === projectId ? { ...item, tasks, updatedAt: at, activity: [...item.activity, { at, text: message }] } : item) };
     if (!LocalWorkspaceSchema.safeParse(next).success) { toast("This task could not be saved. Check the date and project history limits, then try again."); return false; }
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); }
+    try { saveLocalWorkspace(next, localStorage); }
     catch { toast("Browser storage could not save the task. Download a workspace backup and try again when storage is available."); return false; }
     setWorkspace(next); setSaveFailed(false);
     return true;
@@ -357,7 +361,7 @@ export default function Studio() {
       projects: [p, ...workspace.projects],
     };
     try {
-      localStorage.setItem(storageKey, JSON.stringify(nextWorkspace));
+      saveLocalWorkspace(nextWorkspace, localStorage);
     } catch {
       toast(
         "This browser could not save the project. Your creation draft remains available; download a backup from Settings.",
@@ -395,7 +399,7 @@ export default function Studio() {
       )
         return;
       try {
-        localStorage.setItem(storageKey, JSON.stringify(data));
+        saveLocalWorkspace(data, localStorage);
       } catch {
         toast("This browser could not save the imported backup. Your current workspace has been kept. Keep the backup file and try again when browser storage is available.");
         return;
@@ -533,7 +537,7 @@ export default function Studio() {
         )}
         {saveFailed && (
           <div className="save-recovery-banner" role="alert">
-            <div><strong>Your latest changes are not saved.</strong><p>Keep this page open. Download a backup now, or retry when browser storage is available.</p></div>
+            <div><strong>Your latest changes are not saved.</strong><p>{saveInvalid ? "These changes exceed workspace limits or contain invalid data. The last valid save is protected. Keep this page open and download your current data for recovery." : "Keep this page open. Download a backup now, or retry when browser storage is available."}</p></div>
             <div className="save-recovery-actions">
               <button className="button secondary small" onClick={retrySave}>Retry save</button>
               <button className="button primary small" onClick={() => download(new Blob([JSON.stringify(workspace, null, 2)], { type: "application/json" }), "makeborne-unsaved-workspace.json")}><Download size={16} /> Download backup</button>
@@ -976,7 +980,7 @@ export default function Studio() {
                 : [c, ...workspace.clients],
             });
             if (!next.success) return "Check the client details. A name is required, and the workspace must stay within its supported limits.";
-            try { localStorage.setItem(storageKey, JSON.stringify(next.data)); }
+            try { saveLocalWorkspace(next.data, localStorage); }
             catch { return "Your browser could not save these details. Keep this form open and free storage or export a workspace backup before retrying."; }
             setWorkspace(next.data);
             setClientModal(null);
@@ -2022,6 +2026,7 @@ function ProjectEditor({
           <input
             className="title-input"
             aria-label="Project title"
+            maxLength={160}
             value={project.title}
             onChange={(e) =>
               update({
@@ -2120,6 +2125,7 @@ function ProjectEditor({
               Version note
               <input
                 value={versionNote}
+                maxLength={2000}
                 onChange={(e) => setVersionNote(e.target.value)}
                 placeholder="What changed in this version?"
               />
@@ -2193,6 +2199,7 @@ function ProjectEditor({
               <textarea
                 rows={4}
                 value={comment}
+                maxLength={10000}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Add an internal review note…"
               />
@@ -2450,6 +2457,7 @@ function ProjectEditor({
                     Brief
                     <textarea
                       value={project.brief}
+                      maxLength={30000}
                       onChange={(e) =>
                         update({
                           ...project,
@@ -2464,6 +2472,7 @@ function ProjectEditor({
                     Audience
                     <input
                       value={project.audience}
+                      maxLength={5000}
                       onChange={(e) =>
                         update({
                           ...project,
@@ -2477,6 +2486,7 @@ function ProjectEditor({
                     Purpose
                     <input
                       value={project.purpose}
+                      maxLength={5000}
                       onChange={(e) =>
                         update({
                           ...project,

@@ -101,6 +101,10 @@ export const kindLabel = {
   presentation: "Presentation",
 };
 export const storageKey = "makeborne.local-workspace.v1";
+export function saveLocalWorkspace(workspace: Workspace, storage: Pick<Storage, "setItem">) {
+  LocalWorkspaceSchema.parse(workspace);
+  storage.setItem(storageKey, JSON.stringify(workspace));
+}
 const LocalBlockSchema = z.object({
   id: z.string().uuid(),
   type: z.enum(["heading", "paragraph", "image", "quote"]),
