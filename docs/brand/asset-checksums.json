@@ -1,0 +1,27 @@
+[
+  {
+    "file": "coastal-studio.png",
+    "bytes": 2733794,
+    "sha256": "c1ecb4ca99e452eaebe060b8d26e89324f35bca9fbd9aeb5055ce64762df7040"
+  },
+  {
+    "file": "editorial-book-art.png",
+    "bytes": 2703541,
+    "sha256": "2f0cb25023accfcbf85c46b9aa755ed926b77917916e7c3690fe3135dcb02125"
+  },
+  {
+    "file": "makeborne-paper-studio.png",
+    "bytes": 2008279,
+    "sha256": "aab661e0568239728e5ed8f81d8a0d88acd3d36c7a7a228c4e10de950e5c3dff"
+  },
+  {
+    "file": "venture-slide.png",
+    "bytes": 1571723,
+    "sha256": "37323157383f0fa9601ef74a51d30c3a57717d70b0e96c72c9030add7307925d"
+  },
+  {
+    "file": "makeborne-logo-concepts.png",
+    "bytes": 1179961,
+    "sha256": "31230d9d758c1c463d7217b9548b84fe82e56081b1014f013f059ef4ac2d80ad"
+  }
+]

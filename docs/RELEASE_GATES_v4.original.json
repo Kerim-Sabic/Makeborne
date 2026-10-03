@@ -1,0 +1,972 @@
+{
+  "schema_version": "1.1",
+  "spec_version": "Offerloom-v4-2026-10-02",
+  "status": "96 proposed acceptance requirements; not completed tests",
+  "definition_of_P0": "Blocks release when failed for a supported production path.",
+  "definition_of_P1": "Blocks the relevant quality claim or scale decision until addressed; assess scope explicitly.",
+  "tests": [
+    {
+      "id": "OL-V2-001",
+      "area": "IDENTITY",
+      "priority": "P0",
+      "title": "Signup preserves the draft",
+      "scenario": "A visitor enters a brief and authenticates through either supported route.",
+      "expected_result": "Exactly one private workspace is created; the brief survives; retries grant no extra allowance.",
+      "verification_method": "E2E and idempotency test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-002",
+      "area": "IDENTITY",
+      "priority": "P0",
+      "title": "Project-scoped guest access",
+      "scenario": "A creator reviewer opens an invitation and then requests a different project.",
+      "expected_result": "Authorized review works; unrelated sources, CRM notes, exports and jobs are denied.",
+      "verification_method": "Authorization integration tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-003",
+      "area": "TRUTH",
+      "priority": "P0",
+      "title": "Approval is not evidence",
+      "scenario": "Approve an unsupported proposed claim.",
+      "expected_result": "Approval changes permission state but does not convert the claim to verified fact.",
+      "verification_method": "Unit and UI test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-004",
+      "area": "TRUTH",
+      "priority": "P0",
+      "title": "No invented expertise",
+      "scenario": "Create from a thin beginner brief without real examples.",
+      "expected_result": "Missing expertise is disclosed or elicited; no invented first-person experience or customer result appears.",
+      "verification_method": "Adversarial fixture and human review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-005",
+      "area": "TRUTH",
+      "priority": "P0",
+      "title": "Source removal flags dependents",
+      "scenario": "Withdraw a source supporting a book and website claim.",
+      "expected_result": "Affected claims and dependent draft/release references are discoverable and reviewable.",
+      "verification_method": "Dependency integration test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-006",
+      "area": "CREATOR",
+      "priority": "P0",
+      "title": "Hard search constraints",
+      "scenario": "Search with an exact follower interval, platform and language filter.",
+      "expected_result": "Every included record satisfies known hard constraints; insufficient/unknown data is handled explicitly.",
+      "verification_method": "Unit and licensed-data sample",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-007",
+      "area": "CREATOR",
+      "priority": "P1",
+      "title": "Actual niche evidence",
+      "scenario": "Inspect candidates with incidental versus recurring niche coverage.",
+      "expected_result": "Fit findings cite dated sampled content and retain uncertainty about audience and willingness.",
+      "verification_method": "Labeled sample review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-008",
+      "area": "CRM",
+      "priority": "P0",
+      "title": "Separate relationship states",
+      "scenario": "Create two product opportunities for one creator and copy an unsent message.",
+      "expected_result": "The opportunities retain separate stages; copying does not log a provider-confirmed send.",
+      "verification_method": "E2E test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-009",
+      "area": "BOOK",
+      "priority": "P0",
+      "title": "Design-only preservation",
+      "scenario": "Restyle an approved manuscript containing amounts, caveats and instructions.",
+      "expected_result": "All locked content remains intact; only design/allowed pagination changes.",
+      "verification_method": "Text comparison and render review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-010",
+      "area": "BOOK",
+      "priority": "P1",
+      "title": "Representative style choice",
+      "scenario": "Generate three style options.",
+      "expected_result": "Each includes a real cover, reading page and dense/functional page, not three cover-only previews.",
+      "verification_method": "Artifact inspection",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-011",
+      "area": "BOOK",
+      "priority": "P0",
+      "title": "Exact text and figures",
+      "scenario": "Export a book with tables, numbers, captions and accented characters.",
+      "expected_result": "Required content survives; no clipped instructions, missing glyphs or altered numerical facts.",
+      "verification_method": "PDF extraction and visual inspection",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-012",
+      "area": "BOOK",
+      "priority": "P1",
+      "title": "Whole-book design review",
+      "scenario": "Render an image-rich multi-chapter guide.",
+      "expected_result": "Contact-sheet and page review cover repetition, density, crops and reading order; findings are actionable.",
+      "verification_method": "Human review plus deterministic layout checks",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-013",
+      "area": "BOOK",
+      "priority": "P0",
+      "title": "Print/accessibility claims bounded",
+      "scenario": "Export without validated print or accessibility conformance.",
+      "expected_result": "UI does not claim PDF/X, print certification or full accessibility merely because export succeeded.",
+      "verification_method": "Copy and feature-gate tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-014",
+      "area": "IMAGE",
+      "priority": "P0",
+      "title": "Local image revision",
+      "scenario": "Replace one image in an approved book.",
+      "expected_result": "Other art and text remain unchanged; provenance and revision history are retained.",
+      "verification_method": "Diff and render test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-015",
+      "area": "IMAGE",
+      "priority": "P0",
+      "title": "Bounded repair",
+      "scenario": "Simulate repeated image-provider errors.",
+      "expected_result": "Retry policy stops appropriately; approved work persists; policy refusals are not routed around.",
+      "verification_method": "Fault-injection test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-016",
+      "area": "PPTX",
+      "priority": "P0",
+      "title": "Actual native editability",
+      "scenario": "Open the exported deck in each supported target viewer and change title/text/chart.",
+      "expected_result": "Declared native elements are editable; unsupported image-native elements are labeled.",
+      "verification_method": "Manual viewer matrix and file-structure checks",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-017",
+      "area": "PPTX",
+      "priority": "P0",
+      "title": "Deck and PDF release agreement",
+      "scenario": "Export both PPTX and companion PDF.",
+      "expected_result": "They represent the same approved release, content and slide order.",
+      "verification_method": "Version/hash and visual review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-018",
+      "area": "EDIT",
+      "priority": "P0",
+      "title": "Concurrent edit safety",
+      "scenario": "A user changes a block while an AI patch is running.",
+      "expected_result": "The patch detects the newer base version and preserves the user edit through a reviewable resolution.",
+      "verification_method": "Concurrency test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-019",
+      "area": "EDIT",
+      "priority": "P0",
+      "title": "Coherent undo",
+      "scenario": "Apply content and image changes and undo.",
+      "expected_result": "Restore a consistent prior artifact manifest, not mixed assets from different versions.",
+      "verification_method": "E2E version test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-020",
+      "area": "SITE",
+      "priority": "P0",
+      "title": "Real website functionality",
+      "scenario": "Submit valid/invalid form input and follow all primary navigation and CTA routes.",
+      "expected_result": "Validation, submission delivery, success/error states and destinations actually work.",
+      "verification_method": "Browser E2E",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-021",
+      "area": "SITE",
+      "priority": "P0",
+      "title": "Responsive complete-site review",
+      "scenario": "Inspect hero, middle and footer across defined viewport/zoom fixtures.",
+      "expected_result": "No obstructed core controls, unreadable layout or critical overflow; mobile task works.",
+      "verification_method": "Visual regression and manual keyboard/phone review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-022",
+      "area": "SITE",
+      "priority": "P0",
+      "title": "Isolation from studio",
+      "scenario": "Execute generated customer-site content against studio-origin credentials.",
+      "expected_result": "No access to studio cookies, secrets or private tenant data.",
+      "verification_method": "Security isolation tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-023",
+      "area": "PUBLICATION",
+      "priority": "P0",
+      "title": "Paid-content leakage prevention",
+      "scenario": "Build public HTML, data payloads, JSON-LD, sitemap and public feeds from mixed-visibility sources.",
+      "expected_result": "No paid/private content is emitted without an explicit public grant.",
+      "verification_method": "Automated disclosure scans and authorization tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-024",
+      "area": "SEARCH",
+      "priority": "P0",
+      "title": "Crawlable truthful HTML",
+      "scenario": "Fetch a public page without running client JavaScript and compare crawler/user truth.",
+      "expected_result": "Primary approved content and links are available; no crawler-only exaggerated claims.",
+      "verification_method": "HTTP/DOM checks",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-025",
+      "area": "SEARCH",
+      "priority": "P0",
+      "title": "Domain/canonical integrity",
+      "scenario": "Publish and migrate a custom domain.",
+      "expected_result": "Chosen primary domain, canonicals, redirects, sitemap and page IDs remain coherent.",
+      "verification_method": "HTTP integration tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-026",
+      "area": "SEARCH",
+      "priority": "P0",
+      "title": "Structured-data truth",
+      "scenario": "Change the approved price and included deliverables.",
+      "expected_result": "Public text, structured data, metadata and mapped commerce state agree before release.",
+      "verification_method": "Cross-artifact invariant tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-027",
+      "area": "SEARCH",
+      "priority": "P1",
+      "title": "Search/training preferences separated",
+      "scenario": "Configure public discovery and training preferences independently.",
+      "expected_result": "The UI explains distinct purposes; unknown external setting state is not marked verified; no private-access bypass.",
+      "verification_method": "Policy/permission integration review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-028",
+      "area": "SEARCH",
+      "priority": "P1",
+      "title": "Provider report fidelity",
+      "scenario": "Ingest supported AI/search report data or a labeled manual export.",
+      "expected_result": "Report scope, date, sample/coverage limits and metric meaning are retained; no invented API fields.",
+      "verification_method": "Adapter fixtures and source reconciliation",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-029",
+      "area": "SEARCH",
+      "priority": "P1",
+      "title": "No global GEO certainty",
+      "scenario": "Run a small repeated prompt panel and record references.",
+      "expected_result": "Results are labeled sampled observations, not world rankings or proof of causation.",
+      "verification_method": "UI/report assertion tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-030",
+      "area": "PERFORMANCE",
+      "priority": "P1",
+      "title": "Lab versus field separation",
+      "scenario": "Run lab checks before launch and ingest field data when sufficient.",
+      "expected_result": "Lab metrics are not claimed as field Web Vitals; mobile/desktop p75 targets are evaluated separately.",
+      "verification_method": "Telemetry and report tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-031",
+      "area": "ACCESSIBILITY",
+      "priority": "P0",
+      "title": "Usable core tasks",
+      "scenario": "Complete creation/review/purchase with keyboard, zoom and supported screen reader.",
+      "expected_result": "Core controls, focus, errors, reading order and reduced motion work; unresolved defects are recorded.",
+      "verification_method": "Automated plus manual accessibility review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-032",
+      "area": "COMMERCE",
+      "priority": "P0",
+      "title": "Verified buyer delivery",
+      "scenario": "Complete authorized success/failure/refund test cases.",
+      "expected_result": "Server-verified events determine access; redirects alone do not; events are idempotent.",
+      "verification_method": "Sandbox/provider-authorized E2E",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-033",
+      "area": "COMMERCE",
+      "priority": "P0",
+      "title": "Coherent release failure recovery",
+      "scenario": "Fail an external publishing or commerce step mid-release.",
+      "expected_result": "Previous release remains usable; inconsistent new offer/site is not called live; recovery is explicit.",
+      "verification_method": "Fault-injection test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-034",
+      "area": "REVENUE",
+      "priority": "P0",
+      "title": "Financial categories remain distinct",
+      "scenario": "Import transactions, fees, refunds and a partial creator compensation record.",
+      "expected_result": "Gross, incomplete contribution, platform revenue and confirmed contest credit are separate; missing costs are not zero.",
+      "verification_method": "Ledger fixture tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-035",
+      "area": "REVENUE",
+      "priority": "P1",
+      "title": "Unverified competition rules",
+      "scenario": "Select a contest without authoritative current rules.",
+      "expected_result": "Eligibility/attribution remains unknown; no official winner or qualifying-credit claim is generated.",
+      "verification_method": "Rule-state tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-036",
+      "area": "COST",
+      "priority": "P0",
+      "title": "No duplicate paid dispatch",
+      "scenario": "Refresh and retry a job around an ambiguous provider timeout.",
+      "expected_result": "No duplicate local business job; external uncertainty is recorded/reconciled under a bounded policy.",
+      "verification_method": "Job fault injection",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-037",
+      "area": "COST",
+      "priority": "P0",
+      "title": "Quote and cancellation integrity",
+      "scenario": "Run an approved bounded job, request extra scope and cancel queued work.",
+      "expected_result": "No silent quote increase; unsent work stops; incurred costs and platform repairs follow stated policy.",
+      "verification_method": "Ledger integration tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-038",
+      "area": "QUALITY",
+      "priority": "P1",
+      "title": "Fair full-artifact comparison",
+      "scenario": "Run matched briefs across competent allowed comparison workflows.",
+      "expected_result": "Versions, inputs, effort, revision budgets, complete outputs and review uncertainty are retained.",
+      "verification_method": "Benchmark protocol review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-039",
+      "area": "QUALITY",
+      "priority": "P1",
+      "title": "Accepted-result economics",
+      "scenario": "Measure complete packages including failed variants and support.",
+      "expected_result": "Costs include all direct drivers; heavy-use cohort and p95 job exposure fit chosen pricing or block scale.",
+      "verification_method": "Cost-report reconciliation",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V2-040",
+      "area": "QUALITY",
+      "priority": "P0",
+      "title": "No simulated production success",
+      "scenario": "Inspect every paid/published feature claim before launch.",
+      "expected_result": "Unimplemented integrations and mocked results are explicitly unavailable or labeled; evidence is actual.",
+      "verification_method": "Release audit",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-041",
+      "area": "BRAND",
+      "priority": "P0",
+      "title": "Actual brand image generation",
+      "scenario": "Produce the Offerloom logo concepts using the native OpenAI image tool or an authorized Images API call.",
+      "expected_result": "Original generated image files exist, have genuine provenance, and are inspected. A prompt document, utility icon or fabricated ID does not satisfy the gate.",
+      "verification_method": "Tool/API evidence, checksums and visual asset review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-042",
+      "area": "BRAND",
+      "priority": "P1",
+      "title": "Brand installed and readable",
+      "scenario": "Inspect the selected mark, exact typeset wordmark, lockup, favicon and app icon at required sizes and backgrounds.",
+      "expected_result": "The selected identity is used in the actual app; the mark remains distinguishable at 16/24/32px; no affiliation or clearance is implied.",
+      "verification_method": "Real app screenshots and manual small-size review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-043",
+      "area": "BRAND",
+      "priority": "P0",
+      "title": "Honest vector refinement",
+      "scenario": "Inspect any logo advertised as vector artwork.",
+      "expected_result": "It contains genuine path/text geometry rather than an embedded full bitmap masquerading as a vector. Generated source and refinement relationship are recorded.",
+      "verification_method": "SVG inspection and provenance check",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-044",
+      "area": "IMAGE",
+      "priority": "P0",
+      "title": "Independent production image integration",
+      "scenario": "Run a permitted end-user generation job in the application without access to the coding agent native image tool.",
+      "expected_result": "The configured server-side OpenAI image adapter produces and stores real image bytes, records usage, and enforces tenant budget and permission.",
+      "verification_method": "Opt-in cost-capped live API integration test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-045",
+      "area": "IMAGE",
+      "priority": "P0",
+      "title": "Reference-based editing really works",
+      "scenario": "Edit an existing authorized generated/uploaded asset with a specific preservation instruction.",
+      "expected_result": "The route supplies the actual reference through a supported edit workflow; source and revision are retained, unrelated approved text/assets remain unchanged, and imperfect adherence is not concealed.",
+      "verification_method": "API request record, artifact diff and visual review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-046",
+      "area": "IMAGE",
+      "priority": "P0",
+      "title": "Persistent asset storage and provenance",
+      "scenario": "Create an image and wait until a provider temporary URL can no longer be relied on.",
+      "expected_result": "Approved image bytes remain in tenant-authorized storage, with checksum, generation/edit source, truthful request metadata and known/unknown cost status. No invented provider IDs.",
+      "verification_method": "Storage lifecycle integration test and manifest reconciliation",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-047",
+      "area": "MOCKUP",
+      "priority": "P0",
+      "title": "Mockup fidelity and public permission",
+      "scenario": "Compose an image-generated scene with an actual approved product cover or screenshot.",
+      "expected_result": "The displayed product is the real release, with accurate text and no fabricated ratings or private pages. Digital-only fulfillment is represented honestly.",
+      "verification_method": "Asset/source comparison and disclosure review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-048",
+      "area": "BRAND",
+      "priority": "P0",
+      "title": "Image capability failure is not fake success",
+      "scenario": "Remove image-tool/API access before a branding milestone.",
+      "expected_result": "The milestone is blocked, placeholders are explicitly labeled, and neither release evidence nor production claims say genuine generation completed.",
+      "verification_method": "Dependency-failure test and release assertion review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-049",
+      "area": "MODELS",
+      "priority": "P0",
+      "title": "Verified configurable provider routes",
+      "scenario": "Configure a stale, unsupported or unavailable model identifier.",
+      "expected_result": "The route is unavailable with an actionable reason; no invented endpoint, silent provider substitution or stale asserted price reaches production.",
+      "verification_method": "Provider contract tests and capability registry review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-050",
+      "area": "PRIVACY",
+      "priority": "P0",
+      "title": "Fallback retains processing policy",
+      "scenario": "Fail the primary model while processing material restricted to a permitted provider/region.",
+      "expected_result": "Fallback remains within the same data policy or stops; confidential material does not move to a cheaper unauthorized processor.",
+      "verification_method": "Fault-injection policy test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-051",
+      "area": "COST",
+      "priority": "P0",
+      "title": "Concurrent reservation safety",
+      "scenario": "Dispatch multiple paid jobs concurrently against an almost-exhausted allowance and global cap.",
+      "expected_result": "Atomic reservations prevent overspend; ledger adjustments are exact and reconciled, and scope expansion cannot silently increase the customer quote.",
+      "verification_method": "Concurrent database and ledger integration test",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-052",
+      "area": "SECURITY",
+      "priority": "P0",
+      "title": "Cache and preview tenant isolation",
+      "scenario": "Request different tenant sites and authenticated previews through the same CDN/application paths.",
+      "expected_result": "Cache keys, host mapping, preview tokens and response policies do not disclose another tenant or paid content; studio credentials never cross into customer-site content.",
+      "verification_method": "HTTP cache, origin and authorization tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-053",
+      "area": "DOMAINS",
+      "priority": "P0",
+      "title": "Custom-domain lifecycle safety",
+      "scenario": "Attempt domain binding without verification, send a hostile Host header, and remove/reassign a test domain.",
+      "expected_result": "Only verified mappings resolve; canonicals are not generated from an untrusted header; domain removal and reassignment do not enable unintended takeover.",
+      "verification_method": "Domain adapter and routing security tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-054",
+      "area": "SECURITY",
+      "priority": "P0",
+      "title": "Import and renderer abuse limits",
+      "scenario": "Process malicious HTML/SVG, macro-containing input, an oversized document, decompression bomb fixture and internal-network URL.",
+      "expected_result": "The relevant input is rejected or safely sanitized; CPU/memory/time/network caps hold and no worker receives unnecessary secrets.",
+      "verification_method": "Adversarial fixtures in isolated workers",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-055",
+      "area": "RECOVERY",
+      "priority": "P0",
+      "title": "Backup restoration exercise",
+      "scenario": "Restore a staged database and artifact manifest into an isolated recovery environment.",
+      "expected_result": "Authorized projects, versions and entitlements reconcile with stored assets; restore steps and actual findings are recorded, not merely documented as a future plan.",
+      "verification_method": "Authorized staging recovery drill",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-056",
+      "area": "LIFECYCLE",
+      "priority": "P0",
+      "title": "Cancellation and deletion continuity",
+      "scenario": "Cancel an operator subscription with live buyers, then exercise a permitted account-deletion flow.",
+      "expected_result": "The disclosed transition and legally retained records are respected; future access, export and deletion behave as documented without surprise immediate buyer loss or perpetual-hosting claims.",
+      "verification_method": "Lifecycle E2E and policy review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-057",
+      "area": "IDENTITY",
+      "priority": "P0",
+      "title": "No client privilege or trial escalation",
+      "scenario": "Modify profile metadata and replay signup/invitation/payment callbacks.",
+      "expected_result": "Roles, publishing powers and allowances remain server-authorized; replays do not grant extra privileges or credits.",
+      "verification_method": "Adversarial identity integration tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-058",
+      "area": "TESTING",
+      "priority": "P0",
+      "title": "Production cannot silently use fixture providers",
+      "scenario": "Start a production build with test adapters or mock paid entitlements selected.",
+      "expected_result": "Configuration rejects the combination or prevents the affected production path with a visible unavailable state; no synthetic results are sold as live.",
+      "verification_method": "Configuration and build-time assertion tests",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-059",
+      "area": "E2E",
+      "priority": "P0",
+      "title": "Complete signature workflow",
+      "scenario": "Create a fresh authorized test project from notes; obtain genuine generated art; edit and export PDF/PPTX; produce a functional site; qualify a real licensed/imported creator and prepare an unsent proposal.",
+      "expected_result": "Shared context survives throughout, exact edits persist, artifacts are real, visibility is correct and the next task is recorded. Live API versus authorized import versus fixture evidence is labeled separately.",
+      "verification_method": "Cost-capped authorized E2E, artifact inspection and relationship-state checks",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-BUILD-060",
+      "area": "EXECUTION",
+      "priority": "P1",
+      "title": "Resumable build handoff",
+      "scenario": "Stop after a completed slice and resume from repository status documents.",
+      "expected_result": "A new session can identify exact next work, requirements, assets, tests and unresolved costs without reconstructing progress or unnecessarily repeating paid generations.",
+      "verification_method": "Handoff rehearsal and documentation review",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-061",
+      "area": "LICENSE",
+      "priority": "P0",
+      "title": "Exact dependency identity",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Each adopted library/model records commit/checkpoint, license/NOTICE, dependency scope and notices before shipping.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-062",
+      "area": "LICENSE",
+      "priority": "P0",
+      "title": "Directory-specific restrictions",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "No OpenShorts cloud/ commercial code is shipped without written permission; source scan and provenance review required.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-063",
+      "area": "LICENSE",
+      "priority": "P0",
+      "title": "Remotion eligibility",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Actual organization/contractor headcount, automation use, render volume and allowed-service restrictions are reviewed; no assumed free entitlement.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-064",
+      "area": "LICENSE",
+      "priority": "P0",
+      "title": "Weight variant separation",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "FLUX4B and 9B have independent policy entries; noncommercial/unapproved checkpoints cannot enter a commercial route.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-065",
+      "area": "LICENSE",
+      "priority": "P0",
+      "title": "Codec and model dependencies",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "FFmpeg build configuration and all vision/alignment checkpoints are reviewed separately from application license.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-066",
+      "area": "SOURCE",
+      "priority": "P1",
+      "title": "No roadmap dependency",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Upcoming OpenCut rewrite functionality cannot be represented as shipped; selected classic code passes our fixtures.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-067",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Rights and visibility",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Uploaded private video cannot appear in public clips/previews without a recorded applicable grant.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-068",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Upload resource safety",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Actual probe enforces duration/size/codec/resource limits, quarantines malicious input and cleans abandoned multipart uploads.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-069",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Timebase integrity",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Variable frame rate, rotation and source-to-output time mappings preserve sentence boundaries and audiovisual sync.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-070",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Meaning preservation",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Clip fixtures containing negations and qualifications retain essential context; a misleading cut cannot silently pass.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-071",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Caption fidelity",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Caption correction does not fabricate new spoken content; source and editorial text remain distinct and timestamps valid.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-072",
+      "area": "MEDIA",
+      "priority": "P1",
+      "title": "Crop fallback",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Uncertain speaker/subject detection yields safe/manual alternatives; demonstrations and text are not blindly cropped.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-073",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Scoped worker inputs",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Python/GPU worker receives only scoped signed assets/callback rights; no global data, session or payment secret.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-074",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Final exported clip",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Actual MP4 decodes and plays with expected duration, audio, captions, dimensions and no known critical crop or drift defect.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-075",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Render is not social publication",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Export does not send/publish; a social action needs separate destination/content authorization.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-076",
+      "area": "MEDIA",
+      "priority": "P0",
+      "title": "Cancellation and retries",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Cancellation stops undispatched tasks and bounds retries; no duplicated local job or concealed uncertain provider billing.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-077",
+      "area": "GENVIDEO",
+      "priority": "P0",
+      "title": "Synthetic provenance",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Generated B-roll is distinguishable from original footage; no fabricated endorsement/customer proof or unapproved voice/likeness use.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-078",
+      "area": "GENVIDEO",
+      "priority": "P0",
+      "title": "Metered scope",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Seconds/resolution/variants/rights and spend are approved before video calls; no unlimited fallback loop.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-079",
+      "area": "MODELS",
+      "priority": "P0",
+      "title": "No silent quality substitution",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Requested premium OpenAI final artwork is not quietly replaced by an unapproved cheaper route.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-080",
+      "area": "MODELS",
+      "priority": "P1",
+      "title": "Accepted-result cost benchmark",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Measure quality, correction time, failures and total cost for any proposed open-weight replacement.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-081",
+      "area": "MODELS",
+      "priority": "P0",
+      "title": "Supply-chain boundary",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "No user-controlled remote model code, pip/npm installs, ComfyUI nodes or unrestricted shell commands execute in production.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-082",
+      "area": "WAITLIST",
+      "priority": "P0",
+      "title": "Idempotent lead capture",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Repeated signup creates no duplicate lead, confirmation flood or extra referral reward.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-083",
+      "area": "WAITLIST",
+      "priority": "P0",
+      "title": "Server challenge validation",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Public challenge is checked server-side with expected context; expired/reused tokens fail safely.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-084",
+      "area": "WAITLIST",
+      "priority": "P0",
+      "title": "Email scanner safety",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "A mail security scanner visiting a link cannot silently confirm unrelated marketing consent or enroll a paid plan.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-085",
+      "area": "WAITLIST",
+      "priority": "P0",
+      "title": "Suppression authority",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Unsubscribe, complaint and bounce state prevent further unwanted dispatch; retries and imports do not resurrect opt-outs.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-086",
+      "area": "WAITLIST",
+      "priority": "P0",
+      "title": "Private list",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Public clients cannot list members or infer addresses; exports handle formula injection and admin access is scoped.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-087",
+      "area": "WAITLIST",
+      "priority": "P0",
+      "title": "Truthful waitlist copy",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "No fabricated member counts, queue positions, revenue, product availability or official affiliation.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-088",
+      "area": "PAYMENTS",
+      "priority": "P0",
+      "title": "Actual entity route",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Provider approval, seller identity and payout method are verified for the real entity; no country/payout-role inference grants access.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-089",
+      "area": "PAYMENTS",
+      "priority": "P0",
+      "title": "Two money flows",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Platform subscription revenue and seller product proceeds have separate owners/ledgers and approved provider arrangements.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-090",
+      "area": "PAYMENTS",
+      "priority": "P0",
+      "title": "Signed authoritative events",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Raw signatures, duplicate/reordered events, workspace mappings, cancellation, refund and failed payments are tested.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-091",
+      "area": "PAYMENTS",
+      "priority": "P0",
+      "title": "Pilot renewal disclosure",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "One-time versus recurring pilot terms, charge, cancellation and refund treatment are visible before payment.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-092",
+      "area": "PAYMENTS",
+      "priority": "P0",
+      "title": "Settlement is not usage credit",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Provider pending funds and successful charge are not assumed cash settled; no merchant prefunding guarantee is invented.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-093",
+      "area": "STORAGE",
+      "priority": "P0",
+      "title": "R2 independent authorization",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "R2 keys, signed URLs and private/public buckets honor tenancy; Supabase RLS is not assumed to protect R2 automatically.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-094",
+      "area": "STORAGE",
+      "priority": "P1",
+      "title": "Media lifecycle economics",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Proxy/original retention, failed exports, multipart leftovers and deletion/continuity rules are measured and enforced.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-095",
+      "area": "BRAND",
+      "priority": "P1",
+      "title": "Naming clearance status",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Makeborne and Offerloom remain provisional until domain/rights checks; no invented clearance or domain purchase.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    },
+    {
+      "id": "OL-V4-096",
+      "area": "LAUNCH",
+      "priority": "P1",
+      "title": "Pilot evidence before scale",
+      "scenario": "Implement a representative positive, negative and recovery fixture for this invariant.",
+      "expected_result": "Payment, actual completion, support load and meaningful return/renewal are measured independently of waitlist size and compliments.",
+      "verification_method": "Automated integration/adversarial tests plus documented manual/provider review where required",
+      "status": "not_implemented_or_run"
+    }
+  ],
+  "source_catalog": "Offerloom_v2_Release_Gates.json (40 requirements retained unchanged)",
+  "additions": "20 build-time image generation, production integration, security and handoff requirements",
+  "v4_precedence": "V4 implementation addendum overrides conflicting prior scope, name, licensing, media and commercial assumptions."
+}
