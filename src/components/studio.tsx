@@ -1703,8 +1703,16 @@ function ProjectEditor({
   restoreVersion: (projectId: string, versionId: string) => boolean;
   notify: (s: string) => void;
 }) {
-  const [bookAuthor, setBookAuthor] = useState("");
-  const [bookLanguage, setBookLanguage] = useState("en");
+  const bookAuthor = project.bookMetadata?.author ?? "";
+  const bookLanguage = project.bookMetadata?.language ?? "en";
+  function updateBookMetadata(values: Partial<{ author: string; language: string }>) {
+    update((current) => ({
+      ...current,
+      bookMetadata: { author: "", language: "en", ...current.bookMetadata, ...values },
+      updatedAt: now(),
+      status: current.status === "approved" ? "in_progress" : current.status,
+    }), project.id);
+  }
   const [active, setActive] = useState(project.blocks[0]?.id || "");
   const [view, setView] = useState("edit");
   const [panel, setPanel] = useState("content");
@@ -2494,8 +2502,11 @@ function ProjectEditor({
                       Book language
                       <select
                         value={bookLanguage}
-                        onChange={(e) => setBookLanguage(e.target.value)}
+                        onChange={(e) => updateBookMetadata({ language: e.target.value })}
                       >
+                        {!["en", "bs", "hr", "sr", "pl", "de", "fr", "es", "it", "pt", "ar", "ja"].includes(bookLanguage) && (
+                          <option value={bookLanguage}>{bookLanguage} (saved language)</option>
+                        )}
                         <option value="en">English (default)</option>
                         <option value="bs">Bosnian</option>
                         <option value="hr">Croatian</option>
@@ -2514,7 +2525,7 @@ function ProjectEditor({
                       Author (optional)
                       <input
                         value={bookAuthor}
-                        onChange={(e) => setBookAuthor(e.target.value)}
+                        onChange={(e) => updateBookMetadata({ author: e.target.value })}
                         maxLength={200}
                         placeholder="Use the real author's name"
                       />

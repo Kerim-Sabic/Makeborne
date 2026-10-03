@@ -35,6 +35,7 @@ export type Project = {
   audience: string;
   purpose: string;
   wording: string;
+  bookMetadata?: { author: string; language: string };
   blocks: Block[];
   versions: Version[];
   activity: { at: string; text: string }[];
@@ -115,6 +116,10 @@ const LocalProjectSchema = ProjectSchema.extend({
   audience: z.string().max(5000),
   purpose: z.string().max(5000),
   wording: z.enum(["preserve", "improve", "summarise"]),
+  bookMetadata: z.object({
+    author: z.string().max(200),
+    language: z.string().max(64).regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/),
+  }).optional(),
   blocks: z.array(LocalBlockSchema).max(500),
   versions: z
     .array(

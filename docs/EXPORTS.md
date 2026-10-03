@@ -41,3 +41,9 @@ The local development export endpoint was exercised after the authored-direction
 Both Signal and base Editorial rejected a 4,485-character slide with HTTP 400 SLIDE_CONTENT_OVERFLOW. Native PPTX slide XML retained the image caption. The Form HTML fixture was inspected in the browser at desktop and 390px widths; measured mobile document width was 375px with no horizontal overflow. Production build passed after the fixes.
 
 This evidence covers the named fixtures only. PowerPoint rendering, all style/content combinations, extremely long cover captions, customer-generated imagery and production worker/auth flows remain unverified. Temporary sample exports and the reproduction driver live under the task's work/artifact-review and work/review-artifact-exports.mjs; they are not customer deliverables or generated client work.
+
+### Saved book publishing details
+
+Book author and language now live in optional project `bookMetadata`, so workspace save/restore retains them. Existing projects without metadata use an empty author and English. Exports read these project values; changing them updates the project timestamp and reopens internally approved work. Imported valid language tags outside the preset list remain visible as a saved-language option.
+
+Validation: production build passed and lint reported zero errors (two existing image warnings). Four schema assertions passed for older workspaces, metadata JSON round-trip, author length, and invalid language tags. Browser reload and a fresh exported-file metadata inspection remain unverified for this change.
