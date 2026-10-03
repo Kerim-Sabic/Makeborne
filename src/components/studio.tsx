@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { creationStyles, retainCreationStyle, styleConcept } from "@/lib/creation-styles";
 import BrandMark from "./brand-mark";
+import StudioAccount from "./studio-account";
 import {
   LocalWorkspaceSchema,
   LocalStyleSchema,
@@ -46,7 +47,6 @@ import {
   ArrowUpRight,
   BookOpen as BookOpenIcon,
   Check,
-  Cloud as CloudIcon,
   CreditCard,
   Download,
   FileText,
@@ -528,9 +528,6 @@ export default function Studio() {
           >
             <Settings size={18} /> Settings
           </button>
-          <Link className="sidebar-home" href="/studio/cloud">
-            <CloudIcon size={15} /> Cloud studio <ArrowUpRight size={14} />
-          </Link>
           <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> Plan & credits <ArrowUpRight size={14} /></Link>
           {process.env.NODE_ENV === "development" && <Link className="sidebar-home" href="/admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
           <div className="sidebar-device">
@@ -562,8 +559,7 @@ export default function Studio() {
                     : "Settings"}
           </div>
           <div className="studio-topbar-actions">
-            <span className="workspace-mode">Local workspace</span>
-            <Link className="studio-account-link" href="/login">Account <ArrowUpRight size={14} /></Link>
+            <StudioAccount />
           </div>
         </header>
         {loaded && !persistenceAllowed && (
@@ -988,14 +984,14 @@ export default function Studio() {
                     </button>
                   </section>
                   <section>
-                    <h2>Cloud services</h2>
+                    <h2>Account storage</h2>
                     <p>
-                      Cloud accounts are available through the separate Cloud
-                      studio when configured. Live AI generation, client
-                      sharing, custom domains, and payments require configured
-                      integrations. This local preview does not claim those
-                      services are active.
+                      Account saving is being connected to this studio. Projects
+                      shown here are still saved on this device. Signing in does
+                      not upload or merge them yet. Previously saved account
+                      records remain available below during this transition.
                     </p>
+                    <Link className="text-link" href="/studio/cloud">Previously saved account records <ArrowUpRight size={14} /></Link>
                   </section>
                 </div>
               </>

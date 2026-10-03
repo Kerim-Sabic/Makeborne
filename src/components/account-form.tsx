@@ -36,7 +36,7 @@ export default function AccountForm() {
       queueMicrotask(() =>
         setMessage(
           error === "cloud-unavailable"
-            ? "Account access is not available yet. You can continue in the local studio."
+            ? "Account access is not available yet. You can return to your studio."
             : "This email link expired or could not be verified. Request a new link or sign in.",
         ),
       );
@@ -71,7 +71,7 @@ export default function AccountForm() {
         });
         if (error) throw error;
         if (data.session) {
-          router.push("/studio/cloud");
+          router.push("/studio");
           router.refresh();
         } else {
           setVerification(true);
@@ -88,7 +88,7 @@ export default function AccountForm() {
           password,
         });
         if (error) throw error;
-        router.push("/studio/cloud");
+        router.push("/studio");
         router.refresh();
       }
     } catch (error) {
@@ -132,7 +132,7 @@ export default function AccountForm() {
         Makeborne
       </Link>
       <div className="login-card">
-        <span className="eyebrow">YOUR CLOUD STUDIO</span>
+        <span className="eyebrow">YOUR MAKEBORNE ACCOUNT</span>
         <h1>{verification ? "Check your inbox." : mode === "signup" ? "Create your studio." : mode === "recovery" ? "Reset your password." : "Welcome back."}</h1>
         {enabled === null ? (
           <p>Checking account availability…</p>
@@ -143,10 +143,10 @@ export default function AccountForm() {
               <p>Account access is being prepared.</p>
             </div>
             <p>
-              Your local studio is ready to use. Online accounts will be available once cloud setup is complete.
+              Account access is temporarily unavailable. You can still open your device drafts in the studio.
             </p>
             <Link className="button primary" href="/studio">
-              Open local studio <ArrowRight size={16} />
+              Open studio <ArrowRight size={16} />
             </Link>
           </>
         ) : verification ? (
@@ -249,7 +249,7 @@ export default function AccountForm() {
           </p>
         )}
         <Link className="text-link" href="/studio">
-          <ArrowLeft size={15} /> Keep working locally
+          <ArrowLeft size={15} /> Back to studio
         </Link>
       </div>
     </main>

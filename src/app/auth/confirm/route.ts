@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     try {
       const client = await createClient();
       const { error } = await client.auth.verifyOtp({ token_hash, type });
-      if (!error) return authRedirect(url.origin, type === "recovery" ? "/auth/update-password" : "/studio/cloud");
+      if (!error) return authRedirect(url.origin, type === "recovery" ? "/auth/update-password" : "/studio");
     } catch {
       // Never expose the token or provider details in a URL or error page.
     }

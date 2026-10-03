@@ -1,6 +1,6 @@
 /** Fixed destinations prevent untrusted email links becoming open redirects. */
 export function authDestination(next: string | null): string {
-  return next === "/auth/update-password" ? next : "/studio/cloud";
+  return next === "/auth/update-password" ? next : "/studio";
 }
 
 export function accountError(error: unknown): string {

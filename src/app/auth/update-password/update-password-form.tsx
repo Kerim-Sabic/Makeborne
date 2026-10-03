@@ -28,7 +28,7 @@ export default function UpdatePasswordForm() {
     <div className="login-card">
       <span className="eyebrow">YOUR ACCOUNT</span>
       <h1>{saved ? "Password updated." : "A fresh start."}</h1>
-      {saved ? <><p>Your new password is ready to use.</p><Link className="button primary" href="/studio/cloud">Open your studio</Link></> : <>
+      {saved ? <><p>Your new password is ready to use.</p><Link className="button primary" href="/studio">Open your studio</Link></> : <>
         <p>Choose a new password with at least 12 characters.</p>
         <form onSubmit={submit}>
           <label>New password<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} disabled={busy} value={password} onChange={e => setPassword(e.target.value)} /></label>
