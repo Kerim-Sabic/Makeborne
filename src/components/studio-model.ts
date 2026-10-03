@@ -23,6 +23,14 @@ export type Style = {
   textColor?: string;
 };
 export type Version = { id: string; at: string; blocks: Block[]; note: string };
+export const ProjectTaskSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().trim().min(1).max(300),
+  dueDate: z.iso.date().nullable(),
+  completedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type ProjectTask = z.infer<typeof ProjectTaskSchema>;
 export type Project = {
   id: string;
   title: string;
@@ -36,6 +44,7 @@ export type Project = {
   purpose: string;
   wording: string;
   bookMetadata?: { author: string; language: string };
+  tasks?: ProjectTask[];
   blocks: Block[];
   versions: Version[];
   activity: { at: string; text: string }[];
@@ -116,6 +125,7 @@ const LocalProjectSchema = ProjectSchema.extend({
   audience: z.string().max(5000),
   purpose: z.string().max(5000),
   wording: z.enum(["preserve", "improve", "summarise"]),
+  tasks: z.array(ProjectTaskSchema).max(300).optional(),
   bookMetadata: z.object({
     author: z.string().max(200),
     language: z.string().max(64).regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/),
@@ -175,6 +185,7 @@ export const LocalWorkspaceSchema = z
         });
       unique(project.blocks, ["projects", index, "blocks"]);
       unique(project.versions, ["projects", index, "versions"]);
+      unique(project.tasks ?? [], ["projects", index, "tasks"]);
       project.versions.forEach((version, versionIndex) =>
         unique(version.blocks, [
           "projects",

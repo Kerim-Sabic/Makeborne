@@ -18,12 +18,14 @@ import {
   type Client,
   type Style,
   type Project,
+  type ProjectTask,
   type Workspace,
 } from "./studio-model";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
+import ProjectTasks from "./project-tasks";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
@@ -270,6 +272,18 @@ export default function Studio() {
     setWorkspace(next);
     setSaveFailed(false);
     toast("Version restored. Your previous content is preserved in a safety copy in History & review.");
+    return true;
+  }
+  function saveTasks(projectId: string, tasks: ProjectTask[], message: string): boolean {
+    if (!persistenceAllowed) { toast("Recover your workspace in Settings before saving tasks."); return false; }
+    const current = workspace.projects.find(item => item.id === projectId);
+    if (!current) return false;
+    const at = now();
+    const next = { ...workspace, projects: workspace.projects.map(item => item.id === projectId ? { ...item, tasks, updatedAt: at, activity: [...item.activity, { at, text: message }] } : item) };
+    if (!LocalWorkspaceSchema.safeParse(next).success) { toast("This task could not be saved. Check the date and project history limits, then try again."); return false; }
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); }
+    catch { toast("Browser storage could not save the task. Download a workspace backup and try again when storage is available."); return false; }
+    setWorkspace(next); setSaveFailed(false);
     return true;
   }
   function openRoute(route: StudioRoute, replace = false) {
@@ -544,6 +558,7 @@ export default function Studio() {
             sound={workspace.sound}
             update={mutateProject}
             restoreVersion={restoreVersion}
+            saveTasks={saveTasks}
             back={() => navigate("projects")}
             notify={toast}
           />
@@ -1688,6 +1703,7 @@ function ProjectEditor({
   sound,
   update,
   restoreVersion,
+  saveTasks,
   back,
   notify,
 }: {
@@ -1701,6 +1717,7 @@ function ProjectEditor({
   ) => void;
   back: () => void;
   restoreVersion: (projectId: string, versionId: string) => boolean;
+  saveTasks: (projectId: string, tasks: ProjectTask[], message: string) => boolean;
   notify: (s: string) => void;
 }) {
   const bookAuthor = project.bookMetadata?.author ?? "";
@@ -2141,6 +2158,7 @@ function ProjectEditor({
             )}
           </section>
           <section>
+            <ProjectTasks tasks={project.tasks ?? []} save={(tasks, message) => saveTasks(project.id, tasks, message)} />
             <div className="eyebrow">INTERNAL REVIEW</div>
             <h2>What happens next?</h2>
             <p className="muted">

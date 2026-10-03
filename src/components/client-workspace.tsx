@@ -460,6 +460,7 @@ export default function ClientWorkspace({
                             <span>
                               <strong>{project.title}</strong>
                               <small>{kinds[project.kind]}</small>
+                              <small>{(project.tasks ?? []).filter(task => !task.completedAt).length} open tasks</small>
                             </span>
                           </button>
                         </td>

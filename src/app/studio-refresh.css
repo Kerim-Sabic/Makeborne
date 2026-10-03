@@ -2584,3 +2584,15 @@
 .save-recovery-banner p { margin: 5px 0 0; font-size: 13px; line-height: 1.55; }
 .save-recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 @media (max-width: 760px) { .save-recovery-banner { margin: 12px; flex-direction: column; align-items: stretch; } .save-recovery-actions .button { min-height: 44px; } }
+
+.project-tasks { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #e1e5ed; }
+.project-tasks form { display: grid; gap: 12px; }
+.task-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.project-task-list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.project-task-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px; border: 1px solid #e1e5ed; border-radius: 12px; background: #f8faff; }
+.project-task-list .task-check { display: flex; align-items: center; gap: 10px; flex: 1 1 180px; margin: 0; min-width: 0; }
+.project-task-list .task-check input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #4865d8; }
+.task-check span { overflow-wrap: anywhere; }
+.task-complete { text-decoration: line-through; color: #697080; }
+.task-overdue { color: #9c3c24; font-size: 13px; }
+.project-task-list .text-link { min-height: 44px; }
