@@ -3,6 +3,7 @@ import Link from "next/link";
 import BrandMark from "./brand-mark";
 import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
+import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
 import { useCallback, useEffect, useState, useRef } from "react";
 import {
@@ -479,18 +480,7 @@ export default function CloudStudio() {
       const localStyle =
         importPreview.styles.find((s) => s.id === local.styleId) ||
         baseStyles[0];
-      const style: StyleProfile = {
-        id: localStyle.id,
-        name: localStyle.name,
-        version: 1,
-        typography: {
-          headingFont: localStyle.font === "serif" ? "Source Serif 4" : "Inter",
-          bodyFont: "Inter",
-        },
-        colors: { accent: localStyle.color, ink: "#16181D", canvas: "#F8F7F4" },
-        description: localStyle.description,
-        referenceAssetIds: [],
-      };
+      const style = accountStyleFromStudio(localStyle);
       const content: ArtifactContent = {
         schemaVersion: 1,
         title: local.title,
