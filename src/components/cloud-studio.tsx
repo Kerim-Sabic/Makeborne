@@ -1605,14 +1605,16 @@ export function CloudEditor({
     </section>
   );
 }
-function CloudClientDetails({
+export function CloudClientDetails({
   client,
   workspaceId,
   canEdit,
   close,
   saved,
   notify,
+  onSaving,
 }: {
+  onSaving?: (value: boolean) => void;
   client: CloudClient;
   workspaceId: string;
   canEdit: boolean;
@@ -1630,7 +1632,7 @@ function CloudClientDetails({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!canEdit || busy) return;
-    setBusy(true);
+    setBusy(true); onSaving?.(true);
     try {
       await api(
         `/api/cloud/workspaces/${workspaceId}/clients/${client.id}`,
@@ -1654,12 +1656,12 @@ function CloudClientDetails({
           : "Client details could not save.",
       );
     } finally {
-      setBusy(false);
+      setBusy(false); onSaving?.(false);
     }
   }
   return (
     <section className="import-review">
-      <span className="eyebrow">CLOUD CLIENT DETAILS</span>
+      <span className="eyebrow">CONTACT DETAILS</span>
       <h2>{client.name}</h2>
       {conflict && (
         <p role="alert">
@@ -1673,7 +1675,7 @@ function CloudClientDetails({
             Name
             <input
               required
-              disabled={!canEdit}
+              disabled={!canEdit || busy}
               value={name}
               maxLength={120}
               onChange={(e) => setName(e.target.value)}
@@ -1682,7 +1684,7 @@ function CloudClientDetails({
           <label>
             Company
             <input
-              disabled={!canEdit}
+              disabled={!canEdit || busy}
               value={company}
               maxLength={160}
               onChange={(e) => setCompany(e.target.value)}
@@ -1692,7 +1694,7 @@ function CloudClientDetails({
             Email
             <input
               type="email"
-              disabled={!canEdit}
+              disabled={!canEdit || busy}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -1701,7 +1703,7 @@ function CloudClientDetails({
             Website
             <input
               type="url"
-              disabled={!canEdit}
+              disabled={!canEdit || busy}
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
             />
@@ -1710,7 +1712,7 @@ function CloudClientDetails({
         <label>
           Internal notes
           <textarea
-            disabled={!canEdit}
+            disabled={!canEdit || busy}
             rows={4}
             maxLength={10000}
             value={notes}

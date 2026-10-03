@@ -7,6 +7,7 @@ import { creationStyles, retainCreationStyle, styleConcept } from "@/lib/creatio
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
 import AccountProjects from "./account-projects";
+import AccountClients from "./account-clients";
 import { useCreationAccount } from "./use-creation-account";
 import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import { createClient } from "@/lib/supabase/client";
@@ -822,6 +823,7 @@ export default function Studio() {
               setInitialClient(opportunityClient); setInitialBrief(brief); setInitialTitle(title); setInitialStyle("editorial"); setHomeHandoff(false); setCreating(kind); setOpportunityClient(null);
             }} />}
             {tab === "clients" && !opportunityClient && (
+              <AccountClients deviceClients={
               <ClientWorkspace
                 clients={workspace.clients}
                 projects={workspace.projects}
@@ -846,6 +848,7 @@ export default function Studio() {
                   setCreating("website");
                 }}
               />
+              } />
             )}
             {tab === "styles" && (
               <>

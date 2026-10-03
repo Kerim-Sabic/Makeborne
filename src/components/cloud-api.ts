@@ -86,13 +86,14 @@ export async function api<T>(
   const verb = body ? method : method === "POST" ? "GET" : method;
   const bodyText = body ? JSON.stringify(body) : undefined;
   const signature = `${verb}:${path}:${bodyText || ""}`;
-  if (activeRequests.has(signature))
+  const isWrite = verb !== "GET";
+  if (isWrite && activeRequests.has(signature))
     throw new CloudError(
       409,
       "This request is already in progress. Wait for its result.",
       "REQUEST_PENDING",
     );
-  activeRequests.add(signature);
+  if (isWrite) activeRequests.add(signature);
   let storageId: string | undefined;
   let requestKey: string | undefined;
   try {
@@ -233,7 +234,7 @@ export async function api<T>(
     }
     return result.data as T;
   } finally {
-    activeRequests.delete(signature);
+    if (isWrite) activeRequests.delete(signature);
   }
 }
 export type PendingCloudWrite = {

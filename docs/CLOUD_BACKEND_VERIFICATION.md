@@ -68,3 +68,16 @@ Generated three development fixtures through the real export endpoint: a six-pag
 Page margin counters follow the Chromium-supported CSS margin-box mechanism documented at https://developer.chrome.com/blog/print-margins. The fixture renderer reports Chromium 154. `check-pdf-layout.py` verifies the expected page counts, nonempty pages, all glyphs inside page bounds, cover folio suppression, subsequent page numbers, all twelve repeated source paragraphs, and final source sentences. The updated fixtures pass. The title-text check normalizes extracted line breaks; its initial exact-line assertion failed on a legitimate wrapped heading and was corrected rather than changing the source.
 
 `check-pdf-layout.cjs` additionally verifies a deliberately overfull slide is rejected with HTTP 400 / SLIDE_CONTENT_OVERFLOW. The 17 account export checks and all four localhost renderer smoke checks pass, as do TypeScript, focused lint and production build. This covers these representative text-only fixtures; it is not comprehensive validation of all typography, languages, image-generated pages, print trims or publishing platforms. Fixtures remain in work/pdf-layout-checks as QA intermediates, not customer-ready books.
+
+
+## Main Studio account CRM — 2026-10-04
+
+- Clients now opens account-backed records for signed-in users. Device-only CRM remains explicitly accessible without implicit upload.
+- Added account client creation, workspace selection, search/stage filters, pagination, contact editing, outreach/history, and linked project artifact navigation in the main Studio shell.
+- Uses existing authenticated, workspace-scoped endpoints and optimistic client revisions. Reviewer controls remain read-only; no RLS or database schema changes.
+- Request generations discard obsolete reads. Account changes unmount client state. Save-in-progress disables client-section/storage switches; uncertain creation requests remain recoverable through existing idempotency UI.
+- Fixed shared API helper rejecting simultaneous GET reads (observed under development effect replay). Duplicate mutation protection remains enabled.
+- Browser evidence: created `QA client — account CRM`, saved company `QA studio`, stage `Contacted`, channel `Instagram`, follow-up `2026-10-06`. Reload preserved company, stage and follow-up; outreach history recorded changes. Search by company and stage filtering behaved as expected. QA record retained; no outreach messages sent.
+- Offline regression: `node src/components/check-cloud-api-concurrency.cjs` passes overlapping reads, duplicate mutation rejection, and lock release after completion.
+- TypeScript, focused ESLint, and production build pass. Desktop and 390px client list visually inspected; mobile toolbar revised to keep the search field on its own row.
+- Limits: browser scenario used one owner workspace and one QA client. First-workspace provisioning, multi-workspace selection, reviewer UI, pagination beyond 200 clients, and populated linked-project navigation need dedicated browser scenarios. Existing server isolation checks are separate evidence, not proof of these UI cases. Account CRM analysis/brief creation and permanent client-detail URLs remain follow-up work.
