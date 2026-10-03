@@ -25,6 +25,7 @@ import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute } from "@/lib/studio-navigation";
+import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
   ArrowDown,
   ArrowLeft,
@@ -240,6 +241,36 @@ export default function Studio() {
   }
   function toast(text: string) {
     setNotice(text);
+  }
+  function restoreVersion(projectId: string, versionId: string): boolean {
+    if (!persistenceAllowed) {
+      toast("Recover your workspace in Settings before restoring a version.");
+      return false;
+    }
+    const current = workspace.projects.find(item => item.id === projectId);
+    if (!current) return false;
+    let restored: Project;
+    try {
+      restored = restoreContentVersion(current, versionId, uid(), now());
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "This version could not be restored.");
+      return false;
+    }
+    const next = { ...workspace, projects: workspace.projects.map(item => item.id === projectId ? restored : item) };
+    if (!LocalWorkspaceSchema.safeParse(next).success) {
+      toast("This workspace could not be validated. Download a backup before restoring content.");
+      return false;
+    }
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {
+      toast("There is not enough available browser storage to save the safety copy. Your current content is unchanged. Download a workspace backup before continuing.");
+      return false;
+    }
+    setWorkspace(next);
+    setSaveFailed(false);
+    toast("Version restored. Your previous content is preserved in a safety copy in History & review.");
+    return true;
   }
   function openRoute(route: StudioRoute, replace = false) {
     const href = studioHref(route);
@@ -512,6 +543,7 @@ export default function Studio() {
             clients={workspace.clients}
             sound={workspace.sound}
             update={mutateProject}
+            restoreVersion={restoreVersion}
             back={() => navigate("projects")}
             notify={toast}
           />
@@ -1655,6 +1687,7 @@ function ProjectEditor({
   clients,
   sound,
   update,
+  restoreVersion,
   back,
   notify,
 }: {
@@ -1667,6 +1700,7 @@ function ProjectEditor({
     targetId?: string,
   ) => void;
   back: () => void;
+  restoreVersion: (projectId: string, versionId: string) => boolean;
   notify: (s: string) => void;
 }) {
   const [bookAuthor, setBookAuthor] = useState("");
@@ -2081,11 +2115,13 @@ function ProjectEditor({
                       onClick={() => {
                         if (
                           window.confirm(
-                            "Restore this content snapshot? The current content will remain available through Undo.",
+                            "Restore this content snapshot? Your current content will first be saved as a safety copy in History & review. Your project details and style stay the same.",
                           )
                         ) {
-                          change(structuredClone(v.blocks));
-                          notify("Saved content snapshot restored.");
+                          if (restoreVersion(project.id, v.id)) {
+                            setHistory((items) => [...items.slice(-29), project.blocks]);
+                            setActive(v.blocks[0]?.id || "");
+                          }
                         }
                       }}
                     >

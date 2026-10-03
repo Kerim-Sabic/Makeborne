@@ -53,3 +53,9 @@ Verification: production build passed; six focused route-parser/URL assertions p
 A failed autosave now shows a persistent recovery banner with Retry save and Download backup. The download captures the current in-memory workspace. A beforeunload listener warns while saving remains failed; successfully saving clears that condition. Backup import writes the validated replacement before updating the displayed workspace or announcing success, preserving the existing workspace if storage rejects it.
 
 Validation: production build passed; component lint has zero errors and two existing image-optimization warnings. Storage-quota failure, backup download, and beforeunload behavior have not yet been exercised in a controlled browser failure scenario. These checks remain open; this does not establish production readiness.
+
+## Durable content restoration
+
+Restoring a content version now adds a safety snapshot of the outgoing blocks and records the restoration in activity. The complete validated workspace is written before updating the editor. A failed storage write leaves current content untouched. The history/version caps block restoration rather than discarding existing history. Internally approved content returns to in-progress when restored; project details and style remain unchanged. Undo remains available during the editor session, while the safety version persists in browser storage.
+
+Verification: nine direct assertions cover restored blocks, safety-copy content, approval reset, original immutability, deep-copy isolation, JSON survival, missing versions, version capacity, and activity capacity. Production build passed. These checks do not prove browser reload/restore interaction or simulated storage-failure handling; those remain to be exercised end to end.
