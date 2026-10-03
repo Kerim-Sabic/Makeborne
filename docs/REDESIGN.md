@@ -71,3 +71,9 @@ Verification: production build passed; lint zero errors, two existing image warn
 Removed the workspace switcher and duplicated home link. The brand is the home link; a quiet New project button sits above Projects, Clients and Styles. Active navigation uses a single pale-blue surface and aria-current. Footer settings/cloud links and a compact device-storage/backup control replace the larger storage notice. Main workspace gradients remain.
 
 Mobile navigation now has an opaque drawer, dimmed/blurred backdrop, explicit close control, Escape handling, and closes before opening the creation wizard. Browser verification: New project opens the three-step creation dialog; Clients navigation closes the mobile drawer; 390px viewport has 375px document width (no horizontal overflow). Desktop and mobile screenshots reviewed and saved. Full generation flows are not verified or enabled by this visual change.
+
+## Creation wizard keyboard flow
+
+Format and style pickers now expose labelled radio groups with one selected option and one tab stop. Arrow keys wrap through choices; Home/End select the first/last option. Changing wizard steps focuses the new heading, and decorative progress segments are hidden from accessibility APIs. The existing dialog focus containment and trigger focus restoration remain in use.
+
+Verification: production build passed. Browser checks confirmed Right selects/focuses Book from Website, End selects/focuses Presentation, and closing the dialog restores New project focus. Style keyboard transitions and full wizard completion were not exercised in this pass; no project was created and no model call was made.

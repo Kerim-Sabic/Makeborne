@@ -21,7 +21,7 @@ import {
   type ProjectTask,
   type Workspace,
 } from "./studio-model";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
@@ -70,6 +70,16 @@ function date(value: string) {
     month: "short",
     day: "numeric",
   });
+}
+function moveRadioSelection(event: ReactKeyboardEvent<HTMLDivElement>, select: (index: number) => void) {
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+  const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+  const current = options.indexOf(event.target as HTMLButtonElement);
+  if (current < 0 || !options.length) return;
+  event.preventDefault();
+  const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : (current + (["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1) + options.length) % options.length;
+  select(next);
+  options[next].focus();
 }
 
 export default function Studio() {
@@ -1163,6 +1173,7 @@ function CreateModal({
   const wizardContent = useRef<HTMLDivElement>(null);
   useEffect(() => {
     wizardContent.current?.scrollTo({ top: 0, behavior: "instant" });
+    wizardContent.current?.querySelector<HTMLElement>("h2")?.focus();
   }, [step]);
   const [title, setTitle] = useState(
     initialTitle || (initialBrief.trim() ? `Untitled ${kind}` : ""),
@@ -1278,7 +1289,7 @@ function CreateModal({
         <div className="eyebrow">
           {["", "SOURCE", "DIRECTION", "STYLE"][step]} · STEP {step} OF 3
         </div>
-        <h2>
+        <h2 tabIndex={-1}>
           {step === 1
             ? "What are we making?"
             : step === 2
@@ -1297,20 +1308,22 @@ function CreateModal({
             {draftNotice}
           </p>
         )}
-        <div className="step-track">
+        <div className="step-track" aria-hidden="true">
           <span className={step >= 1 ? "active" : ""} />
           <span className={step >= 2 ? "active" : ""} />
           <span className={step >= 3 ? "active" : ""} />
         </div>
         {step === 1 ? (
           <>
-            <div className="format-picker">
+            <div className="format-picker" role="radiogroup" aria-label="Project format" onKeyDown={event => moveRadioSelection(event, index => onKind((["website", "book", "presentation"] as Kind[])[index]))}>
               {(["website", "book", "presentation"] as Kind[]).map((k) => {
                 const Icon = icons[k];
                 return (
                   <button
                     className={kind === k ? "selected" : ""}
-                    aria-pressed={kind === k}
+                    role="radio"
+                    aria-checked={kind === k}
+                    tabIndex={kind === k ? 0 : -1}
                     key={k}
                     onClick={() => onKind(k)}
                   >
@@ -1413,12 +1426,14 @@ function CreateModal({
           </>
         ) : (
           <>
-            <div className="style-picker">
+            <div className="style-picker" role="radiogroup" aria-label="Project style" onKeyDown={event => moveRadioSelection(event, index => setStyle(styles[index].id))}>
               {styles.map((s) => (
                 <button
                   key={s.id}
                   className={styleId === s.id ? "selected" : ""}
-                  aria-pressed={styleId === s.id}
+                  role="radio"
+                  aria-checked={styleId === s.id}
+                  tabIndex={styleId === s.id ? 0 : -1}
                   onClick={() => setStyle(s.id)}
                 >
                   <span
