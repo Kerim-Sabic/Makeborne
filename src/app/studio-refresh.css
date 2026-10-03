@@ -2596,3 +2596,32 @@
 .task-complete { text-decoration: line-through; color: #697080; }
 .task-overdue { color: #9c3c24; font-size: 13px; }
 .project-task-list .text-link { min-height: 44px; }
+
+/* Quiet navigation rail: clear hierarchy, restrained colour, fewer containers. */
+.studio-shell .sidebar { padding: 28px 16px 18px; background: #f9fafceF; border-right: 1px solid #dce2ed; box-shadow: none; }
+.studio-shell .sidebar > .wordmark { font-size: 21px; gap: 9px; padding: 0 10px; margin-bottom: 32px; letter-spacing: -.055em; }
+.studio-shell .create-button { margin: 0 0 30px; padding: 11px 14px; min-height: 44px; border: 1px solid #dce1ea; border-radius: 11px; background: #fff; color: #283247; box-shadow: 0 2px 3px #24345404; font-size: 13px; font-weight: 550; gap: 11px; }
+.studio-shell .create-button:hover { background: #f0f4ff; border-color: #bbc9ee; box-shadow: none; transform: none; }
+.studio-shell .create-button svg { color: #526acf; }
+.studio-shell .nav-label { padding: 0 13px; margin-bottom: 10px; color: #818897; font-size: 11px; letter-spacing: .035em; }
+.studio-shell .studio-nav { gap: 5px; }
+.studio-shell .studio-nav button { min-height: 44px; padding: 11px 13px; border-radius: 10px; font-size: 13px; font-weight: 450; color: #646d7e; gap: 12px; }
+.studio-shell .studio-nav button.active,.studio-shell .sidebar-settings.active { background: #e9eefb; color: #354ea5; box-shadow: none; font-weight: 550; }
+.studio-shell .studio-nav button:hover,.studio-shell .sidebar-settings:hover,.studio-shell .sidebar-home:hover { background: #eef1f7; }
+.studio-shell .studio-nav button.active:hover { background: #e4ebfc; }
+.studio-shell .studio-nav button > span { background: #dce4f7; color: #52628b; font-size: 11px; min-width: 20px; text-align: center; border-radius: 6px; }
+.studio-shell .sidebar-bottom { padding-top: 20px; gap: 3px; }
+.studio-shell .sidebar-settings,.studio-shell .sidebar-home { min-height: 44px; padding: 11px 13px; font-size: 12px; gap: 12px; border-radius: 10px; color: #687184; }
+.studio-shell .sidebar-device { margin: 14px 9px 0; padding-top: 16px; border-top: 1px solid #e1e5ee; }
+.sidebar-device-label { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #747e90; }
+.sidebar-device button { display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 10px 0; min-height: 36px; color: #65718a; font-size: 11px; cursor: pointer; }
+.sidebar-device button:hover { color: #354ea5; }
+@media(prefers-reduced-transparency:reduce) { .studio-shell .sidebar { background: #f9fafc; } }
+@media(forced-colors:active) { .studio-shell .sidebar { background: Canvas; border-color: CanvasText; } .studio-shell .studio-nav button.active { outline: 1px solid Highlight; } }
+.sidebar-scrim,.studio-shell .sidebar-close { display: none; }
+@media(max-width:700px) {
+  .sidebar-scrim { display: block; position: fixed; inset: 0; z-index: 29; border: 0; background: #1e294842; backdrop-filter: blur(3px); }
+  .studio-shell .sidebar { width: 280px; max-width: calc(100vw - 48px); background: #f9fafc; }
+  .studio-shell .sidebar-close { display: flex; position: absolute; top: 18px; right: 9px; width: 40px; height: 40px; }
+  .studio-shell .sidebar > .wordmark { padding-right: 32px; }
+}

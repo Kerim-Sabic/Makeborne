@@ -36,7 +36,6 @@ import {
   ArrowUpRight,
   BookOpen as BookOpenIcon,
   Check,
-  ChevronDown,
   Cloud as CloudIcon,
   Download,
   FileText,
@@ -96,6 +95,14 @@ export default function Studio() {
   const [mobileNav, setMobileNav] = useState(false);
   const [clientDetail, setClientDetail] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!mobileNav) return;
+    const closeNavigation = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNav(false);
+    };
+    window.addEventListener("keydown", closeNavigation);
+    return () => window.removeEventListener("keydown", closeNavigation);
+  }, [mobileNav]);
   useEffect(() => {
     queueMicrotask(() => {
       let restored = emptyWorkspace();
@@ -424,6 +431,7 @@ export default function Studio() {
 
   return (
     <div className="studio-shell">
+      {mobileNav && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
       <aside
         id="studio-navigation"
         className={`sidebar ${mobileNav ? "open" : ""}`}
@@ -432,25 +440,15 @@ export default function Studio() {
           <BrandMark size={27} />
           Makeborne
         </Link>
+        <button className="sidebar-close icon-button" aria-label="Close sidebar" onClick={() => setMobileNav(false)}><X size={18} /></button>
         <button
-          className="workspace-switch"
-          onClick={() => navigate("settings")}
-          aria-label="Manage local workspace"
+          className="button create-button"
+          onClick={() => { setMobileNav(false); setCreating("website"); }}
         >
-          <span className="workspace-initial">M</span>
-          <span>
-            My studio<small>Local workspace</small>
-          </span>
-          <ChevronDown size={15} />
+          <Plus size={18} /> New project
         </button>
-        <button
-          className="button primary create-button"
-          onClick={() => setCreating("website")}
-        >
-          <Plus size={18} /> Create something
-        </button>
-        <div className="nav-label">WORKSPACE</div>
-        <nav className="studio-nav">
+        <div className="nav-label">My workspace</div>
+        <nav className="studio-nav" aria-label="Workspace">
           {[
             [FolderOpen, "projects", "Projects"],
             [Users, "clients", "Clients"],
@@ -461,6 +459,7 @@ export default function Studio() {
               <button
                 key={String(id)}
                 className={tab === id ? "active" : ""}
+                aria-current={tab === id ? "page" : undefined}
                 onClick={() => navigate(String(id))}
               >
                 <I size={18} />
@@ -473,13 +472,9 @@ export default function Studio() {
           })}
         </nav>
         <div className="sidebar-bottom">
-          <div className="local-notice">
-            <span className="status-dot" />
-            <strong>Your work, on this device.</strong>
-            <p>Saved in this browser. Export a backup to keep it safe.</p>
-          </div>
           <button
             className={`sidebar-settings ${tab === "settings" ? "active" : ""}`}
+            aria-current={tab === "settings" ? "page" : undefined}
             onClick={() => navigate("settings")}
           >
             <Settings size={18} /> Settings
@@ -487,9 +482,10 @@ export default function Studio() {
           <Link className="sidebar-home" href="/studio/cloud">
             <CloudIcon size={15} /> Cloud studio <ArrowUpRight size={14} />
           </Link>
-          <Link className="sidebar-home" href="/">
-            Back to Makeborne <ArrowUpRight size={14} />
-          </Link>
+          <div className="sidebar-device">
+            <span className="sidebar-device-label"><span className="status-dot" /> Stored on this device</span>
+            <button type="button" onClick={() => navigate("settings")}>Backup & recovery <ArrowUpRight size={12} /></button>
+          </div>
         </div>
       </aside>
       <div className="studio-main">
