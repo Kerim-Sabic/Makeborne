@@ -38,6 +38,7 @@ import {
   BookOpen as BookOpenIcon,
   Check,
   Cloud as CloudIcon,
+  CreditCard,
   Download,
   FileText,
   FolderOpen,
@@ -496,6 +497,7 @@ export default function Studio() {
           <Link className="sidebar-home" href="/studio/cloud">
             <CloudIcon size={15} /> Cloud studio <ArrowUpRight size={14} />
           </Link>
+          <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> Plan & credits <ArrowUpRight size={14} /></Link>
           <div className="sidebar-device">
             <span className="sidebar-device-label"><span className="status-dot" /> Stored on this device</span>
             <button type="button" onClick={() => navigate("settings")}>Backup & recovery <ArrowUpRight size={12} /></button>

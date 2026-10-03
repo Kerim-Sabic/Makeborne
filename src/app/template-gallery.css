@@ -791,3 +791,8 @@
   font-size: 13px;
   line-height: 1.6;
 }
+
+.mbg-generated-preview { aspect-ratio: 3 / 2; background: #eeeef3; }
+.mbg-generated-preview > img { object-fit: contain; transition: transform 500ms ease; }
+.mbg-card:hover .mbg-generated-preview > img { transform: scale(1.025); }
+@media(prefers-reduced-motion:reduce) { .mbg-generated-preview > img { transition: none; } .mbg-card:hover .mbg-generated-preview > img { transform: none; } }

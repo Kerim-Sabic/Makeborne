@@ -2655,3 +2655,12 @@
 }
 @media(prefers-reduced-transparency:reduce) { .studio-shell .sidebar { background: #f5f7fc; backdrop-filter: none; -webkit-backdrop-filter: none; } .studio-account-link { background: #fff; } }
 @media(forced-colors:active) { .studio-shell .sidebar,.studio-account-link { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; } }
+
+@property --suggestion-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+@keyframes suggestion-orbit { to { --suggestion-angle: 360deg; } }
+.studio-shell .brief-suggestions button { position: relative; border: 1px solid transparent; background: linear-gradient(#fcfdff,#fcfdff) padding-box,conic-gradient(from var(--suggestion-angle),#dce4f0 0%,#dce4f0 42%,#8ca5e4 49%,#b4a3d6 57%,#dce4f0 66%,#dce4f0 100%) border-box; animation: suggestion-orbit 9s linear infinite; box-shadow: 0 3px 12px #5269a408; }
+.studio-shell .brief-suggestions button:nth-child(2) { animation-delay: -3s; }
+.studio-shell .brief-suggestions button:nth-child(3) { animation-delay: -6s; }
+.studio-shell .brief-suggestions button:hover { background: linear-gradient(#fff,#fff) padding-box,conic-gradient(from var(--suggestion-angle),#d3def1,#869edf,#b4a3d6,#d3def1) border-box; box-shadow: 0 5px 18px #546bb017; }
+@media(prefers-reduced-motion:reduce) { .studio-shell .brief-suggestions button { animation: none; } }
+@media(forced-colors:active) { .studio-shell .brief-suggestions button { background: ButtonFace; color: ButtonText; border: 1px solid ButtonText; animation: none; } }
