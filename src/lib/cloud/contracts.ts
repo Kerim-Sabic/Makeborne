@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ClientOutreachSchema } from "../client-outreach";
 import { ArtifactContentSchema, ArtifactKindSchema, CreateClientSchema, CreateProjectSchema, StyleProfileSchema, type Client, type Project, type Artifact, type ArtifactVersion } from "@/lib/domain";
 
 export type CloudRole = "owner" | "editor" | "reviewer";
@@ -12,6 +13,7 @@ export type CloudWorkspaceSnapshot = { workspace: CloudWorkspace; clients: Cloud
 export const WorkspaceCreateSchema = z.object({ name: z.string().trim().min(1).max(160) }).strict();
 export const CloudClientCreateSchema = CreateClientSchema.strict();
 export const ClientUpdateSchema = z.object({
+  outreach: ClientOutreachSchema.optional(),
   name: CreateClientSchema.shape.name.optional(), company: CreateClientSchema.shape.company.removeDefault().optional(),
   email: CreateClientSchema.shape.email.removeDefault().optional(), website: CreateClientSchema.shape.website.removeDefault().optional(),
   notes: CreateClientSchema.shape.notes.removeDefault().optional(), expectedUpdatedAt: z.string().datetime(),

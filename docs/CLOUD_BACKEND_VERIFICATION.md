@@ -17,3 +17,10 @@ After migration `20261003213957_revision_conflict_http409`, cloud run `3e42c21f-
 Recommended protected-media implementation: upload with `cacheControl: "0"`, perform fresh authenticated reads with `cache: "no-store"` and a fresh cache nonce, and verify that complete delivery path before release. This recommendation has not yet been implemented or validated as an application media flow; previously cached objects also need an explicit invalidation strategy.
 
 Local regression run `adbfea66-c1c8-406c-ba93-6f56e40bd81a` also passed after the conflict-code migration, including its stricter same-URL storage revocation check. No application environment was changed by cloud verification. Browser auth, production deployment, generation, billing, publishing and full release-gate acceptance remain separate checks. Current advisor results are maintained in `CLOUD_PROJECT_SETUP.md`; this verification does not claim all advisor findings are resolved.
+# Cloud outreach extension
+
+Migration `20261003221220_client_outreach.sql` applied to local Makeborne and linked cloud project `rklojnmmsmhwnkbzuidp`. It adds optional outreach data to existing clients without changing tenant policies. Owner/editor update grants are constrained to the new column; reviewers retain read access only. The private validation trigger has no direct anonymous/authenticated execute grant and preserves existing history.
+
+`supabase/check-client-outreach.sql` passes locally and via linked cloud query: 15 assertions cover owner/editor writes, reviewer reads and denied writes, cross-tenant isolation, stale revision rejection, invalid stages/dates/credential URLs, and append-only history. The script rolls back its fixtures in a subtransaction, including on failure. No messages or emails are sent.
+
+Production build and TypeScript pass. Security advisors report no local issues and only the previously known cloud Auth leaked-password-protection warning. Signed-in browser verification of the new cloud panel remains pending; the inspected app browser session was signed out. Local outreach is not automatically uploaded; explicit project import excludes it and says so.

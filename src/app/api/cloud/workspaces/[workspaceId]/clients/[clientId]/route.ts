@@ -8,7 +8,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ works
     const { workspaceId, clientId } = await context.params;
     validId(clientId);
     const { client } = await cloudContext(workspaceId, true);
-    const { expectedUpdatedAt, ...fields } = await cloudBody(request, ClientUpdateSchema);
+    const { expectedUpdatedAt, ...fields } = await cloudBody(request, ClientUpdateSchema, 1_000_000);
     if (!Object.keys(fields).length) throw new RequestError("EMPTY_CHANGE", "Choose a field to change.");
     const { data, error } = await client.from("clients").update(fields).eq("id", clientId).eq("workspace_id", workspaceId).eq("updated_at", expectedUpdatedAt).select("*").maybeSingle();
     databaseError(error);

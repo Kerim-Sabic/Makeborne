@@ -817,6 +817,8 @@
 .crm-history li { padding: 12px 0; border-top: 1px solid #f0f0f5; }
 .crm-history p { font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; margin: 5px 0; }
 .crm-history time, .crm-history-type { font-size: 10px; color: #8a809b; }
+.crm-edit-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.crm-edit-controls:disabled { opacity: .7; }
 .crm-feedback, .crm-error { font-size: 12px; line-height: 1.6; }
 .crm-feedback { color: #437961; }.crm-error { color: #a34c45; }
 .crm-stage-filter { margin: 0 !important; }

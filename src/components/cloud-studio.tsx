@@ -2,6 +2,7 @@
 import Link from "next/link";
 import BrandMark from "./brand-mark";
 import PendingCloudWrites from "./pending-cloud-writes";
+import CloudClientOutreach from "./cloud-client-outreach";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
 import { useCallback, useEffect, useState, useRef } from "react";
 import {
@@ -80,6 +81,7 @@ export default function CloudStudio() {
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [editingClient, setEditingClient] = useState<CloudClient | null>(null);
+  const [outreachClient, setOutreachClient] = useState<CloudClient | null>(null);
   const [selected, setSelected] = useState<CloudArtifact | null>(null);
   const [importPreview, setImportPreview] = useState<LocalWorkspace | null>(
     null,
@@ -139,6 +141,8 @@ export default function CloudStudio() {
   async function choose(id: string) {
     setBusy(true);
     setSelected(null);
+    setEditingClient(null);
+    setOutreachClient(null);
     setMessage("");
     try {
       setOverview(await api<CloudOverview>(`/api/cloud/workspaces/${id}`));
@@ -406,10 +410,12 @@ export default function CloudStudio() {
           const {
             id: ignoredId,
             createdAt: ignoredDate,
+            outreach: ignoredOutreach,
             ...fields
           } = sourceClient;
           void ignoredId;
           void ignoredDate;
+          void ignoredOutreach;
           const saved = await api<{ client: Client }>(
             `/api/cloud/workspaces/${overview.workspace.id}/clients`,
             fields,
@@ -867,6 +873,7 @@ export default function CloudStudio() {
                         <article className="client-card" key={c.id}>
                           <h3>{c.name}</h3>
                           <p>{c.email || "No email added"}</p>
+                          <p className="small-note">{c.outreach?.stage ?? "Lead"}{c.outreach?.nextFollowUp ? ` · Follow up ${c.outreach.nextFollowUp}` : ""}</p>
                           <span className="small-note">
                             {
                               overview.projects.filter(
@@ -884,15 +891,19 @@ export default function CloudStudio() {
                           </span>
                           <button
                             className="text-link"
-                            onClick={() => setEditingClient(c)}
+                            onClick={() => { setOutreachClient(null); setEditingClient(c); }}
                           >
                             Client details <ArrowRight size={14} />
                           </button>
+                          <button className="text-link" onClick={() => { setEditingClient(null); setOutreachClient(c); }}>Outreach & follow-ups <ArrowRight size={14} /></button>
                         </article>
                       ))}
                     </div>
                   </>
                 )}
+                {outreachClient && <CloudClientOutreach key={`${overview.workspace.id}:${outreachClient.id}`} initialClient={outreachClient}
+                  workspaceId={overview.workspace.id} canEdit={overview.workspace.role !== "reviewer"}
+                  close={() => setOutreachClient(null)} onSaved={client => setOverview(current => current?.workspace.id === overview.workspace.id ? { ...current, clients: current.clients.map(item => item.id === client.id ? client : item) } : current)} />}
                 {editingClient && (
                   <CloudClientDetails
                     key={editingClient.id}
@@ -934,7 +945,7 @@ export default function CloudStudio() {
                     <h2>Choose what moves to the cloud.</h2>
                     <p>
                       This imports one project’s current text, linked client
-                      details, brief, and style. Local history and internal
+                      details, brief, and style. Local outreach tracking, history and internal
                       activity remain on this device. Projects with inline
                       artwork are blocked until cloud asset upload is supported.
                       The local workspace is never removed.

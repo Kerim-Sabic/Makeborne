@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ClientOutreachSchema } from "./client-outreach";
 
 export const ArtifactKindSchema = z.enum(["website", "book", "presentation"]);
 export const ProjectStatusSchema = z.enum([
@@ -24,6 +25,7 @@ export const CreateClientSchema = z.object({
   notes: text.max(10000).default(""),
 });
 export const ClientSchema = CreateClientSchema.extend({
+  outreach: ClientOutreachSchema.optional(),
   id,
   createdAt: timestamp,
 });
