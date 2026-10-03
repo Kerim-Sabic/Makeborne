@@ -43,7 +43,7 @@ import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
-import { readStudioRoute, studioHref, studioTab, type StudioRoute } from "@/lib/studio-navigation";
+import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
   ArrowDown,
@@ -101,7 +101,7 @@ function moveRadioSelection(event: ReactKeyboardEvent<HTMLDivElement>, select: (
 
 export default function Studio() {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
-  const [createdAccountProject, setCreatedAccountProject] = useState<{ workspaceId: string; artifact: CloudArtifact } | null>(null);
+  const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
   const [persistenceAllowed, setPersistenceAllowed] = useState(false);
   const [initialStyle, setInitialStyle] = useState("editorial");
   const [initialBrief, setInitialBrief] = useState("");
@@ -164,7 +164,7 @@ export default function Studio() {
       const parameters = new URLSearchParams(window.location.search);
       if (readable) {
         const route = readStudioRoute(window.location.search, restored);
-        setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId);
+        setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null);
         if (route.notice) setNotice(route.notice);
       }
       const kind = parameters.get("create");
@@ -225,7 +225,7 @@ export default function Studio() {
     const route = persistenceAllowed
       ? readStudioRoute(window.location.search, workspace)
       : { tab: "settings", projectId: null, clientId: null } as const;
-    setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId);
+    setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null);
     // Keep unsaved client/style forms mounted when the underlying route changes.
     setCreating(null); setInitialClient(""); setMobileNav(false);
     if ("notice" in route && route.notice) setNotice(route.notice);
@@ -352,6 +352,7 @@ export default function Studio() {
       window.history[replace ? "replaceState" : "pushState"](null, "", href);
     setTab(route.tab);
     setSelected(route.projectId);
+    setAccountRoute(route.account ?? null);
     setClientDetail(route.clientId);
     setMobileNav(false);
   }
@@ -520,9 +521,6 @@ export default function Studio() {
               >
                 <I size={18} />
                 {String(label)}
-                {id === "projects" && workspace.projects.length > 0 && (
-                  <span>{workspace.projects.length}</span>
-                )}
               </button>
             );
           })}
@@ -538,7 +536,7 @@ export default function Studio() {
           <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> Plan & credits <ArrowUpRight size={14} /></Link>
           {process.env.NODE_ENV === "development" && <Link className="sidebar-home" href="/admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
           <div className="sidebar-device">
-            <span className="sidebar-device-label"><span className="status-dot" /> Stored on this device</span>
+            <span className="sidebar-device-label"><span className="status-dot" /> Device backup & recovery</span>
             <button type="button" onClick={() => navigate("settings")}>Backup & recovery <ArrowUpRight size={12} /></button>
           </div>
         </div>
@@ -618,6 +616,7 @@ export default function Studio() {
           >
             {tab === "projects" && (
               <>
+                {!accountRoute?.artifactId && <>
                 <div className="page-heading">
                   <div>
                     <div className="eyebrow">YOUR CREATION STUDIO</div>
@@ -753,8 +752,9 @@ export default function Studio() {
                     />
                   </label>
                 </div>
-                <AccountProjects key={createdAccountProject?.artifact.id ?? "account-projects"} search={search} filter={filter} created={createdAccountProject} />
-                {workspace.projects.length === 0 ? (
+                </>}
+                <AccountProjects search={search} filter={filter} target={accountRoute} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
+                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (
                   <Empty
                     icon={FolderOpen}
                     title="Your projects will live here."
@@ -812,8 +812,8 @@ export default function Studio() {
                         );
                       })}
                   </div>
-                )}
-                {workspace.projects.length === 0 && (
+                ))}
+                {!accountRoute?.artifactId && workspace.projects.length === 0 && (
                   <TemplateGallery onChoose={chooseDirection} />
                 )}
               </>
@@ -1020,9 +1020,8 @@ export default function Studio() {
           close={() => { setCreating(null); setInitialClient(""); }}
           create={createProject}
           accountCreated={(workspaceId, artifact) => {
-            setCreatedAccountProject({ workspaceId, artifact });
             setCreating(null); setInitialClient(""); setInitialBrief(""); setInitialTitle(""); setDraftBrief("");
-            openRoute({ tab: "projects", projectId: null, clientId: null });
+            openRoute({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId: artifact.id } });
             toast("Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
           }}
         />

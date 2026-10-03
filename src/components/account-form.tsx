@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, LockKeyhole, Mail, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { accountError } from "@/lib/supabase/auth-flow";
+import { accountError, authDestination } from "@/lib/supabase/auth-flow";
 
 type Capability = { cloudWorkspace: { available: boolean; reason?: string } };
 export default function AccountForm() {
@@ -19,6 +19,10 @@ export default function AccountForm() {
   const [verification, setVerification] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [retryAt, setRetryAt] = useState(0);
+  function returnDestination() {
+    const safe = authDestination(new URLSearchParams(window.location.search).get("next"));
+    return safe.startsWith("/studio") ? safe : "/studio";
+  }
   useEffect(() => {
     const abort = new AbortController();
     fetch("/api/capabilities", { signal: abort.signal, cache: "no-store" })
@@ -66,12 +70,12 @@ export default function AccountForm() {
           email: address,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnDestination())}`,
           },
         });
         if (error) throw error;
         if (data.session) {
-          router.push("/studio");
+          router.push(returnDestination());
           router.refresh();
         } else {
           setVerification(true);
@@ -88,7 +92,7 @@ export default function AccountForm() {
           password,
         });
         if (error) throw error;
-        router.push("/studio");
+        router.push(returnDestination());
         router.refresh();
       }
     } catch (error) {
@@ -108,7 +112,7 @@ export default function AccountForm() {
       const { error } = await createClient().auth.resend({
         type: "signup",
         email: email.trim(),
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnDestination())}` },
       });
       if (error) throw error;
       setRetryAt(Date.now() + 60_000);

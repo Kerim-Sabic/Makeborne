@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { studioHref, type AccountProjectRoute } from "@/lib/studio-navigation";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { CloudArtifact, CloudWorkspace, CloudWorkspaceSnapshot } from "@/lib/cloud/contracts";
@@ -12,8 +14,9 @@ const AccountEditor = dynamic(() => import("./cloud-studio").then(module => modu
 type Snapshot = CloudWorkspaceSnapshot & { pagination: { artifacts: { nextOffset: number | null; total: number } } };
 
 /** Account records are read independently: device drafts are never uploaded implicitly. */
-export default function AccountProjects({ search, filter, created }: { search: string; filter: string; created?: { workspaceId: string; artifact: CloudArtifact } | null }) {
+export default function AccountProjects({ search, filter, target, navigate }: { search: string; filter: string; target: AccountProjectRoute | null; navigate: (route: AccountProjectRoute | null) => void }) {
   const [accountId, setAccountId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [workspaces, setWorkspaces] = useState<CloudWorkspace[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selected, setSelected] = useState<CloudArtifact | null>(null);
@@ -28,10 +31,12 @@ export default function AccountProjects({ search, filter, created }: { search: s
     void (async () => {
       try {
         const response = await fetch("/api/capabilities", { cache: "no-store", signal: abort.signal });
-        if (!response.ok || !(await response.json()).cloudWorkspace?.available || !active) return;
+        if (!active) return;
+        if (!response.ok || !(await response.json()).cloudWorkspace?.available) { setAuthReady(true); return; }
         const client = createClient();
         const { data } = client.auth.onAuthStateChange((_event, session) => {
           if (!active) return;
+          setAuthReady(true);
           const next = session?.user.id ?? null;
           if (currentAccount.current !== next) {
             currentAccount.current = next; requestVersion.current++;
@@ -40,7 +45,7 @@ export default function AccountProjects({ search, filter, created }: { search: s
           }
         });
         unsubscribe = () => data.subscription.unsubscribe();
-      } catch { /* The account menu reports connection errors; do not hide device work. */ }
+      } catch { if (active) setAuthReady(true); }
     })();
     return () => { active = false; abort.abort(); unsubscribe?.(); };
   }, []);
@@ -56,12 +61,16 @@ export default function AccountProjects({ search, filter, created }: { search: s
         const result = await api<{ workspaces: CloudWorkspace[] }>("/api/workspaces");
         if (!active || version !== requestVersion.current) return;
         setWorkspaces(result.workspaces);
-        if (result.workspaces.length) {
-          const target = result.workspaces.find(workspace => workspace.id === created?.workspaceId) ?? result.workspaces[0];
-          const data = await api<Snapshot>(`/api/cloud/workspaces/${target.id}`);
+        const requested = target ? result.workspaces.find(workspace => workspace.id === target.workspaceId) : result.workspaces[0];
+        if (target && !requested) throw new Error("This project is not available to your account. Check that you’re signed into the right account or ask the owner for access.");
+        if (requested) {
+          const [data, detail] = await Promise.all([
+            api<Snapshot>(`/api/cloud/workspaces/${requested.id}`),
+            target?.artifactId ? api<{ artifact: CloudArtifact }>(`/api/cloud/workspaces/${requested.id}/artifacts/${target.artifactId}`) : Promise.resolve(null),
+          ]);
           if (active && version === requestVersion.current) {
             setSnapshot(data);
-            if (created?.workspaceId === target.id) setSelected(created.artifact);
+            setSelected(detail?.artifact ?? null);
           }
         }
       } catch (error) {
@@ -69,7 +78,7 @@ export default function AccountProjects({ search, filter, created }: { search: s
       } finally { if (active && version === requestVersion.current) setBusy(false); }
     })();
     return () => { active = false; };
-  }, [accountId, created]);
+  }, [accountId, target]);
   async function load(workspaceId: string, append = false) {
     const version = ++requestVersion.current;
     setBusy(true); setMessage("");
@@ -81,18 +90,22 @@ export default function AccountProjects({ search, filter, created }: { search: s
     } catch (error) { if (version === requestVersion.current) setMessage(error instanceof Error ? error.message : "Could not load your saved projects."); }
     finally { if (version === requestVersion.current) setBusy(false); }
   }
-  if (!accountId) return null;
+  if (!accountId) return target ? <section className="account-projects" aria-label="Open saved project">
+    <h2>{authReady ? "Sign in to open this project" : "Checking your account…"}</h2>
+    {authReady && <><p>Account projects are available to their workspace members.</p><Link className="button primary small" href={`/login?next=${encodeURIComponent(studioHref({ tab: "projects", projectId: null, clientId: null, account: target }))}`}>Sign in</Link></>}
+  </section> : null;
   const visible = snapshot?.artifacts.filter(artifact => (filter === "all" || artifact.kind === filter) && artifact.title.toLowerCase().includes(search.toLowerCase())) ?? [];
   return <section className="account-projects" aria-label="Projects saved to your account">
     <div className="account-projects-heading"><div><span className="eyebrow">SAVED TO YOUR ACCOUNT</span><h2>Your saved projects</h2></div>
       {!selected && snapshot && <button type="button" className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id)}><RefreshCw size={14} /> Refresh</button>}</div>
-    {!selected && workspaces.length > 1 && <label>Workspace<select disabled={busy} value={snapshot?.workspace.id ?? ""} onChange={event => void load(event.target.value)}>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>}
+    {!selected && workspaces.length > 1 && <label>Workspace<select disabled={busy} value={snapshot?.workspace.id ?? ""} onChange={event => navigate({ workspaceId: event.target.value, artifactId: null })}>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>}
     {message && <p role="status">{message}</p>}
+    {!busy && target?.artifactId && !selected && <button className="button secondary small" onClick={() => navigate(null)}>Back to projects</button>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { if (snapshot) await load(snapshot.workspace.id); else window.location.reload(); }} />
     {busy && <p role="status">Loading your account projects…</p>}
     {selected && snapshot ? <AccountEditor key={`${accountId}:${snapshot.workspace.id}:${selected.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} artifact={selected} role={snapshot.workspace.role}
-      notify={setMessage} back={() => { setSelected(null); void load(snapshot.workspace.id); }} /> : <>
-      <div className="account-project-grid">{visible.map(artifact => { const Icon = icons[artifact.kind]; return <button type="button" className="account-project-card" key={artifact.id} disabled={busy} onClick={() => setSelected(artifact)}>
+      notify={setMessage} back={() => navigate({ workspaceId: snapshot.workspace.id, artifactId: null })} /> : <>
+      <div className="account-project-grid">{visible.map(artifact => { const Icon = icons[artifact.kind]; return <button type="button" className="account-project-card" key={artifact.id} disabled={busy} onClick={() => navigate({ workspaceId: snapshot!.workspace.id, artifactId: artifact.id })}>
         <span className={`account-project-icon ${artifact.kind}`}><Icon size={22} /></span><span><strong>{artifact.title}</strong><small>{kindLabel[artifact.kind]} · {artifact.currentVersion ? `Version ${artifact.currentVersion}` : "New draft"}</small></span><ArrowRight size={16} /></button>; })}</div>
       {!busy && !visible.length && <p>{snapshot ? "No saved projects match this view." : "No account workspace was found. Your device projects remain below."}</p>}
       {snapshot?.pagination.artifacts.nextOffset != null && <button className="button secondary small" type="button" disabled={busy} onClick={() => void load(snapshot.workspace.id, true)}>Load more saved projects</button>}

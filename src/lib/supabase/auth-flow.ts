@@ -1,6 +1,18 @@
-/** Fixed destinations prevent untrusted email links becoming open redirects. */
+/** Rebuild only supported local destinations; never forward an arbitrary URL. */
 export function authDestination(next: string | null): string {
-  return next === "/auth/update-password" ? next : "/studio";
+  if (next === "/auth/update-password") return next;
+  if (next?.startsWith("/studio?") && next.length < 500) {
+    const query = new URLSearchParams(next.slice(8));
+    const workspace = query.get("workspace");
+    const artifact = query.get("artifact");
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (query.get("tab") === "projects" && workspace && uuid.test(workspace) && (!artifact || uuid.test(artifact))) {
+      const safe = new URLSearchParams({ tab: "projects", workspace });
+      if (artifact) safe.set("artifact", artifact);
+      return `/studio?${safe.toString()}`;
+    }
+  }
+  return "/studio";
 }
 
 export function accountError(error: unknown): string {

@@ -1423,7 +1423,7 @@ export function CloudEditor({
           onClick={save}
         >
           <Save size={16} />
-          {busy ? "Saving…" : savePaused ? "Retry save" : "Save now"}
+          {!content ? "Loading…" : busy ? "Saving…" : savePaused ? "Retry save" : "Save now"}
         </button>
       </div>
       {uncertainSave && (

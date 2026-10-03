@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { accountsEnabled, authRedirect } from "@/lib/supabase/auth-server";
+import { authDestination } from "@/lib/supabase/auth-flow";
 
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
@@ -12,7 +13,10 @@ export async function GET(request: Request) {
     try {
       const client = await createClient();
       const { error } = await client.auth.verifyOtp({ token_hash, type });
-      if (!error) return authRedirect(url.origin, type === "recovery" ? "/auth/update-password" : "/studio");
+      if (!error) {
+        const next = authDestination(url.searchParams.get("next"));
+        return authRedirect(url.origin, type === "recovery" ? "/auth/update-password" : next.startsWith("/studio") ? next : "/studio");
+      }
     } catch {
       // Never expose the token or provider details in a URL or error page.
     }

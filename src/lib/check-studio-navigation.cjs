@@ -1,0 +1,23 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Offline routing checks. */
+const fs = require("node:fs"), vm = require("node:vm"), ts = require("typescript"), assert = require("node:assert/strict");
+const output = ts.transpileModule(fs.readFileSync(require.resolve("./studio-navigation.ts"), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const context = { exports: {}, URLSearchParams }; vm.runInNewContext(output, context);
+const { readStudioRoute, studioHref } = context.exports;
+const workspaceId = "12345678-1234-1234-1234-123456789012", artifactId = "22345678-1234-1234-1234-123456789012";
+const local = { projects: [{ id: "local-one" }], clients: [{ id: "client-one" }] };
+let checks = 0;
+function check(name, fn) { fn(); checks++; console.log(`PASS ${name}`); }
+const route = { tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId } };
+check("account URL contains both identifiers", () => assert.equal(studioHref(route), `/studio?tab=projects&workspace=${workspaceId}&artifact=${artifactId}`));
+check("account URL round trips with no local data", () => assert.equal(JSON.stringify(readStudioRoute(studioHref(route).split("?")[1], { projects: [], clients: [] })), JSON.stringify(route)));
+check("workspace list preserves workspace", () => assert.equal(readStudioRoute(`?tab=projects&workspace=${workspaceId}`, local).account.artifactId, null));
+check("local project remains addressable", () => assert.equal(readStudioRoute("?tab=projects&project=local-one", local).projectId, "local-one"));
+check("local client remains addressable", () => assert.equal(readStudioRoute("?tab=clients&client=client-one", local).clientId, "client-one"));
+check("unknown local project gives notice", () => assert.ok(readStudioRoute("?project=missing", local).notice));
+check("missing workspace rejected", () => assert.ok(readStudioRoute(`?artifact=${artifactId}`, local).notice));
+check("invalid workspace rejected", () => assert.ok(readStudioRoute("?workspace=bad", local).notice));
+check("invalid artifact rejected", () => assert.ok(readStudioRoute(`?workspace=${workspaceId}&artifact=bad`, local).notice));
+check("account project wins over stale local query", () => assert.equal(readStudioRoute(`?workspace=${workspaceId}&artifact=${artifactId}&project=local-one`, local).projectId, null));
+check("non-project tabs ignore account IDs", () => assert.equal(readStudioRoute(`?tab=styles&workspace=${workspaceId}`, local).account, undefined));
+check("unsafe serialized identifiers rejected", () => assert.throws(() => studioHref({ ...route, account: { workspaceId: "bad", artifactId } })));
+console.log(`${checks} studio navigation checks passed.`);
