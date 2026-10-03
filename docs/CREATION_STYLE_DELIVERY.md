@@ -12,3 +12,9 @@ Verification:
 - Screenshot reviewed after correcting thumbnail grid placement. No horizontal overflow was visible in the corrected desktop dialog.
 
 This delivery does not establish generated artwork quality, PDF/PPTX layout parity, or live provider availability. Those release requirements remain separate.
+
+## Mobile and keyboard follow-up
+
+Relevant authored directions now appear first for the chosen project format; other choices remain available and custom style order is preserved. The committed `node src/lib/check-creation-styles.cjs` runner passes 15 checks covering ordering and preservation. TypeScript and focused helper lint pass.
+
+Browser evidence at 390px: document width and scroll width both 375px, wizard content width and scroll width both 334px. End selected Atlas; after sorting, Home selected Form for a website. Focus outline, selected state, thumbnails, and fixed action buttons were visible. The temporary mobile viewport was reset. No project was created by this follow-up; a QA draft remains in the isolated localhost tab storage.

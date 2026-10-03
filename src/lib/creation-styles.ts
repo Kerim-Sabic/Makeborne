@@ -1,10 +1,14 @@
-import type { Style } from "../components/studio-model";
+import type { Kind, Style } from "../components/studio-model";
 import { templateDirections } from "./template-directions";
 
 /** Saved customisations take precedence; only missing authored directions are added. */
-export function creationStyles(saved: Style[]): Style[] {
+export function creationStyles(saved: Style[], kind?: Kind): Style[] {
   const ids = new Set(saved.map(style => style.id));
-  return [...saved, ...templateDirections.filter(item => !ids.has(item.style.id)).map(item => ({ ...item.style }))];
+  const options = [...saved, ...templateDirections.filter(item => !ids.has(item.style.id)).map(item => ({ ...item.style }))];
+  if (!kind) return options;
+  const suggested = new Set(templateDirections.filter(item => item.kind === kind).map(item => item.style.id));
+  // Stable partition: do not reorder saved custom styles relative to each other.
+  return [...options.filter(style => suggested.has(style.id)), ...options.filter(style => !suggested.has(style.id))];
 }
 
 /** Do not imply the original concept represents a customised palette or typography. */

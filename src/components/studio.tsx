@@ -968,7 +968,7 @@ export default function Studio() {
           kind={creating}
           onKind={setCreating}
           clients={workspace.clients}
-          styles={creationStyles(workspace.styles)}
+          styles={creationStyles(workspace.styles, creating)}
           close={() => { setCreating(null); setInitialClient(""); }}
           create={createProject}
         />
@@ -1310,7 +1310,7 @@ function CreateModal({
             ? "Start with what you know. You can refine everything later."
             : step === 2
               ? "A clear brief makes thoughtful work possible."
-              : "These authored styles are a starting point, not a limit."}
+              : "Styles for your format are shown first. Choose any direction and make it your own."}
         </p>
         {draftNotice && (
           <p className="wizard-draft-notice" role="status">
