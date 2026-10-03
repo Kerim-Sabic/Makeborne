@@ -6,6 +6,7 @@ import Image from "next/image";
 import { creationStyles, retainCreationStyle, styleConcept } from "@/lib/creation-styles";
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
+import AccountProjects from "./account-projects";
 import {
   LocalWorkspaceSchema,
   LocalStyleSchema,
@@ -746,6 +747,7 @@ export default function Studio() {
                     />
                   </label>
                 </div>
+                <AccountProjects search={search} filter={filter} />
                 {workspace.projects.length === 0 ? (
                   <Empty
                     icon={FolderOpen}

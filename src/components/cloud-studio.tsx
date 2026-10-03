@@ -1062,7 +1062,7 @@ const RecoveryDraftSchema = z.object({
   note: z.string().max(2000),
 });
 type RecoveryDraft = z.infer<typeof RecoveryDraftSchema>;
-function CloudEditor({
+export function CloudEditor({
   accountId,
   workspaceId,
   artifact,

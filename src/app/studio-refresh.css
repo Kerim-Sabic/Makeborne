@@ -2702,3 +2702,17 @@
 .studio-account-popover button { display: flex; align-items: center; gap: 9px; margin-top: 7px; padding: 10px; border: 1px solid #e8e5ef; border-radius: 9px; background: #faf9fd; cursor: pointer; font-size: 12px; }
 .studio-account-popover button:disabled { opacity: .6; cursor: wait; }
 .studio-account-error { position: absolute; right: 0; top: calc(100% + 12px); width: 250px; padding: 12px; background: #fff8eb; color: #725526; border: 1px solid #eedcc0; border-radius: 10px; font-size: 12px; z-index: 51; }
+.account-projects { margin: 24px 0 30px; padding: 24px; border: 1px solid #e5e5ef; border-radius: 20px; background: #ffffffc9; min-width: 0; }
+.account-projects-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.account-projects-heading h2 { font-size: 20px; letter-spacing: -.5px; margin: 6px 0 0; }
+.account-project-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+.account-project-card { display: flex; align-items: center; gap: 14px; text-align: left; min-width: 0; padding: 18px; background: #fff; border: 1px solid #e7e7ef; border-radius: 14px; cursor: pointer; transition: border-color .2s,box-shadow .2s; }
+.account-project-card:hover { border-color: #bcb8e0; box-shadow: 0 5px 18px #67579c0c; }
+.account-project-card > span:nth-child(2) { flex: 1; min-width: 0; }
+.account-project-card strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.account-project-card small { display: block; margin-top: 5px; font-size: 11px; color: #777385; }
+.account-project-icon { display: grid; place-items: center; width: 46px; height: 46px; flex: 0 0 46px; border-radius: 12px; color: #6860a4; background: #f1eefb; }
+.account-project-icon.book { color: #877148; background: #f8f1e4; }
+.account-project-icon.presentation { color: #447566; background: #e9f4ef; }
+@media(max-width:700px) { .account-project-grid { grid-template-columns: 1fr; }.account-projects { padding: 17px; }.account-projects-heading { flex-wrap: wrap; } }
+@media(prefers-reduced-motion:reduce) { .account-project-card { transition: none; } }
