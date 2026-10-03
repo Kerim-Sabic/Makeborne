@@ -44,7 +44,7 @@ import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
-import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute } from "@/lib/studio-navigation";
+import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
   ArrowDown,
@@ -102,6 +102,7 @@ function moveRadioSelection(event: ReactKeyboardEvent<HTMLDivElement>, select: (
 
 export default function Studio() {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
+  const [accountClientRoute, setAccountClientRoute] = useState<AccountClientRoute | null>(null);
   const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
   const [persistenceAllowed, setPersistenceAllowed] = useState(false);
   const [initialStyle, setInitialStyle] = useState("editorial");
@@ -165,7 +166,7 @@ export default function Studio() {
       const parameters = new URLSearchParams(window.location.search);
       if (readable) {
         const route = readStudioRoute(window.location.search, restored);
-        setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null);
+        setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
         if (route.notice) setNotice(route.notice);
       }
       const kind = parameters.get("create");
@@ -226,7 +227,7 @@ export default function Studio() {
     const route = persistenceAllowed
       ? readStudioRoute(window.location.search, workspace)
       : { tab: "settings", projectId: null, clientId: null } as const;
-    setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null);
+    setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
     // Keep unsaved client/style forms mounted when the underlying route changes.
     setCreating(null); setInitialClient(""); setMobileNav(false);
     if ("notice" in route && route.notice) setNotice(route.notice);
@@ -354,6 +355,7 @@ export default function Studio() {
     setTab(route.tab);
     setSelected(route.projectId);
     setAccountRoute(route.account ?? null);
+    setAccountClientRoute(route.accountClient ?? null);
     setClientDetail(route.clientId);
     setMobileNav(false);
   }
@@ -823,7 +825,7 @@ export default function Studio() {
               setInitialClient(opportunityClient); setInitialBrief(brief); setInitialTitle(title); setInitialStyle("editorial"); setHomeHandoff(false); setCreating(kind); setOpportunityClient(null);
             }} />}
             {tab === "clients" && !opportunityClient && (
-              <AccountClients deviceClients={
+              <AccountClients key={clientDetail ? "device" : "account"} initialDevice={!!clientDetail} target={accountClientRoute} navigate={accountClient => openRoute({ tab: "clients", projectId: null, clientId: null, accountClient })} deviceClients={
               <ClientWorkspace
                 clients={workspace.clients}
                 projects={workspace.projects}

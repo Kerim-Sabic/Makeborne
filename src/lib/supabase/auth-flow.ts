@@ -5,7 +5,13 @@ export function authDestination(next: string | null): string {
     const query = new URLSearchParams(next.slice(8));
     const workspace = query.get("workspace");
     const artifact = query.get("artifact");
+    const accountClient = query.get("accountClient");
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (query.get("tab") === "clients" && workspace && uuid.test(workspace) && (!accountClient || uuid.test(accountClient))) {
+      const safe = new URLSearchParams({ tab: "clients", workspace });
+      if (accountClient) safe.set("accountClient", accountClient);
+      return `/studio?${safe.toString()}`;
+    }
     if (query.get("tab") === "projects" && workspace && uuid.test(workspace) && (!artifact || uuid.test(artifact))) {
       const safe = new URLSearchParams({ tab: "projects", workspace });
       if (artifact) safe.set("artifact", artifact);

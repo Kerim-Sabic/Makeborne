@@ -20,4 +20,12 @@ check("invalid artifact rejected", () => assert.ok(readStudioRoute(`?workspace=$
 check("account project wins over stale local query", () => assert.equal(readStudioRoute(`?workspace=${workspaceId}&artifact=${artifactId}&project=local-one`, local).projectId, null));
 check("non-project tabs ignore account IDs", () => assert.equal(readStudioRoute(`?tab=styles&workspace=${workspaceId}`, local).account, undefined));
 check("unsafe serialized identifiers rejected", () => assert.throws(() => studioHref({ ...route, account: { workspaceId: "bad", artifactId } })));
+const clientRoute = { tab: "clients", projectId: null, clientId: null, accountClient: { workspaceId, clientId: artifactId } };
+check("account client query round trips", () => assert.equal(JSON.stringify(readStudioRoute(studioHref(clientRoute).split("?")[1], { clients: [], projects: [] })), JSON.stringify(clientRoute)));
+check("account client list keeps workspace", () => assert.equal(readStudioRoute(`?tab=clients&workspace=${workspaceId}`, local).accountClient.clientId, null));
+check("account client missing workspace rejected", () => assert.ok(readStudioRoute(`?tab=clients&accountClient=${artifactId}`, local).notice));
+check("account client invalid identifier rejected", () => assert.ok(readStudioRoute(`?tab=clients&workspace=${workspaceId}&accountClient=bad`, local).notice));
+check("account client overrides stale device client", () => assert.equal(readStudioRoute(`?tab=clients&workspace=${workspaceId}&accountClient=${artifactId}&client=client-one`, local).clientId, null));
+check("invalid account client cannot select a device record", () => assert.equal(readStudioRoute("?tab=clients&workspace=bad&client=client-one", local).clientId, null));
+check("unsafe account client serialization rejected", () => assert.throws(() => studioHref({ ...clientRoute, accountClient: { workspaceId, clientId: "../../admin" } })));
 console.log(`${checks} studio navigation checks passed.`);

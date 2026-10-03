@@ -81,3 +81,14 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Offline regression: `node src/components/check-cloud-api-concurrency.cjs` passes overlapping reads, duplicate mutation rejection, and lock release after completion.
 - TypeScript, focused ESLint, and production build pass. Desktop and 390px client list visually inspected; mobile toolbar revised to keep the search field on its own row.
 - Limits: browser scenario used one owner workspace and one QA client. First-workspace provisioning, multi-workspace selection, reviewer UI, pagination beyond 200 clients, and populated linked-project navigation need dedicated browser scenarios. Existing server isolation checks are separate evidence, not proof of these UI cases. Account CRM analysis/brief creation and permanent client-detail URLs remain follow-up work.
+
+
+## Persistent account-client links — 2026-10-04
+
+- Account client list/detail routes use validated workspace and account-client UUIDs. Device `client` links remain distinct and select the device CRM surface.
+- Main Studio restores the account client route on initial load and browser history navigation. Details are fetched directly, independently of client-list pagination, after workspace membership lookup. Unknown workspace/client requests do not fall back to another client.
+- Signed-out account-client links offer sign-in with a rebuilt, allowlisted destination. Redirect helper strips unrelated query parameters and rejects invalid identifiers.
+- Existing account client creation now opens its permanent route; workspace selection and returning to the list preserve the selected workspace. Contact saves re-fetch the currently addressed client rather than dropping the user into another record.
+- Verification: 19 pure Studio route checks and 22 auth destination checks passed. TypeScript, focused ESLint and production build passed.
+- Browser: opened QA client `53bd4aa2-505e-444b-9a57-45684441fb51` in workspace `e68ff1eb-ed26-42ac-8864-689451e39c30`; verified detail URL, reloaded the same record, Back returned to the list, Forward restored the record including saved outreach fields/history.
+- Limit: full signed-out sign-in return, missing-membership UI, device-client deep link browser scenario, and cross-workspace navigation were not browser-tested this pass. Route unit checks are not a substitute for those scenarios. Unsaved draft navigation protection remains outstanding.
