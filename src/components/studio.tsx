@@ -24,6 +24,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
+import { readStudioRoute, studioHref, studioTab, type StudioRoute } from "@/lib/studio-navigation";
 import {
   ArrowDown,
   ArrowLeft,
@@ -93,14 +94,18 @@ export default function Studio() {
   const importRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     queueMicrotask(() => {
+      let restored = emptyWorkspace();
+      let readable = true;
       try {
         const saved = localStorage.getItem(storageKey);
         if (saved) {
           const parsed = LocalWorkspaceSchema.safeParse(JSON.parse(saved));
           if (parsed.success) {
+            restored = parsed.data;
             setWorkspace(parsed.data);
             setPersistenceAllowed(true);
           } else {
+            readable = false;
             setTab("settings");
             setNotice(
               "Your saved workspace could not be loaded. Its original browser data is preserved; download the original data from Settings.",
@@ -108,6 +113,7 @@ export default function Studio() {
           }
         } else setPersistenceAllowed(true);
       } catch {
+        readable = false;
         setTab("settings");
         setNotice(
           "Your saved workspace could not be read. Its original data has not been overwritten.",
@@ -115,12 +121,11 @@ export default function Studio() {
       }
       setLoaded(true);
       const parameters = new URLSearchParams(window.location.search);
-      const requestedTab = parameters.get("tab");
-      if (
-        requestedTab &&
-        ["projects", "clients", "styles", "settings"].includes(requestedTab)
-      )
-        setTab(requestedTab);
+      if (readable) {
+        const route = readStudioRoute(window.location.search, restored);
+        setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId);
+        if (route.notice) setNotice(route.notice);
+      }
       const kind = parameters.get("create");
       if (parameters.get("from") === "home") {
         try {
@@ -174,6 +179,21 @@ export default function Studio() {
         setCreating(kind);
     });
   }, []);
+  const restoreHistory = useEffectEvent(() => {
+    if (!loaded) return;
+    const route = persistenceAllowed
+      ? readStudioRoute(window.location.search, workspace)
+      : { tab: "settings", projectId: null, clientId: null } as const;
+    setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId);
+    // Keep unsaved client/style forms mounted when the underlying route changes.
+    setCreating(null); setInitialClient(""); setMobileNav(false);
+    if ("notice" in route && route.notice) setNotice(route.notice);
+  });
+  useEffect(() => {
+    const restore = () => restoreHistory();
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
   useEffect(() => {
     if (loaded && persistenceAllowed)
       try {
@@ -205,11 +225,17 @@ export default function Studio() {
   function toast(text: string) {
     setNotice(text);
   }
-  function navigate(name: string) {
-    setTab(name);
-    setSelected(null);
-    setClientDetail(null);
+  function openRoute(route: StudioRoute, replace = false) {
+    const href = studioHref(route);
+    if (window.location.pathname + window.location.search !== href)
+      window.history[replace ? "replaceState" : "pushState"](null, "", href);
+    setTab(route.tab);
+    setSelected(route.projectId);
+    setClientDetail(route.clientId);
     setMobileNav(false);
+  }
+  function navigate(name: string) {
+    openRoute({ tab: studioTab(name), projectId: null, clientId: null });
   }
   function createProject(values: {
     title: string;
@@ -261,8 +287,7 @@ export default function Studio() {
       return false;
     }
     setWorkspace(nextWorkspace);
-    setSelected(p.id);
-    setTab("projects");
+    openRoute({ tab: "projects", projectId: p.id, clientId: null });
     setCreating(null);
     if (homeHandoff && persistenceAllowed) {
       try {
@@ -293,7 +318,7 @@ export default function Studio() {
         return;
       setWorkspace(data);
       setPersistenceAllowed(true);
-      setSelected(null);
+      openRoute({ tab: "projects", projectId: null, clientId: null }, true);
       toast("Workspace backup restored on this device.");
     } catch {
       toast("This is not a valid Makeborne workspace backup.");
@@ -455,7 +480,7 @@ export default function Studio() {
             clients={workspace.clients}
             sound={workspace.sound}
             update={mutateProject}
-            back={() => setSelected(null)}
+            back={() => navigate("projects")}
             notify={toast}
           />
         ) : (
@@ -621,7 +646,7 @@ export default function Studio() {
                           <button
                             className="project-card"
                             key={p.id}
-                            onClick={() => setSelected(p.id)}
+                            onClick={() => openRoute({ tab: "projects", projectId: p.id, clientId: null })}
                           >
                             <div className={`project-cover ${p.styleId}`}>
                               <span className="cover-type">
@@ -668,10 +693,10 @@ export default function Studio() {
                 clients={workspace.clients}
                 projects={workspace.projects}
                 selectedClientId={clientDetail}
-                onSelectClient={setClientDetail}
+                onSelectClient={(id) => openRoute({ tab: "clients", projectId: null, clientId: id })}
                 onEditClient={setClientModal}
                 onAddClient={() => setClientModal("new")}
-                onOpenProject={(id) => { setSelected(id); setTab("projects"); }}
+                onOpenProject={(id) => openRoute({ tab: "projects", projectId: id, clientId: null })}
                 onCreateProject={(clientId) => {
                   setInitialClient(clientId);
                   setHomeHandoff(false);

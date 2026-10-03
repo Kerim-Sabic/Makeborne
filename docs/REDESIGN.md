@@ -41,3 +41,9 @@ The latest human direction adds more colour and glass to the product. Studio chr
 The local CRM now has client/project search, per-client format/status filters, actual saved-version counts and recent project activity. New project from a client profile preselects that client, with drafts scoped to that client. Switching clients resets project filters. Client saves validate the workspace and write to browser storage before reporting success; errors keep the form open. These improvements do not enable cloud sync or verified customer approval.
 
 Production build passed. ESLint had no errors and the two existing inline-artwork image warnings. Desktop and 390px mobile studio were visually inspected with no horizontal overflow. The empty-client screen and whitespace-name save guard were checked without creating records in the user's workspace. Populated-client workflow and storage-failure behaviour still need runtime coverage. Live accounts, AI generation, publication and payments remain gated on their documented external configuration and authorization.
+
+## Studio navigation continuity
+
+Studio sections and selected local project/client IDs now have URLs. Refresh restores the matching local record, and browser Back restores the previous section. Missing IDs fall back to the list with an explanation; URLs contain IDs, not client names or emails. Local links require the matching browser workspace and are not cloud sharing links.
+
+Verification: production build passed; six focused route-parser/URL assertions passed. Browser checks confirmed Styles survives reload, Back returns Clients to Styles, and an unsaved client name stays in its open form through Back. No test client was saved. Client/style forms remain mounted on history changes to preserve unsaved input.
