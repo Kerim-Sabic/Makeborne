@@ -30,7 +30,7 @@ export async function epubDocument(input: ExportRequest) {
     string,
     { href: string; id: string; mime: string }
   >();
-  const art = input.blocks.find((block) => block.type === "image");
+  const art = input.blocks[0]?.type === "image" ? input.blocks[0] : undefined;
   for (const block of input.blocks) {
     if (!block.image || imageFiles.has(block.image)) continue;
     const comma = block.image.indexOf(","),

@@ -25,3 +25,11 @@ The sample EPUB passes official EPUBCheck 5.4.0 with zero errors or warnings. Th
 A separate 3:2 artwork fixture produces a 12192000×8128000 EMU PowerPoint canvas. An explicit incompatible 16:9 request returns 400 SLIDE_ASPECT. This checks canvas handling only; the artwork fixture is not a claim of a newly generated slide.
 
 Implementation references: [Sharp metadata](https://sharp.pixelplumbing.com/api-input/), [PptxGenJS image API](https://gitbrent.github.io/PptxGenJS/docs/api-images/), [W3C EPUB 3.3](https://www.w3.org/TR/epub-33/) and [EPUBCheck releases](https://github.com/w3c/epubcheck/releases).
+
+## Authored direction refinement
+
+The six authored direction IDs now select dedicated website, book and native-slide compositions in HTML/PDF and the local preview. Native PowerPoint uses larger editable statement layouts for short slides, with restrained native vector details for Signal and Atlas; it is not a pixel-identical HTML export.
+
+Books use artwork as the cover only when the image is the first authored block. Images in chapters remain in place, and cover captions stay visible. HTML/PDF contents link to the actual heading IDs; supplied author/language metadata are respected. Native presentations preserve image-block captions in their text flow.
+
+Native PDF slides now have a print-layout overflow check. Content that exceeds its slide returns SLIDE_CONTENT_OVERFLOW with the affected slide numbers, preserving the source instead of silently cropping text or making one logical slide span several PDF pages. This revision has compiled successfully; representative rendered output and overflow behaviour still need runtime verification. Earlier fixture evidence above does not prove these new layouts.

@@ -2260,3 +2260,282 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Content-led compositions use only the user's own blocks. */
+.studio-shell .artifact-direction-label {
+  display: block;
+  font:
+    500 11px/1.6 var(--font-inter),
+    Arial,
+    sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--artifact-accent);
+  margin-bottom: 23px;
+}
+.studio-shell .artifact-content-block:focus-visible {
+  outline: 2px solid var(--artifact-accent);
+  outline-offset: 6px;
+}
+.studio-shell .authored-book-cover {
+  min-height: 510px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 0 44px;
+}
+.studio-shell .authored-book-cover h1 {
+  font-family: var(--artifact-font);
+  font-size: clamp(34px, 4vw, 54px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--artifact-ink, var(--artifact-accent));
+  margin: 10px 0 25px;
+  overflow-wrap: anywhere;
+}
+.studio-shell .authored-book-cover-art {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.studio-shell .authored-book-cover-art .artifact-content-block {
+  width: 100%;
+}
+.studio-shell .authored-book-cover-art figure {
+  margin: 0;
+}
+.studio-shell .authored-book-cover-art img {
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+}
+.studio-shell .authored-book-cover-rule {
+  width: 65px;
+  height: 3px;
+  background: var(--artifact-accent);
+  margin-top: auto;
+}
+.studio-shell .authored-book-contents {
+  padding: 40px 0;
+  border-top: 1px solid
+    color-mix(in srgb, var(--artifact-ink, #222) 20%, transparent);
+}
+.studio-shell .authored-book-contents h2 {
+  font-size: 27px;
+}
+.studio-shell .authored-book-contents ol {
+  padding-left: 23px;
+}
+.studio-shell .authored-book-contents li {
+  padding: 13px 0;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--artifact-ink, #222) 14%, transparent);
+  font-size: 14px;
+}
+.studio-shell .authored-book-contents button,
+.studio-shell .authored-book-contents a {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  line-height: 1.5;
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: none;
+}
+.studio-shell .authored-book-contents button:hover,
+.studio-shell .authored-book-contents a:hover {
+  text-decoration: underline;
+}
+.studio-shell .authored-book-body {
+  max-width: 580px;
+}
+.studio-shell .authored-book-body .artifact-content-block {
+  margin-bottom: 20px;
+}
+.studio-shell .authored-book-body .authored-book-chapter:not(:first-child) {
+  padding-top: 36px;
+  margin-top: 40px;
+  border-top: 1px solid
+    color-mix(in srgb, var(--artifact-ink, #222) 18%, transparent);
+}
+.studio-shell .book-preview.direction-field .authored-book-cover {
+  padding-top: 32px;
+  min-height: 580px;
+}
+.studio-shell .book-preview.direction-field .authored-book-cover h1 {
+  font-size: clamp(42px, 5vw, 66px);
+  font-style: italic;
+  font-weight: 400;
+  max-width: 90%;
+}
+.studio-shell .book-preview.direction-field .authored-book-cover-rule {
+  width: 100%;
+  height: 2px;
+}
+.studio-shell .book-preview.direction-handbook .authored-book-cover {
+  border-top: 10px solid var(--artifact-accent);
+  padding-top: 25px;
+}
+.studio-shell .book-preview.direction-handbook .authored-book-cover h1 {
+  font-weight: 600;
+  letter-spacing: -0.055em;
+  max-width: 90%;
+}
+.studio-shell .book-preview.direction-handbook .authored-book-cover-rule {
+  width: 44px;
+  height: 8px;
+}
+.studio-shell .site-preview {
+  font-family: var(--artifact-font);
+}
+.studio-shell .site-preview nav > span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.studio-shell .site-preview nav a {
+  text-decoration: none;
+}
+.studio-shell .site-layout-content {
+  padding: 0 6%;
+}
+.studio-shell .authored-site-hero {
+  padding: 65px 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 30px;
+  align-items: center;
+}
+.studio-shell .authored-site-hero.has-image {
+  grid-template-columns: 1.1fr 1fr;
+  gap: 6%;
+}
+.studio-shell .authored-site-hero h1 {
+  font-family: var(--artifact-font);
+  font-size: clamp(32px, 3.5vw, 48px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--artifact-ink, var(--artifact-accent));
+  margin: 0 0 25px;
+  overflow-wrap: anywhere;
+}
+.studio-shell .authored-site-hero p,
+.studio-shell .authored-site-section p {
+  font-family: var(--artifact-font);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+.studio-shell .authored-site-hero figure {
+  margin: 0;
+}
+.studio-shell .authored-site-hero img {
+  max-height: 380px;
+  object-fit: contain;
+}
+.studio-shell .authored-site-section {
+  border-top: 1px solid
+    color-mix(in srgb, var(--artifact-ink, #222) 20%, transparent);
+  padding: 42px 0;
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: 7%;
+}
+.studio-shell .authored-site-section h2 {
+  font-family: var(--artifact-font);
+  font-size: 27px;
+  line-height: 1.15;
+  color: var(--artifact-accent);
+  margin: 0 0 20px;
+}
+.studio-shell .authored-site-section-body .artifact-content-block {
+  margin-bottom: 18px;
+}
+.studio-shell .authored-site-section blockquote,
+.studio-shell .authored-site-hero blockquote {
+  font: 22px/1.5 var(--artifact-font);
+  color: var(--artifact-accent);
+  margin: 20px 0;
+}
+.studio-shell .site-preview.direction-form .authored-site-hero {
+  padding-top: 78px;
+  padding-bottom: 65px;
+}
+.studio-shell .site-preview.direction-form .authored-site-hero h1 {
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+.studio-shell .site-preview.direction-form .authored-site-section-heading {
+  padding-top: 4px;
+}
+.studio-shell .site-preview.direction-solstice .authored-site-hero h1 {
+  font-style: italic;
+  font-size: clamp(37px, 4.1vw, 57px);
+}
+.studio-shell .site-preview.direction-solstice .authored-site-hero-art {
+  padding: 12px;
+  border: 1px solid var(--artifact-accent);
+  border-radius: 90px 90px 6px 6px;
+}
+.studio-shell .site-preview.direction-solstice .authored-site-section {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.studio-shell .slide-preview.direction-signal {
+  padding: 35px;
+  border-left: 6px solid var(--artifact-accent);
+}
+.studio-shell .slide-preview.direction-signal .slide-content h2 {
+  color: var(--artifact-accent);
+  font-size: clamp(28px, 3.7vw, 52px);
+  letter-spacing: -0.055em;
+  font-weight: 600;
+}
+.studio-shell .slide-preview.direction-signal .slide-meta {
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--artifact-ink, #fff) 25%, transparent);
+  padding-bottom: 12px;
+}
+.studio-shell .slide-preview.direction-atlas {
+  padding: 35px;
+  border-top: 5px solid var(--artifact-accent);
+}
+.studio-shell .slide-preview.direction-atlas .slide-content h2 {
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+.studio-shell .slide-preview.direction-atlas .slide-meta > span:last-child {
+  background: var(--artifact-accent);
+  color: var(--artifact-background, #fff);
+  padding: 4px 8px;
+  border-radius: 20px;
+}
+.studio-shell .site-preview.mobile .authored-site-hero.has-image,
+.studio-shell .site-preview.mobile .authored-site-section {
+  grid-template-columns: 1fr;
+}
+@media (max-width: 700px) {
+  .studio-shell .authored-site-hero,
+  .studio-shell .site-preview.direction-form .authored-site-hero {
+    padding: 40px 0;
+  }
+  .studio-shell .authored-site-hero.has-image,
+  .studio-shell .authored-site-section {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .studio-shell .authored-book-cover {
+    min-height: 420px;
+  }
+  .studio-shell .book-preview.direction-field .authored-book-cover {
+    min-height: 480px;
+  }
+  .studio-shell .slide-preview.direction-signal,
+  .studio-shell .slide-preview.direction-atlas {
+    padding: 22px;
+  }
+}

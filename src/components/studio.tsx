@@ -185,10 +185,19 @@ export default function Studio() {
       }
   }, [workspace, loaded, persistenceAllowed]);
   const project = workspace.projects.find((p) => p.id === selected);
-  function mutateProject(p: Project) {
+  function mutateProject(
+    p: Project | ((current: Project) => Project),
+    targetId?: string,
+  ) {
     setWorkspace((w) => ({
       ...w,
-      projects: w.projects.map((x) => (x.id === p.id ? p : x)),
+      projects: w.projects.map((current) =>
+        current.id === (typeof p === "function" ? targetId : p.id)
+          ? typeof p === "function"
+            ? p(current)
+            : p
+          : current,
+      ),
     }));
   }
   function toast(text: string) {
@@ -1734,7 +1743,10 @@ function ProjectEditor({
   project: Project;
   styles: Style[];
   clients: Client[];
-  update: (p: Project) => void;
+  update: (
+    p: Project | ((current: Project) => Project),
+    targetId?: string,
+  ) => void;
   back: () => void;
   notify: (s: string) => void;
 }) {
@@ -1749,6 +1761,10 @@ function ProjectEditor({
   const [comment, setComment] = useState("");
   const [previewWidth, setPreviewWidth] = useState("desktop");
   const fileRef = useRef<HTMLInputElement>(null);
+  const latestProject = useRef(project);
+  useEffect(() => {
+    latestProject.current = project;
+  }, [project]);
   const style = styles.find((s) => s.id === project.styleId) || baseStyles[0];
   const block = project.blocks.find((b) => b.id === active);
   const client = clients.find((c) => c.id === project.clientId);
@@ -1765,6 +1781,54 @@ function ProjectEditor({
     change(
       project.blocks.map((b) => (b.id === active ? { ...b, ...values } : b)),
     );
+  }
+  function changeBlockType(type: Block["type"]) {
+    if (!block || type === block.type) return;
+    if (block.image && type !== "image") {
+      if (project.versions.length >= 100) {
+        notify(
+          "Save a workspace backup before converting this artwork block: the project already has 100 versions.",
+        );
+        return;
+      }
+      if (
+        !window.confirm(
+          "Convert this artwork block to text? The image will be removed from this block. A saved version will preserve the artwork so you can restore it from History & review.",
+        )
+      )
+        return;
+      const at = now();
+      setHistory((history) => [...history.slice(-29), project.blocks]);
+      update({
+        ...project,
+        blocks: project.blocks.map((current) => {
+          if (current.id !== block.id) return current;
+          const converted = { ...current, type };
+          delete converted.image;
+          return converted;
+        }),
+        versions: [
+          ...project.versions,
+          {
+            id: uid(),
+            at,
+            blocks: structuredClone(project.blocks),
+            note: "Artwork preserved before conversion to text",
+          },
+        ],
+        activity: [
+          ...project.activity.slice(-999),
+          { at, text: "Saved artwork version and converted a block to text" },
+        ],
+        updatedAt: at,
+        status: project.status === "approved" ? "in_progress" : project.status,
+      });
+      notify(
+        "Artwork preserved in a saved version. The current block is now text.",
+      );
+      return;
+    }
+    editBlock({ type });
   }
   function addBlock(type: Block["type"]) {
     const b: Block = { id: uid(), type, text: "" };
@@ -1938,7 +2002,20 @@ function ProjectEditor({
         text: file.name,
         image: String(reader.result),
       };
-      change([...project.blocks, b]);
+      setHistory((history) => [
+        ...history.slice(-29),
+        latestProject.current.blocks,
+      ]);
+      update(
+        (current) => ({
+          ...current,
+          blocks: [...current.blocks, b],
+          updatedAt: now(),
+          status:
+            current.status === "approved" ? "in_progress" : current.status,
+        }),
+        project.id,
+      );
       setActive(b.id);
     };
     reader.readAsDataURL(file);
@@ -2298,7 +2375,7 @@ function ProjectEditor({
                         <select
                           value={block.type}
                           onChange={(e) =>
-                            editBlock({ type: e.target.value as Block["type"] })
+                            changeBlockType(e.target.value as Block["type"])
                           }
                         >
                           <option value="heading">Heading</option>
@@ -2571,6 +2648,37 @@ function ArtifactPreview({
       <p>{b.text || "Write your next paragraph…"}</p>
     );
   }
+  function editableBlock(
+    block: Block,
+    content: React.ReactNode = renderBlock(block),
+  ) {
+    return (
+      <div
+        className={`artifact-content-block ${active === block.id && select ? "selected-block" : ""}`}
+        key={block.id}
+        onClick={select ? () => select(block.id) : undefined}
+        role={select ? "button" : undefined}
+        aria-label={
+          select
+            ? `Edit ${block.type}: ${block.text.slice(0, 100) || "Untitled block"}`
+            : undefined
+        }
+        tabIndex={select ? 0 : undefined}
+        onKeyDown={
+          select
+            ? (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  select(block.id);
+                }
+              }
+            : undefined
+        }
+      >
+        {content}
+      </div>
+    );
+  }
   if (project.kind === "presentation") {
     const groups: Block[][] = [];
     for (const block of project.blocks) {
@@ -2625,34 +2733,76 @@ function ArtifactPreview({
       </div>
     );
   }
-  if (project.kind === "website")
+  if (project.kind === "website") {
+    const sections: { heading?: Block; blocks: Block[] }[] = [];
+    for (const block of project.blocks) {
+      if (block.type === "heading" || !sections.length)
+        sections.push({
+          heading: block.type === "heading" ? block : undefined,
+          blocks: block.type === "heading" ? [] : [block],
+        });
+      else sections[sections.length - 1].blocks.push(block);
+    }
+    const hero = sections[0];
+    const heroImage = hero?.blocks.find((block) => block.type === "image");
     return (
       <div
         className={`site-preview ${width === "mobile" ? "mobile" : ""} ${style.id}`}
         style={css}
       >
-        <nav>
+        <nav aria-label="Website preview navigation">
           <strong>{project.title}</strong>
           <span>
-            <a href="#site-content">Explore</a> &nbsp;{" "}
+            {sections.slice(1, 4).map((section, index) => (
+              <a
+                key={section.heading?.id || index}
+                href={`#site-section-${index}`}
+              >
+                {section.heading?.text || `Section ${index + 1}`}
+              </a>
+            ))}
             <a href="#site-contact">Contact</a>
           </span>
         </nav>
-        <div className="site-blocks" id="site-content">
-          {project.blocks.map((b) => (
-            <div
-              className={active === b.id && select ? "selected-block" : ""}
-              key={b.id}
-              onClick={() => select?.(b.id)}
-              tabIndex={select ? 0 : undefined}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") select?.(b.id);
-              }}
-            >
-              {renderBlock(b)}
+        <main className="site-layout-content" id="site-content">
+          <section
+            className={`authored-site-hero ${heroImage ? "has-image" : ""}`}
+          >
+            <div className="authored-site-hero-copy">
+              <span className="artifact-direction-label">{style.name}</span>
+              {hero?.heading ? (
+                editableBlock(
+                  hero.heading,
+                  <h1>{hero.heading.text || project.title}</h1>,
+                )
+              ) : (
+                <h1>{project.title}</h1>
+              )}
+              {hero?.blocks
+                .filter((block) => block !== heroImage)
+                .map((block) => editableBlock(block))}
             </div>
+            {heroImage && (
+              <div className="authored-site-hero-art">
+                {editableBlock(heroImage)}
+              </div>
+            )}
+          </section>
+          {sections.slice(1).map((section, index) => (
+            <section
+              className="authored-site-section"
+              id={`site-section-${index}`}
+              key={section.heading?.id || index}
+            >
+              <div className="authored-site-section-heading">
+                {section.heading && editableBlock(section.heading)}
+              </div>
+              <div className="authored-site-section-body">
+                {section.blocks.map((block) => editableBlock(block))}
+              </div>
+            </section>
           ))}
-        </div>
+        </main>
         <div className="site-contact" id="site-contact">
           <h3>Let’s start a conversation.</h3>
           <p>A live contact form requires a configured destination.</p>
@@ -2665,25 +2815,64 @@ function ArtifactPreview({
         <footer>{project.title} · Local content preview</footer>
       </div>
     );
+  }
+  const coverImage =
+    project.blocks[0]?.type === "image" ? project.blocks[0] : undefined;
+  const chapters = project.blocks.filter((block) => block.type === "heading");
   return (
     <div className={`book-preview ${style.id}`} style={css}>
+      <section
+        className={`authored-book-cover ${coverImage ? "has-image" : ""}`}
+        aria-label="Book cover"
+      >
+        <span className="artifact-direction-label">{style.name}</span>
+        <h1>{project.title}</h1>
+        {coverImage && (
+          <div className="authored-book-cover-art">
+            {editableBlock(coverImage)}
+          </div>
+        )}
+        <div className="authored-book-cover-rule" />
+      </section>
+      {chapters.length > 1 && (
+        <section className="authored-book-contents" aria-label="Book contents">
+          <h2>Contents</h2>
+          <ol>
+            {chapters.map((chapter) => (
+              <li key={chapter.id}>
+                {select ? (
+                  <button type="button" onClick={() => select(chapter.id)}>
+                    {chapter.text || "Untitled chapter"}
+                  </button>
+                ) : (
+                  <a href={`#chapter-${chapter.id}`}>
+                    {chapter.text || "Untitled chapter"}
+                  </a>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       <div className="book-running">
         {project.title}
         <span>CONTENT PREVIEW</span>
       </div>
-      {project.blocks.map((b) => (
-        <div
-          className={active === b.id && select ? "selected-block" : ""}
-          key={b.id}
-          onClick={() => select?.(b.id)}
-          tabIndex={select ? 0 : undefined}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") select?.(b.id);
-          }}
-        >
-          {renderBlock(b)}
-        </div>
-      ))}
+      <div className="authored-book-body">
+        {project.blocks
+          .filter((block) => block !== coverImage)
+          .map((block) => (
+            <div
+              id={block.type === "heading" ? `chapter-${block.id}` : undefined}
+              className={
+                block.type === "heading" ? "authored-book-chapter" : ""
+              }
+              key={block.id}
+            >
+              {editableBlock(block)}
+            </div>
+          ))}
+      </div>
       <div className="book-page-end">MAKEBORNE / MANUALLY AUTHORED CONTENT</div>
     </div>
   );

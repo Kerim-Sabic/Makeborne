@@ -4,6 +4,7 @@ import PptxGenJS from "pptxgenjs";
 import { chromium } from "playwright";
 import sharp from "sharp";
 import { RequestError } from "./http";
+import { artifactDesignCss } from "../artifact-design";
 
 const imageSchema = z
   .string()
@@ -297,7 +298,7 @@ function slideDimensions(input: ExportRequest) {
 }
 function blockHtml(block: ExportRequest["blocks"][number]) {
   const text = escapeHtml(block.text);
-  if (block.type === "heading") return `<h2>${text}</h2>`;
+  if (block.type === "heading") return `<h2 id="heading-${escapeHtml(block.id)}">${text}</h2>`;
   if (block.type === "quote") return `<blockquote>${text}</blockquote>`;
   if (block.type === "image")
     return `<figure><img src="${block.image}" alt="${text}">${text ? `<figcaption>${text}</figcaption>` : ""}</figure>`;
@@ -319,7 +320,7 @@ export function htmlDocument(input: ExportRequest) {
       .map((slide, index) =>
         input.presentationMode === "visual"
           ? `<section class="slide visual" aria-label="Slide ${index + 1}"><img src="${slide.image}" alt="${escapeHtml(slide.title || `Slide ${index + 1}`)}"></section>`
-          : `<section class="slide"><span class="slide-number">${String(index + 1).padStart(2, "0")}</span><h2>${escapeHtml(slide.title)}</h2><div class="slide-body">${slide.image ? `<img src="${slide.image}" alt="${escapeHtml(slide.title)}">` : ""}<p>${escapeHtml(slide.body)}</p></div></section>`,
+          : `<section class="slide${!slide.image && slide.title.length <= 100 && slide.body.length <= 180 ? " slide-statement" : ""}"><span class="slide-number">${String(index + 1).padStart(2, "0")}</span><h2>${escapeHtml(slide.title)}</h2><div class="slide-body">${slide.image ? `<img src="${slide.image}" alt="${escapeHtml(slide.title)}">` : ""}<p>${escapeHtml(slide.body)}</p></div></section>`,
       )
       .join("");
     css = `@page{size:13.333in 7.5in;margin:0}.slide{width:100%;aspect-ratio:16/9;padding:6%;background:${style.background ?? "#F8F7F4"};break-after:page;position:relative;overflow:hidden}.slide h2{font-size:36px;max-width:90%}.slide-number{font:12px Arial,sans-serif;color:${style.color};display:block;margin-bottom:30px}.slide-body{display:flex;gap:5%;align-items:flex-start;font-size:23px}.slide-body img{width:43%;max-height:300px;object-fit:contain}.visual{padding:0;background:#16181D;display:flex;align-items:center;justify-content:center}.visual img{width:100%;height:100%;object-fit:contain}@media print{.slide{width:13.333in;height:7.5in;aspect-ratio:auto}.slide:last-child{break-after:auto}}`;
@@ -358,19 +359,19 @@ export function htmlDocument(input: ExportRequest) {
     }</div>${heroImage ? blockHtml(heroImage) : ""}</section>${sections.map((section, index) => `<section class="site-section" id="section-${index}">${section.title ? `<h2>${escapeHtml(section.title)}</h2>` : ""}<div>${section.blocks.map(blockHtml).join("")}</div></section>`).join("")}</main><footer>© ${new Date().getFullYear()} ${title} · Made with Makeborne</footer>`;
     css = `.site-nav{display:flex;justify-content:space-between;align-items:center;gap:30px;padding:26px 6%;border-bottom:1px solid #DCDDD9;font:14px Arial,sans-serif}.site-nav>a{font-weight:bold;font-size:20px;text-decoration:none}.site-nav nav{display:flex;gap:24px}.site-nav nav a{text-decoration:none}main,body>footer{max-width:1280px;padding:0 6%;margin:auto}.site-hero{display:grid;grid-template-columns:1fr 1fr;gap:8%;align-items:center;padding:90px 0}.site-hero:has(>div:only-child){grid-template-columns:1fr}.site-hero h1{max-width:780px;margin:20px 0 30px}.site-hero figure{margin:0}.site-hero img{max-height:520px;object-fit:contain;border-radius:4px}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.site-section{padding:65px 0;border-top:1px solid #DCDDD9}.site-section>div{max-width:850px}.site-section h2{margin-bottom:30px}.site-section figure{max-width:900px}body>footer{padding-top:30px;padding-bottom:30px;border-top:1px solid #DCDDD9}@media(max-width:700px){.site-nav nav{display:none}.site-hero{grid-template-columns:1fr;padding:50px 0;gap:30px}.site-section{padding:40px 0}}@page{size:A4;margin:20mm}@media print{.site-nav nav{display:none}.site-hero{padding:20px 0}.site-section{padding:20px 0}}`;
   } else {
-    const art = input.blocks.find((block) => block.type === "image");
+    const art = input.blocks[0]?.type === "image" ? input.blocks[0] : undefined;
     const chapters = input.blocks.filter((block) => block.type === "heading");
     const toc =
       chapters.length > 1
-        ? `<section class="contents"><span class="eyebrow">CONTENTS</span><h2>A guide to what follows.</h2><ol>${chapters.map((chapter) => `<li>${escapeHtml(chapter.text)}</li>`).join("")}</ol></section>`
+        ? `<section class="contents"><span class="eyebrow">CONTENTS</span><h2>A guide to what follows.</h2><ol>${chapters.map((chapter) => `<li><a href="#heading-${escapeHtml(chapter.id)}">${escapeHtml(chapter.text)}</a></li>`).join("")}</ol></section>`
         : "";
-    content = `<section class="cover"><span class="eyebrow">${escapeHtml(style.name)} / A MAKEBORNE BOOK</span><h1>${title}</h1>${art ? `<img class="cover-art" src="${art.image}" alt="${escapeHtml(art.text)}">` : ""}<span class="cover-rule"></span></section>${toc}<main class="book-body">${input.blocks
+    content = `<section class="cover"><h1>${title}</h1>${input.author ? `<p class="book-author">${escapeHtml(input.author)}</p>` : ""}${art ? `<figure><img class="cover-art" src="${art.image}" alt="${escapeHtml(art.text)}">${art.text ? `<figcaption>${escapeHtml(art.text)}</figcaption>` : ""}</figure>` : ""}<span class="cover-rule"></span></section>${toc}<main class="book-body">${input.blocks
       .filter((block) => block !== art)
       .map(blockHtml)
       .join("")}<footer>Made with Makeborne</footer></main>`;
     css = `@page{size:A4;margin:22mm 20mm}.cover{min-height:240mm;break-after:page;padding:12mm 0;display:flex;flex-direction:column;gap:12mm}.cover h1{font-size:44px;margin:0;overflow-wrap:anywhere}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.cover-art{width:100%;height:145mm;object-fit:contain}.cover-rule{height:2px;width:60px;background:${style.color};margin-top:auto}.contents{break-after:page;padding:20mm 0}.contents li{padding:8px 0;border-bottom:1px solid #DCDDD9}.book-body h2{margin:35px 0 18px}.book-body h2:not(:first-child){break-before:page}.book-body{font-size:16px}.book-body p{margin-bottom:20px}.book-body>figure{margin:25px 0}body{padding:40px;max-width:920px;margin:auto}@media print{body{padding:0;max-width:none}.cover{min-height:240mm}.cover h1{font-size:40px}.book-body h2{margin-top:0}}`;
   }
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}</style></head><body>${content}</body></html>`;
+  return `<!doctype html><html lang="${escapeHtml(input.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}${input.presentationMode === "visual" ? "" : artifactDesignCss(input.styleId, input.kind)}</style></head><body>${content}</body></html>`;
 }
 export async function pdfDocument(input: ExportRequest) {
   const browser = await chromium.launch({
@@ -391,6 +392,25 @@ export async function pdfDocument(input: ExportRequest) {
       waitUntil: "load",
       timeout: 15000,
     });
+    if (input.kind === "presentation" && input.presentationMode === "native") {
+      await page.emulateMedia({ media: "print" });
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const overflowing = await page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>(".slide"))
+          .flatMap((slide, index) =>
+            slide.scrollHeight > slide.clientHeight + 2 ||
+            slide.scrollWidth > slide.clientWidth + 2 ||
+            Array.from(slide.querySelectorAll<HTMLElement>("h2,p")).some(
+              (text) => text.scrollWidth > text.clientWidth + 2,
+            ) ? [index + 1] : [],
+          ),
+      );
+      if (overflowing.length)
+        throw new RequestError(
+          "SLIDE_CONTENT_OVERFLOW",
+          `Slide ${overflowing.join(", ")} contains more content than fits on the page. Split it into shorter slides before exporting; your original text is preserved.`,
+        );
+    }
     return await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
@@ -411,9 +431,7 @@ function effectiveSlides(input: ExportRequest): ExportRequest["slides"] {
         body:
           block.type === "heading"
             ? ""
-            : block.type === "image"
-              ? ""
-              : block.text,
+            : block.text,
         ...(block.image ? { image: block.image } : {}),
       });
     else if (block.type === "image") {
@@ -421,10 +439,14 @@ function effectiveSlides(input: ExportRequest): ExportRequest["slides"] {
         slides.push({
           id: block.id,
           title: input.title,
-          body: "",
+          body: block.text,
           image: block.image,
         });
-      else slides[slides.length - 1].image = block.image;
+      else {
+        const slide = slides[slides.length - 1];
+        slide.image = block.image;
+        if (block.text) slide.body += `${slide.body ? "\n\n" : ""}${block.text}`;
+      }
     } else
       slides[slides.length - 1].body +=
         `${slides[slides.length - 1].body ? "\n\n" : ""}${block.text}`;
@@ -444,7 +466,7 @@ export async function presentationDocument(input: ExportRequest) {
     });
     pptx.layout = "FULL_VISUAL";
   } else pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "Makeborne";
+  pptx.author = input.author || "Makeborne";
   pptx.title = input.title;
   pptx.subject =
     input.presentationMode === "visual"
@@ -483,22 +505,35 @@ export async function presentationDocument(input: ExportRequest) {
         altText: content.title || `Slide ${index + 1}`,
       });
     } else {
+      const statement = !content.image && content.title.length <= 100 && content.body.length <= 180;
+      const signal = style.id === "direction-signal";
+      const atlas = style.id === "direction-atlas";
+      if (signal && statement) {
+        // Native vectors remain editable. Artwork stays out of the text area.
+        for (const diameter of [2.2, 1.7, 1.2])
+          slide.addShape(pptx.ShapeType.ellipse, {
+            x: 12.05 - diameter / 2, y: 1.8 - diameter / 2,
+            w: diameter, h: diameter,
+            line: { color: accent, transparency: 55, width: 0.8 },
+            fill: { color: accent, transparency: 100 },
+          });
+      }
       slide.addShape(pptx.ShapeType.rect, {
         x: 0.6,
         y: 0.5,
-        w: 0.7,
+        w: atlas ? 12.1 : 0.7,
         h: 0.06,
         line: { color: accent },
         fill: { color: accent },
       });
       slide.addText(content.title, {
         x: 0.6,
-        y: 0.9,
-        w: 12.1,
-        h: 1.3,
+        y: statement ? 1.5 : 0.9,
+        w: statement && signal ? 9.3 : 12.1,
+        h: statement ? 2.1 : 1.3,
         fontFace: font,
-        fontSize: 32,
-        bold: true,
+        fontSize: statement ? 48 : 32,
+        bold: !atlas,
         color: (style.textColor ?? "#16181D").slice(1),
         margin: 0,
         fit: "shrink",
@@ -516,11 +551,11 @@ export async function presentationDocument(input: ExportRequest) {
         });
       slide.addText(content.body, {
         x: content.image ? 6.7 : 0.6,
-        y: 2.5,
+        y: statement ? 4.1 : 2.5,
         w: content.image ? 5.9 : 12.1,
-        h: 3.8,
+        h: statement ? 1.8 : 3.8,
         fontFace: font,
-        fontSize: 20,
+        fontSize: statement ? 24 : 20,
         color: (style.textColor ?? "#16181D").slice(1),
         margin: 0,
         valign: "top",
