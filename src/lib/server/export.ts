@@ -304,6 +304,18 @@ function blockHtml(block: ExportRequest["blocks"][number]) {
     return `<figure><img src="${block.image}" alt="${text}">${text ? `<figcaption>${text}</figcaption>` : ""}</figure>`;
   return `<p>${text}</p>`;
 }
+/** Keep a closing quote with its preceding paragraph when they fit together. */
+function bookBodyHtml(blocks: ExportRequest["blocks"]) {
+  const parts: string[] = [];
+  for (let index = 0; index < blocks.length; index++) {
+    const block = blocks[index], next = blocks[index + 1], after = blocks[index + 2];
+    if (block.type === "paragraph" && next?.type === "quote" && (!after || after.type === "heading")) {
+      parts.push(`<div class="book-quote-context">${blockHtml(block)}${blockHtml(next)}</div>`);
+      index++;
+    } else parts.push(blockHtml(block));
+  }
+  return parts.join("");
+}
 export function htmlDocument(input: ExportRequest) {
   const style = exportStyle(input);
   const title = escapeHtml(input.title);
@@ -323,7 +335,7 @@ export function htmlDocument(input: ExportRequest) {
           : `<section class="slide${!slide.image && slide.title.length <= 100 && slide.body.length <= 180 ? " slide-statement" : ""}"><span class="slide-number">${String(index + 1).padStart(2, "0")}</span><h2>${escapeHtml(slide.title)}</h2><div class="slide-body">${slide.image ? `<img src="${slide.image}" alt="${escapeHtml(slide.title)}">` : ""}<p>${escapeHtml(slide.body)}</p></div></section>`,
       )
       .join("");
-    css = `@page{size:13.333in 7.5in;margin:0}.slide{width:100%;aspect-ratio:16/9;padding:6%;background:${style.background ?? "#F8F7F4"};break-after:page;position:relative;overflow:hidden}.slide h2{font-size:36px;max-width:90%}.slide-number{font:12px Arial,sans-serif;color:${style.color};display:block;margin-bottom:30px}.slide-body{display:flex;gap:5%;align-items:flex-start;font-size:23px}.slide-body img{width:43%;max-height:300px;object-fit:contain}.visual{padding:0;background:#16181D;display:flex;align-items:center;justify-content:center}.visual img{width:100%;height:100%;object-fit:contain}@media print{.slide{width:13.333in;height:7.5in;aspect-ratio:auto}.slide:last-child{break-after:auto}}`;
+    css = `@page{size:13.333in 7.5in;margin:0}.slide{width:100%;aspect-ratio:16/9;padding:6%;background:${style.background ?? "#F8F7F4"};break-after:page;position:relative;overflow:hidden}.slide h2{font-size:36px;max-width:90%;line-height:1.15}.slide.slide-statement:not(.visual){display:flex;flex-direction:column;justify-content:center}.slide.slide-statement:not(.visual) h2{font-size:64px;max-width:19ch;line-height:1.08;margin:0 0 32px;letter-spacing:-.035em}.slide.slide-statement:not(.visual) .slide-body{font-size:27px;max-width:42ch;line-height:1.55}.slide.slide-statement:not(.visual) .slide-body p{margin:0}.slide-number{font:12px Arial,sans-serif;color:${style.color};display:block;margin-bottom:30px}.slide-body{display:flex;gap:5%;align-items:flex-start;font-size:23px}.slide-body img{width:43%;max-height:300px;object-fit:contain}.visual{padding:0;background:#16181D;display:flex;align-items:center;justify-content:center}.visual img{width:100%;height:100%;object-fit:contain}@media print{.slide{width:13.333in;height:7.5in;aspect-ratio:auto}.slide:last-child{break-after:auto}}`;
     css = css
       .replace(
         "size:13.333in 7.5in",
@@ -365,11 +377,8 @@ export function htmlDocument(input: ExportRequest) {
       chapters.length > 1
         ? `<section class="contents"><span class="eyebrow">CONTENTS</span><h2>A guide to what follows.</h2><ol>${chapters.map((chapter) => `<li><a href="#heading-${escapeHtml(chapter.id)}">${escapeHtml(chapter.text)}</a></li>`).join("")}</ol></section>`
         : "";
-    content = `<section class="cover"><h1>${title}</h1>${input.author ? `<p class="book-author">${escapeHtml(input.author)}</p>` : ""}${art ? `<figure><img class="cover-art" src="${art.image}" alt="${escapeHtml(art.text)}">${art.text ? `<figcaption>${escapeHtml(art.text)}</figcaption>` : ""}</figure>` : ""}<span class="cover-rule"></span></section>${toc}<main class="book-body">${input.blocks
-      .filter((block) => block !== art)
-      .map(blockHtml)
-      .join("")}<footer>Made with Makeborne</footer></main>`;
-    css = `@page{size:A4;margin:22mm 20mm}.cover{min-height:240mm;break-after:page;padding:12mm 0;display:flex;flex-direction:column;gap:12mm}.cover h1{font-size:44px;margin:0;overflow-wrap:anywhere}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.cover-art{width:100%;height:145mm;object-fit:contain}.cover-rule{height:2px;width:60px;background:${style.color};margin-top:auto}.contents{break-after:page;padding:20mm 0}.contents li{padding:8px 0;border-bottom:1px solid #DCDDD9}.book-body h2{margin:35px 0 18px}.book-body h2:not(:first-child){break-before:page}.book-body{font-size:16px}.book-body p{margin-bottom:20px}.book-body>figure{margin:25px 0}body{padding:40px;max-width:920px;margin:auto}@media print{body{padding:0;max-width:none}.cover{min-height:240mm}.cover h1{font-size:40px}.book-body h2{margin-top:0}}`;
+    content = `<section class="cover"><h1>${title}</h1>${input.author ? `<p class="book-author">${escapeHtml(input.author)}</p>` : ""}${art ? `<figure><img class="cover-art" src="${art.image}" alt="${escapeHtml(art.text)}">${art.text ? `<figcaption>${escapeHtml(art.text)}</figcaption>` : ""}</figure>` : ""}<span class="cover-rule"></span></section>${toc}<main class="book-body">${bookBodyHtml(input.blocks.filter((block) => block !== art))}<footer>Made with Makeborne</footer></main>`;
+    css = `@page{size:A4;margin:22mm 20mm;@bottom-center{content:counter(page) " / " counter(pages);font:9px Arial,sans-serif;color:${style.textColor ?? "#5C616D"}}}@page:first{@bottom-center{content:none}}.book-quote-context{break-inside:avoid}.cover{min-height:240mm;break-after:page;padding:12mm 0;display:flex;flex-direction:column;gap:12mm}.cover h1{font-size:44px;margin:0;overflow-wrap:anywhere}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.cover-art{width:100%;height:145mm;object-fit:contain}.cover-rule{height:2px;width:60px;background:${style.color};margin-top:auto}.contents{break-after:page;padding:20mm 0}.contents li{padding:8px 0;border-bottom:1px solid #DCDDD9}.book-body h2{margin:35px 0 18px}.book-body h2:not(:first-child){break-before:page}.book-body{font-size:16px}.book-body p{margin-bottom:20px}.book-body>figure{margin:25px 0}body{padding:40px;max-width:920px;margin:auto}@media print{body{padding:0;max-width:none}.cover{min-height:240mm}.cover h1{font-size:40px}.book-body h2{margin-top:0}}`;
   }
   const coverPrint = input.kind === "book" ? `@media print{.cover{height:240mm;min-height:0;gap:6mm}.cover h1{flex:none;margin:0}.cover .book-author{flex:none;margin:0}.cover figure{flex:1;min-height:0;display:flex;flex-direction:column;margin:0}.cover .cover-art{flex:1;min-height:0;height:0;width:100%;max-height:none;object-fit:contain}.cover figcaption{flex:none}.cover-rule{flex:none;margin-top:auto}}` : "";
   return `<!doctype html><html lang="${escapeHtml(input.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}${input.presentationMode === "visual" ? "" : artifactDesignCss(input.styleId, input.kind)}${coverPrint}</style></head><body>${content}</body></html>`;
