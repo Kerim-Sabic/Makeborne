@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ClientOutreachSchema } from "../client-outreach";
-import { ArtifactContentSchema, ArtifactKindSchema, CreateClientSchema, CreateProjectSchema, StyleProfileSchema, type Client, type Project, type Artifact, type ArtifactVersion } from "@/lib/domain";
+import { ArtifactContentSchema, ArtifactKindSchema, CreateClientSchema, CreateProjectSchema, StyleProfileSchema, type Client, type Project, type Artifact, type ArtifactVersion } from "../domain";
 
 export type CloudRole = "owner" | "editor" | "reviewer";
 export type CloudWorkspace = { id: string; name: string; role: CloudRole };

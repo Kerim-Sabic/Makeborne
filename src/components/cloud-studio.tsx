@@ -1397,7 +1397,7 @@ export function CloudEditor({
       <div className="editor-heading">
         <button
           className="icon-button"
-          aria-label="Back to cloud projects"
+          aria-label="Back to projects"
           onClick={() => {
             if (
               !dirty ||

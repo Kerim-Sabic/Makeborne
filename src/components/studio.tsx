@@ -7,6 +7,11 @@ import { creationStyles, retainCreationStyle, styleConcept } from "@/lib/creatio
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
 import AccountProjects from "./account-projects";
+import { useCreationAccount } from "./use-creation-account";
+import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
+import { createClient } from "@/lib/supabase/client";
+import { buildCreationPayload } from "@/lib/cloud/creation-payload";
+import type { CloudArtifact, CloudWorkspace } from "@/lib/cloud/contracts";
 import {
   LocalWorkspaceSchema,
   LocalStyleSchema,
@@ -96,6 +101,7 @@ function moveRadioSelection(event: ReactKeyboardEvent<HTMLDivElement>, select: (
 
 export default function Studio() {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
+  const [createdAccountProject, setCreatedAccountProject] = useState<{ workspaceId: string; artifact: CloudArtifact } | null>(null);
   const [persistenceAllowed, setPersistenceAllowed] = useState(false);
   const [initialStyle, setInitialStyle] = useState("editorial");
   const [initialBrief, setInitialBrief] = useState("");
@@ -747,7 +753,7 @@ export default function Studio() {
                     />
                   </label>
                 </div>
-                <AccountProjects search={search} filter={filter} />
+                <AccountProjects key={createdAccountProject?.artifact.id ?? "account-projects"} search={search} filter={filter} created={createdAccountProject} />
                 {workspace.projects.length === 0 ? (
                   <Empty
                     icon={FolderOpen}
@@ -988,10 +994,10 @@ export default function Studio() {
                   <section>
                     <h2>Account storage</h2>
                     <p>
-                      Account saving is being connected to this studio. Projects
-                      shown here are still saved on this device. Signing in does
-                      not upload or merge them yet. Previously saved account
-                      records remain available below during this transition.
+                      New projects created while signed in save to your account.
+                      Open them in Projects to edit with automatic saving.
+                      Existing device drafts remain on this browser until you
+                      explicitly import them. Client and import tools remain available below during this transition.
                     </p>
                     <Link className="text-link" href="/studio/cloud">Previously saved account records <ArrowUpRight size={14} /></Link>
                   </section>
@@ -1013,6 +1019,12 @@ export default function Studio() {
           styles={creationStyles(workspace.styles, creating)}
           close={() => { setCreating(null); setInitialClient(""); }}
           create={createProject}
+          accountCreated={(workspaceId, artifact) => {
+            setCreatedAccountProject({ workspaceId, artifact });
+            setCreating(null); setInitialClient(""); setInitialBrief(""); setInitialTitle(""); setDraftBrief("");
+            openRoute({ tab: "projects", projectId: null, clientId: null });
+            toast("Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
+          }}
         />
       )}
       {clientModal && (
@@ -1198,10 +1210,11 @@ function CreateModal({
   initialStyle,
   kind,
   onKind,
-  clients,
+  clients: deviceClients,
   styles,
   close,
   create,
+  accountCreated,
 }: {
   initialClient: string;
   initialBrief: string;
@@ -1212,6 +1225,7 @@ function CreateModal({
   clients: Client[];
   styles: Style[];
   close: () => void;
+  accountCreated: (workspaceId: string, artifact: CloudArtifact) => void;
   create: (v: {
     effort: EffortLevel;
     title: string;
@@ -1225,6 +1239,13 @@ function CreateModal({
     kind: Kind;
   }) => boolean;
 }) {
+  const account = useCreationAccount();
+  const clients = account.accountId ? account.clients : deviceClients;
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [saveError, setSaveError] = useState("");
+  const [uncertain, setUncertain] = useState(false);
+  const pending = useRef<{ accountId: string; workspaceId: string; body: ReturnType<typeof buildCreationPayload> } | null>(null);
   const [step, setStep] = useState(initialBrief.trim() ? 2 : 1);
   const [mode, setMode] = useState<"plan" | "create">("plan");
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
@@ -1353,8 +1374,10 @@ function CreateModal({
   const finalStep = mode === "plan" ? 4 : 3;
   const needsPlanAnswers = mode === "plan" && step >= 2 && (!brief.trim() || !audience.trim() || !purpose.trim() || (step === 4 && plan.structure.length === 0));
   return (
-    <Modal close={close} title="Create a project">
-      <div className="wizard-content" ref={wizardContent}>
+    <Modal close={() => { if (!savingRef.current) close(); }} title="Create a project">
+      <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
+      {saveError && <p role="alert" className="small-note">{saveError}</p>}
+      <div className="wizard-content" ref={wizardContent} inert={saving || uncertain || !account.ready}>
         <div className="creation-mode" aria-label="Creation mode">
           <button type="button" aria-pressed={mode === "plan"} onClick={() => setMode("plan")}><strong>Plan</strong><small>Shape the brief. Review before creating.</small></button>
           <button type="button" aria-pressed={mode === "create"} onClick={() => { setMode("create"); if (step === 4) setStep(3); }}><strong>Create</strong><small>Go straight to project setup.</small></button>
@@ -1573,25 +1596,28 @@ function CreateModal({
             </div>
           </>
         ) : (
-          <><div className="creation-plan"><h3>{title}</h3><h4>Audience & outcome</h4><p className="plan-answer">{audience} — {purpose}</p><h4>Project brief</h4><p className="plan-answer">{brief}</p><label className="creation-outline">Proposed structure<textarea rows={7} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={event => setOutline(event.target.value)} aria-describedby="creation-outline-help" /></label><p id="creation-outline-help" className="creation-plan-note">Edit the plan: one section, chapter, or slide per line. Add at least one item before approval. Maximum 2,000 characters.</p><h4>Creative effort</h4><p>{EFFORT_PRESENTATION[effort].label} · estimate required before generation</p><h4>Creative direction</h4><p>{selectedStyle?.name}</p>{requirements && <><h4>Requirements & exclusions</h4><p className="plan-answer">{requirements}</p></>}<h4>Before sharing</h4><ul>{plan.checks.map(item => <li key={item}>{item}</li>)}</ul></div><p className="creation-plan-note">This is a local structured plan. Confirming saves the plan and your supplied content in an editable project. Live generation and publishing are not connected.</p></>
+          <><div className="creation-plan"><h3>{title}</h3><h4>Audience & outcome</h4><p className="plan-answer">{audience} — {purpose}</p><h4>Project brief</h4><p className="plan-answer">{brief}</p><label className="creation-outline">Proposed structure<textarea rows={7} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={event => setOutline(event.target.value)} aria-describedby="creation-outline-help" /></label><p id="creation-outline-help" className="creation-plan-note">Edit the plan: one section, chapter, or slide per line. Add at least one item before approval. Maximum 2,000 characters.</p><h4>Creative effort</h4><p>{EFFORT_PRESENTATION[effort].label} · estimate required before generation</p><h4>Creative direction</h4><p>{selectedStyle?.name}</p>{requirements && <><h4>Requirements & exclusions</h4><p className="plan-answer">{requirements}</p></>}<h4>Before sharing</h4><ul>{plan.checks.map(item => <li key={item}>{item}</li>)}</ul></div><p className="creation-plan-note">This is a structured plan. Confirming saves the plan and your supplied content in an editable project. Live generation and publishing are not connected.</p></>
         )}
       </div>
       <div className="modal-actions">
         <button
           className="button secondary"
+          disabled={saving || uncertain}
           onClick={() => (step === 1 ? close() : setStep(step - 1))}
         >
           {step === 1 ? "Cancel" : "Back"}
         </button>
         <button
           className="button primary"
-          disabled={!title.trim() || !draftLoaded || needsPlanAnswers}
-          onClick={() => {
+          disabled={saving || !account.ready || !title.trim() || !draftLoaded || needsPlanAnswers}
+          onClick={async () => {
             if (step < finalStep) {
               setStep(step + 1);
               return;
             }
-            const saved = create({
+            if (savingRef.current) return;
+            savingRef.current = true; setSaving(true); setSaveError("");
+            const values = {
               effort,
               kind,
               title: title.trim(),
@@ -1602,7 +1628,36 @@ function CreateModal({
               styleId,
               clientId,
               content,
-            });
+            };
+            let saved = false;
+            try {
+              if (account.accountId) {
+                const verified = await createClient().auth.getUser();
+                if (verified.error || verified.data.user?.id !== account.accountId) throw new Error("Your account changed. Close this form and reopen it before saving.");
+                if (pending.current && pending.current.accountId !== account.accountId) throw new Error("Retry this draft from the account that started it.");
+                setCloudAccount(account.accountId);
+                if (!pending.current) {
+                  if (getPendingCloudWrites(account.accountId).some(item => item.path.endsWith("/studio-projects"))) throw new Error("An earlier project save needs confirmation. Close this form and retry that exact request in Projects before creating another project.");
+                  if (values.clientId && !account.clients.some(client => client.id === values.clientId)) throw new Error("Choose an account client or select no client. Device-only clients are not uploaded automatically.");
+                  if (!selectedStyle || selectedStyle.id !== values.styleId) throw new Error("Choose an available style before creating.");
+                  const body = buildCreationPayload(values, selectedStyle);
+                  const target = account.workspace ?? (await api<{ workspace: CloudWorkspace }>("/api/workspaces", { name: "My workspace" })).workspace;
+                  pending.current = { accountId: account.accountId, workspaceId: target.id, body };
+                }
+                const request = pending.current;
+                const result = await api<{ artifact: CloudArtifact }>(`/api/cloud/workspaces/${request.workspaceId}/studio-projects`, request.body);
+                saved = true; pending.current = null; setUncertain(false);
+                accountCreated(request.workspaceId, result.artifact);
+              } else {
+                if (pending.current) throw new Error("Sign back into the account that started this save to retry it.");
+                saved = create(values);
+              }
+            } catch (error) {
+              const unknown = !!pending.current && error instanceof CloudError && error.uncertain;
+              if (!unknown && !uncertain) pending.current = null;
+              setUncertain(unknown || uncertain);
+              setSaveError(error instanceof z.ZodError ? "Some details exceed the supported limits. Shorten the title or content and try again." : error instanceof Error ? error.message : "Could not save. Your draft is preserved.");
+            } finally { savingRef.current = false; setSaving(false); }
             if (saved) {
               try {
                 (["website", "book", "presentation"] as Kind[]).forEach(
@@ -1614,7 +1669,7 @@ function CreateModal({
             }
           }}
         >
-          {step === finalStep ? mode === "plan" ? "Confirm plan & create" : "Create project" : step === 3 ? "Review plan" : "Continue"}
+          {saving ? "Saving project…" : uncertain ? "Retry the same save" : step === finalStep ? mode === "plan" ? "Confirm plan & create" : "Create project" : step === 3 ? "Review plan" : "Continue"}
           <ArrowRight size={16} />
         </button>
       </div>

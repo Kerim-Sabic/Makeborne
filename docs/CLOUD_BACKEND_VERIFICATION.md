@@ -34,3 +34,12 @@ Migration `20261003221220_client_outreach.sql` applied to local Makeborne and li
 `supabase/check-client-outreach.sql` passes locally and via linked cloud query: 15 assertions cover owner/editor writes, reviewer reads and denied writes, cross-tenant isolation, stale revision rejection, invalid stages/dates/credential URLs, and append-only history. The script rolls back its fixtures in a subtransaction, including on failure. No messages or emails are sent.
 
 Production build and TypeScript pass. Security advisors report no local issues and only the previously known cloud Auth leaked-password-protection warning. Signed-in browser verification of the new cloud panel remains pending; the inspected app browser session was signed out. Local outreach is not automatically uploaded; explicit project import excludes it and says so.
+
+
+## Main Studio wizard connected — 2026-10-04
+
+The existing creation modal now resolves the account destination and account clients before accepting a save. Signed-in creation calls the atomic endpoint, opens the returned artifact in the main Studio, and retains an identical request body for uncertain retries. New accounts provision their first workspace through the existing idempotent endpoint. Signed-out creation retains the explicitly labelled device draft flow. Account clients are fetched through all pages; device client IDs cannot be silently attached or uploaded. Pending account creation requests are visible and recoverable from Projects after closing the wizard.
+
+Browser verification on localhost with an existing signed-in session: created `QA account creation — main Studio`, opened version 1 with supplied text, edited the paragraph, observed version 2, reloaded the page, reopened the account card, and confirmed the changed paragraph and both history entries. No generation was invoked. This proves that create/edit/autosave/reload path; simulated network interruption and concurrent browser editing remain unverified in the browser.
+
+Eight creation payload checks, 15 autosave checks, 22 editor bridge checks, TypeScript and the production build pass. Focused ESLint reports no errors; two pre-existing image optimization warnings remain in studio.tsx. Homepage/login/signup redesign also inspected on desktop and 390px mobile, including signup mode and footer layout. Authentication submission logic is unchanged; the redesigned signup submission has not created another account.

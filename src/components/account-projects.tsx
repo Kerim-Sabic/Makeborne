@@ -6,12 +6,13 @@ import { createClient } from "@/lib/supabase/client";
 import type { CloudArtifact, CloudWorkspace, CloudWorkspaceSnapshot } from "@/lib/cloud/contracts";
 import { api, setCloudAccount } from "./cloud-api";
 import { icons, kindLabel } from "./studio-model";
+import PendingCloudWrites from "./pending-cloud-writes";
 
 const AccountEditor = dynamic(() => import("./cloud-studio").then(module => module.CloudEditor), { loading: () => <p role="status">Opening project…</p> });
 type Snapshot = CloudWorkspaceSnapshot & { pagination: { artifacts: { nextOffset: number | null; total: number } } };
 
 /** Account records are read independently: device drafts are never uploaded implicitly. */
-export default function AccountProjects({ search, filter }: { search: string; filter: string }) {
+export default function AccountProjects({ search, filter, created }: { search: string; filter: string; created?: { workspaceId: string; artifact: CloudArtifact } | null }) {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<CloudWorkspace[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -56,15 +57,19 @@ export default function AccountProjects({ search, filter }: { search: string; fi
         if (!active || version !== requestVersion.current) return;
         setWorkspaces(result.workspaces);
         if (result.workspaces.length) {
-          const data = await api<Snapshot>(`/api/cloud/workspaces/${result.workspaces[0].id}`);
-          if (active && version === requestVersion.current) setSnapshot(data);
+          const target = result.workspaces.find(workspace => workspace.id === created?.workspaceId) ?? result.workspaces[0];
+          const data = await api<Snapshot>(`/api/cloud/workspaces/${target.id}`);
+          if (active && version === requestVersion.current) {
+            setSnapshot(data);
+            if (created?.workspaceId === target.id) setSelected(created.artifact);
+          }
         }
       } catch (error) {
         if (active && version === requestVersion.current) setMessage(error instanceof Error ? error.message : "Could not load your saved projects.");
       } finally { if (active && version === requestVersion.current) setBusy(false); }
     })();
     return () => { active = false; };
-  }, [accountId]);
+  }, [accountId, created]);
   async function load(workspaceId: string, append = false) {
     const version = ++requestVersion.current;
     setBusy(true); setMessage("");
@@ -83,6 +88,7 @@ export default function AccountProjects({ search, filter }: { search: string; fi
       {!selected && snapshot && <button type="button" className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id)}><RefreshCw size={14} /> Refresh</button>}</div>
     {!selected && workspaces.length > 1 && <label>Workspace<select disabled={busy} value={snapshot?.workspace.id ?? ""} onChange={event => void load(event.target.value)}>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>}
     {message && <p role="status">{message}</p>}
+    <PendingCloudWrites accountId={accountId} refresh={async () => { if (snapshot) await load(snapshot.workspace.id); else window.location.reload(); }} />
     {busy && <p role="status">Loading your account projects…</p>}
     {selected && snapshot ? <AccountEditor key={`${accountId}:${snapshot.workspace.id}:${selected.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} artifact={selected} role={snapshot.workspace.role}
       notify={setMessage} back={() => { setSelected(null); void load(snapshot.workspace.id); }} /> : <>

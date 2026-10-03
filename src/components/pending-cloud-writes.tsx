@@ -48,7 +48,7 @@ export default function PendingCloudWrites({
       await refresh();
       scan();
       setMessage(
-        "The exact request was confirmed. Review the current cloud records before continuing any incomplete import.",
+        "The saved request was confirmed. Review your account projects before continuing.",
       );
     } catch (error) {
       setMessage(
@@ -63,7 +63,7 @@ export default function PendingCloudWrites({
   if (!pending.length) return null;
   return (
     <section className="cloud-conflict">
-      <span className="eyebrow">PENDING CLOUD OPERATIONS ON THIS DEVICE</span>
+      <span className="eyebrow">SAVES AWAITING CONFIRMATION</span>
       <h3>Keep uncertain work recoverable.</h3>
       <p>
         These requests have a preserved identity. They are never retried
@@ -91,7 +91,7 @@ export default function PendingCloudWrites({
                   ? "Workspace creation"
                   : item.path.endsWith("/clients")
                     ? "Client creation"
-                    : item.path.endsWith("/projects")
+                    : item.path.endsWith("/projects") || item.path.endsWith("/studio-projects")
                       ? "Project creation"
                       : "Content setup"}{" "}
               ·{" "}

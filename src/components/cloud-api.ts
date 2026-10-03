@@ -226,8 +226,10 @@ export async function api<T>(
         true,
       );
     if (storageId) {
-      localStorage.removeItem(storageId);
-      pendingChanged();
+      try {
+        localStorage.removeItem(storageId);
+        pendingChanged();
+      } catch { /* A cleanup failure must not turn a confirmed save into a failed write. */ }
     }
     return result.data as T;
   } finally {
@@ -254,11 +256,11 @@ export function getPendingCloudWrites(userId: string): PendingCloudWrite[] {
       const parsed = z
         .object({
           key: z.string().uuid(),
-          body: z.string().max(2100000),
+          body: z.string().max(2500000),
           path: z
             .string()
             .regex(
-              /^\/api\/workspaces$|^\/api\/cloud\/workspaces\/[a-f0-9-]+\/(clients|projects|projects\/[a-f0-9-]+\/artifacts|artifacts\/[a-f0-9-]+\/versions)$/,
+              /^\/api\/workspaces$|^\/api\/cloud\/workspaces\/[a-f0-9-]+\/(clients|projects|studio-projects|projects\/[a-f0-9-]+\/artifacts|artifacts\/[a-f0-9-]+\/versions)$/,
             ),
           method: z.literal("POST"),
           accountId: z.string().uuid(),
