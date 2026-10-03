@@ -21,15 +21,20 @@ export default function ProjectTasks({ tasks, save }: {
     <p className="muted">{tasks.filter(task => !task.completedAt).length} open tasks. Dates are internal targets; no reminders are sent.</p>
     <form onSubmit={event => {
       event.preventDefault();
-      if (!title.trim()) return;
+      const submitted = new FormData(event.currentTarget);
+      const submittedTitle = String(submitted.get("taskTitle") ?? "").trim();
+      const submittedDueDate = String(submitted.get("taskDueDate") ?? "");
+      if (!submittedTitle) return;
+      setTitle(submittedTitle);
+      setDueDate(submittedDueDate);
       if (!editing && tasks.length >= 300) { setError("This project has reached 300 tasks. Export a workspace backup before continuing."); return; }
-      const task = { id: editing ?? uid(), title: title.trim(), dueDate: dueDate || null, completedAt: null, createdAt: now() };
+      const task = { id: editing ?? uid(), title: submittedTitle, dueDate: submittedDueDate || null, completedAt: null, createdAt: now() };
       const next = editing ? tasks.map(item => item.id === editing ? { ...item, title: task.title, dueDate: task.dueDate } : item) : [...tasks, task];
       if (save(next, `${editing ? "Updated" : "Added"} task: ${task.title}`)) reset();
       else setError("The task could not be saved. Your entered details are still here; check the workspace message.");
     }}>
-      <label>Task<input value={title} onChange={event => setTitle(event.target.value)} maxLength={300} placeholder="e.g. Review the homepage with the client" required /></label>
-      <label>Due date (optional)<input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /></label>
+      <label>Task<input name="taskTitle" value={title} onChange={event => setTitle(event.target.value)} maxLength={300} placeholder="e.g. Review the homepage with the client" required /></label>
+      <label>Due date (optional)<input name="taskDueDate" type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /></label>
       <div className="task-actions"><button className="button secondary" disabled={!title.trim()} type="submit">{editing ? "Save task" : "Add task"}</button>{editing && <button className="button secondary" type="button" onClick={reset}>Cancel edit</button>}</div>
       {error && <p role="alert">{error}</p>}
     </form>
