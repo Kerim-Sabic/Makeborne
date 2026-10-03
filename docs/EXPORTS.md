@@ -47,3 +47,7 @@ This evidence covers the named fixtures only. PowerPoint rendering, all style/co
 Book author and language now live in optional project `bookMetadata`, so workspace save/restore retains them. Existing projects without metadata use an empty author and English. Exports read these project values; changing them updates the project timestamp and reopens internally approved work. Imported valid language tags outside the preset list remain visible as a saved-language option.
 
 Validation: production build passed and lint reported zero errors (two existing image warnings). Four schema assertions passed for older workspaces, metadata JSON round-trip, author length, and invalid language tags. Browser reload and a fresh exported-file metadata inspection remain unverified for this change.
+
+### Live metadata export evidence
+
+After the saved-metadata change, POST requests to the running local `/api/export` returned 200 for EPUB and HTML using author `Mira & Co` and language `pl`. Inspection of the returned EPUB ZIP confirmed escaped author text in `dc:creator`, `pl` in `dc:language`, and matching XHTML language/byline. Returned HTML contained the matching language and escaped byline. These checks exercise the real export route, not a mocked renderer. They do not exercise project editing/reload, PDF metadata, or reader compatibility.

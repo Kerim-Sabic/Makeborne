@@ -35,3 +35,7 @@
 Database migrations and RLS runtime checks; cloud persistence, authenticated account flows and guest access; live provider generation; cost reservations and jobs; production exports; publication and custom domains; payments/webhooks; full print rendering/KDP acceptance and broad EPUB reader compatibility; discovery/media and all original production release gates. Cloud routes, immutable-save operations and permission migrations are written but their live behaviour remains unverified. A successful frontend build does not establish readiness for paying customers.
 
 Browser verification records are development evidence. Review client data exists only in an isolated browser session; the application starts with an empty workspace.
+
+## Current capability audit after book metadata persistence
+
+The running development `/api/capabilities` returned HTTP 200: local workspace/manual development exports available; cloud account storage unconfigured, migrations unverified, AI dispatch unavailable, publication unavailable, and payments unavailable. This corroborates the implementation contract's current boundary. Previous visual/build checks must not be used to claim those production capabilities are complete. The next production dependency is configured cloud storage with verified account and tenant isolation flows; paid model calls remain unauthorised.
