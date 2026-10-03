@@ -47,3 +47,9 @@ Production build passed. ESLint had no errors and the two existing inline-artwor
 Studio sections and selected local project/client IDs now have URLs. Refresh restores the matching local record, and browser Back restores the previous section. Missing IDs fall back to the list with an explanation; URLs contain IDs, not client names or emails. Local links require the matching browser workspace and are not cloud sharing links.
 
 Verification: production build passed; six focused route-parser/URL assertions passed. Browser checks confirmed Styles survives reload, Back returns Clients to Styles, and an unsaved client name stays in its open form through Back. No test client was saved. Client/style forms remain mounted on history changes to preserve unsaved input.
+
+## Local save failure recovery
+
+A failed autosave now shows a persistent recovery banner with Retry save and Download backup. The download captures the current in-memory workspace. A beforeunload listener warns while saving remains failed; successfully saving clears that condition. Backup import writes the validated replacement before updating the displayed workspace or announcing success, preserving the existing workspace if storage rejects it.
+
+Validation: production build passed; component lint has zero errors and two existing image-optimization warnings. Storage-quota failure, backup download, and beforeunload behavior have not yet been exercised in a controlled browser failure scenario. These checks remain open; this does not establish production readiness.

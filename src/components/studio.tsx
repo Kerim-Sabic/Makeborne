@@ -89,6 +89,7 @@ export default function Studio() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  const [saveFailed, setSaveFailed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [clientDetail, setClientDetail] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -198,14 +199,29 @@ export default function Studio() {
     if (loaded && persistenceAllowed)
       try {
         localStorage.setItem(storageKey, JSON.stringify(workspace));
+        queueMicrotask(() => setSaveFailed(false));
       } catch {
-        queueMicrotask(() =>
-          setNotice(
-            "This browser could not save your changes. Download a workspace backup now.",
-          ),
-        );
+        queueMicrotask(() => setSaveFailed(true));
       }
   }, [workspace, loaded, persistenceAllowed]);
+  useEffect(() => {
+    if (!saveFailed) return;
+    const protectUnsavedWork = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", protectUnsavedWork);
+    return () => window.removeEventListener("beforeunload", protectUnsavedWork);
+  }, [saveFailed]);
+  function retrySave() {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(workspace));
+      setSaveFailed(false);
+      toast("Your workspace is saved in this browser.");
+    } catch {
+      setSaveFailed(true);
+    }
+  }
   const project = workspace.projects.find((p) => p.id === selected);
   function mutateProject(
     p: Project | ((current: Project) => Project),
@@ -316,7 +332,14 @@ export default function Studio() {
         )
       )
         return;
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(data));
+      } catch {
+        toast("This browser could not save the imported backup. Your current workspace has been kept. Keep the backup file and try again when browser storage is available.");
+        return;
+      }
       setWorkspace(data);
+      setSaveFailed(false);
       setPersistenceAllowed(true);
       openRoute({ tab: "projects", projectId: null, clientId: null }, true);
       toast("Workspace backup restored on this device.");
@@ -456,6 +479,15 @@ export default function Studio() {
           <div className="notice" role="alert">
             Saving is paused to protect unreadable original data. Download
             recovery data and restore a valid backup in Settings.
+          </div>
+        )}
+        {saveFailed && (
+          <div className="save-recovery-banner" role="alert">
+            <div><strong>Your latest changes are not saved.</strong><p>Keep this page open. Download a backup now, or retry when browser storage is available.</p></div>
+            <div className="save-recovery-actions">
+              <button className="button secondary small" onClick={retrySave}>Retry save</button>
+              <button className="button primary small" onClick={() => download(new Blob([JSON.stringify(workspace, null, 2)], { type: "application/json" }), "makeborne-unsaved-workspace.json")}><Download size={16} /> Download backup</button>
+            </div>
           </div>
         )}
         {notice && (

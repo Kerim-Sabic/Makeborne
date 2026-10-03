@@ -2579,3 +2579,8 @@
 @supports not (backdrop-filter:blur(1px)){.studio-shell .sidebar,.studio-shell .studio-topbar{background:#f7f9fe}.studio-shell .studio-composer{background:#fff}}
 @media(prefers-reduced-transparency:reduce){.studio-shell .sidebar,.studio-shell .studio-topbar,.studio-shell .studio-composer,.studio-shell .cw-workspace .cw-client-card,.studio-shell .cw-workspace .cw-profile,.studio-shell .cw-workspace .cw-empty{backdrop-filter:none;-webkit-backdrop-filter:none;background:#f8faff}}
 @media(forced-colors:active){.studio-shell,.studio-shell .sidebar,.studio-shell .studio-topbar,.studio-shell .studio-composer,.studio-shell .cw-workspace .cw-stats>div{background:Canvas;box-shadow:none;border-color:CanvasText}.studio-shell .button.primary,.studio-shell .cw-workspace .cw-primary{background:ButtonFace;color:ButtonText;border-color:ButtonText}}
+
+.save-recovery-banner { margin: 16px 24px; padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid #dfbd78; border-radius: 16px; background: #fff8e8; color: #543917; }
+.save-recovery-banner p { margin: 5px 0 0; font-size: 13px; line-height: 1.55; }
+.save-recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+@media (max-width: 760px) { .save-recovery-banner { margin: 12px; flex-direction: column; align-items: stretch; } .save-recovery-actions .button { min-height: 44px; } }
