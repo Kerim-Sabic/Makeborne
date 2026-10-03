@@ -33,3 +33,11 @@ The six authored direction IDs now select dedicated website, book and native-sli
 Books use artwork as the cover only when the image is the first authored block. Images in chapters remain in place, and cover captions stay visible. HTML/PDF contents link to the actual heading IDs; supplied author/language metadata are respected. Native presentations preserve image-block captions in their text flow.
 
 Native PDF slides now have a print-layout overflow check. Content that exceeds its slide returns SLIDE_CONTENT_OVERFLOW with the affected slide numbers, preserving the source instead of silently cropping text or making one logical slide span several PDF pages. This revision has compiled successfully; representative rendered output and overflow behaviour still need runtime verification. Earlier fixture evidence above does not prove these new layouts.
+
+## Rendered review, 3 October 2026
+
+The local development export endpoint was exercised after the authored-direction changes. Signal produced a two-page 16:9 PDF; both pages were rendered and inspected. A Field Guide fixture produced four A4 pages with chapter artwork still on page 3, an intact visible caption, and two contents-link annotations. Moving that same artwork explicitly to block zero produced a four-page document with the image only on cover page 1. The first cover attempt exposed a fifth page containing a stranded decorative rule; the fixed cover layout now keeps artwork, caption and rule on one page. The page background now also reaches the PDF margins.
+
+Both Signal and base Editorial rejected a 4,485-character slide with HTTP 400 SLIDE_CONTENT_OVERFLOW. Native PPTX slide XML retained the image caption. The Form HTML fixture was inspected in the browser at desktop and 390px widths; measured mobile document width was 375px with no horizontal overflow. Production build passed after the fixes.
+
+This evidence covers the named fixtures only. PowerPoint rendering, all style/content combinations, extremely long cover captions, customer-generated imagery and production worker/auth flows remain unverified. Temporary sample exports and the reproduction driver live under the task's work/artifact-review and work/review-artifact-exports.mjs; they are not customer deliverables or generated client work.

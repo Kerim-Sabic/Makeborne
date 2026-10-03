@@ -7,7 +7,30 @@ export function artifactDesignCss(styleId: string, kind: ArtifactKind): string {
   if (!Object.hasOwn(directions, styleId)) return "";
   const direction = directions[styleId];
   if (!direction) return "";
-  return `${readability[kind]}${direction[kind]}${responsive[kind]}`;
+  return `${readability[kind]}${direction[kind]}${responsive[kind]}${kind === "presentation" ? statementGraphic(styleId) : ""}`;
+}
+
+/** Empty CSS-generated decoration is nonsemantic. Reserve its column rather
+ * than placing artwork behind user text; compact screens stack it in flow. */
+function statementGraphic(styleId: string): string {
+  if (styleId !== "direction-signal" && styleId !== "direction-atlas")
+    return "";
+  const graphic =
+    styleId === "direction-signal"
+      ? `background:radial-gradient(circle closest-side,currentColor 0 15%,transparent 16% 39%,currentColor 40% 41%,transparent 42% 65%,currentColor 66% 67%,transparent 68% 91%,currentColor 92% 93%,transparent 94%);opacity:.72;`
+      : `background:radial-gradient(circle at 34% 46%,currentColor 0 28%,transparent 28.5%),radial-gradient(circle at 66% 60%,currentColor 0 28%,transparent 28.5%);opacity:.16;`;
+  return `
+    .slide.slide-statement:not(.visual){padding-right:33%;position:relative}
+    .slide.slide-statement:not(.visual)::after{content:"";position:absolute;right:6%;top:50%;transform:translateY(-50%);width:22%;aspect-ratio:1;pointer-events:none;color:var(--artifact-accent,currentColor);${graphic}}
+    @media screen and (max-width:700px){
+      .slide.slide-statement:not(.visual){padding-right:24px}
+      .slide.slide-statement:not(.visual)::after{position:relative;display:block;right:auto;top:auto;transform:none;width:150px;max-width:60%;margin:32px 0 0 auto}
+    }
+    @media print{
+      .slide.slide-statement:not(.visual){padding-right:4.25in}
+      .slide.slide-statement:not(.visual)::after{right:.8in;width:2.7in;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    }
+  `;
 }
 
 const readability: Record<ArtifactKind, string> = {

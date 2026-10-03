@@ -310,7 +310,7 @@ export function htmlDocument(input: ExportRequest) {
   const font = style.font === "serif" ? "Georgia,serif" : "Arial,sans-serif";
   const csp =
     "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'";
-  const shared = `*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:${style.background ?? "#F8F7F4"};color:${style.textColor ?? "#16181D"};font:16px/1.65 ${font}}h1,h2,h3{line-height:1.15;letter-spacing:-.035em}h1{font-size:clamp(36px,5vw,64px)}h2{font-size:30px;break-after:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere;orphans:3;widows:3}blockquote{border-left:3px solid ${style.color};padding:12px 0 12px 24px;margin:32px 0;font-size:22px}figure{margin:32px 0;break-inside:avoid}img{display:block;max-width:100%;height:auto}figure img{max-height:170mm;object-fit:contain;margin:auto}figcaption{font:12px/1.5 Arial,sans-serif;color:inherit;opacity:.75;margin-top:10px}footer{font:12px/1.5 Arial,sans-serif;color:inherit;opacity:.75;padding:24px 0}a{color:inherit}:focus-visible{outline:3px solid ${style.color};outline-offset:4px}`;
+  const shared = `@page{background:${style.background ?? "#F8F7F4"}}*{box-sizing:border-box}html{scroll-behavior:smooth}body{--artifact-accent:${style.color};margin:0;background:${style.background ?? "#F8F7F4"};color:${style.textColor ?? "#16181D"};font:16px/1.65 ${font}}h1,h2,h3{line-height:1.15;letter-spacing:-.035em}h1{font-size:clamp(36px,5vw,64px)}h2{font-size:30px;break-after:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere;orphans:3;widows:3}blockquote{border-left:3px solid ${style.color};padding:12px 0 12px 24px;margin:32px 0;font-size:22px}figure{margin:32px 0;break-inside:avoid}img{display:block;max-width:100%;height:auto}figure img{max-height:170mm;object-fit:contain;margin:auto}figcaption{font:12px/1.5 Arial,sans-serif;color:inherit;opacity:.75;margin-top:10px}footer{font:12px/1.5 Arial,sans-serif;color:inherit;opacity:.75;padding:24px 0}a{color:inherit}:focus-visible{outline:3px solid ${style.color};outline-offset:4px}`;
   let content = "",
     css = "";
   if (input.kind === "presentation") {
@@ -371,7 +371,8 @@ export function htmlDocument(input: ExportRequest) {
       .join("")}<footer>Made with Makeborne</footer></main>`;
     css = `@page{size:A4;margin:22mm 20mm}.cover{min-height:240mm;break-after:page;padding:12mm 0;display:flex;flex-direction:column;gap:12mm}.cover h1{font-size:44px;margin:0;overflow-wrap:anywhere}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.cover-art{width:100%;height:145mm;object-fit:contain}.cover-rule{height:2px;width:60px;background:${style.color};margin-top:auto}.contents{break-after:page;padding:20mm 0}.contents li{padding:8px 0;border-bottom:1px solid #DCDDD9}.book-body h2{margin:35px 0 18px}.book-body h2:not(:first-child){break-before:page}.book-body{font-size:16px}.book-body p{margin-bottom:20px}.book-body>figure{margin:25px 0}body{padding:40px;max-width:920px;margin:auto}@media print{body{padding:0;max-width:none}.cover{min-height:240mm}.cover h1{font-size:40px}.book-body h2{margin-top:0}}`;
   }
-  return `<!doctype html><html lang="${escapeHtml(input.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}${input.presentationMode === "visual" ? "" : artifactDesignCss(input.styleId, input.kind)}</style></head><body>${content}</body></html>`;
+  const coverPrint = input.kind === "book" ? `@media print{.cover{height:240mm;min-height:0;gap:6mm}.cover h1{flex:none;margin:0}.cover .book-author{flex:none;margin:0}.cover figure{flex:1;min-height:0;display:flex;flex-direction:column;margin:0}.cover .cover-art{flex:1;min-height:0;height:0;width:100%;max-height:none;object-fit:contain}.cover figcaption{flex:none}.cover-rule{flex:none;margin-top:auto}}` : "";
+  return `<!doctype html><html lang="${escapeHtml(input.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}${input.presentationMode === "visual" ? "" : artifactDesignCss(input.styleId, input.kind)}${coverPrint}</style></head><body>${content}</body></html>`;
 }
 export async function pdfDocument(input: ExportRequest) {
   const browser = await chromium.launch({
@@ -392,6 +393,17 @@ export async function pdfDocument(input: ExportRequest) {
       waitUntil: "load",
       timeout: 15000,
     });
+    if (input.kind === "book") {
+      await page.emulateMedia({ media: "print" });
+      // Match the A4 content width after the renderer's 20mm side margins.
+      await page.setViewportSize({ width: 643, height: 957 });
+      const coverOverflow = await page.evaluate(() => {
+        const cover = document.querySelector<HTMLElement>(".cover");
+        return !!cover && (cover.scrollHeight > cover.clientHeight + 2 || cover.scrollWidth > cover.clientWidth + 2);
+      });
+      if (coverOverflow)
+        throw new RequestError("BOOK_COVER_OVERFLOW", "The cover text does not fit on one page. Shorten the title or move a long artwork caption into the book before exporting. Your source is preserved.");
+    }
     if (input.kind === "presentation" && input.presentationMode === "native") {
       await page.emulateMedia({ media: "print" });
       await page.setViewportSize({ width: 1280, height: 720 });
