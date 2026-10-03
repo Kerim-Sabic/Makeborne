@@ -83,3 +83,9 @@ Verification: production build passed. Browser checks confirmed Right selects/fo
 The navigation rail is now inset with a rounded, lightly tinted glass surface and a restrained lavender New project action. The top bar is transparent, showing the workspace atmosphere; it contains the current section title, local workspace status, and an actual Account link. Removed the redundant breadcrumb prefix and placeholder avatar. Mobile retains an opaque inset drawer, backdrop, and close control. Reduced-transparency and forced-colour fallbacks are supplied.
 
 Verification: production build passed. Desktop screenshot reviewed; mobile drawer open/close checked at 390px with document width 375px, without horizontal overflow. Screenshot saved as makeborne-unified-studio.jpg in user outputs. No generation or account-availability claims follow from these layout changes.
+
+## Client next-action overview
+
+Added Next up to the client workspace when linked projects exist. It aggregates open tasks from non-archived client projects, ordered by due date with undated tasks last. Rows identify the project/client and open the corresponding project. Calendar labels distinguish overdue, today, future due dates, and no deadline. Initially shows eight tasks with an expand/collapse control. Selecting a client scopes the list and resets expansion.
+
+Verification: production build and component lint passed. Six static-render checks confirm section/project rendering, deadline order, completed-task exclusion, archived-task exclusion and overdue class. Browser task-row navigation, client switching, expanded lists and mobile rendering remain unverified for this section.

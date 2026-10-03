@@ -80,6 +80,7 @@ export default function ClientWorkspace({
   const [projectSearch, setProjectSearch] = useState("");
   const [kindFilter, setKindFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const clientIds = new Set(clients.map((client) => client.id));
   const projectsByClient = new Map<string, Project[]>();
   for (const project of projects) {
@@ -90,6 +91,7 @@ export default function ClientWorkspace({
   }
   function selectClient(id: string | null) {
     setProjectSearch(""); setKindFilter("all"); setStatusFilter("all");
+    setShowAllTasks(false);
     onSelectClient(id);
   }
   const selected = clients.find((client) => client.id === selectedClientId);
@@ -133,6 +135,13 @@ export default function ClientWorkspace({
     )
     .slice(0, 12);
   const website = selected?.website ? safeWebsite(selected.website) : null;
+  const openTasks = linkedProjects.filter(project => project.status !== "archived")
+    .flatMap(project => (project.tasks ?? []).filter(task => !task.completedAt).map(task => ({ task, project })))
+    .sort((a, b) => (a.task.dueDate ?? "9999").localeCompare(b.task.dueDate ?? "9999") || a.task.createdAt.localeCompare(b.task.createdAt));
+  const visibleTasks = showAllTasks ? openTasks : openTasks.slice(0, 8);
+  const today = new Date();
+  const localDay = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const clientNames = new Map(clients.map(client => [client.id, client.name]));
   return (
     <div className="cw-workspace">
       {selected && (
@@ -496,6 +505,22 @@ export default function ClientWorkspace({
           )}
         </section>
       )}
+      {linkedProjects.length > 0 && <section className="cw-next-section" aria-labelledby="cw-next-title">
+        <div className="cw-section-heading">
+          <h2 id="cw-next-title">Next up</h2>
+          <span className="cw-section-note">{openTasks.length} open · active client projects</span>
+        </div>
+        {openTasks.length === 0 ? <div className="cw-activity-empty"><Clock3 size={20} /><p>No open tasks. Add next steps in a project’s History & review.</p></div> : <ul className="cw-next-list">
+          {visibleTasks.map(({ task, project }) => <li key={`${project.id}-${task.id}`}>
+            <button type="button" onClick={() => onOpenProject(project.id)} aria-label={`Open ${project.title} for task: ${task.title}`}>
+              <span className="cw-next-copy"><strong>{task.title}</strong><small>{!selected && project.clientId ? `${clientNames.get(project.clientId)} · ` : ""}{project.title}</small></span>
+              <span className={task.dueDate && task.dueDate < localDay ? "cw-due overdue" : "cw-due"}>{task.dueDate ? <><span>{task.dueDate < localDay ? "Overdue" : task.dueDate === localDay ? "Today" : "Due"}</span><time dateTime={task.dueDate}>{date(`${task.dueDate}T12:00:00`)}</time></> : "No due date"}</span>
+              <ArrowUpRight size={16} aria-hidden="true" />
+            </button>
+          </li>)}
+        </ul>}
+        {openTasks.length > 8 && <button className="cw-back" type="button" onClick={() => setShowAllTasks(value => !value)}>{showAllTasks ? "Show fewer tasks" : `Show all ${openTasks.length} tasks`}</button>}
+      </section>}
       <section
         className="cw-activity-section"
         aria-labelledby="cw-activity-title"
