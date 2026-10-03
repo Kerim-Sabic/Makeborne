@@ -1,5 +1,13 @@
 # Makeborne cloud verification
 
+## Unified Studio creation — 2026-10-04
+
+Migration `20261003224557_unified_project_creation.sql` is applied locally and to the linked Makeborne project. The authenticated `/api/cloud/workspaces/[workspaceId]/studio-projects` endpoint creates the project, artifact, and initial saved version in one database transaction. It preserves effort and custom style snapshots. The existing request receipt system rejects changed payloads on retry and returns the original records for identical retries.
+
+`supabase/check-unified-creation.sql` passes both locally and on the linked project: 14 checks cover saved effort/palette, the initial version, identical retries, altered retry rejection, invalid-version rollback, mismatched content, invalid effort, outsider replay denial, and reviewer write denial. Fixtures roll back. Production build, TypeScript, focused ESLint, and diff whitespace checks pass. Linked security advisors still report only the previously documented leaked-password-protection warning.
+
+This verifies the database operation and compiled API integration, not the complete browser creation flow. The main creation wizard is not yet connected to this endpoint; account editor autosave and existing account project access are separate completed steps. Signed-in browser verification remains outstanding.
+
 The separately guarded `supabase/check-cloud-fixtures.mjs` accepts only `https://rklojnmmsmhwnkbzuidp.supabase.co`. It requires `MAKEBORNE_VERIFY_CLOUD_FIXTURES=true` and `MAKEBORNE_CLOUD_KEYS_FILE` pointing to private revealed CLI API-key JSON outside the repository. Never print or commit that file. The original local runner remains restricted to its local endpoint.
 
 Creates unique, confirmed test accounts through admin auth (no signup email), then authenticates them normally. Workspace/project creation uses authenticated RPCs. It never deletes existing data, resets the database, or enables paid integrations. Test users, workspaces and immutable artifacts remain for inspection. Requests refuse redirects. Credentials are not logged.

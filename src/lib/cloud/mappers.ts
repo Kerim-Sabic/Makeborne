@@ -12,7 +12,7 @@ export function mapClientSummary(row: Row): CloudClient {
   return { ...mapClient(row), outreachSummary: row.outreach_stage == null ? undefined : OutreachSummarySchema.parse({ stage: row.outreach_stage, nextFollowUp: row.outreach_follow_up }) };
 }
 export function mapProject(row: Row): CloudProject {
-  return { ...ProjectSchema.parse({ id: row.id, clientId: row.client_id, title: row.title, kind: row.kind, status: row.status, styleId: row.style_id, brief: row.brief, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) }), audience: String(row.audience ?? ""), purpose: String(row.purpose ?? ""), wording: String(row.wording ?? "preserve") };
+  return { ...ProjectSchema.parse({ id: row.id, clientId: row.client_id, title: row.title, kind: row.kind, status: row.status, styleId: row.style_id, effort: row.effort ?? "medium", brief: row.brief, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) }), audience: String(row.audience ?? ""), purpose: String(row.purpose ?? ""), wording: String(row.wording ?? "preserve") };
 }
 export function mapArtifact(row: Row) {
   return ArtifactSchema.parse({ id: row.id, projectId: row.project_id, kind: row.kind, title: row.title, currentVersion: row.current_version, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) });

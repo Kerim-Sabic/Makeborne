@@ -20,8 +20,13 @@ export const ClientUpdateSchema = z.object({
   notes: CreateClientSchema.shape.notes.removeDefault().optional(), expectedUpdatedAt: z.string().datetime(),
 }).strict();
 export const CloudProjectCreateSchema = CreateProjectSchema.extend({
+  styleId: z.string().min(1).max(100).default("editorial"),
   audience: z.string().max(1000).default(""), purpose: z.string().max(2000).default(""), wording: z.enum(["preserve", "improve", "summarise"]).default("preserve"),
 }).strict();
+export const StudioProjectCreateSchema = z.object({
+  project: CloudProjectCreateSchema.extend({ effort: z.enum(["light", "medium", "high", "super_high", "ultra"]).default("medium") }),
+  content: ArtifactContentSchema, style: StyleProfileSchema,
+}).strict().refine(value => value.project.kind === value.content.kind && value.project.title === value.content.title && value.project.styleId === value.style.id, "Project and content must match.");
 export const ProjectUpdateSchema = z.object({
   clientId: CreateProjectSchema.shape.clientId.removeDefault().optional(), title: CreateProjectSchema.shape.title.optional(),
   status: CreateProjectSchema.shape.status.removeDefault().optional(), styleId: CreateProjectSchema.shape.styleId.removeDefault().optional(),

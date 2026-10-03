@@ -41,6 +41,8 @@ export const CreateProjectSchema = z.object({
   brief: text.max(30000).default(""),
 });
 export const ProjectSchema = CreateProjectSchema.extend({
+  styleId: z.string().min(1).max(100),
+  effort: z.enum(["light", "medium", "high", "super_high", "ultra"]).default("medium"),
   id,
   createdAt: timestamp,
   updatedAt: timestamp,

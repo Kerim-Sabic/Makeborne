@@ -64,6 +64,7 @@ function schemaFor(path: string, method: string) {
   if (/\/projects\/[a-f0-9-]+\/artifacts$/.test(base))
     return z.object({ artifact: ArtifactSchema, mutation });
   if (/\/clients\/[a-f0-9-]+$/.test(base)) return z.object({ client });
+  if (/\/studio-projects$/.test(base)) return z.object({ project, artifact: ArtifactSchema, version: ArtifactVersionSchema, mutation });
   if (/\/clients$/.test(base)) return z.object({ client, mutation });
   if (/\/projects$/.test(base)) return z.object({ project, mutation });
   if (/\/workspaces\/[a-f0-9-]+$/.test(base))
