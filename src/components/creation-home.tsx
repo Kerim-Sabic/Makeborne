@@ -78,25 +78,28 @@ export default function CreationHome() {
       <section className="mk-hero" aria-labelledby="creation-heading">
         <div className="mk-atmosphere" aria-hidden="true"><span /><span /><span /></div>
         <div className="mk-hero-content">
-          <a className="mk-announcement" href="#templates"><span>MADE FOR YOUR NEXT IDEA</span><ArrowUpRight size={13} /></a>
           <h1 id="creation-heading">What will you<br className="mk-mobile-break" /> make next?</h1>
           <p className="mk-hero-subtitle">Beautiful websites. Books worth opening. Slides that stay with you.</p>
           <div className="mk-format-switch" role="group" aria-label="What would you like to create?">{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { setKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
           <form className="mk-composer" onSubmit={event => { event.preventDefault(); start(); }}>
             <label className="mk-sr-only" htmlFor="creation-brief">Describe your project</label>
             <textarea ref={promptRef} id="creation-brief" maxLength={20000} value={brief} onChange={event => { setBrief(event.target.value); setError(""); }} placeholder={kind === "website" ? "A beautiful website for my business, with…" : kind === "book" ? "An illustrated book about something I know well…" : "A presentation that tells the story of…"} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); start(); } }} />
-            <div className="mk-composer-bottom"><button className="mk-attach" type="button" onClick={() => uploadRef.current?.click()} aria-label="Add a text or Markdown file"><Plus size={19} /><span>Add your text</span></button><input ref={uploadRef} type="file" hidden accept=".txt,.md,text/plain,text/markdown" onChange={event => { void importText(event.target.files?.[0]); event.target.value = ""; }} /><div className="mk-composer-right"><span className="mk-compose-hint">Start with an idea</span><button className="mk-send" type="submit" disabled={busy || !brief.trim()} aria-label="Plan this project"><ArrowUp size={21} strokeWidth={2} /></button></div></div>
+            <div className="mk-composer-bottom"><button className="mk-attach" type="button" onClick={() => uploadRef.current?.click()} aria-label="Add a text or Markdown file"><Plus size={19} /><span>Add your text</span></button><input ref={uploadRef} type="file" hidden accept=".txt,.md,text/plain,text/markdown" onChange={event => { void importText(event.target.files?.[0]); event.target.value = ""; }} /><div className="mk-composer-right"><button className="mk-send" type="submit" disabled={busy || !brief.trim()} aria-label="Plan this project"><span>{busy ? "Opening…" : "Continue"}</span><ArrowUp size={17} strokeWidth={2} /></button></div></div>
           </form>
           {fileName && <div className="mk-file-note"><FileText size={13} />{fileName}<span>Text added to your brief</span></div>}
           {error && <p className="mk-error" role="alert">{error}</p>}
-          <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}><Plus size={13} />{idea.label}</button>)}</div>
+          <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>
           <p className="mk-availability">Explore the editor now. Live AI generation is coming next.</p>
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>
       <section className="mk-discovery" id="templates" aria-label="Style directions"><TemplateGallery onChoose={(selectedKind, text, styleId, style) => start(selectedKind, [brief.trim(), text].filter(Boolean).join("\n\n"), styleId, style)} /></section>
       <section className="mk-client-band"><div className="mk-client-icon"><Layers3 size={24} strokeWidth={1.4} /></div><div><span className="mk-overline">BUILT FOR THE WORK AFTER THE IDEA</span><h2>Your clients. Your projects.<br />All in one place.</h2><p>Keep every website, revision and next step connected to the right client.</p><Link href="/studio?tab=clients">Explore your client workspace <ArrowUpRight size={16} /></Link></div><div className="mk-client-preview" aria-label="Illustrative client workflow"><div className="mk-client-preview-head"><span>CLIENT WORKSPACE</span><span>Illustration</span></div><div className="mk-client-preview-row"><span className="mk-client-avatar">A</span><div><strong>A client’s next chapter</strong><span>Website · Brand guide · Presentation</span></div><span className="mk-preview-dot" /></div><div className="mk-client-progress"><span><Check size={12} /> Brief</span><i /><span><Check size={12} /> Direction</span><i /><span>Review</span></div></div></section>
-      <footer className="mk-footer"><Link href="/" className="mk-wordmark"><BrandMark size={23} /><span>Makeborne</span></Link><span>A place for things worth making.</span><span>© 2026 Makeborne</span></footer>
+      <footer className="mk-footer">
+        <div className="mk-footer-main"><div className="mk-footer-brand"><Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={28} /><span>Makeborne</span></Link><p>From a first thought<br />to something worth sharing.</p></div>
+          <nav aria-label="Footer navigation"><div><h3>Create</h3><Link href="/studio">Your studio</Link><a href="#templates">Explore styles</a><Link href="/studio?tab=clients">Client workspace</Link></div><div><h3>Your account</h3><Link href="/login">Sign in</Link><Link href="/billing">Plans &amp; credits</Link><Link href="/studio?tab=projects">Your projects</Link></div></nav>
+        </div><div className="mk-footer-bottom"><span>© 2026 Makeborne</span><span>A place for things worth making.</span><a href="#creation-heading">Back to top ↑</a></div>
+      </footer>
     </main>
   );
 }
