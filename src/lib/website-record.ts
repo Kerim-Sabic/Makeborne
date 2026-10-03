@@ -15,3 +15,19 @@ export const WebsiteRecordSchema = z.object({
   updatedAt: z.string().datetime(),
 }).strict();
 export type WebsiteRecord = z.infer<typeof WebsiteRecordSchema>;
+export const WebsiteHistorySchema = z.array(z.object({
+  id: z.string().uuid(), record: WebsiteRecordSchema,
+  replacedAt: z.string().datetime(),
+}).strict()).max(100).refine(items => new Set(items.map(item => item.id)).size === items.length, "Website history IDs must be unique.");
+export type WebsiteHistory = z.infer<typeof WebsiteHistorySchema>;
+
+export function reviseWebsiteRecord(current: WebsiteRecord | undefined, history: WebsiteHistory, input: WebsiteRecord, id: string, at: string) {
+  const previous = current ? WebsiteRecordSchema.parse(current) : undefined;
+  const revisions = WebsiteHistorySchema.parse(history);
+  const record = WebsiteRecordSchema.parse({ ...input, updatedAt: at });
+  const fields = ["previewUrl", "liveUrl", "hosting", "notes"] as const;
+  if (previous && fields.every(field => previous[field] === record[field]))
+    return { record: previous, history: revisions, changed: false };
+  if (previous && revisions.length >= 100) throw new Error("Website history has reached 100 revisions. These changes have not been saved; existing history is preserved.");
+  return { record, history: WebsiteHistorySchema.parse(previous ? [...revisions, { id, record: previous, replacedAt: at }] : revisions), changed: true };
+}

@@ -30,7 +30,7 @@ import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
 import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
-import { WebsiteRecordSchema, type WebsiteRecord } from "@/lib/website-record";
+import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
@@ -307,8 +307,12 @@ export default function Studio() {
     const parsed = WebsiteRecordSchema.safeParse(record);
     if (!parsed.success) { toast("Check the website links and details before saving."); return false; }
     const at = now();
+    let revision: ReturnType<typeof reviseWebsiteRecord>;
+    try { revision = reviseWebsiteRecord(current.websiteRecord, current.websiteHistory ?? [], parsed.data, uid(), at); }
+    catch (error) { toast(error instanceof Error ? error.message : "Website history could not be saved."); return false; }
+    if (!revision.changed) return true;
     const next = { ...workspace, projects: workspace.projects.map(item => item.id === projectId ? {
-      ...item, websiteRecord: { ...parsed.data, updatedAt: at }, updatedAt: at,
+      ...item, websiteRecord: revision.record, websiteHistory: revision.history, updatedAt: at,
       activity: [...item.activity, { at, text: "Updated website preview, live link, or hosting details (user-recorded; deployment not verified)." }],
     } : item) };
     try { saveLocalWorkspace(next, localStorage); }
@@ -2203,7 +2207,7 @@ function ProjectEditor({
             )}
           </section>
           <section>
-            {project.kind === "website" && <WebsiteRecordPanel value={project.websiteRecord} save={record => saveWebsiteRecord(project.id, record)} />}
+            {project.kind === "website" && <WebsiteRecordPanel value={project.websiteRecord} history={project.websiteHistory ?? []} save={record => saveWebsiteRecord(project.id, record)} />}
             <ProjectTasks tasks={project.tasks ?? []} save={(tasks, message) => saveTasks(project.id, tasks, message)} />
             <div className="eyebrow">INTERNAL REVIEW</div>
             <h2>What happens next?</h2>

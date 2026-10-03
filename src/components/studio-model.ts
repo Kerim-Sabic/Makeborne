@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WebsiteRecordSchema, type WebsiteRecord } from "@/lib/website-record";
+import { WebsiteRecordSchema, WebsiteHistorySchema, type WebsiteRecord, type WebsiteHistory } from "@/lib/website-record";
 import {
   ClientSchema,
   ProjectSchema,
@@ -47,6 +47,7 @@ export type Project = {
   bookMetadata?: { author: string; language: string };
   tasks?: ProjectTask[];
   websiteRecord?: WebsiteRecord;
+  websiteHistory?: WebsiteHistory;
   blocks: Block[];
   versions: Version[];
   activity: { at: string; text: string }[];
@@ -133,6 +134,7 @@ const LocalProjectSchema = ProjectSchema.extend({
   wording: z.enum(["preserve", "improve", "summarise"]),
   tasks: z.array(ProjectTaskSchema).max(300).optional(),
   websiteRecord: WebsiteRecordSchema.optional(),
+  websiteHistory: WebsiteHistorySchema.optional(),
   bookMetadata: z.object({
     author: z.string().max(200),
     language: z.string().max(64).regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/),

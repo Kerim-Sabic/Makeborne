@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { WebsiteRecordSchema, websiteHref, type WebsiteRecord } from "@/lib/website-record";
+import { WebsiteRecordSchema, websiteHref, type WebsiteRecord, type WebsiteHistory } from "@/lib/website-record";
 
-export default function WebsiteRecordPanel({ value, save }: {
+export default function WebsiteRecordPanel({ value, history, save }: {
   value?: WebsiteRecord;
+  history: WebsiteHistory;
   save: (record: WebsiteRecord) => boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -29,6 +30,7 @@ export default function WebsiteRecordPanel({ value, save }: {
       <label>Delivery notes<textarea name="notes" maxLength={5000} defaultValue={value?.notes ?? ""} placeholder="Handover details, domain renewal notes, or the next deployment step. Do not store passwords or API keys here." /></label>
       <div className="website-record-actions"><button className="button primary small" type="submit">Save website details</button><button className="button secondary small" type="button" onClick={() => { setEditing(false); setMessage(""); }}>Cancel</button></div>
     </form> : <><div className="website-record-links">{([["Preview", value?.previewUrl], ["Live website", value?.liveUrl]] as const).map(([label, url]) => <div key={label}><strong>{label}</strong>{url && websiteHref(url) ? <a href={websiteHref(url)!} target="_blank" rel="noopener noreferrer">{url}</a> : <span className="muted">Not added</span>}</div>)}</div><p><strong>Hosting:</strong> {value?.hosting || "Not recorded"}</p>{value?.notes && <p className="website-record-notes">{value.notes}</p>}{value?.updatedAt && <small className="muted">Details updated {new Date(value.updatedAt).toLocaleDateString()}</small>}</>}
+    {history.length > 0 && <details className="website-record-history"><summary>Previous website details ({history.length})</summary><p className="muted">Saved local records, newest first. Historical links may no longer be available.</p><ol>{[...history].reverse().map(item => <li key={item.id}><time dateTime={item.replacedAt}>Replaced {new Date(item.replacedAt).toLocaleString()}</time><dl><dt>Preview</dt><dd>{item.record.previewUrl || "Not added"}</dd><dt>Live website</dt><dd>{item.record.liveUrl || "Not added"}</dd><dt>Hosting</dt><dd>{item.record.hosting || "Not recorded"}</dd><dt>Notes</dt><dd>{item.record.notes || "No notes"}</dd></dl></li>)}</ol></details>}
     {message && <p role={editing ? "alert" : "status"}>{message}</p>}
   </section>;
 }

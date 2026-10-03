@@ -2685,3 +2685,10 @@
 .studio-shell .website-record-links a{overflow-wrap:anywhere;color:#4e4ac8}
 .studio-shell .website-record-notes{white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:600px){.studio-shell .website-record-links{grid-template-columns:1fr}}
+.website-record-history{margin-top:20px;border-top:1px solid #e5e3ed;padding-top:16px;font-size:13px}
+.website-record-history summary{cursor:pointer;min-height:36px}
+.website-record-history ol{list-style:none;padding:0;max-height:420px;overflow:auto}
+.website-record-history li{padding:16px 0;border-bottom:1px solid #e5e3ed}
+.website-record-history time{font-weight:600}
+.website-record-history dl{display:grid;grid-template-columns:90px minmax(0,1fr);gap:8px;margin-bottom:0}
+.website-record-history dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
