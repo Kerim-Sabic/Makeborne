@@ -510,7 +510,6 @@ export default function Studio() {
             <Menu />
           </button>
           <div className="breadcrumb">
-            My studio <span>/</span>{" "}
             {project
               ? project.title
               : tab === "projects"
@@ -521,10 +520,10 @@ export default function Studio() {
                     ? "Styles"
                     : "Settings"}
           </div>
-          <span className="local-pill">
-            <span className="status-dot" /> Local preview
-          </span>
-          <span className="avatar">M</span>
+          <div className="studio-topbar-actions">
+            <span className="workspace-mode">Local workspace</span>
+            <Link className="studio-account-link" href="/login">Account <ArrowUpRight size={14} /></Link>
+          </div>
         </header>
         {loaded && !persistenceAllowed && (
           <div className="notice" role="alert">

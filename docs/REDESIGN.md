@@ -77,3 +77,9 @@ Mobile navigation now has an opaque drawer, dimmed/blurred backdrop, explicit cl
 Format and style pickers now expose labelled radio groups with one selected option and one tab stop. Arrow keys wrap through choices; Home/End select the first/last option. Changing wizard steps focuses the new heading, and decorative progress segments are hidden from accessibility APIs. The existing dialog focus containment and trigger focus restoration remain in use.
 
 Verification: production build passed. Browser checks confirmed Right selects/focuses Book from Website, End selects/focuses Presentation, and closing the dialog restores New project focus. Style keyboard transitions and full wizard completion were not exercised in this pass; no project was created and no model call was made.
+
+## Unified sidebar and top bar
+
+The navigation rail is now inset with a rounded, lightly tinted glass surface and a restrained lavender New project action. The top bar is transparent, showing the workspace atmosphere; it contains the current section title, local workspace status, and an actual Account link. Removed the redundant breadcrumb prefix and placeholder avatar. Mobile retains an opaque inset drawer, backdrop, and close control. Reduced-transparency and forced-colour fallbacks are supplied.
+
+Verification: production build passed. Desktop screenshot reviewed; mobile drawer open/close checked at 390px with document width 375px, without horizontal overflow. Screenshot saved as makeborne-unified-studio.jpg in user outputs. No generation or account-availability claims follow from these layout changes.
