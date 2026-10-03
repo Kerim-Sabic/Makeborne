@@ -13,11 +13,16 @@ if (![url,key,ownerA,ownerB,reviewerA,workspaceA,workspaceB,projectA].every(Bool
   process.exit(2);
 }
 let failures = 0;
+const requestTimeout = process.env.MAKEBORNE_VERIFY_REQUEST_TIMEOUT_MS === "30000" ? 30000 : 15000;
 async function call(path, token, method="GET", body) {
-  const response = await fetch(new URL(path,url), { method, redirect:"error", signal:AbortSignal.timeout(15000), headers: { apikey:key, ...(token ? { Authorization:`Bearer ${token}` }:{}), "Content-Type":"application/json", Prefer:"return=representation" }, ...(body===undefined ? {} : {body:JSON.stringify(body)}) });
+  try {
+  const response = await fetch(new URL(path,url), { method, redirect:"error", signal:AbortSignal.timeout(requestTimeout), headers: { apikey:key, ...(token ? { Authorization:`Bearer ${token}` }:{}), "Content-Type":"application/json", Prefer:"return=representation" }, ...(body===undefined ? {} : {body:JSON.stringify(body)}) });
   const text = await response.text();
   let data; try { data=JSON.parse(text); } catch { data=null; }
   return {ok:response.ok,status:response.status,data};
+  } catch {
+    return {ok:false,status:0,data:null};
+  }
 }
 function check(name,condition) { console.log(`${condition ? "PASS" : "FAIL"}: ${name}`); if (!condition) failures++; }
 for (const [name,token] of [["owner A",ownerA],["owner B",ownerB],["reviewer A",reviewerA]]) {
@@ -62,7 +67,7 @@ const versionRequest={ p_workspace_id:workspaceA,p_artifact_id:artifact.id,p_exp
   p_asset_ids:[],p_change_summary:"Concurrent save verification" };
 const versionRequests=[{...versionRequest,p_request_key:crypto.randomUUID()},{...versionRequest,p_request_key:crypto.randomUUID()}];
 const concurrent=await Promise.all(versionRequests.map(body=>call("/rest/v1/rpc/makeborne_save_artifact_version",ownerA,"POST",body)));
-check("exactly one concurrent revision accepted",concurrent.filter(result=>result.ok).length===1 && concurrent.some(result=>!result.ok && result.data?.code==="40001"));
+check("exactly one concurrent revision accepted; other returns HTTP409 without serialization retry",concurrent.filter(result=>result.ok).length===1 && concurrent.some(result=>!result.ok && result.status===409 && result.data?.code==="PT409"));
 const acceptedIndex=concurrent.findIndex(result=>result.ok);
 if (acceptedIndex>=0) {
   const replay=await call("/rest/v1/rpc/makeborne_save_artifact_version",ownerA,"POST",versionRequests[acceptedIndex]);

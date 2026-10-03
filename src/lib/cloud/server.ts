@@ -52,7 +52,7 @@ export function databaseError(error: { code?: string } | null) {
   if (error.code === "MB409") throw new RequestError("IDEMPOTENCY_CONFLICT", "This request key was already used for different content. Review the earlier operation before creating another request.", 409);
   if (error.code === "MB410") throw new RequestError("IDEMPOTENCY_RESULT_EXPIRED", "This request was already committed, but its replay window has ended. Review the saved records; this key cannot create another record.", 410);
   if (error.code === "MB429") throw new RequestError("WRITE_LIMIT", "This workspace has reached its safe write limit. Review queued work before making more changes.", 429);
-  if (error.code === "40001" || error.code === "23505")
+  if (error.code === "PT409" || error.code === "40001" || error.code === "23505")
     throw new RequestError(
       "REVISION_CONFLICT",
       "This record changed. Reload its latest version before saving.",
