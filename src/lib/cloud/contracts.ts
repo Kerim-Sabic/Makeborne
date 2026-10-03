@@ -4,7 +4,8 @@ import { ArtifactContentSchema, ArtifactKindSchema, CreateClientSchema, CreatePr
 
 export type CloudRole = "owner" | "editor" | "reviewer";
 export type CloudWorkspace = { id: string; name: string; role: CloudRole };
-export type CloudClient = Client & { updatedAt: string };
+export const OutreachSummarySchema = ClientOutreachSchema.pick({ stage: true, nextFollowUp: true });
+export type CloudClient = Client & { updatedAt: string; outreachSummary?: z.infer<typeof OutreachSummarySchema> };
 export type CloudProject = Project & { audience: string; purpose: string; wording: string };
 export type CloudArtifact = Artifact;
 export type CloudVersion = ArtifactVersion;

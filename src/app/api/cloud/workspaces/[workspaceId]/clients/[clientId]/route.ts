@@ -3,6 +3,18 @@ import { cloudBody, cloudContext, cloudError, cloudJson, databaseError, validId 
 import { mapClient } from "@/lib/cloud/mappers";
 import { RequestError } from "@/lib/server/http";
 
+export async function GET(_request: Request, context: { params: Promise<{ workspaceId: string; clientId: string }> }) {
+  try {
+    const { workspaceId, clientId } = await context.params;
+    validId(clientId);
+    const { client } = await cloudContext(workspaceId);
+    const { data, error } = await client.from("clients").select("*").eq("id", clientId).eq("workspace_id", workspaceId).maybeSingle();
+    databaseError(error);
+    if (!data) throw new RequestError("NOT_FOUND", "This client is unavailable in this workspace.", 404);
+    return cloudJson({ client: mapClient(data) });
+  } catch (error) { return cloudError(error); }
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ workspaceId: string; clientId: string }> }) {
   try {
     const { workspaceId, clientId } = await context.params;

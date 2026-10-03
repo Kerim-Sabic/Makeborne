@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OutreachSummarySchema } from "@/lib/cloud/contracts";
 import {
   ArtifactSchema,
   ArtifactVersionSchema,
@@ -27,7 +28,7 @@ const workspace = z.object({
   name: z.string().min(1),
   role: z.enum(["owner", "editor", "reviewer"]),
 });
-const client = ClientSchema.extend({ updatedAt: z.string().datetime() });
+const client = ClientSchema.extend({ updatedAt: z.string().datetime(), outreachSummary: OutreachSummarySchema.optional() });
 const project = ProjectSchema.extend({
   audience: z.string(),
   purpose: z.string(),

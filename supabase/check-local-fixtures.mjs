@@ -4,6 +4,7 @@ import { randomUUID, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { CLIENT_LIST_SELECTION } from "../src/lib/cloud/client-selection.ts";
 
 const expectedOrigin = "http://127.0.0.1:55321";
 if (process.env.MAKEBORNE_VERIFY_LOCAL_FIXTURES !== "true") {
@@ -71,6 +72,21 @@ try {
     workspace_id: actors.ownerA.workspace, user_id: actors.reviewer.id, role: "reviewer",
   }).select("user_id").single());
   stage = "execute isolation checks";
+  const crm = requireData(await actors.ownerA.client.rpc("makeborne_create_record", {
+    p_workspace_id: actors.ownerA.workspace, p_request_key: randomUUID(), p_operation: "create_client",
+    p_payload: { name: "CRM loading fixture" },
+  })).record;
+  const outreach = { stage: "Contacted", channel: "Instagram", profileUrl: "https://example.com/profile", lastContact: null,
+    nextFollowUp: "2026-10-05", notes: "Loading fixture", activity: Array.from({ length: 100 }, () => ({ id: randomUUID(),
+      at: new Date().toISOString(), type: "note", text: "Approved fixture text. ".repeat(50) })) };
+  requireData(await actors.ownerA.client.from("clients").update({ outreach }).eq("id", crm.id).select("id").single());
+  const summary = requireData(await actors.ownerA.client.from("clients").select(CLIENT_LIST_SELECTION).eq("id", crm.id).single());
+  const detail = requireData(await actors.ownerA.client.from("clients").select("*").eq("id", crm.id).single());
+  if ("outreach" in summary || summary.outreach_stage !== "Contacted" || summary.outreach_follow_up !== "2026-10-05") throw new Error("CRM_PROJECTION_FAILED");
+  if (detail.outreach.activity.length !== 100 || JSON.stringify(summary).length * 20 >= JSON.stringify(detail).length) throw new Error("CRM_HISTORY_LOADING_FAILED");
+  const hidden = requireData(await actors.ownerB.client.from("clients").select("*").eq("id", crm.id));
+  if (hidden.length) throw new Error("CRM_DETAIL_TENANT_LEAK");
+  console.log("PASS: client list excludes 100-entry history; detail retains it; summary is over 20x smaller; other tenant cannot read detail");
   const exitCode = await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [fileURLToPath(new URL("./verify-isolation.mjs", import.meta.url))], {
       stdio: "inherit", windowsHide: true,

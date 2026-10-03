@@ -82,6 +82,8 @@ export default function CloudStudio() {
   const [clientEmail, setClientEmail] = useState("");
   const [editingClient, setEditingClient] = useState<CloudClient | null>(null);
   const [outreachClient, setOutreachClient] = useState<CloudClient | null>(null);
+  const clientLoadVersion = useRef(0);
+  const [loadingClient, setLoadingClient] = useState(false);
   const [selected, setSelected] = useState<CloudArtifact | null>(null);
   const [importPreview, setImportPreview] = useState<LocalWorkspace | null>(
     null,
@@ -139,6 +141,8 @@ export default function CloudStudio() {
     };
   }, []);
   async function choose(id: string) {
+    clientLoadVersion.current += 1;
+    setLoadingClient(false);
     setBusy(true);
     setSelected(null);
     setEditingClient(null);
@@ -152,6 +156,21 @@ export default function CloudStudio() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function openClient(id: string, view: "details" | "outreach") {
+    if (!overview) return;
+    const version = ++clientLoadVersion.current;
+    setLoadingClient(true); setEditingClient(null); setOutreachClient(null);
+    try {
+      const result = await api<{ client: CloudClient }>(`/api/cloud/workspaces/${overview.workspace.id}/clients/${id}`);
+      if (version !== clientLoadVersion.current) return;
+      if (view === "outreach") setOutreachClient(result.client);
+      else setEditingClient(result.client);
+    } catch (error) {
+      if (version === clientLoadVersion.current) setMessage(error instanceof Error ? error.message : "Could not load this client.");
+    } finally {
+      if (version === clientLoadVersion.current) setLoadingClient(false);
     }
   }
   async function loadMore(collection: Collection) {
@@ -306,6 +325,9 @@ export default function CloudStudio() {
     }
   }
   async function logout() {
+    clientLoadVersion.current += 1;
+    setLoadingClient(false);
+    setEditingClient(null); setOutreachClient(null);
     setBusy(true);
     try {
       const { error } = await createClient().auth.signOut();
@@ -379,7 +401,7 @@ export default function CloudStudio() {
     }
     setBusy(true);
     const log: string[] = [];
-    setImportLog(log);
+    setImportLog([...log]);
     try {
       const reviewKey = `makeborne.import.${overview.workspace.id}.${local.id}`;
       if (localStorage.getItem(reviewKey)) {
@@ -873,7 +895,7 @@ export default function CloudStudio() {
                         <article className="client-card" key={c.id}>
                           <h3>{c.name}</h3>
                           <p>{c.email || "No email added"}</p>
-                          <p className="small-note">{c.outreach?.stage ?? "Lead"}{c.outreach?.nextFollowUp ? ` · Follow up ${c.outreach.nextFollowUp}` : ""}</p>
+                          <p className="small-note">{(c.outreach ?? c.outreachSummary)?.stage ?? "Lead"}{(c.outreach ?? c.outreachSummary)?.nextFollowUp ? ` · Follow up ${(c.outreach ?? c.outreachSummary)?.nextFollowUp}` : ""}</p>
                           <span className="small-note">
                             {
                               overview.projects.filter(
@@ -891,11 +913,12 @@ export default function CloudStudio() {
                           </span>
                           <button
                             className="text-link"
-                            onClick={() => { setOutreachClient(null); setEditingClient(c); }}
+                            disabled={loadingClient || busy}
+                            onClick={() => void openClient(c.id, "details")}
                           >
                             Client details <ArrowRight size={14} />
                           </button>
-                          <button className="text-link" onClick={() => { setEditingClient(null); setOutreachClient(c); }}>Outreach & follow-ups <ArrowRight size={14} /></button>
+                          <button className="text-link" disabled={loadingClient || busy} onClick={() => void openClient(c.id, "outreach")}>Outreach & follow-ups <ArrowRight size={14} /></button>
                         </article>
                       ))}
                     </div>
@@ -904,6 +927,7 @@ export default function CloudStudio() {
                 {outreachClient && <CloudClientOutreach key={`${overview.workspace.id}:${outreachClient.id}`} initialClient={outreachClient}
                   workspaceId={overview.workspace.id} canEdit={overview.workspace.role !== "reviewer"}
                   close={() => setOutreachClient(null)} onSaved={client => setOverview(current => current?.workspace.id === overview.workspace.id ? { ...current, clients: current.clients.map(item => item.id === client.id ? client : item) } : current)} />}
+                {loadingClient && <p role="status">Loading the latest client record…</p>}
                 {editingClient && (
                   <CloudClientDetails
                     key={editingClient.id}
