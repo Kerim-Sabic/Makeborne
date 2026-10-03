@@ -22,7 +22,7 @@ export async function epubDocument(input: ExportRequest) {
   const style = exportStyle(input),
     title = escapeHtml(input.title),
     language = escapeHtml(input.language);
-  const css = `body{font-family:${style.font === "serif" ? "Georgia,serif" : "Arial,sans-serif"};line-height:1.6;margin:5%;color:#16181D}h1,h2{line-height:1.2}p{white-space:pre-wrap;overflow-wrap:break-word}img{max-width:100%;height:auto}figure{margin:1.5em 0;break-inside:avoid}figcaption{font-size:.8em}blockquote{border-left:3px solid ${style.color};padding-left:1em;margin-left:0}a{color:inherit}.cover{text-align:center}.cover img{max-height:70vh}.cover h1{font-size:2em}.byline{font-style:italic}`;
+  const css = `body{font-family:${style.font === "serif" ? "Georgia,serif" : "Arial,sans-serif"};line-height:1.6;margin:5%;color:${style.textColor ?? "#16181D"};background:${style.background ?? "#F8F7F4"}}h1,h2{line-height:1.2}p{white-space:pre-wrap;overflow-wrap:break-word}img{max-width:100%;height:auto}figure{margin:1.5em 0;break-inside:avoid}figcaption{font-size:.8em}blockquote{border-left:3px solid ${style.color};padding-left:1em;margin-left:0}a{color:inherit}.cover{text-align:center}.cover img{max-height:70vh}.cover h1{font-size:2em}.byline{font-style:italic}`;
   zip.file("EPUB/styles.css", css);
   const xhtml = (pageTitle: string, body: string) =>
     `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${language}" xml:lang="${language}"><head><meta charset="utf-8"/><title>${escapeHtml(pageTitle)}</title><link rel="stylesheet" type="text/css" href="styles.css"/></head><body>${body}</body></html>`;

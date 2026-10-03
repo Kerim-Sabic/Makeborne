@@ -5,54 +5,65 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, LockKeyhole, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { accountError } from "@/lib/supabase/auth-flow";
 
 type Capability = { cloudWorkspace: { available: boolean; reason?: string } };
 export default function AccountForm() {
   const router = useRouter();
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [reason, setReason] = useState("");
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "recovery">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [verification, setVerification] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [retryAt, setRetryAt] = useState(0);
   useEffect(() => {
     const abort = new AbortController();
     fetch("/api/capabilities", { signal: abort.signal, cache: "no-store" })
       .then((r) => r.json())
       .then((c: Capability) => {
         setEnabled(c.cloudWorkspace?.available === true);
-        setReason(
-          c.cloudWorkspace?.reason || "Cloud services are not enabled.",
-        );
       })
       .catch(() => {
         if (!abort.signal.aborted) {
           setEnabled(false);
-          setReason(
-            "We could not verify cloud availability. Please try again later.",
-          );
         }
       });
-    if (new URLSearchParams(window.location.search).has("error"))
+    const error = new URLSearchParams(window.location.search).get("error");
+    if (error)
       queueMicrotask(() =>
         setMessage(
-          "This confirmation link could not be verified. Sign in again or request another confirmation.",
+          error === "cloud-unavailable"
+            ? "Account access is not available yet. You can continue in the local studio."
+            : "This email link expired or could not be verified. Request a new link or sign in.",
         ),
       );
     return () => abort.abort();
   }, []);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!enabled) return;
+    if (!enabled || busy) return;
     setBusy(true);
     setMessage("");
     try {
       const client = createClient();
-      if (mode === "signup") {
+      const address = email.trim();
+      if (mode === "recovery") {
+        if (Date.now() < retryAt) {
+          setMessage("Wait a minute before requesting another email.");
+          return;
+        }
+        const { error } = await client.auth.resetPasswordForEmail(address, {
+          redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
+        });
+        if (error) throw error;
+        setRetryAt(Date.now() + 60_000);
+        setMessage("If an account uses this email, you will receive a link to reset its password. Check your inbox and spam folder.");
+      } else if (mode === "signup") {
         const { data, error } = await client.auth.signUp({
-          email,
+          email: address,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
@@ -64,13 +75,16 @@ export default function AccountForm() {
           router.refresh();
         } else {
           setVerification(true);
+          setEmail(address);
+          setPassword("");
+          setRetryAt(Date.now() + 60_000);
           setMessage(
-            "Check your email for a confirmation link if this address is eligible. Your local projects have not been uploaded.",
+            "Check your inbox and spam folder for a confirmation link if this address is eligible.",
           );
         }
       } else {
         const { error } = await client.auth.signInWithPassword({
-          email,
+          email: address,
           password,
         });
         if (error) throw error;
@@ -78,35 +92,38 @@ export default function AccountForm() {
         router.refresh();
       }
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Account access could not complete. Please try again.",
-      );
+      setMessage(accountError(error));
     } finally {
       setBusy(false);
     }
   }
   async function resend() {
     if (!enabled || busy) return;
+    if (Date.now() < retryAt) {
+      setMessage("Wait a minute before requesting another email.");
+      return;
+    }
     setBusy(true);
     try {
       const { error } = await createClient().auth.resend({
         type: "signup",
-        email,
+        email: email.trim(),
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) throw error;
+      setRetryAt(Date.now() + 60_000);
       setMessage(
         "A new confirmation link was requested. Check your inbox if the address is eligible.",
       );
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Confirmation request failed.",
-      );
+      setMessage(accountError(error));
     } finally {
       setBusy(false);
     }
+  }
+  function changeMode(next: typeof mode) {
+    if (busy) return;
+    setMode(next); setPassword(""); setMessage(""); setShowPassword(false);
   }
   return (
     <main className="login-page">
@@ -116,23 +133,17 @@ export default function AccountForm() {
       </Link>
       <div className="login-card">
         <span className="eyebrow">YOUR CLOUD STUDIO</span>
-        <h1>
-          A place for
-          <br />
-          <em>your next idea.</em>
-        </h1>
+        <h1>{verification ? "Check your inbox." : mode === "signup" ? "Create your studio." : mode === "recovery" ? "Reset your password." : "Welcome back."}</h1>
         {enabled === null ? (
           <p>Checking account availability…</p>
         ) : !enabled ? (
           <>
             <div className="inline-info">
               <LockKeyhole size={20} />
-              <p>{reason}</p>
+              <p>Account access is being prepared.</p>
             </div>
             <p>
-              Cloud accounts remain unavailable until the server is configured
-              and its migrations are verified. Your local studio is ready to
-              use.
+              Your local studio is ready to use. Online accounts will be available once cloud setup is complete.
             </p>
             <Link className="button primary" href="/studio">
               Open local studio <ArrowRight size={16} />
@@ -143,11 +154,8 @@ export default function AccountForm() {
             <div className="verification-icon">
               <Mail size={29} />
             </div>
-            <h2>One more step.</h2>
             <p>
-              Use the confirmation link sent to <strong>{email}</strong>.
-              Account creation does not move your device’s projects into the
-              cloud.
+              If <strong>{email}</strong> is eligible, you will receive a confirmation link. Open it to finish setting up your studio.
             </p>
             <button
               className="button secondary"
@@ -158,6 +166,7 @@ export default function AccountForm() {
             </button>
             <button
               className="text-link"
+              disabled={busy}
               onClick={() => {
                 setVerification(false);
                 setMode("login");
@@ -169,20 +178,23 @@ export default function AccountForm() {
           </>
         ) : (
           <>
-            <div className="filter-tabs account-tabs">
+            {mode !== "recovery" && <div className="filter-tabs account-tabs">
               <button
                 className={mode === "login" ? "active" : ""}
-                onClick={() => setMode("login")}
+                disabled={busy}
+                onClick={() => changeMode("login")}
               >
                 Sign in
               </button>
               <button
                 className={mode === "signup" ? "active" : ""}
-                onClick={() => setMode("signup")}
+                disabled={busy}
+                onClick={() => changeMode("signup")}
               >
                 Create account
               </button>
-            </div>
+            </div>}
+            {mode === "recovery" && <p>Enter your account email and we’ll send a reset link if it is eligible.</p>}
             <form onSubmit={submit}>
               <label>
                 Email
@@ -190,25 +202,28 @@ export default function AccountForm() {
                   type="email"
                   autoComplete="email"
                   required
+                  disabled={busy}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   maxLength={254}
                 />
               </label>
-              <label>
+              {mode !== "recovery" && <label>
                 Password
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   autoComplete={
                     mode === "signup" ? "new-password" : "current-password"
                   }
                   minLength={mode === "signup" ? 12 : 1}
                   required
+                  disabled={busy}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   maxLength={128}
                 />
-              </label>
+              </label>}
+              {mode !== "recovery" && <button type="button" className="text-link" disabled={busy} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Hide password" : "Show password"}</button>}
               {mode === "signup" && (
                 <p className="small-note">
                   Use at least 12 characters. Your device’s projects stay local
@@ -220,10 +235,12 @@ export default function AccountForm() {
                   ? "Please wait…"
                   : mode === "signup"
                     ? "Create account"
-                    : "Sign in"}
+                    : mode === "recovery" ? "Send reset link" : "Sign in"}
                 <ArrowRight size={16} />
               </button>
             </form>
+            <button className="text-link" disabled={busy} onClick={() => changeMode(mode === "recovery" ? "login" : "recovery")}>{mode === "recovery" ? "Back to sign in" : "Forgot your password?"}</button>
+            {mode === "login" && <button className="text-link" disabled={busy || !email.trim()} onClick={resend}>Resend confirmation email</button>}
           </>
         )}
         {message && (

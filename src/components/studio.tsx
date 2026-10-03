@@ -1,8 +1,11 @@
 "use client";
+import "@/app/studio-refresh.css";
+import { z } from "zod";
 import Link from "next/link";
 import BrandMark from "./brand-mark";
 import {
   LocalWorkspaceSchema,
+  LocalStyleSchema,
   baseStyles,
   emptyWorkspace,
   uid,
@@ -17,8 +20,9 @@ import {
   type Project,
   type Workspace,
 } from "./studio-model";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import WebsiteSections from "./website-sections";
+import TemplateGallery from "./template-gallery";
 import {
   ArrowDown,
   ArrowLeft,
@@ -68,6 +72,11 @@ export default function Studio() {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [persistenceAllowed, setPersistenceAllowed] = useState(false);
   const [initialStyle, setInitialStyle] = useState("editorial");
+  const [initialBrief, setInitialBrief] = useState("");
+  const [initialTitle, setInitialTitle] = useState("");
+  const [draftBrief, setDraftBrief] = useState("");
+  const [draftKind, setDraftKind] = useState<Kind>("website");
+  const [homeHandoff, setHomeHandoff] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("projects");
   const [selected, setSelected] = useState<string | null>(null);
@@ -103,7 +112,62 @@ export default function Studio() {
         );
       }
       setLoaded(true);
-      const kind = new URLSearchParams(window.location.search).get("create");
+      const parameters = new URLSearchParams(window.location.search);
+      const requestedTab = parameters.get("tab");
+      if (
+        requestedTab &&
+        ["projects", "clients", "styles", "settings"].includes(requestedTab)
+      )
+        setTab(requestedTab);
+      const kind = parameters.get("create");
+      if (parameters.get("from") === "home") {
+        try {
+          const raw = sessionStorage.getItem("makeborne.creation-draft.v1");
+          if (raw) {
+            const draft = z
+              .object({
+                kind: z.enum(["website", "book", "presentation"]),
+                brief: z.string().trim().min(1).max(20000),
+                styleId: z.string().min(1).max(100).optional(),
+                style: LocalStyleSchema.optional(),
+              })
+              .strict()
+              .safeParse(JSON.parse(raw));
+            if (draft.success && draft.data.kind === kind) {
+              setInitialBrief(draft.data.brief);
+              setInitialTitle(`Untitled ${draft.data.kind}`);
+              setDraftBrief(draft.data.brief);
+              setDraftKind(draft.data.kind);
+              if (draft.data.style) {
+                const style = draft.data.style;
+                setWorkspace((current) => ({
+                  ...current,
+                  styles: current.styles.some(
+                    (existing) => existing.id === style.id,
+                  )
+                    ? current.styles.map((existing) =>
+                        existing.id === style.id ? style : existing,
+                      )
+                    : [...current.styles, style],
+                }));
+                setInitialStyle(style.id);
+              } else if (
+                draft.data.styleId &&
+                baseStyles.some((style) => style.id === draft.data.styleId)
+              )
+                setInitialStyle(draft.data.styleId);
+              setHomeHandoff(true);
+            } else
+              setNotice(
+                "The saved creation brief could not be safely loaded. Its original session data has been preserved.",
+              );
+          }
+        } catch {
+          setNotice(
+            "The saved creation brief could not be read. You can enter it again in the studio.",
+          );
+        }
+      }
       if (kind === "book" || kind === "website" || kind === "presentation")
         setCreating(kind);
     });
@@ -167,13 +231,43 @@ export default function Studio() {
       createdAt: t,
       updatedAt: t,
     };
-    setWorkspace((w) => ({ ...w, projects: [p, ...w.projects] }));
+    if (!persistenceAllowed) {
+      toast(
+        "Recover your saved workspace before creating a project. Your creation draft remains available.",
+      );
+      return false;
+    }
+    const nextWorkspace = {
+      ...workspace,
+      projects: [p, ...workspace.projects],
+    };
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextWorkspace));
+    } catch {
+      toast(
+        "This browser could not save the project. Your creation draft remains available; download a backup from Settings.",
+      );
+      return false;
+    }
+    setWorkspace(nextWorkspace);
     setSelected(p.id);
     setTab("projects");
     setCreating(null);
+    if (homeHandoff && persistenceAllowed) {
+      try {
+        sessionStorage.removeItem("makeborne.creation-draft.v1");
+        setHomeHandoff(false);
+      } catch {
+        /* A retained session draft is safe to keep. */
+      }
+    }
+    setInitialBrief("");
+    setInitialTitle("");
+    setDraftBrief("");
     toast(
       "Project created. Your supplied content is ready to edit. No AI generation was performed.",
     );
+    return true;
   }
   async function importBackup(file: File) {
     try {
@@ -193,9 +287,42 @@ export default function Studio() {
       toast("This is not a valid Makeborne workspace backup.");
     }
   }
+  function chooseDirection(
+    kind: Kind,
+    brief: string,
+    styleId: string,
+    selectedStyle?: Style,
+  ) {
+    if (selectedStyle) {
+      const parsed = LocalStyleSchema.safeParse(selectedStyle);
+      if (!parsed.success) {
+        toast("This direction could not be safely loaded.");
+        return;
+      }
+      const style = parsed.data;
+      setWorkspace((current) => ({
+        ...current,
+        styles: current.styles.some((existing) => existing.id === style.id)
+          ? current.styles.map((existing) =>
+              existing.id === style.id ? style : existing,
+            )
+          : [...current.styles, style],
+      }));
+    }
+    setDraftKind(kind);
+    setDraftBrief(brief);
+    setInitialBrief(brief);
+    setInitialTitle(`Untitled ${kind}`);
+    setInitialStyle(styleId);
+    setCreating(kind);
+  }
+
   return (
     <div className="studio-shell">
-      <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
+      <aside
+        id="studio-navigation"
+        className={`sidebar ${mobileNav ? "open" : ""}`}
+      >
         <Link className="wordmark" href="/">
           <BrandMark size={27} />
           Makeborne
@@ -264,6 +391,8 @@ export default function Studio() {
         <header className="studio-topbar">
           <button
             className="icon-button mobile-toggle"
+            aria-expanded={mobileNav}
+            aria-controls="studio-navigation"
             aria-label="Toggle navigation"
             onClick={() => setMobileNav(!mobileNav)}
           >
@@ -318,17 +447,16 @@ export default function Studio() {
             notify={toast}
           />
         ) : (
-          <div className="workspace-content">
+          <div
+            className={`workspace-content ${tab === "projects" && workspace.projects.length === 0 ? "fresh-workspace" : ""}`}
+          >
             {tab === "projects" && (
               <>
                 <div className="page-heading">
                   <div>
                     <div className="eyebrow">YOUR CREATION STUDIO</div>
-                    <h1>A place for your next idea.</h1>
-                    <p>
-                      Bring your work together. Make something you’re proud to
-                      share.
-                    </p>
+                    <h1>What will you make next?</h1>
+                    <p>Your ideas, projects, and clients. All in one place.</p>
                   </div>
                   <button
                     className="button primary"
@@ -337,30 +465,103 @@ export default function Studio() {
                     <Plus size={17} /> New project
                   </button>
                 </div>
-                <div className="quick-create">
-                  {(["website", "book", "presentation"] as Kind[]).map(
-                    (kind) => {
-                      const Icon = icons[kind];
-                      return (
-                        <button key={kind} onClick={() => setCreating(kind)}>
-                          <span className={`format-icon ${kind}`}>
-                            <Icon size={23} />
-                          </span>
-                          <span>
-                            <strong>{kindLabel[kind]}</strong>
-                            <small>
-                              {kind === "website"
-                                ? "Build a home for a business."
-                                : kind === "book"
-                                  ? "Give your knowledge a shape."
-                                  : "Make your ideas land."}
-                            </small>
-                          </span>
-                          <ArrowUpRight size={18} />
-                        </button>
-                      );
+                <section
+                  className="studio-composer"
+                  aria-label="Start with a brief"
+                >
+                  <div className="composer-format-tabs">
+                    {(["website", "book", "presentation"] as Kind[]).map(
+                      (k) => {
+                        const Icon = icons[k];
+                        return (
+                          <button
+                            key={k}
+                            className={draftKind === k ? "active" : ""}
+                            onClick={() => setDraftKind(k)}
+                          >
+                            <Icon size={16} />
+                            {kindLabel[k]}
+                          </button>
+                        );
+                      },
+                    )}
+                    <span>Your next project starts here</span>
+                  </div>
+                  <label className="composer-input-label">
+                    <span className="sr-only">Describe your next project</span>
+                    <textarea
+                      id="studio-brief"
+                      value={draftBrief}
+                      maxLength={20000}
+                      onChange={(e) => setDraftBrief(e.target.value)}
+                      placeholder={
+                        draftKind === "website"
+                          ? "Describe the website you want to create…"
+                          : draftKind === "book"
+                            ? "What knowledge do you want to turn into a book?"
+                            : "What would you like your presentation to say?"
+                      }
+                    />
+                  </label>
+                  <div className="composer-bottom">
+                    <span>
+                      <Sparkles size={14} /> Set the direction. Keep control of
+                      the details.
+                    </span>
+                    <button
+                      className="button primary"
+                      aria-label="Continue with this brief"
+                      onClick={() => {
+                        setInitialBrief(draftBrief.trim());
+                        setInitialTitle(`Untitled ${draftKind}`);
+                        setCreating(draftKind);
+                      }}
+                    >
+                      <ArrowUp size={19} />
+                    </button>
+                  </div>
+                </section>
+                <div className="composer-note">
+                  Your brief becomes a saved project. Live AI generation is not
+                  enabled.
+                </div>
+                <div
+                  className="brief-suggestions"
+                  aria-label="Brief suggestions"
+                >
+                  {[
+                    {
+                      label: "A website for a client",
+                      kind: "website" as Kind,
+                      brief:
+                        "Help me plan a website for a client. I will provide their business, services, brand direction, and approved content.",
                     },
-                  )}
+                    {
+                      label: "Turn knowledge into a book",
+                      kind: "book" as Kind,
+                      brief:
+                        "Help me shape my knowledge into a practical book. I will provide the topic, intended reader, and source material.",
+                    },
+                    {
+                      label: "Present an idea clearly",
+                      kind: "presentation" as Kind,
+                      brief:
+                        "Help me structure a presentation that explains my idea clearly. I will provide the audience, purpose, and key points.",
+                    },
+                  ].map((suggestion) => (
+                    <button
+                      type="button"
+                      key={suggestion.kind}
+                      onClick={() => {
+                        setDraftKind(suggestion.kind);
+                        setDraftBrief(suggestion.brief);
+                        document.getElementById("studio-brief")?.focus();
+                      }}
+                    >
+                      {suggestion.label}
+                      <ArrowUpRight size={14} />
+                    </button>
+                  ))}
                 </div>
                 <div className="list-toolbar">
                   <div className="filter-tabs">
@@ -389,8 +590,8 @@ export default function Studio() {
                 {workspace.projects.length === 0 ? (
                   <Empty
                     icon={FolderOpen}
-                    title="The beginning of something good."
-                    text="Your first project starts with an idea, a brief, or something you’ve already written."
+                    title="Your projects will live here."
+                    text="Start with a brief above, or bring your existing content into a new project."
                     action="Create your first project"
                     onClick={() => setCreating("website")}
                   />
@@ -445,18 +646,21 @@ export default function Studio() {
                       })}
                   </div>
                 )}
+                {workspace.projects.length === 0 && (
+                  <TemplateGallery onChoose={chooseDirection} />
+                )}
               </>
             )}
             {tab === "clients" && (
               <>
                 <div className="page-heading">
                   <div>
-                    <div className="eyebrow">WORK, WITH PEOPLE</div>
+                    <div className="eyebrow">CLIENT WORKSPACE</div>
                     <h1>
                       {clientDetail
                         ? workspace.clients.find((c) => c.id === clientDetail)
                             ?.name
-                        : "Keep your clients close."}
+                        : "Your clients, connected."}
                     </h1>
                     <p>
                       One place for their projects, details, and what happens
@@ -571,7 +775,7 @@ export default function Studio() {
                 ) : workspace.clients.length === 0 ? (
                   <Empty
                     icon={Users}
-                    title="Every client deserves a clear picture."
+                    title="A clear home for every client."
                     text="Save their details and connect every website, book, and presentation to the right person."
                     action="Add your first client"
                     onClick={() => setClientModal("new")}
@@ -622,7 +826,7 @@ export default function Studio() {
                 <div className="page-heading">
                   <div>
                     <div className="eyebrow">A CLEAR CREATIVE DIRECTION</div>
-                    <h1>Find your point of view.</h1>
+                    <h1>Choose a creative direction.</h1>
                     <p>
                       Give every project a coherent character. Save custom
                       directions for your clients.
@@ -635,46 +839,43 @@ export default function Studio() {
                     <Plus size={17} /> Custom style
                   </button>
                 </div>
-                <div className="style-grid">
-                  {workspace.styles.map((s) => (
-                    <article className="style-card" key={s.id}>
-                      <div
-                        className={`style-sample ${s.id}`}
-                        style={
-                          { "--style-color": s.color } as React.CSSProperties
-                        }
-                      >
-                        <span>MAKEBORNE / {s.name.toUpperCase()}</span>
-                        <h2
-                          style={{
-                            fontFamily:
-                              s.font === "serif"
-                                ? "var(--font-serif)"
-                                : "var(--font-inter)",
-                          }}
-                        >
-                          A different
-                          <br />
-                          <em>kind of good.</em>
-                        </h2>
-                        <div className="style-shape" />
-                      </div>
-                      <div>
-                        <h3>{s.name}</h3>
-                        <p>{s.description}</p>
-                        <button
-                          className="text-link"
-                          onClick={() => {
-                            setInitialStyle(s.id);
-                            setCreating("website");
-                          }}
-                        >
-                          Start with this direction <ArrowRight size={16} />
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
+                <TemplateGallery onChoose={chooseDirection} />
+                {workspace.styles.some(
+                  (style) =>
+                    !["editorial", "venture", "studio"].includes(style.id),
+                ) && (
+                  <section className="saved-style-directions">
+                    <h2>Your saved directions</h2>
+                    <div className="saved-style-grid">
+                      {workspace.styles
+                        .filter(
+                          (style) =>
+                            !["editorial", "venture", "studio"].includes(
+                              style.id,
+                            ),
+                        )
+                        .map((style) => (
+                          <button
+                            type="button"
+                            key={style.id}
+                            onClick={() =>
+                              chooseDirection("website", "", style.id)
+                            }
+                          >
+                            <span
+                              className="saved-style-swatch"
+                              style={{ background: style.color }}
+                            />
+                            <span>
+                              <strong>{style.name}</strong>
+                              <small>{style.description}</small>
+                            </span>
+                            <ArrowUpRight size={17} />
+                          </button>
+                        ))}
+                    </div>
+                  </section>
+                )}
               </>
             )}
             {tab === "settings" && (
@@ -682,7 +883,7 @@ export default function Studio() {
                 <div className="page-heading">
                   <div>
                     <div className="eyebrow">MAKE YOURSELF AT HOME</div>
-                    <h1>Your workspace, your way.</h1>
+                    <h1>Workspace settings.</h1>
                     <p>
                       Keep your local work safe and control how the studio
                       feels.
@@ -783,6 +984,8 @@ export default function Studio() {
       {creating && (
         <CreateModal
           initialStyle={initialStyle}
+          initialBrief={initialBrief}
+          initialTitle={initialTitle}
           kind={creating}
           onKind={setCreating}
           clients={workspace.clients}
@@ -858,24 +1061,44 @@ function Modal({
   title: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeFromKeyboard = useEffectEvent(() => close());
   useEffect(() => {
     const prev = document.activeElement as HTMLElement;
-    ref.current
-      ?.querySelector<HTMLElement>("button,input,textarea,select")
-      ?.focus();
+    const focusable = () =>
+      Array.from(
+        ref.current?.querySelectorAll<HTMLElement>(
+          "button,input,textarea,select,a[href],[tabindex]",
+        ) || [],
+      ).filter(
+        (node) =>
+          !node.matches(":disabled,[aria-disabled='true']") &&
+          node.tabIndex >= 0 &&
+          node.getClientRects().length > 0 &&
+          getComputedStyle(node).visibility !== "hidden",
+      );
+    (focusable()[0] || ref.current)?.focus();
     function key(e: KeyboardEvent) {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeFromKeyboard();
+      }
       if (e.key === "Tab") {
-        const nodes = ref.current?.querySelectorAll<HTMLElement>(
-          "button,input,textarea,select,a[href]",
-        );
-        if (!nodes?.length) return;
+        const nodes = focusable();
+        if (!nodes.length) {
+          e.preventDefault();
+          ref.current?.focus();
+          return;
+        }
         const first = nodes[0],
           last = nodes[nodes.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
+        const current = document.activeElement;
+        if (!nodes.includes(current as HTMLElement)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        } else if (e.shiftKey && current === first) {
           e.preventDefault();
           last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
+        } else if (!e.shiftKey && current === last) {
           e.preventDefault();
           first.focus();
         }
@@ -886,7 +1109,7 @@ function Modal({
       document.removeEventListener("keydown", key);
       prev?.focus();
     };
-  }, [close]);
+  }, []);
   return (
     <div
       className="modal-backdrop"
@@ -895,10 +1118,11 @@ function Modal({
       }}
     >
       <div
-        className="modal"
+        className={`modal ${title === "Create a project" ? "creation-modal" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         ref={ref}
       >
         <button
@@ -913,7 +1137,32 @@ function Modal({
     </div>
   );
 }
+const WizardDraftSchema = z
+  .object({
+    seed: z.string().max(100),
+    kind: z.enum(["website", "book", "presentation"]),
+    step: z.number().int().min(1).max(3),
+    title: z.string().max(160),
+    brief: z.string().max(20000),
+    content: z.string().max(50000),
+    audience: z.string().max(5000),
+    purpose: z.string().max(5000),
+    wording: z.enum(["preserve", "improve", "summarise"]),
+    styleId: z.string().min(1).max(100),
+    clientId: z.union([z.literal(""), z.string().uuid()]),
+  })
+  .strict();
+function creationSeed(brief: string, title: string, style: string) {
+  const value = JSON.stringify([brief, title, style]);
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++)
+    hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
+  return (hash >>> 0).toString(36) + "-" + value.length;
+}
+
 function CreateModal({
+  initialBrief,
+  initialTitle,
   initialStyle,
   kind,
   onKind,
@@ -922,6 +1171,8 @@ function CreateModal({
   close,
   create,
 }: {
+  initialBrief: string;
+  initialTitle: string;
   initialStyle: string;
   kind: Kind;
   onKind: (k: Kind) => void;
@@ -938,178 +1189,329 @@ function CreateModal({
     wording: string;
     content: string;
     kind: Kind;
-  }) => void;
+  }) => boolean;
 }) {
-  const [step, setStep] = useState(1);
-  const [title, setTitle] = useState("");
-  const [brief, setBrief] = useState("");
+  const [step, setStep] = useState(initialBrief.trim() ? 2 : 1);
+  const wizardContent = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    wizardContent.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [step]);
+  const [title, setTitle] = useState(
+    initialTitle || (initialBrief.trim() ? `Untitled ${kind}` : ""),
+  );
+  const [brief, setBrief] = useState(initialBrief);
   const [content, setContent] = useState("");
   const [audience, setAudience] = useState("");
   const [purpose, setPurpose] = useState("");
   const [wording, setWording] = useState("preserve");
   const [styleId, setStyle] = useState(initialStyle);
   const [clientId, setClient] = useState("");
+  const [seed] = useState(() =>
+    creationSeed(initialBrief, initialTitle, initialStyle),
+  );
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [draftWritable, setDraftWritable] = useState(true);
+  const [draftNotice, setDraftNotice] = useState("");
+  const draftKey = (draftKind: Kind) =>
+    `makeborne.wizard-draft.v1.${draftKind}.${seed}`;
+  useEffect(() => {
+    queueMicrotask(() => {
+      try {
+        const raw = sessionStorage.getItem(
+          `makeborne.wizard-draft.v1.${kind}.${seed}`,
+        );
+        if (raw) {
+          if (raw.length > 200000) throw new Error("Draft too large");
+          const parsed = WizardDraftSchema.safeParse(JSON.parse(raw));
+          if (
+            !parsed.success ||
+            parsed.data.seed !== seed ||
+            parsed.data.kind !== kind
+          )
+            throw new Error("Invalid draft");
+          const draft = parsed.data;
+          setStep(draft.step);
+          setTitle(draft.title);
+          setBrief(draft.brief);
+          setContent(draft.content);
+          setAudience(draft.audience);
+          setPurpose(draft.purpose);
+          setWording(draft.wording);
+          if (styles.some((style) => style.id === draft.styleId))
+            setStyle(draft.styleId);
+          setClient(
+            clients.some((client) => client.id === draft.clientId)
+              ? draft.clientId
+              : "",
+          );
+          setDraftNotice(
+            "Your saved creation draft has been restored in this tab.",
+          );
+        }
+      } catch {
+        setDraftWritable(false);
+        setDraftNotice(
+          "The saved draft could not be read. Its original data is preserved. New edits cannot replace it in this tab.",
+        );
+      }
+      setDraftLoaded(true);
+    });
+    // Restore once per opened dialog; format changes preserve current answers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!draftLoaded || !draftWritable) return;
+    try {
+      const draft = WizardDraftSchema.parse({
+        seed,
+        kind,
+        step,
+        title,
+        brief,
+        content,
+        audience,
+        purpose,
+        wording,
+        styleId,
+        clientId,
+      });
+      sessionStorage.setItem(
+        `makeborne.wizard-draft.v1.${kind}.${seed}`,
+        JSON.stringify(draft),
+      );
+    } catch {
+      queueMicrotask(() => {
+        setDraftWritable(false);
+        setDraftNotice(
+          "This tab could not save your draft. Keep this dialog open or copy your content before leaving.",
+        );
+      });
+    }
+  }, [
+    draftLoaded,
+    draftWritable,
+    seed,
+    kind,
+    step,
+    title,
+    brief,
+    content,
+    audience,
+    purpose,
+    wording,
+    styleId,
+    clientId,
+  ]);
+  const selectedStyle =
+    styles.find((style) => style.id === styleId) || styles[0];
   return (
     <Modal close={close} title="Create a project">
-      <div className="eyebrow">A NEW POSSIBILITY · STEP {step} OF 3</div>
-      <h2>
-        {step === 1
-          ? "What are we making?"
-          : step === 2
-            ? "Give it a direction."
-            : "Choose its character."}
-      </h2>
-      <p className="modal-intro">
-        {step === 1
-          ? "Start with what you know. You can refine everything later."
-          : step === 2
-            ? "A clear brief makes thoughtful work possible."
-            : "These authored styles are a starting point, not a limit."}
-      </p>
-      <div className="step-track">
-        <span className={step >= 1 ? "active" : ""} />
-        <span className={step >= 2 ? "active" : ""} />
-        <span className={step >= 3 ? "active" : ""} />
-      </div>
-      {step === 1 ? (
-        <>
-          <div className="format-picker">
-            {(["website", "book", "presentation"] as Kind[]).map((k) => {
-              const Icon = icons[k];
-              return (
-                <button
-                  className={kind === k ? "selected" : ""}
-                  key={k}
-                  onClick={() => onKind(k)}
-                >
-                  <Icon size={22} />
-                  {kindLabel[k]}
-                </button>
-              );
-            })}
-          </div>
-          <label>
-            Project title
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={
-                kind === "website"
-                  ? "e.g. Website for your next client"
-                  : kind === "book"
-                    ? "e.g. The practical photography guide"
-                    : "e.g. A workshop worth remembering"
-              }
-              maxLength={160}
-            />
-          </label>
-          <label>
-            Client
-            <select
-              value={clientId}
-              onChange={(e) => setClient(e.target.value)}
-            >
-              <option value="">For myself</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Your material
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Paste your text here. Separate sections with a blank line, or start with a title and write in the editor."
-              rows={5}
-              maxLength={50000}
-            />
-          </label>
-          <label>
-            How should AI handle your wording?
-            <select
-              value={wording}
-              onChange={(e) => setWording(e.target.value)}
-            >
-              <option value="preserve">Preserve my wording</option>
-              <option value="improve">Improve my wording</option>
-              <option value="summarise">Summarise my material</option>
-            </select>
-          </label>
-        </>
-      ) : step === 2 ? (
-        <>
-          <label>
-            What should this project achieve?
-            <textarea
-              value={brief}
-              onChange={(e) => setBrief(e.target.value)}
-              placeholder="Describe the idea, what matters, and what the finished work should do."
-              rows={5}
-              maxLength={6000}
-            />
-          </label>
-          <div className="form-grid">
+      <div className="wizard-content" ref={wizardContent}>
+        <div className="eyebrow">
+          {["", "SOURCE", "DIRECTION", "STYLE"][step]} · STEP {step} OF 3
+        </div>
+        <h2>
+          {step === 1
+            ? "What are we making?"
+            : step === 2
+              ? "Give it a direction."
+              : "Choose its character."}
+        </h2>
+        <p className="modal-intro">
+          {step === 1
+            ? "Start with what you know. You can refine everything later."
+            : step === 2
+              ? "A clear brief makes thoughtful work possible."
+              : "These authored styles are a starting point, not a limit."}
+        </p>
+        {draftNotice && (
+          <p className="wizard-draft-notice" role="status">
+            {draftNotice}
+          </p>
+        )}
+        <div className="step-track">
+          <span className={step >= 1 ? "active" : ""} />
+          <span className={step >= 2 ? "active" : ""} />
+          <span className={step >= 3 ? "active" : ""} />
+        </div>
+        {step === 1 ? (
+          <>
+            <div className="format-picker">
+              {(["website", "book", "presentation"] as Kind[]).map((k) => {
+                const Icon = icons[k];
+                return (
+                  <button
+                    className={kind === k ? "selected" : ""}
+                    aria-pressed={kind === k}
+                    key={k}
+                    onClick={() => onKind(k)}
+                  >
+                    <Icon size={22} />
+                    {kindLabel[k]}
+                  </button>
+                );
+              })}
+            </div>
             <label>
-              Who is it for?
+              Project title
               <input
-                value={audience}
-                onChange={(e) => setAudience(e.target.value)}
-                placeholder="e.g. First-time founders"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={
+                  kind === "website"
+                    ? "e.g. Website for your next client"
+                    : kind === "book"
+                      ? "e.g. The practical photography guide"
+                      : "e.g. A workshop worth remembering"
+                }
+                maxLength={160}
               />
             </label>
             <label>
-              Intended outcome
-              <input
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                placeholder="e.g. Book a consultation"
-              />
-            </label>
-          </div>
-          <div className="inline-info">
-            <Sparkles size={18} />
-            <p>
-              Your brief is saved for later generation. Live AI is not enabled
-              in this preview; no content will be invented automatically.
-            </p>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="style-picker">
-            {styles.map((s) => (
-              <button
-                key={s.id}
-                className={styleId === s.id ? "selected" : ""}
-                onClick={() => setStyle(s.id)}
+              Client
+              <select
+                value={clientId}
+                onChange={(e) => setClient(e.target.value)}
               >
-                <span className="style-chip" style={{ background: s.color }} />
-                <strong>{s.name}</strong>
-                <small>{s.description}</small>
-                {styleId === s.id && <Check size={16} />}
-              </button>
-            ))}
-          </div>
-          <div className="creation-summary">
-            <span className="eyebrow">YOUR STARTING POINT</span>
-            <strong>{title || "Untitled project"}</strong>
-            <p>
-              {kindLabel[kind]} ·{" "}
-              {clients.find((c) => c.id === clientId)?.name ||
-                "Personal project"}{" "}
-              · {styles.find((s) => s.id === styleId)?.name}
-            </p>
-            <p>
-              {content
-                ? "Your supplied content will be added to the editor."
-                : "Start with a title and add your own content."}
-            </p>
-          </div>
-        </>
-      )}
+                <option value="">For myself</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Your material
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Paste your text here. Separate sections with a blank line, or start with a title and write in the editor."
+                rows={5}
+                maxLength={50000}
+              />
+            </label>
+            <label>
+              How should AI handle your wording?
+              <select
+                value={wording}
+                onChange={(e) => setWording(e.target.value)}
+              >
+                <option value="preserve">Preserve my wording</option>
+                <option value="improve">Improve my wording</option>
+                <option value="summarise">Summarise my material</option>
+              </select>
+            </label>
+          </>
+        ) : step === 2 ? (
+          <>
+            <label>
+              What should this project achieve?
+              <textarea
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+                placeholder="Describe the idea, what matters, and what the finished work should do."
+                rows={5}
+                maxLength={20000}
+              />
+            </label>
+            <div className="form-grid">
+              <label>
+                Who is it for?
+                <input
+                  value={audience}
+                  maxLength={5000}
+                  onChange={(e) => setAudience(e.target.value)}
+                  placeholder="e.g. First-time founders"
+                />
+              </label>
+              <label>
+                Intended outcome
+                <input
+                  value={purpose}
+                  maxLength={5000}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  placeholder="e.g. Book a consultation"
+                />
+              </label>
+            </div>
+            <div className="inline-info">
+              <Sparkles size={18} />
+              <p>
+                Your brief is saved for later generation. Live AI is not enabled
+                in this preview; no content will be invented automatically.
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="style-picker">
+              {styles.map((s) => (
+                <button
+                  key={s.id}
+                  className={styleId === s.id ? "selected" : ""}
+                  aria-pressed={styleId === s.id}
+                  onClick={() => setStyle(s.id)}
+                >
+                  <span
+                    className="style-chip"
+                    style={{ background: s.color }}
+                  />
+                  <strong>{s.name}</strong>
+                  <small>{s.description}</small>
+                  {styleId === s.id && <Check size={16} />}
+                </button>
+              ))}
+            </div>
+            <div
+              className="theme-live-preview"
+              style={{
+                background: selectedStyle?.background || "#ffffff",
+                color: selectedStyle?.textColor || "#171717",
+                fontFamily:
+                  selectedStyle?.font === "serif"
+                    ? "var(--font-serif), Georgia, serif"
+                    : "var(--font-inter), Arial, sans-serif",
+              }}
+            >
+              <span
+                className="theme-preview-label"
+                style={{ color: selectedStyle?.color }}
+              >
+                YOUR SELECTED DIRECTION · {kindLabel[kind]}
+              </span>
+              <h3>{title || `Untitled ${kind}`}</h3>
+              <p>
+                A clear headline, thoughtful spacing, and content that feels
+                like you.
+              </p>
+              <div
+                className="theme-preview-rule"
+                style={{ background: selectedStyle?.color }}
+              />
+              <small>
+                Palette and typography preview. Your own content appears in the
+                editor.
+              </small>
+            </div>
+            <div className="creation-summary">
+              <span className="eyebrow">YOUR STARTING POINT</span>
+              <strong>{title || "Untitled project"}</strong>
+              <p>
+                {kindLabel[kind]} ·{" "}
+                {clients.find((c) => c.id === clientId)?.name ||
+                  "Personal project"}{" "}
+                · {styles.find((s) => s.id === styleId)?.name}
+              </p>
+              <p>
+                {content
+                  ? "Your supplied content will be added to the editor."
+                  : "Start with a title and add your own content."}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
       <div className="modal-actions">
         <button
           className="button secondary"
@@ -1119,22 +1521,33 @@ function CreateModal({
         </button>
         <button
           className="button primary"
-          disabled={!title.trim()}
-          onClick={() =>
-            step < 3
-              ? setStep(step + 1)
-              : create({
-                  kind,
-                  title: title.trim(),
-                  brief,
-                  audience,
-                  purpose,
-                  wording,
-                  styleId,
-                  clientId,
-                  content,
-                })
-          }
+          disabled={!title.trim() || !draftLoaded}
+          onClick={() => {
+            if (step < 3) {
+              setStep(step + 1);
+              return;
+            }
+            const saved = create({
+              kind,
+              title: title.trim(),
+              brief,
+              audience,
+              purpose,
+              wording,
+              styleId,
+              clientId,
+              content,
+            });
+            if (saved) {
+              try {
+                (["website", "book", "presentation"] as Kind[]).forEach(
+                  (format) => sessionStorage.removeItem(draftKey(format)),
+                );
+              } catch {
+                /* A retained draft is safe; the created project is saved. */
+              }
+            }
+          }}
         >
           {step === 3 ? "Create project" : "Continue"}
           <ArrowRight size={16} />
@@ -1478,6 +1891,8 @@ function ProjectEditor({
             name: style.name,
             color: style.color,
             font: style.font,
+            background: style.background,
+            textColor: style.textColor,
           },
           presentationMode: "native",
           documentId: project.id,
@@ -2135,6 +2550,10 @@ function ArtifactPreview({
 }) {
   const css = {
     "--artifact-accent": style.color,
+    "--artifact-background": style.background,
+    "--artifact-ink": style.textColor,
+    background: style.background,
+    color: style.textColor,
     "--artifact-font":
       style.font === "serif" ? "var(--font-serif)" : "var(--font-inter)",
   } as React.CSSProperties;
@@ -2165,10 +2584,19 @@ function ArtifactPreview({
           separately.
         </p>
         {groups.length === 0 ? (
-          <div className="slide-preview">Add your first slide block.</div>
+          <div
+            className="slide-preview"
+            style={{ background: style.background, color: style.textColor }}
+          >
+            Add your first slide block.
+          </div>
         ) : (
           groups.map((group, i) => (
-            <div className={`slide-preview ${style.id}`} key={group[0].id}>
+            <div
+              className={`slide-preview ${style.id}`}
+              key={group[0].id}
+              style={{ background: style.background, color: style.textColor }}
+            >
               <div className="slide-meta">
                 <span>{project.title}</span>
                 <span>{String(i + 1).padStart(2, "0")}</span>

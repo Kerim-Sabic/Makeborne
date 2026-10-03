@@ -1,0 +1,2262 @@
+/* Makeborne studio: neutral product chrome. Artifact styles remain independent. */
+.studio-shell {
+  --canvas: #fafafa;
+  --surface: #fff;
+  --ink: #171717;
+  --muted: #737373;
+  --line: #e8e8e8;
+  --blue: #202020;
+  --blue-hover: #3a3a3a;
+  background: #fafafa;
+  color: #171717;
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.studio-shell button,
+.studio-shell input,
+.studio-shell select,
+.studio-shell textarea {
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+.studio-shell .button {
+  border-radius: 9px;
+  min-height: 42px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 16px;
+  box-shadow: none;
+  gap: 8px;
+}
+.studio-shell .button.primary {
+  background: #202020;
+  color: #fff;
+  border: 1px solid #202020;
+}
+.studio-shell .button.primary:hover {
+  background: #3a3a3a;
+  border-color: #3a3a3a;
+}
+.studio-shell .button.secondary {
+  background: #fff;
+  border: 1px solid #e3e3e3;
+  color: #333;
+}
+.studio-shell .button.secondary:hover {
+  background: #f7f7f7;
+  border-color: #ccc;
+}
+.studio-shell .button.small {
+  min-height: 36px;
+  font-size: 12px;
+  padding: 7px 11px;
+}
+.studio-shell .text-link {
+  font-size: 12px;
+  min-height: 36px;
+  color: #444;
+  font-weight: 500;
+}
+.studio-shell .text-link:hover {
+  color: #111;
+}
+.studio-shell .eyebrow {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  color: #72727c;
+}
+.studio-shell .sidebar {
+  width: 224px;
+  padding: 24px 15px 16px;
+  border-color: #e9e9e9;
+  background: #f8f8f8;
+  box-shadow: none;
+}
+.studio-shell .sidebar > .wordmark {
+  font-size: 22px;
+  letter-spacing: -0.065em;
+  font-weight: 600;
+  padding: 0 9px;
+  margin-bottom: 25px;
+  gap: 8px;
+}
+.studio-shell .workspace-switch {
+  min-height: 58px;
+  border: 1px solid #e9e9e9;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+  gap: 10px;
+}
+.studio-shell .workspace-initial {
+  background: #f2f2f2;
+  border: 1px solid #e7e7e7;
+  border-radius: 8px;
+  width: 31px;
+  height: 33px;
+  font-weight: 500;
+  color: #333;
+}
+.studio-shell .workspace-switch > span:nth-child(2) {
+  font-size: 12px;
+  font-weight: 500;
+}
+.studio-shell .workspace-switch small {
+  font-size: 12px;
+  color: #72727c;
+  margin-top: 2px;
+}
+.studio-shell .workspace-switch > svg {
+  color: #72727c;
+  width: 13px;
+}
+.studio-shell .create-button {
+  margin: 13px 0 26px;
+  border-radius: 8px;
+  font-size: 12px;
+  justify-content: flex-start;
+  padding: 10px 13px;
+  min-height: 41px;
+}
+.studio-shell .create-button svg {
+  width: 16px;
+  stroke-width: 1.8;
+}
+.studio-shell .nav-label {
+  font-size: 12px;
+  letter-spacing: 0.025em;
+  font-weight: 500;
+  text-transform: none;
+  color: #72727c;
+  padding: 0 11px;
+  margin-bottom: 8px;
+}
+.studio-shell .studio-nav {
+  gap: 3px;
+}
+.studio-shell .studio-nav button {
+  min-height: 41px;
+  padding: 10px 12px;
+  gap: 11px;
+  font-size: 12px;
+  border-radius: 8px;
+  color: #777;
+  font-weight: 400;
+}
+.studio-shell .studio-nav button > svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.6;
+}
+.studio-shell .studio-nav button.active {
+  background: #ececec;
+  color: #232323;
+  font-weight: 500;
+}
+.studio-shell .studio-nav button:hover {
+  background: #efefef;
+}
+.studio-shell .studio-nav button > span {
+  background: #dfdfdf;
+  color: #656565;
+  border-radius: 5px;
+  font-size: 12px;
+  padding: 1px 6px;
+}
+.studio-shell .sidebar-bottom {
+  padding-top: 24px;
+}
+.studio-shell .local-notice {
+  border-color: #e8e8e8;
+  padding: 16px 10px 12px;
+}
+.studio-shell .local-notice strong {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6f6f6f;
+}
+.studio-shell .local-notice p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #72727c;
+}
+.studio-shell .status-dot {
+  background: #6c957f;
+  width: 5px;
+  height: 5px;
+}
+.studio-shell .sidebar-settings {
+  border-radius: 8px;
+  font-size: 12px;
+  min-height: 39px;
+  padding: 10px 11px;
+  color: #717171;
+}
+.studio-shell .sidebar-settings svg {
+  stroke-width: 1.6;
+  width: 17px;
+}
+.studio-shell .sidebar-settings.active {
+  background: #ececec;
+  color: #252525;
+}
+.studio-shell .sidebar-home {
+  padding: 9px 12px;
+  justify-content: flex-start;
+  gap: 5px;
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .sidebar-home > svg:last-child {
+  margin-left: auto;
+  width: 12px;
+}
+.studio-shell .studio-main {
+  margin-left: 224px;
+  width: calc(100% - 224px);
+}
+.studio-shell .studio-topbar {
+  height: 64px;
+  border-color: #e9e9e9;
+  background: #fff;
+  padding: 0 32px;
+  gap: 13px;
+}
+.studio-shell .breadcrumb {
+  font-size: 12px;
+  color: #727272;
+}
+.studio-shell .breadcrumb > span {
+  color: #c9c9c9;
+  padding: 0 10px;
+}
+.studio-shell .local-pill {
+  font-size: 12px;
+  border-color: #e6e6e6;
+  background: #f8f8f8;
+  color: #858585;
+  border-radius: 5px;
+  padding: 4px 8px;
+}
+.studio-shell .avatar {
+  width: 28px;
+  height: 28px;
+  background: #f0f0f0;
+  border-color: #e6e6e6;
+  color: #666;
+  font-size: 12px;
+}
+.studio-shell .workspace-content {
+  max-width: 1200px;
+  padding: 43px 42px 60px;
+}
+.studio-shell .page-heading {
+  margin-bottom: 30px;
+  align-items: center;
+  gap: 25px;
+}
+.studio-shell .page-heading h1 {
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+  margin: 9px 0 9px;
+  color: #252525;
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+.studio-shell .page-heading p {
+  font-size: 12px;
+  color: #8b8b8b;
+  line-height: 1.7;
+}
+.studio-shell .page-heading > .button {
+  font-size: 12px;
+}
+.studio-shell .studio-composer {
+  background: #fff;
+  border: 1px solid #dedede;
+  border-radius: 17px;
+  padding: 14px 17px 12px;
+  box-shadow:
+    0 2px 5px #00000003,
+    0 12px 40px #00000003;
+  max-width: 850px;
+  margin: 0 auto;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.studio-shell .studio-composer:focus-within {
+  border-color: #bdbdbd;
+  box-shadow:
+    0 2px 5px #00000003,
+    0 12px 40px #00000005;
+}
+.studio-shell .composer-format-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f1f1;
+}
+.studio-shell .composer-format-tabs > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 10px;
+  min-height: 33px;
+  background: transparent;
+  font-size: 12px;
+  color: #8b8b8b;
+}
+.studio-shell .composer-format-tabs > button.active {
+  color: #333;
+  background: #f1f1f1;
+  font-weight: 500;
+}
+.studio-shell .composer-format-tabs > button > svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.7;
+}
+.studio-shell .composer-format-tabs > span {
+  margin-left: auto;
+  font-size: 12px;
+  color: #b1b1b1;
+}
+.studio-shell .composer-input-label {
+  margin: 0;
+  padding: 0;
+}
+.studio-shell .composer-input-label textarea {
+  min-height: 116px;
+  margin: 0;
+  padding: 20px 6px 8px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  resize: vertical;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.7;
+  color: #333;
+  box-shadow: none;
+}
+.studio-shell .composer-input-label textarea:focus-visible {
+  outline: 0;
+}
+.studio-shell .composer-input-label textarea::placeholder {
+  color: #72727c;
+}
+.studio-shell .composer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 4px 0 0;
+}
+.studio-shell .composer-bottom > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .composer-bottom > span svg {
+  stroke-width: 1.4;
+}
+.studio-shell .composer-bottom > .button {
+  padding: 0;
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 8px;
+}
+.studio-shell .composer-note {
+  text-align: center;
+  font-size: 12px;
+  color: #72727c;
+  margin: 10px 0 26px;
+}
+.studio-shell .quick-create {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 35px;
+}
+.studio-shell .quick-create > button {
+  border: 1px solid #e8e8e8;
+  background: #fff;
+  padding: 17px 16px;
+  border-radius: 10px;
+  gap: 12px;
+  transform: none;
+  box-shadow: none;
+}
+.studio-shell .quick-create > button:hover {
+  border-color: #c9c9c9;
+  background: #fff;
+  box-shadow: 0 4px 12px #00000003;
+  transform: none;
+}
+.studio-shell .format-icon {
+  width: 39px;
+  height: 39px;
+  border-radius: 9px;
+  border: 1px solid #ededed;
+  background: #f7f7f7;
+  color: #686868;
+}
+.studio-shell .format-icon.book {
+  background: #fff5ed;
+  border-color: #f4e9df;
+  color: #b7875f;
+}
+.studio-shell .format-icon.website {
+  background: #eff5ff;
+  border-color: #e6edf9;
+  color: #6d8bbb;
+}
+.studio-shell .format-icon.presentation {
+  background: #f4f1ff;
+  border-color: #eae5fa;
+  color: #9b88b8;
+}
+.studio-shell .format-icon svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.5;
+}
+.studio-shell .quick-create strong {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+}
+.studio-shell .quick-create small {
+  font-size: 12px;
+  color: #72727c;
+  margin-top: 3px;
+}
+.studio-shell .quick-create > button > svg {
+  width: 15px;
+  color: #b2b2b2;
+}
+.studio-shell .list-toolbar {
+  border-color: #e8e8e8;
+  padding-bottom: 15px;
+  margin-bottom: 20px;
+}
+.studio-shell .filter-tabs {
+  gap: 3px;
+}
+.studio-shell .filter-tabs button {
+  font-size: 12px;
+  color: #72727c;
+  min-height: 33px;
+  padding: 7px 11px;
+  border-radius: 6px;
+}
+.studio-shell .filter-tabs button.active {
+  background: #ededed;
+  color: #353535;
+  font-weight: 500;
+}
+.studio-shell .search-field {
+  gap: 7px;
+  color: #72727c;
+  margin-bottom: 0;
+}
+.studio-shell .search-field svg {
+  width: 14px;
+  stroke-width: 1.6;
+}
+.studio-shell .search-field input {
+  font-size: 12px;
+  color: #777;
+  background: transparent;
+}
+.studio-shell .empty-state {
+  background: #fff;
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 46px 24px 44px;
+}
+.studio-shell .empty-symbol {
+  width: 52px;
+  height: 52px;
+  border: 1px solid #ededed;
+  border-radius: 12px;
+  background: #f9f9f9;
+  color: #72727c;
+  transform: none;
+  margin-bottom: 19px;
+}
+.studio-shell .empty-symbol svg {
+  width: 25px;
+  height: 25px;
+  stroke-width: 1.3;
+}
+.studio-shell .empty-state > .eyebrow {
+  display: none;
+}
+.studio-shell .empty-state h2 {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  margin: 0 0 9px;
+  color: #444;
+}
+.studio-shell .empty-state p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #72727c;
+  max-width: 350px;
+  margin-bottom: 21px;
+}
+.studio-shell .empty-state .button {
+  font-size: 12px;
+  min-height: 38px;
+  border-radius: 7px;
+}
+.studio-shell .project-grid {
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.studio-shell .project-card {
+  border-color: #e7e7e7;
+  border-radius: 11px;
+  box-shadow: 0 2px 3px #00000002;
+}
+.studio-shell .project-card:hover {
+  box-shadow: 0 5px 18px #00000005;
+  transform: translateY(-2px);
+}
+.studio-shell .project-cover {
+  background: #f2efeb;
+  min-height: 180px;
+  padding: 21px;
+  color: #6b5e51;
+  position: relative;
+}
+.studio-shell .project-cover:after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: 15px;
+  width: 52px;
+  height: 52px;
+  border-radius: 7px;
+  background: #ffffff55;
+  border: 1px solid #ffffff77;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+.studio-shell .project-cover.venture {
+  background: #edf1fc;
+  color: #45629b;
+}
+.studio-shell .project-cover.studio {
+  background: #edf2ef;
+  color: #4f7965;
+}
+.studio-shell .project-cover h3 {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 26px 0 23px;
+  position: relative;
+  z-index: 1;
+}
+.studio-shell .cover-type {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+.studio-shell .cover-number {
+  font-size: 7px;
+  letter-spacing: 0.035em;
+  opacity: 0.6;
+}
+.studio-shell .project-info {
+  padding: 16px 16px 9px;
+}
+.studio-shell .project-info strong {
+  font-weight: 500;
+  font-size: 12px;
+  color: #333;
+}
+.studio-shell .project-info span {
+  color: #72727c;
+  font-size: 12px;
+}
+.studio-shell .project-info > svg {
+  color: #b2b2b2;
+}
+.studio-shell .project-meta {
+  padding: 7px 16px 17px;
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .status-label {
+  font-size: 12px;
+  border-color: #e8e8e8;
+  background: #f7f7f7;
+  color: #8b8b8b;
+  border-radius: 4px;
+  padding: 3px 6px;
+}
+.studio-shell .status-label.approved {
+  background: #eff8f2;
+  border-color: #e4efe6;
+  color: #659077;
+}
+.studio-shell .status-label.review {
+  background: #fff8ec;
+  border-color: #f2eada;
+  color: #ad926c;
+}
+.studio-shell .client-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.studio-shell .client-card {
+  border: 1px solid #e7e7e7;
+  border-radius: 12px;
+  padding: 23px;
+  background: #fff;
+  transition:
+    border-color 0.14s,
+    box-shadow 0.14s;
+}
+.studio-shell .client-card:hover {
+  border-color: #cdcdcd;
+  box-shadow: 0 5px 15px #00000003;
+}
+.studio-shell .client-card-top {
+  margin-bottom: 22px;
+  color: #bbb;
+}
+.studio-shell .client-avatar {
+  background: #f2f2f2;
+  border: 1px solid #eaeaea;
+  color: #777;
+  font-size: 12px;
+  font-weight: 500;
+  width: 39px;
+  height: 39px;
+  border-radius: 9px;
+}
+.studio-shell .client-card h3 {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  margin-bottom: 5px;
+}
+.studio-shell .client-card p {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .client-card-meta {
+  border-color: #eee;
+  margin-top: 24px;
+  padding-top: 15px;
+  color: #72727c;
+  font-size: 12px;
+  justify-content: space-between;
+}
+.studio-shell .client-profile {
+  border-color: #e7e7e7;
+  border-radius: 12px;
+  padding: 30px;
+  background: #fff;
+  gap: 40px;
+}
+.studio-shell .client-profile h2 {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+  margin-top: 16px;
+}
+.studio-shell .client-profile p {
+  font-size: 12px;
+  color: #8b8b8b;
+  line-height: 1.8;
+}
+.studio-shell .client-project {
+  border-color: #eee;
+  padding: 18px 0;
+}
+.studio-shell .client-project strong {
+  font-weight: 500;
+  font-size: 13px;
+  color: #444;
+}
+.studio-shell .client-project small {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .client-project > svg {
+  width: 16px;
+  color: #72727c;
+}
+.studio-shell .subheading {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: #444;
+  margin: 32px 0 17px;
+}
+.studio-shell .activity-list {
+  margin-top: 19px;
+}
+.studio-shell .activity-list > div {
+  border-color: #ececec;
+  padding: 14px 0;
+  gap: 12px;
+}
+.studio-shell .activity-list strong {
+  font-size: 12px;
+  font-weight: 400;
+  color: #727272;
+}
+.studio-shell .activity-list p {
+  color: #72727c;
+  font-size: 12px;
+}
+.studio-shell .timeline-dot {
+  background: #b0b0b0;
+  width: 5px;
+  height: 5px;
+}
+.studio-shell .style-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.studio-shell .style-card {
+  border-color: #e6e6e6;
+  border-radius: 12px;
+  background: #fff;
+}
+.studio-shell .style-card > div:nth-child(2) {
+  padding: 22px;
+}
+.studio-shell .style-card h3 {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  margin-bottom: 7px;
+}
+.studio-shell .style-card p {
+  font-size: 12px;
+  color: #72727c;
+  line-height: 1.8;
+}
+.studio-shell .style-card .text-link {
+  font-size: 12px;
+  color: #7c7c7c;
+}
+.studio-shell .style-sample {
+  min-height: 230px;
+  padding: 23px;
+  background: #f2eeea;
+}
+.studio-shell .style-sample.venture {
+  background: #ecf0fb;
+}
+.studio-shell .style-sample.studio {
+  background: #edf3ef;
+}
+.studio-shell .style-sample > span {
+  font-size: 7px;
+  opacity: 0.65;
+  letter-spacing: 0.08em;
+}
+.studio-shell .style-sample h2 {
+  font-size: 31px;
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  margin-top: 35px;
+}
+.studio-shell .style-shape {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  right: -15px;
+  bottom: -18px;
+  opacity: 0.1;
+}
+.studio-shell .settings-panel {
+  max-width: 840px;
+  background: #fff;
+  border-color: #e7e7e7;
+  border-radius: 12px;
+  padding: 5px 30px;
+}
+.studio-shell .settings-panel section {
+  padding: 27px 0;
+  border-color: #eee;
+}
+.studio-shell .settings-panel h2 {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: #333;
+}
+.studio-shell .settings-panel p {
+  font-size: 12px;
+  line-height: 1.85;
+  color: #72727c;
+}
+.studio-shell .toggle {
+  font-size: 12px;
+  color: #777;
+}
+.studio-shell .toggle > span {
+  background: #d3d3d3;
+}
+.studio-shell .toggle.enabled > span {
+  background: #2a2a2a;
+}
+.studio-shell .notice {
+  background: #f4f6fa;
+  border-color: #e4e7ef;
+  color: #7a8496;
+  font-size: 12px;
+  padding: 12px 25px;
+}
+.studio-shell .notice .icon-button {
+  color: #9099a9;
+}
+.studio-shell .icon-button {
+  border-radius: 6px;
+  color: #8b8b8b;
+  min-width: 34px;
+  min-height: 34px;
+}
+.studio-shell .icon-button:hover {
+  background: #f1f1f1;
+}
+.studio-shell .modal-backdrop {
+  background: #16161642;
+  backdrop-filter: blur(6px);
+}
+.studio-shell .modal {
+  background: #fff;
+  border: 1px solid #e9e9e9;
+  border-radius: 18px;
+  padding: 38px;
+  max-width: 610px;
+  box-shadow: 0 20px 80px #00000019;
+}
+.studio-shell .modal-close {
+  top: 15px;
+  right: 15px;
+  border-radius: 7px;
+  background: #f7f7f7;
+  color: #72727c;
+}
+.studio-shell .modal h2 {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  margin: 12px 0;
+  line-height: 1.2;
+  color: #282828;
+}
+.studio-shell .modal-intro {
+  font-size: 12px;
+  color: #72727c;
+  line-height: 1.7;
+  margin-bottom: 22px;
+}
+.studio-shell .step-track {
+  gap: 5px;
+  margin-bottom: 23px;
+}
+.studio-shell .step-track span {
+  height: 2px;
+  background: #ededed;
+}
+.studio-shell .step-track span.active {
+  background: #333;
+}
+.studio-shell label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #737373;
+  margin-bottom: 18px;
+}
+.studio-shell label input,
+.studio-shell label textarea,
+.studio-shell label select {
+  border: 1px solid #dedede;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 43px;
+  padding: 11px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #555;
+  margin-top: 7px;
+  box-shadow: 0 1px 2px #00000002;
+}
+.studio-shell label input::placeholder,
+.studio-shell label textarea::placeholder {
+  color: #72727c;
+}
+.studio-shell label input:focus-visible,
+.studio-shell label textarea:focus-visible,
+.studio-shell label select:focus-visible {
+  outline: 2px solid #d3ddf4;
+  outline-offset: 1px;
+  border-color: #a6b7dd;
+}
+.studio-shell .format-picker {
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.studio-shell .format-picker button {
+  border: 1px solid #e6e6e6;
+  background: #fafafa;
+  border-radius: 9px;
+  font-size: 12px;
+  color: #72727c;
+  min-height: 82px;
+  gap: 9px;
+}
+.studio-shell .format-picker button.selected {
+  border-color: #303030;
+  background: #fafafa;
+  color: #272727;
+  box-shadow: 0 0 0 1px #30303005;
+}
+.studio-shell .format-picker button svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.5;
+}
+.studio-shell .modal-actions {
+  border-color: #eee;
+  padding-top: 22px;
+  margin-top: 25px;
+}
+.studio-shell .inline-info {
+  background: #f7f7f7;
+  border: 1px solid #ededed;
+  border-radius: 8px;
+  color: #8e8e8e;
+  padding: 13px;
+  gap: 10px;
+}
+.studio-shell .inline-info p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #72727c;
+}
+.studio-shell .style-picker > button {
+  border: 1px solid #e8e8e8;
+  background: #fff;
+  border-radius: 9px;
+  padding: 16px;
+  gap: 4px 12px;
+}
+.studio-shell .style-picker > button.selected {
+  border-color: #444;
+  background: #fafafa;
+  color: #333;
+}
+.studio-shell .style-picker strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.studio-shell .style-picker small {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .style-chip {
+  border-radius: 5px;
+  height: 29px;
+}
+.studio-shell .creation-summary {
+  background: #f9f9f9;
+  border: 1px solid #ececec;
+  border-radius: 9px;
+  padding: 18px;
+  margin-top: 23px;
+}
+.studio-shell .creation-summary > strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: #444;
+}
+.studio-shell .creation-summary p {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .editor-heading {
+  background: #fff;
+  border-color: #e7e7e7;
+  padding: 21px 26px;
+  gap: 13px;
+}
+.studio-shell .title-input {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  color: #333;
+}
+.studio-shell .editor-heading p {
+  font-size: 12px;
+  color: #72727c;
+  margin-top: 4px;
+}
+.studio-shell .editor-actions {
+  gap: 7px;
+}
+.studio-shell .editor-actions .button {
+  font-size: 12px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 7px;
+}
+.studio-shell .editor-toolbar {
+  padding: 8px 24px;
+  background: #fff;
+  border-color: #e9e9e9;
+  gap: 20px;
+}
+.studio-shell .editor-toolbar .filter-tabs button {
+  font-size: 12px;
+  min-height: 31px;
+  padding: 7px 11px;
+}
+.studio-shell .editor-toolbar-right {
+  gap: 9px;
+}
+.studio-shell .editor-toolbar-right select {
+  border-color: #e6e6e6;
+  background: #fafafa;
+  color: #888;
+  font-size: 12px;
+  border-radius: 5px;
+  padding: 6px 9px;
+}
+.studio-shell .editor-workbench {
+  grid-template-columns: 178px minmax(210px, 1fr) 255px;
+  min-height: calc(100vh - 191px);
+}
+.studio-shell .outline-panel {
+  border-color: #e7e7e7;
+  background: #fcfcfc;
+  padding: 21px 13px;
+}
+.studio-shell .outline-heading {
+  color: #72727c;
+  padding-bottom: 16px;
+}
+.studio-shell .outline-heading .eyebrow {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .outline-item {
+  border-radius: 7px;
+  margin-bottom: 6px;
+  padding: 5px;
+  border-color: transparent;
+}
+.studio-shell .outline-item.active {
+  background: #eee;
+  border-color: #e3e3e3;
+}
+.studio-shell .outline-item > button {
+  font-size: 12px;
+  color: #858585;
+  gap: 9px;
+}
+.studio-shell .outline-item > button > span:first-child {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .outline-item .icon-button {
+  color: #72727c;
+  min-height: 23px;
+  min-width: 25px;
+}
+.studio-shell .outline-add {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 7px;
+  padding: 9px 10px;
+  font-size: 12px;
+  color: #72727c;
+  margin-top: 9px;
+  gap: 6px;
+  min-height: 34px;
+}
+.studio-shell .outline-add:hover {
+  background: #f8f8f8;
+  border-color: #ccc;
+}
+.studio-shell .outline-footnote {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #72727c;
+  padding: 19px 7px;
+}
+.studio-shell .artifact-canvas {
+  background: #f1f1f1;
+  padding: 0 31px 40px;
+}
+.studio-shell .canvas-toolbar {
+  padding: 22px 0;
+  font-size: 12px;
+  color: #72727c;
+  letter-spacing: 0.05em;
+}
+.studio-shell .canvas-toolbar > div {
+  gap: 9px;
+}
+.studio-shell .canvas-toolbar button {
+  color: #72727c;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.studio-shell .canvas-toolbar button.selected {
+  background: #e4e4e4;
+  color: #777;
+  border-radius: 4px;
+}
+.studio-shell .inspector-panel {
+  background: #fff;
+  border-color: #e7e7e7;
+  padding: 20px 20px;
+}
+.studio-shell .inspector-panel > .filter-tabs {
+  border-color: #eee;
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+}
+.studio-shell .inspector-panel label {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .inspector-panel label input,
+.studio-shell .inspector-panel label textarea,
+.studio-shell .inspector-panel label select {
+  font-size: 12px;
+  min-height: 38px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  border-color: #e0e0e0;
+  color: #606060;
+}
+.studio-shell .inspector-panel h3 {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: #777;
+}
+.studio-shell .inspector-divider {
+  border-color: #eee;
+  margin: 22px 0;
+}
+.studio-shell .inspector-add {
+  gap: 6px;
+}
+.studio-shell .inspector-add button {
+  background: #fafafa;
+  border: 1px solid #e6e6e6;
+  border-radius: 5px;
+  padding: 6px 7px;
+  font-size: 12px;
+  color: #72727c;
+  min-height: 32px;
+}
+.studio-shell .website-sections {
+  background: #fafafa;
+  border: 1px solid #ebebeb;
+  border-radius: 9px;
+  padding: 13px;
+  margin-bottom: 23px;
+}
+.studio-shell .website-sections p {
+  font-size: 12px;
+  color: #72727c;
+  line-height: 1.8;
+}
+.studio-shell .website-sections .button {
+  font-size: 12px;
+  min-height: 32px;
+}
+.studio-shell .ai-panel {
+  background: #fafafa;
+  border-color: #e9e9e9;
+  border-radius: 9px;
+  padding: 15px;
+  margin-top: 29px;
+  color: #72727c;
+}
+.studio-shell .ai-panel h3 {
+  font-size: 12px;
+  font-weight: 500;
+  margin: 10px 0 6px;
+  color: #777;
+}
+.studio-shell .ai-panel p {
+  color: #72727c;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.studio-shell .ai-panel .button {
+  font-size: 12px;
+  border-radius: 6px;
+  min-height: 33px;
+}
+.studio-shell .export-options {
+  border-color: #eee;
+  margin-top: 23px;
+  padding-top: 17px;
+}
+.studio-shell .export-options .eyebrow {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .export-options .text-link {
+  font-size: 12px;
+  color: #72727c;
+  min-height: 34px;
+}
+.studio-shell .book-export-details p {
+  font-size: 12px;
+  color: #72727c;
+  line-height: 1.8;
+}
+.studio-shell .review-layout {
+  padding: 36px;
+  gap: 40px;
+}
+.studio-shell .review-layout h2 {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  margin: 12px 0 25px;
+  color: #444;
+}
+.studio-shell .review-layout p {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .version-list article {
+  background: #fff;
+  border-color: #e6e6e6;
+  border-radius: 9px;
+  padding: 16px;
+  gap: 14px;
+  margin-bottom: 11px;
+}
+.studio-shell .version-number {
+  background: #f2f2f2;
+  color: #72727c;
+  border-radius: 6px;
+  width: 28px;
+  height: 30px;
+}
+.studio-shell .version-list strong {
+  font-weight: 500;
+  font-size: 12px;
+  color: #777;
+}
+.studio-shell .version-list p {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .version-list .button {
+  font-size: 12px;
+  min-height: 32px;
+}
+.studio-shell .preview-disclaimer,
+.studio-shell .preview-layout-note {
+  font-size: 12px;
+  color: #72727c;
+}
+/* Actual artifact typography, palette and content retain their chosen style. */
+.studio-shell .book-preview,
+.studio-shell .site-preview,
+.studio-shell .slide-preview {
+  box-shadow: 0 2px 10px #00000005;
+}
+.studio-shell .selected-block {
+  outline-color: #a9b6ce;
+}
+.studio-shell .site-preview label input {
+  font-size: 12px;
+  border-color: #e0e0e0;
+}
+.studio-shell .mobile-toggle {
+  display: none;
+}
+@media (min-width: 1600px) {
+  .studio-shell .workspace-content {
+    padding-top: 50px;
+  }
+  .studio-shell .studio-composer {
+    max-width: 900px;
+  }
+  .studio-shell .composer-input-label textarea {
+    min-height: 140px;
+  }
+}
+@media (max-width: 1200px) {
+  .studio-shell .sidebar {
+    width: 210px;
+    padding: 23px 13px;
+  }
+  .studio-shell .studio-main {
+    margin-left: 210px;
+    width: calc(100% - 210px);
+  }
+  .studio-shell .workspace-content {
+    padding: 36px 29px;
+  }
+  .studio-shell .quick-create {
+    gap: 10px;
+  }
+  .studio-shell .quick-create > button {
+    padding: 16px 12px;
+    gap: 9px;
+  }
+  .studio-shell .quick-create small {
+    font-size: 12px;
+  }
+  .studio-shell .project-grid,
+  .studio-shell .client-grid,
+  .studio-shell .style-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .studio-shell .editor-workbench {
+    grid-template-columns: 150px minmax(200px, 1fr) 230px;
+  }
+  .studio-shell .artifact-canvas {
+    padding: 0 22px 35px;
+  }
+  .studio-shell .inspector-panel {
+    padding: 20px 15px;
+  }
+  .studio-shell .composer-format-tabs > span {
+    display: none;
+  }
+}
+@media (max-width: 980px) {
+  .studio-shell .editor-workbench {
+    grid-template-columns: 145px minmax(220px, 1fr);
+  }
+  .studio-shell .inspector-panel {
+    grid-column: 1/-1;
+    border-left: 0;
+    border-top: 1px solid #e7e7e7;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 25px;
+    padding: 24px;
+  }
+  .studio-shell .inspector-panel > .filter-tabs {
+    grid-column: 1/-1;
+  }
+  .studio-shell .inspector-panel .ai-panel {
+    margin-top: 0;
+  }
+  .studio-shell .quick-create {
+    grid-template-columns: 1fr;
+  }
+  .studio-shell .quick-create > button {
+    padding: 13px 17px;
+    gap: 12px;
+  }
+  .studio-shell .quick-create small {
+    font-size: 12px;
+  }
+  .studio-shell .quick-create > button > svg {
+    display: block;
+  }
+  .studio-shell .page-heading h1 {
+    font-size: 27px;
+  }
+  .studio-shell .editor-heading .editor-actions .button:first-child {
+    display: none;
+  }
+  .studio-shell .client-profile {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .studio-shell .review-layout {
+    padding: 28px;
+    gap: 28px;
+  }
+  .studio-shell .editor-toolbar {
+    padding: 8px 18px;
+  }
+  .studio-shell .editor-toolbar .filter-tabs button {
+    font-size: 12px;
+    padding: 7px 8px;
+  }
+}
+@media (max-width: 700px) {
+  .studio-shell .sidebar {
+    width: 224px;
+    transform: translateX(-100%);
+    box-shadow: 10px 0 40px #00000012;
+    padding: 23px 15px;
+  }
+  .studio-shell .sidebar.open {
+    transform: none;
+  }
+  .studio-shell .studio-main {
+    margin-left: 0;
+    width: 100%;
+  }
+  .studio-shell .studio-topbar {
+    height: 60px;
+    padding: 0 15px;
+    gap: 9px;
+  }
+  .studio-shell .mobile-toggle {
+    display: grid;
+  }
+  .studio-shell .breadcrumb {
+    font-size: 12px;
+  }
+  .studio-shell .avatar {
+    display: none;
+  }
+  .studio-shell .local-pill {
+    font-size: 12px;
+    padding: 4px 6px;
+  }
+  .studio-shell .workspace-content {
+    padding: 30px 19px 40px;
+  }
+  .studio-shell .page-heading {
+    margin-bottom: 24px;
+    align-items: start;
+    gap: 10px;
+  }
+  .studio-shell .page-heading h1 {
+    font-size: 27px;
+    max-width: 280px;
+    margin-top: 8px;
+  }
+  .studio-shell .page-heading p {
+    font-size: 12px;
+    max-width: 260px;
+    line-height: 1.7;
+  }
+  .studio-shell .page-heading > .button {
+    min-width: 38px;
+    min-height: 38px;
+    padding: 9px;
+    font-size: 0;
+    gap: 0;
+    margin-top: 22px;
+  }
+  .studio-shell .page-heading > .button svg {
+    width: 16px;
+    height: 16px;
+  }
+  .studio-shell .studio-composer {
+    border-radius: 13px;
+    padding: 12px 13px 10px;
+  }
+  .studio-shell .composer-format-tabs {
+    gap: 1px;
+    padding-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .studio-shell .composer-format-tabs > button {
+    font-size: 12px;
+    padding: 7px 8px;
+    gap: 5px;
+    min-height: 32px;
+  }
+  .studio-shell .composer-format-tabs > button svg {
+    width: 13px;
+    height: 13px;
+  }
+  .studio-shell .composer-format-tabs > span {
+    display: none;
+  }
+  .studio-shell .composer-input-label textarea {
+    min-height: 113px;
+    padding: 17px 3px 9px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .studio-shell .composer-bottom > span {
+    font-size: 12px;
+    gap: 5px;
+    max-width: 230px;
+  }
+  .studio-shell .composer-bottom > span svg {
+    width: 12px;
+    flex: none;
+  }
+  .studio-shell .composer-bottom > .button {
+    min-width: 31px;
+    min-height: 31px;
+    border-radius: 7px;
+  }
+  .studio-shell .composer-note {
+    font-size: 12px;
+    margin: 10px 0 21px;
+  }
+  .studio-shell .quick-create {
+    gap: 9px;
+    margin-bottom: 29px;
+  }
+  .studio-shell .quick-create > button {
+    padding: 13px 14px;
+    border-radius: 9px;
+  }
+  .studio-shell .format-icon {
+    width: 35px;
+    height: 35px;
+    border-radius: 8px;
+  }
+  .studio-shell .format-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+  .studio-shell .quick-create strong {
+    font-size: 12px;
+  }
+  .studio-shell .quick-create small {
+    font-size: 12px;
+  }
+  .studio-shell .list-toolbar {
+    gap: 12px;
+    padding-bottom: 13px;
+    flex-wrap: wrap;
+  }
+  .studio-shell .filter-tabs button {
+    font-size: 12px;
+    padding: 7px 9px;
+    min-height: 32px;
+  }
+  .studio-shell .search-field {
+    background: #fff;
+    border: 1px solid #e7e7e7;
+    border-radius: 7px;
+    padding: 2px 9px;
+    min-height: 34px;
+    width: 100%;
+    margin: 0;
+  }
+  .studio-shell .search-field input {
+    font-size: 12px;
+    min-height: 26px;
+    padding: 5px 0;
+    box-shadow: none;
+  }
+  .studio-shell .empty-state {
+    padding: 35px 19px;
+  }
+  .studio-shell .empty-state h2 {
+    font-size: 18px;
+  }
+  .studio-shell .empty-state p {
+    font-size: 12px;
+  }
+  .studio-shell .project-grid,
+  .studio-shell .client-grid,
+  .studio-shell .style-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .studio-shell .project-cover {
+    min-height: 185px;
+  }
+  .studio-shell .client-profile {
+    padding: 24px;
+  }
+  .studio-shell .style-sample {
+    min-height: 235px;
+  }
+  .studio-shell .settings-panel {
+    padding: 0 23px;
+  }
+  .studio-shell .settings-panel p {
+    font-size: 12px;
+  }
+  .studio-shell .modal-backdrop {
+    padding: 12px;
+  }
+  .studio-shell .modal {
+    padding: 29px 23px;
+    border-radius: 15px;
+    max-height: 94vh;
+  }
+  .studio-shell .modal h2 {
+    font-size: 25px;
+    margin-top: 12px;
+  }
+  .studio-shell .modal .eyebrow {
+    font-size: 12px;
+  }
+  .studio-shell .modal-intro {
+    font-size: 12px;
+  }
+  .studio-shell .modal label input,
+  .studio-shell .modal label select,
+  .studio-shell .modal label textarea {
+    font-size: 12px;
+  }
+  .studio-shell .form-grid {
+    gap: 12px;
+  }
+  .studio-shell .modal-actions {
+    gap: 12px;
+  }
+  .studio-shell .modal-actions .button {
+    font-size: 12px;
+    padding: 10px 15px;
+  }
+  .studio-shell .notice {
+    padding: 10px 15px;
+    font-size: 12px;
+  }
+  .studio-shell .editor-heading {
+    padding: 15px 13px;
+    gap: 7px;
+  }
+  .studio-shell .title-input {
+    font-size: 16px;
+  }
+  .studio-shell .editor-heading p {
+    font-size: 12px;
+  }
+  .studio-shell .editor-heading .icon-button {
+    min-width: 26px;
+  }
+  .studio-shell .editor-actions .button {
+    font-size: 12px;
+    min-height: 34px;
+    padding: 7px 10px;
+  }
+  .studio-shell .editor-toolbar {
+    padding: 7px 13px;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .studio-shell .editor-toolbar-right {
+    margin-left: auto;
+    gap: 6px;
+  }
+  .studio-shell .editor-toolbar-right .status-label {
+    display: none;
+  }
+  .studio-shell .editor-toolbar-right select {
+    font-size: 12px;
+  }
+  .studio-shell .editor-workbench {
+    grid-template-columns: 1fr;
+  }
+  .studio-shell .outline-panel {
+    border-right: 0;
+    border-bottom: 1px solid #e7e7e7;
+    padding: 12px;
+  }
+  .studio-shell .outline-heading,
+  .studio-shell .outline-footnote {
+    display: none;
+  }
+  .studio-shell .outline-list {
+    display: flex;
+    overflow: auto;
+    gap: 6px;
+    padding-bottom: 6px;
+  }
+  .studio-shell .outline-item {
+    min-width: 110px;
+    width: 110px;
+    flex: none;
+    margin: 0;
+  }
+  .studio-shell .outline-item > div {
+    display: none;
+  }
+  .studio-shell .outline-add {
+    display: inline-flex;
+    width: auto;
+    margin-top: 3px;
+    padding: 8px 10px;
+    margin-right: 7px;
+    font-size: 12px;
+  }
+  .studio-shell .artifact-canvas {
+    padding: 0 17px 30px;
+  }
+  .studio-shell .canvas-toolbar {
+    padding: 18px 0;
+    font-size: 7px;
+  }
+  .studio-shell .inspector-panel {
+    grid-template-columns: 1fr;
+    display: block;
+    padding: 24px 22px;
+  }
+  .studio-shell .inspector-panel label {
+    font-size: 12px;
+  }
+  .studio-shell .inspector-panel label input,
+  .studio-shell .inspector-panel label select,
+  .studio-shell .inspector-panel label textarea {
+    font-size: 12px;
+    min-height: 42px;
+    padding: 11px;
+  }
+  .studio-shell .inspector-add button {
+    font-size: 12px;
+    min-height: 36px;
+    padding: 7px 9px;
+  }
+  .studio-shell .ai-panel {
+    margin-top: 25px;
+  }
+  .studio-shell .website-sections .button,
+  .studio-shell .ai-panel .button {
+    font-size: 12px;
+    min-height: 38px;
+  }
+  .studio-shell .website-sections p,
+  .studio-shell .ai-panel p {
+    font-size: 12px;
+  }
+  .studio-shell .export-options .text-link {
+    font-size: 12px;
+    min-height: 38px;
+  }
+  .studio-shell .review-layout {
+    grid-template-columns: 1fr;
+    padding: 27px 20px;
+    gap: 32px;
+  }
+  .studio-shell .preview-only .artifact-canvas {
+    padding: 0 17px 30px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-shell * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .studio-shell .project-card:hover {
+    transform: none;
+  }
+}
+@media print {
+  .studio-shell .studio-composer,
+  .studio-shell .composer-note {
+    display: none;
+  }
+  .studio-shell .studio-main {
+    width: 100%;
+    margin: 0;
+  }
+  .studio-shell .artifact-canvas {
+    background: #fff;
+    padding: 0;
+  }
+  .studio-shell .sidebar,
+  .studio-shell .studio-topbar {
+    display: none;
+  }
+}
+.studio-shell .fresh-workspace .page-heading {
+  justify-content: center;
+  text-align: center;
+  margin-top: 25px;
+  margin-bottom: 32px;
+}
+.studio-shell .fresh-workspace .page-heading h1 {
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  margin: 0 0 12px;
+}
+.studio-shell .fresh-workspace .page-heading .eyebrow {
+  display: none;
+}
+.studio-shell .fresh-workspace .page-heading > .button {
+  display: none;
+}
+.studio-shell .fresh-workspace .page-heading p {
+  font-size: 13px;
+  color: #72727c;
+}
+.studio-shell .fresh-workspace .studio-composer {
+  max-width: 790px;
+}
+.studio-shell .fresh-workspace .quick-create {
+  max-width: 790px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 43px;
+}
+.studio-shell .fresh-workspace .quick-create > button {
+  padding: 14px;
+  border-color: #ebebeb;
+  background: transparent;
+}
+.studio-shell .fresh-workspace .quick-create small {
+  font-size: 12px;
+}
+.studio-shell .fresh-workspace .list-toolbar {
+  margin-top: 0;
+}
+.studio-shell .fresh-workspace .empty-state {
+  padding: 32px 20px;
+  background: transparent;
+  border-style: dashed;
+  border-color: #e7e7e7;
+}
+.studio-shell .fresh-workspace .empty-state h2 {
+  font-size: 16px;
+  color: #8a8a8a;
+}
+.studio-shell .fresh-workspace .empty-state p {
+  font-size: 12px;
+  color: #72727c;
+  margin-bottom: 0;
+}
+.studio-shell .fresh-workspace .empty-symbol {
+  width: 43px;
+  height: 43px;
+  background: #f6f6f6;
+  border-color: #eee;
+  margin-bottom: 13px;
+}
+.studio-shell .fresh-workspace .empty-state > .button {
+  display: none;
+}
+.studio-shell .fresh-workspace .empty-state p {
+  max-width: 450px;
+}
+@media (max-width: 700px) {
+  .studio-shell .fresh-workspace .page-heading {
+    margin-top: 13px;
+    margin-bottom: 25px;
+  }
+  .studio-shell .fresh-workspace .page-heading h1 {
+    font-size: 29px;
+    max-width: none;
+  }
+  .studio-shell .fresh-workspace .page-heading p {
+    font-size: 12px;
+    max-width: none;
+  }
+  .studio-shell .fresh-workspace .quick-create {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 33px;
+  }
+  .studio-shell .fresh-workspace .quick-create > button {
+    flex-direction: column;
+    gap: 9px;
+    padding: 12px 5px;
+    text-align: center;
+  }
+  .studio-shell .fresh-workspace .quick-create small,
+  .studio-shell .fresh-workspace .quick-create > button > svg {
+    display: none;
+  }
+  .studio-shell .fresh-workspace .quick-create strong {
+    font-size: 12px;
+  }
+  .studio-shell .fresh-workspace .format-icon {
+    width: 31px;
+    height: 31px;
+    background: #fff;
+    border-color: #ececec;
+  }
+  .studio-shell .fresh-workspace .empty-state {
+    padding: 28px 20px;
+  }
+  .studio-shell .fresh-workspace .empty-state h2 {
+    font-size: 15px;
+  }
+}
+
+/* Readable product chrome and purposeful starting points. */
+.studio-shell .brief-suggestions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 19px auto 37px;
+  max-width: 850px;
+}
+.studio-shell .brief-suggestions button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e3e3e6;
+  border-radius: 22px;
+  background: #fff;
+  padding: 10px 14px;
+  min-height: 40px;
+  color: #62626c;
+  font-size: 12px;
+  transition:
+    background 150ms,
+    border-color 150ms;
+}
+.studio-shell .brief-suggestions button:hover {
+  background: #f1f1f4;
+  border-color: #c8c8d0;
+  color: #222;
+}
+.studio-shell .mbg-gallery {
+  padding: 48px 0 16px;
+  max-width: none;
+}
+.studio-shell .mbg-heading h2 {
+  font-size: 25px;
+}
+.studio-shell .mbg-eyebrow,
+.studio-shell .mbg-preview-note,
+.studio-shell .mbg-gallery-footnote {
+  font-size: 12px;
+  color: #72727c;
+}
+.studio-shell .mbg-heading > p,
+.studio-shell .mbg-card-details p {
+  color: #72727c;
+}
+.studio-shell .saved-style-directions {
+  margin: 38px 0 0;
+  padding-top: 26px;
+  border-top: 1px solid #e5e5e8;
+}
+.studio-shell .saved-style-directions h2 {
+  font:
+    500 20px var(--font-inter),
+    Arial,
+    sans-serif;
+  letter-spacing: -0.03em;
+  margin: 0 0 20px;
+}
+.studio-shell .saved-style-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.studio-shell .saved-style-grid button {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid #e5e5e8;
+  border-radius: 12px;
+  padding: 20px;
+  background: #fff;
+  text-align: left;
+}
+.studio-shell .saved-style-grid button > span:nth-child(2) {
+  flex: 1;
+}
+.studio-shell .saved-style-grid strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+.studio-shell .saved-style-grid small {
+  font-size: 12px;
+  color: #72727c;
+  line-height: 1.6;
+}
+.studio-shell .saved-style-swatch {
+  display: block;
+  width: 32px;
+  height: 40px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  .studio-shell .brief-suggestions {
+    gap: 8px;
+    margin-bottom: 30px;
+  }
+  .studio-shell .brief-suggestions button {
+    font-size: 12px;
+  }
+  .studio-shell .mbg-heading {
+    align-items: flex-start;
+  }
+  .studio-shell .mbg-heading > p {
+    display: none;
+  }
+  .studio-shell .saved-style-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.studio-shell .modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: #fff;
+  border-top: 1px solid #e8e8ed;
+  padding-top: 18px;
+  padding-bottom: 18px;
+  margin-bottom: -18px;
+  box-shadow: 0 -10px 18px #ffffff;
+}
+.studio-shell .modal label,
+.studio-shell .modal label input,
+.studio-shell .modal label textarea,
+.studio-shell .modal label select,
+.studio-shell .modal-intro,
+.studio-shell .modal .inline-info p {
+  font-size: 13px;
+}
+.studio-shell .modal label {
+  color: #62626d;
+}
+
+.studio-shell .wizard-draft-notice {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #62626d;
+  padding: 10px 12px;
+  background: #f5f5f8;
+  border-radius: 7px;
+  margin: 0 0 18px;
+}
+.studio-shell .theme-live-preview {
+  border: 1px solid #dfdfe5;
+  border-radius: 12px;
+  padding: 26px;
+  margin: 24px 0;
+  overflow: hidden;
+}
+.studio-shell .theme-live-preview .theme-preview-label {
+  display: block;
+  font:
+    600 11px var(--font-inter),
+    Arial,
+    sans-serif;
+  letter-spacing: 0.1em;
+  margin-bottom: 23px;
+}
+.studio-shell .theme-live-preview h3 {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 500;
+  margin: 0 0 14px;
+  letter-spacing: -0.025em;
+  color: inherit;
+}
+.studio-shell .theme-live-preview p {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  color: inherit;
+}
+.studio-shell .theme-preview-rule {
+  height: 4px;
+  width: 52px;
+  border-radius: 3px;
+  margin: 0 0 20px;
+}
+.studio-shell .theme-live-preview small {
+  font:
+    12px/1.6 var(--font-inter),
+    Arial,
+    sans-serif;
+  color: inherit;
+}
+.studio-shell .modal .button,
+.studio-shell .modal-close,
+.studio-shell .format-picker button,
+.studio-shell .style-picker button,
+.studio-shell .brief-suggestions button,
+.studio-shell .outline-add,
+.studio-shell .inspector-add button {
+  min-height: 44px;
+}
+.studio-shell .modal-close {
+  min-width: 44px;
+}
+
+/* The creation footer sits outside the scrolling answers. */
+.studio-shell .creation-modal {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  max-height: 90dvh;
+}
+.studio-shell .creation-modal .wizard-content {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  padding: 36px 38px 24px;
+  scroll-padding-top: 24px;
+}
+.studio-shell .creation-modal .modal-close {
+  z-index: 4;
+}
+.studio-shell .creation-modal .modal-actions {
+  position: static;
+  flex-shrink: 0;
+  padding: 18px 38px;
+  margin: 0;
+  background: #fff;
+  border-top: 1px solid #e8e8ed;
+  box-shadow: none;
+}
+.studio-shell .creation-modal .style-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.studio-shell .creation-modal .style-picker > button {
+  padding: 12px;
+  min-height: 72px;
+  grid-template-columns: 22px 1fr 16px;
+  gap: 4px 9px;
+}
+.studio-shell .creation-modal .style-chip {
+  width: 22px;
+  height: 25px;
+}
+.studio-shell .creation-modal .style-picker small {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.studio-shell .creation-modal .theme-live-preview {
+  padding: 20px;
+  margin: 20px 0;
+}
+.studio-shell .creation-modal .theme-preview-label {
+  margin-bottom: 15px;
+}
+.studio-shell .creation-modal .theme-live-preview h3 {
+  font-size: 25px;
+}
+.studio-shell .creation-modal .creation-summary {
+  padding: 14px;
+}
+/* Rendered artifact details inherit the selected theme instead of product chrome. */
+.studio-shell .book-preview {
+  font-family: var(--artifact-font);
+  color: var(--artifact-ink, #2a2d25);
+}
+.studio-shell .book-preview p {
+  font-family: var(--artifact-font);
+  color: var(--artifact-ink, #474b40);
+}
+.studio-shell .book-preview blockquote,
+.studio-shell .site-blocks blockquote,
+.studio-shell .slide-content blockquote {
+  font-family: var(--artifact-font);
+}
+.studio-shell .book-running,
+.studio-shell .book-page-end,
+.studio-shell .book-preview figcaption,
+.studio-shell .site-preview figcaption,
+.studio-shell .site-preview footer {
+  color: var(--artifact-ink, #5c616d);
+  font-size: 12px;
+  border-color: color-mix(
+    in srgb,
+    var(--artifact-ink, #5c616d) 24%,
+    transparent
+  );
+}
+.studio-shell .site-preview nav,
+.studio-shell .site-preview nav a,
+.studio-shell .site-contact,
+.studio-shell .site-contact p,
+.studio-shell .site-contact label {
+  color: var(--artifact-ink, #16181d);
+}
+.studio-shell .site-preview nav {
+  border-color: color-mix(
+    in srgb,
+    var(--artifact-ink, #16181d) 24%,
+    transparent
+  );
+}
+.studio-shell .site-preview nav > span {
+  font-size: 12px;
+}
+.studio-shell .site-contact {
+  background: color-mix(
+    in srgb,
+    var(--artifact-ink, #16181d) 7%,
+    var(--artifact-background, #ffffff)
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--artifact-ink, #16181d) 18%, transparent);
+}
+.studio-shell .site-contact input {
+  background: var(--artifact-background, #ffffff);
+  color: var(--artifact-ink, #16181d);
+  border-color: color-mix(
+    in srgb,
+    var(--artifact-ink, #16181d) 28%,
+    transparent
+  );
+}
+.studio-shell .site-contact button {
+  background: color-mix(
+    in srgb,
+    var(--artifact-ink, #16181d) 12%,
+    var(--artifact-background, #ffffff)
+  );
+  color: var(--artifact-ink, #16181d);
+}
+.studio-shell .deck-preview .preview-layout-note {
+  color: var(--artifact-ink, #62626d);
+  padding: 13px 16px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.studio-shell .slide-meta,
+.studio-shell .slide-footer,
+.studio-shell .slide-content figcaption {
+  color: inherit;
+  opacity: 1;
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .studio-shell .sidebar {
+    display: none;
+  }
+  .studio-shell .sidebar.open {
+    display: flex;
+  }
+  .studio-shell .creation-modal {
+    max-height: 94dvh;
+  }
+  .studio-shell .creation-modal .wizard-content {
+    padding: 32px 22px 22px;
+  }
+  .studio-shell .creation-modal .modal-actions {
+    padding: 16px 22px;
+  }
+  .studio-shell .creation-modal .style-picker {
+    grid-template-columns: 1fr;
+  }
+}

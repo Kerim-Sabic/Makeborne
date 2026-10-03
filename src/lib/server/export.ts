@@ -15,6 +15,8 @@ const styleSchema = z
     name: z.string().min(1).max(120),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     font: z.enum(["serif", "sans"]),
+    background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   })
   .strict();
 export const ExportRequestSchema = z
@@ -159,7 +161,7 @@ export function escapeHtml(value: string) {
       ]!,
   );
 }
-export function exportStyle(input: ExportRequest) {
+export function exportStyle(input: ExportRequest): z.infer<typeof styleSchema> {
   return (
     input.style ?? {
       id: input.styleId,
@@ -307,7 +309,7 @@ export function htmlDocument(input: ExportRequest) {
   const font = style.font === "serif" ? "Georgia,serif" : "Arial,sans-serif";
   const csp =
     "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'";
-  const shared = `*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#F8F7F4;color:#16181D;font:16px/1.65 ${font}}h1,h2,h3{line-height:1.15;letter-spacing:-.035em}h1{font-size:clamp(36px,5vw,64px)}h2{font-size:30px;break-after:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere;orphans:3;widows:3}blockquote{border-left:3px solid ${style.color};padding:12px 0 12px 24px;margin:32px 0;font-size:22px}figure{margin:32px 0;break-inside:avoid}img{display:block;max-width:100%;height:auto}figure img{max-height:170mm;object-fit:contain;margin:auto}figcaption{font:12px/1.5 Arial,sans-serif;color:#5C616D;margin-top:10px}footer{font:12px/1.5 Arial,sans-serif;color:#5C616D;padding:24px 0}a{color:inherit}:focus-visible{outline:3px solid ${style.color};outline-offset:4px}`;
+  const shared = `*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:${style.background ?? "#F8F7F4"};color:${style.textColor ?? "#16181D"};font:16px/1.65 ${font}}h1,h2,h3{line-height:1.15;letter-spacing:-.035em}h1{font-size:clamp(36px,5vw,64px)}h2{font-size:30px;break-after:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere;orphans:3;widows:3}blockquote{border-left:3px solid ${style.color};padding:12px 0 12px 24px;margin:32px 0;font-size:22px}figure{margin:32px 0;break-inside:avoid}img{display:block;max-width:100%;height:auto}figure img{max-height:170mm;object-fit:contain;margin:auto}figcaption{font:12px/1.5 Arial,sans-serif;color:inherit;opacity:.75;margin-top:10px}footer{font:12px/1.5 Arial,sans-serif;color:inherit;opacity:.75;padding:24px 0}a{color:inherit}:focus-visible{outline:3px solid ${style.color};outline-offset:4px}`;
   let content = "",
     css = "";
   if (input.kind === "presentation") {
@@ -320,7 +322,7 @@ export function htmlDocument(input: ExportRequest) {
           : `<section class="slide"><span class="slide-number">${String(index + 1).padStart(2, "0")}</span><h2>${escapeHtml(slide.title)}</h2><div class="slide-body">${slide.image ? `<img src="${slide.image}" alt="${escapeHtml(slide.title)}">` : ""}<p>${escapeHtml(slide.body)}</p></div></section>`,
       )
       .join("");
-    css = `@page{size:13.333in 7.5in;margin:0}.slide{width:100%;aspect-ratio:16/9;padding:6%;background:#F8F7F4;break-after:page;position:relative;overflow:hidden}.slide h2{font-size:36px;max-width:90%}.slide-number{font:12px Arial,sans-serif;color:${style.color};display:block;margin-bottom:30px}.slide-body{display:flex;gap:5%;align-items:flex-start;font-size:23px}.slide-body img{width:43%;max-height:300px;object-fit:contain}.visual{padding:0;background:#16181D;display:flex;align-items:center;justify-content:center}.visual img{width:100%;height:100%;object-fit:contain}@media print{.slide{width:13.333in;height:7.5in;aspect-ratio:auto}.slide:last-child{break-after:auto}}`;
+    css = `@page{size:13.333in 7.5in;margin:0}.slide{width:100%;aspect-ratio:16/9;padding:6%;background:${style.background ?? "#F8F7F4"};break-after:page;position:relative;overflow:hidden}.slide h2{font-size:36px;max-width:90%}.slide-number{font:12px Arial,sans-serif;color:${style.color};display:block;margin-bottom:30px}.slide-body{display:flex;gap:5%;align-items:flex-start;font-size:23px}.slide-body img{width:43%;max-height:300px;object-fit:contain}.visual{padding:0;background:#16181D;display:flex;align-items:center;justify-content:center}.visual img{width:100%;height:100%;object-fit:contain}@media print{.slide{width:13.333in;height:7.5in;aspect-ratio:auto}.slide:last-child{break-after:auto}}`;
     css = css
       .replace(
         "size:13.333in 7.5in",
@@ -366,7 +368,7 @@ export function htmlDocument(input: ExportRequest) {
       .filter((block) => block !== art)
       .map(blockHtml)
       .join("")}<footer>Made with Makeborne</footer></main>`;
-    css = `@page{size:A4;margin:22mm 20mm}.cover{min-height:240mm;break-after:page;padding:12mm 0;display:flex;flex-direction:column;gap:12mm}.cover h1{font-size:44px;margin:0;overflow-wrap:anywhere}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.cover-art{width:100%;height:145mm;object-fit:contain}.cover-rule{height:2px;width:60px;background:${style.color};margin-top:auto}.contents{break-after:page;padding:20mm 0}.contents li{padding:8px 0;border-bottom:1px solid #DCDDD9}.book-body h2{margin:35px 0 18px}.book-body h2:not(:first-child){break-before:page}.book-body{font-size:16px}.book-body p{margin-bottom:20px}.book-body>figure{margin:25px 0}body{padding:40px;max-width:920px;margin:auto}@media print{body{background:white;padding:0;max-width:none}.cover{min-height:240mm}.cover h1{font-size:40px}.book-body h2{margin-top:0}}`;
+    css = `@page{size:A4;margin:22mm 20mm}.cover{min-height:240mm;break-after:page;padding:12mm 0;display:flex;flex-direction:column;gap:12mm}.cover h1{font-size:44px;margin:0;overflow-wrap:anywhere}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.cover-art{width:100%;height:145mm;object-fit:contain}.cover-rule{height:2px;width:60px;background:${style.color};margin-top:auto}.contents{break-after:page;padding:20mm 0}.contents li{padding:8px 0;border-bottom:1px solid #DCDDD9}.book-body h2{margin:35px 0 18px}.book-body h2:not(:first-child){break-before:page}.book-body{font-size:16px}.book-body p{margin-bottom:20px}.book-body>figure{margin:25px 0}body{padding:40px;max-width:920px;margin:auto}@media print{body{padding:0;max-width:none}.cover{min-height:240mm}.cover h1{font-size:40px}.book-body h2{margin-top:0}}`;
   }
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}</style></head><body>${content}</body></html>`;
 }
@@ -463,7 +465,7 @@ export async function presentationDocument(input: ExportRequest) {
   for (const [index, content] of slides.entries()) {
     const slide = pptx.addSlide();
     slide.background = {
-      color: input.presentationMode === "visual" ? "16181D" : "F8F7F4",
+      color: input.presentationMode === "visual" ? "16181D" : (style.background ?? "#F8F7F4").slice(1),
     };
     if (input.presentationMode === "visual") {
       if (!content.image)
@@ -497,7 +499,7 @@ export async function presentationDocument(input: ExportRequest) {
         fontFace: font,
         fontSize: 32,
         bold: true,
-        color: "16181D",
+        color: (style.textColor ?? "#16181D").slice(1),
         margin: 0,
         fit: "shrink",
         valign: "top",
@@ -519,7 +521,7 @@ export async function presentationDocument(input: ExportRequest) {
         h: 3.8,
         fontFace: font,
         fontSize: 20,
-        color: "16181D",
+        color: (style.textColor ?? "#16181D").slice(1),
         margin: 0,
         valign: "top",
         paraSpaceAfter: 10,
@@ -532,7 +534,7 @@ export async function presentationDocument(input: ExportRequest) {
           y: 6.9,
           w: 1.2,
           h: 0.2,
-          color: "5C616D",
+          color: (style.textColor ?? "#5C616D").slice(1),
           fontSize: 10,
           align: "right",
         },

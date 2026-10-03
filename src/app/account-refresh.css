@@ -1,0 +1,32 @@
+.login-page,.cloud-shell{--canvas:#fafafa;--ink:#202024;--muted:#707078;--line:#e7e7ec;--blue:#202024;--blue-hover:#3c3c43;font-family:var(--font-inter),Arial,sans-serif;color:#202024;background:#fafafa;min-height:100vh}
+.login-page{max-width:none;padding:30px 40px;background:radial-gradient(ellipse at 80% 90%,#f5e8e2 0%,transparent 43%),radial-gradient(ellipse at 15% 90%,#edf0fc 0%,transparent 45%),#fafafa}
+.login-page>.wordmark{font-size:24px;letter-spacing:-1px;font-weight:650;max-width:1300px;margin:auto}
+.login-card{max-width:450px;margin:66px auto 35px;border:1px solid #e7e7ec;box-shadow:0 16px 50px -20px #20203013;border-radius:20px;padding:38px;background:#fff}
+.login-card h1{font-family:var(--font-inter),Arial,sans-serif;font-size:31px;font-weight:500;letter-spacing:-1.3px;margin:18px 0 25px;line-height:1.15}
+.login-card .eyebrow{font-size:9px;letter-spacing:1.5px;color:#81818b}
+.login-card p{font-size:13px;line-height:1.75;color:#74747e}
+.login-card label{font-size:12px;font-weight:500;color:#62626d}
+.login-card input{min-height:46px;background:white;border:1px solid #dedee5;border-radius:9px;padding:11px 13px;font-size:14px;margin-top:7px;color:#25252b}
+.login-card input:focus{outline:2px solid #b1bdd7;outline-offset:2px;border-color:#9ba7bf}
+.login-card .button{border-radius:9px;font-size:13px;min-height:44px;font-weight:500}
+.login-card .button.primary{background:#202024;color:white}
+.login-card .button.primary:hover{background:#3c3c43}
+.login-card .inline-info{background:#f6f6f8;border-color:#e7e7ec;border-radius:10px;color:#76767f}
+.login-card .inline-info p{margin:0}
+.login-card .account-tabs{display:flex;border-bottom:1px solid #ececf0;padding-bottom:0;margin-bottom:24px}
+.login-card .filter-tabs button{font-size:12px;border-radius:7px;font-weight:500;min-height:38px}
+.login-card .filter-tabs button.active{background:#f0f0f3;color:#25252b}
+.login-card .text-link{color:#64646e;font-size:12px}
+.login-card .account-message{border-radius:9px;font-size:12px;padding:12px 14px;line-height:1.6;background:#f5f6f9;color:#515b71}
+.cloud-shell .marketing-nav{height:76px;margin:0;padding:0 40px;background:#fff;border-bottom:1px solid #e8e8ed;max-width:none}
+.cloud-shell .marketing-nav nav{font-size:12px;gap:22px}
+.cloud-shell .cloud-content{max-width:1180px;padding:42px 40px 70px}
+.cloud-shell .page-heading h1{font-family:var(--font-inter),Arial,sans-serif;font-weight:500;font-size:32px;letter-spacing:-1.2px}
+.cloud-shell .page-heading p{font-size:13px;color:#74747e}
+.cloud-shell .button{background:#fff;border-radius:8px;font-size:12px;min-height:40px}
+.cloud-shell .button.primary{background:#202024;color:#fff}
+.cloud-shell .cloud-create-form,.cloud-shell .cloud-edit-grid{border-radius:12px;border-color:#e6e6ec}
+.cloud-shell .cloud-project-list h3{font-size:19px;letter-spacing:-.6px}
+.cloud-shell .empty-state h2{font-family:var(--font-inter),Arial,sans-serif;font-size:25px;font-weight:500;letter-spacing:-.8px}
+.cloud-shell input,.cloud-shell textarea,.cloud-shell select{background:#fff;border-color:#e0e0e7;border-radius:8px;font-size:13px}
+@media(max-width:650px){.login-page{padding:24px 18px}.login-card{margin-top:40px;padding:28px 23px;border-radius:16px}.login-card h1{font-size:29px}.cloud-shell .marketing-nav{padding:0 20px}.cloud-shell .cloud-content{padding:30px 20px}.cloud-shell .cloud-workspace-bar,.cloud-shell .cloud-edit-grid{grid-template-columns:1fr}.cloud-shell .cloud-edit-grid aside{border-left:0;padding-left:0}}

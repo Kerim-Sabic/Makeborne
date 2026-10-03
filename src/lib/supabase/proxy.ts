@@ -20,6 +20,11 @@ export async function updateSession(request: NextRequest) {
       },
     },
   });
-  await supabase.auth.getClaims();
+  try {
+    await supabase.auth.getClaims();
+  } catch {
+    // Provider outages must not break public login/local routes. Protected
+    // server operations independently verify the user; this grants no access.
+  }
   return response;
 }

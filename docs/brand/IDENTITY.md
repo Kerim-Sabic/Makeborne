@@ -1,5 +1,15 @@
 # Makeborne identity
 
+## Current direction — modern continuous M (supersedes earlier direction)
+
+The human rejected the earlier folded-paper branding and raster imagery. The current application identity uses a single filled rounded double-arch M/ribbon. Its consistent silhouette is defined by actual native SVG path geometry; it is not a new image-generated asset or an imitation of another application's mark.
+
+Palette: white #FFFFFF, off-white #FAFAFA, ink #18181B, subtle border #E8E8EC and a sparingly used coral #F76F53. Use the default ink mark on light backgrounds, white on ink, and coral as a small expressive accent. The application wordmark remains Makeborne in Inter 600 with restrained negative tracking. Soft ambient blue/coral belongs to supporting interface atmosphere, not multi-colour logo geometry.
+
+The SVG files, application BrandMark component and app icon share the same path. The silhouette avoids narrow fold details so it remains practical at small sizes. Favicon background/foreground adapt to light and dark appearance. Native SVG rendering was visually inspected at actual 16, 24, 32 and 64 pixels in ink on off-white and white on ink; the two arches remain open and the three stems retain separation. Final browser/header placement still needs review in the actual UI. This is not a trademark-clearance or brand-superiority claim.
+
+Earlier generated paper artwork, concept sheets and brand boards below are historical exploration. They no longer describe the current identity and must not be shown as the current brand board or used as visible application hero artwork. Their genuine-generation provenance remains intact; supersession does not retroactively make them production customer assets.
+
 ## Selected concept
 
 The first/top concept in `public/brand/makeborne-logo-concepts.png` is selected for the implementation direction. Its folded, angular M preserves the strongest letter recognition of the three options. The central fold gives the otherwise simple mark a useful asymmetry. The second concept reads more like an arch; the third depends on subtle curves that are less clear at small sizes.

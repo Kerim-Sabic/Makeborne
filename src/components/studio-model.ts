@@ -19,6 +19,8 @@ export type Style = {
   description: string;
   color: string;
   font: string;
+  background?: string;
+  textColor?: string;
 };
 export type Version = { id: string; at: string; blocks: Block[]; note: string };
 export type Project = {
@@ -99,12 +101,14 @@ const LocalBlockSchema = z.object({
     .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/)
     .optional(),
 });
-const LocalStyleSchema = z.object({
+export const LocalStyleSchema = z.object({
   id: z.string().min(1).max(100),
   name: z.string().min(1).max(120),
   description: z.string().max(5000),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   font: z.enum(["serif", "sans"]),
+  background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
 const LocalProjectSchema = ProjectSchema.extend({
   styleId: z.string().min(1).max(100),
