@@ -2664,3 +2664,11 @@
 .studio-shell .brief-suggestions button:hover { background: linear-gradient(#fff,#fff) padding-box,conic-gradient(from var(--suggestion-angle),#d3def1,#869edf,#b4a3d6,#d3def1) border-box; box-shadow: 0 5px 18px #546bb017; }
 @media(prefers-reduced-motion:reduce) { .studio-shell .brief-suggestions button { animation: none; } }
 @media(forced-colors:active) { .studio-shell .brief-suggestions button { background: ButtonFace; color: ButtonText; border: 1px solid ButtonText; animation: none; } }
+.studio-shell .creation-modal .creation-style-art{position:relative;display:block;grid-column:1/-1;grid-row:1;width:100%;aspect-ratio:3/2;overflow:hidden;border-radius:9px;margin-bottom:8px;background:#eeeef3}
+.studio-shell .creation-modal .style-picker > button{min-width:0}
+.studio-shell .creation-modal .style-picker > button:has(.creation-style-art) .style-chip{grid-column:1;grid-row:2/4}
+.studio-shell .creation-modal .style-picker > button:has(.creation-style-art) strong{grid-column:2;grid-row:2;min-width:0;overflow-wrap:anywhere}
+.studio-shell .creation-modal .style-picker > button:has(.creation-style-art) small{grid-column:2;grid-row:3;min-width:0}
+.studio-shell .creation-modal .style-picker > button:has(.creation-style-art) > svg{grid-column:3;grid-row:2/4}
+.studio-shell .creation-modal .creation-style-art img{object-fit:contain}
+.studio-shell .creation-modal .creation-style-note{font-size:12px;line-height:1.6;color:#666477;margin:14px 0 22px}

@@ -2,6 +2,8 @@
 import "@/app/studio-refresh.css";
 import { z } from "zod";
 import Link from "next/link";
+import Image from "next/image";
+import { creationStyles, retainCreationStyle, styleConcept } from "@/lib/creation-styles";
 import BrandMark from "./brand-mark";
 import {
   LocalWorkspaceSchema,
@@ -360,8 +362,10 @@ export default function Studio() {
     const nextWorkspace = {
       ...workspace,
       projects: [p, ...workspace.projects],
+      styles: workspace.styles,
     };
     try {
+      nextWorkspace.styles = retainCreationStyle(workspace.styles, values.styleId);
       saveLocalWorkspace(nextWorkspace, localStorage);
     } catch {
       toast(
@@ -964,7 +968,7 @@ export default function Studio() {
           kind={creating}
           onKind={setCreating}
           clients={workspace.clients}
-          styles={workspace.styles}
+          styles={creationStyles(workspace.styles)}
           close={() => { setCreating(null); setInitialClient(""); }}
           create={createProject}
         />
@@ -1441,6 +1445,7 @@ function CreateModal({
                   tabIndex={styleId === s.id ? 0 : -1}
                   onClick={() => setStyle(s.id)}
                 >
+                  {styleConcept(s) && <span className="creation-style-art" aria-hidden="true"><Image src={`/gallery/${styleConcept(s)!.id}.png`} alt="" fill sizes="(max-width: 600px) 80vw, 220px" /></span>}
                   <span
                     className="style-chip"
                     style={{ background: s.color }}
@@ -1451,6 +1456,7 @@ function CreateModal({
                 </button>
               ))}
             </div>
+            <p className="creation-style-note">Images show design concepts. Your chosen palette and typography carry into the editor and exports; the artwork is not automatically added to your project.</p>
             <div
               className="theme-live-preview"
               style={{
