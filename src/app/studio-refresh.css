@@ -2672,3 +2672,16 @@
 .studio-shell .creation-modal .style-picker > button:has(.creation-style-art) > svg{grid-column:3;grid-row:2/4}
 .studio-shell .creation-modal .creation-style-art img{object-fit:contain}
 .studio-shell .creation-modal .creation-style-note{font-size:12px;line-height:1.6;color:#666477;margin:14px 0 22px}
+.studio-shell .website-record{padding:22px;border:1px solid #e5e3ed;border-radius:14px;background:#fff;margin-bottom:20px}
+.studio-shell .website-record-heading{display:flex;justify-content:space-between;align-items:start;gap:16px;flex-wrap:wrap}
+.studio-shell .website-record h3{margin:0 0 8px}
+.studio-shell .website-record p{font-size:13px;line-height:1.6}
+.studio-shell .website-record form,.studio-shell .website-record label{display:grid;gap:8px}
+.studio-shell .website-record form{gap:16px}
+.studio-shell .website-record textarea{min-height:100px}
+.studio-shell .website-record-actions{display:flex;gap:8px;flex-wrap:wrap}
+.studio-shell .website-record-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:20px}
+.studio-shell .website-record-links>div{display:grid;gap:6px;min-width:0;font-size:13px}
+.studio-shell .website-record-links a{overflow-wrap:anywhere;color:#4e4ac8}
+.studio-shell .website-record-notes{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:600px){.studio-shell .website-record-links{grid-template-columns:1fr}}

@@ -697,3 +697,5 @@
 .cw-due.overdue { color: #a34632; }
 .cw-next-list button > svg { flex-shrink: 0; color: #8490a5; }
 @media(max-width:600px) { .cw-next-list button { padding: 14px; gap: 10px; flex-wrap: wrap; } .cw-next-copy { flex-basis: 65%; } .cw-due { text-align: left; } }
+.cw-site-links{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 0 46px}
+.cw-site-links a{display:inline-flex;align-items:center;gap:4px;min-height:32px;font-size:12px;color:#5550b7}

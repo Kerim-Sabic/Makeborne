@@ -29,6 +29,8 @@ import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
 import ProjectTasks from "./project-tasks";
+import WebsiteRecordPanel from "./website-record";
+import { WebsiteRecordSchema, type WebsiteRecord } from "@/lib/website-record";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
@@ -296,6 +298,22 @@ export default function Studio() {
     setWorkspace(next);
     setSaveFailed(false);
     toast("Version restored. Your previous content is preserved in a safety copy in History & review.");
+    return true;
+  }
+  function saveWebsiteRecord(projectId: string, record: WebsiteRecord): boolean {
+    if (!persistenceAllowed) { toast("Recover your workspace in Settings before saving website details."); return false; }
+    const current = workspace.projects.find(item => item.id === projectId);
+    if (!current || current.kind !== "website") return false;
+    const parsed = WebsiteRecordSchema.safeParse(record);
+    if (!parsed.success) { toast("Check the website links and details before saving."); return false; }
+    const at = now();
+    const next = { ...workspace, projects: workspace.projects.map(item => item.id === projectId ? {
+      ...item, websiteRecord: { ...parsed.data, updatedAt: at }, updatedAt: at,
+      activity: [...item.activity, { at, text: "Updated website preview, live link, or hosting details (user-recorded; deployment not verified)." }],
+    } : item) };
+    try { saveLocalWorkspace(next, localStorage); }
+    catch { toast("Website details could not be saved. Keep the form open and download a workspace backup before retrying."); return false; }
+    setWorkspace(next); setSaveFailed(false);
     return true;
   }
   function saveTasks(projectId: string, tasks: ProjectTask[], message: string): boolean {
@@ -574,6 +592,7 @@ export default function Studio() {
             update={mutateProject}
             restoreVersion={restoreVersion}
             saveTasks={saveTasks}
+            saveWebsiteRecord={saveWebsiteRecord}
             back={() => navigate("projects")}
             notify={toast}
           />
@@ -1726,6 +1745,7 @@ function ProjectEditor({
   update,
   restoreVersion,
   saveTasks,
+  saveWebsiteRecord,
   back,
   notify,
 }: {
@@ -1740,6 +1760,7 @@ function ProjectEditor({
   back: () => void;
   restoreVersion: (projectId: string, versionId: string) => boolean;
   saveTasks: (projectId: string, tasks: ProjectTask[], message: string) => boolean;
+  saveWebsiteRecord: (projectId: string, record: WebsiteRecord) => boolean;
   notify: (s: string) => void;
 }) {
   const bookAuthor = project.bookMetadata?.author ?? "";
@@ -2182,6 +2203,7 @@ function ProjectEditor({
             )}
           </section>
           <section>
+            {project.kind === "website" && <WebsiteRecordPanel value={project.websiteRecord} save={record => saveWebsiteRecord(project.id, record)} />}
             <ProjectTasks tasks={project.tasks ?? []} save={(tasks, message) => saveTasks(project.id, tasks, message)} />
             <div className="eyebrow">INTERNAL REVIEW</div>
             <h2>What happens next?</h2>

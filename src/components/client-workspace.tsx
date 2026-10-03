@@ -14,6 +14,7 @@ import {
   Search,
   Users,
 } from "lucide-react";
+import { websiteHref } from "@/lib/website-record";
 import type { Client, Project } from "./studio-model";
 import "@/app/client-workspace.css";
 
@@ -472,6 +473,7 @@ export default function ClientWorkspace({
                               <small>{(project.tasks ?? []).filter(task => !task.completedAt).length} open tasks</small>
                             </span>
                           </button>
+                          {project.kind === "website" && <div className="cw-site-links">{project.websiteRecord?.previewUrl && websiteHref(project.websiteRecord.previewUrl) && <a href={websiteHref(project.websiteRecord.previewUrl)!} target="_blank" rel="noopener noreferrer">Open preview <ArrowUpRight size={12} /></a>}{project.websiteRecord?.liveUrl && websiteHref(project.websiteRecord.liveUrl) && <a href={websiteHref(project.websiteRecord.liveUrl)!} target="_blank" rel="noopener noreferrer">Open live link <ArrowUpRight size={12} /></a>}</div>}
                         </td>
                         <td>
                           <span
