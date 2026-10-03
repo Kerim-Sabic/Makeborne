@@ -22,6 +22,8 @@ check("missing period fails closed", () => assert.equal(readBillingView({ ...rea
 check("combined filter and search", () => assert.equal(filterBillingEntries([entry], "Media", "  FIELD  ").length, 1));
 check("category mismatch", () => assert.equal(filterBillingEntries([entry], "Hosting", "").length, 0));
 check("statement retains exact credits", () => assert.equal(JSON.parse(billingStatement(ready, "All activity", "")).entries[0].credits, entry.credits));
+check("statement hides internal model identity", () => assert.equal(JSON.parse(billingStatement(ready, "All activity", "")).entries[0].model, undefined));
+check("customer search excludes internal model identity", () => assert.equal(filterBillingEntries([entry], "All activity", "fixture-model").length, 0));
 check("statement uses selected filters", () => assert.equal(JSON.parse(billingStatement(ready, "Media", "unmatched")).entries.length, 0));
 check("unavailable cannot export", () => assert.throws(() => billingStatement(unavailableBilling, "All activity", ""), /unavailable/));
 check("statement declares limited coverage", () => assert.match(JSON.parse(billingStatement(ready, "Media", "")).coverage, /not a complete account ledger/));

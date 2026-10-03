@@ -2658,10 +2658,11 @@
 
 @property --suggestion-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 @keyframes suggestion-orbit { to { --suggestion-angle: 360deg; } }
-.studio-shell .brief-suggestions button { position: relative; border: 1px solid transparent; background: linear-gradient(#fcfdff,#fcfdff) padding-box,conic-gradient(from var(--suggestion-angle),#dce4f0 0%,#dce4f0 42%,#8ca5e4 49%,#b4a3d6 57%,#dce4f0 66%,#dce4f0 100%) border-box; animation: suggestion-orbit 9s linear infinite; box-shadow: 0 3px 12px #5269a408; }
+.studio-shell .brief-suggestions button { position: relative; border: 1px solid #dedee9; border-radius: 12px; background: #ffffffb8; padding: 12px 16px; min-height: 44px; color: #535368; font-weight: 500; animation: none; box-shadow: 0 1px 2px #24244204; backdrop-filter: blur(12px); }
 .studio-shell .brief-suggestions button:nth-child(2) { animation-delay: -3s; }
 .studio-shell .brief-suggestions button:nth-child(3) { animation-delay: -6s; }
-.studio-shell .brief-suggestions button:hover { background: linear-gradient(#fff,#fff) padding-box,conic-gradient(from var(--suggestion-angle),#d3def1,#869edf,#b4a3d6,#d3def1) border-box; box-shadow: 0 5px 18px #546bb017; }
+.studio-shell .brief-suggestions button:hover { background: #faf9ff; border-color: #aaa0ce; color: #413564; box-shadow: 0 3px 10px #546bb00d; }
+.studio-shell .brief-suggestions button svg { color: #9992b0; margin-left: 4px; }
 @media(prefers-reduced-motion:reduce) { .studio-shell .brief-suggestions button { animation: none; } }
 @media(forced-colors:active) { .studio-shell .brief-suggestions button { background: ButtonFace; color: ButtonText; border: 1px solid ButtonText; animation: none; } }
 .studio-shell .creation-modal .creation-style-art{position:relative;display:block;grid-column:1/-1;grid-row:1;width:100%;aspect-ratio:3/2;overflow:hidden;border-radius:9px;margin-bottom:8px;background:#eeeef3}

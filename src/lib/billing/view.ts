@@ -42,7 +42,7 @@ export function readBillingView(input: unknown): BillingViewModel {
 export function filterBillingEntries(entries: BillingEntry[], category: string, query: string) {
   const search = query.trim().toLowerCase();
   return entries.filter(entry => (category === "All activity" || entry.category === category)
-    && `${entry.project} ${entry.action} ${entry.model}`.toLowerCase().includes(search));
+    && `${entry.project} ${entry.action}`.toLowerCase().includes(search));
 }
 
 /** A statement of loaded activity only; never infer account totals from a page. */
@@ -53,6 +53,6 @@ export function billingStatement(input: unknown, category: string, query: string
     schema: "makeborne.usage-statement.v1", unit: summary.unit, period: summary.period,
     coverage: "Loaded activity matching the selected filters; not a complete account ledger or invoice.",
     filters: { category, query: query.trim() },
-    entries: filterBillingEntries(summary.entries, category, query),
+    entries: filterBillingEntries(summary.entries, category, query).map(entry => ({ id: entry.id, occurredAt: entry.occurredAt, project: entry.project, action: entry.action, category: entry.category, status: entry.status, credits: entry.credits })),
   }, null, 2);
 }

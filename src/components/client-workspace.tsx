@@ -12,6 +12,7 @@ import {
   Plus,
   Presentation,
   Search,
+  Sparkles,
   Users,
 } from "lucide-react";
 import { websiteHref } from "@/lib/website-record";
@@ -27,6 +28,7 @@ export type ClientWorkspaceProps = {
   onAddClient: () => void;
   onOpenProject: (id: string) => void;
   onCreateProject: (clientId: string) => void;
+  onAnalyseClient?: (clientId: string) => void;
 };
 const kinds = {
   website: "Website",
@@ -76,12 +78,15 @@ export default function ClientWorkspace({
   onAddClient,
   onOpenProject,
   onCreateProject,
+  onAnalyseClient,
 }: ClientWorkspaceProps) {
   const [clientSearch, setClientSearch] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
   const [kindFilter, setKindFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAllTasks, setShowAllTasks] = useState(false);
+  const [clientFilter, setClientFilter] = useState("all");
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const clientIds = new Set(clients.map((client) => client.id));
   const projectsByClient = new Map<string, Project[]>();
   for (const project of projects) {
@@ -93,6 +98,7 @@ export default function ClientWorkspace({
   function selectClient(id: string | null) {
     setProjectSearch(""); setKindFilter("all"); setStatusFilter("all");
     setShowAllTasks(false);
+    setShowAllActivity(false);
     onSelectClient(id);
   }
   const selected = clients.find((client) => client.id === selectedClientId);
@@ -111,7 +117,9 @@ export default function ClientWorkspace({
     ]
       .join(" ")
       .toLowerCase()
-      .includes(clientSearch.trim().toLowerCase()),
+      .includes(clientSearch.trim().toLowerCase()) &&
+      (clientFilter === "all" || (projectsByClient.get(client.id) ?? []).some(project =>
+        clientFilter === "review" ? project.status === "review" : project.status === "in_progress")),
   );
   const visibleProjects = linkedProjects
     .filter(
@@ -156,14 +164,14 @@ export default function ClientWorkspace({
       )}
       <header className="cw-header">
         <div>
-          <span className="cw-eyebrow">CLIENT WORKSPACE</span>
+          <span className="cw-eyebrow">YOUR BUSINESS, TOGETHER</span>
           <h1>
-            {selected ? selected.name : "Good work. Clear relationships."}
+            {selected ? selected.name : "Clients"}
           </h1>
           <p>
             {selected
               ? "Every project and saved version in one place."
-              : "Keep each client and everything you make for them connected."}
+              : "The people, projects, and next steps behind your work."}
           </p>
         </div>
         <button
@@ -177,6 +185,7 @@ export default function ClientWorkspace({
           {selected ? "New project" : "Add client"}
         </button>
       </header>
+      {selected && onAnalyseClient && <button type="button" className="cw-secondary" style={{ marginBottom: 20 }} onClick={() => onAnalyseClient(selected.id)}><Sparkles size={16} /> Analyse client & explore offers</button>}
       <div className="cw-stats" aria-label="Client project counts">
         {[
           [
@@ -205,6 +214,8 @@ export default function ClientWorkspace({
           </div>
         ))}
       </div>
+      <div className="cw-body-grid">
+      <div className="cw-main-column">
       {selected ? (
         <section className="cw-profile" aria-label="Client details">
           <div className="cw-profile-identity">
@@ -273,6 +284,12 @@ export default function ClientWorkspace({
               />
             </label>
           </div>
+          {clients.length > 0 && <div className="cw-directory-toolbar">
+            <div className="cw-segments" aria-label="Filter clients">
+              {[["all", "All clients"], ["active", "In progress"], ["review", "In review"]].map(([value, label]) => <button type="button" key={value} aria-pressed={clientFilter === value} onClick={() => setClientFilter(value)}>{label}</button>)}
+            </div>
+            <span className="cw-section-note" role="status">{visibleClients.length} {visibleClients.length === 1 ? "client" : "clients"}</span>
+          </div>}
           {clients.length === 0 ? (
             <div className="cw-empty">
               <Users size={27} />
@@ -298,17 +315,16 @@ export default function ClientWorkspace({
               <button
                 type="button"
                 className="cw-secondary"
-                onClick={() => setClientSearch("")}
+                onClick={() => { setClientSearch(""); setClientFilter("all"); }}
               >
-                Clear search
+                Reset filters
               </button>
             </div>
           ) : (
             <div className="cw-client-grid">
               {visibleClients.map((client) => {
-                const work = projects.filter(
-                  (project) => project.clientId === client.id,
-                );
+                const work = projectsByClient.get(client.id) ?? [];
+                const pendingTasks = work.filter(project => project.status !== "archived").flatMap(project => (project.tasks ?? []).filter(task => !task.completedAt));
                 const latest = [...work].sort(
                   (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
                 )[0];
@@ -319,16 +335,13 @@ export default function ClientWorkspace({
                     key={client.id}
                     onClick={() => selectClient(client.id)}
                   >
-                    <div className="cw-card-top">
-                      <span className="cw-avatar">{initials(client.name)}</span>
-                      <ArrowUpRight size={18} />
-                    </div>
-                    <h3>{client.name}</h3>
+                    <span className="cw-avatar">{initials(client.name)}</span>
+                    <div className="cw-client-copy"><h3>{client.name}</h3>
                     <p>
                       {client.company ||
                         client.email ||
-                        "Client details ready to add"}
-                    </p>
+                        "Contact details not added"}
+                    </p></div>
                     <div className="cw-card-counts">
                       <span>
                         {work.length}{" "}
@@ -339,14 +352,11 @@ export default function ClientWorkspace({
                           work.filter((project) => project.kind === "website")
                             .length
                         }{" "}
-                        websites
+                        {work.filter(project => project.kind === "website").length === 1 ? "website" : "websites"}
                       </span>
                     </div>
-                    <small>
-                      {latest
-                        ? `Latest update ${date(latest.updatedAt)}`
-                        : "No projects yet"}
-                    </small>
+                    <div className="cw-client-pulse"><span>{pendingTasks.length > 0 ? `${pendingTasks.length} open ${pendingTasks.length === 1 ? "task" : "tasks"}` : "No open tasks"}</span><small>{latest ? date(latest.updatedAt) : "No projects yet"}</small></div>
+                    <ArrowUpRight className="cw-client-arrow" size={17} aria-hidden="true" />
                   </button>
                 );
               })}
@@ -507,6 +517,8 @@ export default function ClientWorkspace({
           )}
         </section>
       )}
+      </div>
+      <aside className="cw-context-column" aria-label="Client work overview">
       {linkedProjects.length > 0 && <section className="cw-next-section" aria-labelledby="cw-next-title">
         <div className="cw-section-heading">
           <h2 id="cw-next-title">Next up</h2>
@@ -538,7 +550,7 @@ export default function ClientWorkspace({
           </div>
         ) : (
           <ol className="cw-activity-list">
-            {activity.map((item, index) => (
+            {(showAllActivity ? activity : activity.slice(0, 4)).map((item, index) => (
               <li key={`${item.project.id}-${item.at}-${index}`}>
                 <span className="cw-activity-dot" />
                 <div>
@@ -556,7 +568,10 @@ export default function ClientWorkspace({
             ))}
           </ol>
         )}
+        {activity.length > 4 && <button type="button" className="cw-back" aria-expanded={showAllActivity} onClick={() => setShowAllActivity(value => !value)}>{showAllActivity ? "Show less activity" : `View ${activity.length - 4} more updates`}</button>}
       </section>
+      </aside>
+      </div>
     </div>
   );
 }

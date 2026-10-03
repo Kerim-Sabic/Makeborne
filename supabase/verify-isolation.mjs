@@ -14,7 +14,7 @@ if (![url,key,ownerA,ownerB,reviewerA,workspaceA,workspaceB,projectA].every(Bool
 }
 let failures = 0;
 async function call(path, token, method="GET", body) {
-  const response = await fetch(new URL(path,url), { method, headers: { apikey:key, ...(token ? { Authorization:`Bearer ${token}` }:{}), "Content-Type":"application/json", Prefer:"return=representation" }, ...(body===undefined ? {} : {body:JSON.stringify(body)}) });
+  const response = await fetch(new URL(path,url), { method, redirect:"error", signal:AbortSignal.timeout(15000), headers: { apikey:key, ...(token ? { Authorization:`Bearer ${token}` }:{}), "Content-Type":"application/json", Prefer:"return=representation" }, ...(body===undefined ? {} : {body:JSON.stringify(body)}) });
   const text = await response.text();
   let data; try { data=JSON.parse(text); } catch { data=null; }
   return {ok:response.ok,status:response.status,data};

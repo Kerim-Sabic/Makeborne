@@ -28,6 +28,9 @@ import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as Reac
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
+import ClientOpportunity from "./client-opportunity";
+import { creationPlan } from "@/lib/creation-plan";
+import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
@@ -111,6 +114,7 @@ export default function Studio() {
   const [saveInvalid, setSaveInvalid] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [clientDetail, setClientDetail] = useState<string | null>(null);
+  const [opportunityClient, setOpportunityClient] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!mobileNav) return;
@@ -333,6 +337,7 @@ export default function Studio() {
     return true;
   }
   function openRoute(route: StudioRoute, replace = false) {
+    setOpportunityClient(null);
     const href = studioHref(route);
     if (window.location.pathname + window.location.search !== href)
       window.history[replace ? "replaceState" : "pushState"](null, "", href);
@@ -524,6 +529,7 @@ export default function Studio() {
             <CloudIcon size={15} /> Cloud studio <ArrowUpRight size={14} />
           </Link>
           <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> Plan & credits <ArrowUpRight size={14} /></Link>
+          {process.env.NODE_ENV === "development" && <Link className="sidebar-home" href="/admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
           <div className="sidebar-device">
             <span className="sidebar-device-label"><span className="status-dot" /> Stored on this device</span>
             <button type="button" onClick={() => navigate("settings")}>Backup & recovery <ArrowUpRight size={12} /></button>
@@ -805,7 +811,10 @@ export default function Studio() {
                 )}
               </>
             )}
-            {tab === "clients" && (
+            {tab === "clients" && opportunityClient && <ClientOpportunity clientName={workspace.clients.find(client => client.id === opportunityClient)?.name} onClose={() => setOpportunityClient(null)} onCreateBrief={(kind, brief, title) => {
+              setInitialClient(opportunityClient); setInitialBrief(brief); setInitialTitle(title); setInitialStyle("editorial"); setHomeHandoff(false); setCreating(kind); setOpportunityClient(null);
+            }} />}
+            {tab === "clients" && !opportunityClient && (
               <ClientWorkspace
                 clients={workspace.clients}
                 projects={workspace.projects}
@@ -813,6 +822,7 @@ export default function Studio() {
                 onSelectClient={(id) => openRoute({ tab: "clients", projectId: null, clientId: id })}
                 onEditClient={setClientModal}
                 onAddClient={() => setClientModal("new")}
+                onAnalyseClient={setOpportunityClient}
                 onOpenProject={(id) => openRoute({ tab: "projects", projectId: id, clientId: null })}
                 onCreateProject={(clientId) => {
                   setInitialClient(clientId);
@@ -1149,7 +1159,10 @@ const WizardDraftSchema = z
   .object({
     seed: z.string().max(100),
     kind: z.enum(["website", "book", "presentation"]),
-    step: z.number().int().min(1).max(3),
+    step: z.number().int().min(1).max(4),
+    mode: z.enum(["plan", "create"]).default("create"),
+    requirements: z.string().max(4000).default(""),
+    outline: z.string().max(2000).nullable().default(null),
     title: z.string().max(160),
     brief: z.string().max(20000),
     content: z.string().max(50000),
@@ -1202,6 +1215,9 @@ function CreateModal({
   }) => boolean;
 }) {
   const [step, setStep] = useState(initialBrief.trim() ? 2 : 1);
+  const [mode, setMode] = useState<"plan" | "create">("plan");
+  const [requirements, setRequirements] = useState("");
+  const [outline, setOutline] = useState<string | null>(null);
   const wizardContent = useRef<HTMLDivElement>(null);
   useEffect(() => {
     wizardContent.current?.scrollTo({ top: 0, behavior: "instant" });
@@ -1242,6 +1258,8 @@ function CreateModal({
             throw new Error("Invalid draft");
           const draft = parsed.data;
           setStep(draft.step);
+          setMode(draft.mode); setRequirements(draft.requirements);
+          setOutline(draft.outline);
           setTitle(draft.title);
           setBrief(draft.brief);
           setContent(draft.content);
@@ -1274,6 +1292,7 @@ function CreateModal({
     if (!draftLoaded || !draftWritable) return;
     try {
       const draft = WizardDraftSchema.parse({
+        mode, requirements, outline,
         seed,
         kind,
         step,
@@ -1312,28 +1331,36 @@ function CreateModal({
     wording,
     styleId,
     clientId,
+    mode, requirements, outline,
   ]);
   const selectedStyle =
     styles.find((style) => style.id === styleId) || styles[0];
+  const plan = creationPlan({ kind, title, brief, audience, purpose, requirements, outline, style: selectedStyle?.name || "Custom direction" });
+  const finalStep = mode === "plan" ? 4 : 3;
+  const needsPlanAnswers = mode === "plan" && step >= 2 && (!brief.trim() || !audience.trim() || !purpose.trim() || (step === 4 && plan.structure.length === 0));
   return (
     <Modal close={close} title="Create a project">
       <div className="wizard-content" ref={wizardContent}>
+        <div className="creation-mode" aria-label="Creation mode">
+          <button type="button" aria-pressed={mode === "plan"} onClick={() => setMode("plan")}><strong>Plan</strong><small>Shape the brief. Review before creating.</small></button>
+          <button type="button" aria-pressed={mode === "create"} onClick={() => { setMode("create"); if (step === 4) setStep(3); }}><strong>Create</strong><small>Go straight to project setup.</small></button>
+        </div>
         <div className="eyebrow">
-          {["", "SOURCE", "DIRECTION", "STYLE"][step]} · STEP {step} OF 3
+          {["", "SOURCE", "DIRECTION", "STYLE", "REVIEW PLAN"][step]} · STEP {step} OF {finalStep}
         </div>
         <h2 tabIndex={-1}>
           {step === 1
             ? "What are we making?"
             : step === 2
               ? "Give it a direction."
-              : "Choose its character."}
+              : step === 3 ? "Choose its character." : "Review your project plan."}
         </h2>
         <p className="modal-intro">
           {step === 1
             ? "Start with what you know. You can refine everything later."
             : step === 2
               ? "A clear brief makes thoughtful work possible."
-              : "Styles for your format are shown first. Choose any direction and make it your own."}
+              : step === 3 ? "Styles for your format are shown first. Choose any direction and make it your own." : "Confirm this starting plan before we create the project."}
         </p>
         {draftNotice && (
           <p className="wizard-draft-notice" role="status">
@@ -1344,6 +1371,7 @@ function CreateModal({
           <span className={step >= 1 ? "active" : ""} />
           <span className={step >= 2 ? "active" : ""} />
           <span className={step >= 3 ? "active" : ""} />
+          {mode === "plan" && <span className={step >= 4 ? "active" : ""} />}
         </div>
         {step === 1 ? (
           <>
@@ -1448,6 +1476,8 @@ function CreateModal({
                 />
               </label>
             </div>
+            {mode === "plan" && <label>What must be included, and what should we avoid?<textarea value={requirements} onChange={event => setRequirements(event.target.value)} maxLength={4000} rows={4} placeholder="Required sections, tone, reference styles, brand rules, assets, constraints, and anything you do not want." /></label>}
+            {mode === "plan" && <p className="creation-plan-note">Add an audience, outcome, and brief to continue. We will propose a structured starting plan for your approval.</p>}
             <div className="inline-info">
               <Sparkles size={18} />
               <p>
@@ -1456,7 +1486,7 @@ function CreateModal({
               </p>
             </div>
           </>
-        ) : (
+        ) : step === 3 ? (
           <>
             <div className="style-picker" role="radiogroup" aria-label="Project style" onKeyDown={event => moveRadioSelection(event, index => setStyle(styles[index].id))}>
               {styles.map((s) => (
@@ -1527,6 +1557,8 @@ function CreateModal({
               </p>
             </div>
           </>
+        ) : (
+          <><div className="creation-plan"><h3>{title}</h3><h4>Audience & outcome</h4><p className="plan-answer">{audience} — {purpose}</p><h4>Project brief</h4><p className="plan-answer">{brief}</p><label className="creation-outline">Proposed structure<textarea rows={7} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={event => setOutline(event.target.value)} aria-describedby="creation-outline-help" /></label><p id="creation-outline-help" className="creation-plan-note">Edit the plan: one section, chapter, or slide per line. Add at least one item before approval. Maximum 2,000 characters.</p><h4>Creative direction</h4><p>{selectedStyle?.name}</p>{requirements && <><h4>Requirements & exclusions</h4><p className="plan-answer">{requirements}</p></>}<h4>Before sharing</h4><ul>{plan.checks.map(item => <li key={item}>{item}</li>)}</ul></div><p className="creation-plan-note">This is a local structured plan. Confirming saves the plan and your supplied content in an editable project. Live generation and publishing are not connected.</p></>
         )}
       </div>
       <div className="modal-actions">
@@ -1538,16 +1570,16 @@ function CreateModal({
         </button>
         <button
           className="button primary"
-          disabled={!title.trim() || !draftLoaded}
+          disabled={!title.trim() || !draftLoaded || needsPlanAnswers}
           onClick={() => {
-            if (step < 3) {
+            if (step < finalStep) {
               setStep(step + 1);
               return;
             }
             const saved = create({
               kind,
               title: title.trim(),
-              brief,
+              brief: mode === "plan" ? plan.brief : brief,
               audience,
               purpose,
               wording,
@@ -1566,7 +1598,7 @@ function CreateModal({
             }
           }}
         >
-          {step === 3 ? "Create project" : "Continue"}
+          {step === finalStep ? mode === "plan" ? "Confirm plan & create" : "Create project" : step === 3 ? "Review plan" : "Continue"}
           <ArrowRight size={16} />
         </button>
       </div>
