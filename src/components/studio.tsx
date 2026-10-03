@@ -29,6 +29,8 @@ import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
 import ClientOpportunity from "./client-opportunity";
+import EffortControl from "./effort-control";
+import { EffortLevelSchema, DEFAULT_EFFORT, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
 import { creationPlan } from "@/lib/creation-plan";
 import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
@@ -350,6 +352,7 @@ export default function Studio() {
     openRoute({ tab: studioTab(name), projectId: null, clientId: null });
   }
   function createProject(values: {
+    effort: EffortLevel;
     title: string;
     brief: string;
     audience: string;
@@ -822,6 +825,14 @@ export default function Studio() {
                 onSelectClient={(id) => openRoute({ tab: "clients", projectId: null, clientId: id })}
                 onEditClient={setClientModal}
                 onAddClient={() => setClientModal("new")}
+                onUpdateClient={(client) => {
+                  if (!persistenceAllowed || !workspace.clients.some(item => item.id === client.id)) return false;
+                  const next = { ...workspace, clients: workspace.clients.map(item => item.id === client.id ? client : item) };
+                  try { saveLocalWorkspace(next, localStorage); } catch { return false; }
+                  setWorkspace(next);
+                  toast("Client outreach saved on this device.");
+                  return true;
+                }}
                 onAnalyseClient={setOpportunityClient}
                 onOpenProject={(id) => openRoute({ tab: "projects", projectId: id, clientId: null })}
                 onCreateProject={(clientId) => {
@@ -1157,6 +1168,7 @@ function Modal({
 }
 const WizardDraftSchema = z
   .object({
+    effort: EffortLevelSchema.default(DEFAULT_EFFORT),
     seed: z.string().max(100),
     kind: z.enum(["website", "book", "presentation"]),
     step: z.number().int().min(1).max(4),
@@ -1203,6 +1215,7 @@ function CreateModal({
   styles: Style[];
   close: () => void;
   create: (v: {
+    effort: EffortLevel;
     title: string;
     brief: string;
     audience: string;
@@ -1216,6 +1229,7 @@ function CreateModal({
 }) {
   const [step, setStep] = useState(initialBrief.trim() ? 2 : 1);
   const [mode, setMode] = useState<"plan" | "create">("plan");
+  const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   const [requirements, setRequirements] = useState("");
   const [outline, setOutline] = useState<string | null>(null);
   const wizardContent = useRef<HTMLDivElement>(null);
@@ -1257,6 +1271,7 @@ function CreateModal({
           )
             throw new Error("Invalid draft");
           const draft = parsed.data;
+          setEffort(draft.effort);
           setStep(draft.step);
           setMode(draft.mode); setRequirements(draft.requirements);
           setOutline(draft.outline);
@@ -1292,6 +1307,7 @@ function CreateModal({
     if (!draftLoaded || !draftWritable) return;
     try {
       const draft = WizardDraftSchema.parse({
+        effort,
         mode, requirements, outline,
         seed,
         kind,
@@ -1331,7 +1347,7 @@ function CreateModal({
     wording,
     styleId,
     clientId,
-    mode, requirements, outline,
+    mode, requirements, outline, effort,
   ]);
   const selectedStyle =
     styles.find((style) => style.id === styleId) || styles[0];
@@ -1476,6 +1492,7 @@ function CreateModal({
                 />
               </label>
             </div>
+            <EffortControl value={effort} onChange={setEffort} />
             {mode === "plan" && <label>What must be included, and what should we avoid?<textarea value={requirements} onChange={event => setRequirements(event.target.value)} maxLength={4000} rows={4} placeholder="Required sections, tone, reference styles, brand rules, assets, constraints, and anything you do not want." /></label>}
             {mode === "plan" && <p className="creation-plan-note">Add an audience, outcome, and brief to continue. We will propose a structured starting plan for your approval.</p>}
             <div className="inline-info">
@@ -1558,7 +1575,7 @@ function CreateModal({
             </div>
           </>
         ) : (
-          <><div className="creation-plan"><h3>{title}</h3><h4>Audience & outcome</h4><p className="plan-answer">{audience} — {purpose}</p><h4>Project brief</h4><p className="plan-answer">{brief}</p><label className="creation-outline">Proposed structure<textarea rows={7} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={event => setOutline(event.target.value)} aria-describedby="creation-outline-help" /></label><p id="creation-outline-help" className="creation-plan-note">Edit the plan: one section, chapter, or slide per line. Add at least one item before approval. Maximum 2,000 characters.</p><h4>Creative direction</h4><p>{selectedStyle?.name}</p>{requirements && <><h4>Requirements & exclusions</h4><p className="plan-answer">{requirements}</p></>}<h4>Before sharing</h4><ul>{plan.checks.map(item => <li key={item}>{item}</li>)}</ul></div><p className="creation-plan-note">This is a local structured plan. Confirming saves the plan and your supplied content in an editable project. Live generation and publishing are not connected.</p></>
+          <><div className="creation-plan"><h3>{title}</h3><h4>Audience & outcome</h4><p className="plan-answer">{audience} — {purpose}</p><h4>Project brief</h4><p className="plan-answer">{brief}</p><label className="creation-outline">Proposed structure<textarea rows={7} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={event => setOutline(event.target.value)} aria-describedby="creation-outline-help" /></label><p id="creation-outline-help" className="creation-plan-note">Edit the plan: one section, chapter, or slide per line. Add at least one item before approval. Maximum 2,000 characters.</p><h4>Creative effort</h4><p>{EFFORT_PRESENTATION[effort].label} · estimate required before generation</p><h4>Creative direction</h4><p>{selectedStyle?.name}</p>{requirements && <><h4>Requirements & exclusions</h4><p className="plan-answer">{requirements}</p></>}<h4>Before sharing</h4><ul>{plan.checks.map(item => <li key={item}>{item}</li>)}</ul></div><p className="creation-plan-note">This is a local structured plan. Confirming saves the plan and your supplied content in an editable project. Live generation and publishing are not connected.</p></>
         )}
       </div>
       <div className="modal-actions">
@@ -1577,6 +1594,7 @@ function CreateModal({
               return;
             }
             const saved = create({
+              effort,
               kind,
               title: title.trim(),
               brief: mode === "plan" ? plan.brief : brief,
@@ -1628,6 +1646,7 @@ function ClientModal({
         onSubmit={(e) => {
           e.preventDefault();
           const problem = save({
+            ...existing,
             id: existing?.id || uid(),
             name: name.trim(),
             company,
@@ -2562,6 +2581,7 @@ function ProjectEditor({
                       }
                     />
                   </label>
+                  <EffortControl value={project.effort ?? DEFAULT_EFFORT} onChange={effort => update({ ...project, effort, updatedAt: now() })} />
                   <label>
                     Client
                     <select

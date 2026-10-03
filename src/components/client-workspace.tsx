@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { websiteHref } from "@/lib/website-record";
 import type { Client, Project } from "./studio-model";
+import ClientOutreachPanel from "./client-outreach";
+import { followUpDue, outreachStages } from "@/lib/client-outreach";
 import "@/app/client-workspace.css";
 
 export type ClientWorkspaceProps = {
@@ -29,6 +31,7 @@ export type ClientWorkspaceProps = {
   onOpenProject: (id: string) => void;
   onCreateProject: (clientId: string) => void;
   onAnalyseClient?: (clientId: string) => void;
+  onUpdateClient?: (client: Client) => boolean;
 };
 const kinds = {
   website: "Website",
@@ -79,6 +82,7 @@ export default function ClientWorkspace({
   onOpenProject,
   onCreateProject,
   onAnalyseClient,
+  onUpdateClient,
 }: ClientWorkspaceProps) {
   const [clientSearch, setClientSearch] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
@@ -86,6 +90,10 @@ export default function ClientWorkspace({
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [clientFilter, setClientFilter] = useState("all");
+  const [outreachFilter, setOutreachFilter] = useState("all");
+  const [dueOnly, setDueOnly] = useState(false);
+  const today = new Date();
+  const localDay = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const [showAllActivity, setShowAllActivity] = useState(false);
   const clientIds = new Set(clients.map((client) => client.id));
   const projectsByClient = new Map<string, Project[]>();
@@ -118,6 +126,8 @@ export default function ClientWorkspace({
       .join(" ")
       .toLowerCase()
       .includes(clientSearch.trim().toLowerCase()) &&
+      (outreachFilter === "all" || (client.outreach?.stage ?? "Lead") === outreachFilter) &&
+      (!dueOnly || followUpDue(client.outreach, localDay)) &&
       (clientFilter === "all" || (projectsByClient.get(client.id) ?? []).some(project =>
         clientFilter === "review" ? project.status === "review" : project.status === "in_progress")),
   );
@@ -148,8 +158,6 @@ export default function ClientWorkspace({
     .flatMap(project => (project.tasks ?? []).filter(task => !task.completedAt).map(task => ({ task, project })))
     .sort((a, b) => (a.task.dueDate ?? "9999").localeCompare(b.task.dueDate ?? "9999") || a.task.createdAt.localeCompare(b.task.createdAt));
   const visibleTasks = showAllTasks ? openTasks : openTasks.slice(0, 8);
-  const today = new Date();
-  const localDay = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const clientNames = new Map(clients.map(client => [client.id, client.name]));
   return (
     <div className="cw-workspace">
@@ -288,6 +296,8 @@ export default function ClientWorkspace({
             <div className="cw-segments" aria-label="Filter clients">
               {[["all", "All clients"], ["active", "In progress"], ["review", "In review"]].map(([value, label]) => <button type="button" key={value} aria-pressed={clientFilter === value} onClick={() => setClientFilter(value)}>{label}</button>)}
             </div>
+            <label className="crm-stage-filter"><span className="cw-sr">Filter outreach stage</span><select aria-label="Filter outreach stage" value={outreachFilter} onChange={event => setOutreachFilter(event.target.value)}><option value="all">All outreach stages</option>{outreachStages.map(stage => <option key={stage}>{stage}</option>)}</select></label>
+            <button type="button" className={`crm-due-filter ${dueOnly ? "is-active" : ""}`} aria-pressed={dueOnly} onClick={() => setDueOnly(value => !value)}>Follow-ups due <span>{clients.filter(client => followUpDue(client.outreach, localDay)).length}</span></button>
             <span className="cw-section-note" role="status">{visibleClients.length} {visibleClients.length === 1 ? "client" : "clients"}</span>
           </div>}
           {clients.length === 0 ? (
@@ -315,7 +325,7 @@ export default function ClientWorkspace({
               <button
                 type="button"
                 className="cw-secondary"
-                onClick={() => { setClientSearch(""); setClientFilter("all"); }}
+                onClick={() => { setClientSearch(""); setClientFilter("all"); setOutreachFilter("all"); setDueOnly(false); }}
               >
                 Reset filters
               </button>
@@ -343,6 +353,8 @@ export default function ClientWorkspace({
                         "Contact details not added"}
                     </p></div>
                     <div className="cw-card-counts">
+                      <span className="crm-stage">{client.outreach?.stage ?? "Lead"}</span>
+                      {client.outreach?.nextFollowUp && <span className={followUpDue(client.outreach, localDay) ? "crm-due-badge" : ""}>Follow up {date(`${client.outreach.nextFollowUp}T12:00:00`)}</span>}
                       <span>
                         {work.length}{" "}
                         {work.length === 1 ? "project" : "projects"}
@@ -364,6 +376,7 @@ export default function ClientWorkspace({
           )}
         </section>
       )}
+      {selected && onUpdateClient && <ClientOutreachPanel key={selected.id} client={selected} onSave={onUpdateClient} />}
       {selected && (
         <section
           className="cw-project-section"

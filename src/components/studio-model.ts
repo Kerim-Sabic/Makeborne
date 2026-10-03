@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { ClientOutreachSchema, type ClientOutreach } from "@/lib/client-outreach";
 import { WebsiteRecordSchema, WebsiteHistorySchema, type WebsiteRecord, type WebsiteHistory } from "@/lib/website-record";
 import {
-  ClientSchema,
+  ClientSchema as DomainClientSchema,
   ProjectSchema,
   type Client as DomainClient,
 } from "@/lib/domain";
@@ -13,7 +14,8 @@ export type Block = {
   text: string;
   image?: string;
 };
-export type Client = DomainClient;
+export type Client = DomainClient & { outreach?: ClientOutreach };
+const ClientSchema = DomainClientSchema.extend({ outreach: ClientOutreachSchema.optional() });
 export type Style = {
   id: string;
   name: string;
@@ -44,6 +46,7 @@ export type Project = {
   audience: string;
   purpose: string;
   wording: string;
+  effort?: "light" | "medium" | "high" | "super_high" | "ultra";
   bookMetadata?: { author: string; language: string };
   tasks?: ProjectTask[];
   websiteRecord?: WebsiteRecord;
@@ -132,6 +135,7 @@ const LocalProjectSchema = ProjectSchema.extend({
   audience: z.string().max(5000),
   purpose: z.string().max(5000),
   wording: z.enum(["preserve", "improve", "summarise"]),
+  effort: z.enum(["light", "medium", "high", "super_high", "ultra"]).optional(),
   tasks: z.array(ProjectTaskSchema).max(300).optional(),
   websiteRecord: WebsiteRecordSchema.optional(),
   websiteHistory: WebsiteHistorySchema.optional(),

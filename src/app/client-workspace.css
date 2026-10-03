@@ -798,3 +798,31 @@
   .cw-profile { margin-bottom: 25px !important; }
   .cw-activity-list time { margin-left: 16px; }
 }
+.crm-panel { background: #ffffffc9; border: 1px solid var(--cw-border); border-radius: 16px; padding: 23px; margin-bottom: 28px; }
+.crm-subtitle { font-size: 11px; color: #7b8497; line-height: 1.7; margin: 6px 0 0; }
+.crm-panel form { display: grid; gap: 16px; }
+.crm-panel label { display: grid; gap: 7px; font-size: 12px; color: #657087; margin: 0; }
+.crm-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.crm-panel input, .crm-panel select, .crm-panel textarea, .crm-stage-filter select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #dfe3ee; background: #fcfcff; border-radius: 9px; padding: 10px 12px; color: #37435a; font: inherit; font-size: 12px; margin: 0; min-height: 42px; }
+.crm-panel textarea { resize: vertical; line-height: 1.7; }
+.crm-panel form > button { justify-self: start; }
+.crm-stage { display: inline-flex; border-radius: 6px; padding: 5px 9px; color: #76639f; background: #f0edf9; font-size: 11px; white-space: nowrap; }
+.crm-log, .crm-history { border-top: 1px solid #e9eaf1; padding-top: 18px; margin-top: 22px; }
+.crm-panel h3 { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 550; margin: 0 0 13px; }
+.crm-log-fields { display: flex; gap: 8px; }
+.crm-log-fields select { width: 130px; flex-shrink: 0; }
+.crm-log-fields input { flex: 1; }
+.crm-panel button:disabled { opacity: .5; cursor: not-allowed; }
+.crm-history ol { list-style: none; padding: 0; margin: 0; }
+.crm-history li { padding: 12px 0; border-top: 1px solid #f0f0f5; }
+.crm-history p { font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; margin: 5px 0; }
+.crm-history time, .crm-history-type { font-size: 10px; color: #8a809b; }
+.crm-feedback, .crm-error { font-size: 12px; line-height: 1.6; }
+.crm-feedback { color: #437961; }.crm-error { color: #a34c45; }
+.crm-stage-filter { margin: 0 !important; }
+.crm-stage-filter select { width: auto; background: #fff; }
+.crm-due-filter { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; border: 1px solid #e2dfee; border-radius: 9px; padding: 9px 12px; background: #fff; color: #746789; font-size: 12px !important; }
+.crm-due-filter.is-active { background: #f0ecff; border-color: #aaa0d5; }
+.crm-due-filter span { font-size: 10px; padding: 2px 5px; border-radius: 4px; background: #f2eff8; }
+.cw-card-counts .crm-due-badge { color: #a6613f; background: #fff2e6; }
+@media(max-width:650px) { .crm-panel { padding: 18px; }.crm-log-fields { flex-wrap: wrap; }.crm-log-fields select { width: 100%; }.crm-log-fields input { flex-basis: 100%; }.crm-fields { grid-template-columns: 1fr; } }

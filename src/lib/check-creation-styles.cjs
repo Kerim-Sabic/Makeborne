@@ -6,7 +6,7 @@ let count = 0;
 function check(name, fn) { fn(); count++; console.log(`PASS ${name}`); }
 for (const [kind, expected] of [["book", ["direction-field", "direction-handbook"]], ["website", ["direction-form", "direction-solstice"]], ["presentation", ["direction-signal", "direction-atlas"]]]) {
   check(`${kind} directions first`, () => assert.deepEqual(creationStyles([], kind).slice(0, 2).map(style => style.id), expected));
-  check(`${kind} keeps all six`, () => assert.equal(new Set(creationStyles([], kind).map(style => style.id)).size, 6));
+  check(`${kind} keeps all twelve authored directions`, () => assert.equal(new Set(creationStyles([], kind).map(style => style.id)).size, 12));
 }
 const field = retainCreationStyle([], "direction-field");
 check("retains only chosen direction", () => assert.equal(field.length, 1));
@@ -18,6 +18,8 @@ check("changed palette hides original concept", () => assert.equal(styleConcept(
 check("original palette has concept", () => assert.equal(styleConcept(field[0]).id, "field"));
 check("unknown style is rejected", () => assert.throws(() => retainCreationStyle([], "unknown")));
 const custom = [{ ...changed, id: "custom-a" }, { ...changed, id: "custom-b" }];
-check("custom ordering preserved", () => assert.deepEqual(creationStyles(custom, "book").slice(2, 4).map(style => style.id), ["custom-a", "custom-b"]));
+check("custom ordering preserved", () => assert.deepEqual(creationStyles(custom, "book").filter(style => style.id.startsWith("custom-")).map(style => style.id), ["custom-a", "custom-b"]));
+check("new authored style retains its exact palette", () => assert.equal(retainCreationStyle([], "electric-mint")[0].background, "#142824"));
+check("new style does not pretend to have generated artwork", () => assert.equal(styleConcept(retainCreationStyle([], "brass-house")[0]), undefined));
 check("saved array unchanged", () => { creationStyles(custom, "book"); assert.equal(custom.length, 2); });
 console.log(`${count} creation style checks passed.`);
