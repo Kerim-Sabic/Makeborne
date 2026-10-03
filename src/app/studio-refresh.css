@@ -2716,3 +2716,11 @@
 .account-project-icon.presentation { color: #447566; background: #e9f4ef; }
 @media(max-width:700px) { .account-project-grid { grid-template-columns: 1fr; }.account-projects { padding: 17px; }.account-projects-heading { flex-wrap: wrap; } }
 @media(prefers-reduced-motion:reduce) { .account-project-card { transition: none; } }
+.account-export{margin:24px 0;padding:20px 0;border-top:1px solid #e9e6ef;border-bottom:1px solid #e9e6ef}
+.account-export h3{margin:0 0 10px;font-size:15px}
+.account-export p{font-size:12px;line-height:1.65;color:#77717f}
+.account-export .account-export-note{font-size:11px;color:#857c90}
+.account-export fieldset{border:0;padding:0;margin:16px 0;min-width:0}
+.account-export legend{font-size:11px;color:#82778d;margin-bottom:12px}
+.account-export input,.account-export select{width:100%;min-height:40px}
+.account-export .button-row{display:flex;gap:8px;flex-wrap:wrap}

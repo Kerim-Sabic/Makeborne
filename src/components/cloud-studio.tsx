@@ -3,6 +3,7 @@ import Link from "next/link";
 import BrandMark from "./brand-mark";
 import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
+import AccountExport from "./account-export";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
@@ -1570,6 +1571,7 @@ export function CloudEditor({
             <button className="button secondary" onClick={backup}>
               <FileText size={16} /> Download draft
             </button>
+            {style && <AccountExport documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
             <h3>Version history</h3>
             {versions.length === 0 ? (
               <p>No saved versions yet.</p>
