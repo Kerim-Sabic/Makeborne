@@ -19,4 +19,8 @@ The accepted magnitude matches `ExactAmountSchema`: `0` through `922337203685477
 7. Keep unavailable data null. Do not replace failed fetches or unauthenticated state with a zero balance or a success-shaped empty account. Use the unavailable state until the server adapter and failure UI are implemented.
 8. Before enabling checkout, replace proposed cards with a server-approved product catalogue, authoritative price IDs, explicit currency/interval/tax presentation, and authenticated checkout/portal actions. Validate payment webhooks and reconcile ledger funding independently of redirect success.
 
-The current `ready` type anticipates data wiring; connected-state purchase controls and account-state copy still require integration work. All existing purchase and portal controls deliberately remain disabled.
+The `ready` view now renders connected usage copy, while purchase and portal controls stay disabled independently. `src/lib/billing/view.ts` validates the display boundary: ready balances must all be exact strings, a period is required, event IDs must be unique, and invalid snapshots become unavailable with no rows. This validation does not authenticate or authorise data; the server adapter is still required.
+
+The usage download is JSON to retain exact credit strings. It exports only loaded entries matching the selected category/search, labels that limited coverage, and is not an invoice or complete account ledger. It is disabled when unavailable or no matching entries exist. No client-side sum is used to infer a funded balance.
+
+Verification: 17 offline checks cover precision, zero vs unavailable, invalid units/dates/amounts, duplicate rows, filters, and exact statement export. Focused lint and TypeScript passed. Browser inspection confirms the unavailable screen keeps export and purchases disabled. A real authenticated snapshot, database accounting, and a live download from that account remain unverified.

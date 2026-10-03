@@ -1,0 +1,28 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Offline TypeScript fixture runner. */
+const fs = require("node:fs");
+const ts = require("typescript");
+const assert = require("node:assert/strict");
+require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
+const { readBillingView, unavailableBilling, billingStatement, filterBillingEntries } = require("./view.ts");
+const entry = { id: "event-1", occurredAt: "2026-10-03T12:00:00.000Z", project: "Field guide", action: "Book cover", model: "fixture-model", category: "Media", status: "Charged", credits: "9007199254740993" };
+const ready = { status: "ready", unit: "whole_customer_credits", available: "0", reserved: "2", used: "9007199254740993", period: "October 2026", entries: [entry] };
+let checks = 0;
+function check(name, fn) { fn(); checks++; console.log(`PASS ${name}`); }
+check("exact balance survives", () => assert.equal(readBillingView(ready).used, "9007199254740993"));
+check("zero is a known balance", () => assert.equal(readBillingView(ready).available, "0"));
+check("null ready amount fails closed", () => assert.equal(readBillingView({ ...ready, available: null }).status, "unavailable"));
+check("number amounts fail closed", () => assert.equal(readBillingView({ ...ready, available: 1 }).status, "unavailable"));
+check("overflow fails closed", () => assert.equal(readBillingView({ ...ready, available: "9223372036854775808" }).status, "unavailable"));
+check("unknown unit fails closed", () => assert.equal(readBillingView({ ...ready, unit: "micro_usd" }).status, "unavailable"));
+check("invalid dates fail closed", () => assert.equal(readBillingView({ ...ready, entries: [{ ...entry, occurredAt: "yesterday" }] }).status, "unavailable"));
+check("duplicate events fail closed", () => assert.equal(readBillingView({ ...ready, entries: [entry, entry] }).status, "unavailable"));
+check("unavailable cannot leak rows", () => assert.deepEqual(readBillingView({ ...unavailableBilling, entries: [entry] }), unavailableBilling));
+check("unsupported category fails closed", () => assert.equal(readBillingView({ ...ready, entries: [{ ...entry, category: "Other" }] }).status, "unavailable"));
+check("missing period fails closed", () => assert.equal(readBillingView({ ...ready, period: " " }).status, "unavailable"));
+check("combined filter and search", () => assert.equal(filterBillingEntries([entry], "Media", "  FIELD  ").length, 1));
+check("category mismatch", () => assert.equal(filterBillingEntries([entry], "Hosting", "").length, 0));
+check("statement retains exact credits", () => assert.equal(JSON.parse(billingStatement(ready, "All activity", "")).entries[0].credits, entry.credits));
+check("statement uses selected filters", () => assert.equal(JSON.parse(billingStatement(ready, "Media", "unmatched")).entries.length, 0));
+check("unavailable cannot export", () => assert.throws(() => billingStatement(unavailableBilling, "All activity", ""), /unavailable/));
+check("statement declares limited coverage", () => assert.match(JSON.parse(billingStatement(ready, "Media", "")).coverage, /not a complete account ledger/));
+console.log(`${checks} offline billing checks passed. No live account or payment verification.`);
