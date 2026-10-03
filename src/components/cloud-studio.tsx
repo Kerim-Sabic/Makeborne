@@ -4,8 +4,9 @@ import BrandMark from "./brand-mark";
 import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
+import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useState, useRef } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -1080,6 +1081,9 @@ export function CloudEditor({
   const recoveryKey = `makeborne.cloud-draft.${accountId}.${workspaceId}.${artifact.id}`;
   const [recovery, setRecovery] = useState<RecoveryDraft | null>(null);
   const saveBusy = useRef(false);
+  const editRevision = useRef(0);
+  const pendingSave = useRef<{ revision: number; payload: { expectedVersion: number; content: ArtifactContent; style: StyleProfile; assetIds: string[]; changeSummary: string } } | null>(null);
+  const [savePaused, setSavePaused] = useState(false);
   const [uncertainSave, setUncertainSave] = useState(false);
   const [content, setContent] = useState<ArtifactContent | null>(null);
   const [style, setStyle] = useState<StyleProfile | null>(null);
@@ -1136,6 +1140,7 @@ export function CloudEditor({
       );
       setDirty(false);
       setConflict(false);
+      setSavePaused(false);
       try {
         const original = localStorage.getItem(recoveryKey);
         if (original) {
@@ -1220,6 +1225,7 @@ export function CloudEditor({
   ]);
   function editBlock(sectionId: string, blockId: string, text: string) {
     if (!content) return;
+    editRevision.current++;
     setContent({
       ...content,
       sections: content.sections.map((s) =>
@@ -1237,6 +1243,7 @@ export function CloudEditor({
   }
   function add(type: "heading" | "paragraph" | "quote") {
     if (!content) return;
+    editRevision.current++;
     const sections = [...content.sections];
     if (!sections.length)
       sections.push({
@@ -1265,6 +1272,13 @@ export function CloudEditor({
     if (!content || !style || busy || saveBusy.current || role === "reviewer")
       return;
     saveBusy.current = true;
+    const attempt = uncertainSave && pendingSave.current ? pendingSave.current : {
+      revision: editRevision.current,
+      payload: { expectedVersion, content, style, assetIds, changeSummary: note || "Saved account content" },
+    };
+    pendingSave.current = attempt;
+    const savingRevision = attempt.revision;
+    setSavePaused(false);
     setBusy(true);
     try {
       const result = await api<{
@@ -1273,23 +1287,27 @@ export function CloudEditor({
         mutation: { replayed: boolean };
       }>(
         `/api/cloud/workspaces/${workspaceId}/artifacts/${artifact.id}/versions`,
-        {
-          expectedVersion,
-          content,
-          style,
-          assetIds,
-          changeSummary: note || "Saved cloud content",
-        },
+        attempt.payload,
       );
+      pendingSave.current = null;
       setExpectedVersion(result.artifact.currentVersion);
-      setVersions((v) => [...v, result.version]);
-      setDirty(false);
+      setVersions((v) => [...v.filter(version => version.id !== result.version.id), result.version]);
+      const settlement = settleAccountSave(savingRevision, editRevision.current, result.mutation.replayed);
+      const hasNewerEdits = settlement.newerEdits;
+      setDirty(hasNewerEdits);
       setRecovery(null);
       setConflict(false);
       setUncertainSave(false);
-      localStorage.removeItem(recoveryKey);
-      setNote("");
+      if (settlement.clearRecovery) {
+        try { localStorage.removeItem(recoveryKey); } catch { /* A retained draft is safer than treating a confirmed save as failed. */ }
+        setNote("");
+      }
       if (result.mutation.replayed) {
+        if (settlement.pauseForReview) {
+          setConflict(true);
+          notify("The earlier save is confirmed. Your newer edits are preserved; review them against the latest saved version before continuing.");
+          return;
+        }
         const current = await load();
         if (!current) {
           setConflict(true);
@@ -1302,6 +1320,7 @@ export function CloudEditor({
           );
       } else notify("Content version saved to the cloud.");
     } catch (error) {
+      setSavePaused(true);
       if (error instanceof CloudError && error.uncertain) {
         setUncertainSave(true);
         notify(error.message);
@@ -1325,6 +1344,12 @@ export function CloudEditor({
       setBusy(false);
     }
   }
+  const saveAfterPause = useEffectEvent(() => { void save(); });
+  useEffect(() => {
+    if (!canAutosave({ dirty, busy, conflict, uncertain: uncertainSave, paused: savePaused, recovery: !!recovery, reviewer: role === "reviewer", ready: !!content && !!style })) return;
+    const timer = window.setTimeout(() => saveAfterPause(), 1500);
+    return () => window.clearTimeout(timer);
+  }, [dirty, busy, conflict, uncertainSave, savePaused, recovery, role, content, style, note, assetIds]);
   async function moreVersions() {
     if (nextOffset === null || busy) return;
     setBusy(true);
@@ -1388,8 +1413,8 @@ export function CloudEditor({
         <div>
           <h2>{artifact.title}</h2>
           <p>
-            Cloud content · Based on version {expectedVersion} ·{" "}
-            {dirty ? "Unsaved changes" : "No unsaved changes"}
+            Saved to your account · Version {expectedVersion} ·{" "}
+            {savePaused || conflict || uncertainSave ? "Saving paused — review required" : busy && dirty ? "Saving…" : dirty ? "Waiting to save…" : "Saved"}
           </p>
         </div>
         <button
@@ -1398,7 +1423,7 @@ export function CloudEditor({
           onClick={save}
         >
           <Save size={16} />
-          {busy ? "Saving…" : "Save cloud version"}
+          {busy ? "Saving…" : savePaused ? "Retry save" : "Save now"}
         </button>
       </div>
       {uncertainSave && (
@@ -1419,6 +1444,7 @@ export function CloudEditor({
       )}
       {recovery && (
         <div className="cloud-conflict">
+          <PendingCloudWrites accountId={accountId} refresh={async () => { setConflict(true); notify("The pending request is confirmed. Download any recovery draft before loading the latest version."); }} />
           <h3>An unsaved draft is available.</h3>
           <p>
             Saved on this device from cloud version {recovery.basedOnVersion}.
@@ -1429,6 +1455,7 @@ export function CloudEditor({
               className="button secondary"
               onClick={() => {
                 setContent(recovery.content);
+                editRevision.current++;
                 setStyle(recovery.style);
                 setAssetIds(recovery.assetIds);
                 setExpectedVersion(recovery.basedOnVersion);
@@ -1524,18 +1551,19 @@ export function CloudEditor({
             )}
           </div>
           <aside>
-            <span className="eyebrow">SAVE WITH INTENTION</span>
+            <span className="eyebrow">AUTOMATIC SAVING</span>
             <p>
-              Unsaved drafts are also kept on this device for recovery. Cloud
-              content saves as a new version. A concurrent change is reported
-              rather than overwritten.
+              Edits save after you pause typing. Each save creates a version.
+              A recovery draft stays on this device. Saving pauses if another
+              person has updated the project or a request cannot be confirmed.
             </p>
             <label>
               Change note
               <input
                 value={note}
                 maxLength={2000}
-                onChange={(e) => setNote(e.target.value)}
+                disabled={role === "reviewer" || uncertainSave}
+                onChange={(e) => { editRevision.current++; setNote(e.target.value); setDirty(true); }}
                 placeholder="What changed?"
               />
             </label>
