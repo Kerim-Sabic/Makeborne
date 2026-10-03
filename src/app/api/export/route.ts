@@ -9,7 +9,9 @@ import {
   htmlDocument,
   pdfDocument,
   presentationDocument,
+  prepareExport,
 } from "@/lib/server/export";
+import { epubDocument } from "@/lib/server/epub";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -34,12 +36,6 @@ export async function POST(request: Request) {
         "Development exports are available only on this computer.",
         403,
       );
-    const parsed = ExportRequestSchema.safeParse(await boundedJson(request));
-    if (!parsed.success)
-      throw new RequestError(
-        "INVALID_EXPORT",
-        "This content exceeds supported export limits or has an unsupported structure.",
-      );
     if (activeExports >= 2)
       throw new RequestError(
         "EXPORT_BUSY",
@@ -48,7 +44,15 @@ export async function POST(request: Request) {
       );
     activeExports++;
     reserved = true;
-    const input = parsed.data;
+    const parsed = ExportRequestSchema.safeParse(
+      await boundedJson(request, 18_000_000),
+    );
+    if (!parsed.success)
+      throw new RequestError(
+        "INVALID_EXPORT",
+        "This content exceeds supported export limits or has an unsupported structure.",
+      );
+    const input = await prepareExport(parsed.data);
     const filename =
       input.title.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "makeborne";
     const headers = {
@@ -61,16 +65,20 @@ export async function POST(request: Request) {
         headers: { ...headers, "Content-Type": "text/html; charset=utf-8" },
       });
     const bytes =
-      input.format === "pdf"
-        ? await pdfDocument(input)
-        : await presentationDocument(input);
+      input.format === "epub"
+        ? await epubDocument(input)
+        : input.format === "pdf"
+          ? await pdfDocument(input)
+          : await presentationDocument(input);
     return new Response(new Uint8Array(bytes), {
       headers: {
         ...headers,
         "Content-Type":
-          input.format === "pdf"
-            ? "application/pdf"
-            : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          input.format === "epub"
+            ? "application/epub+zip"
+            : input.format === "pdf"
+              ? "application/pdf"
+              : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       },
     });
   } catch (error) {

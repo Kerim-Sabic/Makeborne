@@ -1,9 +1,18 @@
 export function getSupabaseConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) return null;
+  if (!url || !key || !key.startsWith("sb_publishable_")) return null;
   try {
-    if (!["http:", "https:"].includes(new URL(url).protocol)) return null;
+    const endpoint = new URL(url);
+    if (endpoint.username || endpoint.password) return null;
+    if (
+      endpoint.protocol !== "https:" &&
+      !(
+        endpoint.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)
+      )
+    )
+      return null;
   } catch {
     return null;
   }

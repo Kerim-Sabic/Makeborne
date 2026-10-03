@@ -1,21 +1,34 @@
 "use client";
 import Link from "next/link";
-import { z } from "zod";
+import BrandMark from "./brand-mark";
 import {
-  ClientSchema,
-  ProjectSchema,
-  type Client as DomainClient,
-} from "@/lib/domain";
+  LocalWorkspaceSchema,
+  baseStyles,
+  emptyWorkspace,
+  uid,
+  now,
+  icons,
+  kindLabel,
+  storageKey,
+  type Kind,
+  type Block,
+  type Client,
+  type Style,
+  type Project,
+  type Workspace,
+} from "./studio-model";
 import { useEffect, useRef, useState } from "react";
+import WebsiteSections from "./website-sections";
 import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
   ArrowUpRight,
-  BookOpen,
+  BookOpen as BookOpenIcon,
   Check,
   ChevronDown,
+  Cloud as CloudIcon,
   Download,
   FileText,
   FolderOpen,
@@ -24,7 +37,6 @@ import {
   Menu,
   MoreHorizontal,
   Palette,
-  PanelTop,
   Plus,
   Presentation,
   Save,
@@ -36,175 +48,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-
-type Kind = "website" | "book" | "presentation";
-type Block = {
-  id: string;
-  type: "heading" | "paragraph" | "image" | "quote";
-  text: string;
-  image?: string;
-};
-type Client = DomainClient;
-type Style = {
-  id: string;
-  name: string;
-  description: string;
-  color: string;
-  font: string;
-};
-type Version = { id: string; at: string; blocks: Block[]; note: string };
-type Project = {
-  id: string;
-  title: string;
-  kind: Kind;
-  clientId: string | null;
-  status:
-    "draft" | "in_progress" | "review" | "approved" | "published" | "archived";
-  styleId: string;
-  brief: string;
-  audience: string;
-  purpose: string;
-  wording: string;
-  blocks: Block[];
-  versions: Version[];
-  activity: { at: string; text: string }[];
-  createdAt: string;
-  updatedAt: string;
-};
-type Workspace = {
-  schemaVersion: 1;
-  projects: Project[];
-  clients: Client[];
-  styles: Style[];
-  sound: boolean;
-};
-const baseStyles: Style[] = [
-  {
-    id: "editorial",
-    name: "Editorial",
-    description: "Warm paper. Serif headlines. Room to breathe.",
-    color: "#9b583c",
-    font: "serif",
-  },
-  {
-    id: "venture",
-    name: "Venture",
-    description: "Confident contrast. Precise grids. Clear ideas.",
-    color: "#3358d4",
-    font: "sans",
-  },
-  {
-    id: "studio",
-    name: "Studio",
-    description: "Expressive composition. Distinctive character.",
-    color: "#33544c",
-    font: "sans",
-  },
-];
-const emptyWorkspace = (): Workspace => ({
-  schemaVersion: 1,
-  projects: [],
-  clients: [],
-  styles: baseStyles,
-  sound: false,
-});
-const uid = () => crypto.randomUUID();
-const now = () => new Date().toISOString();
-const icons = { website: PanelTop, book: BookOpen, presentation: Presentation };
-const kindLabel = {
-  website: "Website",
-  book: "Book",
-  presentation: "Presentation",
-};
-const storageKey = "makeborne.local-workspace.v1";
-const LocalBlockSchema = z.object({
-  id: z.string().uuid(),
-  type: z.enum(["heading", "paragraph", "image", "quote"]),
-  text: z.string().max(50000),
-  image: z
-    .string()
-    .max(4100000)
-    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/)
-    .optional(),
-});
-const LocalStyleSchema = z.object({
-  id: z.string().min(1).max(100),
-  name: z.string().min(1).max(120),
-  description: z.string().max(5000),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  font: z.enum(["serif", "sans"]),
-});
-const LocalProjectSchema = ProjectSchema.extend({
-  styleId: z.string().min(1).max(100),
-  audience: z.string().max(5000),
-  purpose: z.string().max(5000),
-  wording: z.enum(["preserve", "improve", "summarise"]),
-  blocks: z.array(LocalBlockSchema).max(500),
-  versions: z
-    .array(
-      z.object({
-        id: z.string().uuid(),
-        at: z.string().datetime(),
-        blocks: z.array(LocalBlockSchema).max(500),
-        note: z.string().max(2000),
-      }),
-    )
-    .max(100),
-  activity: z
-    .array(z.object({ at: z.string().datetime(), text: z.string().max(10000) }))
-    .max(2000),
-});
-const LocalWorkspaceSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    projects: z.array(LocalProjectSchema).max(1000),
-    clients: z.array(ClientSchema).max(1000),
-    styles: z.array(LocalStyleSchema).min(1).max(100),
-    sound: z.boolean(),
-  })
-  .superRefine((workspace, context) => {
-    const unique = (items: { id: string }[], path: (string | number)[]) => {
-      const ids = new Set<string>();
-      items.forEach((item, index) => {
-        if (ids.has(item.id))
-          context.addIssue({
-            code: "custom",
-            path: [...path, index, "id"],
-            message: "Record IDs must be unique.",
-          });
-        ids.add(item.id);
-      });
-      return ids;
-    };
-    const clients = unique(workspace.clients, ["clients"]);
-    const styles = unique(workspace.styles, ["styles"]);
-    unique(workspace.projects, ["projects"]);
-    workspace.projects.forEach((project, index) => {
-      if (project.clientId && !clients.has(project.clientId))
-        context.addIssue({
-          code: "custom",
-          path: ["projects", index, "clientId"],
-          message: "The linked client is missing.",
-        });
-      if (!styles.has(project.styleId))
-        context.addIssue({
-          code: "custom",
-          path: ["projects", index, "styleId"],
-          message: "The selected style is missing.",
-        });
-      unique(project.blocks, ["projects", index, "blocks"]);
-      unique(project.versions, ["projects", index, "versions"]);
-      project.versions.forEach((version, versionIndex) =>
-        unique(version.blocks, [
-          "projects",
-          index,
-          "versions",
-          versionIndex,
-          "blocks",
-        ]),
-      );
-    });
-  });
 
 function download(data: Blob, name: string) {
   const url = URL.createObjectURL(data);
@@ -354,7 +197,7 @@ export default function Studio() {
     <div className="studio-shell">
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
         <Link className="wordmark" href="/">
-          <img src="/brand/makeborne-mark.svg" alt="" width="27" height="27" />
+          <BrandMark size={27} />
           Makeborne
         </Link>
         <button
@@ -409,6 +252,9 @@ export default function Studio() {
           >
             <Settings size={18} /> Settings
           </button>
+          <Link className="sidebar-home" href="/studio/cloud">
+            <CloudIcon size={15} /> Cloud studio <ArrowUpRight size={14} />
+          </Link>
           <Link className="sidebar-home" href="/">
             Back to Makeborne <ArrowUpRight size={14} />
           </Link>
@@ -921,8 +767,9 @@ export default function Studio() {
                   <section>
                     <h2>Cloud services</h2>
                     <p>
-                      Production accounts, live AI generation, client sharing,
-                      custom domains, and payments require configured
+                      Cloud accounts are available through the separate Cloud
+                      studio when configured. Live AI generation, client
+                      sharing, custom domains, and payments require configured
                       integrations. This local preview does not claim those
                       services are active.
                     </p>
@@ -1478,6 +1325,8 @@ function ProjectEditor({
   back: () => void;
   notify: (s: string) => void;
 }) {
+  const [bookAuthor, setBookAuthor] = useState("");
+  const [bookLanguage, setBookLanguage] = useState("en");
   const [active, setActive] = useState(project.blocks[0]?.id || "");
   const [view, setView] = useState("edit");
   const [panel, setPanel] = useState("content");
@@ -1614,35 +1463,27 @@ function ProjectEditor({
     }
   }
   async function exportFile(format: string) {
-    if (project.blocks.some((b) => b.type === "image")) {
-      notify(
-        "Image-inclusive export is not implemented yet. Your artwork remains saved in this workspace.",
-      );
-      return;
-    }
-    if (!baseStyles.some((s) => s.id === project.styleId)) {
-      notify(
-        "Custom-style export is not implemented yet. Choose an authored style to export your text.",
-      );
-      return;
-    }
     setBusy(true);
     try {
-      const slides = project.blocks.map((b) => ({
-        id: b.id,
-        title: b.type === "heading" ? b.text : "",
-        body: b.type === "heading" ? "" : b.text,
-        image: b.image,
-      }));
       const response = await fetch("/api/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           format,
+          kind: project.kind,
           title: project.title,
           styleId: project.styleId,
+          style: {
+            id: style.id,
+            name: style.name,
+            color: style.color,
+            font: style.font,
+          },
+          presentationMode: "native",
+          documentId: project.id,
+          author: bookAuthor.trim() || undefined,
+          language: bookLanguage,
           blocks: project.blocks,
-          slides: project.kind === "presentation" ? slides : undefined,
         }),
       });
       if (!response.ok) {
@@ -2095,6 +1936,18 @@ function ProjectEditor({
                     <p>Select or add a content block.</p>
                   )}
                   <div className="inspector-divider" />
+                  {project.kind === "website" && (
+                    <WebsiteSections
+                      add={(blocks) => {
+                        const added = blocks.map((b) => ({ ...b, id: uid() }));
+                        change([...project.blocks, ...added]);
+                        setActive(added[0].id);
+                        notify(
+                          "Section scaffold added. Replace the guidance with your own verified content.",
+                        );
+                      }}
+                    />
+                  )}
                   <h3>Expand your content</h3>
                   <div className="inspector-add">
                     <button onClick={() => addBlock("heading")}>
@@ -2188,6 +2041,51 @@ function ProjectEditor({
                 </button>
               </div>
               <div className="export-options">
+                {project.kind === "book" && (
+                  <div className="book-export-details">
+                    <label>
+                      Book language
+                      <select
+                        value={bookLanguage}
+                        onChange={(e) => setBookLanguage(e.target.value)}
+                      >
+                        <option value="en">English (default)</option>
+                        <option value="bs">Bosnian</option>
+                        <option value="hr">Croatian</option>
+                        <option value="sr">Serbian</option>
+                        <option value="pl">Polish</option>
+                        <option value="de">German</option>
+                        <option value="fr">French</option>
+                        <option value="es">Spanish</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ar">Arabic</option>
+                        <option value="ja">Japanese</option>
+                      </select>
+                    </label>
+                    <label>
+                      Author (optional)
+                      <input
+                        value={bookAuthor}
+                        onChange={(e) => setBookAuthor(e.target.value)}
+                        maxLength={200}
+                        placeholder="Use the real author's name"
+                      />
+                    </label>
+                    <button
+                      className="text-link"
+                      disabled={busy}
+                      onClick={() => exportFile("epub")}
+                    >
+                      <BookOpenIcon size={15} /> Download EPUB
+                    </button>
+                    <p>
+                      EPUB export does not establish Amazon acceptance. Review
+                      the file in your target reader.
+                    </p>
+                  </div>
+                )}
+
                 <span className="eyebrow">MANUAL CONTENT EXPORT</span>
                 <button
                   className="text-link"
@@ -2254,33 +2152,51 @@ function ArtifactPreview({
       <p>{b.text || "Write your next paragraph…"}</p>
     );
   }
-  if (project.kind === "presentation")
+  if (project.kind === "presentation") {
+    const groups: Block[][] = [];
+    for (const block of project.blocks) {
+      if (block.type === "heading" || groups.length === 0) groups.push([block]);
+      else groups[groups.length - 1].push(block);
+    }
     return (
       <div className="deck-preview" style={css}>
-        {project.blocks.length === 0 ? (
+        <p className="preview-layout-note">
+          Each heading begins a slide. Native PowerPoint layout is rendered
+          separately.
+        </p>
+        {groups.length === 0 ? (
           <div className="slide-preview">Add your first slide block.</div>
         ) : (
-          project.blocks.map((b, i) => (
-            <div
-              className={`slide-preview ${style.id} ${active === b.id && select ? "selected-block" : ""}`}
-              onClick={() => select?.(b.id)}
-              key={b.id}
-              tabIndex={select ? 0 : undefined}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") select?.(b.id);
-              }}
-            >
+          groups.map((group, i) => (
+            <div className={`slide-preview ${style.id}`} key={group[0].id}>
               <div className="slide-meta">
                 <span>{project.title}</span>
                 <span>{String(i + 1).padStart(2, "0")}</span>
               </div>
-              <div className="slide-content">{renderBlock(b)}</div>
+              <div className="slide-content">
+                {group.map((b) => (
+                  <div
+                    className={
+                      active === b.id && select ? "selected-block" : ""
+                    }
+                    key={b.id}
+                    onClick={() => select?.(b.id)}
+                    tabIndex={select ? 0 : undefined}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") select?.(b.id);
+                    }}
+                  >
+                    {renderBlock(b)}
+                  </div>
+                ))}
+              </div>
               <div className="slide-footer">MAKEBORNE / MANUALLY AUTHORED</div>
             </div>
           ))
         )}
       </div>
     );
+  }
   if (project.kind === "website")
     return (
       <div
@@ -2289,9 +2205,12 @@ function ArtifactPreview({
       >
         <nav>
           <strong>{project.title}</strong>
-          <span>About &nbsp; Contact</span>
+          <span>
+            <a href="#site-content">Explore</a> &nbsp;{" "}
+            <a href="#site-contact">Contact</a>
+          </span>
         </nav>
-        <div className="site-blocks">
+        <div className="site-blocks" id="site-content">
           {project.blocks.map((b) => (
             <div
               className={active === b.id && select ? "selected-block" : ""}
@@ -2306,7 +2225,7 @@ function ArtifactPreview({
             </div>
           ))}
         </div>
-        <div className="site-contact">
+        <div className="site-contact" id="site-contact">
           <h3>Let’s start a conversation.</h3>
           <p>A live contact form requires a configured destination.</p>
           <label>

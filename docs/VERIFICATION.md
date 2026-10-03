@@ -3,7 +3,7 @@
 ## Executed
 
 - Next production build succeeds; TypeScript completes.
-- ESLint completes with zero errors and five intentional plain-image optimisation warnings (brand SVG/local uploaded artwork). Development dependency advisories remain documented separately.
+- After replacing repeated logo images with a shared vector and optimising the landing artwork, two plain-image optimisation warnings remain for editor artwork. Final lint/build results are recorded below. Development dependency advisories remain documented separately.
 - Desktop home and studio open in a real Chrome browser without a framework error overlay; console has only development messages.
 - Mobile home at viewport 390px reports document width 375px, with stacked hero and no horizontal overflow.
 - Created a review-only client through the UI and linked two website projects. Client detail lists both projects and the actual saved-version activity.
@@ -16,8 +16,22 @@
 - Native PPTX export returns 200. Inspected its slide XML: editable text and speaker notes are present. No claim of visual PowerPoint rendering verification yet.
 - Production dependency audit reports zero known advisories after image-size override to 2.0.4.
 
+## Second milestone checks
+
+- Production dependency audit after adding Sharp/JSZip again reports zero known advisories.
+- Illustrated custom-style PDF fixture returns 200; the four-page file contains its supplied artwork and extractable chapter text. Its cover was rendered and visually inspected.
+- Complete visual PPTX fixture returns 200, with one image and zero rendered text nodes in slide XML. Actual supplied venture artwork is approximately 16:9 and the generated canvas is 16:9. This is package inspection, not visual PowerPoint rendering.
+- A separate 3:2 artwork fixture exports to a 12192000×8128000 EMU canvas. Requesting that artwork as 16:9 returns 400 SLIDE_ASPECT; it is not silently cropped.
+- Sample reflowable EPUB passes official EPUBCheck 5.4.0, zero errors or warnings. The validator reported EPUB 3.4 rules. No Kindle/Amazon compatibility claim follows from this sample.
+- Fresh isolated Chrome checks at 390×844 open home, login and cloud studio with HTTP 200, zero broken images and zero page errors. Each page's document width equals its 390px viewport. Unconfigured account/cloud screens disclose unavailable storage and show local continuation links.
+- Docker engine startup fails while initialising its local inference socket. Database runtime verification cannot proceed through that engine; no migration or cloud flag has been activated.
+- A fresh isolated browser flow creates a custom style and book, uploads the supplied editorial artwork, downloads an EPUB with HTTP 200, then creates a website, adds a services scaffold and downloads HTML containing that section. There are zero page errors in this flow. The actual illustrated EPUB downloaded through the UI passes EPUBCheck with zero errors or warnings.
+- Fixed the development loopback-origin mismatch found by browser testing. Same-port loopback aliases can reach request validation; different ports, external domains and `Origin: null` return 403. Production retains exact-origin matching. This is a bounded origin check, not a full CSRF penetration test.
+- Nineteen offline job-domain assertions pass for disabled spending, reservations, uncertain outcomes, cancellation and related fixed-fixture cases. No provider, SQL concurrency, queue crash-recovery or live worker verification follows from those assertions.
+- Final integrated production build and TypeScript pass. Final full ESLint run has zero errors and two editor-artwork optimisation warnings. No secret-pattern matches were found in the reviewed source/document/migration paths; this scan is not a credential-security certification.
+
 ## Not verified or unavailable
 
-Database migration and RLS runtime checks; cloud persistence and guest access; live provider generation; cost reservations and jobs; production exports; publication and custom domains; payments/webhooks; image/custom-style-inclusive export; KDP/EPUB; discovery/media and all original production release gates. A successful frontend build does not establish readiness for paying customers.
+Database migrations and RLS runtime checks; cloud persistence, authenticated account flows and guest access; live provider generation; cost reservations and jobs; production exports; publication and custom domains; payments/webhooks; full print rendering/KDP acceptance and broad EPUB reader compatibility; discovery/media and all original production release gates. Cloud routes, immutable-save operations and permission migrations are written but their live behaviour remains unverified. A successful frontend build does not establish readiness for paying customers.
 
 Browser verification records are development evidence. Review client data exists only in an isolated browser session; the application starts with an empty workspace.

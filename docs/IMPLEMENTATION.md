@@ -6,7 +6,7 @@ Latest human requirements override archived Offerloom instructions. Source archi
 
 ## Current boundary
 
-An authored identity and local editing workspace. Local records and approval labels do not establish cloud security, verified claims, actual publication, live generation or payment settlement. Production export is unavailable pending bounded authenticated workers. Migration is unapplied and unverified against a running database.
+An authored identity, local editing workspace, bounded illustrated/custom-style exports and gated cloud CRM code. Local records and approval labels do not establish cloud security, verified claims, actual publication, live generation or payment settlement. Production export is unavailable pending bounded authenticated workers. Migrations are unapplied and unverified against a running database. Schema and paperback metadata validators are implemented; they do not prove print file quality or Amazon acceptance.
 
 ## Required architecture
 

@@ -1,0 +1,273 @@
+import { z } from "zod";
+import {
+  ArtifactSchema,
+  ArtifactVersionSchema,
+  ClientSchema,
+  ProjectSchema,
+} from "@/lib/domain";
+let accountId: string | null = null;
+function pendingChanged() {
+  window.dispatchEvent(new Event("makeborne-cloud-pending"));
+}
+export function setCloudAccount(id: string | null) {
+  accountId = id;
+}
+export class CloudError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public code = "REQUEST_FAILED",
+    public uncertain = false,
+  ) {
+    super(message);
+  }
+}
+const workspace = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  role: z.enum(["owner", "editor", "reviewer"]),
+});
+const client = ClientSchema.extend({ updatedAt: z.string().datetime() });
+const project = ProjectSchema.extend({
+  audience: z.string(),
+  purpose: z.string(),
+  wording: z.string(),
+});
+const page = z.object({
+  offset: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  nextOffset: z.number().int().nonnegative().nullable(),
+});
+const mutation = z.object({
+  idempotencyKey: z.string().uuid(),
+  replayed: z.boolean(),
+});
+function schemaFor(path: string, method: string) {
+  const base = path.split("?")[0];
+  if (base === "/api/workspaces")
+    return method === "GET"
+      ? z.object({ workspaces: z.array(workspace) })
+      : z.object({ workspace, mutation });
+  if (/\/versions$/.test(base))
+    return z.object({
+      artifact: ArtifactSchema,
+      version: ArtifactVersionSchema,
+      mutation,
+    });
+  if (/\/artifacts\/[a-f0-9-]+$/.test(base))
+    return z.object({
+      artifact: ArtifactSchema,
+      versions: z.array(ArtifactVersionSchema),
+      pagination: page,
+    });
+  if (/\/projects\/[a-f0-9-]+\/artifacts$/.test(base))
+    return z.object({ artifact: ArtifactSchema, mutation });
+  if (/\/clients\/[a-f0-9-]+$/.test(base)) return z.object({ client });
+  if (/\/clients$/.test(base)) return z.object({ client, mutation });
+  if (/\/projects$/.test(base)) return z.object({ project, mutation });
+  if (/\/workspaces\/[a-f0-9-]+$/.test(base))
+    return z.object({
+      workspace,
+      clients: z.array(client),
+      projects: z.array(project),
+      artifacts: z.array(ArtifactSchema),
+      pagination: z.object({ clients: page, projects: page, artifacts: page }),
+    });
+  throw new CloudError(400, "This cloud operation is unsupported.");
+}
+const activeRequests = new Set<string>();
+export async function api<T>(
+  path: string,
+  body?: unknown,
+  method = "POST",
+): Promise<T> {
+  const verb = body ? method : method === "POST" ? "GET" : method;
+  const bodyText = body ? JSON.stringify(body) : undefined;
+  const signature = `${verb}:${path}:${bodyText || ""}`;
+  if (activeRequests.has(signature))
+    throw new CloudError(
+      409,
+      "This request is already in progress. Wait for its result.",
+      "REQUEST_PENDING",
+    );
+  activeRequests.add(signature);
+  let storageId: string | undefined;
+  let requestKey: string | undefined;
+  try {
+    const schema = schemaFor(path, verb);
+    const headers: Record<string, string> = {};
+    if (bodyText) headers["Content-Type"] = "application/json";
+    const needsKey =
+      verb === "POST" &&
+      (path.startsWith("/api/cloud/") || path === "/api/workspaces");
+    if (needsKey) {
+      if (!accountId)
+        throw new CloudError(
+          401,
+          "Verify your account before saving cloud work.",
+        );
+      const digest = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(`${accountId}:${signature}`),
+      );
+      storageId = `makeborne.pending-write.${Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")}`;
+      try {
+        const existing = localStorage.getItem(storageId);
+        if (existing) {
+          const pending = z
+            .object({
+              key: z.string().uuid(),
+              body: z.string(),
+              path: z.string(),
+              method: z.string(),
+              accountId: z.string().uuid(),
+            })
+            .parse(JSON.parse(existing));
+          if (
+            pending.accountId !== accountId ||
+            pending.path !== path ||
+            pending.method !== verb ||
+            pending.body !== bodyText
+          )
+            throw new Error("Pending request does not match");
+          requestKey = pending.key;
+        } else {
+          requestKey = crypto.randomUUID();
+          localStorage.setItem(
+            storageId,
+            JSON.stringify({
+              key: requestKey,
+              body: bodyText,
+              path,
+              method: verb,
+              accountId,
+              createdAt: new Date().toISOString(),
+            }),
+          );
+          pendingChanged();
+        }
+      } catch {
+        throw new CloudError(
+          503,
+          "This device could not preserve the pending write. No request was sent; download your draft and free browser storage before saving.",
+          "PENDING_STORAGE_UNAVAILABLE",
+        );
+      }
+      headers["Idempotency-Key"] = requestKey;
+    }
+    let response: Response;
+    try {
+      response = await fetch(path, {
+        method: verb,
+        headers,
+        body: bodyText,
+        cache: "no-store",
+      });
+    } catch {
+      throw new CloudError(
+        503,
+        body
+          ? "The cloud could not confirm this write. Keep your draft and retry the same operation after reviewing saved records."
+          : "The cloud could not be reached.",
+        "NETWORK_UNCONFIRMED",
+        !!body,
+      );
+    }
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch {
+      throw new CloudError(
+        503,
+        "The cloud returned an unreadable result. Keep your draft and review saved records before retrying.",
+        "RESPONSE_UNCONFIRMED",
+        !!body,
+      );
+    }
+    if (!response.ok) {
+      const error = z
+        .object({
+          error: z.object({ message: z.string(), code: z.string().optional() }),
+        })
+        .safeParse(data);
+      const uncertain = !!body && response.status >= 500;
+      // Keep request identities even after access errors: an earlier uncertain attempt may already exist.
+      throw new CloudError(
+        response.status,
+        error.success
+          ? error.data.error.message
+          : "The cloud request could not complete.",
+        error.success ? error.data.error.code : "REQUEST_FAILED",
+        uncertain,
+      );
+    }
+    const result = schema.safeParse(data);
+    if (!result.success)
+      throw new CloudError(
+        503,
+        "The cloud response could not be verified. Your draft is preserved; review saved records before another write.",
+        "RESPONSE_UNCONFIRMED",
+        !!body,
+      );
+    if (
+      requestKey &&
+      "mutation" in result.data &&
+      (result.data as { mutation: { idempotencyKey: string } }).mutation
+        .idempotencyKey !== requestKey
+    )
+      throw new CloudError(
+        503,
+        "The cloud did not confirm the expected request identity. Keep your draft and review the saved record.",
+        "RESPONSE_UNCONFIRMED",
+        true,
+      );
+    if (storageId) {
+      localStorage.removeItem(storageId);
+      pendingChanged();
+    }
+    return result.data as T;
+  } finally {
+    activeRequests.delete(signature);
+  }
+}
+export type PendingCloudWrite = {
+  storageId: string;
+  key: string;
+  body: string;
+  path: string;
+  method: string;
+  accountId: string;
+  createdAt?: string;
+};
+export function getPendingCloudWrites(userId: string): PendingCloudWrite[] {
+  const items: PendingCloudWrite[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const id = localStorage.key(i);
+      if (!id?.startsWith("makeborne.pending-write.")) continue;
+      const saved = localStorage.getItem(id);
+      if (!saved) continue;
+      const parsed = z
+        .object({
+          key: z.string().uuid(),
+          body: z.string().max(2100000),
+          path: z
+            .string()
+            .regex(
+              /^\/api\/workspaces$|^\/api\/cloud\/workspaces\/[a-f0-9-]+\/(clients|projects|projects\/[a-f0-9-]+\/artifacts|artifacts\/[a-f0-9-]+\/versions)$/,
+            ),
+          method: z.literal("POST"),
+          accountId: z.string().uuid(),
+          createdAt: z.string().optional(),
+        })
+        .safeParse(JSON.parse(saved));
+      if (parsed.success && parsed.data.accountId === userId)
+        items.push({ ...parsed.data, storageId: id });
+    }
+  } catch {
+    /* Unreadable records are preserved rather than replaced. */
+  }
+  return items;
+}

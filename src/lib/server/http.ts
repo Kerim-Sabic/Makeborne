@@ -14,7 +14,7 @@ export async function boundedJson(
   request: Request,
   limit = 256_000,
 ): Promise<unknown> {
-  if (!request.headers.get("content-type")?.includes("application/json"))
+  if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json")
     throw new RequestError("CONTENT_TYPE", "Send JSON content.", 415);
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > limit)
@@ -50,7 +50,7 @@ export async function boundedJson(
       offset += chunk.length;
     }
     try {
-      return JSON.parse(new TextDecoder().decode(bytes));
+      return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch {
       throw new RequestError(
         "INVALID_JSON",
@@ -64,7 +64,27 @@ export async function boundedJson(
 
 export function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin)
+  if (!origin) return;
+  const target = new URL(request.url);
+  let allowed = origin === target.origin;
+  // Next development can normalize an incoming 127.0.0.1 URL to localhost.
+  // Permit only loopback aliases on the same protocol and port in development.
+  // Never trust forwarded host headers to widen the production origin boundary.
+  if (!allowed && process.env.NODE_ENV === "development") {
+    try {
+      const source = new URL(origin);
+      const loopback = ["localhost", "127.0.0.1", "[::1]"];
+      allowed =
+        source.origin === origin &&
+        loopback.includes(source.hostname) &&
+        loopback.includes(target.hostname) &&
+        source.protocol === target.protocol &&
+        source.port === target.port;
+    } catch {
+      allowed = false;
+    }
+  }
+  if (!allowed)
     throw new RequestError(
       "ORIGIN_DENIED",
       "This request must originate from this application.",
@@ -83,7 +103,7 @@ export function apiError(error: unknown) {
       error: {
         code: "REQUEST_FAILED",
         message:
-          "The request could not be completed. Your saved work is unchanged.",
+          "Request completion could not be confirmed. Keep your current draft before retrying.",
       },
     },
     { status: 500, headers: { "Cache-Control": "no-store" } },

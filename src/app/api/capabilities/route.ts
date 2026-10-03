@@ -1,4 +1,6 @@
+import { getCloudStatus } from "@/lib/cloud/config";
 export async function GET() {
+  const cloud = getCloudStatus();
   return Response.json(
     {
       localWorkspace: {
@@ -12,8 +14,15 @@ export async function GET() {
           "Paid API calls are not authorised; production dispatch is not installed.",
       },
       cloudWorkspace: {
-        available: false,
-        reason: "Cloud persistence is not wired to the studio yet.",
+        available: cloud.enabled,
+        configured: cloud.configured,
+        migrationsVerified: cloud.migrationsVerified,
+        reason: cloud.reason,
+      },
+      manualExports: {
+        available: process.env.NODE_ENV !== "production",
+        formats: ["html", "pdf", "pptx", "epub"],
+        scope: "localhost development",
       },
       publicPublishing: {
         available: false,

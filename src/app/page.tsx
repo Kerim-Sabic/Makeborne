@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
+import BrandMark from "@/components/brand-mark";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -12,7 +14,7 @@ export default function Home() {
     <main className="landing">
       <header className="marketing-nav">
         <Link className="wordmark" href="/">
-          <img src="/brand/makeborne-mark.svg" alt="" width="30" height="30" />
+          <BrandMark />
           Makeborne<span className="beta">EARLY ACCESS</span>
         </Link>
         <nav>
@@ -55,9 +57,14 @@ export default function Home() {
             <span>ONE IDEA. MANY POSSIBILITIES.</span>
             <span>01 — 03</span>
           </div>
-          <img
+          <Image
             className="hero-generated"
             src="/artwork/makeborne-paper-studio.png"
+            width={1536}
+            height={1024}
+            sizes="(max-width: 900px) 100vw, 55vw"
+            fetchPriority="high"
+            loading="eager"
             alt="Sculptural folded paper composition, original Makeborne artwork"
           />
           <div className="sample-book">
@@ -219,6 +226,7 @@ export default function Home() {
       </section>
       <footer className="marketing-footer">
         <Link className="wordmark" href="/">
+          <BrandMark />
           Makeborne
         </Link>
         <span>Make something worth selling.</span>

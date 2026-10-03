@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   },
   description:
     "Your creation and client studio for websites, books, and presentations.",
-  icons: { icon: "/brand/makeborne-mark.svg" },
+  icons: { icon: "/brand/favicon.svg" },
 };
 export default function RootLayout({
   children,

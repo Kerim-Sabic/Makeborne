@@ -152,6 +152,10 @@ img {
   font-weight: 650;
   letter-spacing: -0.055em;
 }
+.brand-mark {
+  display: block;
+  flex-shrink: 0;
+}
 .beta {
   font-size: 8px;
   letter-spacing: 0.11em;
@@ -2651,4 +2655,294 @@ label input[type="color"] {
   .slide-preview {
     break-after: page;
   }
+}
+.cloud-content {
+  max-width: 1120px;
+  margin: auto;
+  padding: 36px 40px 70px;
+}
+.cloud-workspace-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 35px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+}
+.cloud-workspace-bar form {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+.cloud-workspace-bar form label {
+  flex: 1;
+}
+.cloud-workspace-bar form button {
+  margin-bottom: 17px;
+}
+.cloud-create-form {
+  display: flex;
+  align-items: end;
+  gap: 15px;
+  background: white;
+  border: 1px solid var(--line);
+  padding: 23px;
+  border-radius: 10px;
+  margin-bottom: 23px;
+}
+.cloud-create-form label {
+  flex: 1;
+  margin-bottom: 0;
+}
+.cloud-project-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 23px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 20px;
+}
+.cloud-project-list h3 {
+  font-size: 23px;
+  margin: 8px 0;
+}
+.cloud-project-list p {
+  font-size: 12px;
+  margin: 0;
+}
+.cloud-project-list article > div:last-child {
+  display: flex;
+  gap: 8px;
+}
+.cloud-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 35px;
+  padding: 30px;
+  background: white;
+  border: 1px solid var(--line);
+  border-top: 0;
+}
+.cloud-edit-grid aside {
+  border-left: 1px solid var(--line);
+  padding-left: 25px;
+}
+.cloud-edit-grid aside p {
+  font-size: 11px;
+  line-height: 1.8;
+}
+.cloud-edit-grid aside h3 {
+  margin-top: 30px;
+  font-size: 18px;
+}
+.cloud-editor .editor-heading {
+  border: 1px solid var(--line);
+  border-radius: 10px 10px 0 0;
+}
+.cloud-editor .editor-heading h2 {
+  font-size: 23px;
+  margin: 0;
+}
+.cloud-version {
+  border-bottom: 1px solid var(--line);
+  padding: 15px 0;
+}
+.cloud-version strong {
+  font-size: 12px;
+}
+.cloud-version p {
+  font-size: 10px;
+  margin: 6px 0;
+}
+.cloud-version small {
+  font-size: 9px;
+  color: var(--muted);
+}
+.cloud-conflict,
+.import-review {
+  background: #f5f0df;
+  border: 1px solid #ddd3b7;
+  border-radius: 8px;
+  padding: 22px;
+  margin: 22px 0;
+}
+.cloud-conflict h3,
+.import-review h2 {
+  font-size: 22px;
+}
+.cloud-conflict p,
+.import-review p {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.import-review li {
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.cloud-workspace-bar label,
+.cloud-create-form label {
+  font-size: 12px;
+}
+.cloud-shell .filter-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.account-tabs {
+  margin: 24px 0;
+}
+.account-message {
+  padding: 12px;
+  background: #edf0e5;
+  border-radius: 6px;
+  font-size: 12px !important;
+  margin: 20px 0;
+}
+.verification-icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  background: #e9ede2;
+  border-radius: 12px;
+  color: #617849;
+  margin: 25px 0;
+}
+.login-card > .text-link {
+  display: flex;
+  margin-top: 22px;
+}
+@media (max-width: 700px) {
+  .cloud-content {
+    padding: 27px 20px;
+  }
+  .cloud-workspace-bar,
+  .cloud-edit-grid {
+    grid-template-columns: 1fr;
+    gap: 17px;
+  }
+  .cloud-workspace-bar form {
+    gap: 10px;
+  }
+  .cloud-create-form {
+    flex-wrap: wrap;
+    padding: 18px;
+  }
+  .cloud-create-form label {
+    min-width: 130px;
+  }
+  .cloud-create-form button {
+    margin-top: 5px;
+  }
+  .cloud-project-list article {
+    display: block;
+  }
+  .cloud-project-list article > div:last-child {
+    margin-top: 15px;
+  }
+  .cloud-edit-grid {
+    padding: 22px;
+  }
+  .cloud-edit-grid aside {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 22px 0 0;
+  }
+  .cloud-editor .editor-heading {
+    flex-wrap: wrap;
+  }
+  .cloud-editor .editor-heading > .button {
+    margin-left: 40px;
+  }
+  .cloud-shell .marketing-nav nav > a:not(.button) {
+    display: block;
+  }
+  .cloud-shell .marketing-nav nav {
+    gap: 15px;
+  }
+}
+.website-sections {
+  border: 1px solid #dfe4d8;
+  border-radius: 8px;
+  background: #f7f8f3;
+  padding: 13px;
+  margin-bottom: 23px;
+}
+.website-sections h3 {
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+.website-sections p {
+  font-size: 9px;
+  line-height: 1.8;
+}
+.website-sections .button {
+  font-size: 9px;
+  white-space: normal;
+  width: 100%;
+}
+.sidebar-home svg:first-child {
+  width: 15px;
+  height: 15px;
+  margin-right: 7px;
+}
+.preview-layout-note {
+  font-size: 9px;
+  line-height: 1.6;
+  color: #727e67;
+  margin: 0;
+}
+.slide-content > div {
+  margin-bottom: 13px;
+}
+.slide-preview {
+  height: auto;
+  min-height: 250px;
+}
+.cloud-pagination {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 23px 0;
+}
+.import-data-summary {
+  padding: 17px;
+  border: 1px solid #ddd4bc;
+  border-radius: 7px;
+  margin: 19px 0;
+  max-height: 350px;
+  overflow: auto;
+}
+.import-data-summary strong {
+  font-size: 15px;
+}
+.import-data-summary h3 {
+  font-size: 14px;
+  margin: 17px 0 8px;
+}
+.import-data-summary p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.book-export-details {
+  margin-bottom: 18px;
+}
+.book-export-details label {
+  font-size: 9px;
+}
+.book-export-details p {
+  font-size: 8px;
+  line-height: 1.7;
+  margin: 7px 0 14px;
+}
+.pending-cloud-item {
+  border-top: 1px solid #ded4ba;
+  padding: 17px 0;
+}
+.pending-cloud-item strong {
+  font-size: 13px;
+}
+.pending-cloud-item p {
+  font-size: 10px;
+  margin: 6px 0 12px;
 }
