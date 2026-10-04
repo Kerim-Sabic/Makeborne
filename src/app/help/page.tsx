@@ -56,6 +56,13 @@ const questions = [
     link: "View optional support",
   },
   {
+    id: "topups",
+    question: "Can I add credits without changing my plan?",
+    answer: "One-time credit packs are planned for customers with an active creation membership. You will be able to choose extra credits without upgrading your subscription or enabling automatic purchases. The pack selector currently shows preview prices; purchases will open when credit delivery is ready. Final prices, expiry and refund terms will be shown before purchase.",
+    href: "/billing#topups",
+    link: "View credit packs",
+  },
+  {
     id: "client-work",
     question: "How does Makeborne fit client work?",
     answer: "The client workspace is designed to connect each client’s contact details, outreach stage, notes, next follow-up and associated projects. Its purpose is to keep the brief and delivery history together. Workspace access follows the same creation-membership requirement; buying coffee support does not unlock it.",
