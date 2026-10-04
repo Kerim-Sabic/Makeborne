@@ -33,13 +33,13 @@ import {
   type ProjectTask,
   type Workspace,
 } from "./studio-model";
-import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
 import ClientOpportunity from "./client-opportunity";
 import EffortControl from "./effort-control";
-import { EffortLevelSchema, DEFAULT_EFFORT, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
+import { EffortLevelSchema, DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
 import { creationPlan } from "@/lib/creation-plan";
 import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
@@ -89,16 +89,6 @@ function date(value: string) {
     month: "short",
     day: "numeric",
   });
-}
-function moveRadioSelection(event: ReactKeyboardEvent<HTMLDivElement>, select: (index: number) => void) {
-  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-  const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
-  const current = options.indexOf(event.target as HTMLButtonElement);
-  if (current < 0 || !options.length) return;
-  event.preventDefault();
-  const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : (current + (["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1) + options.length) % options.length;
-  select(next);
-  options[next].focus();
 }
 
 export default function Studio() {
@@ -1264,8 +1254,8 @@ function CreationWizard({
   const [saveError, setSaveError] = useState("");
   const [uncertain, setUncertain] = useState(false);
   const pending = useRef<{ accountId: string; workspaceId: string; body: ReturnType<typeof buildCreationPayload> } | null>(null);
-  const [step, setStep] = useState(initialBrief.trim() ? 2 : 1);
-  const [mode, setMode] = useState<"plan" | "create">("plan");
+  const step = 1; // Retain compatibility with saved drafts from the previous wizard.
+  const [mode, setMode] = useState<"plan" | "create">("create");
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   const [requirements, setRequirements] = useState("");
   const [outline, setOutline] = useState<string | null>(null);
@@ -1307,7 +1297,7 @@ function CreationWizard({
           const draft = parsed.data;
           onKind(savedKind);
           setEffort(draft.effort);
-          setStep(draft.step);
+
           setMode(draft.mode); setRequirements(draft.requirements);
           setOutline(draft.outline);
           setTitle(draft.title);
@@ -1383,258 +1373,78 @@ function CreationWizard({
   const selectedStyle =
     styles.find((style) => style.id === styleId) || styles[0];
   const plan = creationPlan({ kind, title, brief, audience, purpose, requirements, outline, style: selectedStyle?.name || "Custom direction" });
-  const finalStep = mode === "plan" ? 4 : 3;
-  const needsPlanAnswers = mode === "plan" && step >= 2 && (!brief.trim() || !audience.trim() || !purpose.trim() || (step === 4 && plan.structure.length === 0));
+  const needsPlanAnswers = mode === "plan" && plan.structure.length === 0;
   return (
     <Modal close={() => { if (!savingRef.current) close(); }} title="Create a project">
       <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
       {saveError && <p role="alert" className="small-note">{saveError}</p>}
       <div className="wizard-content" ref={wizardContent} inert={saving || uncertain || !account.ready}>
-        <div className="creation-mode" aria-label="Creation mode">
-          <button type="button" aria-pressed={mode === "plan"} onClick={() => setMode("plan")}><strong>Plan</strong><small>Shape the brief. Review before creating.</small></button>
-          <button type="button" aria-pressed={mode === "create"} onClick={() => { setMode("create"); if (step === 4) setStep(3); }}><strong>Create</strong><small>Go straight to project setup.</small></button>
+        <h2 tabIndex={-1}>What would you like to make?</h2>
+        <p className="modal-intro">Start with your idea. Everything else can be refined as you go.</p>
+        {draftNotice && <p className="wizard-draft-notice" role="status">{draftNotice}</p>}
+        <div className="prompt-format-switch" role="group" aria-label="Project format">
+          {(["website", "book", "presentation"] as Kind[]).map(k => {
+            const Icon = icons[k];
+            return <button type="button" key={k} aria-pressed={kind === k} onClick={() => onKind(k)}><Icon size={16} />{kindLabel[k]}</button>;
+          })}
         </div>
-        <div className="eyebrow">
-          {["", "SOURCE", "DIRECTION", "STYLE", "REVIEW PLAN"][step]} · STEP {step} OF {finalStep}
+        <label className="prompt-main-label">Your idea
+          <textarea className="prompt-main-input" value={brief} onChange={e => setBrief(e.target.value)} rows={5} maxLength={20000} placeholder={`Describe the ${kind} you have in mind…`} />
+        </label>
+        <div className="prompt-mode-switch" role="group" aria-label="Creation mode">
+          <button type="button" aria-pressed={mode === "create"} onClick={() => setMode("create")}>Create</button>
+          <button type="button" aria-pressed={mode === "plan"} onClick={() => setMode("plan")}>Plan first</button>
+          <span>{mode === "create" ? "Open your project directly" : "Review a starting outline below"}</span>
         </div>
-        <h2 tabIndex={-1}>
-          {step === 1
-            ? "What are we making?"
-            : step === 2
-              ? "Give it a direction."
-              : step === 3 ? "Choose its character." : "Review your project plan."}
-        </h2>
-        <p className="modal-intro">
-          {step === 1
-            ? "Start with what you know. You can refine everything later."
-            : step === 2
-              ? "A clear brief makes thoughtful work possible."
-              : step === 3 ? "Styles for your format are shown first. Choose any direction and make it your own." : "Confirm this starting plan before we create the project."}
-        </p>
-        {draftNotice && (
-          <p className="wizard-draft-notice" role="status">
-            {draftNotice}
-          </p>
-        )}
-        <div className="step-track" aria-hidden="true">
-          <span className={step >= 1 ? "active" : ""} />
-          <span className={step >= 2 ? "active" : ""} />
-          <span className={step >= 3 ? "active" : ""} />
-          {mode === "plan" && <span className={step >= 4 ? "active" : ""} />}
-        </div>
-        {step === 1 ? (
-          <>
-            <div className="format-picker" role="radiogroup" aria-label="Project format" onKeyDown={event => moveRadioSelection(event, index => onKind((["website", "book", "presentation"] as Kind[])[index]))}>
-              {(["website", "book", "presentation"] as Kind[]).map((k) => {
-                const Icon = icons[k];
-                return (
-                  <button
-                    className={kind === k ? "selected" : ""}
-                    role="radio"
-                    aria-checked={kind === k}
-                    tabIndex={kind === k ? 0 : -1}
-                    key={k}
-                    onClick={() => onKind(k)}
-                  >
-                    <Icon size={22} />
-                    {kindLabel[k]}
-                  </button>
-                );
-              })}
-            </div>
-            <label>
-              Project title
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={
-                  kind === "website"
-                    ? "e.g. Website for your next client"
-                    : kind === "book"
-                      ? "e.g. The practical photography guide"
-                      : "e.g. A workshop worth remembering"
-                }
-                maxLength={160}
-              />
-            </label>
-            <label>
-              Client
-              <select
-                value={clientId}
-                onChange={(e) => setClient(e.target.value)}
-              >
-                <option value="">For myself</option>
-                {clientId && !clients.some(client => client.id === clientId) && <option value={clientId} disabled>{account.ready ? "Client unavailable — choose another" : "Loading selected client…"}</option>}
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Your material
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Paste your text here. Separate sections with a blank line, or start with a title and write in the editor."
-                rows={5}
-                maxLength={50000}
-              />
-            </label>
-            <label>
-              How should AI handle your wording?
-              <select
-                value={wording}
-                onChange={(e) => setWording(e.target.value)}
-              >
-                <option value="preserve">Preserve my wording</option>
-                <option value="improve">Improve my wording</option>
-                <option value="summarise">Summarise my material</option>
-              </select>
-            </label>
-          </>
-        ) : step === 2 ? (
-          <>
-            <label>
-              What should this project achieve?
-              <textarea
-                value={brief}
-                onChange={(e) => setBrief(e.target.value)}
-                placeholder="Describe the idea, what matters, and what the finished work should do."
-                rows={5}
-                maxLength={20000}
-              />
-            </label>
-            <div className="form-grid">
-              <label>
-                Who is it for?
-                <input
-                  value={audience}
-                  maxLength={5000}
-                  onChange={(e) => setAudience(e.target.value)}
-                  placeholder="e.g. First-time founders"
-                />
-              </label>
-              <label>
-                Intended outcome
-                <input
-                  value={purpose}
-                  maxLength={5000}
-                  onChange={(e) => setPurpose(e.target.value)}
-                  placeholder="e.g. Book a consultation"
-                />
-              </label>
-            </div>
-            <EffortControl value={effort} onChange={setEffort} />
-            {mode === "plan" && <label>What must be included, and what should we avoid?<textarea value={requirements} onChange={event => setRequirements(event.target.value)} maxLength={4000} rows={4} placeholder="Required sections, tone, reference styles, brand rules, assets, constraints, and anything you do not want." /></label>}
-            {mode === "plan" && <p className="creation-plan-note">Add an audience, outcome, and brief to continue. We will propose a structured starting plan for your approval.</p>}
-            <div className="inline-info">
-              <Sparkles size={18} />
-              <p>
-                Your brief is saved for later generation. Live AI is not enabled
-                in this preview; no content will be invented automatically.
-              </p>
-            </div>
-          </>
-        ) : step === 3 ? (
-          <>
-            <div className="style-picker" role="radiogroup" aria-label="Project style" onKeyDown={event => moveRadioSelection(event, index => setStyle(styles[index].id))}>
-              {styles.map((s) => (
-                <button
-                  key={s.id}
-                  className={styleId === s.id ? "selected" : ""}
-                  role="radio"
-                  aria-checked={styleId === s.id}
-                  tabIndex={styleId === s.id ? 0 : -1}
-                  onClick={() => setStyle(s.id)}
-                >
-                  {styleConcept(s) && <span className="creation-style-art" aria-hidden="true"><Image src={`/gallery/${styleConcept(s)!.id}.png`} alt="" fill sizes="(max-width: 600px) 80vw, 220px" /></span>}
-                  <span
-                    className="style-chip"
-                    style={{ background: s.color }}
-                  />
-                  <strong>{s.name}</strong>
-                  <small>{s.description}</small>
-                  {styleId === s.id && <Check size={16} />}
-                </button>
-              ))}
-            </div>
-            <p className="creation-style-note">Images show design concepts. Your chosen palette and typography carry into the editor and exports; the artwork is not automatically added to your project.</p>
-            <div
-              className="theme-live-preview"
-              style={{
-                background: selectedStyle?.background || "#ffffff",
-                color: selectedStyle?.textColor || "#171717",
-                fontFamily:
-                  selectedStyle?.font === "serif"
-                    ? "var(--font-serif), Georgia, serif"
-                    : "var(--font-inter), Arial, sans-serif",
-              }}
-            >
-              <span
-                className="theme-preview-label"
-                style={{ color: selectedStyle?.color }}
-              >
-                YOUR SELECTED DIRECTION · {kindLabel[kind]}
-              </span>
-              <h3>{title || `Untitled ${kind}`}</h3>
-              <p>
-                A clear headline, thoughtful spacing, and content that feels
-                like you.
-              </p>
-              <div
-                className="theme-preview-rule"
-                style={{ background: selectedStyle?.color }}
-              />
-              <small>
-                Palette and typography preview. Your own content appears in the
-                editor.
-              </small>
-            </div>
-            <div className="creation-summary">
-              <span className="eyebrow">YOUR STARTING POINT</span>
-              <strong>{title || "Untitled project"}</strong>
-              <p>
-                {kindLabel[kind]} ·{" "}
-                {clients.find((c) => c.id === clientId)?.name ||
-                  "Personal project"}{" "}
-                · {styles.find((s) => s.id === styleId)?.name}
-              </p>
-              <p>
-                {content
-                  ? "Your supplied content will be added to the editor."
-                  : "Start with a title and add your own content."}
-              </p>
-            </div>
-          </>
-        ) : (
-          <><div className="creation-plan"><h3>{title}</h3><h4>Audience & outcome</h4><p className="plan-answer">{audience} — {purpose}</p><h4>Project brief</h4><p className="plan-answer">{brief}</p><label className="creation-outline">Proposed structure<textarea rows={7} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={event => setOutline(event.target.value)} aria-describedby="creation-outline-help" /></label><p id="creation-outline-help" className="creation-plan-note">Edit the plan: one section, chapter, or slide per line. Add at least one item before approval. Maximum 2,000 characters.</p><h4>Creative effort</h4><p>{EFFORT_PRESENTATION[effort].label} · estimate required before generation</p><h4>Creative direction</h4><p>{selectedStyle?.name}</p>{requirements && <><h4>Requirements & exclusions</h4><p className="plan-answer">{requirements}</p></>}<h4>Before sharing</h4><ul>{plan.checks.map(item => <li key={item}>{item}</li>)}</ul></div><p className="creation-plan-note">This is a structured plan. Confirming saves the plan and your supplied content in an editable project. Live generation and publishing are not connected.</p></>
-        )}
+        <details className="prompt-options">
+          <summary><span>Style <small>{selectedStyle?.name}</small></span><span>Browse all {styles.length}</span></summary>
+          <p className="creation-style-note">Optional. Every style is available below; suggestions for your format appear first.</p>
+          <div className="prompt-style-grid" role="group" aria-label="Project style">
+            {styles.map(s => {
+              const concept = styleConcept(s);
+              return <button type="button" key={s.id} aria-pressed={selectedStyle?.id === s.id} onClick={() => setStyle(s.id)}>
+                <span className="prompt-style-visual" style={{ background: s.background, color: s.textColor }} aria-hidden="true">
+                  {concept ? <Image src={`/gallery/${concept.id}.png`} alt="" fill sizes="(max-width: 600px) 42vw, 220px" /> : <span className={`prompt-style-composition composition-${kind}`} style={{ fontFamily: s.font === "serif" ? "Georgia, serif" : "Arial, sans-serif" }}><i style={{ background: s.color }} /><small>MAKE SOMETHING MEANINGFUL</small><b>{kind === "book" ? "A new perspective." : kind === "presentation" ? "Ideas worth sharing." : "A different point of view."}</b><span style={{ background: s.color }} /><em>Thoughtfully made. Uniquely yours.</em></span>}
+                </span>
+                <span className="prompt-style-caption"><strong>{s.name}</strong>{selectedStyle?.id === s.id && <Check size={15} />}</span>
+                <small>{concept ? "Artwork concept" : "Palette & typography"}</small>
+              </button>;
+            })}
+          </div>
+          <p className="creation-style-note">Concept artwork is inspiration. Palette and typography are applied to your project; example images are not included.</p>
+        </details>
+        <details className="prompt-options">
+          <summary><span>Project details</span><span>Optional</span></summary>
+          <label>Project title<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} placeholder="Name it now or later" /></label>
+          <label>Client<select value={clientId} onChange={e => setClient(e.target.value)}><option value="">For myself</option>{clientId && !clients.some(c => c.id === clientId) && <option value={clientId} disabled>Client unavailable — choose another</option>}{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+          <div className="form-grid"><label>Audience<input value={audience} onChange={e => setAudience(e.target.value)} maxLength={1000} placeholder="Who is it for?" /></label><label>Outcome<input value={purpose} onChange={e => setPurpose(e.target.value)} maxLength={2000} placeholder="What should it achieve?" /></label></div>
+          <label>Your source text<textarea value={content} onChange={e => setContent(e.target.value)} maxLength={50000} rows={5} placeholder="Paste any text you want included in your project." /></label>
+          <label>Wording preference<select value={wording} onChange={e => setWording(e.target.value)}><option value="preserve">Preserve my wording</option><option value="improve">Improve my wording</option><option value="summarise">Summarise my material</option></select></label>
+          <label>Requirements<textarea value={requirements} onChange={e => setRequirements(e.target.value)} maxLength={4000} rows={3} placeholder="Anything to include or avoid" /></label>
+        </details>
+        <details className="prompt-options"><summary><span>Creative effort</span><span>{effort.replaceAll("_", " ")}</span></summary><EffortControl value={effort} onChange={setEffort} /></details>
+        {mode === "plan" && <div className="creation-plan"><h3>Your starting plan</h3><label className="creation-outline">Sections to include<textarea rows={6} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={e => setOutline(e.target.value)} /></label><p>Edit one section, chapter, or slide per line. Creating the project confirms this outline.</p></div>}
+        <p className="creation-plan-note">Your brief and source text will be saved in an editable project. Live AI generation is not connected yet.</p>
       </div>
       <div className="modal-actions">
         <button
           className="button secondary"
           disabled={saving || uncertain}
-          onClick={() => (step === 1 ? close() : setStep(step - 1))}
+          onClick={close}
         >
-          {step === 1 ? "Cancel" : "Back"}
+          Cancel
         </button>
         <button
           className="button primary"
-          disabled={saving || !account.ready || !title.trim() || !draftLoaded || needsPlanAnswers}
+          disabled={saving || !account.ready || (!brief.trim() && !content.trim()) || !draftLoaded || needsPlanAnswers}
           onClick={async () => {
-            if (step < finalStep) {
-              setStep(step + 1);
-              return;
-            }
             if (savingRef.current) return;
             savingRef.current = true; setSaving(true); setSaveError("");
             const values = {
               effort,
               kind,
-              title: title.trim(),
-              brief: mode === "plan" ? plan.brief : brief,
+              title: title.trim() || `Untitled ${kind}`,
+              brief: mode === "plan" ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n"),
               audience,
               purpose,
               wording,
@@ -1681,7 +1491,7 @@ function CreationWizard({
             }
           }}
         >
-          {saving ? "Saving project…" : uncertain ? "Retry the same save" : step === finalStep ? mode === "plan" ? "Confirm plan & create" : "Create project" : step === 3 ? "Review plan" : "Continue"}
+          {saving ? "Saving project…" : uncertain ? "Retry the same save" : mode === "plan" ? "Confirm plan & create" : "Create project"}
           <ArrowRight size={16} />
         </button>
       </div>
