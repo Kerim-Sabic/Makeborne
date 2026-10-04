@@ -92,9 +92,20 @@ try:
     assert run(f"select vendor_reserved||','||credit_reserved||','||active_reservations||','||revision from makeborne_private.generation_budgets where workspace_id='{workspace}';").stdout.strip() == '12,3,1,3'
     print('PASS observed lock wait: concurrent cancellation releases balances once')
 
+    remaining = run(f"select id from makeborne_private.generation_reservations where workspace_id='{workspace}' and status='reserved';").stdout.strip()
+    dispatch_key = uid()
+    dispatch = f"select result->>'dispatchId' from (select makeborne_private.claim_generation_dispatch('{remaining}','{dispatch_key}','{owner}','{hashes[1]}','{'a'*64}') result) d where (result->>'claimed')::boolean;"
+    claimed, duplicate_dispatch = race(dispatch, dispatch)
+    assert duplicate_dispatch.returncode == 0 and duplicate_dispatch.stdout.strip() == '', duplicate_dispatch.stderr
+    assert run(f"select count(*) from makeborne_private.generation_dispatches where reservation_id='{remaining}';").stdout.strip() == '1'
+    assert run(f"select status from makeborne_private.generation_reservations where id='{remaining}';").stdout.strip() == 'uncertain'
+    assert run(f"select vendor_reserved||','||credit_reserved||','||active_reservations||','||revision from makeborne_private.generation_budgets where workspace_id='{workspace}';").stdout.strip() == '12,3,1,3'
+    print('PASS observed lock wait: only one concurrent worker receives a dispatch claim')
+
 finally:
     if created:
         run(f"""begin;
+        delete from makeborne_private.generation_dispatches where reservation_id in (select id from makeborne_private.generation_reservations where workspace_id='{workspace}');
         delete from makeborne_private.generation_reservations where workspace_id='{workspace}';
         delete from makeborne_private.generation_budgets where workspace_id='{workspace}';
         delete from makeborne_private.generation_proposals where workspace_id='{workspace}';
