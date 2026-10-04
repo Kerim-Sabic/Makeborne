@@ -17,7 +17,15 @@ export default function EffortControl({ value, onChange, disabled = false, varia
     event.preventDefault();
     const current = choices.findIndex(choice => choice === document.activeElement);
     const next = event.key === "Home" ? 0 : event.key === "End" ? choices.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + choices.length) % choices.length;
-    choices[next]?.focus();
+    const choice = choices[next];
+    choice?.focus({ preventScroll: true });
+    const panel = event.currentTarget.closest<HTMLElement>(".creation-effort-panel");
+    if (panel && choice) {
+      const bounds = panel.getBoundingClientRect();
+      const choiceBounds = choice.getBoundingClientRect();
+      if (choiceBounds.bottom > bounds.bottom - 8) panel.scrollTop += choiceBounds.bottom - bounds.bottom + 8;
+      else if (choiceBounds.top < bounds.top + 8) panel.scrollTop -= bounds.top + 8 - choiceBounds.top;
+    }
   }
   if (variant === "menu") return <div className="mbe-effort mbe-effort-menu" role="menu" aria-label="Effort level" aria-describedby={`${id}-cost`} onKeyDown={navigateMenu}>
     <div className="mbe-effort-menu-heading" aria-hidden="true"><strong>Effort</strong><span>How deeply to work</span></div>

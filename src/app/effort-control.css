@@ -8,21 +8,21 @@
 .mbe-effort-option:has(input:focus-visible) { outline:2px solid #8d759e; outline-offset:1px; }
 .mbe-effort-copy { display:grid; gap:3px; flex:1; min-width:0; }
 .mbe-effort-copy strong { display:block; color:#44384f; font-size:12px; font-weight:550; line-height:1.35; }
-.mbe-effort-copy > span { color:#93899c; font-size:10px; line-height:1.5; }
+.mbe-effort-copy > span { color:#79707f; font-size:11px; line-height:1.5; }
 .mbe-effort-check { flex-shrink:0; visibility:hidden; color:#786185; }
 .is-selected > .mbe-effort-check { visibility:visible; }
-.mbe-effort .mbe-effort-cost { max-width:330px; margin:12px 12px 2px; color:#958b9e; font-size:10px; line-height:1.65; }
+.mbe-effort .mbe-effort-cost { max-width:330px; margin:12px 12px 2px; color:#79707f; font-size:11px; line-height:1.65; }
 .mbe-effort:disabled { opacity:.55; }
 .mbe-effort:disabled label,.mbe-effort button:disabled { cursor:not-allowed; }
 .mbe-effort-menu-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 9px 9px; }
 .mbe-effort-menu-heading strong { font-size:12px; font-weight:550; color:#62556e; }
-.mbe-effort-menu-heading > span { font-size:10px; color:#a093aa; }
+.mbe-effort-menu-heading > span { font-size:11px; color:#79707f; }
 .mbe-effort-menu .mbe-effort-options { gap:1px; }
 .mbe-effort-menu .mbe-effort-option { min-height:43px; padding:7px 9px; border-radius:7px; }
 .mbe-effort-menu .mbe-effort-copy { gap:2px; }
 .mbe-effort-menu .mbe-effort-copy strong { font-size:12px; }
-.mbe-effort-menu .mbe-effort-copy > span { font-size:10px; }
-.mbe-effort-menu .mbe-effort-cost { margin:7px 3px 0; padding:9px 6px 3px; border-top:1px solid #eee9f2; font-size:10px; line-height:1.6; }
+.creation-effort-panel .mbe-effort-menu .mbe-effort-copy > span { font-size:11px; }
+.creation-effort-panel .mbe-effort-menu .mbe-effort-cost { margin:7px 3px 0; padding:9px 6px 3px; border-top:1px solid #eee9f2; font-size:11px; line-height:1.6; }
 @media (forced-colors:active) {
   .mbe-effort .mbe-effort-option.is-selected { border-color:Highlight; }
 }

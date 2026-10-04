@@ -1,25 +1,28 @@
 # Makeborne hosting
 
-Reviewed 2026-10-04. **Hosting status: not yet deployed.** This document records the deployment plan and checks still required; it does not establish a live service or a completed launch.
+Reviewed 2026-10-04. **Hosted app preview is live: https://makeborne.vercel.app.** Vercel reports the Production deployment Ready. The product still has the feature and launch limits below.
 
 ## Selected starting point
 
-Deploy the current Next.js application to **Vercel**, retaining the existing Supabase backend. This is the shortest path to an online app preview because Vercel runs Next.js directly, including server routes, streaming and Git previews. The repository uses Next.js 16.3.8 and a Node runtime; no Cloudflare adapter is configured. [Vercel Next.js support](https://vercel.com/docs/frameworks/full-stack/nextjs)
+The current Next.js application is deployed to **Vercel**, retaining the existing Supabase backend. This is the shortest path to an online app preview because Vercel runs Next.js directly, including server routes, streaming and Git previews. The repository uses Next.js 16.3.8 and a Node runtime; no Cloudflare adapter is configured. [Vercel Next.js support](https://vercel.com/docs/frameworks/full-stack/nextjs)
 
-The connected Vercel account exposes `amuo's projects` (`amuos-projects`). Read-only checks found no Makeborne project. A later deployment-context check confirmed the connected team is on Hobby. Verify the selected destination and commercial hosting plan when creating the project; Vercel Hobby is restricted to personal, noncommercial use. No purchase is recorded by this assessment. [Vercel Hobby](https://vercel.com/docs/plans/hobby)
+Project `makeborne` belongs to the intended browser account, `kerimsabic-6594s-projects`, and is linked to `Kerim-Sabic/Makeborne` main. Future pushes to main deploy automatically. The connector is tied to a different account and was not used for this deployment. The current plan is Hobby; a commercial launch requires a suitable plan because Hobby is restricted to personal, noncommercial use. No purchase, Pro trial or upgrade was made. [Vercel Hobby](https://vercel.com/docs/plans/hobby)
 
 Cloudflare is a possible later hosting target, but it requires compatibility work for this repository's native image processing and local Chromium rendering. Cloudflare currently recommends vinext, which is beta; OpenNext also supports Next.js 16. Choosing either requires a separate build and runtime verification. Do not deploy this server application as a static Pages export. [Cloudflare Next.js guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/), [OpenNext support](https://opennext.js.org/cloudflare)
 
-## Minimum app preview checklist
+## Deployment and verification status
 
-- [ ] Create or identify the Makeborne Vercel project linked to `Kerim-Sabic/Makeborne`, using the repository root and the Next.js framework preset. Use the committed lockfile, `npm ci` and `npm run build`. Record the selected Node version; the repository requires Node 22 or newer.
-- [ ] Deploy an explicit commit and record deployment URL, project, target environment, commit and build result. A successful build alone does not verify authentication or saved projects.
-- [ ] Configure the intended Vercel environment using only the application variables listed below. Keep preview and production scope deliberate; never copy a local environment file wholesale or print its values.
-- [ ] For cloud accounts, confirm that the selected Supabase project has all committed migrations and the required permission evidence. The linked development project has cloud verification recorded in `CLOUD_BACKEND_VERIFICATION.md`; this is not evidence that another project is ready. Enable the two cloud gates only for a verified target.
-- [ ] Configure the exact deployed origin in Supabase Auth as described below, preserving existing authorized local development entries.
-- [ ] On the deployed URL, verify landing page, login, account session refresh, prompt-to-project navigation, project create/edit/save/reload and client reads. Check a signed-out request and a second tenant cannot access the first tenant's records. Confirm same-origin write checks operate behind the deployed proxy without widening trusted origins.
-- [ ] Check `/api/capabilities` reflects the intended account configuration and continues to report unavailable generation, publishing and payments. Confirm production-only restrictions below remain effective and `/admin` returns not found.
-- [ ] Record observed results and remaining failures before sharing the URL as a working preview. An app preview is not a generation, export or customer-hosting launch.
+- [x] Created Makeborne with the Next.js preset, repository root, existing lockfile and default npm build.
+- [x] Deployed commit `58921cd4d9eb2dac1c1a6365590258c1aaa99c26` to Production. Deployment `dpl_5aTZ5obkk1Yggz1rdrduLoP2xp9H` returned Ready and the stable alias `makeborne.vercel.app`.
+- [x] Imported only the two public Supabase settings and the two verified cloud gates into Production and Preview. No provider keys, privileged Supabase key, or local Chromium path was uploaded.
+- [x] Retained the verified Makeborne Supabase project `rklojnmmsmhwnkbzuidp`; see `CLOUD_BACKEND_VERIFICATION.md` for migration and isolation evidence.
+- [x] Saved Supabase Site URL `https://makeborne.vercel.app`. Added that host's `/auth/callback`, `/auth/callback?next=**`, `/auth/confirm` and `/auth/update-password`; preserved all eight localhost entries. Only the callback query can vary on the exact hosted origin.
+- [x] Hosted HTTP probes: /, /login, /studio, /billing and /chat returned 200; /admin returned 404; signed-out /api/workspaces returned 401 AUTH_REQUIRED.
+- [x] Hosted capabilities report cloud accounts enabled and verified, and generation, exports, payments and public publishing unavailable. Same-origin generation request returned expected 503 GENERATION_NOT_ENABLED; an unrelated origin returned 403 ORIGIN_DENIED.
+- [x] Visually inspected the deployed homepage and effort control. Local TypeScript, focused ESLint and production build passed.
+- [ ] Signed-in project create/edit/save/reload and CRM reads on the hosted domain; the user was asked to sign in on that domain. Localhost authentication does not transfer to a new origin.
+- [ ] Public signup and email recovery delivery: custom SMTP is not configured. The active confirmation and recovery templates both use the default ConfirmationURL.
+- [x] Vercel reports Node.js 24.x, Fluid Compute, standard CPU and Standard Protection. The initial deployment used iad1; `vercel.json` now selects fra1 beside the existing Frankfurt database for subsequent deployments.
 
 ### Variables actually read by the app
 
@@ -43,7 +46,11 @@ The application sends signup/resend links to `/auth/callback` with a validated l
 3. Inspect the active email templates. Existing token-hash templates using `SiteURL` and `/auth/confirm` always target that Site URL, even if the request began on a preview. Keep that behavior intentional. Default PKCE confirmation links can use the supplied callback destination. Do not append another confirmation path to a value already containing `/auth/callback`.
 4. Confirm SMTP/delivery and exercise signup, confirmation, resend, logout, recovery, password change and expired links using a controlled recipient. The current code allows only its supported local destinations; preserve that restriction.
 
-These are configuration checks still required on the deployed origin. Supabase documents matching redirect URLs to its allowlist, exact production paths, and the difference between Site URL and per-request redirect destinations. [Redirect configuration](https://supabase.com/docs/guides/auth/redirect-urls), [Email templates](https://supabase.com/docs/guides/auth/auth-email-templates)
+Origin and callback configuration is saved on the deployed origin; authenticated browser and email-delivery checks remain. Supabase documents matching redirect URLs to its allowlist, exact production paths, and the difference between Site URL and per-request redirect destinations. [Redirect configuration](https://supabase.com/docs/guides/auth/redirect-urls), [Email templates](https://supabase.com/docs/guides/auth/auth-email-templates)
+
+### Email delivery blocker
+
+Supabase's dashboard confirms the default email sender is active. It only delivers to project team addresses and is unsuitable for public signup. Configure a verified sending domain and custom SMTP, then exercise confirmation and recovery end to end. Do not disable email confirmation as a workaround. [Supabase SMTP restrictions](https://supabase.com/docs/guides/auth/auth-smtp)
 
 ## Production feature gates and limits
 
@@ -76,8 +83,6 @@ Cloudflare for SaaS is a candidate for custom hostname management; Workers for P
 
 ## Deployment record
 
-2026-10-04: local production build and TypeScript passed for the new project workspace. Commit `cdcb40d` was pushed to `main`. Creating a Git-linked Makeborne project in the connected Vercel team failed with `repo_no_access`: that account does not have the required repository access. No successful deployment or remote URL was returned.
+2026-10-04: deployed through the user's authenticated Vercel browser account after GitHub repository access became available. Imported the existing Makeborne repository, with no repository clone, no paid plan and no new backend project. Build, stable HTTPS alias and Production Ready status were observed. Vercel deployment URL: https://makeborne-cfcks2zqg-kerimsabic-6594s-projects.vercel.app. Project: https://vercel.com/kerimsabic-6594s-projects/makeborne.
 
-Browser GitHub sign-in returned `github_account_not_linked`: an account already exists for the GitHub email and must be accessed by email before linking GitHub. The sign-in page was opened for the user. No purchase, hosting upgrade, environment transfer or new GitHub permission grant was performed. Deployment and remote authentication verification remain blocked by account access. Customer publication remains unimplemented.
-
-The user subsequently signed into the intended browser account (kerimsabic-6594). GitHub sign-in is linked to Kerim-Sabic. The connector remains tied to a different account, so browser deployment is the current path. The official Vercel GitHub app is not installed for the personal Kerim-Sabic scope. Its permission review is prepared with only Kerim-Sabic/Makeborne selected; the final Install action awaits the user's explicit approval because it grants new repository access. No repository clone, project deployment, Pro trial or upgrade was started. The remaining immediate blocker is repository-app access, not Vercel sign-in.
+The earlier connector repo_no_access and browser account mismatch are resolved for this browser deployment. The connector remains a different account. Customer website publishing, AI workers, paid integrations and public email delivery remain separate release work.
