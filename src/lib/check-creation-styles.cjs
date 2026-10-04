@@ -6,7 +6,7 @@ let count = 0;
 function check(name, fn) { fn(); count++; console.log(`PASS ${name}`); }
 for (const [kind, expected] of [["book", ["direction-field", "direction-handbook"]], ["website", ["direction-form", "direction-solstice"]], ["presentation", ["direction-signal", "direction-atlas"]]]) {
   check(`${kind} directions first`, () => assert.deepEqual(creationStyles([], kind).slice(0, 2).map(style => style.id), expected));
-  check(`${kind} shows only its four authored directions`, () => assert.equal(new Set(creationStyles([], kind).map(style => style.id)).size, 4));
+  check(`${kind} shows only its six authored directions`, () => assert.equal(new Set(creationStyles([], kind).map(style => style.id)).size, 6));
 }
 const field = retainCreationStyle([], "direction-field");
 check("retains only chosen direction", () => assert.equal(field.length, 1));

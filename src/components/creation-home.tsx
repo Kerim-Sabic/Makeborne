@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, useRef, useState } from "react";
 import { ArrowUp, ArrowUpRight, BookOpen, Check, Globe2, Menu, Presentation, X } from "lucide-react";
@@ -8,6 +9,7 @@ import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
 import BrandMark from "./brand-mark";
 import TemplateGallery from "./template-gallery";
 import type { Style } from "./studio-model";
+import { templateDirections } from "@/lib/template-directions";
 import { useCreationAccount } from "./use-creation-account";
 import { attachmentOwner, saveCreationDraft } from "@/lib/attachments";
 import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop } from "./file-attachments";
@@ -43,6 +45,9 @@ export default function CreationHome() {
   const [mode, setMode] = useState<"create" | "plan">("create");
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   const [brief, setBrief] = useState("");
+  const [selectedStyles, setSelectedStyles] = useState<Partial<Record<Kind, Style>>>({});
+  const selectedStyle = selectedStyles[kind];
+  const selectedConcept = templateDirections.find(direction => direction.style.id === selectedStyle?.id);
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -52,20 +57,30 @@ export default function CreationHome() {
   const attachments = useFileAttachments(owner, "home");
   const drop = useFileDrop(attachments.add, !attachments.ready || attachments.busy || busy);
   const starting = useRef(false);
-  async function start(selectedKind: Kind = kind, text = brief, styleId = "editorial", style?: Style) {
+  async function start() {
     if (starting.current || attachments.busy) return;
     if (!owner || !attachments.ready) { setError(account.error || attachments.error || "Checking your account and file storage. Try again in a moment."); return; }
-    if (!text.trim()) { promptRef.current?.focus(); return; }
-    if (text.trim().length > 20000) { setError("Keep your brief and style instructions under 20,000 characters."); return; }
+    if (!brief.trim()) { promptRef.current?.focus(); return; }
+    if (brief.trim().length > 20000) { setError("Keep your brief under 20,000 characters."); return; }
     starting.current = true; setBusy(true);
     try {
       const requestId = crypto.randomUUID();
       const nonce = crypto.randomUUID();
-      const draft = { kind: selectedKind, brief: text.trim(), styleId, style, mode, effort, requestId, attachmentOwner: owner };
+      const draft = { kind, brief: brief.trim(), styleId: selectedStyle?.id ?? "editorial", style: selectedStyle, mode, effort, requestId, attachmentOwner: owner };
       await saveCreationDraft(owner, requestId, nonce, draft);
       sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify(draft));
-      router.push(`/studio?create=${selectedKind}&from=home&draft=${requestId}&claim=${nonce}`);
+      router.push(`/studio?create=${kind}&from=home&draft=${requestId}&claim=${nonce}`);
     } catch { setError("Your browser could not save this brief and its files. Keep a copy and try again."); starting.current = false; setBusy(false); }
+  }
+  function chooseStyle(selectedKind: Kind, styleId: string, style: Style) {
+    if (starting.current || style.id !== styleId) return;
+    setKind(selectedKind);
+    setSelectedStyles(previous => ({ ...previous, [selectedKind]: style }));
+    setError("");
+    requestAnimationFrame(() => {
+      promptRef.current?.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+      promptRef.current?.focus({ preventScroll: true });
+    });
   }
   function addIdea(text: string) {
     const combined = [brief.trim(), text].filter(Boolean).join("\n\n");
@@ -89,6 +104,11 @@ export default function CreationHome() {
           <form className={`mk-composer${drop.dragging ? " is-file-dragging" : ""}`} {...drop.handlers} onSubmit={event => { event.preventDefault(); void start(); }}>
             {drop.dragging && <p className="attachment-drop-hint">Drop files to attach</p>}
             <AttachmentList files={attachments.files} onRemove={id => void attachments.remove(id)} disabled={attachments.busy || busy} />
+            {selectedStyle && <div className="mk-selected-style" role="status">
+              {selectedConcept && <Image src={`/gallery/${selectedConcept.id}.png`} alt="" width={32} height={32} />}
+              <span><small>Style</small>{selectedStyle.name}</span>
+              <button type="button" disabled={busy} aria-label={`Remove ${selectedStyle.name} style`} onClick={() => setSelectedStyles(previous => ({ ...previous, [kind]: undefined }))}><X size={14} /></button>
+            </div>}
             <label className="mk-sr-only" htmlFor="creation-brief">Describe your project</label>
             <textarea ref={promptRef} id="creation-brief" maxLength={20000} value={brief} onChange={event => { setBrief(event.target.value); setError(""); }} placeholder={kind === "website" ? "A beautiful website for my business, with…" : kind === "book" ? "An illustrated book about something I know well…" : "A presentation that tells the story of…"} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); start(); } }} />
             <div className="mk-composer-bottom">
@@ -104,7 +124,7 @@ export default function CreationHome() {
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>
-      <section className="mk-discovery" id="templates" aria-label="Style directions"><TemplateGallery key={kind} initialFilter={kind} onChoose={(selectedKind, text, styleId, style) => start(selectedKind, [brief.trim(), text].filter(Boolean).join("\n\n"), styleId, style)} /></section>
+      <section className="mk-discovery" id="templates" aria-label="Style directions"><TemplateGallery key={kind} initialFilter={kind} selectedStyleId={selectedStyle?.id} onChoose={chooseStyle} /></section>
       <section className="mk-client-band" aria-labelledby="client-work-heading">
         <div className="mk-client-copy">
           <span className="mk-overline">FOR YOUR CLIENT WORK</span>

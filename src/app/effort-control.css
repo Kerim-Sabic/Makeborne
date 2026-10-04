@@ -10,9 +10,11 @@
 .mbe-effort-track { position:relative; height:44px; }
 .mbe-effort-rail { position:absolute; left:12px; right:12px; top:19px; height:6px; border-radius:99px; background:#ebebee; pointer-events:none; }
 .mbe-effort-fill { position:absolute; inset:0 auto 0 0; width:var(--effort-progress); border-radius:inherit; background:#34343a; transition:width 180ms cubic-bezier(.22,1,.36,1); }
-.mbe-effort.is-ultra .mbe-effort-fill { background:linear-gradient(100deg,#487bf0,#7760dc,#4c8cf3,#7760dc); background-size:250% 100%; animation:effort-ultra-flow 5s ease-in-out infinite alternate; }
+.mbe-effort.is-ultra .mbe-effort-fill { overflow:hidden; isolation:isolate; background:linear-gradient(100deg,#356df0,#7560e1,#459aef,#7655d9,#356df0); background-size:220% 100%; animation:effort-ultra-flow 4s linear infinite; box-shadow:0 1px 7px #6a70e32b; }
+.mbe-effort.is-ultra .mbe-effort-fill::after { content:""; position:absolute; inset:-2px auto -2px 0; width:42%; border-radius:inherit; background:linear-gradient(100deg,transparent 0%,#c6dcff55 32%,#ffffffc9 52%,#e0caff50 70%,transparent 100%); transform:translateX(-130%); animation:effort-ultra-sweep 2.6s cubic-bezier(.4,0,.25,1) infinite; }
 .mbe-effort.is-ultra .mbe-effort-thumb { border-color:#8983df55; box-shadow:0 0 0 3px #7770df12,0 2px 7px #625bd333; }
-@keyframes effort-ultra-flow { from { background-position:0% 50%; } to { background-position:100% 50%; } }
+@keyframes effort-ultra-flow { from { background-position:0% 50%; } to { background-position:200% 50%; } }
+@keyframes effort-ultra-sweep { 0%,8% { transform:translateX(-130%); opacity:0; } 18% { opacity:1; } 78% { opacity:1; } 94%,100% { transform:translateX(340%); opacity:0; } }
 .mbe-effort-rail i { position:absolute; top:50%; transform:translate(-50%,-50%); width:3px; height:3px; border-radius:50%; background:#c9c9ce; }
 .mbe-effort-rail i.is-filled { background:#ffffff70; }
 .mbe-effort-rail i:first-of-type,.mbe-effort-rail i:last-of-type { opacity:0; }
@@ -40,10 +42,12 @@
 @media(prefers-reduced-motion:reduce) {
   .mbe-effort-thumb,.mbe-effort-fill,.mbe-effort .mbe-effort-stops button { transition:none; }
   .mbe-effort.is-ultra .mbe-effort-fill { animation:none; }
+  .mbe-effort.is-ultra .mbe-effort-fill::after { display:none; animation:none; }
 }
 @media(forced-colors:active) {
   .mbe-effort-rail { background:GrayText; }
   .mbe-effort-fill,.mbe-effort.is-ultra .mbe-effort-fill { background:Highlight; animation:none; }
+  .mbe-effort.is-ultra .mbe-effort-fill::after { display:none; animation:none; }
   .mbe-effort-rail i { background:CanvasText; }
   .mbe-effort-thumb { forced-color-adjust:none; border:2px solid Highlight; background:Canvas; }
 }

@@ -193,7 +193,7 @@ export default function Studio() {
             const draft = z
               .object({
                 kind: z.enum(["website", "book", "presentation"]),
-                brief: z.string().trim().min(1).max(20000),
+                brief: z.string().max(20000),
                 styleId: z.string().min(1).max(100).optional(),
                 style: LocalStyleSchema.optional(),
                 mode: z.enum(["create", "plan"]).default("create"),
@@ -208,7 +208,7 @@ export default function Studio() {
               setCreationMode(draft.data.mode); setCreationEffort(draft.data.effort);
               setCreationRequestId(draft.data.requestId ?? crypto.randomUUID());
               setInitialAttachmentOwner(draft.data.attachmentOwner ?? null);
-              setDirectStart(true);
+              setDirectStart(Boolean(draft.data.brief.trim()));
               setInitialTitle(`Untitled ${draft.data.kind}`);
               setDraftBrief(draft.data.brief);
               setDraftKind(draft.data.kind);
@@ -414,7 +414,6 @@ export default function Studio() {
   }
   function chooseDirection(
     kind: Kind,
-    brief: string,
     styleId: string,
     selectedStyle?: Style,
   ) {
@@ -435,8 +434,7 @@ export default function Studio() {
       }));
     }
     setDraftKind(kind);
-    setDraftBrief(brief);
-    setInitialBrief(brief);
+    setInitialBrief(draftBrief);
     setInitialTitle(`Untitled ${kind}`);
     setInitialStyle(styleId);
     setCreating(kind);
@@ -865,7 +863,7 @@ export default function Studio() {
                             type="button"
                             key={style.id}
                             onClick={() =>
-                              chooseDirection(styleConcept(style)?.kind ?? "website", "", style.id, style)
+                              chooseDirection(styleConcept(style)?.kind ?? "website", style.id, style)
                             }
                           >
                             <span className="saved-style-preview" style={{ background: style.background, color: style.textColor, fontFamily: style.font === "serif" ? "Georgia, serif" : "Arial, sans-serif" }}>

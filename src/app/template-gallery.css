@@ -104,6 +104,8 @@
     0 9px 25px rgba(0, 0, 0, 0.085),
     0 0 0 1px rgba(0, 0, 0, 0.05);
 }
+.mbg-card.is-selected .mbg-preview { box-shadow: 0 0 0 2px #7663bd, 0 6px 18px #5b43941a; }
+.mbg-card.is-selected .mbg-card-action { opacity: 1; transform: none; background: #6650aa; color: #fff; }
 .mbg-card:focus-visible,
 .mbg-filter:focus-visible {
   outline: 2px solid #3358d4;

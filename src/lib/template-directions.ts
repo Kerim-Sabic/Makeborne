@@ -2,7 +2,7 @@ import type { Kind, Style } from "@/components/studio-model";
 import { curatedStyles } from "./curated-styles";
 
 export type TemplateDirectionId =
-  "form" | "signal" | "field" | "solstice" | "handbook" | "atlas" | "brass-house" | "electric-mint" | "moss-notebook" | "ink-and-vermilion" | "cobalt-study" | "plum-salon";
+  "form" | "signal" | "field" | "solstice" | "handbook" | "atlas" | "brass-house" | "electric-mint" | "moss-notebook" | "ink-and-vermilion" | "cobalt-study" | "plum-salon" | "sora-wellness" | "outline-studio" | "sunday-table" | "orbit-notes" | "meridian-report" | "sienna-story";
 export type TemplateDirection = {
   id: TemplateDirectionId;
   title: string;

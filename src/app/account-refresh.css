@@ -73,3 +73,46 @@
 .auth-refined button:focus-visible,.auth-refined a:focus-visible,.auth-help summary:focus-visible{outline:2px solid #8b7bd3;outline-offset:4px}
 @media(max-width:600px){.auth-refined{padding:0 24px}.auth-header{padding:20px 0}.auth-header .wordmark{font-size:21px}.auth-back{font-size:11px}.auth-center{padding:44px 0 60px;justify-content:flex-start}.auth-refined .login-card h1{font-size:29px}.auth-footer{font-size:10px}.auth-footer span:last-child{display:none}.auth-caption{margin-top:35px}}
 @media(prefers-reduced-motion:reduce){.auth-refined *{transition:none!important}}
+
+/* Email confirmation shares the app's restrained blue, lavender and white surfaces. */
+.auth-refined .login-card.auth-verification-card{max-width:442px;padding:36px;border:1px solid #e9e6f0;border-radius:24px;background:linear-gradient(145deg,#fff,#fefeff);box-shadow:0 8px 32px #34265306,0 26px 70px -42px #7662b933}
+.auth-verification-card .auth-heading{margin-bottom:26px}
+.auth-refined .auth-verification-card h1{font-size:28px;letter-spacing:-1px;line-height:1.2}
+.auth-step-label{display:block;margin:0 0 12px;font-size:9px;font-weight:600;letter-spacing:1.6px;color:#85799b}
+.auth-verification-card .auth-mail-icon{width:64px;height:64px;margin-bottom:25px;border:1px solid #e4ddf6;border-radius:19px;background:linear-gradient(145deg,#faf8ff,#efeafa);box-shadow:0 5px 15px #7968b20b;color:#6851b0}
+.auth-verification-card .auth-mail-icon.is-complete{background:linear-gradient(145deg,#f3fcf8,#e9f5ef);color:#318661;border-color:#dbeee2}
+.auth-refined .login-card .button.primary{background:linear-gradient(110deg,#3154bd,#6651cd);border-color:#4e55c4;transition:background-color .16s,box-shadow .16s}
+.auth-refined .login-card .button.primary:hover:not(:disabled){background:linear-gradient(110deg,#294baa,#5945bc);box-shadow:0 4px 12px #5744b825}
+.auth-refined .login-card .button:disabled{cursor:not-allowed}
+.auth-email-address{display:flex;align-items:center;gap:9px;width:100%;padding:12px 13px;border:1px solid #eae7f0;border-radius:12px;background:#faf9fc;color:#8d849e}
+.auth-email-address>svg{flex-shrink:0}
+.auth-email-address strong{flex:1;min-width:0;overflow-wrap:anywhere;font-size:12px;font-weight:500;color:#4d465c;line-height:1.5}
+.auth-email-address button{flex-shrink:0;border:0;border-radius:5px;background:transparent;font-size:11px;font-weight:500;color:#6a54a4;cursor:pointer;min-height:32px;padding:3px}
+.auth-code-entry{margin:23px 0 0}
+.auth-code-entry summary{text-align:center;cursor:pointer;color:#6d5a95;font-size:12px;list-style:none;padding:8px;border-radius:6px}
+.auth-code-entry summary::-webkit-details-marker{display:none}
+.auth-code-entry[open] summary{margin-bottom:15px}
+.auth-refined .auth-code-entry form{gap:12px}
+.auth-refined .login-card .auth-otp-input{text-align:center;letter-spacing:8px;font-size:24px;font-weight:500;font-variant-numeric:tabular-nums;height:58px;padding-left:22px}
+.auth-refined .login-card .auth-otp-input::placeholder{color:#c2b9d2}
+.auth-resend-row{display:flex;justify-content:center;align-items:center;gap:7px;min-height:40px;margin-top:12px;color:#9a90a6;font-size:11px}
+.auth-resend-row button{padding:7px 0;background:none;border:0;border-radius:4px;color:#66538e;font-size:11px;font-weight:550;font-variant-numeric:tabular-nums;cursor:pointer}
+.auth-resend-row button:disabled{color:#a39aaf;cursor:not-allowed}
+.auth-refined .login-card .auth-verification-footnote{font-size:11px;line-height:1.7;margin:14px auto 0;color:#786c82;text-align:center;max-width:305px}
+.auth-refined .account-message{margin-top:22px;margin-bottom:0;background:#f4f5fc;border:1px solid #e7e9f4;color:#5b6380}
+.auth-refined .account-message.is-error{border-color:#f1ddd9;background:#fff8f6;color:#a15a4d}
+.auth-mode-switch a{color:#66528c;font-weight:500;font-size:12px}
+.auth-loading{display:flex;align-items:center;justify-content:center;gap:9px;min-height:88px;color:#8b829a;font-size:12px}
+.auth-spinner{animation:auth-spin .85s linear infinite}
+.auth-google{display:flex;align-items:center;justify-content:center;gap:11px;width:100%;min-height:50px;padding:12px;border:1px solid #e2dfea;border-radius:11px;background:#fff;color:#453f4f;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:background-color .16s,border-color .16s}
+.auth-google:hover:not(:disabled){background:#faf9fc;border-color:#d0c9df}
+.auth-google:disabled{opacity:.55;cursor:wait}
+.auth-divider{display:flex;align-items:center;gap:15px;margin:24px 0;color:#a69cad;font-size:11px}
+.auth-divider::before,.auth-divider::after{content:"";height:1px;flex:1;background:#ece8f0}
+.auth-code-entry summary:focus-visible{outline:2px solid #8b7bd3;outline-offset:3px}
+.auth-refined button:disabled{cursor:not-allowed}
+@keyframes auth-spin{to{transform:rotate(360deg)}}
+@media(max-width:600px){.auth-refined .login-card.auth-verification-card{padding:29px 23px;border-radius:20px}.auth-refined .auth-verification-card h1{font-size:26px}.auth-verification-card .auth-heading p{font-size:13px!important}.auth-refined:has(.auth-verification-card) .auth-center{padding-top:25px}}
+@media(prefers-reduced-motion:reduce){.auth-spinner{animation:none}.auth-refined *{scroll-behavior:auto!important}}
+@media(prefers-reduced-transparency:reduce){.auth-refined .login-card.auth-verification-card{background:#fff}}
+@media(forced-colors:active){.auth-refined .login-card.auth-verification-card,.auth-email-address,.auth-google{border:1px solid CanvasText}.auth-refined .login-card .button.primary{background:ButtonFace;color:ButtonText;border-color:ButtonText}.auth-verification-card .auth-mail-icon{background:Canvas;color:CanvasText;border-color:CanvasText}}

@@ -1,6 +1,7 @@
 import "server-only";
 import { createOpenAIImageAdapter, type ImageDependencies, type OpenAIImageConfig } from "../providers/openai-image";
 import { DraftValidationError, validateDraftContext, validateGeneratedDraft } from "./draft-contract";
+import { getStyleDesignInstructions } from "../style-design-instructions";
 
 export function buildArtworkPrompt(contextInput: unknown, draftInput: unknown, blockId: string) {
   const context = validateDraftContext(contextInput);
@@ -25,6 +26,7 @@ export function buildArtworkPrompt(contextInput: unknown, draftInput: unknown, b
           ? "Produce purposeful editorial interior artwork for a book, not a website screenshot or book mockup. Avoid decorative text or invented labels."
           : "Produce an original website image asset suitable for the described section. Do not render an entire website or invent brand logos unless the approved direction explicitly calls for them.",
     "Follow the specified palette, visual direction and aspect. Aim for coherent composition and legibility. Do not add watermarks or quality claims.",
+    getStyleDesignInstructions(style.id, context.input.content.kind, style, request.role),
     JSON.stringify(brief),
   ].join("\n");
   if (prompt.length > 32000) throw new DraftValidationError("bounds");

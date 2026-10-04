@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>Reset your Makeborne password</title></head>
+<body style="margin:0;padding:0;background:#f7f6fb;font-family:Arial,Helvetica,sans-serif;color:#282330;-webkit-text-size-adjust:100%;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f7f6fb;font-size:1px;">A secure link to choose a fresh password.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f6fb;"><tr><td align="center" style="padding:40px 16px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+      <tr><td style="padding:0 0 28px;text-align:center;">
+        <a href="{{ .SiteURL }}" style="text-decoration:none;color:#25212d;font-size:24px;font-weight:600;letter-spacing:-1px;"><img src="{{ .SiteURL }}/brand/makeborne-email-mark.png" width="27" height="27" alt="" style="vertical-align:middle;border:0;margin-right:8px;">Makeborne</a>
+      </td></tr>
+      <tr><td style="background:#ffffff;border:1px solid #e8e3f0;border-radius:22px;overflow:hidden;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr><td height="4" style="height:4px;background:#6651cd;background-image:linear-gradient(100deg,#3154bd,#8a6ada);font-size:0;line-height:0;">&nbsp;</td></tr>
+          <tr><td style="padding:36px 30px 31px;text-align:center;">
+            <p style="margin:0 0 15px;color:#766683;font-size:10px;font-weight:600;letter-spacing:1.6px;">YOUR ACCOUNT</p>
+            <h1 style="margin:0 0 16px;color:#302735;font-size:29px;line-height:1.23;letter-spacing:-0.8px;font-weight:600;">Reset your password</h1>
+            <p style="margin:0 0 27px;color:#6f6578;font-size:14px;line-height:1.8;">We received a request to reset your password.<br>Continue below to choose a new one.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr><td bgcolor="#574fc5" style="border-radius:11px;background:#574fc5;background-image:linear-gradient(110deg,#3154bd,#6651cd);"><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery&amp;redirect_to={{ .RedirectTo | urlquery }}" style="display:inline-block;padding:16px 29px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;line-height:18px;border-radius:11px;">Reset my password &rarr;</a></td></tr></table>
+            <p style="margin:23px 0 17px;color:#786d82;font-size:11px;line-height:1.7;">Or enter this code on the password reset page</p>
+            <div style="background:#f7f5fb;border:1px solid #eeebf4;border-radius:12px;padding:16px 12px;margin:0 auto;max-width:235px;color:#68528c;font-family:Consolas,Menlo,monospace;font-size:25px;letter-spacing:7px;font-weight:600;text-align:center;">{{ .Token }}</div>
+            <p style="margin:24px 0 0;font-size:11px;line-height:1.8;color:#786d82;">This reset works once. If it expires,<br>request a new email from Makeborne.</p>
+          </td></tr>
+          <tr><td style="padding:20px 30px;border-top:1px solid #f0edf5;text-align:center;font-size:11px;line-height:1.8;color:#786d82;">Didn’t request a password reset? You can ignore this email. Your password will stay the same.</td></tr>
+        </table>
+      </td></tr>
+      <tr><td style="padding:25px 15px 0;text-align:center;font-size:11px;line-height:1.8;color:#786d82;">Sent for your Makeborne account.<br><a href="{{ .SiteURL }}" style="color:#6c5b80;text-decoration:none;">Makeborne · Account security</a></td></tr>
+    </table>
+  </td></tr></table>
+</body></html>
+

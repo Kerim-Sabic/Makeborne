@@ -2,174 +2,278 @@
 import Link from "next/link";
 import BrandMark from "./brand-mark";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, LockKeyhole, Mail, Eye, EyeOff } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, LockKeyhole, Mail, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { accountError, authDestination } from "@/lib/supabase/auth-flow";
+import { accountError, authDestination, passwordRecoveryDestination } from "@/lib/supabase/auth-flow";
 
-type Capability = { cloudWorkspace: { available: boolean; reason?: string } };
+type Mode = "login" | "signup" | "recovery";
+type Notice = { text: string; error: boolean };
+const PENDING_EMAIL_KEY = "makeborne.pending-email.v1";
+
+function GoogleMark() {
+  return <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.23c1.89-1.74 2.99-4.3 2.99-7.36Z" /><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.41l-3.23-2.51c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.76-5.58-4.12H3.08v2.59A10 10 0 0 0 12 22Z" /><path fill="#FBBC05" d="M6.42 13.92a6.02 6.02 0 0 1 0-3.84V7.49H3.08a10 10 0 0 0 0 9.02l3.34-2.59Z" /><path fill="#EA4335" d="M12 5.96c1.47 0 2.79.51 3.82 1.51l2.86-2.86A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.92 5.49l3.34 2.59C7.2 7.72 9.4 5.96 12 5.96Z" /></svg>;
+}
+
 export default function AccountForm() {
   const router = useRouter();
+  const emailInput = useRef<HTMLInputElement>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [mode, setMode] = useState<"login" | "signup" | "recovery">("login");
+  const [google, setGoogle] = useState(false);
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [verification, setVerification] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [verification, setVerification] = useState<"signup" | "recovery" | null>(null);
+  const [verified, setVerified] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [retryAt, setRetryAt] = useState(0);
+  const [retryIn, setRetryIn] = useState(0);
+
   function returnDestination() {
     return authDestination(new URLSearchParams(window.location.search).get("next"));
   }
+  function redirectUrl(recovery = false) {
+    const next = recovery ? passwordRecoveryDestination(returnDestination()) : returnDestination();
+    return `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+  }
+  function clearPendingEmail() {
+    try { sessionStorage.removeItem(PENDING_EMAIL_KEY); } catch { /* Storage is optional. */ }
+  }
+  function beginCooldown(address: string, kind: "signup" | "recovery") {
+    const until = Date.now() + 60_000;
+    setRetryAt(until);
+    setRetryIn(60);
+    try { sessionStorage.setItem(PENDING_EMAIL_KEY, JSON.stringify({ email: address, kind, retryAt: until, expiresAt: Date.now() + 3_600_000 })); } catch { /* Storage is optional. */ }
+  }
   useEffect(() => {
     const abort = new AbortController();
-    fetch("/api/capabilities", { signal: abort.signal, cache: "no-store" })
-      .then((r) => r.json())
-      .then((c: Capability) => {
-        setEnabled(c.cloudWorkspace?.available === true);
+    fetch("/api/auth/providers", { signal: abort.signal, cache: "no-store" })
+      .then((response) => { if (!response.ok) throw new Error("Unavailable"); return response.json(); })
+      .then((capability: { enabled: boolean; google: boolean }) => {
+        setEnabled(capability.enabled === true);
+        setGoogle(capability.google === true);
       })
-      .catch(() => {
-        if (!abort.signal.aborted) {
-          setEnabled(false);
-        }
-      });
-    const error = new URLSearchParams(window.location.search).get("error");
-    if (error)
-      queueMicrotask(() =>
-        setMessage(
-          error === "cloud-unavailable"
-            ? "Account access is temporarily unavailable. Your saved brief is kept in this browser."
-            : "This email link expired or could not be verified. Request a new link or sign in.",
-        ),
-      );
+      .catch(() => { if (!abort.signal.aborted) setEnabled(false); });
+    queueMicrotask(() => {
+      const query = new URLSearchParams(window.location.search);
+      if (query.get("mode") === "signup") setMode("signup");
+      const error = query.get("error");
+      if (error) {
+        setNotice({ error: true, text: error === "cloud-unavailable"
+          ? "Account access is temporarily unavailable. Your saved brief is kept in this browser."
+          : error === "oauth" ? "Sign-in wasn’t completed. Please try again or use your email."
+          : "This email link expired or could not be verified. Request a new link or sign in." });
+      } else {
+        try {
+          const raw = sessionStorage.getItem(PENDING_EMAIL_KEY);
+          const pending = raw ? JSON.parse(raw) : null;
+          if (pending && typeof pending.email === "string" && pending.email.length <= 254 &&
+            (pending.kind === "signup" || pending.kind === "recovery") && pending.expiresAt > Date.now()) {
+            setEmail(pending.email);
+            setVerification(pending.kind);
+            setRetryAt(pending.retryAt);
+            setRetryIn(Math.max(0, Math.ceil((pending.retryAt - Date.now()) / 1000)));
+          }
+        } catch { /* A new browser can always request a fresh email. */ }
+      }
+    });
     return () => abort.abort();
   }, []);
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    if (!retryAt) return;
+    const tick = window.setInterval(() => setRetryIn(Math.max(0, Math.ceil((retryAt - Date.now()) / 1000))), 1000);
+    return () => window.clearInterval(tick);
+  }, [retryAt]);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
     if (!enabled || busy) return;
     setBusy(true);
-    setMessage("");
+    setNotice(null);
     try {
       const client = createClient();
       const address = email.trim();
       if (mode === "recovery") {
         if (Date.now() < retryAt) {
-          setMessage("Wait a minute before requesting another email.");
+          setNotice({ error: false, text: `You can request another email in ${retryIn} seconds.` });
           return;
         }
-        const { error } = await client.auth.resetPasswordForEmail(address, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
-        });
+        const { error } = await client.auth.resetPasswordForEmail(address, { redirectTo: redirectUrl(true) });
         if (error) throw error;
-        setRetryAt(Date.now() + 60_000);
-        setMessage("If an account uses this email, you will receive a link to reset its password. Check your inbox and spam folder.");
+        setEmail(address);
+        setVerification("recovery");
+        beginCooldown(address, "recovery");
       } else if (mode === "signup") {
         const { data, error } = await client.auth.signUp({
           email: address,
           password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnDestination())}`,
-          },
+          options: { emailRedirectTo: redirectUrl() },
         });
         if (error) throw error;
+        setPassword("");
         if (data.session) {
+          clearPendingEmail();
           router.push(returnDestination());
           router.refresh();
         } else {
-          setVerification(true);
+          setVerification("signup");
           setEmail(address);
-          setPassword("");
-          setRetryAt(Date.now() + 60_000);
-          setMessage(
-            "Check your inbox and spam folder for a confirmation link if this address is eligible.",
-          );
+          beginCooldown(address, "signup");
         }
       } else {
-        const { error } = await client.auth.signInWithPassword({
-          email: address,
-          password,
-        });
-        if (error) throw error;
+        const { error } = await client.auth.signInWithPassword({ email: address, password });
+        if (error) {
+          if (error.code === "email_not_confirmed") {
+            setVerification("signup");
+            setEmail(address);
+            setPassword("");
+          }
+          throw error;
+        }
+        clearPendingEmail();
         router.push(returnDestination());
         router.refresh();
       }
     } catch (error) {
-      setMessage(accountError(error));
+      setNotice({ error: true, text: accountError(error) });
     } finally {
       setBusy(false);
     }
   }
-  async function resend() {
-    if (!enabled || busy) return;
-    if (Date.now() < retryAt) {
-      setMessage("Wait a minute before requesting another email.");
-      return;
-    }
+
+  async function resend(kind: "signup" | "recovery" = verification || "signup") {
+    if (!enabled || busy || !email.trim() || Date.now() < retryAt) return;
     setBusy(true);
+    setNotice(null);
     try {
-      const { error } = await createClient().auth.resend({
-        type: "signup",
+      const client = createClient();
+      const address = email.trim();
+      const { error } = kind === "recovery"
+        ? await client.auth.resetPasswordForEmail(address, { redirectTo: redirectUrl(true) })
+        : await client.auth.resend({ type: "signup", email: address, options: { emailRedirectTo: redirectUrl() } });
+      if (error) throw error;
+      setVerification(kind);
+      setEmail(address);
+      setCode("");
+      beginCooldown(address, kind);
+      setNotice({ error: false, text: "A fresh email has been requested. Use the latest link or code in your inbox." });
+    } catch (error) {
+      setNotice({ error: true, text: accountError(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyCode(event: React.FormEvent) {
+    event.preventDefault();
+    if (!enabled || busy || !verification) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await createClient().auth.verifyOtp({
         email: email.trim(),
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnDestination())}` },
+        token: code.replace(/\s/g, ""),
+        type: verification === "recovery" ? "recovery" : "email",
       });
       if (error) throw error;
-      setRetryAt(Date.now() + 60_000);
-      setMessage(
-        "A new confirmation link was requested. Check your inbox if the address is eligible.",
-      );
+      clearPendingEmail();
+      setCode("");
+      setVerified(true);
     } catch (error) {
-      setMessage(accountError(error));
+      setNotice({ error: true, text: accountError(error) });
     } finally {
       setBusy(false);
     }
   }
-  function changeMode(next: typeof mode) {
-    if (busy) return;
-    setMode(next); setPassword(""); setMessage(""); setShowPassword(false);
+
+  async function signInWithGoogle() {
+    if (!enabled || !google || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await createClient().auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${redirectUrl()}&provider=google`, queryParams: { prompt: "select_account" } },
+      });
+      if (error) throw error;
+      clearPendingEmail();
+    } catch (error) {
+      setNotice({ error: true, text: accountError(error) });
+      setBusy(false);
+    }
   }
-  return (
-    <main className="login-page auth-refined">
-      <header className="auth-header">
-        <Link className="wordmark" href="/" aria-label="Makeborne home"><BrandMark size={28} /> Makeborne</Link>
-        <Link href="/" className="auth-back">Back to home <ArrowRight size={14} /></Link>
-      </header>
-      <div className="auth-center">
-        <section className="login-card" aria-labelledby="account-heading">
-          <div className="auth-heading">
-            <h1 id="account-heading">{verification ? "Check your inbox" : mode === "signup" ? "Make room for your ideas" : mode === "recovery" ? "Reset your password" : "Welcome back"}</h1>
-            <p>{verification ? "Confirm your email to continue." : mode === "signup" ? "Your next website, book or presentation starts here." : mode === "recovery" ? "We’ll help you get back to your projects." : "Pick up where your ideas left off."}</p>
-          </div>
-          {enabled === null ? <p role="status">Checking account availability…</p> : !enabled ? <>
-            <div className="inline-info"><LockKeyhole size={20} /><p>Account access is temporarily unavailable.</p></div>
-            <Link className="button primary" href="/">Back to home <ArrowRight size={16} /></Link>
-          </> : verification ? <>
-            <div className="auth-mail-icon"><Mail size={26} /></div>
-            <p>If <strong>{email}</strong> is eligible, you’ll receive a confirmation link. Check your inbox and spam folder.</p>
-            <button className="button primary" disabled={busy} onClick={resend}>{busy ? "Requesting…" : "Resend confirmation"}</button>
-            <button className="auth-switch" disabled={busy} onClick={() => { setVerification(false); changeMode("login"); }}>Back to sign in</button>
-          </> : <>
-            <form onSubmit={submit}>
-              <div className="auth-field"><label htmlFor="account-email">Email address</label>
-                <input id="account-email" type="email" placeholder="you@example.com" autoComplete="email" required disabled={busy} value={email} onChange={e => setEmail(e.target.value)} maxLength={254} />
-              </div>
-              {mode !== "recovery" && <div className="auth-field">
-                <div className="auth-label-row"><label htmlFor="account-password">Password</label>{mode === "login" && <button type="button" disabled={busy} onClick={() => changeMode("recovery")}>Forgot password?</button>}</div>
-                <div className="auth-password"><input id="account-password" type={showPassword ? "text" : "password"} placeholder={mode === "signup" ? "At least 12 characters" : "Enter your password"} autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={mode === "signup" ? 12 : 1} required disabled={busy} value={password} onChange={e => setPassword(e.target.value)} maxLength={128} aria-describedby={mode === "signup" ? "password-guidance" : undefined} />
-                  <button type="button" className="auth-eye" disabled={busy} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                </div>
-                {mode === "signup" && <p id="password-guidance" className="auth-hint">Use at least 12 characters for a stronger password.</p>}
-              </div>}
-              <button className="button primary" disabled={busy} type="submit">{busy ? "Please wait…" : mode === "signup" ? "Create account" : mode === "recovery" ? "Send reset link" : "Sign in"}<ArrowRight size={16} /></button>
+
+  function changeMode(next: Mode) {
+    if (busy) return;
+    clearPendingEmail();
+    setMode(next);
+    setVerification(null);
+    setVerified(false);
+    setPassword("");
+    setCode("");
+    setNotice(null);
+    setShowPassword(false);
+  }
+  function changeEmail() {
+    changeMode(verification === "recovery" ? "recovery" : "signup");
+    window.setTimeout(() => emailInput.current?.focus(), 0);
+  }
+
+  return <main className="login-page auth-refined">
+    <header className="auth-header">
+      <Link className="wordmark" href="/" aria-label="Makeborne home"><BrandMark size={28} /> Makeborne</Link>
+      <Link href="/" className="auth-back">Back to home <ArrowRight size={14} /></Link>
+    </header>
+    <div className="auth-center">
+      <section className={`login-card${verification ? " auth-verification-card" : ""}`} aria-labelledby="account-heading">
+        {verification && <div className={`auth-mail-icon${verified ? " is-complete" : ""}`} aria-hidden="true">{verified ? <Check size={28} /> : <Mail size={28} />}</div>}
+        <div className="auth-heading">
+          {verification && <span className="auth-step-label">{verified ? "ALL SET" : "CHECK YOUR EMAIL"}</span>}
+          <h1 id="account-heading">{verified ? verification === "recovery" ? "You’re verified" : "Email confirmed" : verification ? "Check your inbox" : mode === "signup" ? "Make room for your ideas" : mode === "recovery" ? "Reset your password" : "Welcome back"}</h1>
+          <p>{verified ? "You’re ready to continue." : verification ? verification === "recovery" ? "If an account uses this email, a reset link is on its way." : "Follow the confirmation link in your email to finish signing up." : mode === "signup" ? "Your next website, book or presentation starts here." : mode === "recovery" ? "We’ll help you get back to your projects." : "Pick up where your ideas left off."}</p>
+        </div>
+        {enabled === null ? <div className="auth-loading" role="status"><LoaderCircle className="auth-spinner" size={17} />Getting things ready…</div> : !enabled ? <>
+          <div className="inline-info"><LockKeyhole size={20} /><p>Account access is temporarily unavailable.</p></div>
+          <Link className="button primary" href="/">Back to home <ArrowRight size={16} /></Link>
+        </> : verified ? <>
+          <Link className="button primary" href={verification === "recovery" ? passwordRecoveryDestination(returnDestination()) : returnDestination()}>Continue<ArrowRight size={16} /></Link>
+          <p className="auth-verification-footnote">Your projects, all in one place.</p>
+        </> : verification ? <>
+          <div className="auth-email-address"><Mail size={16} aria-hidden="true" /><strong>{email}</strong><button type="button" onClick={changeEmail} disabled={busy}>Change</button></div>
+          <details className="auth-code-entry">
+            <summary>Have a verification code?</summary>
+            <form onSubmit={verifyCode}>
+              <label htmlFor="account-code">Code from your email</label>
+              <input id="account-code" className="auth-otp-input" type="text" inputMode="numeric" autoComplete="one-time-code" placeholder="000000" pattern="[0-9]{6,10}" minLength={6} maxLength={10} required value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ""))} disabled={busy} />
+              <button className="button primary" disabled={busy || code.length < 6} type="submit">{busy ? <><LoaderCircle className="auth-spinner" size={16} />Verifying…</> : <>Verify email<ArrowRight size={16} /></>}</button>
             </form>
-            <div className="auth-mode-switch">{mode === "recovery" ? <button disabled={busy} onClick={() => changeMode("login")}><ArrowLeft size={14} /> Back to sign in</button> : <><span>{mode === "signup" ? "Already have an account?" : "New to Makeborne?"}</span><button disabled={busy} onClick={() => changeMode(mode === "signup" ? "login" : "signup")}>{mode === "signup" ? "Sign in" : "Create an account"}</button></>}</div>
-            {mode === "login" && <details className="auth-help"><summary>Waiting for a confirmation email?</summary><p>Enter your email above, then request a new link.</p><button className="text-link" disabled={busy || !email.trim()} onClick={resend}>Resend confirmation email</button></details>}
-          </>}
-          {message && <p className="account-message" role="status">{message}</p>}
-        </section>
-        <p className="auth-caption">A little space for your next big thing.</p>
-      </div>
-      <footer className="auth-footer"><span>© 2026 Makeborne</span><span>Websites. Books. Presentations.</span></footer>
-    </main>
-  );
+          </details>
+          <div className="auth-resend-row"><span>Can’t find it?</span><button type="button" disabled={busy || retryIn > 0} onClick={() => void resend()}>{busy ? "Requesting…" : retryIn > 0 ? `Resend in ${retryIn}s` : "Resend email"}</button></div>
+          <p className="auth-verification-footnote">Check your spam folder, too. Use the most recent email; each confirmation works once.</p>
+          <div className="auth-mode-switch"><button disabled={busy} onClick={() => changeMode("login")}><ArrowLeft size={14} />Back to sign in</button></div>
+        </> : <>
+          {google && mode !== "recovery" && <><button type="button" className="auth-google" disabled={busy} onClick={signInWithGoogle}><GoogleMark />Continue with Google</button><div className="auth-divider"><span>or use your email</span></div></>}
+          <form onSubmit={submit}>
+            <div className="auth-field"><label htmlFor="account-email">Email address</label><input ref={emailInput} id="account-email" type="email" placeholder="you@example.com" autoComplete="email" required disabled={busy} value={email} onChange={event => setEmail(event.target.value)} maxLength={254} /></div>
+            {mode !== "recovery" && <div className="auth-field">
+              <div className="auth-label-row"><label htmlFor="account-password">Password</label>{mode === "login" && <button type="button" disabled={busy} onClick={() => changeMode("recovery")}>Forgot password?</button>}</div>
+              <div className="auth-password"><input id="account-password" type={showPassword ? "text" : "password"} placeholder={mode === "signup" ? "At least 12 characters" : "Enter your password"} autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={mode === "signup" ? 12 : 1} required disabled={busy} value={password} onChange={event => setPassword(event.target.value)} maxLength={128} aria-describedby={mode === "signup" ? "password-guidance" : undefined} />
+                <button type="button" className="auth-eye" disabled={busy} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+              </div>
+              {mode === "signup" && <p id="password-guidance" className="auth-hint">Use at least 12 characters for a stronger password.</p>}
+            </div>}
+            <button className="button primary" disabled={busy || (mode === "recovery" && retryIn > 0)} type="submit">{busy ? <><LoaderCircle className="auth-spinner" size={16} />Please wait…</> : <>{mode === "signup" ? "Create account" : mode === "recovery" ? retryIn > 0 ? `Try again in ${retryIn}s` : "Send reset link" : "Sign in"}<ArrowRight size={16} /></>}</button>
+          </form>
+          <div className="auth-mode-switch">{mode === "recovery" ? <button disabled={busy} onClick={() => changeMode("login")}><ArrowLeft size={14} />Back to sign in</button> : <><span>{mode === "signup" ? "Already have an account?" : "New to Makeborne?"}</span><button disabled={busy} onClick={() => changeMode(mode === "signup" ? "login" : "signup")}>{mode === "signup" ? "Sign in" : "Create an account"}</button></>}</div>
+          {mode === "login" && <details className="auth-help"><summary>Waiting for a confirmation email?</summary><p>Enter your email above, then request a new link.</p><button type="button" className="text-link" disabled={busy || !email.trim() || retryIn > 0} onClick={() => void resend("signup")}>{retryIn > 0 ? `Resend in ${retryIn}s` : "Resend confirmation email"}</button></details>}
+        </>}
+        {notice && <p className={`account-message${notice.error ? " is-error" : ""}`} role={notice.error ? "alert" : "status"}>{notice.text}</p>}
+      </section>
+      {!verification && <p className="auth-caption">A little space for your next big thing.</p>}
+    </div>
+    <footer className="auth-footer"><span>© 2026 Makeborne</span><span>Websites. Books. Presentations.</span></footer>
+  </main>;
 }

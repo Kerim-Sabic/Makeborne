@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   BookOpen,
+  Check,
   LayoutTemplate,
   Presentation,
 } from "lucide-react";
@@ -33,22 +34,23 @@ const kindIcon = {
   presentation: Presentation,
 };
 
-function PreviewFrame({ direction }: { direction: Direction }) {
+function PreviewFrame({ direction, selected }: { direction: Direction; selected: boolean }) {
   return <div className={`mbg-preview mbg-generated-preview mbg-preview-${direction.id}`} aria-hidden="true">
     <Image src={`/gallery/${direction.id}.png`} alt="" fill sizes="(max-width: 700px) 92vw, (max-width: 1200px) 44vw, 32vw" />
-    <span className="mbg-card-action"><ArrowUpRight size={19} /></span>
+    <span className="mbg-card-action">{selected ? <Check size={18} /> : <ArrowUpRight size={19} />}</span>
   </div>;
 }
 export default function TemplateGallery({
   onChoose,
   initialFilter = "all",
+  selectedStyleId,
 }: {
   initialFilter?: Kind | "all";
+  selectedStyleId?: string;
   onChoose?: (
     kind: Kind,
-    brief: string,
     styleId: string,
-    style?: Style,
+    style: Style,
   ) => void;
 }) {
   const [filter, setFilter] = useState<Kind | "all">(initialFilter);
@@ -59,13 +61,14 @@ export default function TemplateGallery({
   );
   function choose(direction: Direction) {
     if (onChoose)
-      onChoose(direction.kind, direction.brief, direction.style.id, {
+      onChoose(direction.kind, direction.style.id, {
         ...direction.style,
       });
     else {
       try {
         const existing = sessionStorage.getItem("makeborne.creation-draft.v1");
         let priorBrief = "";
+        let previousDraft: Record<string, unknown> = {};
         if (existing) {
           const previous: unknown = JSON.parse(existing);
           if (
@@ -76,22 +79,20 @@ export default function TemplateGallery({
           )
             throw new Error("Unreadable existing brief");
           priorBrief = previous.brief;
+          previousDraft = previous as Record<string, unknown>;
         }
-        const brief =
-          priorBrief.trim() && priorBrief !== direction.brief
-            ? `${priorBrief}\n\nStyle direction:\n${direction.brief}`
-            : direction.brief;
-        if (brief.length > 20000) {
+        if (priorBrief.length > 20000) {
           setError(
-            "Your existing brief is safely kept. Open it in the studio before adding another direction; the combined brief would exceed 20,000 characters.",
+            "Your existing brief is safely kept. Open it in the studio to shorten it before continuing.",
           );
           return;
         }
         sessionStorage.setItem(
           "makeborne.creation-draft.v1",
           JSON.stringify({
+            ...previousDraft,
             kind: direction.kind,
-            brief,
+            brief: priorBrief,
             styleId: direction.style.id,
             style: direction.style,
           }),
@@ -118,7 +119,7 @@ export default function TemplateGallery({
           <h2 id="mbg-title">Start with a little inspiration.</h2>
         </div>
         <p>
-          A direction for your next idea.
+          Choose a look. Bring your own idea.
           <br />
           Make it your own in the studio.
         </p>
@@ -151,12 +152,13 @@ export default function TemplateGallery({
           return (
             <button
               type="button"
-              className="mbg-card"
+              className={`mbg-card${selectedStyleId === direction.style.id ? " is-selected" : ""}`}
               key={direction.id}
               onClick={() => choose(direction)}
               aria-label={`Use ${direction.title} style for a ${kindLabel[direction.kind].toLowerCase()} project`}
+              aria-pressed={selectedStyleId === direction.style.id}
             >
-              <PreviewFrame direction={direction} />
+              <PreviewFrame direction={direction} selected={selectedStyleId === direction.style.id} />
               <div className="mbg-card-details">
                 <div>
                   <h3>{direction.title}</h3>
