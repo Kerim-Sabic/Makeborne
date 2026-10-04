@@ -1,28 +1,38 @@
-.mbe-effort { min-width:0; border:0; padding:0; margin:0; background:transparent; color:#38313e; }
-.mbe-effort legend { padding:0; margin-bottom:12px; color:#665d70; font-size:12px; font-weight:550; }
-.mbe-effort-options { display:grid; gap:3px; }
-.mbe-effort .mbe-effort-option { position:relative; display:flex; align-items:center; gap:12px; width:100%; min-height:51px; margin:0; padding:9px 12px; border:1px solid transparent; border-radius:8px; background:transparent; color:inherit; font:inherit; cursor:pointer; text-align:left; }
-.mbe-effort .mbe-effort-option:hover { background:#f7f5f9; }
-.mbe-effort .mbe-effort-option.is-selected { background:#f3f0f7; border-color:transparent; }
-.mbe-effort-option input { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
-.mbe-effort-option:has(input:focus-visible) { outline:2px solid #8d759e; outline-offset:1px; }
-.mbe-effort-copy { display:grid; gap:3px; flex:1; min-width:0; }
-.mbe-effort-copy strong { display:block; color:#44384f; font-size:12px; font-weight:550; line-height:1.35; }
-.mbe-effort-copy > span { color:#79707f; font-size:11px; line-height:1.5; }
-.mbe-effort-check { flex-shrink:0; visibility:hidden; color:#786185; }
-.is-selected > .mbe-effort-check { visibility:visible; }
-.mbe-effort .mbe-effort-cost { max-width:330px; margin:12px 12px 2px; color:#79707f; font-size:11px; line-height:1.65; }
-.mbe-effort:disabled { opacity:.55; }
-.mbe-effort:disabled label,.mbe-effort button:disabled { cursor:not-allowed; }
-.mbe-effort-menu-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 9px 9px; }
-.mbe-effort-menu-heading strong { font-size:12px; font-weight:550; color:#62556e; }
-.mbe-effort-menu-heading > span { font-size:11px; color:#79707f; }
-.mbe-effort-menu .mbe-effort-options { gap:1px; }
-.mbe-effort-menu .mbe-effort-option { min-height:43px; padding:7px 9px; border-radius:7px; }
-.mbe-effort-menu .mbe-effort-copy { gap:2px; }
-.mbe-effort-menu .mbe-effort-copy strong { font-size:12px; }
-.creation-effort-panel .mbe-effort-menu .mbe-effort-copy > span { font-size:11px; }
-.creation-effort-panel .mbe-effort-menu .mbe-effort-cost { margin:7px 3px 0; padding:9px 6px 3px; border-top:1px solid #eee9f2; font-size:11px; line-height:1.6; }
-@media (forced-colors:active) {
-  .mbe-effort .mbe-effort-option.is-selected { border-color:Highlight; }
+.mbe-effort {
+  min-width:0; width:100%; border:0; padding:0; margin:0;
+  color:#27272a; font-family:var(--font-inter),Arial,sans-serif;
+}
+.mbe-effort-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+.mbe-effort-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:17px; }
+.mbe-effort-heading label { display:block; margin:0; font-size:13px; line-height:20px; font-weight:500; color:#737377; }
+.mbe-effort-heading output { font-size:14px; line-height:20px; font-weight:600; color:#242427; }
+.mbe-effort-heading output.is-ultra { color:#6552ac; }
+.mbe-effort-track { position:relative; height:30px; }
+.mbe-effort-rail { position:absolute; left:10px; right:10px; top:13px; height:4px; border-radius:4px; background:linear-gradient(to right,#29292d 0%,#29292d var(--effort-progress),#e5e5e7 var(--effort-progress),#e5e5e7 100%); pointer-events:none; }
+.mbe-effort-rail i { position:absolute; top:50%; transform:translate(-50%,-50%); width:6px; height:6px; border-radius:50%; background:#d9d9dc; }
+.mbe-effort-rail i.is-filled { background:#29292d; }
+.mbe-effort-track input { position:relative; z-index:1; display:block; appearance:none; -webkit-appearance:none; box-sizing:border-box; width:100%; height:30px; padding:0; margin:0; border:0; border-radius:0; background:transparent; cursor:pointer; outline:none; box-shadow:none; }
+.mbe-effort-track input::-webkit-slider-runnable-track { height:4px; border:0; background:transparent; }
+.mbe-effort-track input::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:20px; height:20px; margin-top:-8px; border:1.5px solid #29292d; border-radius:50%; background:#fff; box-shadow:0 1px 4px #0000001a; cursor:grab; }
+.mbe-effort-track input::-moz-range-track { height:4px; border:0; background:transparent; }
+.mbe-effort-track input::-moz-range-progress { background:transparent; }
+.mbe-effort-track input::-moz-range-thumb { box-sizing:border-box; width:20px; height:20px; border:1.5px solid #29292d; border-radius:50%; background:#fff; box-shadow:0 1px 4px #0000001a; cursor:grab; }
+.mbe-effort-track input:active::-webkit-slider-thumb { cursor:grabbing; background:#f5f5f5; }
+.mbe-effort-track input:active::-moz-range-thumb { cursor:grabbing; background:#f5f5f5; }
+.mbe-effort-track input:focus-visible::-webkit-slider-thumb { outline:3px solid #c9c9ce; outline-offset:3px; }
+.mbe-effort-track input:focus-visible::-moz-range-thumb { outline:3px solid #c9c9ce; outline-offset:3px; }
+.mbe-effort-stops { position:relative; height:28px; margin:1px 10px 0; }
+.mbe-effort-stops button { position:absolute; left:var(--stop); transform:translateX(-50%); border:0; border-radius:4px; padding:5px 0; margin:0; color:#858589; background:transparent; font-family:inherit; font-size:10.5px; line-height:16px; font-weight:400; white-space:nowrap; cursor:pointer; }
+.mbe-effort-stops button:first-child { left:-10px; transform:none; }
+.mbe-effort-stops button:last-child { left:auto; right:-10px; transform:none; }
+.mbe-effort-stops button[aria-pressed=true],.mbe-effort-stops button:hover { color:#242427; font-weight:550; }
+.mbe-effort .mbe-effort-description { margin:13px 0 0; color:#454549; font-size:12px; line-height:18px; min-height:18px; }
+.mbe-effort .mbe-effort-cost { margin:5px 0 0; color:#89898e; font-size:11px; line-height:17px; }
+.mbe-effort:disabled { opacity:.5; }
+.mbe-effort:disabled input,.mbe-effort:disabled button { cursor:not-allowed; }
+@media(forced-colors:active) {
+  .mbe-effort-rail { background:CanvasText; }
+  .mbe-effort-rail i { background:CanvasText; }
+  .mbe-effort-track input::-webkit-slider-thumb { border-color:Highlight; background:Canvas; }
+  .mbe-effort-track input::-moz-range-thumb { border-color:Highlight; background:Canvas; }
 }
