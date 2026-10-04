@@ -7,10 +7,12 @@ import {
   ProjectSchema,
 } from "@/lib/domain";
 let accountId: string | null = null;
+let accountRevision = 0;
 function pendingChanged() {
   window.dispatchEvent(new Event("makeborne-cloud-pending"));
 }
 export function setCloudAccount(id: string | null) {
+  if (accountId !== id) accountRevision++;
   accountId = id;
 }
 export class CloudError extends Error {
@@ -86,33 +88,44 @@ export async function api<T>(
   const verb = body ? method : method === "POST" ? "GET" : method;
   const bodyText = body ? JSON.stringify(body) : undefined;
   const signature = `${verb}:${path}:${bodyText || ""}`;
+  const requestAccount = accountId;
+  const requestRevision = accountRevision;
+  const activeSignature = `${requestAccount}:${signature}`;
   const isWrite = verb !== "GET";
-  if (isWrite && activeRequests.has(signature))
+  function assertAccount(uncertain = false) {
+    if (requestRevision !== accountRevision) throw new CloudError(409,
+      uncertain ? "Your account changed while this save was in progress. Sign back into the original account and review the saved record before retrying." : "Your account changed. Reopen this view before continuing.",
+      "ACCOUNT_CHANGED", uncertain);
+  }
+  if (isWrite && !requestAccount) throw new CloudError(401, "Verify your account before saving cloud work.", "ACCOUNT_REQUIRED");
+  if (isWrite && activeRequests.has(activeSignature))
     throw new CloudError(
       409,
       "This request is already in progress. Wait for its result.",
       "REQUEST_PENDING",
     );
-  if (isWrite) activeRequests.add(signature);
+  if (isWrite) activeRequests.add(activeSignature);
   let storageId: string | undefined;
   let requestKey: string | undefined;
   try {
     const schema = schemaFor(path, verb);
     const headers: Record<string, string> = {};
+    if (requestAccount) headers["X-Makeborne-Account"] = requestAccount;
     if (bodyText) headers["Content-Type"] = "application/json";
     const needsKey =
       verb === "POST" &&
       (path.startsWith("/api/cloud/") || path === "/api/workspaces");
     if (needsKey) {
-      if (!accountId)
+      if (!requestAccount)
         throw new CloudError(
           401,
           "Verify your account before saving cloud work.",
         );
       const digest = await crypto.subtle.digest(
         "SHA-256",
-        new TextEncoder().encode(`${accountId}:${signature}`),
+        new TextEncoder().encode(`${requestAccount}:${signature}`),
       );
+      assertAccount();
       storageId = `makeborne.pending-write.${Array.from(new Uint8Array(digest))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("")}`;
@@ -129,7 +142,7 @@ export async function api<T>(
             })
             .parse(JSON.parse(existing));
           if (
-            pending.accountId !== accountId ||
+            pending.accountId !== requestAccount ||
             pending.path !== path ||
             pending.method !== verb ||
             pending.body !== bodyText
@@ -145,7 +158,7 @@ export async function api<T>(
               body: bodyText,
               path,
               method: verb,
-              accountId,
+              accountId: requestAccount,
               createdAt: new Date().toISOString(),
             }),
           );
@@ -160,6 +173,7 @@ export async function api<T>(
       }
       headers["Idempotency-Key"] = requestKey;
     }
+    assertAccount();
     let response: Response;
     try {
       response = await fetch(path, {
@@ -189,6 +203,7 @@ export async function api<T>(
         !!body,
       );
     }
+    assertAccount(isWrite);
     if (!response.ok) {
       const error = z
         .object({
@@ -234,7 +249,7 @@ export async function api<T>(
     }
     return result.data as T;
   } finally {
-    if (isWrite) activeRequests.delete(signature);
+    if (isWrite) activeRequests.delete(activeSignature);
   }
 }
 export type PendingCloudWrite = {

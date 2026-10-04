@@ -1,4 +1,5 @@
 import "server-only";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@/lib/server/http";
 import { CLOUD_SCHEMA_VERSION, getCloudStatus } from "./config";
 import type { CloudRole } from "./contracts";
+import { requestAccountMatches } from "./request-account";
 
 export function cloudJson(value: unknown, status = 200) {
   return Response.json(value, {
@@ -102,6 +104,9 @@ export async function cloudContext(workspaceId?: string, write = false) {
       "Sign in to access your cloud workspace.",
       401,
     );
+  // This header can only constrain the authenticated identity, never grant access.
+  const expectedAccount = (await headers()).get("X-Makeborne-Account");
+  if (!requestAccountMatches(expectedAccount, auth.user.id)) throw new RequestError("ACCOUNT_CHANGED", "Your signed-in account changed. Reopen this view before continuing.", 409);
   const { data: schemaVersion, error: schemaError } = await client.rpc(
     "makeborne_cloud_schema_version",
   );

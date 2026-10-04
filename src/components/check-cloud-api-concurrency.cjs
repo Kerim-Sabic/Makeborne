@@ -2,8 +2,9 @@
 const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "..").replaceAll("\\", "/");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8").replaceAll('"@/', `"${root}/`), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
-const { api } = require("./cloud-api.ts");
+const { api, setCloudAccount } = require("./cloud-api.ts");
 (async () => {
+  setCloudAccount("11111111-1111-4111-8111-111111111111");
   const waiting = [];
   global.fetch = () => new Promise(resolve => waiting.push(resolve));
   const first = api("/api/workspaces"), second = api("/api/workspaces");

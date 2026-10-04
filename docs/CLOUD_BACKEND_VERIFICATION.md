@@ -123,3 +123,13 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Seventeen storage regression checks pass, including account/workspace/device isolation, cleanup limited to one owner context, invalid identity rejection, and preservation of unknown-owner legacy drafts.
 - Browser: reopened a Book setup for the QA client and verified format/title/material/client still restored under the current account. No sign-out or second-account browser transition was performed; those need a dedicated authentication scenario. This does not claim encryption against someone with direct access to the same browser profile.
 - TypeScript, production build and focused lint pass; Studio lint retains two pre-existing image-element performance warnings. No new cloud records or paid provider calls.
+
+
+## Account identity during requests — 2026-10-04
+
+- Shared request helper captures account identity and an account-change revision at request start. An A-to-B-to-A switch still invalidates the old response. Reaffirming the same account does not.
+- Creation request hashing/storage uses the captured owner. A switch during hashing prevents storage/network dispatch; a switch after dispatch leaves the original owner's pending identity intact and reports an uncertain write rather than success under the new account.
+- Duplicate mutation locks are account-specific. Existing idempotency hash format is preserved so prior pending requests remain reconcilable. Anonymous client-side writes are rejected.
+- Browser calls include X-Makeborne-Account. Cloud context compares this optional constraint to auth.getUser before schema/workspace queries. It grants no authority, does not replace authentication/RLS, and preserves compatibility for other callers without the header.
+- Eight mocked-transport/account checks and three concurrency regressions pass, including original-account retry with the same request key and header. Normal signed-in client detail loading succeeds through the updated server path. TypeScript, lint and production build pass.
+- Limits: no real concurrent sign-out or second-account browser session was exercised; mismatch rejection is covered by the pure server predicate and code placement, not an authenticated HTTP mismatch fixture. No claim that a request already committed before a later sign-out can be undone. No cloud records or paid calls were made.
