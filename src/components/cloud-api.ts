@@ -67,7 +67,11 @@ function schemaFor(path: string, method: string) {
     return z.object({ artifact: ArtifactSchema, mutation });
   if (/\/clients\/[a-f0-9-]+$/.test(base)) return z.object({ client });
   if (/\/studio-projects$/.test(base)) return z.object({ project, artifact: ArtifactSchema, version: ArtifactVersionSchema, mutation });
-  if (/\/clients$/.test(base)) return z.object({ client, mutation });
+  if (/\/clients$/.test(base)) return method === "GET" ? z.object({
+    clients: z.array(client).max(50),
+    pagination: page.omit({ offset: true }),
+    counts: z.object({ all: z.number().int().nonnegative(), overdue: z.number().int().nonnegative(), today: z.number().int().nonnegative(), upcoming: z.number().int().nonnegative(), unscheduled: z.number().int().nonnegative() }),
+  }) : z.object({ client, mutation });
   if (/\/projects$/.test(base)) return z.object({ project, mutation });
   if (/\/workspaces\/[a-f0-9-]+$/.test(base))
     return z.object({

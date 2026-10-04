@@ -1,0 +1,42 @@
+begin;
+do $$
+declare u uuid:=gen_random_uuid(); other_u uuid:=gen_random_uuid(); w uuid:=gen_random_uuid(); other_w uuid:=gen_random_uuid(); result jsonb; first_page jsonb;
+begin
+ insert into auth.users(id,email) values(u,'directory-'||u||'@example.invalid'),(other_u,'directory-'||other_u||'@example.invalid');
+ insert into public.workspaces(id,name,owner_id) values(w,'Directory fixture',u),(other_w,'Isolated fixture',other_u);
+ insert into public.clients(workspace_id,name,created_at,outreach)
+ select w,case when i=204 then 'Literal %,comma' else 'Client '||i end,now()-i*interval '1 day',jsonb_build_object('stage',case when i=1 then 'Won' else 'Contacted' end,'channel','Email','profileUrl','','lastContact',null,'nextFollowUp',case when i in (1,205) then '2026-10-01' else null end,'notes','','activity','[]'::jsonb) from generate_series(1,205) i;
+ insert into public.clients(workspace_id,name) values(other_w,'Secret other workspace');
+ perform set_config('request.jwt.claim.sub',u::text,true);
+ set local role authenticated;
+ first_page:=public.makeborne_client_directory(w,'','All stages','all','2026-10-04',0);
+ if jsonb_array_length(first_page->'clients')<>50 or (first_page#>>'{pagination,total}')::int<>205 or (first_page#>>'{pagination,nextOffset}')::int<>50 then raise exception 'page bounds'; end if;
+ raise notice 'PASS bounded first page with full total';
+ if first_page#>>'{counts,overdue}'<>'1' or first_page#>>'{counts,unscheduled}'<>'203' then raise exception 'counts wrong'; end if;
+ raise notice 'PASS workspace counts exclude closed followups';
+ if first_page->'clients' @> '[{"name":"Client 205"}]'::jsonb then raise exception 'fixture not beyond page'; end if;
+ result:=public.makeborne_client_directory(w,'Client 205','All stages','all','2026-10-04',0);
+ if result#>>'{pagination,total}'<>'1' or result#>>'{clients,0,name}'<>'Client 205' then raise exception 'search missed later record'; end if;
+ raise notice 'PASS search finds client beyond first page';
+ result:=public.makeborne_client_directory(w,'','All stages','overdue','2026-10-04',0);
+ if result#>>'{pagination,total}'<>'1' or result#>>'{clients,0,name}'<>'Client 205' then raise exception 'overdue missed later record'; end if;
+ raise notice 'PASS overdue queue finds client beyond first page';
+ if result->'clients'->0 ? 'outreach' or result->'clients'->0 ? 'notes' then raise exception 'heavy details exposed'; end if;
+ raise notice 'PASS directory omits history and notes';
+ result:=public.makeborne_client_directory(w,'%','All stages','all','2026-10-04',0);
+ if result#>>'{pagination,total}'<>'1' then raise exception 'wildcard not literal'; end if;
+ raise notice 'PASS wildcard punctuation searched literally';
+ result:=public.makeborne_client_directory(w,'','All stages','all','2026-10-04',200);
+ if jsonb_array_length(result->'clients')<>5 or result#>'{pagination,nextOffset}'<>'null'::jsonb then raise exception 'last page'; end if;
+ raise notice 'PASS last page bounded';
+ result:=public.makeborne_client_directory(w,'','Won','overdue','2026-10-04',0);
+ if result#>>'{pagination,total}'<>'0' then raise exception 'filter intersection'; end if;
+ raise notice 'PASS stage and followup intersect';
+ begin perform public.makeborne_client_directory(other_w,'','All stages','all','2026-10-04',0); raise exception 'cross tenant'; exception when insufficient_privilege then raise notice 'PASS other workspace denied'; end;
+ begin perform public.makeborne_client_directory(w,'','All stages','all','2026-10-04',-1); raise exception 'negative offset'; exception when invalid_parameter_value then raise notice 'PASS invalid page denied'; end;
+ reset role;
+ set local role anon;
+ begin perform public.makeborne_client_directory(w,'','All stages','all','2026-10-04',0); raise exception 'anonymous'; exception when insufficient_privilege then raise notice 'PASS anonymous directory denied'; end;
+ reset role;
+end $$;
+rollback;
