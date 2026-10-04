@@ -103,3 +103,13 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Browser verified: QA client selection survived dialog reopening; created `QA client presentation — CRM handoff` with supplied text, then found it under that client's Projects tab. Artifact `03edc914-01d5-4838-9824-1f684bd705b5` in workspace `e68ff1eb-ed26-42ac-8864-689451e39c30`. Followed the client project link and confirmed the account editor opened. QA project retained; no provider calls or outreach messages.
 - Nine workspace-selection checks and nine creation-payload checks pass; TypeScript, focused ESLint and production build pass.
 - Limits: browser scenario covers presentation in one owner workspace. Website/book use the same handoff but were not separately created this pass. Multi-workspace and reviewer behavior have pure selection checks, not browser proof. Wizard resumes by initial format; resuming the last-used format after changing format and closing still needs improvement. Full AI generation remains disabled.
+
+
+## Resume the last creation format — 2026-10-04
+
+- The setup wizard now stores its last active format per creation context after the draft itself is written. Reopening resolves and validates that format before restoring the full draft.
+- Successful creation clears the format pointer and all drafts for that context. Legacy drafts without a pointer still use the requested format. Invalid pointers or missing referenced drafts fail without overwriting the stored source.
+- Browser verified in the QA account-client workflow: switch to Book, enter title/material, close/reopen, and observe Book/title/material/client retained. Then switch to Presentation, replace title/material, close, reload the page, reopen, and observe Presentation/title/material/client retained.
+- No new cloud project or provider call was made in this pass. Temporary draft lived in the agent's browser tab.
+- Nine offline draft-storage checks cover fresh and legacy cases, latest-format recovery, context separation, failed writes, damaged/missing pointers, and cleanup. TypeScript, focused lint and production build pass.
+- Scope: same-tab session storage survives page refresh, not guaranteed browser closure or another device. Account-isolated draft namespaces and fuller draft management remain follow-up work; this is not a cloud draft-sync implementation.

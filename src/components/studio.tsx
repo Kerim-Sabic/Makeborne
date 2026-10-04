@@ -12,6 +12,7 @@ import { useCreationAccount } from "./use-creation-account";
 import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import { createClient } from "@/lib/supabase/client";
 import { buildCreationPayload } from "@/lib/cloud/creation-payload";
+import { readWizardDraft, writeWizardDraft, clearWizardDrafts } from "@/lib/wizard-draft-storage";
 import type { CloudArtifact, CloudWorkspace } from "@/lib/cloud/contracts";
 import {
   LocalWorkspaceSchema,
@@ -1282,24 +1283,21 @@ function CreateModal({
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftWritable, setDraftWritable] = useState(true);
   const [draftNotice, setDraftNotice] = useState("");
-  const draftKey = (draftKind: Kind) =>
-    `makeborne.wizard-draft.v1.${draftKind}.${seed}`;
   useEffect(() => {
     queueMicrotask(() => {
       try {
-        const raw = sessionStorage.getItem(
-          `makeborne.wizard-draft.v1.${kind}.${seed}`,
-        );
+        const { raw, kind: savedKind } = readWizardDraft(sessionStorage, seed, kind);
         if (raw) {
           if (raw.length > 200000) throw new Error("Draft too large");
           const parsed = WizardDraftSchema.safeParse(JSON.parse(raw));
           if (
             !parsed.success ||
             parsed.data.seed !== seed ||
-            parsed.data.kind !== kind
+            parsed.data.kind !== savedKind
           )
             throw new Error("Invalid draft");
           const draft = parsed.data;
+          onKind(savedKind);
           setEffort(draft.effort);
           setStep(draft.step);
           setMode(draft.mode); setRequirements(draft.requirements);
@@ -1348,10 +1346,7 @@ function CreateModal({
         styleId,
         clientId,
       });
-      sessionStorage.setItem(
-        `makeborne.wizard-draft.v1.${kind}.${seed}`,
-        JSON.stringify(draft),
-      );
+      writeWizardDraft(sessionStorage, seed, kind, JSON.stringify(draft));
     } catch {
       queueMicrotask(() => {
         setDraftWritable(false);
@@ -1670,9 +1665,7 @@ function CreateModal({
             } finally { savingRef.current = false; setSaving(false); }
             if (saved) {
               try {
-                (["website", "book", "presentation"] as Kind[]).forEach(
-                  (format) => sessionStorage.removeItem(draftKey(format)),
-                );
+                clearWizardDrafts(sessionStorage, seed);
               } catch {
                 /* A retained draft is safe; the created project is saved. */
               }
