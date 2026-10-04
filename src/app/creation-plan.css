@@ -55,3 +55,6 @@
 .composition-presentation > b { font-size:28px; }
 @media(max-width:550px) { .prompt-mode-switch > span { display:none; } .prompt-options summary small { display:block; margin:4px 0 0; } .prompt-style-grid { gap:8px; } .prompt-style-composition > b { font-size:19px; } }
 @media(prefers-reduced-motion:reduce) { .prompt-style-grid > button { transition:none; } }
+
+.account-style-image { position:relative; display:block; width:100%; aspect-ratio:3/2; overflow:hidden; border-radius:8px; }
+.account-style-image img { object-fit:cover; }

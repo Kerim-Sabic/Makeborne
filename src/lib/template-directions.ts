@@ -1,7 +1,8 @@
 import type { Kind, Style } from "@/components/studio-model";
+import { curatedStyles } from "./curated-styles";
 
 export type TemplateDirectionId =
-  "form" | "signal" | "field" | "solstice" | "handbook" | "atlas";
+  "form" | "signal" | "field" | "solstice" | "handbook" | "atlas" | "brass-house" | "electric-mint" | "moss-notebook" | "ink-and-vermilion" | "cobalt-study" | "plum-salon";
 export type TemplateDirection = {
   id: TemplateDirectionId;
   title: string;
@@ -127,4 +128,13 @@ export const templateDirections: TemplateDirection[] = [
       font: "serif",
     },
   },
+  ...curatedStyles.map(({ kind, style }): TemplateDirection => ({
+    id: style.id as TemplateDirectionId,
+    title: style.name,
+    description: style.description,
+    kind,
+    baseStyleId: "editorial",
+    style,
+    brief: `Create a ${kind} using the ${style.name} visual direction: ${style.description} Use my supplied material and ask for missing facts. Do not invent claims or examples of client work.`,
+  })),
 ];

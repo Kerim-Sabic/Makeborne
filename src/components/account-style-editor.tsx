@@ -1,20 +1,20 @@
 "use client";
 import { useState } from "react";
 import { StyleProfileSchema, type ArtifactContent, type StyleProfile } from "@/lib/domain";
-import { baseStyles } from "./studio-model";
-import { curatedStyles } from "@/lib/curated-styles";
+import Image from "next/image";
+import { templateDirections } from "@/lib/template-directions";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 
 export default function AccountStyleEditor({ style, kind, disabled, onChange }: { style: StyleProfile; kind: ArtifactContent["kind"]; disabled: boolean; onChange: (style: StyleProfile) => void }) {
   const [error, setError] = useState("");
-  const choices = [...baseStyles, ...curatedStyles.filter(item => item.kind === kind).map(item => item.style)];
+  const choices = templateDirections.filter(item => item.kind === kind);
   return <details className="account-style-editor">
     <summary>Design direction <span>{style.name}</span></summary>
     <p className="small-note">Change colours and typography. Your content stays in place; previous designs remain in version history.</p>
     <fieldset disabled={disabled}>
       <legend>Choose a direction</legend>
-      <div className="account-style-options">{choices.map(choice => <button key={choice.id} type="button" aria-pressed={style.id === choice.id} onClick={() => { setError(""); onChange(accountStyleFromStudio(choice)); }}>
-        <span className="account-style-swatch" style={{ background: choice.background ?? "#F8F7F4", color: choice.textColor ?? "#16181D", fontFamily: choice.font === "serif" ? "var(--font-serif), Georgia, serif" : "var(--font-inter), Arial, sans-serif" }}>Aa<i style={{ background: choice.color }} /></span>
+      <div className="account-style-options">{choices.map(({ id, style: choice }) => <button key={choice.id} type="button" aria-pressed={style.id === choice.id} onClick={() => { setError(""); onChange(accountStyleFromStudio(choice)); }}>
+        <span className="account-style-image"><Image src={`/gallery/${id}.png`} alt="" fill sizes="(max-width: 600px) 42vw, 220px" /></span>
         <strong>{choice.name}</strong><small>{choice.description}</small>
       </button>)}</div>
     </fieldset>

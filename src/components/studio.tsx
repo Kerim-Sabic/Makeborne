@@ -1272,7 +1272,9 @@ function CreationWizard({
   const [audience, setAudience] = useState("");
   const [purpose, setPurpose] = useState("");
   const [wording, setWording] = useState("preserve");
-  const [styleId, setStyle] = useState(initialStyle);
+  const [requestedStyleId, setStyle] = useState(initialStyle);
+  const selectedStyle = styles.find(style => style.id === requestedStyleId) || styles[0];
+  const styleId = selectedStyle?.id ?? "";
   const [clientId, setClient] = useState(initialClient);
   const [seed] = useState(() =>
     creationSeed(initialBrief, initialTitle, initialStyle + (initialClient ? `::${initialClient}` : "") + (initialWorkspaceId ? `::workspace:${initialWorkspaceId}` : "")),
@@ -1370,8 +1372,6 @@ function CreationWizard({
     clientId,
     mode, requirements, outline, effort,
   ]);
-  const selectedStyle =
-    styles.find((style) => style.id === styleId) || styles[0];
   const plan = creationPlan({ kind, title, brief, audience, purpose, requirements, outline, style: selectedStyle?.name || "Custom direction" });
   const needsPlanAnswers = mode === "plan" && plan.structure.length === 0;
   return (
@@ -1398,7 +1398,7 @@ function CreationWizard({
         </div>
         <details className="prompt-options">
           <summary><span>Style <small>{selectedStyle?.name}</small></span><span>Browse all {styles.length}</span></summary>
-          <p className="creation-style-note">Optional. Every style is available below; suggestions for your format appear first.</p>
+          <p className="creation-style-note">Choose a style for your {kind}. You can refine it in the editor.</p>
           <div className="prompt-style-grid" role="group" aria-label="Project style">
             {styles.map(s => {
               const concept = styleConcept(s);

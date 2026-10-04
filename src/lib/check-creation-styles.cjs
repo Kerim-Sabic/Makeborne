@@ -6,7 +6,7 @@ let count = 0;
 function check(name, fn) { fn(); count++; console.log(`PASS ${name}`); }
 for (const [kind, expected] of [["book", ["direction-field", "direction-handbook"]], ["website", ["direction-form", "direction-solstice"]], ["presentation", ["direction-signal", "direction-atlas"]]]) {
   check(`${kind} directions first`, () => assert.deepEqual(creationStyles([], kind).slice(0, 2).map(style => style.id), expected));
-  check(`${kind} keeps all twelve authored directions`, () => assert.equal(new Set(creationStyles([], kind).map(style => style.id)).size, 12));
+  check(`${kind} shows only its four authored directions`, () => assert.equal(new Set(creationStyles([], kind).map(style => style.id)).size, 4));
 }
 const field = retainCreationStyle([], "direction-field");
 check("retains only chosen direction", () => assert.equal(field.length, 1));
@@ -20,6 +20,8 @@ check("unknown style is rejected", () => assert.throws(() => retainCreationStyle
 const custom = [{ ...changed, id: "custom-a" }, { ...changed, id: "custom-b" }];
 check("custom ordering preserved", () => assert.deepEqual(creationStyles(custom, "book").filter(style => style.id.startsWith("custom-")).map(style => style.id), ["custom-a", "custom-b"]));
 check("new authored style retains its exact palette", () => assert.equal(retainCreationStyle([], "electric-mint")[0].background, "#142824"));
-check("new style does not pretend to have generated artwork", () => assert.equal(styleConcept(retainCreationStyle([], "brass-house")[0]), undefined));
+check("new style has its own generated artwork", () => assert.equal(styleConcept(retainCreationStyle([], "brass-house")[0]).id, "brass-house"));
+check("book rejects saved website styles", () => assert.ok(!creationStyles(retainCreationStyle([], "brass-house"), "book").some(s => s.id === "brass-house")));
+check("book rejects saved slide styles", () => assert.ok(!creationStyles(retainCreationStyle([], "direction-atlas"), "book").some(s => s.id === "direction-atlas")));
 check("saved array unchanged", () => { creationStyles(custom, "book"); assert.equal(custom.length, 2); });
 console.log(`${count} creation style checks passed.`);
