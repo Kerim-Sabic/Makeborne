@@ -5,7 +5,8 @@ import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
 import AccountPreview from "./account-preview";
-import { appendAccountSection, appendAccountBlock, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
+import AccountArtworkUpload from "./account-artwork-upload";
+import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
 import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
 import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
@@ -1305,6 +1306,11 @@ export function CloudEditor({
       editRevision.current++; setContent(next); setDirty(true);
     } catch (error) { notify(error instanceof Error ? error.message : "Could not add content."); }
   }
+  function attachImage(sectionId: string, assetId: string) {
+    if (!content || role === "reviewer" || uncertainSave || conflict || recovery || lockChangePending) throw new Error("The editor changed while uploading. Retry the same file when editing is available.");
+    const next = appendAccountImage(content, sectionId, crypto.randomUUID(), assetId);
+    editRevision.current++; setContent(next); setAssetIds(current => [...new Set([...current, assetId])]); setDirty(true);
+  }
   function addSection() {
     if (!content || role === "reviewer" || uncertainSave || conflict || recovery) return;
     const title = `${content.kind === "book" ? "Chapter" : "Section"} ${content.sections.length + 1}`;
@@ -1620,6 +1626,7 @@ export function CloudEditor({
                 ))}
                 {role !== "reviewer" && !uncertainSave && !conflict && !recovery && <div className="button-row" aria-label={`Add content to section ${sectionIndex + 1}`}>
                   {(["heading", "paragraph", "quote"] as const).map(type => <button key={type} type="button" className="button secondary small" aria-label={`Add ${type} to section ${sectionIndex + 1}`} onClick={() => add(type, s.id)}><Plus size={14} />{type}</button>)}
+                  {process.env.NODE_ENV !== "production" && <AccountArtworkUpload accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} sectionNumber={sectionIndex + 1} disabled={busy || lockChangePending} onUploaded={assetId => attachImage(s.id, assetId)} />}
                 </div>}
               </section>
             ))}
@@ -1686,8 +1693,7 @@ export function CloudEditor({
               </button>
             )}
             <p className="small-note">
-              Artwork upload, automatic generation, and publication are separate
-              capabilities and are not performed by this editor.
+              {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Image exports, automatic generation, and publication are not connected." : "Artwork upload, automatic generation, and publication are not connected."}
             </p>
           </aside>
         </div>

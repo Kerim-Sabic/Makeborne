@@ -309,3 +309,14 @@ export async function readCloudImage(path: string, expectedAccount: string, sign
   if (!blob.size || blob.size > 8 * 1024 * 1024) throw new Error("Artwork preview exceeds the supported size.");
   return blob;
 }
+
+export async function uploadCloudImage(path: string, file: File, expectedAccount: string, signal: AbortSignal): Promise<string> {
+  const revision = accountRevision;
+  if (!expectedAccount || accountId !== expectedAccount) throw new Error("Your account changed. Reopen this project.");
+  if (!file.size || file.size > 8 * 1024 * 1024) throw new Error("Choose an image under 8 MB.");
+  const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Makeborne-Account": expectedAccount }, body: file, cache: "no-store", signal });
+  const result = await response.json();
+  if (signal.aborted || revision !== accountRevision || accountId !== expectedAccount) throw new Error("Your account changed. The image was not added to this editor.");
+  if (!response.ok) throw new Error(result?.error?.message || "Upload could not be confirmed. Retry the same file.");
+  return z.object({ asset: z.object({ id: z.string().uuid() }), reused: z.boolean() }).parse(result).asset.id;
+}

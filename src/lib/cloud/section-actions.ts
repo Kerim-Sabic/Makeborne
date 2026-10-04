@@ -43,3 +43,11 @@ export function restoreAccountSection(input: ArtifactContent, removed: RemovedAc
   content.sections.splice(Math.min(removed.index, content.sections.length), 0, structuredClone(removed.section));
   return ArtifactContentSchema.parse(content);
 }
+
+export function appendAccountImage(input: ArtifactContent, sectionId: string, blockId: string, assetId: string) {
+  const content = ArtifactContentSchema.parse(input);
+  const section = content.sections.find(item => item.id === sectionId);
+  if (!section) throw new Error("The target section is no longer available.");
+  section.blocks.push({ id: blockId, type: "image", text: "", sourceIds: [], assetId: z.string().uuid().parse(assetId), locked: false });
+  return ArtifactContentSchema.parse(content);
+}

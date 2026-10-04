@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Offline structural checks. */
 const fs=require('node:fs'),ts=require('typescript'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto');
 require.extensions['.ts']=(module,filename)=>module._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
-const {appendAccountSection,appendAccountBlock,moveAccountSection,removeAccountSection,restoreAccountSection}=require('./section-actions.ts');
+const {appendAccountSection,appendAccountBlock,appendAccountImage,moveAccountSection,removeAccountSection,restoreAccountSection}=require('./section-actions.ts');
 const first=randomUUID(), second=randomUUID(), block=randomUUID();
 const original={schemaVersion:1,title:'Fixture',kind:'book',sections:[{id:first,title:'Original',blocks:[{id:block,type:'paragraph',text:'Locked text',locked:true,sourceIds:[randomUUID()],assetId:null}]}]};
 let count=0;function check(name,fn){fn();count++;console.log(`PASS ${name}`);}
@@ -37,4 +37,10 @@ check('duplicate section restoration rejected',()=>assert.throws(()=>restoreAcco
 check('missing section removal rejected',()=>assert.throws(()=>removeAccountSection(unlocked,randomUUID()),/no longer/));
 check('last section can be removed and restored',()=>{const only={...unlocked,sections:[unlocked.sections[0]]};const r=removeAccountSection(only,first);assert.equal(r.content.sections.length,0);assert.deepEqual(restoreAccountSection(r.content,r.removed),only);});
 check('invalid restoration position rejected',()=>assert.throws(()=>restoreAccountSection(removed.content,{...removed.removed,index:-1}),/Invalid/));
+
+const imageId=randomUUID();const imageContent=appendAccountImage(unlocked,second,randomUUID(),imageId);
+check('image inserted into selected section',()=>{assert.equal(imageContent.sections[1].blocks.at(-1).assetId,imageId);assert.equal(imageContent.sections[1].blocks.at(-1).type,'image');});
+check('image insertion preserves other content',()=>assert.deepEqual(imageContent.sections[0],unlocked.sections[0]));
+check('missing image section rejected',()=>assert.throws(()=>appendAccountImage(unlocked,randomUUID(),randomUUID(),imageId),/no longer/));
+check('invalid image reference rejected',()=>assert.throws(()=>appendAccountImage(unlocked,second,randomUUID(),'bad-id')));
 console.log(`${count} section checks passed.`);
