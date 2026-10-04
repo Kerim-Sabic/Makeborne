@@ -55,6 +55,24 @@ export function prepareGenerationProposal(input: unknown, preparation: unknown, 
 }
 export type GenerationProposal = NonNullable<ReturnType<typeof prepareGenerationProposal>["proposal"]>;
 
+/** Parameter values for the private SQL store, not a browser/API payload. */
+export function generationProposalRecord(proposal: GenerationProposal, now: string) {
+  verifyGenerationApproval(proposal, proposal.approvalHash, proposal.input, now);
+  return {
+    workspace_id: proposal.input.scope.workspaceId,
+    project_id: proposal.input.scope.projectId,
+    artifact_id: proposal.input.scope.artifactId,
+    base_version_id: proposal.input.baseVersionId,
+    input_hash: proposal.inputHash,
+    approval_hash: proposal.approvalHash,
+    snapshot: proposal,
+    maximum_vendor_microusd: proposal.workflow.maximumVendorMicrousd,
+    maximum_customer_credits: proposal.workflow.maximumCustomerCredits,
+    prepared_at: proposal.workflow.preparedAt,
+    expires_at: proposal.workflow.expiresAt,
+  };
+}
+
 /** Compare an approval to a proposal fetched from trusted storage, never a client-
  * supplied proposal. Hashes are integrity bindings, NOT signatures/authorization.
  * Caller must separately recheck membership, rights, routes, balance, and atomically reserve. */

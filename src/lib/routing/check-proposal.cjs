@@ -25,4 +25,7 @@ check('route selection changes approval hash', () => assert.notEqual(prepareGene
 check('unconfigured routes produce no proposal', () => assert.equal(prepareGenerationProposal(input,policy,PLANNED_ROUTES).proposal,null));
 check('format mismatch rejected', () => assert.throws(() => prepareGenerationProposal({...input,content:{...input.content,kind:'book'}},policy,[route]), /format/));
 check('undeclared source rejected', () => assert.throws(() => prepareGenerationProposal({...input,content:{...input.content,sections:[{id:randomUUID(),title:'Section',blocks:[{id:randomUUID(),type:'paragraph',text:'Text',sourceIds:[randomUUID()]}]}]}},policy,[route]), /source/));
+check('storage record preserves exact integer strings', () => { const record = require('./proposal.ts').generationProposalRecord(p,now); assert.equal(typeof record.maximum_vendor_microusd,'string'); assert.equal(record.approval_hash,p.approvalHash); assert.equal(record.workspace_id,input.scope.workspaceId); });
+check('storage rejects expired proposal', () => assert.throws(() => require('./proposal.ts').generationProposalRecord(p,p.workflow.expiresAt), /no longer/));
+
 console.log(`${count} proposal checks passed; no provider calls.`);
