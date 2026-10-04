@@ -22,10 +22,10 @@
 .mbe-effort-track input:focus-visible::-webkit-slider-thumb { outline:3px solid #c9c9ce; outline-offset:3px; }
 .mbe-effort-track input:focus-visible::-moz-range-thumb { outline:3px solid #c9c9ce; outline-offset:3px; }
 .mbe-effort-stops { position:relative; height:28px; margin:1px 10px 0; }
-.mbe-effort-stops button { position:absolute; left:var(--stop); transform:translateX(-50%); border:0; border-radius:4px; padding:5px 0; margin:0; color:#858589; background:transparent; font-family:inherit; font-size:10.5px; line-height:16px; font-weight:400; white-space:nowrap; cursor:pointer; }
-.mbe-effort-stops button:first-child { left:-10px; transform:none; }
-.mbe-effort-stops button:last-child { left:auto; right:-10px; transform:none; }
-.mbe-effort-stops button[aria-pressed=true],.mbe-effort-stops button:hover { color:#242427; font-weight:550; }
+.mbe-effort .mbe-effort-stops button { position:absolute; left:var(--stop); transform:translateX(-50%); display:block; width:auto; min-width:0; min-height:0; border:0; border-radius:4px; padding:5px 0; margin:0; color:#858589; background:transparent; font-family:inherit; font-size:10.5px; line-height:16px; font-weight:400; white-space:nowrap; cursor:pointer; }
+.mbe-effort .mbe-effort-stops button:first-child { left:-10px; transform:none; }
+.mbe-effort .mbe-effort-stops button:last-child { left:auto; right:-10px; transform:none; }
+.mbe-effort .mbe-effort-stops button[aria-pressed=true],.mbe-effort .mbe-effort-stops button:hover { color:#242427; font-weight:550; }
 .mbe-effort .mbe-effort-description { margin:13px 0 0; color:#454549; font-size:12px; line-height:18px; min-height:18px; }
 .mbe-effort .mbe-effort-cost { margin:5px 0 0; color:#89898e; font-size:11px; line-height:17px; }
 .mbe-effort:disabled { opacity:.5; }
