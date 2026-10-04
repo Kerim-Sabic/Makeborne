@@ -3,36 +3,47 @@
   color:#27272a; font-family:var(--font-inter),Arial,sans-serif;
 }
 .mbe-effort-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
-.mbe-effort-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:17px; }
-.mbe-effort-heading label { display:block; margin:0; font-size:13px; line-height:20px; font-weight:500; color:#737377; }
-.mbe-effort-heading output { font-size:14px; line-height:20px; font-weight:600; color:#242427; }
+.mbe-effort-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:7px; }
+.mbe-effort-heading label { display:block; margin:0; font-size:13px; line-height:20px; font-weight:450; color:#77777d; }
+.mbe-effort-heading output { font-size:13px; line-height:20px; font-weight:550; color:#29292d; }
 .mbe-effort-heading output.is-ultra { color:#6552ac; }
-.mbe-effort-track { position:relative; height:30px; }
-.mbe-effort-rail { position:absolute; left:10px; right:10px; top:13px; height:4px; border-radius:4px; background:linear-gradient(to right,#29292d 0%,#29292d var(--effort-progress),#e5e5e7 var(--effort-progress),#e5e5e7 100%); pointer-events:none; }
-.mbe-effort-rail i { position:absolute; top:50%; transform:translate(-50%,-50%); width:6px; height:6px; border-radius:50%; background:#d9d9dc; }
-.mbe-effort-rail i.is-filled { background:#29292d; }
-.mbe-effort-track input { position:relative; z-index:1; display:block; appearance:none; -webkit-appearance:none; box-sizing:border-box; width:100%; height:30px; padding:0; margin:0; border:0; border-radius:0; background:transparent; cursor:pointer; outline:none; box-shadow:none; }
-.mbe-effort-track input::-webkit-slider-runnable-track { height:4px; border:0; background:transparent; }
-.mbe-effort-track input::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:20px; height:20px; margin-top:-8px; border:1.5px solid #29292d; border-radius:50%; background:#fff; box-shadow:0 1px 4px #0000001a; cursor:grab; }
-.mbe-effort-track input::-moz-range-track { height:4px; border:0; background:transparent; }
+.mbe-effort-track { position:relative; height:44px; }
+.mbe-effort-rail { position:absolute; left:12px; right:12px; top:19px; height:6px; border-radius:99px; background:#ebebee; pointer-events:none; }
+.mbe-effort-fill { position:absolute; inset:0 auto 0 0; width:var(--effort-progress); border-radius:inherit; background:#34343a; transition:width 180ms cubic-bezier(.22,1,.36,1); }
+.mbe-effort.is-ultra .mbe-effort-fill { background:linear-gradient(100deg,#487bf0,#7760dc,#4c8cf3,#7760dc); background-size:250% 100%; animation:effort-ultra-flow 5s ease-in-out infinite alternate; }
+.mbe-effort.is-ultra .mbe-effort-thumb { border-color:#8983df55; box-shadow:0 0 0 3px #7770df12,0 2px 7px #625bd333; }
+@keyframes effort-ultra-flow { from { background-position:0% 50%; } to { background-position:100% 50%; } }
+.mbe-effort-rail i { position:absolute; top:50%; transform:translate(-50%,-50%); width:3px; height:3px; border-radius:50%; background:#c9c9ce; }
+.mbe-effort-rail i.is-filled { background:#ffffff70; }
+.mbe-effort-rail i:first-of-type,.mbe-effort-rail i:last-of-type { opacity:0; }
+.mbe-effort-thumb { position:absolute; top:50%; left:var(--effort-progress); transform:translate(-50%,-50%); box-sizing:border-box; width:22px; height:22px; border:1px solid #0000000b; border-radius:50%; background:#fff; box-shadow:0 1px 3px #00000020,0 2px 7px #0000000b; transition:left 180ms cubic-bezier(.22,1,.36,1),box-shadow 140ms ease; }
+.mbe-effort-track:hover .mbe-effort-thumb { box-shadow:0 1px 4px #00000025,0 3px 9px #00000012; }
+.mbe-effort.is-dragging .mbe-effort-thumb,.mbe-effort.is-dragging .mbe-effort-fill { transition:none; }
+.mbe-effort.is-dragging .mbe-effort-thumb { box-shadow:0 0 0 4px #34343a08,0 2px 7px #00000024; }
+.mbe-effort-track input { position:relative; z-index:1; display:block; appearance:none; -webkit-appearance:none; box-sizing:border-box; width:100%; height:44px; padding:0; margin:0; border:0; border-radius:0; background:transparent; cursor:grab; outline:none; box-shadow:none; opacity:0; touch-action:pan-y; }
+.mbe-effort-track input:active { cursor:grabbing; }
+.mbe-effort-track input::-webkit-slider-runnable-track { height:6px; border:0; background:transparent; }
+.mbe-effort-track input::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:24px; height:24px; margin-top:-9px; border:0; }
+.mbe-effort-track input::-moz-range-track { height:6px; border:0; background:transparent; }
 .mbe-effort-track input::-moz-range-progress { background:transparent; }
-.mbe-effort-track input::-moz-range-thumb { box-sizing:border-box; width:20px; height:20px; border:1.5px solid #29292d; border-radius:50%; background:#fff; box-shadow:0 1px 4px #0000001a; cursor:grab; }
-.mbe-effort-track input:active::-webkit-slider-thumb { cursor:grabbing; background:#f5f5f5; }
-.mbe-effort-track input:active::-moz-range-thumb { cursor:grabbing; background:#f5f5f5; }
-.mbe-effort-track input:focus-visible::-webkit-slider-thumb { outline:3px solid #c9c9ce; outline-offset:3px; }
-.mbe-effort-track input:focus-visible::-moz-range-thumb { outline:3px solid #c9c9ce; outline-offset:3px; }
-.mbe-effort-stops { position:relative; height:28px; margin:1px 10px 0; }
-.mbe-effort .mbe-effort-stops button { position:absolute; left:var(--stop); transform:translateX(-50%); display:block; width:auto; min-width:0; min-height:0; border:0; border-radius:4px; padding:5px 0; margin:0; color:#858589; background:transparent; font-family:inherit; font-size:10.5px; line-height:16px; font-weight:400; white-space:nowrap; cursor:pointer; }
-.mbe-effort .mbe-effort-stops button:first-child { left:-10px; transform:none; }
-.mbe-effort .mbe-effort-stops button:last-child { left:auto; right:-10px; transform:none; }
-.mbe-effort .mbe-effort-stops button[aria-pressed=true],.mbe-effort .mbe-effort-stops button:hover { color:#242427; font-weight:550; }
-.mbe-effort .mbe-effort-description { margin:13px 0 0; color:#454549; font-size:12px; line-height:18px; min-height:18px; }
-.mbe-effort .mbe-effort-cost { margin:5px 0 0; color:#89898e; font-size:11px; line-height:17px; }
+.mbe-effort-track input::-moz-range-thumb { box-sizing:border-box; width:24px; height:24px; border:0; }
+.mbe-effort-track:has(input:focus-visible) .mbe-effort-thumb { outline:2px solid #898991; outline-offset:4px; }
+.mbe-effort-stops { position:relative; height:23px; margin:-2px 12px 0; }
+.mbe-effort .mbe-effort-stops button { position:absolute; left:var(--stop); transform:translateX(-50%); display:block; width:auto; min-width:0; min-height:0; border:0; border-radius:4px; padding:3px 0; margin:0; color:#83838b; background:transparent; font-family:inherit; font-size:11px; line-height:17px; font-weight:450; white-space:nowrap; cursor:pointer; transition:color 120ms ease; }
+.mbe-effort .mbe-effort-stops button:first-child { left:-12px; transform:none; }
+.mbe-effort .mbe-effort-stops button:last-child { left:auto; right:-12px; transform:none; }
+.mbe-effort .mbe-effort-stops button[aria-pressed=true],.mbe-effort .mbe-effort-stops button:hover { color:#29292d; }
+.mbe-effort .mbe-effort-description { margin:12px 0 0; color:#55555d; font-size:12px; line-height:18px; min-height:18px; }
+.mbe-effort .mbe-effort-cost { margin:3px 0 0; color:#8a8a92; font-size:11px; line-height:17px; }
 .mbe-effort:disabled { opacity:.5; }
 .mbe-effort:disabled input,.mbe-effort:disabled button { cursor:not-allowed; }
+@media(prefers-reduced-motion:reduce) {
+  .mbe-effort-thumb,.mbe-effort-fill,.mbe-effort .mbe-effort-stops button { transition:none; }
+  .mbe-effort.is-ultra .mbe-effort-fill { animation:none; }
+}
 @media(forced-colors:active) {
-  .mbe-effort-rail { background:CanvasText; }
+  .mbe-effort-rail { background:GrayText; }
+  .mbe-effort-fill,.mbe-effort.is-ultra .mbe-effort-fill { background:Highlight; animation:none; }
   .mbe-effort-rail i { background:CanvasText; }
-  .mbe-effort-track input::-webkit-slider-thumb { border-color:Highlight; background:Canvas; }
-  .mbe-effort-track input::-moz-range-thumb { border-color:Highlight; background:Canvas; }
+  .mbe-effort-thumb { forced-color-adjust:none; border:2px solid Highlight; background:Canvas; }
 }

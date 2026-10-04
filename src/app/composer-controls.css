@@ -7,7 +7,7 @@
 .creation-effort-trigger .creation-effort-label { color:#89898e; font-weight:400; }
 .creation-effort-trigger > svg { flex:none; color:#77777c; }
 .creation-effort-trigger:hover,.creation-effort-trigger[aria-expanded=true] { background:#f4f4f5; border-color:#dedee1; }
-.creation-effort-panel { position:fixed; box-sizing:border-box; width:min(320px,calc(100vw - 24px)); padding:18px 20px 16px; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#d8d8dc transparent; border:1px solid #e8e8eb; border-radius:16px; background:#fff; box-shadow:0 8px 30px #00000012,0 2px 6px #00000006; z-index:1000; }
+.creation-effort-panel { position:fixed; box-sizing:border-box; width:min(336px,calc(100vw - 24px)); padding:18px 20px 17px; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#d8d8dc transparent; border:1px solid #eaeaec; border-radius:18px; background:#fff; box-shadow:0 10px 35px #0000000e,0 2px 7px #00000006; z-index:1000; }
 .creation-controls button:focus-visible { outline:2px solid #8b8b93; outline-offset:3px; }
 @media(max-width:440px) {
   .creation-controls { gap:6px; }

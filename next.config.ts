@@ -24,6 +24,10 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      ...["studio", "chat", "login", "billing", "admin", "auth", "api"].map((route) => ({
+        source: `/${route}/:path*`,
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      })),
     ];
   },
 };

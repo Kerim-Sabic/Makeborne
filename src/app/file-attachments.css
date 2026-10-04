@@ -1,0 +1,27 @@
+.attachment-picker { display:inline-flex; flex:0 0 auto; }
+.attachment-add { display:grid; place-items:center; width:34px; height:34px; padding:0; border:0; border-radius:50%; color:#77727e; background:transparent; cursor:pointer; }
+.attachment-add:hover { color:#332d3c; background:#f1eef5; }
+.attachment-add:disabled { opacity:.4; cursor:default; }
+.attachment-section { min-width:0; margin:0 0 12px; }
+.attachment-list { display:flex; flex-wrap:wrap; gap:7px; padding:0; margin:0; list-style:none; }
+.attachment-chip { display:flex; position:relative; align-items:center; min-width:0; max-width:230px; border:1px solid #e8e4ec; border-radius:10px; background:#faf9fc; }
+.attachment-download { display:flex; align-items:center; min-width:0; gap:9px; padding:7px 9px; border:0; background:transparent; color:#635b6d; text-align:left; text-decoration:none; cursor:pointer; }
+.attachment-download:hover { color:#3d304a; }
+.attachment-thumbnail { display:grid; place-items:center; width:34px; height:36px; flex:0 0 34px; border-radius:5px; background:#efebf3; overflow:hidden; }
+.attachment-thumbnail img { width:100%; height:100%; object-fit:cover; }
+.attachment-details { display:grid; gap:4px; min-width:0; }
+.attachment-details strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; line-height:14px; font-weight:550; max-width:142px; }
+.attachment-details small { display:flex; align-items:center; gap:6px; color:#968d9e; font-size:10px; line-height:12px; }
+.attachment-remove { display:grid; place-items:center; align-self:flex-start; flex:0 0 22px; width:22px; height:22px; margin:3px 3px 0 0; padding:0; border:0; border-radius:50%; color:#94899e; background:transparent; cursor:pointer; }
+.attachment-remove:hover { background:#eae4ef; color:#46364f; }
+.attachment-note { margin:7px 0 0; color:#928a9a; font-size:10px; line-height:15px; text-align:left; }
+.attachment-section.is-compact .attachment-chip { max-width:100%; }
+.attachment-section.is-compact .attachment-details strong { max-width:165px; }
+.attachment-section.is-compact { margin:12px 0; }
+.attachment-picker.is-compact .attachment-add { width:28px; height:28px; }
+.attachment-error { margin:6px 0; color:#a14848; font-size:11px; line-height:1.6; }
+.mk-composer.is-file-dragging,.build-composer.is-file-dragging { outline:2px solid #9b81b5; outline-offset:3px; background:#fcfaff; }
+.attachment-drop-hint { color:#846498; font-size:12px; margin:0 0 10px; }
+.attachment-saving { animation:attachment-spin .9s linear infinite; }
+@keyframes attachment-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .attachment-saving { animation:none; } }

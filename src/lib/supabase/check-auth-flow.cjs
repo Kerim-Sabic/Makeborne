@@ -5,22 +5,32 @@ const ts = require("typescript");
 const assert = require("node:assert/strict");
 const source = fs.readFileSync(require.resolve("./auth-flow.ts"), "utf8");
 const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-const context = { exports: {}, URLSearchParams };
+const context = { exports: {}, URLSearchParams, URL };
 vm.runInNewContext(output, context);
 const { authDestination } = context.exports;
-for (const target of [null, "", "/studio", "/studio/cloud", "https://example.com", "//example.com", "/auth/update-password?next=evil"]) {
-  assert.equal(authDestination(target), "/studio");
-}
-assert.equal(authDestination("/auth/update-password"), "/auth/update-password");
+for (const target of [null, "", "https://example.com", "//example.com", "/\\example.com", "/auth/update-password?next=evil", "/admin", "/billingevil", "/studioevil"]) assert.equal(authDestination(target), "/studio");
+for (const target of ["/studio", "/studio/cloud", "/chat", "/billing", "/auth/update-password"]) assert.equal(authDestination(target), target);
 const workspace = "12345678-1234-1234-1234-123456789012", artifact = "22345678-1234-1234-1234-123456789012";
-const deep = `/studio?tab=projects&workspace=${workspace}&artifact=${artifact}`;
-assert.equal(authDestination(deep), deep);
-assert.equal(authDestination(deep + "&next=https://evil.example"), deep);
-assert.equal(authDestination(`/studio?tab=projects&workspace=${workspace}`), `/studio?tab=projects&workspace=${workspace}`);
-for (const target of ["/studio?tab=projects&workspace=https://evil.example", "/studio?tab=projects&artifact=" + artifact, deep + "/../../admin", "/studio?tab=settings&workspace=" + workspace, "/studio?tab=projects&workspace=" + "a".repeat(600)]) assert.equal(authDestination(target), "/studio");
-const clientDeep = `/studio?tab=clients&workspace=${workspace}&accountClient=${artifact}`;
-assert.equal(authDestination(clientDeep), clientDeep);
-assert.equal(authDestination(clientDeep + "&next=https://evil.example&client=local"), clientDeep);
-assert.equal(authDestination(`/studio?tab=clients&workspace=${workspace}`), `/studio?tab=clients&workspace=${workspace}`);
-for (const target of ["/studio?tab=clients&accountClient=" + artifact, "/studio?tab=clients&workspace=bad", clientDeep + "/../../admin"]) assert.equal(authDestination(target), "/studio");
-console.log("PASS: 22 auth destination checks; project/client links preserved, unsupported destinations rejected.");
+for (const tab of ["clients", "projects", "styles", "settings"]) {
+  const url = new URL(authDestination(`/studio?tab=${tab}&workspace=${workspace}&artifact=${artifact}&next=https://evil.example`), "https://makeborne.invalid");
+  assert.equal(url.pathname, "/studio");
+  assert.equal(url.searchParams.get("workspace"), workspace);
+  assert.equal(url.searchParams.get("artifact"), artifact);
+  assert.equal(url.searchParams.get("tab"), tab);
+  assert.equal(url.searchParams.has("next"), false);
+}
+const draft = `/studio?create=book&from=home&draft=${workspace}&claim=${artifact}`;
+const draftResult = new URL(authDestination(draft), "https://makeborne.invalid");
+assert.equal(draftResult.searchParams.get("draft"), workspace);
+assert.equal(draftResult.searchParams.get("claim"), artifact);
+assert.equal(draftResult.searchParams.get("create"), "book");
+const billing = `/billing?required=membership&next=${encodeURIComponent(draft)}#support`;
+const billingResult = new URL(authDestination(billing), "https://makeborne.invalid");
+assert.equal(billingResult.searchParams.get("next"), authDestination(draft));
+assert.equal(billingResult.searchParams.get("required"), "membership");
+assert.equal(billingResult.hash, "#support");
+assert.equal(authDestination("/billing?next=https://evil.example#wrong"), "/billing");
+assert.equal(authDestination(`/billing/return?request=${workspace}`), `/billing/return?request=${workspace}`);
+assert.equal(authDestination("/billing/return?request=bad"), "/billing");
+assert.equal(authDestination("/studio?draft=bad&claim=bad&create=evil&next=https://evil.example"), "/studio");
+console.log("PASS: internal account, draft, billing and checkout return URLs preserved; external and unsupported destinations rejected.");

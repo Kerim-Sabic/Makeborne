@@ -14,7 +14,7 @@ export async function GET() {
 }
 export async function POST(request: Request) {
   try {
-    const { client } = await cloudContext();
+    const { client } = await cloudContext(undefined, true);
     const body = await cloudBody(request, WorkspaceCreateSchema);
     const key = requestKey(request);
     const { data, error } = await client.rpc("makeborne_create_workspace", { p_request_key: key, p_name: body.name });

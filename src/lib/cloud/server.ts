@@ -11,6 +11,7 @@ import {
 import { CLOUD_SCHEMA_VERSION, getCloudStatus } from "./config";
 import type { CloudRole } from "./contracts";
 import { requestAccountMatches } from "./request-account";
+import { requireCreationAccess } from "@/lib/billing/access";
 
 export function cloudJson(value: unknown, status = 200) {
   return Response.json(value, {
@@ -50,6 +51,7 @@ export async function cloudBody<T extends z.ZodType>(
 }
 export function databaseError(error: { code?: string } | null) {
   if (!error) return;
+  if (error.code === "MB402") throw new RequestError("MEMBERSHIP_REQUIRED", "A verified creation membership is required before changing this workspace.", 402);
   if (error.code === "MB412") throw new RequestError("WORKSPACE_EXISTS", "Your private workspace already exists. Reload the workspace list to continue.", 409);
   if (error.code === "MB409") throw new RequestError("IDEMPOTENCY_CONFLICT", "This request key was already used for different content. Review the earlier operation before creating another request.", 409);
   if (error.code === "MB410") throw new RequestError("IDEMPOTENCY_RESULT_EXPIRED", "This request was already committed, but its replay window has ended. Review the saved records; this key cannot create another record.", 410);
@@ -107,6 +109,7 @@ export async function cloudContext(workspaceId?: string, write = false) {
   // This header can only constrain the authenticated identity, never grant access.
   const expectedAccount = (await headers()).get("X-Makeborne-Account");
   if (!requestAccountMatches(expectedAccount, auth.user.id)) throw new RequestError("ACCOUNT_CHANGED", "Your signed-in account changed. Reopen this view before continuing.", 409);
+  if (write) await requireCreationAccess(auth.user);
   const { data: schemaVersion, error: schemaError } = await client.rpc(
     "makeborne_cloud_schema_version",
   );

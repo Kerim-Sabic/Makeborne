@@ -12,6 +12,7 @@ import {
   prepareExport,
 } from "@/lib/server/export";
 import { epubDocument } from "@/lib/server/epub";
+import { requireCreationAccess } from "@/lib/billing/access";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
   let reserved = false;
   try {
     sameOrigin(request);
+    await requireCreationAccess();
     // Server rendering has not yet been connected to cloud quotas and tenant jobs.
     // Keep it local-only even if the application is deployed from this repo.
     if (process.env.NODE_ENV === "production")

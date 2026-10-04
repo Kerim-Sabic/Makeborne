@@ -3,10 +3,11 @@ import "@/app/studio-refresh.css";
 import { z } from "zod";
 import Link from "next/link";
 import Image from "next/image";
-import { creationStyles, retainCreationStyle, styleConcept } from "@/lib/creation-styles";
+import { creationStyles, styleConcept } from "@/lib/creation-styles";
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
 import BuildConversation from "./build-conversation";
+import { AttachmentList, useFileAttachments } from "./file-attachments";
 import ComposerControls from "./composer-controls";
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
@@ -16,6 +17,7 @@ import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud
 import { createClient } from "@/lib/supabase/client";
 import { buildCreationPayload } from "@/lib/cloud/creation-payload";
 import { readWizardDraft, writeWizardDraft, clearWizardDrafts, wizardDraftScope } from "@/lib/wizard-draft-storage";
+import { attachmentOwner, claimCreationDraft, copyAttachments, finishAttachmentHandoff, projectAttachmentKey } from "@/lib/attachments";
 import type { CloudArtifact, CloudWorkspace } from "@/lib/cloud/contracts";
 import {
   LocalWorkspaceSchema,
@@ -111,6 +113,7 @@ export default function Studio() {
   const [creationMode, setCreationMode] = useState<"create" | "plan">("create");
   const [creationEffort, setCreationEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   const [creationRequestId, setCreationRequestId] = useState("");
+  const [initialAttachmentOwner, setInitialAttachmentOwner] = useState<string | null>(null);
   const [homeHandoff, setHomeHandoff] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("projects");
@@ -136,7 +139,7 @@ export default function Studio() {
     return () => window.removeEventListener("keydown", closeNavigation);
   }, [mobileNav]);
   useEffect(() => {
-    queueMicrotask(() => {
+    queueMicrotask(async () => {
       let restored = emptyWorkspace();
       let readable = true;
       try {
@@ -172,7 +175,20 @@ export default function Studio() {
       const kind = parameters.get("create");
       if (parameters.get("from") === "home") {
         try {
-          const raw = sessionStorage.getItem("makeborne.creation-draft.v1");
+          let raw = sessionStorage.getItem("makeborne.creation-draft.v1");
+          const draftId = parameters.get("draft");
+          const claim = parameters.get("claim");
+          if (draftId || claim) {
+            if (!z.string().uuid().safeParse(draftId).success || !z.string().uuid().safeParse(claim).success) throw new Error("The creation return link is incomplete. Return to your original tab to continue.");
+            const verified = await createClient().auth.getUser();
+            if (verified.error || !verified.data.user) throw new Error("Sign in to recover your creation draft and its files.");
+            const recovered = await claimCreationDraft(draftId!, claim!, verified.data.user.id);
+            raw = JSON.stringify(recovered);
+            sessionStorage.setItem("makeborne.creation-draft.v1", raw);
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete("draft"); cleanUrl.searchParams.delete("claim");
+            window.history.replaceState(window.history.state, "", cleanUrl);
+          }
           if (raw) {
             const draft = z
               .object({
@@ -183,6 +199,7 @@ export default function Studio() {
                 mode: z.enum(["create", "plan"]).default("create"),
                 effort: EffortLevelSchema.default(DEFAULT_EFFORT),
                 requestId: z.string().uuid().optional(),
+                attachmentOwner: z.string().regex(/^(device|account:[0-9a-f-]{36})$/).optional(),
               })
               .strict()
               .safeParse(JSON.parse(raw));
@@ -190,6 +207,7 @@ export default function Studio() {
               setInitialBrief(draft.data.brief);
               setCreationMode(draft.data.mode); setCreationEffort(draft.data.effort);
               setCreationRequestId(draft.data.requestId ?? crypto.randomUUID());
+              setInitialAttachmentOwner(draft.data.attachmentOwner ?? null);
               setDirectStart(true);
               setInitialTitle(`Untitled ${draft.data.kind}`);
               setDraftBrief(draft.data.brief);
@@ -218,10 +236,11 @@ export default function Studio() {
                 "The saved creation brief could not be safely loaded. Its original session data has been preserved.",
               );
           }
-        } catch {
+        } catch (error) {
           setNotice(
-            "The saved creation brief could not be read. You can enter it again in the studio.",
+            error instanceof Error ? error.message : "The saved creation brief could not be read. Continue from your original browser or start a new project.",
           );
+          return;
         }
       }
       if (kind === "book" || kind === "website" || kind === "presentation")
@@ -235,7 +254,7 @@ export default function Studio() {
       : { tab: "settings", projectId: null, clientId: null } as const;
     setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
     // Keep unsaved client/style forms mounted when the underlying route changes.
-    setCreating(null); setInitialWorkspaceId(null); setInitialClient(""); setMobileNav(false);
+    setCreating(null); setInitialAttachmentOwner(null); setInitialWorkspaceId(null); setInitialClient(""); setMobileNav(false);
     if ("notice" in route && route.notice) setNotice(route.notice);
   });
   useEffect(() => {
@@ -368,79 +387,6 @@ export default function Studio() {
   function navigate(name: string) {
     openRoute({ tab: studioTab(name), projectId: null, clientId: null });
   }
-  function createProject(values: {
-    effort: EffortLevel;
-    title: string;
-    brief: string;
-    audience: string;
-    purpose: string;
-    styleId: string;
-    clientId: string;
-    wording: string;
-    content: string;
-    kind: Kind;
-  }) {
-    const t = now();
-    const lines = values.content.split(/\n\s*\n/).filter(Boolean);
-    const blocks: Block[] = lines.map((text, i) => ({
-      id: uid(),
-      type: i === 0 ? "heading" : "paragraph",
-      text,
-    }));
-    if (!blocks.length)
-      blocks.push({ id: uid(), type: "heading", text: values.title });
-    const p: Project = {
-      ...values,
-      id: uid(),
-      clientId: values.clientId || null,
-      status: "draft",
-      blocks,
-      versions: [],
-      activity: [{ at: t, text: "Project created in your local workspace" }],
-      createdAt: t,
-      updatedAt: t,
-    };
-    if (!persistenceAllowed) {
-      toast(
-        "Recover your saved workspace before creating a project. Your creation draft remains available.",
-      );
-      return false;
-    }
-    const nextWorkspace = {
-      ...workspace,
-      projects: [p, ...workspace.projects],
-      styles: workspace.styles,
-    };
-    try {
-      nextWorkspace.styles = retainCreationStyle(workspace.styles, values.styleId);
-      saveLocalWorkspace(nextWorkspace, localStorage);
-    } catch {
-      toast(
-        "This browser could not save the project. Your creation draft remains available; download a backup from Settings.",
-      );
-      return false;
-    }
-    setWorkspace(nextWorkspace);
-    setDirectStart(false);
-    openRoute({ tab: "projects", projectId: p.id, clientId: null }, directStart || homeHandoff);
-    setCreating(null);
-    if (homeHandoff && persistenceAllowed) {
-      try {
-        sessionStorage.removeItem("makeborne.creation-draft.v1");
-        setHomeHandoff(false);
-      } catch {
-        /* A retained session draft is safe to keep. */
-      }
-    }
-    setInitialBrief("");
-    setInitialTitle("");
-    setInitialClient("");
-    setDraftBrief("");
-    toast(
-      "Project created. Your supplied content is ready to edit. No AI generation was performed.",
-    );
-    return true;
-  }
   async function importBackup(file: File) {
     try {
       if (file.size > 10_000_000) throw new Error("Backup too large");
@@ -502,6 +448,7 @@ export default function Studio() {
           initialMode={creationMode}
           initialEffort={creationEffort}
           requestId={creationRequestId}
+          initialAttachmentOwner={initialAttachmentOwner}
           initialClient={initialClient}
           initialWorkspaceId={initialWorkspaceId}
           initialStyle={initialStyle}
@@ -511,10 +458,9 @@ export default function Studio() {
           onKind={setCreating}
           clients={workspace.clients}
           styles={creationStyles(workspace.styles, creating)}
-          close={() => { if (directStart) openRoute({ tab: "projects", projectId: null, clientId: null }, true); setCreating(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); }}
-          create={createProject}
+          close={() => { if (directStart) openRoute({ tab: "projects", projectId: null, clientId: null }, true); setCreating(null); setInitialAttachmentOwner(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); }}
           accountCreated={(workspaceId, artifact) => {
-            setCreating(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief("");
+            setCreating(null); setInitialAttachmentOwner(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief("");
             try { sessionStorage.removeItem("makeborne.creation-draft.v1"); } catch { /* Saved project takes precedence. */ } setInitialTitle(""); setDraftBrief("");
             openRoute({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId: artifact.id } }, directStart || homeHandoff);
             toast("Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
@@ -1222,11 +1168,13 @@ function CreateModal(props: Omit<Parameters<typeof CreationWizard>[0], "account"
   const account = useCreationAccount(props.initialWorkspaceId);
   const LoadingFrame = props.directStart ? CreationSession : Modal;
   if (!account.ready) return <LoadingFrame close={props.close} title="Create a project"><h2>{account.error ? "Account unavailable" : "Opening your project…"}</h2><p role="status">{account.error || "Checking where your project and draft will be saved."}</p><button className="button secondary" onClick={props.close}>Back</button></LoadingFrame>;
+  if (!account.accountId) return <LoadingFrame close={props.close} title="Create a project"><h2>Sign in to create</h2><p>Your account connection is unavailable. Creation requires a signed-in account and an active creation plan. Your draft is preserved.</p><Link className="button" href="/login?next=%2Fstudio">Sign in</Link><button className="button secondary" onClick={props.close}>Back to projects</button></LoadingFrame>;
+  if (props.initialAttachmentOwner && props.initialAttachmentOwner !== attachmentOwner(account.accountId)) return <LoadingFrame close={props.close} title="Create a project"><h2>Your account changed</h2><p>The attached files belong to the account that started this brief. Return to that account to continue, or start a new project from home.</p><button className="button secondary" onClick={props.close}>Back to projects</button></LoadingFrame>;
   return <CreationWizard {...props} account={account} key={`${account.accountId ?? "device"}:${account.workspace?.id ?? "new"}`} />;
 }
 
 function CreationWizard({
-  directStart, initialMode, initialEffort, requestId,
+  directStart, initialMode, initialEffort, requestId, initialAttachmentOwner,
   account,
   initialWorkspaceId,
   initialClient,
@@ -1238,10 +1186,10 @@ function CreationWizard({
   clients: deviceClients,
   styles,
   close,
-  create,
   accountCreated,
 }: {
   directStart: boolean; initialMode: "create" | "plan"; initialEffort: EffortLevel; requestId: string;
+  initialAttachmentOwner: string | null;
   account: CreationAccount;
   initialWorkspaceId: string | null;
   initialClient: string;
@@ -1254,25 +1202,15 @@ function CreationWizard({
   styles: Style[];
   close: () => void;
   accountCreated: (workspaceId: string, artifact: CloudArtifact) => void;
-  create: (v: {
-    effort: EffortLevel;
-    title: string;
-    brief: string;
-    audience: string;
-    purpose: string;
-    styleId: string;
-    clientId: string;
-    wording: string;
-    content: string;
-    kind: Kind;
-  }) => boolean;
 }) {
   const clients = account.accountId ? account.clients : deviceClients;
+  const sourceAttachments = useFileAttachments(initialAttachmentOwner, `draft:${requestId}`);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState("");
   const [uncertain, setUncertain] = useState(false);
   const pending = useRef<{ accountId: string; workspaceId: string; body: ReturnType<typeof buildCreationPayload> } | null>(null);
+  const createdCloudArtifact = useRef<CloudArtifact | null>(null);
   const step = 1; // Retain compatibility with saved drafts from the previous wizard.
   const [mode, setMode] = useState<"plan" | "create">(initialMode);
   const [effort, setEffort] = useState<EffortLevel>(initialEffort);
@@ -1425,20 +1363,22 @@ function CreationWizard({
                   pending.current = { accountId: account.accountId, workspaceId: target.id, body };
                 }
                 const request = pending.current;
-                const result = await api<{ artifact: CloudArtifact }>(`/api/cloud/workspaces/${request.workspaceId}/studio-projects`, request.body);
+                const artifact = createdCloudArtifact.current ?? (await api<{ artifact: CloudArtifact }>(`/api/cloud/workspaces/${request.workspaceId}/studio-projects`, request.body)).artifact;
+                createdCloudArtifact.current = artifact;
+                if (initialAttachmentOwner) await copyAttachments(initialAttachmentOwner, `draft:${requestId}`, projectAttachmentKey(`${account.accountId}:${request.workspaceId}:${artifact.id}`));
                 saved = true; pending.current = null; setUncertain(false);
-                accountCreated(request.workspaceId, result.artifact);
+                accountCreated(request.workspaceId, artifact);
               } else {
-                if (pending.current) throw new Error("Sign back into the account that started this save to retry it.");
-                saved = create(values);
+                throw new Error("Sign in with an active creation plan to continue. Your draft and files are preserved.");
               }
             } catch (error) {
-              const unknown = !!pending.current && error instanceof CloudError && error.uncertain;
+              const unknown = !!createdCloudArtifact.current || (!!pending.current && error instanceof CloudError && error.uncertain);
               if (!unknown && !uncertain) pending.current = null;
               setUncertain(unknown || uncertain);
               setSaveError(error instanceof z.ZodError ? "Some details exceed the supported limits. Shorten the title or content and try again." : error instanceof Error ? error.message : "Could not save. Your draft is preserved.");
             } finally { savingRef.current = false; setSaving(false); }
             if (saved) {
+              if (initialAttachmentOwner) await finishAttachmentHandoff(initialAttachmentOwner, requestId).catch(() => { /* Project files are saved; a retained home draft is safe. */ });
               try {
                 clearWizardDrafts(sessionStorage, storageSeed);
               } catch {
@@ -1456,6 +1396,7 @@ function CreationWizard({
   return (
     <Frame close={() => { if (!savingRef.current) close(); }} title="Create a project">
       <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
+      <AttachmentList files={sourceAttachments.files} />
       {saveError && <p role="alert" className="small-note">{saveError}</p>}
       <div className="wizard-content" ref={wizardContent} inert={saving || uncertain || !account.ready}>
         <h2 tabIndex={-1}>{directStart ? mode === "plan" ? "Let’s shape your idea" : "Opening your project" : "What would you like to make?"}</h2>

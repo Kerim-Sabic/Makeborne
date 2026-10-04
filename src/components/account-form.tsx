@@ -20,8 +20,7 @@ export default function AccountForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [retryAt, setRetryAt] = useState(0);
   function returnDestination() {
-    const safe = authDestination(new URLSearchParams(window.location.search).get("next"));
-    return safe.startsWith("/studio") ? safe : "/studio";
+    return authDestination(new URLSearchParams(window.location.search).get("next"));
   }
   useEffect(() => {
     const abort = new AbortController();
@@ -40,7 +39,7 @@ export default function AccountForm() {
       queueMicrotask(() =>
         setMessage(
           error === "cloud-unavailable"
-            ? "Account access is not available yet. You can return to your studio."
+            ? "Account access is temporarily unavailable. Your saved brief is kept in this browser."
             : "This email link expired or could not be verified. Request a new link or sign in.",
         ),
       );

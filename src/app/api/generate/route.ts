@@ -5,6 +5,7 @@ import {
   sameOrigin,
 } from "@/lib/server/http";
 import { z } from "zod";
+import { requireCreationAccess } from "@/lib/billing/access";
 
 const requestSchema = z.object({
   kind: z.enum(["website", "book", "presentation"]),
@@ -22,6 +23,7 @@ const requestSchema = z.object({
 export async function POST(request: Request) {
   try {
     sameOrigin(request);
+    await requireCreationAccess();
     const parsed = requestSchema.safeParse(await boundedJson(request));
     if (!parsed.success)
       throw new RequestError(

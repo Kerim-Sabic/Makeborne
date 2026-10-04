@@ -2,12 +2,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, useRef, useState } from "react";
-import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Globe2, Menu, Plus, Presentation, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, BookOpen, Check, Globe2, Menu, Presentation, X } from "lucide-react";
 import ComposerControls from "./composer-controls";
 import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
 import BrandMark from "./brand-mark";
 import TemplateGallery from "./template-gallery";
 import type { Style } from "./studio-model";
+import { useCreationAccount } from "./use-creation-account";
+import { attachmentOwner, saveCreationDraft } from "@/lib/attachments";
+import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop } from "./file-attachments";
 import "@/app/home.css";
 
 type Kind = "website" | "book" | "presentation";
@@ -40,36 +43,34 @@ export default function CreationHome() {
   const [mode, setMode] = useState<"create" | "plan">("create");
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   const [brief, setBrief] = useState("");
-  const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
-  const uploadRef = useRef<HTMLInputElement>(null);
-  function start(selectedKind: Kind = kind, text = brief, styleId = "editorial", style?: Style) {
-    if (busy) return;
+  const account = useCreationAccount();
+  const owner = account.ready ? attachmentOwner(account.accountId) : null;
+  const attachments = useFileAttachments(owner, "home");
+  const drop = useFileDrop(attachments.add, !attachments.ready || attachments.busy || busy);
+  const starting = useRef(false);
+  async function start(selectedKind: Kind = kind, text = brief, styleId = "editorial", style?: Style) {
+    if (starting.current || attachments.busy) return;
+    if (!owner || !attachments.ready) { setError(account.error || attachments.error || "Checking your account and file storage. Try again in a moment."); return; }
     if (!text.trim()) { promptRef.current?.focus(); return; }
     if (text.trim().length > 20000) { setError("Keep your brief and style instructions under 20,000 characters."); return; }
+    starting.current = true; setBusy(true);
     try {
-      sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify({ kind: selectedKind, brief: text.trim(), styleId, style, mode, effort, requestId: crypto.randomUUID() }));
-      setBusy(true);
-      router.push(`/studio?create=${selectedKind}&from=home`);
-    } catch { setError("Your browser could not keep this brief. Copy your text before opening the studio."); }
+      const requestId = crypto.randomUUID();
+      const nonce = crypto.randomUUID();
+      const draft = { kind: selectedKind, brief: text.trim(), styleId, style, mode, effort, requestId, attachmentOwner: owner };
+      await saveCreationDraft(owner, requestId, nonce, draft);
+      sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify(draft));
+      router.push(`/studio?create=${selectedKind}&from=home&draft=${requestId}&claim=${nonce}`);
+    } catch { setError("Your browser could not save this brief and its files. Keep a copy and try again."); starting.current = false; setBusy(false); }
   }
   function addIdea(text: string) {
     const combined = [brief.trim(), text].filter(Boolean).join("\n\n");
     if (combined.length > 20000) { setError("There isn't room for this suggestion. Your existing brief is preserved."); return; }
     setBrief(combined); setError(""); promptRef.current?.focus();
-  }
-  async function importText(file?: File) {
-    if (!file) return;
-    if (!/\.(txt|md)$/i.test(file.name) || file.size > 100_000) { setError("Choose a text or Markdown file under 100 KB."); return; }
-    try {
-      const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
-      const combined = [brief.trim(), text.trim()].filter(Boolean).join("\n\n");
-      if (combined.length > 20000) { setError("Keep your brief and source text under 20,000 characters."); return; }
-      setBrief(combined); setFileName(file.name); setError(""); promptRef.current?.focus();
-    } catch { setError("This file could not be read as UTF-8 text. Try a plain text file."); }
   }
   return (
     <main className="mk-home">
@@ -85,32 +86,47 @@ export default function CreationHome() {
           <h1 id="creation-heading">What will you<br className="mk-mobile-break" /> make next?</h1>
           <p className="mk-hero-subtitle">Beautiful websites. Books worth opening. Slides that stay with you.</p>
           <div className="mk-format-switch" style={{ "--format-index": formats.findIndex(item => item.id === kind) } as CSSProperties} role="group" aria-label="What would you like to create?"><span className="mk-format-indicator" aria-hidden="true" />{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { setKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
-          <form className="mk-composer" onSubmit={event => { event.preventDefault(); start(); }}>
+          <form className={`mk-composer${drop.dragging ? " is-file-dragging" : ""}`} {...drop.handlers} onSubmit={event => { event.preventDefault(); void start(); }}>
+            {drop.dragging && <p className="attachment-drop-hint">Drop files to attach</p>}
+            <AttachmentList files={attachments.files} onRemove={id => void attachments.remove(id)} disabled={attachments.busy || busy} />
             <label className="mk-sr-only" htmlFor="creation-brief">Describe your project</label>
             <textarea ref={promptRef} id="creation-brief" maxLength={20000} value={brief} onChange={event => { setBrief(event.target.value); setError(""); }} placeholder={kind === "website" ? "A beautiful website for my business, with…" : kind === "book" ? "An illustrated book about something I know well…" : "A presentation that tells the story of…"} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); start(); } }} />
             <div className="mk-composer-bottom">
-              <button className="mk-attach" type="button" onClick={() => uploadRef.current?.click()} aria-label="Add a text or Markdown file" title="Add your text"><Plus size={18} /></button>
-              <input ref={uploadRef} type="file" hidden accept=".txt,.md,text/plain,text/markdown" onChange={event => { void importText(event.target.files?.[0]); event.target.value = ""; }} />
+              <AttachFilesButton onFiles={attachments.add} disabled={!attachments.ready || busy} busy={attachments.busy} />
               <ComposerControls mode={mode} onMode={setMode} effort={effort} onEffort={setEffort} />
-              <button className="mk-send" type="submit" disabled={busy || !brief.trim()} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
+              <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim()} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
             </div>
           </form>
-          {fileName && <div className="mk-file-note"><FileText size={13} />{fileName}<span>Text added to your brief</span></div>}
+          {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
           <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>
-          <p className="mk-availability">Explore the editor now. Live AI generation is coming next.</p>
+          <p className="mk-availability">An account and creation plan are required. Live AI generation is coming next.</p>
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>
       <section className="mk-discovery" id="templates" aria-label="Style directions"><TemplateGallery key={kind} initialFilter={kind} onChoose={(selectedKind, text, styleId, style) => start(selectedKind, [brief.trim(), text].filter(Boolean).join("\n\n"), styleId, style)} /></section>
       <section className="mk-client-band" aria-labelledby="client-work-heading">
-        <div className="mk-client-copy"><span className="mk-overline">MADE FOR CLIENT WORK</span><h2 id="client-work-heading">Great work.<br />Happy clients.</h2><p>Keep the brief, the latest version, and the next conversation together. From first hello to final handoff.</p><Link href="/studio?tab=clients">Open your client workspace <ArrowUpRight size={16} /></Link></div>
-        <div className="mk-client-board" aria-label="Example client workspace"><header><span>Client projects</span><small>Illustration</small></header><div className="mk-client-board-labels"><span>CLIENT / PROJECT</span><span>STATUS</span></div>{[{initial:"F",name:"Form Studio",project:"Portfolio website",status:"In progress",tone:"violet"},{initial:"M",name:"Moss & Paper",project:"Illustrated field guide",status:"In review",tone:"amber"},{initial:"A",name:"Atlas Collective",project:"Workshop presentation",status:"Delivered",tone:"green"}].map(item => <div className="mk-client-board-row" key={item.initial}><span className={`mk-board-avatar ${item.tone}`}>{item.initial}</span><div><strong>{item.name}</strong><small>{item.project}</small></div><span className={`mk-board-status ${item.tone}`}><i />{item.status}</span></div>)}<footer><span>Every version. Every next step.</span><span>One workspace <Check size={13} /></span></footer></div>
+        <div className="mk-client-copy">
+          <span className="mk-overline">FOR YOUR CLIENT WORK</span>
+          <h2 id="client-work-heading">One place for<br /> every client.</h2>
+          <p>Keep their projects, your conversations, and the next step together. Pick up exactly where you left off.</p>
+          <Link className="mk-client-cta" href="/studio?tab=clients">Open client workspace <ArrowUpRight size={16} aria-hidden="true" /></Link>
+        </div>
+        <div className="mk-client-workflow" aria-label="Your client workflow">
+          <div className="mk-client-workflow-heading"><span className="mk-client-workflow-mark" aria-hidden="true"><BrandMark size={22} /></span><span>From first hello to final handoff.</span></div>
+          <ol>
+            <li><span className="mk-workflow-step" aria-hidden="true">01</span><div><h3>Know the client</h3><p>Contact details, outreach, and the brief.</p></div></li>
+            <li><span className="mk-workflow-step" aria-hidden="true">02</span><div><h3>Keep the work connected</h3><p>Every project and its saved versions.</p></div></li>
+            <li><span className="mk-workflow-step" aria-hidden="true"><Check size={15} strokeWidth={1.8} /></span><div><h3>Know what comes next</h3><p>Notes and follow-ups, ready when you are.</p></div></li>
+          </ol>
+        </div>
       </section>
       <footer className="mk-footer">
-        <div className="mk-footer-main"><div className="mk-footer-brand"><Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={28} /><span>Makeborne</span></Link><p>From a first thought<br />to something worth sharing.</p></div>
-          <nav aria-label="Footer navigation"><div><h3>Create</h3><Link href="/studio">Your studio</Link><Link href="/chat">Expert chat</Link><a href="#templates">Explore styles</a><Link href="/studio?tab=clients">Client workspace</Link></div><div><h3>Your account</h3><Link href="/login">Sign in</Link><Link href="/billing">Plans &amp; credits</Link><Link href="/studio?tab=projects">Your projects</Link></div></nav>
-        </div><div className="mk-footer-bottom"><span>© 2026 Makeborne</span><span>A place for things worth making.</span><a href="#creation-heading">Back to top ↑</a></div>
+        <div className="mk-footer-main">
+          <div className="mk-footer-brand"><Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={25} /><span>Makeborne</span></Link><p>Make something worth sharing.</p></div>
+          <nav aria-label="Footer navigation"><Link href="/studio">Studio</Link><Link href="/chat">Expert chat</Link><a href="#templates">Styles</a><Link href="/billing">Plans &amp; credits</Link></nav>
+        </div>
+        <div className="mk-footer-bottom"><span>© 2026 Makeborne</span><a href="#creation-heading">Back to top <ArrowUp size={13} aria-hidden="true" /></a></div>
       </footer>
     </main>
   );
