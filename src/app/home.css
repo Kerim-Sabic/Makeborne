@@ -124,7 +124,6 @@
 .mk-format-switch button{position:relative;z-index:1;justify-content:center;padding:9px 8px;min-width:0}
 .mk-format-switch button.is-active{background:transparent;border-color:transparent;box-shadow:none;color:#514079}
 .mk-format-indicator{position:absolute;left:4px;top:4px;bottom:4px;width:calc((100% - 8px)/3);border-radius:24px;background:#fff;box-shadow:0 2px 8px #41396612;transform:translateX(calc(var(--format-index)*100%));transition:transform .32s cubic-bezier(.22,1,.36,1);pointer-events:none}
-.mk-composer>.creation-controls{margin-top:14px;padding-top:12px;border-top:1px solid #f0edf5}
 @media(max-width:440px){.mk-format-switch button{font-size:11px;gap:5px}.mk-composer .creation-controls{gap:6px}.creation-effort-trigger{font-size:11px}}
 
 /* Quiet interactions: no lifting cards or animated decorative surfaces. */
@@ -132,6 +131,21 @@
 .mk-home button:hover,.mk-send:not(:disabled):hover,.mk-idea-chips button:hover{transform:none}
 .mk-format-indicator{transition:transform .2s ease-out;box-shadow:0 1px 4px #30233c0a}
 .mk-composer{backdrop-filter:none;-webkit-backdrop-filter:none;overflow:visible;position:relative;z-index:4}
+
+/* One quiet composer toolbar, with secondary settings kept in the popover. */
+.mk-composer-bottom{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:10px;margin-top:15px;padding-top:12px;border-top:1px solid #f1edf5}
+.mk-composer-bottom .mk-attach{display:grid;place-items:center;flex:0 0 32px;width:32px;min-width:32px;height:34px;min-height:34px;padding:0;border:0;border-radius:8px;color:#918799;background:transparent}
+.mk-composer-bottom .mk-attach:hover{color:#61546e;background:#f5f2f8}
+.mk-composer-bottom .creation-controls{position:static;flex:0 1 auto;gap:8px;margin-right:auto}
+.mk-composer-bottom .creation-effort-panel{left:0;width:min(278px,100%)}
+.mk-composer-bottom .mk-send{flex:0 0 auto;min-width:36px;min-height:36px;height:36px;padding:0 12px;border-radius:9px;gap:8px;font-size:11px;box-shadow:none}
+@media(max-width:440px){
+  .mk-composer-bottom{gap:5px;padding-top:10px}
+  .mk-composer-bottom .mk-attach{flex-basis:28px;width:28px;min-width:28px}
+  .mk-composer-bottom .creation-controls{gap:3px}
+  .mk-composer-bottom .mk-send{width:32px;min-width:32px;height:32px;min-height:32px;padding:0;justify-content:center}
+  .mk-composer-bottom .mk-send>span{display:none}
+}
 .mk-hero-content{position:relative;z-index:3}.mk-hero{overflow:visible}.mk-atmosphere{overflow:hidden;border-radius:inherit;pointer-events:none}
 .mk-client-band{display:grid;grid-template-columns:1fr 1.2fr;gap:80px;align-items:center;max-width:1120px;margin:20px auto 90px;padding:48px 28px;background:transparent;border:0;border-radius:0;box-shadow:none}
 .mk-client-copy{max-width:350px}.mk-client-copy .mk-overline{font-size:10px;letter-spacing:1.6px;color:#8c8398}
