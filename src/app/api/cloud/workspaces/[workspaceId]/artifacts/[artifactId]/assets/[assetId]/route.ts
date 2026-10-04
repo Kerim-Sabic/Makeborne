@@ -1,10 +1,13 @@
 import { cloudContext, cloudError, databaseError, validId } from "@/lib/cloud/server";
-import { MAX_PREVIEW_SOURCE_BYTES, renderAssetPreview } from "@/lib/cloud/image-preview";
+import { MAX_PREVIEW_SOURCE_BYTES, renderAssetPreview, renderAssetExport } from "@/lib/cloud/image-preview";
 import { RequestError } from "@/lib/server/http";
 
 export const runtime = "nodejs";
-export async function GET(_request: Request, context: { params: Promise<{ workspaceId: string; artifactId: string; assetId: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ workspaceId: string; artifactId: string; assetId: string }> }) {
   try {
+    const variant = new URL(request.url).searchParams.get("variant") ?? "preview";
+    if (!["preview", "export"].includes(variant)) throw new RequestError("INVALID_VARIANT", "Choose a supported artwork format.");
+    if (variant === "export" && process.env.NODE_ENV === "production") throw new RequestError("EXPORT_UNAVAILABLE", "Artwork exports are not configured in this environment.", 503);
     const { workspaceId, artifactId, assetId } = await context.params;
     validId(artifactId); validId(assetId);
     const { client } = await cloudContext(workspaceId);
@@ -19,8 +22,8 @@ export async function GET(_request: Request, context: { params: Promise<{ worksp
     if (error || !file) throw new RequestError("IMAGE_UNAVAILABLE", "The artwork could not be loaded.", 404);
     if (file.size > MAX_PREVIEW_SOURCE_BYTES) throw new RequestError("IMAGE_TOO_LARGE", "Artwork preview supports images under 8 MB.", 413);
     let bytes: Uint8Array<ArrayBuffer>;
-    try { bytes = new Uint8Array(await renderAssetPreview(new Uint8Array(await file.arrayBuffer()))); }
-    catch { throw new RequestError("INVALID_IMAGE", "This image format or size cannot be previewed.", 415); }
+    try { bytes = new Uint8Array(await (variant === "export" ? renderAssetExport : renderAssetPreview)(new Uint8Array(await file.arrayBuffer()))); }
+    catch (error) { throw new RequestError("INVALID_IMAGE", variant === "export" && error instanceof Error ? error.message : "This image format or size cannot be previewed.", 415); }
     return new Response(bytes, { headers: { "Content-Type": "image/webp", "Cache-Control": "private, no-store", Vary: "Cookie, X-Makeborne-Account", "X-Content-Type-Options": "nosniff", "Cross-Origin-Resource-Policy": "same-origin" } });
   } catch (error) { return cloudError(error); }
 }

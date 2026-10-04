@@ -4,7 +4,7 @@ import type { ExportRequest } from "../server/export";
 export type AccountExportFormat = "html" | "pdf" | "pptx" | "epub";
 export function accountExportRequest(contentInput: unknown, styleInput: unknown, options: {
   format: AccountExportFormat; documentId: string; author?: string; language?: string;
-}): ExportRequest {
+}, artwork: ReadonlyMap<string, string> = new Map()): ExportRequest {
   const content = ArtifactContentSchema.parse(contentInput);
   const style = StyleProfileSchema.parse(styleInput);
   if ((options.format === "html" && content.kind !== "website") || (options.format === "pptx" && content.kind !== "presentation") || (options.format === "epub" && content.kind !== "book")) throw new Error("Choose a format supported by this project.");
@@ -13,6 +13,12 @@ export function accountExportRequest(contentInput: unknown, styleInput: unknown,
   for (const section of content.sections) {
     if (section.title && !(section.blocks[0]?.type === "heading" && section.blocks[0].text === section.title)) blocks.push({ id: section.id, type: "heading", text: section.title });
     for (const block of section.blocks) {
+      if (block.type === "image" && block.assetId) {
+        const image = artwork.get(block.assetId);
+        if (!image || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(image)) throw new Error("Artwork could not be included. Retry the export; nothing has been removed.");
+        blocks.push({ id: block.id, type: "image", text: block.text, image });
+        continue;
+      }
       if (block.assetId || !["heading", "paragraph", "quote"].includes(block.type)) throw new Error("This document contains artwork or structured blocks that this export cannot preserve yet. Download its source draft instead; nothing has been removed.");
       blocks.push({ id: block.id, type: block.type as "heading" | "paragraph" | "quote", text: block.text });
     }

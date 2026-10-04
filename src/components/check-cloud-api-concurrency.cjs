@@ -2,7 +2,7 @@
 const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "..").replaceAll("\\", "/");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8").replaceAll('"@/', `"${root}/`), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
-const { api, setCloudAccount, readCloudImage } = require("./cloud-api.ts");
+const { api, setCloudAccount, readCloudImage, cloudAccountGuard } = require("./cloud-api.ts");
 (async () => {
   setCloudAccount("11111111-1111-4111-8111-111111111111");
   const waiting = [];
@@ -44,6 +44,10 @@ const { api, setCloudAccount, readCloudImage } = require("./cloud-api.ts");
   global.fetch = async () => new Response(new Uint8Array([1,2,3]), { headers: { "Content-Type": "image/webp" } });
   assert.equal((await readCloudImage("/image", account, new AbortController().signal)).size, 3);
   console.log("PASS binary preview response accepted");
+  const guard = cloudAccountGuard(account); guard();
+  setCloudAccount(null); setCloudAccount(account);
+  assert.throws(guard, /account changed/);console.log("PASS multi-stage download rejects switch and switch back");
+  assert.throws(() => cloudAccountGuard("different-account"), /account changed/);console.log("PASS download cannot start under another account");
   let finishImage;
   global.fetch = () => new Promise(resolve => { finishImage = resolve; });
   const imageRequest = readCloudImage("/image", account, new AbortController().signal);

@@ -27,23 +27,40 @@ check("wrong format rejected", () => assert.throws(() => accountExportRequest(co
 check("unsupported typography rejected", () => assert.throws(() => accountExportRequest(content, { ...style, typography: { headingFont: "Uninstalled", bodyFont: "Inter" } }, options), /fonts/));
 check("missing palette rejected", () => assert.throws(() => accountExportRequest(content, { ...style, colors: {} }, options), /palette/));
 check("large block rejected without truncation", () => { const copy = structuredClone(content); copy.sections[0].blocks[0].text = "x".repeat(20001); assert.throws(() => accountExportRequest(copy, style, options), /limit/); });
+const artworkId = randomUUID();
+const illustrated = structuredClone(content);
+illustrated.sections[0].blocks.push({ id: randomUUID(), type: "image", text: "Artwork caption", assetId: artworkId, locked: false, sourceIds: [] });
+check("missing artwork fails whole export", () => assert.throws(() => accountExportRequest(illustrated, style, options), /could not be included/));
+check("external artwork URL rejected", () => assert.throws(() => accountExportRequest(illustrated, style, options, new Map([[artworkId, "https://example.com/image.png"]])), /could not be included/));
+check("embedded artwork and caption preserved", () => {
+ const result = accountExportRequest(illustrated, style, options, new Map([[artworkId, "data:image/png;base64,AQID"]]));
+ assert.equal(result.blocks[2].image, "data:image/png;base64,AQID");assert.equal(result.blocks[2].text, "Artwork caption");
+ assert.equal(illustrated.sections[0].blocks[1].assetId, artworkId);
+});
 console.log(`${count} account export checks passed.`);
 
 // Explicit opt-in: exercise existing localhost renderer only; no provider calls.
 if (process.env.MAKEBORNE_VERIFY_EXPORT_HTTP === "true") void (async () => {
   const JSZip = require("jszip");
+  const png = await require("sharp")({create:{width:240,height:160,channels:3,background:"#456749"}}).png().toBuffer();
+  const artwork = new Map([[artworkId, `data:image/png;base64,${png.toString("base64")}`]]);
   for (const [kind, format] of [["website", "html"], ["book", "epub"], ["presentation", "pptx"], ["book", "pdf"]]) {
-    const body = accountExportRequest({ ...content, kind }, style, { ...options, format, language: "en", author: "QA Author" });
+    const body = accountExportRequest({ ...illustrated, kind }, style, { ...options, format, language: "en", author: "QA Author" }, artwork);
     const response = await fetch("http://127.0.0.1:3000/api/export", { method: "POST", headers: { "Content-Type": "application/json", Origin: "http://127.0.0.1:3000" }, body: JSON.stringify(body) });
     assert.equal(response.status, 200, `${format}: ${response.status === 200 ? "" : await response.text()}`);
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (format === "html") { assert.match(bytes.toString(), /Supplied words &lt;keep these&gt; &amp; punctuation/); assert.match(bytes.toString(), /#122822/); }
-    else if (format === "pdf") assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
+    if (format === "html") { assert.match(bytes.toString(), /Supplied words &lt;keep these&gt; &amp; punctuation/); assert.match(bytes.toString(), /#122822/); assert.match(bytes.toString(), /data:image\/png;base64/); assert.match(bytes.toString(), /Artwork caption/); }
+    else if (format === "pdf") { assert.equal(bytes.subarray(0, 5).toString(), "%PDF-"); assert.match(bytes.toString("latin1"), /\/Subtype\s*\/Image/); }
     else {
       const zip = await JSZip.loadAsync(bytes);
       const files = Object.keys(zip.files).filter(path => format === "pptx" ? /^ppt\/slides\/slide\d+\.xml$/.test(path) : path.endsWith(".xhtml"));
       const text = (await Promise.all(files.map(path => zip.file(path).async("string")))).join("\n");
       assert.match(text, /Supplied words/); assert.match(text, /First chapter/);
+      assert.match(text, /Artwork caption/);
+      const media = Object.keys(zip.files).filter(path => /\.(png|jpe?g)$/.test(path));
+      assert.ok(media.length > 0, `${format} embeds artwork`);
+      const image = await zip.file(media[0]).async("nodebuffer");
+      assert.equal((await require("sharp")(image).metadata()).width, 240);
       if (format === "pptx") assert.match(text, /<a:t>/);
     }
     console.log(`PASS localhost ${format.toUpperCase()} renderer (${bytes.length} bytes)`);

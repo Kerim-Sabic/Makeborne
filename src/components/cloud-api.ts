@@ -302,7 +302,10 @@ export async function readCloudImage(path: string, expectedAccount: string, sign
   const revision = accountRevision;
   if (!expectedAccount || accountId !== expectedAccount) throw new Error("Your account changed. Reopen this project.");
   const response = await fetch(path, { headers: { "X-Makeborne-Account": expectedAccount }, cache: "no-store", signal });
-  if (!response.ok) throw new Error("Artwork is unavailable. Check access or try again.");
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.error?.message || "Artwork is unavailable. Check access or try again.");
+  }
   if (response.headers.get("content-type")?.split(";")[0] !== "image/webp") throw new Error("Invalid artwork response.");
   const blob = await response.blob();
   if (signal.aborted || accountId !== expectedAccount || revision !== accountRevision) throw new Error("Your account changed. Reopen this project.");
@@ -319,4 +322,14 @@ export async function uploadCloudImage(path: string, file: File, expectedAccount
   if (signal.aborted || revision !== accountRevision || accountId !== expectedAccount) throw new Error("Your account changed. The image was not added to this editor.");
   if (!response.ok) throw new Error(result?.error?.message || "Upload could not be confirmed. Retry the same file.");
   return z.object({ asset: z.object({ id: z.string().uuid() }), reused: z.boolean() }).parse(result).asset.id;
+}
+
+/** Capture once for multi-stage downloads, including account A -> B -> A changes. */
+export function cloudAccountGuard(expectedAccount: string) {
+  const revision = accountRevision;
+  const assertCurrent = () => {
+    if (!expectedAccount || accountId !== expectedAccount || accountRevision !== revision) throw new Error("Your account changed. Reopen this project.");
+  };
+  assertCurrent();
+  return assertCurrent;
 }

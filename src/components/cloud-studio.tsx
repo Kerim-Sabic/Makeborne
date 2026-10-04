@@ -1658,7 +1658,7 @@ export function CloudEditor({
             <button className="button secondary" onClick={backup}>
               <FileText size={16} /> Download draft
             </button>
-            {style && <AccountExport documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
+            {style && <AccountExport key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
             <h3>Version history</h3>
             {versions.length === 0 ? (
               <p>No saved versions yet.</p>
@@ -1693,7 +1693,7 @@ export function CloudEditor({
               </button>
             )}
             <p className="small-note">
-              {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Image exports, automatic generation, and publication are not connected." : "Artwork upload, automatic generation, and publication are not connected."}
+              {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Uploaded artwork can be included in development exports. Automatic generation and publication are not connected." : "Artwork upload, automatic generation, and publication are not connected."}
             </p>
           </aside>
         </div>
