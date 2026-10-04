@@ -1,6 +1,12 @@
 type Format = "website" | "book" | "presentation";
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const formats: Format[] = ["website", "book", "presentation"];
+export function wizardDraftScope(seed: string, accountId: string | null, workspaceId: string | null) {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (accountId && !uuid.test(accountId)) throw new Error("Invalid draft account.");
+  if (workspaceId && (!accountId || !uuid.test(workspaceId))) throw new Error("Invalid draft workspace.");
+  return accountId ? `account.${accountId}.workspace.${workspaceId ?? "new"}.${seed}` : `device.${seed}`;
+}
 export const wizardDraftKey = (seed: string, kind: Format) => `makeborne.wizard-draft.v1.${kind}.${seed}`;
 const activeKey = (seed: string) => `makeborne.wizard-draft.active.v1.${seed}`;
 

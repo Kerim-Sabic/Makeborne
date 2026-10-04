@@ -113,3 +113,13 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - No new cloud project or provider call was made in this pass. Temporary draft lived in the agent's browser tab.
 - Nine offline draft-storage checks cover fresh and legacy cases, latest-format recovery, context separation, failed writes, damaged/missing pointers, and cleanup. TypeScript, focused lint and production build pass.
 - Scope: same-tab session storage survives page refresh, not guaranteed browser closure or another device. Account-isolated draft namespaces and fuller draft management remain follow-up work; this is not a cloud draft-sync implementation.
+
+
+## Account-scoped wizard recovery — 2026-10-04
+
+- Wizard draft storage keys now include account and workspace identity; signed-out drafts use a separate device namespace. Draft schema seed remains the existing bounded context identifier.
+- Account resolution moved to an outer setup boundary. The editable wizard does not mount until account resolution finishes, and its identity key changes between accounts/workspaces. Account loading/errors therefore cannot restore a draft under a guessed identity.
+- Unscoped historical drafts are left untouched and are not automatically assigned to the currently signed-in account. A deliberate legacy-recovery experience remains unimplemented.
+- Seventeen storage regression checks pass, including account/workspace/device isolation, cleanup limited to one owner context, invalid identity rejection, and preservation of unknown-owner legacy drafts.
+- Browser: reopened a Book setup for the QA client and verified format/title/material/client still restored under the current account. No sign-out or second-account browser transition was performed; those need a dedicated authentication scenario. This does not claim encryption against someone with direct access to the same browser profile.
+- TypeScript, production build and focused lint pass; Studio lint retains two pre-existing image-element performance warnings. No new cloud records or paid provider calls.

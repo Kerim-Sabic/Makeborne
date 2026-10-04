@@ -8,11 +8,11 @@ import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
 import AccountProjects from "./account-projects";
 import AccountClients from "./account-clients";
-import { useCreationAccount } from "./use-creation-account";
+import { useCreationAccount, type CreationAccount } from "./use-creation-account";
 import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import { createClient } from "@/lib/supabase/client";
 import { buildCreationPayload } from "@/lib/cloud/creation-payload";
-import { readWizardDraft, writeWizardDraft, clearWizardDrafts } from "@/lib/wizard-draft-storage";
+import { readWizardDraft, writeWizardDraft, clearWizardDrafts, wizardDraftScope } from "@/lib/wizard-draft-storage";
 import type { CloudArtifact, CloudWorkspace } from "@/lib/cloud/contracts";
 import {
   LocalWorkspaceSchema,
@@ -1212,7 +1212,14 @@ function creationSeed(brief: string, title: string, style: string) {
   return (hash >>> 0).toString(36) + "-" + value.length;
 }
 
-function CreateModal({
+function CreateModal(props: Omit<Parameters<typeof CreationWizard>[0], "account">) {
+  const account = useCreationAccount(props.initialWorkspaceId);
+  if (!account.ready) return <Modal close={props.close} title="Create a project"><h2>{account.error ? "Account unavailable" : "Opening your setup…"}</h2><p role="status">{account.error || "Checking where your project and draft will be saved."}</p><button className="button secondary" onClick={props.close}>Close</button></Modal>;
+  return <CreationWizard {...props} account={account} key={`${account.accountId ?? "device"}:${account.workspace?.id ?? "new"}`} />;
+}
+
+function CreationWizard({
+  account,
   initialWorkspaceId,
   initialClient,
   initialBrief,
@@ -1226,6 +1233,7 @@ function CreateModal({
   create,
   accountCreated,
 }: {
+  account: CreationAccount;
   initialWorkspaceId: string | null;
   initialClient: string;
   initialBrief: string;
@@ -1250,7 +1258,6 @@ function CreateModal({
     kind: Kind;
   }) => boolean;
 }) {
-  const account = useCreationAccount(initialWorkspaceId);
   const clients = account.accountId ? account.clients : deviceClients;
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -1280,13 +1287,14 @@ function CreateModal({
   const [seed] = useState(() =>
     creationSeed(initialBrief, initialTitle, initialStyle + (initialClient ? `::${initialClient}` : "") + (initialWorkspaceId ? `::workspace:${initialWorkspaceId}` : "")),
   );
+  const storageSeed = wizardDraftScope(seed, account.accountId, account.workspace?.id ?? null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftWritable, setDraftWritable] = useState(true);
   const [draftNotice, setDraftNotice] = useState("");
   useEffect(() => {
     queueMicrotask(() => {
       try {
-        const { raw, kind: savedKind } = readWizardDraft(sessionStorage, seed, kind);
+        const { raw, kind: savedKind } = readWizardDraft(sessionStorage, storageSeed, kind);
         if (raw) {
           if (raw.length > 200000) throw new Error("Draft too large");
           const parsed = WizardDraftSchema.safeParse(JSON.parse(raw));
@@ -1346,7 +1354,7 @@ function CreateModal({
         styleId,
         clientId,
       });
-      writeWizardDraft(sessionStorage, seed, kind, JSON.stringify(draft));
+      writeWizardDraft(sessionStorage, storageSeed, kind, JSON.stringify(draft));
     } catch {
       queueMicrotask(() => {
         setDraftWritable(false);
@@ -1358,6 +1366,7 @@ function CreateModal({
   }, [
     draftLoaded,
     draftWritable,
+    storageSeed,
     seed,
     kind,
     step,
@@ -1665,7 +1674,7 @@ function CreateModal({
             } finally { savingRef.current = false; setSaving(false); }
             if (saved) {
               try {
-                clearWizardDrafts(sessionStorage, seed);
+                clearWizardDrafts(sessionStorage, storageSeed);
               } catch {
                 /* A retained draft is safe; the created project is saved. */
               }
