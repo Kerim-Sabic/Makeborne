@@ -217,3 +217,11 @@ Account editor now exposes Lock/Unlock controls. Changes must be saved before ch
 
 Seven local transactional database checks passed: edits, bundled unlock/edit, block removal, section removal rejected; failed changes leave the revision unchanged; a separate unlock and subsequent edit succeed. TypeScript and lint passed. Local security advisor clean. Migration applied to the linked cloud project.
 Browser verification: QA book heading locked and saved as version 14; its textarea was disabled. A separate unlock saved as version 15 and the original text remained present with the Lock control available again. Cloud advisor retained only the pre-existing leaked-password-protection warning.
+
+## Authenticated artwork preview foundation — 2026-10-04
+
+Added an account-authenticated image endpoint scoped to workspace, artifact project, and asset record. It downloads from the private bucket using the authenticated user's client, validates the workspace path and raster MIME type, rejects source files above 8 MiB / 20 million pixels and non-still PNG/JPEG/WebP formats, decodes and re-encodes a maximum 1600px WebP without source metadata. Responses are private/no-store with nosniff and same-origin resource policy. No signed URL is returned.
+
+Current and historical account previews now resolve image blocks through this endpoint. Temporary blob URLs are revoked on unmount. Account revisions fence late responses, including a switch away and back. Loading failures have retry controls and a 30-second timeout.
+
+Evidence: seven image normalization checks, seven mocked route/access checks, nine cloud API checks (including binary account-switch fencing), TypeScript and touched component lint passed. This is not a live uploaded-image end-to-end verification. Upload/registration/placement controls, quota enforcement, production image-export support, and generation remain unfinished. Storage download currently materializes the bucket object before enforcing the preview byte limit; the bucket itself caps objects at 50 MiB. Already downloaded browser pixels cannot be revoked retroactively.

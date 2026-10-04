@@ -4,13 +4,15 @@ import { ChevronLeft, ChevronRight, Image as ImageIcon, Monitor, Smartphone } fr
 import type { ArtifactContent, StyleProfile } from "@/lib/domain";
 import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
 import "@/app/account-preview.css";
+import AccountArtwork, { type ArtworkScope } from "./account-artwork";
 
 const fonts: Record<string, string> = {
   "Source Serif 4": 'var(--font-serif), Georgia, serif',
   Georgia: "Georgia, serif", Inter: 'var(--font-inter), Arial, sans-serif', Arial: "Arial, sans-serif",
 };
 type Block = ArtifactContent["sections"][number]["blocks"][number];
-function PreviewBlock({ block }: { block: Block }) {
+function PreviewBlock({ block, artworkScope }: { block: Block; artworkScope?: ArtworkScope }) {
+  if (block.assetId && artworkScope) return <AccountArtwork key={`${artworkScope.accountId}:${artworkScope.artifactId}:${block.assetId}`} scope={artworkScope} assetId={block.assetId} caption={block.text} />;
   if (block.assetId || block.type === "image") return <figure className="ap-placeholder"><ImageIcon size={24} /><figcaption>{block.text || "Artwork"}</figcaption><small>Artwork preview unavailable</small></figure>;
   if (block.type === "heading") return <h3>{block.text}</h3>;
   if (block.type === "quote") return <blockquote>{block.text}</blockquote>;
@@ -19,7 +21,7 @@ function PreviewBlock({ block }: { block: Block }) {
   return <div className="ap-structured"><small>{block.type} · text preview</small><p>{block.text || "No text supplied"}</p></div>;
 }
 
-export default function AccountPreview({ content, style, dirty }: { content: ArtifactContent; style: StyleProfile; dirty: boolean }) {
+export default function AccountPreview({ content, style, dirty, artworkScope }: { content: ArtifactContent; style: StyleProfile; dirty: boolean; artworkScope?: ArtworkScope }) {
   const [mobile, setMobile] = useState(false);
   const [slideIndex, setSlideIndex] = useState(0);
   const slides = content.kind === "presentation" ? previewSlides(content) : [];
@@ -34,11 +36,11 @@ export default function AccountPreview({ content, style, dirty }: { content: Art
     </header>
     <div className={`ap-stage ${content.kind}${mobile && content.kind === "website" ? " ap-mobile" : ""}`} style={palette}>
       {content.kind === "presentation" ? <>
-        <article className="ap-slide" aria-label={`Slide ${current + 1} of ${slides.length}`}><span className="ap-slide-number">{String(current + 1).padStart(2, "0")}</span><h3>{slides[current].title}</h3>{slides[current].blocks.map(block => <PreviewBlock key={block.id} block={block} />)}</article>
+        <article className="ap-slide" aria-label={`Slide ${current + 1} of ${slides.length}`}><span className="ap-slide-number">{String(current + 1).padStart(2, "0")}</span><h3>{slides[current].title}</h3>{slides[current].blocks.map(block => <PreviewBlock key={block.id} block={block} artworkScope={artworkScope} />)}</article>
         <nav className="ap-slide-nav" aria-label="Preview slides"><button type="button" disabled={current === 0} aria-label="Previous slide" onClick={() => setSlideIndex(current - 1)}><ChevronLeft size={16} /></button><span aria-live="polite">{current + 1} / {slides.length}</span><button type="button" disabled={current === slides.length - 1} aria-label="Next slide" onClick={() => setSlideIndex(current + 1)}><ChevronRight size={16} /></button></nav>
       </> : <div className="ap-document">
         {content.kind === "book" ? <header className="ap-book-cover"><span className="ap-cover-rule" /><h2>{content.title}</h2><span className="ap-cover-rule" /></header> : <header className="ap-site-brand">{content.title}<span className="ap-brand-dot" /></header>}
-        <div className="ap-reading">{previewBlocks(content).map(block => <PreviewBlock key={block.id} block={block} />)}{!content.sections.some(section => section.blocks.length) && <p>Add content to begin shaping your {content.kind}.</p>}</div>
+        <div className="ap-reading">{previewBlocks(content).map(block => <PreviewBlock key={block.id} block={block} artworkScope={artworkScope} />)}{!content.sections.some(section => section.blocks.length) && <p>Add content to begin shaping your {content.kind}.</p>}</div>
       </div>}
     </div>
     <p className="ap-note">Layout preview of your current content. Exported pagination and line breaks may differ. This does not publish your project.</p>

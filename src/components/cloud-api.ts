@@ -296,3 +296,16 @@ export function getPendingCloudWrites(userId: string): PendingCloudWrite[] {
   }
   return items;
 }
+
+/** Binary reads retain the same account-switch fence as JSON account reads. */
+export async function readCloudImage(path: string, expectedAccount: string, signal: AbortSignal): Promise<Blob> {
+  const revision = accountRevision;
+  if (!expectedAccount || accountId !== expectedAccount) throw new Error("Your account changed. Reopen this project.");
+  const response = await fetch(path, { headers: { "X-Makeborne-Account": expectedAccount }, cache: "no-store", signal });
+  if (!response.ok) throw new Error("Artwork is unavailable. Check access or try again.");
+  if (response.headers.get("content-type")?.split(";")[0] !== "image/webp") throw new Error("Invalid artwork response.");
+  const blob = await response.blob();
+  if (signal.aborted || accountId !== expectedAccount || revision !== accountRevision) throw new Error("Your account changed. Reopen this project.");
+  if (!blob.size || blob.size > 8 * 1024 * 1024) throw new Error("Artwork preview exceeds the supported size.");
+  return blob;
+}

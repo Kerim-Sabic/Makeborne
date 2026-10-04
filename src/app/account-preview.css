@@ -82,3 +82,8 @@
 .account-section-actions button:focus-visible { outline:2px solid #8765ae; outline-offset:2px; }
 
 .account-protection-status { grid-column:1 / -1; }
+
+.ap-artwork { margin:24px 0; }
+.ap-artwork img { display:block; width:100%; height:auto; max-height:620px; object-fit:contain; border-radius:5px; }
+.ap-artwork figcaption { margin-top:9px; font-size:11px; line-height:1.5; opacity:.65; }
+.ap-slide .ap-artwork img { max-height:300px; }

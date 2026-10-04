@@ -2,7 +2,7 @@
 const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "..").replaceAll("\\", "/");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8").replaceAll('"@/', `"${root}/`), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
-const { api, setCloudAccount } = require("./cloud-api.ts");
+const { api, setCloudAccount, readCloudImage } = require("./cloud-api.ts");
 (async () => {
   setCloudAccount("11111111-1111-4111-8111-111111111111");
   const waiting = [];
@@ -40,4 +40,16 @@ const { api, setCloudAccount } = require("./cloud-api.ts");
   global.fetch = async () => new Response(JSON.stringify({ ...projectPage, items: [{ title: "Invalid item" }] }));
   await assert.rejects(api(clientPath + "/projects?offset=0"), /could not be verified/);
   console.log("PASS incomplete project directory records rejected");
+  const account = "11111111-1111-4111-8111-111111111111";
+  global.fetch = async () => new Response(new Uint8Array([1,2,3]), { headers: { "Content-Type": "image/webp" } });
+  assert.equal((await readCloudImage("/image", account, new AbortController().signal)).size, 3);
+  console.log("PASS binary preview response accepted");
+  let finishImage;
+  global.fetch = () => new Promise(resolve => { finishImage = resolve; });
+  const imageRequest = readCloudImage("/image", account, new AbortController().signal);
+  setCloudAccount(null); setCloudAccount(account);
+  finishImage(new Response(new Uint8Array([1]), { headers: { "Content-Type": "image/webp" } }));
+  await assert.rejects(imageRequest, /account changed/);
+  console.log("PASS binary preview rejects account switch and switch back");
+
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1625,7 +1625,7 @@ export function CloudEditor({
             ))}
             {role !== "reviewer" && !uncertainSave && !conflict && !recovery && <button type="button" className="button secondary small" onClick={addSection}><Plus size={14} />{content.kind === "book" ? "Add chapter" : "Add section"}</button>}
           </div>
-          {style && <AccountPreview content={content} style={style} dirty={dirty} />}
+          {style && <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} />}
           </div>
           <aside>
             {style && <AccountStyleEditor style={style} kind={content.kind} disabled={role === "reviewer" || uncertainSave || conflict || !!recovery || busy} onChange={next => {
@@ -1670,7 +1670,7 @@ export function CloudEditor({
             {inspectedVersion && <section className="account-version-review" aria-label={`Saved version ${inspectedVersion.number}`}>
               <h3>Version {inspectedVersion.number}</h3>
               <p className="small-note">This is a saved snapshot. Restoring creates a new version and keeps your history.</p>
-              <AccountPreview key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />
+              <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />
               {role !== "reviewer" && inspectedVersion.number < expectedVersion && <>
                 <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
                 {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
