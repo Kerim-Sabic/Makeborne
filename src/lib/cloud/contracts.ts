@@ -9,6 +9,12 @@ export type CloudClient = Client & { updatedAt: string; outreachSummary?: z.infe
 export type CloudProject = Project & { audience: string; purpose: string; wording: string };
 export type CloudArtifact = Artifact;
 export type CloudVersion = ArtifactVersion;
+export const ClientProjectItemSchema = z.object({
+  projectId: z.string().uuid(), projectTitle: z.string(), projectStatus: z.string(),
+  kind: ArtifactKindSchema, artifactId: z.string().uuid().nullable(), title: z.string(),
+  version: z.number().int().nonnegative().nullable(), updatedAt: z.string().datetime(),
+});
+export type ClientProjectItem = z.infer<typeof ClientProjectItemSchema>;
 export type CloudWorkspaceSnapshot = { workspace: CloudWorkspace; clients: CloudClient[]; projects: CloudProject[]; artifacts: CloudArtifact[] };
 
 export const WorkspaceCreateSchema = z.object({ name: z.string().trim().min(1).max(160) }).strict();

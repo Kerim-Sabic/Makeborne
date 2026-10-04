@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OutreachSummarySchema } from "@/lib/cloud/contracts";
+import { OutreachSummarySchema, ClientProjectItemSchema } from "@/lib/cloud/contracts";
 import {
   ArtifactSchema,
   ArtifactVersionSchema,
@@ -72,6 +72,7 @@ function schemaFor(path: string, method: string) {
     pagination: page.omit({ offset: true }),
     counts: z.object({ all: z.number().int().nonnegative(), overdue: z.number().int().nonnegative(), today: z.number().int().nonnegative(), upcoming: z.number().int().nonnegative(), unscheduled: z.number().int().nonnegative() }),
   }) : z.object({ client, mutation });
+  if (/\/clients\/[a-f0-9-]+\/projects$/.test(base) && method === "GET") return z.object({ items: z.array(ClientProjectItemSchema).max(50), pagination: page.omit({ offset: true }) });
   if (/\/projects$/.test(base)) return z.object({ project, mutation });
   if (/\/workspaces\/[a-f0-9-]+$/.test(base))
     return z.object({

@@ -1,0 +1,33 @@
+begin;
+do $$
+declare u uuid:=gen_random_uuid(); w uuid:=gen_random_uuid(); c uuid:=gen_random_uuid(); other_c uuid:=gen_random_uuid(); other_w uuid:=gen_random_uuid(); other_u uuid:=gen_random_uuid(); p uuid; result jsonb; first_page jsonb;
+begin
+ insert into auth.users(id,email) values(u,'projects-'||u||'@example.invalid'),(other_u,'projects-'||other_u||'@example.invalid');
+ insert into public.workspaces(id,name,owner_id) values(w,'Client project fixture',u),(other_w,'Other workspace',other_u);
+ insert into public.clients(id,workspace_id,name) values(c,w,'Selected client'),(other_c,w,'Another client');
+ insert into public.projects(workspace_id,client_id,title,kind) select w,c,'Project '||i,'book' from generate_series(1,55) i;
+ insert into public.artifacts(workspace_id,project_id,kind,title) select w,id,'book',title from public.projects where workspace_id=w;
+ insert into public.projects(workspace_id,client_id,title,kind) values(w,c,'Empty project','website'),(w,other_c,'Not this client','website');
+ perform set_config('request.jwt.claim.sub',u::text,true);
+ set local role authenticated;
+ first_page:=public.makeborne_client_projects(w,c,0);
+ if jsonb_array_length(first_page->'items')<>50 or first_page#>>'{pagination,total}'<>'56' or first_page#>>'{pagination,nextOffset}'<>'50' then raise exception 'first page'; end if;
+ raise notice 'PASS first page and full client total';
+ result:=public.makeborne_client_projects(w,c,50);
+ if jsonb_array_length(result->'items')<>6 or result#>'{pagination,nextOffset}'<>'null'::jsonb then raise exception 'last page'; end if;
+ raise notice 'PASS final page';
+ if exists(select 1 from jsonb_array_elements(first_page->'items') a join jsonb_array_elements(result->'items') b on a->>'projectId'=b->>'projectId') then raise exception 'overlap'; end if;
+ raise notice 'PASS stable non-overlapping pages';
+ if not exists(select 1 from jsonb_array_elements((first_page->'items')||(result->'items')) a where a->>'title'='Empty project' and a->'artifactId'='null'::jsonb) then raise exception 'empty project missing'; end if;
+ raise notice 'PASS projects without documents remain visible';
+ if exists(select 1 from jsonb_array_elements((first_page->'items')||(result->'items')) a where a->>'title'='Not this client' or a ? 'brief' or a ? 'content') then raise exception 'unrelated or excessive data'; end if;
+ raise notice 'PASS client isolation and minimal payload';
+ begin perform public.makeborne_client_projects(other_w,c,0); raise exception 'cross workspace'; exception when insufficient_privilege then raise notice 'PASS workspace denied'; end;
+ begin perform public.makeborne_client_projects(w,gen_random_uuid(),0); raise exception 'missing client'; exception when no_data_found then raise notice 'PASS unavailable client denied'; end;
+ begin perform public.makeborne_client_projects(w,c,-1); raise exception 'negative offset'; exception when invalid_parameter_value then raise notice 'PASS invalid page denied'; end;
+ reset role;
+ set local role anon;
+ begin perform public.makeborne_client_projects(w,c,0); raise exception 'anonymous'; exception when insufficient_privilege then raise notice 'PASS anonymous denied'; end;
+ reset role;
+end $$;
+rollback;
