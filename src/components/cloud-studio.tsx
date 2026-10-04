@@ -1096,6 +1096,7 @@ export function CloudEditor({
   const [savePaused, setSavePaused] = useState(false);
   const [uncertainSave, setUncertainSave] = useState(false);
   const [content, setContent] = useState<ArtifactContent | null>(null);
+  const [lockChangePending, setLockChangePending] = useState(false);
   const [removedSection, setRemovedSection] = useState<RemovedAccountSection | null>(null);
   const [removedBlock, setRemovedBlock] = useState<RemovedAccountBlock | null>(null);
   const [inspectedVersion, setInspectedVersion] = useState<ArtifactVersion | null>(null);
@@ -1122,7 +1123,7 @@ export function CloudEditor({
         (a, b) => b.number - a.number,
       )[0];
       setVersions(result.versions);
-      setRemovedBlock(null); setRemovedSection(null);
+      setRemovedBlock(null); setRemovedSection(null); setLockChangePending(false);
       setInspectedVersion(null);
       setNextOffset(result.pagination?.nextOffset ?? null);
       setAssetIds(latest?.assetIds || []);
@@ -1238,6 +1239,14 @@ export function CloudEditor({
     recoveryKey,
     notify,
   ]);
+  function toggleBlockLock(sectionId: string, blockId: string) {
+    if (!content || dirty || busy || lockChangePending || role === "reviewer" || uncertainSave || conflict || recovery) return;
+    const next = structuredClone(content);
+    const block = next.sections.find(section => section.id === sectionId)?.blocks.find(item => item.id === blockId);
+    if (!block) return;
+    block.locked = !block.locked;
+    editRevision.current++; setContent(next); setDirty(true); setLockChangePending(true);
+  }
   function blockAction(sectionId: string, blockId: string, action: "up" | "down" | "remove") {
     if (!content || role === "reviewer" || uncertainSave || conflict || recovery) return;
     try {
@@ -1337,6 +1346,7 @@ export function CloudEditor({
       const settlement = settleAccountSave(savingRevision, editRevision.current, result.mutation.replayed);
       const hasNewerEdits = settlement.newerEdits;
       setDirty(hasNewerEdits);
+      if (!hasNewerEdits) setLockChangePending(false);
       setRecovery(null);
       setConflict(false);
       setUncertainSave(false);
@@ -1401,7 +1411,7 @@ export function CloudEditor({
       setStyle(restored.style);
       setAssetIds(restored.assetIds);
       setNote(restored.changeSummary);
-      setRemovedBlock(null); setRemovedSection(null);
+      setRemovedBlock(null); setRemovedSection(null); setLockChangePending(false);
       setInspectedVersion(null);
       setDirty(true);
       notify(`Version ${version.number} restored into your editor. Saving it as a new version…`);
@@ -1572,7 +1582,8 @@ export function CloudEditor({
         <p>Loading content…</p>
       ) : (
         <div className="cloud-edit-grid account-visual-editor">
-          <div className="account-compose">
+          {lockChangePending && <p role="status" className="small-note account-protection-status">Saving content protection. Editing resumes after the save is confirmed; use Save now to retry if needed.</p>}
+          <div className="account-compose" inert={lockChangePending}>
           <div>
             {removedBlock && <div className="account-block-undo"><span role="status">Block removed.</span><button type="button" className="button secondary small" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onClick={undoRemoval}><Undo2 size={14} /> Undo removal</button></div>}
             {removedSection && <div className="account-block-undo"><span role="status">{content.kind === "book" ? "Chapter" : "Section"} removed.</span><button type="button" className="button secondary small" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onClick={undoSectionRemoval}><Undo2 size={14} /> Undo section removal</button></div>}
@@ -1590,6 +1601,7 @@ export function CloudEditor({
                   <div className="account-content-block" key={b.id}>
                     <div className="account-block-tools"><label htmlFor={`account-block-${b.id}`}>{b.type}{b.locked ? " · locked" : ""}</label>
                       {role !== "reviewer" && <div>
+                        <button type="button" aria-label={`${b.locked ? "Unlock" : "Lock"} ${b.type} block ${index + 1}`} title={dirty ? "Save your changes before changing protection" : b.locked ? "Unlock content" : "Protect content"} disabled={dirty || busy || uncertainSave || conflict || !!recovery || lockChangePending} onClick={() => toggleBlockLock(s.id, b.id)}>{b.locked ? "Unlock" : "Lock"}</button>
                         <button type="button" aria-label={`Move ${b.type} block ${index + 1} up`} title="Move up" disabled={b.locked || index === 0 || s.blocks[index - 1]?.locked || uncertainSave || conflict || !!recovery} onClick={() => blockAction(s.id, b.id, "up")}><ArrowUp size={14} /></button>
                         <button type="button" aria-label={`Move ${b.type} block ${index + 1} down`} title="Move down" disabled={b.locked || index === s.blocks.length - 1 || s.blocks[index + 1]?.locked || uncertainSave || conflict || !!recovery} onClick={() => blockAction(s.id, b.id, "down")}><ArrowDown size={14} /></button>
                         <button type="button" aria-label={`Remove ${b.type} block ${index + 1}`} title="Remove block" disabled={b.locked || uncertainSave || conflict || !!recovery} onClick={() => blockAction(s.id, b.id, "remove")}><Trash2 size={14} /></button>

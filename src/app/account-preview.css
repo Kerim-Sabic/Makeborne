@@ -80,3 +80,5 @@
 .account-section-actions button:hover:not(:disabled) { background:#f7f3fc; color:#614c75; }
 .account-section-actions button:disabled { opacity:.4; cursor:not-allowed; }
 .account-section-actions button:focus-visible { outline:2px solid #8765ae; outline-offset:2px; }
+
+.account-protection-status { grid-column:1 / -1; }

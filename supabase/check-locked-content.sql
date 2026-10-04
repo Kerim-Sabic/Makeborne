@@ -1,0 +1,33 @@
+begin;
+do $$
+declare u uuid:=gen_random_uuid(); w uuid:=gen_random_uuid(); section_id uuid:=gen_random_uuid(); block_id uuid:=gen_random_uuid(); a uuid; result jsonb; content jsonb; changed jsonb;
+style jsonb:='{"id":"editorial","name":"Editorial","version":1,"typography":{"headingFont":"Inter","bodyFont":"Inter"},"colors":{"ink":"#111111"},"description":"Fixture","referenceAssetIds":[]}';
+begin
+ insert into auth.users(id) values(u);
+ insert into public.workspaces(id,name,owner_id) values(w,'Lock fixture',u);
+ content:=jsonb_build_object('schemaVersion',1,'title','Lock fixture','kind','book','sections',jsonb_build_array(jsonb_build_object('id',section_id,'title','Section','blocks',jsonb_build_array(jsonb_build_object('id',block_id,'type','paragraph','text','Protected text','locked',true,'sourceIds','[]'::jsonb,'assetId',null)))));
+ perform set_config('request.jwt.claim.sub',u::text,true);
+ set local role authenticated;
+ result:=public.makeborne_create_studio_project(w,gen_random_uuid(),'{"title":"Lock fixture","kind":"book","style_id":"editorial","effort":"medium"}',content,style);
+ a:=(result#>>'{artifact,id}')::uuid;
+ changed:=jsonb_set(content,'{sections,0,blocks,0,text}','"Tampered"');
+ begin perform public.makeborne_save_artifact_version(w,a,1,changed,style,'[]','Fixture',gen_random_uuid()); raise exception 'edit accepted'; exception when invalid_parameter_value then raise notice 'PASS locked text edits denied'; end;
+ changed:=jsonb_set(changed,'{sections,0,blocks,0,locked}','false');
+ begin perform public.makeborne_save_artifact_version(w,a,1,changed,style,'[]','Fixture',gen_random_uuid()); raise exception 'edit plus unlock accepted'; exception when invalid_parameter_value then raise notice 'PASS edit bundled with unlock denied'; end;
+ changed:=jsonb_set(content,'{sections,0,blocks}','[]');
+ begin perform public.makeborne_save_artifact_version(w,a,1,changed,style,'[]','Fixture',gen_random_uuid()); raise exception 'remove accepted'; exception when invalid_parameter_value then raise notice 'PASS locked block removal denied'; end;
+ changed:=jsonb_set(content,'{sections}','[]');
+ begin perform public.makeborne_save_artifact_version(w,a,1,changed,style,'[]','Fixture',gen_random_uuid()); raise exception 'section removal accepted'; exception when invalid_parameter_value then raise notice 'PASS locked section removal denied'; end;
+ if (select current_version from public.artifacts where id=a)<>1 then raise exception 'rejected mutations left revisions'; end if;
+ raise notice 'PASS rejected changes leave revision unchanged';
+ changed:=jsonb_set(content,'{sections,0,blocks,0,locked}','false');
+ result:=public.makeborne_save_artifact_version(w,a,1,changed,style,'[]','Unlock',gen_random_uuid());
+ if result#>>'{artifact,current_version}'<>'2' then raise exception 'unlock failed'; end if;
+ raise notice 'PASS separate unlock saved';
+ changed:=jsonb_set(changed,'{sections,0,blocks,0,text}','"Allowed after unlock"');
+ result:=public.makeborne_save_artifact_version(w,a,2,changed,style,'[]','Edit',gen_random_uuid());
+ if result#>>'{artifact,current_version}'<>'3' then raise exception 'edit after unlock failed'; end if;
+ raise notice 'PASS edits after saved unlock allowed';
+ reset role;
+end $$;
+rollback;

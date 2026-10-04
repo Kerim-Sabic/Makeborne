@@ -208,3 +208,12 @@ Evidence: 26 section action checks passed; TypeScript and component lint passed.
 
 Limits: undo retains the latest removed section during the current editor session. It is not a multi-step undo history. Previous saved versions remain the recovery mechanism across reloads. Reordering uses explicit up/down controls rather than drag-and-drop.
 The undo result saved successfully as version 13, confirmed by the account editor's Saved status.
+
+## Locked content persistence — 2026-10-04
+
+Migration `20261004015856_protect_locked_blocks` extends the existing atomic save function under the artifact row lock. Every previously locked block must remain in its original section, with the same ID and exact JSON fields except its lock flag. Removing it, changing its text/provenance/artwork/type, or combining text changes with an unlock is rejected. An unchanged block can be unlocked in a separate saved version. Relative position within its section is not part of this server invariant.
+
+Account editor now exposes Lock/Unlock controls. Changes must be saved before changing protection; while a lock change is pending, the composing area is inert until a confirmed save. Existing reviewer/conflict/uncertain-save rules still apply. Failed saves preserve the draft and can be retried.
+
+Seven local transactional database checks passed: edits, bundled unlock/edit, block removal, section removal rejected; failed changes leave the revision unchanged; a separate unlock and subsequent edit succeed. TypeScript and lint passed. Local security advisor clean. Migration applied to the linked cloud project.
+Browser verification: QA book heading locked and saved as version 14; its textarea was disabled. A separate unlock saved as version 15 and the original text remained present with the Lock control available again. Cloud advisor retained only the pre-existing leaked-password-protection warning.
