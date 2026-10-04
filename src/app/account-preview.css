@@ -40,3 +40,14 @@
 @media(min-width:1600px) { .cloud-edit-grid.account-visual-editor { grid-template-columns: minmax(0,1fr) 250px; } .account-visual-editor > aside { border-top: 0; border-left: 1px solid #e9e6ef; padding: 0 0 0 24px; } }
 
 @media(max-width:650px) { .cloud-edit-grid.account-visual-editor { padding: 12px; } .ap-stage { padding: 10px; } .ap-book-cover { min-height: 300px; padding: 30px 18px; } .ap-book-cover h2 { font-size: clamp(24px,9cqw,36px); } .ap-reading,.ap-slide { padding: 18px; } }
+
+.account-content-block { margin: 14px 0; }
+.account-content-block textarea { display: block; width: 100%; box-sizing: border-box; }
+.account-block-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.account-block-tools label { margin: 0; font-size: 12px; color: #6c6474; text-transform: capitalize; }
+.account-block-tools > div { display: flex; gap: 3px; }
+.account-block-tools button { border: 0; background: transparent; color: #7c7087; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; cursor: pointer; }
+.account-block-tools button:hover:not(:disabled) { background: #f0eaf7; color: #563477; }
+.account-block-tools button:disabled { opacity: .25; cursor: default; }
+.account-block-tools button:focus-visible { outline: 2px solid #8569aa; outline-offset: 2px; }
+.account-block-undo { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; border-radius: 10px; background: #f4f0fa; font-size: 12px; margin-bottom: 16px; }

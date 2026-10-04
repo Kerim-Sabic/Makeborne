@@ -5,12 +5,17 @@ import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
 import AccountPreview from "./account-preview";
+import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
 import { useCallback, useEffect, useEffectEvent, useState, useRef } from "react";
 import {
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
+  Trash2,
+  Undo2,
   ArrowRight,
   Cloud,
   FileText,
@@ -1088,6 +1093,7 @@ export function CloudEditor({
   const [savePaused, setSavePaused] = useState(false);
   const [uncertainSave, setUncertainSave] = useState(false);
   const [content, setContent] = useState<ArtifactContent | null>(null);
+  const [removedBlock, setRemovedBlock] = useState<RemovedAccountBlock | null>(null);
   const [style, setStyle] = useState<StyleProfile | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(
     artifact.currentVersion,
@@ -1111,6 +1117,7 @@ export function CloudEditor({
         (a, b) => b.number - a.number,
       )[0];
       setVersions(result.versions);
+      setRemovedBlock(null);
       setNextOffset(result.pagination?.nextOffset ?? null);
       setAssetIds(latest?.assetIds || []);
       setExpectedVersion(result.artifact.currentVersion);
@@ -1225,8 +1232,22 @@ export function CloudEditor({
     recoveryKey,
     notify,
   ]);
+  function blockAction(sectionId: string, blockId: string, action: "up" | "down" | "remove") {
+    if (!content || role === "reviewer" || uncertainSave || conflict || recovery) return;
+    try {
+      let next: ArtifactContent;
+      if (action === "remove") { const result = removeAccountBlock(content, sectionId, blockId); next = result.content; setRemovedBlock(result.removed); }
+      else next = moveAccountBlock(content, sectionId, blockId, action === "up" ? -1 : 1);
+      editRevision.current++; setContent(next); setDirty(true);
+    } catch (error) { notify(error instanceof Error ? error.message : "Could not change this block."); }
+  }
+  function undoRemoval() {
+    if (!content || !removedBlock || role === "reviewer" || uncertainSave || conflict || recovery) return;
+    try { const next = restoreAccountBlock(content, removedBlock); editRevision.current++; setContent(next); setDirty(true); setRemovedBlock(null); }
+    catch (error) { notify(error instanceof Error ? error.message : "Could not restore this block."); }
+  }
   function editBlock(sectionId: string, blockId: string, text: string) {
-    if (!content) return;
+    if (!content || role === "reviewer" || uncertainSave || content.sections.find(section => section.id === sectionId)?.blocks.find(block => block.id === blockId)?.locked) return;
     editRevision.current++;
     setContent({
       ...content,
@@ -1244,7 +1265,7 @@ export function CloudEditor({
     setDirty(true);
   }
   function add(type: "heading" | "paragraph" | "quote") {
-    if (!content) return;
+    if (!content || role === "reviewer" || uncertainSave || conflict || recovery) return;
     editRevision.current++;
     const sections = [...content.sections];
     if (!sections.length)
@@ -1519,13 +1540,20 @@ export function CloudEditor({
         <div className="cloud-edit-grid account-visual-editor">
           <div className="account-compose">
           <div>
+            {removedBlock && <div className="account-block-undo"><span role="status">Block removed.</span><button type="button" className="button secondary small" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onClick={undoRemoval}><Undo2 size={14} /> Undo removal</button></div>}
             {content.sections.map((s) => (
               <section key={s.id}>
                 <span className="eyebrow">{s.title}</span>
-                {s.blocks.map((b) => (
-                  <label key={b.id}>
-                    {b.type}
-                    <textarea
+                {s.blocks.map((b, index) => (
+                  <div className="account-content-block" key={b.id}>
+                    <div className="account-block-tools"><label htmlFor={`account-block-${b.id}`}>{b.type}{b.locked ? " · locked" : ""}</label>
+                      {role !== "reviewer" && <div>
+                        <button type="button" aria-label={`Move ${b.type} block ${index + 1} up`} title="Move up" disabled={b.locked || index === 0 || s.blocks[index - 1]?.locked || uncertainSave || conflict || !!recovery} onClick={() => blockAction(s.id, b.id, "up")}><ArrowUp size={14} /></button>
+                        <button type="button" aria-label={`Move ${b.type} block ${index + 1} down`} title="Move down" disabled={b.locked || index === s.blocks.length - 1 || s.blocks[index + 1]?.locked || uncertainSave || conflict || !!recovery} onClick={() => blockAction(s.id, b.id, "down")}><ArrowDown size={14} /></button>
+                        <button type="button" aria-label={`Remove ${b.type} block ${index + 1}`} title="Remove block" disabled={b.locked || uncertainSave || conflict || !!recovery} onClick={() => blockAction(s.id, b.id, "remove")}><Trash2 size={14} /></button>
+                      </div>}
+                    </div>
+                    <textarea id={`account-block-${b.id}`}
                       value={b.text}
                       disabled={
                         role === "reviewer" || b.locked || uncertainSave
@@ -1534,11 +1562,11 @@ export function CloudEditor({
                       maxLength={50000}
                       onChange={(e) => editBlock(s.id, b.id, e.target.value)}
                     />
-                  </label>
+                  </div>
                 ))}
               </section>
             ))}
-            {role !== "reviewer" && !uncertainSave && (
+            {role !== "reviewer" && !uncertainSave && !conflict && !recovery && (
               <div className="button-row">
                 {(["heading", "paragraph", "quote"] as const).map((t) => (
                   <button

@@ -143,3 +143,11 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Inspected 390px book editor; document scroll width equaled viewport client width. Reduced narrow-screen cover padding/title sizing after observing a split word, then visually confirmed the corrected cover and reading layout. Viewport override reset.
 - Ten pure preview-content checks pass for headings, order, exact text, empty states and non-mutation. TypeScript, focused lint and production build pass.
 - Limits: this is a draft layout preview, not an export-equivalent renderer, full website runtime, generated artwork, or publishing. Long content is allowed to grow rather than clip; pagination/line breaks may differ from PDF/PPTX. Full rich-block and asset rendering, preview/export parity, and all-style/language coverage remain incomplete.
+
+## Account block controls — 2026-10-04
+
+- Added adjacent move, remove and last-removal undo controls to account content blocks. Pure transformations retain block IDs and source references, reject locked targets/neighbors, and preserve unrelated content. Undo preserves subsequent edits to other blocks; successful reload clears stale undo state.
+- Structural controls pause during uncertain saves, conflicts and recovery. Reviewer controls remain unavailable. Textareas occupy the full editor column after a visual regression was found and corrected.
+- Fifteen offline integrity assertions, focused lint and TypeScript pass. Production build passed before the final undo-reset and textarea-width adjustments; those adjustments were checked by TypeScript/lint and browser respectively.
+- Browser: QA book c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45 reopened with reordered paragraphs at version 2. Moving the third paragraph up restored original order and autosaved version 3; preview reflected the restored order. Screenshot captured in outputs/makeborne-editor-block-controls.png.
+- Limits: remove/undo covered by pure assertions, not browser deletion. Undo is session-local and retains only the latest removal; this is not full version restoration. No paid calls.
