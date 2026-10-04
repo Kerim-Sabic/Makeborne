@@ -11,6 +11,7 @@ export const GenerationInputSchema = z.object({
   brief: z.string().min(1).max(30000),
   audience: z.string().max(1000),
   purpose: z.string().max(2000),
+  wording: z.enum(["preserve", "improve", "summarise"]).default("preserve"),
   content: ArtifactContentSchema,
   style: StyleProfileSchema,
   sourceIds: z.array(z.string().uuid()).max(1000),

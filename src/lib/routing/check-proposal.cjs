@@ -14,6 +14,8 @@ check('prepares unapproved frozen workflow', () => { assert.ok(Object.isFrozen(p
 check('exact input accepted', () => assert.equal(verifyGenerationApproval(p,p.approvalHash,input,now).inputHash,p.inputHash));
 check('object key order irrelevant', () => assert.equal(prepareGenerationProposal(Object.fromEntries(Object.entries(input).reverse()),policy,[route]).proposal.approvalHash,p.approvalHash));
 for (const field of ['brief','audience','purpose']) check(`${field} change rejected`, () => assert.throws(() => verifyGenerationApproval(p,p.approvalHash,{...input,[field]: input[field] + ' changed'},now), /input changed/));
+check('wording change invalidates approval', () => assert.throws(() => verifyGenerationApproval(p,p.approvalHash,{...input,wording:'improve'},now), /input changed/));
+check('missing wording defaults to preserve', () => assert.equal(p.input.wording,'preserve'));
 check('base version change rejected', () => assert.throws(() => verifyGenerationApproval(p,p.approvalHash,{...input,baseVersionId:randomUUID()},now), /input changed/));
 check('workspace change rejected', () => assert.throws(() => verifyGenerationApproval(p,p.approvalHash,{...input,scope:{...input.scope,workspaceId:randomUUID()}},now), /input changed/));
 check('style change rejected', () => assert.throws(() => verifyGenerationApproval(p,p.approvalHash,{...input,style:{...input.style,name:'Changed'}},now), /input changed/));

@@ -60,5 +60,25 @@ function rejected(change,code,ctx=context){const copy=structuredClone(draft);cha
   let calls=0;const generate=createOpenAIArtworkGenerator({apiKey:'offline-fixture',model:'gpt-image-fixture',size:'1024x1024',quality:'high',background:'opaque',maximumInputTokens:1000,maximumOutputTokens:5000,timeoutMs:1000},{spendingAllowed:()=>true,countInputTokens:async()=>100,claimDispatch:async()=>true,fetch:async()=>{calls++;throw Error('must not call');}});
   await assert.rejects(generate(randomUUID(),context,draft,imageId,new AbortController().signal),e=>e.code==='artwork');assert.equal(calls,0);
  });
+ for (const mode of ['preserve','improve','summarise']) await check(mode+' mode enforced for unlocked wording',()=>{
+  const c=structuredClone(context);c.input.wording=mode;c.input.content.sections[0].blocks[0].locked=false;
+  const d=structuredClone(draft);d.content.sections[0].blocks[0].locked=false;d.content.sections[0].blocks[0].text='A rewritten passage.';
+  if(mode==='preserve')assert.throws(()=>validateGeneratedDraft(c,d),e=>e.code==='wording');else assert.equal(validateGeneratedDraft(c,d).content.sections[0].blocks[0].text,'A rewritten passage.');
+  assert.match(buildDraftPrompt(c).instructions,new RegExp('WORDING POLICY: '+mode.toUpperCase()));
+ });
+ for (const [label,change] of [['whitespace',d=>{d.content.sections[0].blocks[0].text+=' ';}],['source references',d=>{d.content.sections[0].blocks[0].sourceIds=[];}],['deletion',d=>{d.content.sections[0].blocks.shift();}]]) await check('preserve mode rejects '+label+' changes',()=>{
+  const c=structuredClone(context);c.input.content.sections[0].blocks[0].locked=false;const d=structuredClone(draft);d.content.sections[0].blocks[0].locked=false;change(d);assert.throws(()=>validateGeneratedDraft(c,d),e=>e.code==='wording');
+ });
+ await check('preserve keeps supplied reading order',()=>{
+  const c=structuredClone(context);c.input.content.sections[0].blocks[0].locked=false;
+  const second={id:randomUUID(),type:'paragraph',text:'Second passage.',assetId:null,locked:false,sourceIds:[]};c.input.content.sections[0].blocks.push(second);
+  const d=structuredClone(draft);d.content.sections[0].blocks[0].locked=false;d.content.sections[0].blocks.unshift(second);assert.throws(()=>validateGeneratedDraft(c,d),e=>e.code==='wording');
+ });
+ await check('preserve permits regrouping unlocked passages',()=>{
+  const c=structuredClone(context);c.input.content.sections[0].blocks[0].locked=false;const d=structuredClone(draft);d.content.sections[0].blocks[0].locked=false;
+  const text=d.content.sections[0].blocks.shift();d.content.sections.unshift({id:randomUUID(),title:'A new grouping',blocks:[text]});assert.equal(validateGeneratedDraft(c,d).content.sections[0].blocks[0].text,text.text);
+ });
+ await check('locked content stays protected in improve mode',()=>{const c=structuredClone(context);c.input.wording='improve';const d=structuredClone(draft);d.content.sections[0].blocks[0].text='Rewritten';assert.throws(()=>validateGeneratedDraft(c,d),e=>e.code==='locked');});
+ await check('oversized preserve passage rejected before dispatch',()=>{const c=structuredClone(context);c.input.content.sections[0].blocks[0].locked=false;c.input.content.sections[0].blocks[0].text='x'.repeat(20001);assert.throws(()=>buildDraftPrompt(c),e=>e.code==='bounds');});
  console.log(`${count} generation draft checks passed; zero external requests.`);
 })().catch(error=>{console.error(error);process.exitCode=1;});
