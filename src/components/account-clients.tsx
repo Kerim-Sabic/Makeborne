@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowUpRight, Plus, RefreshCw, Search, Users } from "lucide-
 import { createClient } from "@/lib/supabase/client";
 import type { CloudClient, CloudWorkspace, CloudWorkspaceSnapshot } from "@/lib/cloud/contracts";
 import { outreachStages } from "@/lib/client-outreach";
+import { followUpBucket, followUpLabel, localCalendarDay, type FollowUpBucket } from "@/lib/client-followups";
 import { studioHref, type AccountClientRoute, type AccountProjectRoute } from "@/lib/studio-navigation";
 import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import CloudClientOutreach from "./cloud-client-outreach";
@@ -63,6 +64,14 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const [view, setView] = useState<"outreach" | "details" | "projects">("outreach");
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("All stages");
+  const [followUp, setFollowUp] = useState<"all" | Exclude<FollowUpBucket, "closed">>("all");
+  const [today, setToday] = useState(() => localCalendarDay(new Date()));
+  useEffect(() => {
+    const update = () => setToday(localCalendarDay(new Date()));
+    const timer = window.setInterval(update, 60000);
+    window.addEventListener("focus", update);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", update); };
+  }, []);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -158,11 +167,15 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     finally { writeLock.current = false; savingChanged(false); setBusy(false); }
   }
   const canEdit = snapshot?.workspace.role !== "reviewer";
-  const clients = snapshot?.clients.filter(client => `${client.name} ${client.company} ${client.email}`.toLowerCase().includes(search.toLowerCase()) && (stage === "All stages" || (client.outreachSummary?.stage ?? client.outreach?.stage ?? "Lead") === stage)) ?? [];
+  const summary = (client: CloudClient) => client.outreachSummary ?? client.outreach;
+  const followUps = ([['all', 'All clients'], ['overdue', 'Overdue'], ['today', 'Due today'], ['upcoming', 'Upcoming'], ['unscheduled', 'Not scheduled']] as const).map(([id, label]) => ({ id, label, count: snapshot?.clients.filter(client => id === 'all' || followUpBucket(summary(client), today) === id).length ?? 0 }));
+  const clients = (snapshot?.clients.filter(client => `${client.name} ${client.company} ${client.email}`.toLowerCase().includes(search.toLowerCase()) && (stage === "All stages" || (summary(client)?.stage ?? "Lead") === stage) && (followUp === "all" || followUpBucket(summary(client), today) === followUp)) ?? []);
+  if (followUp !== "all") clients.sort((a, b) => (summary(a)?.nextFollowUp ?? "9999").localeCompare(summary(b)?.nextFollowUp ?? "9999") || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   return <section className="ac-workspace" aria-label="Account clients">
     <header className="ac-heading"><div><span className="eyebrow">YOUR CLIENT RELATIONSHIPS</span><h1>{selected ? selected.name : "Good work starts with people."}</h1><p>{selected ? "Contact details, conversations, and the work you create together." : "Keep every conversation, next step, and project together."}</p></div>
       {!selected && snapshot && canEdit && <button className="button primary" disabled={busy || adding} onClick={() => setAdding(true)}><Plus size={16} /> Add client</button>}</header>
     {selected && snapshot && canEdit && <button className="button primary" disabled={busy || saving} onClick={() => onCreate(snapshot.workspace.id, selected)}><Plus size={16} /> Create for this client</button>}
+    {!selected && snapshot && <><div className="ac-followup-tabs" aria-label="Follow-up views">{followUps.map(item => <button type="button" key={item.id} aria-pressed={followUp === item.id} onClick={() => setFollowUp(item.id)}><span>{item.label}</span><strong>{item.count}</strong></button>)}</div><p className="small-note">Follow-ups among {snapshot.clients.length} loaded clients · Dates use your local calendar. Won and lost clients are excluded from follow-up views.</p></>}
     {!selected && <div className="ac-toolbar">
       <label className="ac-search"><Search size={16} /><input aria-label="Search account clients" placeholder="Search name, company, or email" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <select aria-label="Outreach stage" value={stage} onChange={event => setStage(event.target.value)}><option>All stages</option>{outreachStages.map(item => <option key={item}>{item}</option>)}</select>
@@ -183,8 +196,8 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
         {!snapshot.projects.some(project => project.clientId === selected.id) && <p>No linked projects in the loaded records. Assign this client when creating a project.</p>}
         {(["projects", "artifacts"] as const).map(collection => snapshot.pagination[collection].nextOffset !== null && <button key={collection} className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id, collection)}>Load more {collection}</button>)}
       </div>}
-    </div> : !adding && <><div className="ac-list">{clients.map(client => <button className="ac-row" key={client.id} disabled={busy} onClick={() => void open(client.id, "outreach")}><span className="ac-avatar">{client.name.slice(0, 1).toUpperCase()}</span><span className="ac-person"><strong>{client.name}</strong><small>{client.company || client.email || "Add contact details"}</small></span><span className="ac-stage">{client.outreachSummary?.stage ?? client.outreach?.stage ?? "Lead"}</span><small className="ac-followup">{(client.outreachSummary?.nextFollowUp ?? client.outreach?.nextFollowUp) ? `Follow up ${client.outreachSummary?.nextFollowUp ?? client.outreach?.nextFollowUp}` : "No follow-up set"}</small><ArrowUpRight size={16} /></button>)}</div>
-      {!busy && !clients.length && !message && <div className="ac-empty"><Users size={28} /><h2>{snapshot ? "A place for your next client." : "Start your client workspace."}</h2><p>{snapshot ? "Add a client or adjust your filters to start tracking the relationship." : "Keep client relationships and their projects saved to your account."}</p>{!snapshot && !workspaces.length && <button onClick={() => void createWorkspace()} className="button primary">Set up client workspace</button>}</div>}
+    </div> : !adding && <><div className="ac-list">{clients.map(client => <button className="ac-row" key={client.id} disabled={busy} onClick={() => void open(client.id, "outreach")}><span className="ac-avatar">{client.name.slice(0, 1).toUpperCase()}</span><span className="ac-person"><strong>{client.name}</strong><small>{client.company || client.email || "Add contact details"}</small></span><span className="ac-stage">{client.outreachSummary?.stage ?? client.outreach?.stage ?? "Lead"}</span><small className={`ac-followup ac-followup-${followUpBucket(summary(client), today)}`}>{followUpLabel(summary(client), today)}</small><ArrowUpRight size={16} /></button>)}</div>
+      {!busy && !clients.length && !message && <div className="ac-empty"><Users size={28} /><h2>{snapshot ? (search || stage !== "All stages" || followUp !== "all" ? "No clients match this view." : "A place for your next client.") : "Start your client workspace."}</h2><p>{snapshot ? "Add a client or adjust your filters to start tracking the relationship." : "Keep client relationships and their projects saved to your account."}</p>{snapshot && (search || stage !== "All stages" || followUp !== "all") && <button className="button secondary" onClick={() => { setSearch(""); setStage("All stages"); setFollowUp("all"); }}>Clear filters</button>}{!snapshot && !workspaces.length && <button onClick={() => void createWorkspace()} className="button primary">Set up client workspace</button>}</div>}
       {snapshot?.pagination.clients.nextOffset !== null && snapshot && <button className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id, "clients")}>Load more clients</button>}
       {snapshot && <p className="small-note">Saved to your account · Filters apply to the {snapshot.clients.length} loaded clients.</p>}
     </>}

@@ -38,3 +38,11 @@
 .ac-search:focus-within { outline: 2px solid #8671ba; outline-offset: 2px; }
 .studio-shell .ac-search input:focus-visible { outline: none; }
 @media(max-width:650px) { .ac-toolbar .ac-search { flex-basis: 100%; } }
+.ac-followup-tabs { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; margin: 22px 0 8px; }
+.ac-followup-tabs button { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #e8e3ee; background: #ffffffb8; padding: 14px; border-radius: 12px; color: #71677c; cursor: pointer; font-size: 12px; }
+.ac-followup-tabs button strong { font-size: 19px; font-weight: 500; color: #31253e; }
+.ac-followup-tabs button[aria-pressed=true] { background: #f2edf9; border-color: #9d87c2; color: #513771; }
+.ac-followup-tabs button:focus-visible { outline: 2px solid #8569aa; outline-offset: 3px; }
+.ac-row .ac-followup-overdue { color: #a83c35; }
+.ac-row .ac-followup-today { color: #65429c; font-weight: 600; }
+@media(max-width:750px) { .ac-followup-tabs { grid-template-columns: repeat(2,minmax(0,1fr)); } .ac-followup-tabs button:first-child { grid-column: 1 / -1; } }

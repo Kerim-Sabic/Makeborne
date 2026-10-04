@@ -174,3 +174,10 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Browser: QA book c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45 gained chapter 2, Making room for practice, with one new paragraph. Preview reflected both and autosave confirmed version 9. Existing three blocks remained in chapter 1. Screenshot outputs/makeborne-book-chapters.png.
 - Twelve structural checks, fifteen block checks and ten preview checks pass. Focused ESLint, TypeScript and production build pass. No paid calls.
 - Limits: no section deletion/reordering or cross-section block moves yet; presentation grouping still follows the existing heading-led preview/export convention. Browser scenario covered a book; this is not evidence of full slide or website layout editing.
+
+## Client follow-up views — 2026-10-04
+
+- Account client list now exposes All, Overdue, Due today, Upcoming and Not scheduled views with counts. Active follow-up views exclude Won/Lost and sort dated clients earliest first; normal search and stage filters still intersect with the selected view. Empty filtered views offer Clear filters.
+- Calendar comparisons use the browser's local day, refreshing every minute and on focus. Row labels distinguish overdue/today/upcoming/closed. Counts and filters explicitly cover loaded clients; this is not yet a server-wide follow-up query.
+- Eleven date/status assertions, focused lint, TypeScript and production build pass. Browser: existing QA client's 2026-10-06 follow-up appeared in Upcoming; Overdue showed the correct empty state; Clear filters restored visibility. Screenshot outputs/makeborne-client-followups.png. No records modified or outreach sent.
+- Limits: server-wide filtering beyond loaded pages, timezone preferences and notifications remain unimplemented. Midnight refresh, mobile view and large client counts were not browser-tested this turn; date logic is covered by offline cases.
