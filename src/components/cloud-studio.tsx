@@ -5,6 +5,7 @@ import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
 import AccountPreview from "./account-preview";
+import { prepareVersionRestore } from "@/lib/cloud/version-restore";
 import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
@@ -1094,6 +1095,7 @@ export function CloudEditor({
   const [uncertainSave, setUncertainSave] = useState(false);
   const [content, setContent] = useState<ArtifactContent | null>(null);
   const [removedBlock, setRemovedBlock] = useState<RemovedAccountBlock | null>(null);
+  const [inspectedVersion, setInspectedVersion] = useState<ArtifactVersion | null>(null);
   const [style, setStyle] = useState<StyleProfile | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(
     artifact.currentVersion,
@@ -1118,6 +1120,7 @@ export function CloudEditor({
       )[0];
       setVersions(result.versions);
       setRemovedBlock(null);
+      setInspectedVersion(null);
       setNextOffset(result.pagination?.nextOffset ?? null);
       setAssetIds(latest?.assetIds || []);
       setExpectedVersion(result.artifact.currentVersion);
@@ -1373,6 +1376,21 @@ export function CloudEditor({
     const timer = window.setTimeout(() => saveAfterPause(), 1500);
     return () => window.clearTimeout(timer);
   }, [dirty, busy, conflict, uncertainSave, savePaused, recovery, role, content, style, note, assetIds]);
+  function restoreVersion(version: ArtifactVersion) {
+    if (!content || dirty || busy || saveBusy.current || savePaused || uncertainSave || conflict || recovery || role === "reviewer") return;
+    try {
+      const restored = prepareVersionRestore(content, version, artifact.id, expectedVersion);
+      editRevision.current++;
+      setContent(restored.content);
+      setStyle(restored.style);
+      setAssetIds(restored.assetIds);
+      setNote(restored.changeSummary);
+      setRemovedBlock(null);
+      setInspectedVersion(null);
+      setDirty(true);
+      notify(`Version ${version.number} restored into your editor. Saving it as a new version…`);
+    } catch (error) { notify(error instanceof Error ? error.message : "This version could not be restored."); }
+  }
   async function moreVersions() {
     if (nextOffset === null || busy) return;
     setBusy(true);
@@ -1615,9 +1633,19 @@ export function CloudEditor({
                     <strong>Version {v.number}</strong>
                     <p>{v.changeSummary}</p>
                     <small>{new Date(v.createdAt).toLocaleString()}</small>
+                    <button type="button" className="button secondary small" aria-expanded={inspectedVersion?.id === v.id} onClick={() => setInspectedVersion(inspectedVersion?.id === v.id ? null : v)}> {inspectedVersion?.id === v.id ? "Close preview" : `Preview version ${v.number}`}</button>
                   </div>
                 ))
             )}
+            {inspectedVersion && <section className="account-version-review" aria-label={`Saved version ${inspectedVersion.number}`}>
+              <h3>Version {inspectedVersion.number}</h3>
+              <p className="small-note">This is a saved snapshot. Restoring creates a new version and keeps your history.</p>
+              <AccountPreview key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />
+              {role !== "reviewer" && inspectedVersion.number < expectedVersion && <>
+                <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
+                {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
+              </>}
+            </section>}
             {nextOffset !== null && (
               <button
                 className="button secondary small"

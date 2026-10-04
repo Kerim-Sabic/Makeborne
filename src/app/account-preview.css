@@ -43,6 +43,10 @@
 
 .account-content-block { margin: 14px 0; }
 .account-content-block textarea { display: block; width: 100%; box-sizing: border-box; }
+.cloud-version > button { display: flex; width: fit-content; margin-top: 10px; }
+.account-version-review { padding: 18px; margin: 18px 0; border: 1px solid #e7e1ed; border-radius: 14px; background: #faf9fc; }
+.account-version-review > .account-preview { position: static; margin: 14px 0; }
+.account-version-review .ap-stage { max-height: 380px; }
 .account-block-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .account-block-tools label { margin: 0; font-size: 12px; color: #6c6474; text-transform: capitalize; }
 .account-block-tools > div { display: flex; gap: 3px; }

@@ -151,3 +151,11 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Fifteen offline integrity assertions, focused lint and TypeScript pass. Production build passed before the final undo-reset and textarea-width adjustments; those adjustments were checked by TypeScript/lint and browser respectively.
 - Browser: QA book c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45 reopened with reordered paragraphs at version 2. Moving the third paragraph up restored original order and autosaved version 3; preview reflected the restored order. Screenshot captured in outputs/makeborne-editor-block-controls.png.
 - Limits: remove/undo covered by pure assertions, not browser deletion. Undo is session-local and retains only the latest removal; this is not full version restoration. No paid calls.
+
+## Saved version preview and restoration — 2026-10-04
+
+- Account version history now opens a saved layout preview. Editors can restore an earlier snapshot into the editor; normal autosave creates a new version with a provenance note. Existing history remains intact.
+- Restore is unavailable with unsaved edits, busy/paused/uncertain saves, conflicts, recovery drafts or reviewer role. Preparation validates the snapshot, artifact identity and format, rejects current/future versions, and refuses alteration/removal/movement/unlocking of current locked blocks. Content, style and asset references are cloned from the snapshot.
+- Thirteen pure integrity assertions pass. Focused ESLint, TypeScript and production build pass. A subsequent display-only adjustment places preview buttons below dates.
+- Browser: previewed version 1 of QA book c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45, restored it, and observed saved version 4 with note Restored from version 1. Versions 1-3 remained listed. Current-version preview has no restore action.
+- Limits: browser restoration exercised one text-only book, not all formats/assets or concurrent-editor races. Existing optimistic version checking and uncertain-save handling are reused. Snapshot artwork retains the existing unavailable placeholder where unsupported. No provider calls or paid services used.
