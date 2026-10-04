@@ -5,6 +5,7 @@ import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
 import AccountPreview from "./account-preview";
+import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
 import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
@@ -1602,6 +1603,10 @@ export function CloudEditor({
           {style && <AccountPreview content={content} style={style} dirty={dirty} />}
           </div>
           <aside>
+            {style && <AccountStyleEditor style={style} kind={content.kind} disabled={role === "reviewer" || uncertainSave || conflict || !!recovery || busy} onChange={next => {
+              if (role === "reviewer" || uncertainSave || conflict || recovery || busy) return;
+              editRevision.current++; setStyle(next); setDirty(true);
+            }} />}
             <span className="eyebrow">AUTOMATIC SAVING</span>
             <p>
               Edits save after you pause typing. Each save creates a version.

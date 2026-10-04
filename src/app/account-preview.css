@@ -42,6 +42,22 @@
 @media(max-width:650px) { .cloud-edit-grid.account-visual-editor { padding: 12px; } .ap-stage { padding: 10px; } .ap-book-cover { min-height: 300px; padding: 30px 18px; } .ap-book-cover h2 { font-size: clamp(24px,9cqw,36px); } .ap-reading,.ap-slide { padding: 18px; } }
 
 .account-content-block { margin: 14px 0; }
+.account-style-editor { margin-bottom: 24px; border: 1px solid #e7e1ed; border-radius: 14px; padding: 16px; }
+.account-style-editor summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.account-style-editor summary span { margin-left: 12px; color: #807487; font-size: 12px; font-weight: 400; }
+.account-style-editor fieldset { border: 0; padding: 0; margin: 18px 0; min-width: 0; }
+.account-style-editor legend { font-size: 12px; color: #716779; margin-bottom: 10px; }
+.account-style-options { display: grid; grid-template-columns: repeat(auto-fit,minmax(135px,1fr)); gap: 10px; }
+.account-style-options button { min-width: 0; text-align: left; border: 1px solid #e7e1ed; background: white; border-radius: 10px; padding: 9px; cursor: pointer; }
+.account-style-options button[aria-pressed=true] { border-color: #7256a4; box-shadow: 0 0 0 1px #7256a4; }
+.account-style-options button:disabled { cursor: default; opacity: .5; }
+.account-style-options strong,.account-style-options small { display: block; font-size: 11px; margin-top: 8px; }
+.account-style-options small { color: #776e7f; line-height: 1.5; font-size: 10px; }
+.account-style-swatch { display: flex; align-items: center; justify-content: space-between; padding: 14px; font-size: 26px; border-radius: 6px; }
+.account-style-swatch i { width: 14px; height: 14px; border-radius: 50%; }
+.account-style-fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(125px,1fr)); gap: 12px; margin-bottom: 12px; }
+.account-style-fields input[type=color] { width: 100%; height: 40px; padding: 4px; cursor: pointer; }
+.account-style-editor :focus-visible { outline: 2px solid #8569aa; outline-offset: 3px; }
 .account-content-block textarea { display: block; width: 100%; box-sizing: border-box; }
 .cloud-version > button { display: flex; width: fit-content; margin-top: 10px; }
 .account-version-review { padding: 18px; margin: 18px 0; border: 1px solid #e7e1ed; border-radius: 14px; background: #faf9fc; }

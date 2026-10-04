@@ -159,3 +159,10 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Thirteen pure integrity assertions pass. Focused ESLint, TypeScript and production build pass. A subsequent display-only adjustment places preview buttons below dates.
 - Browser: previewed version 1 of QA book c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45, restored it, and observed saved version 4 with note Restored from version 1. Versions 1-3 remained listed. Current-version preview has no restore action.
 - Limits: browser restoration exercised one text-only book, not all formats/assets or concurrent-editor races. Existing optimistic version checking and uncertain-save handling are reused. Snapshot artwork retains the existing unavailable placeholder where unsupported. No provider calls or paid services used.
+
+## Saved project design directions — 2026-10-04
+
+- Added a collapsible Design direction panel inside the account editor. Three shared presets plus two format-specific authored directions show colour/type swatches. Custom controls apply a style name, heading font and background/text/accent colours through StyleProfile validation; remaining style metadata is retained for custom edits.
+- Changes update the existing preview and autosave as new versions. Read-only/reviewer, busy, uncertain, conflict and recovery states disable changes. Content blocks are not replaced by style changes.
+- Browser QA book c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45: applied Ink & Vermilion and observed saved version 5. Applied QA Botanical Edition with Source Serif 4 and #456749 accent, observed saved version 6, then reloaded and confirmed version/style and all three original text blocks persisted. Screenshot outputs/makeborne-project-styles.png.
+- Focused lint, TypeScript and production build pass. Limits: browser exercised a book at desktop width; cross-format/mobile/export visual parity and colour-contrast checks were not established. These presets change palette/type, not generated artwork or complete layout systems. No paid calls.
