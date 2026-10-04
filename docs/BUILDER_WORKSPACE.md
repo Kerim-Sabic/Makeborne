@@ -24,3 +24,4 @@
 Generation and live advisor replies are still disconnected. Publishing, payments and production administration are not activated by this layout change. Follow-up instructions are tab-local and do not sync across devices. Plan selected before initial creation retains its explicit planning flow; default Create skips it.
 
 See HOSTING.md for deployment requirements and separate customer-site publication work.
+- Responsive styles are included, but this pass could not verify phone width: the browser viewport override continued reporting 1280 pixels. Desktop evidence does not establish mobile verification.

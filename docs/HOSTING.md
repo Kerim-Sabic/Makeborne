@@ -6,7 +6,7 @@ Reviewed 2026-10-04. **Hosting status: not yet deployed.** This document records
 
 Deploy the current Next.js application to **Vercel**, retaining the existing Supabase backend. This is the shortest path to an online app preview because Vercel runs Next.js directly, including server routes, streaming and Git previews. The repository uses Next.js 16.3.8 and a Node runtime; no Cloudflare adapter is configured. [Vercel Next.js support](https://vercel.com/docs/frameworks/full-stack/nextjs)
 
-The connected Vercel account exposes `amuo's projects` (`amuos-projects`). Read-only checks found no Makeborne project. The team's billing plan was not returned. Verify the selected destination and commercial hosting plan when creating the project; Vercel Hobby is restricted to personal, noncommercial use. No purchase is recorded by this assessment. [Vercel Hobby](https://vercel.com/docs/plans/hobby)
+The connected Vercel account exposes `amuo's projects` (`amuos-projects`). Read-only checks found no Makeborne project. A later deployment-context check confirmed the connected team is on Hobby. Verify the selected destination and commercial hosting plan when creating the project; Vercel Hobby is restricted to personal, noncommercial use. No purchase is recorded by this assessment. [Vercel Hobby](https://vercel.com/docs/plans/hobby)
 
 Cloudflare is a possible later hosting target, but it requires compatibility work for this repository's native image processing and local Chromium rendering. Cloudflare currently recommends vinext, which is beta; OpenNext also supports Next.js 16. Choosing either requires a separate build and runtime verification. Do not deploy this server application as a static Pages export. [Cloudflare Next.js guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/), [OpenNext support](https://opennext.js.org/cloudflare)
 
@@ -76,4 +76,6 @@ Cloudflare for SaaS is a candidate for custom hostname management; Workers for P
 
 ## Deployment record
 
-No deployment URL, successful remote build, deployed auth check or customer publishing verification has been recorded in this document. Update this section with observed results after deployment; retain the feature limitations until their own implementation and verification are complete.
+2026-10-04: local production build and TypeScript passed for the new project workspace. Commit `cdcb40d` was pushed to `main`. Creating a Git-linked Makeborne project in the connected Vercel team failed with `repo_no_access`: that account does not have the required repository access. No successful deployment or remote URL was returned.
+
+Browser GitHub sign-in returned `github_account_not_linked`: an account already exists for the GitHub email and must be accessed by email before linking GitHub. The sign-in page was opened for the user. No purchase, hosting upgrade, environment transfer or new GitHub permission grant was performed. Deployment and remote authentication verification remain blocked by account access. Customer publication remains unimplemented.
