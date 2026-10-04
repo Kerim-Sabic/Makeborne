@@ -72,7 +72,7 @@ export default function ExpertChat() {
         <div className="advisor-picker" role="group" aria-label="Choose an advisor">
           {EXPERT_PERSONAS.map((person) => (
             <button key={person.id} type="button" className={`advisor-person ${selected === person.id ? "is-selected" : ""}`} aria-pressed={selected === person.id} onClick={() => { setSelected(person.id); setCopied(false); setNotice(""); }}>
-              <span className={`advisor-avatar advisor-avatar-${person.id}`} aria-hidden="true"><Image src={`/advisors/${person.id}.png`} alt="" width={44} height={44} /></span>
+              <span className={`advisor-avatar advisor-avatar-${person.id}`} aria-hidden="true"><Image src={`/advisors/${person.id}-transparent.png`} alt="" width={44} height={44} /></span>
               <span><strong>{person.name}</strong><small>{person.specialty}</small></span>
             </button>
           ))}
@@ -84,7 +84,7 @@ export default function ExpertChat() {
         <header className="advisor-top"><div><strong>{expert.name}</strong><span>{expert.specialty}</span></div><span className="advisor-preview-badge">Chat preview</span></header>
         <div className="advisor-conversation">
           <section className="advisor-welcome" aria-labelledby="advisor-title">
-            <span className={`advisor-avatar advisor-avatar-large advisor-avatar-${expert.id}`} aria-hidden="true"><Image key={expert.id} src={`/advisors/${expert.id}.png`} alt="" width={88} height={88} priority /></span>
+            <span className={`advisor-avatar advisor-avatar-large advisor-avatar-${expert.id}`} aria-hidden="true"><Image key={expert.id} src={`/advisors/${expert.id}-transparent.png`} alt="" width={88} height={88} priority /></span>
             <p className="advisor-eyebrow">Think it through with {expert.name}</p>
             <h1 id="advisor-title">{expert.introduction}</h1>
             <p className="advisor-description">{expert.description} Start with a question, a rough idea, or the decision in front of you.</p>

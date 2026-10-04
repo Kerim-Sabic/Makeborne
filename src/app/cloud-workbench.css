@@ -1,0 +1,98 @@
+.account-projects.account-project-open {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  min-height: 0;
+}
+
+.cloud-workbench .cloud-workbench-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 20px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid #e9e7ed;
+  border-radius: 0;
+  background: #fff;
+}
+.cloud-workbench-heading > div { flex: 1; min-width: 0; }
+.cloud-workbench .cloud-workbench-heading h2 {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 550;
+  letter-spacing: -.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-workbench .cloud-workbench-heading p { margin: 4px 0 0; font-size: 10px; color: #797580; }
+.cloud-workbench .cloud-workbench-heading > .button { min-height: 34px; padding: 8px 12px; font-size: 11px; width: auto; }
+.cloud-workbench-heading .icon-button { flex: 0 0 32px; width: 32px; height: 32px; }
+.cloud-workbench-stage { overflow: hidden; min-width: 0; }
+.cloud-workbench .cloud-workbench-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 9px 16px;
+  border-bottom: 1px solid #e9e7ed;
+  background: #fff;
+}
+.cloud-workbench-tabs > div { display: flex; align-items: center; gap: 4px; }
+.cloud-workbench-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #77737e;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cloud-workbench-tabs button[aria-pressed=true] { color: #2c2637; background: #f1edf6; }
+.cloud-workbench-tabs button:hover { background: #f5f3f7; }
+.cloud-workbench-tabs button:focus-visible { outline: 2px solid #806797; outline-offset: 2px; }
+.cloud-workbench-tabs > span { font-size: 10px; color: #8d8894; }
+.cloud-workbench-content { flex: 1; min-height: 0; overflow: auto; background: #f7f7f9; }
+.cloud-workbench-content > .cloud-conflict { margin: 16px; }
+.cloud-workbench-preview { height: 100%; min-height: 380px; padding: 18px; }
+.cloud-workbench-preview > .account-preview { position: static; min-height: 100%; display: flex; flex-direction: column; background: #f0eff3; border-radius: 10px; }
+.cloud-workbench-preview .ap-toolbar { min-height: 50px; padding: 9px 14px; }
+.cloud-workbench-preview .ap-toolbar strong { display: none; }
+.cloud-workbench-preview .ap-stage { max-height: none; flex: 1; overflow: visible; }
+.cloud-workbench-preview .ap-stage.website { padding: 0; }
+.cloud-workbench-preview .ap-document { min-height: 100%; box-shadow: none; }
+.cloud-workbench-preview .ap-mobile { padding: 18px !important; }
+.cloud-workbench-preview .ap-mobile .ap-document { max-width: 390px; box-shadow: 0 6px 25px #20182e0b; }
+.cloud-workbench-preview .ap-stage.book .ap-document { max-width: 720px; margin: auto; }
+.cloud-workbench-preview .ap-note { margin: 0; padding: 9px 14px; font-size: 9px; background: #fff; border-top: 1px solid #e9e7ed; }
+.cloud-workbench-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding: 48px 24px; border: 1px solid #eae7ee; border-radius: 10px; background: #fff; text-align: center; }
+.cloud-workbench-empty-icon { display: grid; place-items: center; width: 66px; height: 66px; border: 1px solid #e9e3ef; border-radius: 19px; background: #f9f7fc; color: #8d789f; }
+.cloud-workbench-empty h3 { margin: 22px 0 8px; color: #39333e; font-family: var(--font-inter), Arial, sans-serif; font-size: 20px; font-weight: 500; letter-spacing: -.04em; }
+.cloud-workbench-empty p { max-width: 315px; margin: 0 0 20px; font-size: 12px; line-height: 1.8; color: #8c8493; }
+.cloud-workbench-edit[hidden], .cloud-workbench-history[hidden] { display: none; }
+.cloud-workbench .cloud-edit-grid.account-visual-editor { display: block; padding: 24px; border: 0; background: #fff; }
+.cloud-workbench .account-compose { display: block; }
+.cloud-workbench .account-visual-editor > aside { margin-top: 28px; border: 0; border-top: 1px solid #e9e7ed; padding: 24px 0 0; }
+.cloud-workbench-history { padding: 28px; background: #fff; min-height: 100%; }
+.cloud-workbench-history > h3 { margin: 0 0 12px; font-size: 18px; letter-spacing: -.03em; }
+.cloud-workbench-history > .cloud-version { padding: 18px 0; }
+.cloud-workbench-loading { padding: 36px; text-align: center; color: #89808e; font-size: 12px; }
+
+@media (max-width: 720px) {
+  .cloud-workbench .cloud-workbench-heading { padding: 10px 12px; }
+  .cloud-workbench .cloud-workbench-heading h2 { font-size: 12px; }
+  .cloud-workbench .cloud-workbench-tabs { padding: 9px; }
+  .cloud-workbench-tabs > span { display: none; }
+  .cloud-workbench-preview { padding: 10px; min-height: 420px; }
+  .cloud-workbench .cloud-edit-grid.account-visual-editor, .cloud-workbench-history { padding: 16px; }
+  .cloud-workbench-empty { min-height: 400px; }
+}

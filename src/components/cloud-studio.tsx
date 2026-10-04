@@ -6,6 +6,8 @@ import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
+import BuildConversation from "./build-conversation";
+import "@/app/cloud-workbench.css";
 import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
 import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
@@ -23,6 +25,12 @@ import {
   ArrowRight,
   Cloud,
   FileText,
+  Eye,
+  History,
+  PencilLine,
+  PanelsTopLeft,
+  BookOpen,
+  Presentation,
   FolderOpen,
   LogOut,
   Plus,
@@ -721,6 +729,7 @@ export default function CloudStudio() {
                 accountId={accountId!}
                 workspaceId={overview.workspace.id}
                 artifact={selected}
+                project={overview.projects.find(project => project.id === selected.projectId)}
                 role={overview.workspace.role}
                 back={() => setSelected(null)}
                 notify={setMessage}
@@ -1078,6 +1087,7 @@ export function CloudEditor({
   accountId,
   workspaceId,
   artifact,
+  project,
   role,
   back,
   notify,
@@ -1085,10 +1095,12 @@ export function CloudEditor({
   accountId: string;
   workspaceId: string;
   artifact: CloudArtifact;
+  project?: Pick<Project, "brief" | "effort">;
   role: WorkspaceSummary["role"];
   back: () => void;
   notify: (s: string) => void;
 }) {
+  const [view, setView] = useState<"preview" | "edit" | "history">("preview");
   const recoveryKey = `makeborne.cloud-draft.${accountId}.${workspaceId}.${artifact.id}`;
   const [recovery, setRecovery] = useState<RecoveryDraft | null>(null);
   const saveBusy = useRef(false);
@@ -1465,9 +1477,12 @@ export function CloudEditor({
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  const previewBlocks = content?.sections.flatMap(section => section.blocks) ?? [];
+  const isStartingDraft = !previewBlocks.length || (expectedVersion <= 1 && previewBlocks.length === 1 && previewBlocks[0].type === "heading" && previewBlocks[0].text === content?.title && !previewBlocks[0].assetId);
+  const PreviewIcon = artifact.kind === "website" ? PanelsTopLeft : artifact.kind === "book" ? BookOpen : Presentation;
   return (
-    <section className="cloud-editor">
-      <div className="editor-heading">
+    <section className="cloud-editor workspace-workbench cloud-workbench">
+      <div className="editor-heading cloud-workbench-heading">
         <button
           className="icon-button"
           aria-label="Back to projects"
@@ -1486,7 +1501,7 @@ export function CloudEditor({
         <div>
           <h2>{artifact.title}</h2>
           <p>
-            Saved to your account · Version {expectedVersion} ·{" "}
+            Version {expectedVersion} ·{" "}
             {savePaused || conflict || uncertainSave ? "Saving paused — review required" : busy && dirty ? "Saving…" : dirty ? "Waiting to save…" : "Saved"}
           </p>
         </div>
@@ -1499,6 +1514,18 @@ export function CloudEditor({
           {!content ? "Loading…" : busy ? "Saving…" : savePaused ? "Retry save" : "Save now"}
         </button>
       </div>
+      <div className="workbench-layout">
+        <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />
+        <div className="workbench-stage cloud-workbench-stage">
+          <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
+            <div>
+              <button type="button" aria-pressed={view === "preview"} onClick={() => setView("preview")}><Eye size={15} />Preview</button>
+              <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />Edit</button>
+              <button type="button" aria-pressed={view === "history"} onClick={() => setView("history")}><History size={15} />History</button>
+            </div>
+            <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>
+          </nav>
+          <div className="cloud-workbench-content">
       {uncertainSave && (
         <div className="cloud-conflict" role="alert">
           <h3>The last save is not confirmed.</h3>
@@ -1585,8 +1612,17 @@ export function CloudEditor({
         </div>
       )}
       {!content ? (
-        <p>Loading content…</p>
-      ) : (
+        <p className="cloud-workbench-loading" role="status">Opening your project…</p>
+      ) : (<>
+        {view === "preview" && style && <div className="cloud-workbench-preview">
+          {isStartingDraft ? <div className="cloud-workbench-empty">
+            <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
+            <h3>Your {artifact.kind} starts here</h3>
+            <p>{project?.brief.trim() ? "Your brief is saved. " : ""}AI generation is not connected yet. {role === "reviewer" ? "You have view access to this project." : "You can add your own content in the editor."}</p>
+            <button type="button" onClick={() => setView("edit")} className="button secondary small"><PencilLine size={14} />Open editor</button>
+          </div> : <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} />}
+        </div>}
+        <div className="cloud-workbench-edit" hidden={view !== "edit"}>
         <div className="cloud-edit-grid account-visual-editor">
           {lockChangePending && <p role="status" className="small-note account-protection-status">Saving content protection. Editing resumes after the save is confirmed; use Save now to retry if needed.</p>}
           <div className="account-compose" inert={lockChangePending}>
@@ -1632,7 +1668,6 @@ export function CloudEditor({
             ))}
             {role !== "reviewer" && !uncertainSave && !conflict && !recovery && <button type="button" className="button secondary small" onClick={addSection}><Plus size={14} />{content.kind === "book" ? "Add chapter" : "Add section"}</button>}
           </div>
-          {style && <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} />}
           </div>
           <aside>
             {style && <AccountStyleEditor style={style} kind={content.kind} disabled={role === "reviewer" || uncertainSave || conflict || !!recovery || busy} onChange={next => {
@@ -1659,6 +1694,13 @@ export function CloudEditor({
               <FileText size={16} /> Download draft
             </button>
             {style && <AccountExport key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
+            <p className="small-note">
+              {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Uploaded artwork can be included in development exports. Automatic generation and publication are not connected." : "Artwork upload, automatic generation, and publication are not connected."}
+            </p>
+          </aside>
+        </div>
+        </div>
+        <section className="cloud-workbench-history" hidden={view !== "history"} aria-label="Project version history">
             <h3>Version history</h3>
             {versions.length === 0 ? (
               <p>No saved versions yet.</p>
@@ -1692,12 +1734,11 @@ export function CloudEditor({
                 Load earlier versions
               </button>
             )}
-            <p className="small-note">
-              {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Uploaded artwork can be included in development exports. Automatic generation and publication are not connected." : "Artwork upload, automatic generation, and publication are not connected."}
-            </p>
-          </aside>
+        </section>
+      </>)}
+          </div>
         </div>
-      )}
+      </div>
     </section>
   );
 }

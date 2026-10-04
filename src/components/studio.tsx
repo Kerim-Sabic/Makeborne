@@ -6,6 +6,7 @@ import Image from "next/image";
 import { creationStyles, retainCreationStyle, styleConcept } from "@/lib/creation-styles";
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
+import BuildConversation from "./build-conversation";
 import ComposerControls from "./composer-controls";
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
@@ -522,7 +523,7 @@ export default function Studio() {
       );
   if (directStart && creating) return <div className="studio-shell creation-route">{creationView}</div>;
   return (
-    <div className="studio-shell">
+    <div className={`studio-shell ${project || accountRoute?.artifactId ? "is-project-open" : ""}`}>
       {mobileNav && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
       <aside
         id="studio-navigation"
@@ -1721,6 +1722,8 @@ function ProjectEditor({
   saveWebsiteRecord: (projectId: string, record: WebsiteRecord) => boolean;
   notify: (s: string) => void;
 }) {
+  const PreviewIcon = icons[project.kind];
+  const isStartingDraft = project.blocks.length === 1 && project.blocks[0].type === "heading" && project.blocks[0].text === project.title;
   const bookAuthor = project.bookMetadata?.author ?? "";
   const bookLanguage = project.bookMetadata?.language ?? "en";
   function updateBookMetadata(values: Partial<{ author: string; language: string }>) {
@@ -1732,7 +1735,7 @@ function ProjectEditor({
     }), project.id);
   }
   const [active, setActive] = useState(project.blocks[0]?.id || "");
-  const [view, setView] = useState("edit");
+  const [view, setView] = useState("preview");
   const [panel, setPanel] = useState("content");
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<Block[][]>([]);
@@ -2000,7 +2003,7 @@ function ProjectEditor({
     reader.readAsDataURL(file);
   }
   return (
-    <div className="editor">
+    <div className="editor workbench-local">
       <div className="editor-heading">
         <button
           className="icon-button"
@@ -2049,20 +2052,13 @@ function ProjectEditor({
           </button>
         </div>
       </div>
+      <div className="workbench-layout">
+      <BuildConversation projectKey={`device:${project.id}`} brief={project.brief} kind={project.kind} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} effort={project.effort ?? DEFAULT_EFFORT} onEffort={effort => update({ ...project, effort, updatedAt: now() })} />
+      <section className="workbench-stage" aria-label="Project workspace">
       <div className="editor-toolbar">
         <div className="filter-tabs">
-          <button
-            className={view === "edit" ? "active" : ""}
-            onClick={() => setView("edit")}
-          >
-            Edit
-          </button>
-          <button
-            className={view === "preview" ? "active" : ""}
-            onClick={() => setView("preview")}
-          >
-            Preview
-          </button>
+          <button className={view === "preview" ? "active" : ""} aria-pressed={view === "preview"} onClick={() => setView("preview")}>Preview</button>
+          <button className={view === "edit" ? "active" : ""} aria-pressed={view === "edit"} onClick={() => setView("edit")}>Edit</button>
           <button
             className={view === "history" ? "active" : ""}
             onClick={() => setView("history")}
@@ -2295,7 +2291,7 @@ function ProjectEditor({
               </div>
             </aside>
           )}
-          <div className="artifact-canvas">
+          <div className={`artifact-canvas ${isStartingDraft ? "is-starting-draft" : ""}`}>
             <div className="canvas-toolbar">
               <span>
                 {view === "preview"
@@ -2322,13 +2318,13 @@ function ProjectEditor({
                 <span>{style.name}</span>
               </div>
             </div>
-            <ArtifactPreview
+            {view === "preview" && isStartingDraft ? <div className="workbench-empty"><span className="workbench-empty-icon"><PreviewIcon size={26} /></span><span className="workbench-empty-eyebrow">YOUR {kindLabel[project.kind].toUpperCase()} WORKSPACE</span><h2>From your idea<br />to the first draft.</h2><p>Your brief is on the left. This space will show your {project.kind} once content is added or generation is enabled.</p><button type="button" onClick={() => setView("edit")}>Add your own content <ArrowRight size={15} /></button></div> : <ArtifactPreview
               project={project}
               style={style}
               width={previewWidth}
               active={active}
               select={view === "edit" ? setActive : undefined}
-            />
+            />}
             {view === "preview" && (
               <div className="preview-disclaimer">
                 This is a local content preview. Publishing, live forms, and
@@ -2602,6 +2598,8 @@ function ProjectEditor({
           )}
         </div>
       )}
+      </section>
+      </div>
     </div>
   );
 }

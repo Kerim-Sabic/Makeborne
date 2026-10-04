@@ -95,15 +95,15 @@ export default function AccountProjects({ search, filter, target, navigate }: { 
     {authReady && <><p>Account projects are available to their workspace members.</p><Link className="button primary small" href={`/login?next=${encodeURIComponent(studioHref({ tab: "projects", projectId: null, clientId: null, account: target }))}`}>Sign in</Link></>}
   </section> : null;
   const visible = snapshot?.artifacts.filter(artifact => (filter === "all" || artifact.kind === filter) && artifact.title.toLowerCase().includes(search.toLowerCase())) ?? [];
-  return <section className="account-projects" aria-label="Projects saved to your account">
-    <div className="account-projects-heading"><div><span className="eyebrow">SAVED TO YOUR ACCOUNT</span><h2>Your saved projects</h2></div>
-      {!selected && snapshot && <button type="button" className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id)}><RefreshCw size={14} /> Refresh</button>}</div>
+  return <section className={`account-projects${selected ? " account-project-open" : ""}`} aria-label={selected ? "Project workspace" : "Projects saved to your account"}>
+    {!selected && !target?.artifactId && <div className="account-projects-heading"><div><span className="eyebrow">SAVED TO YOUR ACCOUNT</span><h2>Your saved projects</h2></div>
+      {snapshot && <button type="button" className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id)}><RefreshCw size={14} /> Refresh</button>}</div>}
     {!selected && workspaces.length > 1 && <label>Workspace<select disabled={busy} value={snapshot?.workspace.id ?? ""} onChange={event => navigate({ workspaceId: event.target.value, artifactId: null })}>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>}
     {message && <p role="status">{message}</p>}
     {!busy && target?.artifactId && !selected && <button className="button secondary small" onClick={() => navigate(null)}>Back to projects</button>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { if (snapshot) await load(snapshot.workspace.id); else window.location.reload(); }} />
     {busy && <p role="status">Loading your account projects…</p>}
-    {selected && snapshot ? <AccountEditor key={`${accountId}:${snapshot.workspace.id}:${selected.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} artifact={selected} role={snapshot.workspace.role}
+    {selected && snapshot ? <AccountEditor key={`${accountId}:${snapshot.workspace.id}:${selected.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} artifact={selected} project={snapshot.projects.find(project => project.id === selected.projectId)} role={snapshot.workspace.role}
       notify={setMessage} back={() => navigate({ workspaceId: snapshot.workspace.id, artifactId: null })} /> : <>
       <div className="account-project-grid">{visible.map(artifact => { const Icon = icons[artifact.kind]; return <button type="button" className="account-project-card" key={artifact.id} disabled={busy} onClick={() => navigate({ workspaceId: snapshot!.workspace.id, artifactId: artifact.id })}>
         <span className={`account-project-icon ${artifact.kind}`}><Icon size={22} /></span><span><strong>{artifact.title}</strong><small>{kindLabel[artifact.kind]} · {artifact.currentVersion ? `Version ${artifact.currentVersion}` : "New draft"}</small></span><ArrowRight size={16} /></button>; })}</div>

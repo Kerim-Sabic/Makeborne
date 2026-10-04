@@ -60,3 +60,5 @@
 .advisor-composer>.advisor-send{grid-column:2;grid-row:1;align-self:end;width:32px;height:32px;border-radius:10px}
 .advisor-composer-actions{grid-column:1/-1;margin-top:0;padding-top:5px;border-top:1px solid #f3eff7}.advisor-composer-actions>div{gap:5px}.advisor-composer-actions>span{font-size:9px}.advisor-copy{font-size:10px;padding:5px}.advisor-draft-note{font-size:9px;margin-top:9px}.advisor-feedback:empty{display:none}
 @media(max-width:600px){.advisor-person .advisor-avatar{height:33px;width:33px;border-radius:9px}.advisor-avatar-large{height:72px;width:72px;border-radius:18px}.advisor-conversation{padding:26px 20px;gap:23px;justify-content:flex-start}.advisor-welcome h1{font-size:27px}.advisor-description{font-size:13px}.advisor-composer{padding:11px 12px}.advisor-availability p{font-size:9px}}
+
+.advisor-page .advisor-avatar{background:transparent;border-radius:0;overflow:visible}.advisor-page .advisor-avatar img{object-fit:contain;border-radius:0}
