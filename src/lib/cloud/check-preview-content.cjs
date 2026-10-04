@@ -1,0 +1,21 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Offline preview fidelity checks. */
+const fs = require("node:fs"), ts = require("typescript"), assert = require("node:assert/strict");
+require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, filename);
+const { previewBlocks, previewSlides } = require("./preview-content.ts");
+const block = (id, type, text) => ({ id, type, text, assetId: null, locked: false, sourceIds: [] });
+const content = { title: "Deck", kind: "presentation", sections: [{ id: "section", title: "Opening", blocks: [block("one", "heading", "Opening"), block("two", "paragraph", "Exact words"), block("three", "heading", "Next"), block("four", "quote", "Keep this quote")] }] };
+const original = JSON.stringify(content);
+assert.equal(previewBlocks(content).length, 4);
+const slides = previewSlides(content);
+assert.equal(slides.length, 2);
+assert.equal(slides[0].title, "Opening");
+assert.equal(slides[0].blocks[0].text, "Exact words");
+assert.equal(slides[1].blocks[0].type, "quote");
+assert.equal(JSON.stringify(content), original);
+assert.equal(previewSlides({ title: "Empty", sections: [] })[0].title, "Empty");
+const paragraphOnly = { title: "Untitled layout", sections: [{ id: "s", title: "", blocks: [block("p", "paragraph", "No heading")] }] };
+assert.equal(previewSlides(paragraphOnly)[0].blocks[0].text, "No heading");
+assert.equal(previewSlides(paragraphOnly)[0].title, "Untitled layout");
+const titledSection = { ...paragraphOnly, sections: [{ ...paragraphOnly.sections[0], title: "Section heading" }] };
+assert.equal(previewBlocks(titledSection)[0].text, "Section heading");
+console.log("PASS 10 preview checks: source order, headings, exact text, empty content, and no mutation.");

@@ -133,3 +133,13 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Browser calls include X-Makeborne-Account. Cloud context compares this optional constraint to auth.getUser before schema/workspace queries. It grants no authority, does not replace authentication/RLS, and preserves compatibility for other callers without the header.
 - Eight mocked-transport/account checks and three concurrency regressions pass, including original-account retry with the same request key and header. Normal signed-in client detail loading succeeds through the updated server path. TypeScript, lint and production build pass.
 - Limits: no real concurrent sign-out or second-account browser session was exercised; mismatch rejection is covered by the pure server predicate and code placement, not an authenticated HTTP mismatch fixture. No claim that a request already committed before a later sign-out can be undone. No cloud records or paid calls were made.
+
+
+## Live account-project layout previews — 2026-10-04
+
+- Account editor now renders the current content beside the text editor on wider screens and below it on narrow screens. Preview uses saved palette and supported typography without changing canonical content.
+- Website preview includes desktop/mobile width controls. Book preview includes a cover and continuous reading layout. Presentation preview groups heading-led slides with previous/next controls. Missing artwork is explicitly represented as unavailable; structured blocks retain a labeled text representation.
+- Browser: presentation Next control opened slide 2; editing its paragraph updated preview immediately and autosaved version 2 of QA artifact `03edc914-01d5-4838-9824-1f684bd705b5`. Website mobile-width control worked for existing Electric Mint QA artifact. Created QA book `QA — The Thoughtful Practice`, artifact `c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45`, using Moss Notebook and supplied text; cover/reading layout rendered. No generated images or model calls.
+- Inspected 390px book editor; document scroll width equaled viewport client width. Reduced narrow-screen cover padding/title sizing after observing a split word, then visually confirmed the corrected cover and reading layout. Viewport override reset.
+- Ten pure preview-content checks pass for headings, order, exact text, empty states and non-mutation. TypeScript, focused lint and production build pass.
+- Limits: this is a draft layout preview, not an export-equivalent renderer, full website runtime, generated artwork, or publishing. Long content is allowed to grow rather than clip; pagination/line breaks may differ from PDF/PPTX. Full rich-block and asset rendering, preview/export parity, and all-style/language coverage remain incomplete.

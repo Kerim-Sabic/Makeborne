@@ -1,0 +1,42 @@
+.account-compose { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 22px; align-items: start; min-width: 0; }
+.cloud-edit-grid.account-visual-editor { grid-template-columns: minmax(0,1fr); padding: 24px; }
+.account-visual-editor > aside { border-left: 0; border-top: 1px solid #e9e6ef; padding: 24px 0 0; }
+.account-preview { min-width: 0; border: 1px solid #e4e0e9; border-radius: 15px; background: #f6f4f8; overflow: hidden; position: sticky; top: 18px; }
+.ap-toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; background: #fff; padding: 14px 16px; border-bottom: 1px solid #e9e6ed; }
+.ap-toolbar > div:first-child { display: grid; gap: 4px; }
+.ap-toolbar strong { color: #36313d; font-size: 13px; font-weight: 550; }
+.ap-toolbar small { color: #78717f; font-size: 11px; }
+.ap-devices, .ap-slide-nav { display: flex; align-items: center; gap: 6px; }
+.ap-devices button, .ap-slide-nav button { display: grid; place-items: center; border: 0; background: transparent; border-radius: 7px; width: 30px; height: 30px; cursor: pointer; color: #736982; }
+.ap-devices button[aria-pressed=true] { background: #ede7f8; color: #5e428d; }
+.ap-stage { padding: 18px; max-height: 650px; overflow: auto; container-type: inline-size; }
+.ap-document, .ap-slide { color: var(--ap-ink); background: var(--ap-canvas); font-family: var(--ap-body); box-shadow: 0 4px 20px #30233a0d; overflow-wrap: anywhere; }
+.ap-document h2, .ap-document h3, .ap-slide h3 { font-family: var(--ap-heading); color: inherit; font-weight: 500; letter-spacing: -.035em; line-height: 1.15; }
+.ap-document p, .ap-slide p, .ap-document blockquote, .ap-slide blockquote { white-space: pre-wrap; font-size: 13px; line-height: 1.8; color: inherit; }
+.ap-reading { padding: 28px; }
+.ap-reading h3 { font-size: clamp(21px, 7cqw, 36px); margin: 28px 0 16px; }
+.ap-reading h3:first-child { margin-top: 0; }
+.ap-reading blockquote, .ap-slide blockquote { border-left: 2px solid var(--ap-accent); padding-left: 18px; margin: 24px 0; font-style: italic; }
+.ap-site-brand { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 28px; border-bottom: 1px solid color-mix(in srgb,var(--ap-ink) 12%,transparent); font-size: 12px; font-weight: 600; }
+.ap-brand-dot { flex: 0 0 7px; height: 7px; border-radius: 50%; background: var(--ap-accent); }
+.ap-mobile .ap-document { max-width: 290px; margin: auto; }
+.ap-book-cover { min-height: 370px; padding: 46px 30px; display: flex; flex-direction: column; justify-content: space-between; }
+.ap-book-cover h2 { font-size: clamp(28px,10cqw,52px); margin: 50px 0; }
+.ap-cover-rule { display: block; height: 3px; width: 42px; background: var(--ap-accent); }
+.book .ap-reading { border-top: 1px solid color-mix(in srgb,var(--ap-ink) 12%,transparent); }
+.ap-slide { min-height: 230px; aspect-ratio: 16/9; padding: 30px; display: flex; flex-direction: column; justify-content: center; }
+.ap-slide h3 { font-size: clamp(22px,7cqw,40px); margin: 15px 0; }
+.ap-slide p { margin: 8px 0; }
+.ap-slide-number { color: var(--ap-accent); font-size: 11px; letter-spacing: .1em; }
+.ap-slide-nav { justify-content: center; margin-top: 12px; font-size: 12px; color: #746d7e; }
+.ap-slide-nav button:disabled { opacity: .35; cursor: default; }
+.ap-placeholder { display: grid; justify-items: center; gap: 9px; border: 1px dashed currentColor; border-radius: 10px; padding: 24px; margin: 20px 0; text-align: center; color: var(--ap-ink); }
+.ap-placeholder figcaption { font-size: 12px; white-space: pre-wrap; }
+.ap-placeholder small, .ap-structured small { font-size: 10px; opacity: .7; }
+.ap-callout, .ap-structured { padding: 16px; border: 1px solid color-mix(in srgb,var(--ap-ink) 20%,transparent); border-radius: 8px; white-space: pre-wrap; margin: 18px 0; }
+.ap-note { padding: 0 16px 12px; font-size: 10px; line-height: 1.6; color: #797080; }
+.account-preview button:focus-visible { outline: 2px solid #8569aa; outline-offset: 2px; }
+@media(max-width:900px) { .account-compose { grid-template-columns: minmax(0,1fr); } .account-preview { position: static; } }
+@media(min-width:1600px) { .cloud-edit-grid.account-visual-editor { grid-template-columns: minmax(0,1fr) 250px; } .account-visual-editor > aside { border-top: 0; border-left: 1px solid #e9e6ef; padding: 0 0 0 24px; } }
+
+@media(max-width:650px) { .cloud-edit-grid.account-visual-editor { padding: 12px; } .ap-stage { padding: 10px; } .ap-book-cover { min-height: 300px; padding: 30px 18px; } .ap-book-cover h2 { font-size: clamp(24px,9cqw,36px); } .ap-reading,.ap-slide { padding: 18px; } }

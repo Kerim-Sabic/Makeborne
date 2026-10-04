@@ -4,6 +4,7 @@ import BrandMark from "./brand-mark";
 import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
+import AccountPreview from "./account-preview";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
@@ -1515,7 +1516,8 @@ export function CloudEditor({
       {!content ? (
         <p>Loading content…</p>
       ) : (
-        <div className="cloud-edit-grid">
+        <div className="cloud-edit-grid account-visual-editor">
+          <div className="account-compose">
           <div>
             {content.sections.map((s) => (
               <section key={s.id}>
@@ -1550,6 +1552,8 @@ export function CloudEditor({
                 ))}
               </div>
             )}
+          </div>
+          {style && <AccountPreview content={content} style={style} dirty={dirty} />}
           </div>
           <aside>
             <span className="eyebrow">AUTOMATIC SAVING</span>
