@@ -1,18 +1,10 @@
 import type { Metadata } from "next";
 import CreationHome from "@/components/creation-home";
-import { IS_PREVIEW, SITE } from "@/lib/site-metadata";
+import { publicPageMetadata, SITE } from "@/lib/site-metadata";
 
 export const metadata: Metadata = {
-  alternates: { canonical: "/" },
-  robots: { index: !IS_PREVIEW, follow: !IS_PREVIEW },
-  openGraph: {
-    type: "website",
-    siteName: SITE.name,
-    title: SITE.title,
-    description: SITE.description,
-    url: "/",
-    locale: "en_US",
-  },
+  ...publicPageMetadata("/", SITE.title, SITE.description),
+  title: { absolute: SITE.title },
 };
 
 export default function Home() {

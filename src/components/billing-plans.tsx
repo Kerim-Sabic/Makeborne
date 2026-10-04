@@ -60,7 +60,7 @@ function SupportPlan() {
       if (!response.ok) throw new Error(typeof data?.error?.message === "string" ? data.error.message : "Checkout could not be opened. Please try again.");
       if (typeof data?.url !== "string") throw new Error("Checkout could not be opened. Please try again.");
       const destination = new URL(data.url);
-      if (destination.protocol !== "https:" || (destination.hostname !== "whop.com" && !destination.hostname.endsWith(".whop.com"))) throw new Error("The checkout link could not be verified. Please try again.");
+      if (destination.origin !== "https://whop.com" || destination.username || destination.password || !/^\/checkout\/(?:plan|ch)_[A-Za-z0-9]+\/?$/.test(destination.pathname)) throw new Error("The checkout link could not be verified. Please try again.");
       window.location.assign(destination.href);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Checkout could not be opened. Please try again.");

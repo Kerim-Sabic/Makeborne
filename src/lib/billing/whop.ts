@@ -4,6 +4,11 @@ import { RequestError } from "@/lib/server/http";
 import { billingConfig } from "./config";
 
 const id = z.string().regex(/^[a-z]+_[A-Za-z0-9]+$/);
+const paymentSchema = z.object({
+  id: z.string().regex(/^pay_[A-Za-z0-9]+$/),
+  company: z.object({ id }),
+  membership: z.object({ id: z.string().regex(/^mem_[A-Za-z0-9]+$/) }).nullable(),
+});
 export const membershipSchema = z.object({
   id,
   status: z.string(),
@@ -39,6 +44,15 @@ export async function retrieveMembership(membershipId: string) {
   return parsed.data;
 }
 
+/** Refund/dispute events identify a payment; resolve its current membership. */
+export async function retrievePaymentMembership(paymentId: string) {
+  if (!/^pay_[A-Za-z0-9]+$/.test(paymentId)) throw new RequestError("INVALID_PAYMENT", "This payment could not be verified.", 403);
+  const parsed = paymentSchema.safeParse(await whopRequest(`/payments/${paymentId}`));
+  if (!parsed.success || parsed.data.id !== paymentId) throw new RequestError("PAYMENT_UNVERIFIED", "This payment could not be verified.", 503);
+  if (parsed.data.company.id !== billingConfig().companyId) throw new RequestError("WRONG_MERCHANT", "This payment belongs to a different merchant.", 403);
+  return parsed.data.membership?.id ?? null;
+}
+
 export function activeMembership(membership: WhopMembership) {
   const config = billingConfig();
   return membership.company.id === config.companyId && config.accessPlanIds.includes(membership.plan.id)
@@ -48,8 +62,10 @@ export function activeMembership(membership: WhopMembership) {
 
 export function checkoutUrl(value: unknown) {
   if (typeof value !== "string") throw new RequestError("CHECKOUT_UNVERIFIED", "The checkout link could not be verified.", 503);
-  const url = new URL(value, "https://whop.com");
-  if (url.origin !== "https://whop.com" || url.username || url.password || !url.pathname.startsWith("/checkout/"))
+  let url: URL;
+  try { url = new URL(value); }
+  catch { throw new RequestError("CHECKOUT_UNVERIFIED", "The checkout link could not be verified.", 503); }
+  if (url.origin !== "https://whop.com" || url.username || url.password || !/^\/checkout\/(?:plan|ch)_[A-Za-z0-9]+\/?$/.test(url.pathname))
     throw new RequestError("CHECKOUT_UNVERIFIED", "The checkout link could not be verified.", 503);
   return url.href;
 }

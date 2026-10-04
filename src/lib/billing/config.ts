@@ -18,10 +18,11 @@ export const CREATION_CATALOG = {
 export function billingConfig() {
   const apiKey = process.env.WHOP_API_KEY;
   const companyId = process.env.WHOP_COMPANY_ID;
+  const webhookSecret = process.env.WHOP_WEBHOOK_SECRET;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
   const accessPlanIds = (process.env.WHOP_ACCESS_PLAN_IDS ?? "").split(",").map(value => value.trim())
     .filter(value => Object.values(CREATION_CATALOG).includes(value as typeof CREATION_CATALOG[keyof typeof CREATION_CATALOG]) && value !== SUPPORT.planId);
-  const configured = Boolean(apiKey && companyId === SUPPORT.companyId && secretKey?.startsWith("sb_secret_") && accessPlanIds.length);
+  const configured = Boolean(apiKey && companyId === SUPPORT.companyId && webhookSecret?.startsWith("ws_") && secretKey?.startsWith("sb_secret_") && accessPlanIds.length);
   return {
     apiKey, companyId, secretKey, accessPlanIds,
     enabled: configured && process.env.WHOP_CREATION_ENABLED === "true" && process.env.MAKEBORNE_BILLING_MIGRATIONS_VERIFIED === "true",

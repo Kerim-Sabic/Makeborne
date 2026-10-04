@@ -6,15 +6,41 @@
 .mbe-effort-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:7px; }
 .mbe-effort-heading label { display:block; margin:0; font-size:13px; line-height:20px; font-weight:450; color:#77777d; }
 .mbe-effort-heading output { font-size:13px; line-height:20px; font-weight:550; color:#29292d; }
-.mbe-effort-heading output.is-ultra { color:#6552ac; }
+.mbe-effort-heading output.is-ultra { color:#5c4bb4; }
 .mbe-effort-track { position:relative; height:44px; }
 .mbe-effort-rail { position:absolute; left:12px; right:12px; top:19px; height:6px; border-radius:99px; background:#ebebee; pointer-events:none; }
 .mbe-effort-fill { position:absolute; inset:0 auto 0 0; width:var(--effort-progress); border-radius:inherit; background:#34343a; transition:width 180ms cubic-bezier(.22,1,.36,1); }
-.mbe-effort.is-ultra .mbe-effort-fill { overflow:hidden; isolation:isolate; background:linear-gradient(100deg,#356df0,#7560e1,#459aef,#7655d9,#356df0); background-size:220% 100%; animation:effort-ultra-flow 4s linear infinite; box-shadow:0 1px 7px #6a70e32b; }
-.mbe-effort.is-ultra .mbe-effort-fill::after { content:""; position:absolute; inset:-2px auto -2px 0; width:42%; border-radius:inherit; background:linear-gradient(100deg,transparent 0%,#c6dcff55 32%,#ffffffc9 52%,#e0caff50 70%,transparent 100%); transform:translateX(-130%); animation:effort-ultra-sweep 2.6s cubic-bezier(.4,0,.25,1) infinite; }
-.mbe-effort.is-ultra .mbe-effort-thumb { border-color:#8983df55; box-shadow:0 0 0 3px #7770df12,0 2px 7px #625bd333; }
-@keyframes effort-ultra-flow { from { background-position:0% 50%; } to { background-position:200% 50%; } }
-@keyframes effort-ultra-sweep { 0%,8% { transform:translateX(-130%); opacity:0; } 18% { opacity:1; } 78% { opacity:1; } 94%,100% { transform:translateX(340%); opacity:0; } }
+.mbe-effort.is-ultra .mbe-effort-fill {
+  overflow:hidden; isolation:isolate; background:#5c60dc;
+  box-shadow:0 0 0 1px #6976e51a,0 2px 10px #6965df24;
+}
+/* Two identical colour cycles make the loop seamless. Only the layers move. */
+.mbe-effort.is-ultra .mbe-effort-fill::before {
+  content:""; position:absolute; inset:0 auto 0 0; width:200%;
+  background:linear-gradient(90deg,#476cf0 0%,#7954d9 12.5%,#6881f5 25%,#82b7ff 37.5%,#476cf0 50%,#7954d9 62.5%,#6881f5 75%,#82b7ff 87.5%,#476cf0 100%);
+  animation:effort-ultra-current 5.6s linear infinite;
+}
+.mbe-effort.is-ultra .mbe-effort-fill::after {
+  content:""; position:absolute; inset:0 auto 0 0; width:38%; border-radius:inherit;
+  background:linear-gradient(90deg,transparent 0%,#d7e5ff12 24%,#e8efff55 57%,#fffdf2 78%,#e7eaff80 88%,transparent 100%);
+  transform:translate3d(-105%,0,0); animation:effort-ultra-light 3.6s linear infinite;
+}
+.mbe-effort.is-ultra .mbe-effort-thumb {
+  border-color:#7776d528; box-shadow:0 0 0 4px #7568d90b,0 2px 8px #5d5bcb2b;
+}
+.mbe-effort.is-ultra .mbe-effort-thumb::before {
+  content:""; position:absolute; inset:-2px; border-radius:inherit;
+  background:conic-gradient(from 0deg,#bbc8f2,#f6f4ff 26%,#9278e5 51%,#78a9fb 72%,#bbc8f2);
+  animation:effort-ultra-orbit 5.6s linear infinite;
+}
+.mbe-effort.is-ultra .mbe-effort-thumb::after {
+  content:""; position:absolute; inset:1px; border-radius:inherit;
+  background:radial-gradient(circle at 50% 50%,#7665d9 0 2px,transparent 2.6px),linear-gradient(145deg,#fff 36%,#f0f1fd);
+  box-shadow:inset 0 0 0 1px #fff9;
+}
+@keyframes effort-ultra-current { to { transform:translate3d(-50%,0,0); } }
+@keyframes effort-ultra-light { to { transform:translate3d(365%,0,0); } }
+@keyframes effort-ultra-orbit { to { transform:rotate(1turn); } }
 .mbe-effort-rail i { position:absolute; top:50%; transform:translate(-50%,-50%); width:3px; height:3px; border-radius:50%; background:#c9c9ce; }
 .mbe-effort-rail i.is-filled { background:#ffffff70; }
 .mbe-effort-rail i:first-of-type,.mbe-effort-rail i:last-of-type { opacity:0; }
@@ -39,15 +65,17 @@
 .mbe-effort .mbe-effort-cost { margin:3px 0 0; color:#8a8a92; font-size:11px; line-height:17px; }
 .mbe-effort:disabled { opacity:.5; }
 .mbe-effort:disabled input,.mbe-effort:disabled button { cursor:not-allowed; }
+.mbe-effort:disabled .mbe-effort-fill::before,.mbe-effort:disabled .mbe-effort-fill::after,.mbe-effort:disabled .mbe-effort-thumb::before { animation-play-state:paused; }
 @media(prefers-reduced-motion:reduce) {
   .mbe-effort-thumb,.mbe-effort-fill,.mbe-effort .mbe-effort-stops button { transition:none; }
   .mbe-effort.is-ultra .mbe-effort-fill { animation:none; }
+  .mbe-effort.is-ultra .mbe-effort-fill::before,.mbe-effort.is-ultra .mbe-effort-thumb::before { animation:none; }
   .mbe-effort.is-ultra .mbe-effort-fill::after { display:none; animation:none; }
 }
 @media(forced-colors:active) {
   .mbe-effort-rail { background:GrayText; }
   .mbe-effort-fill,.mbe-effort.is-ultra .mbe-effort-fill { background:Highlight; animation:none; }
-  .mbe-effort.is-ultra .mbe-effort-fill::after { display:none; animation:none; }
+  .mbe-effort.is-ultra .mbe-effort-fill::before,.mbe-effort.is-ultra .mbe-effort-fill::after,.mbe-effort.is-ultra .mbe-effort-thumb::before,.mbe-effort.is-ultra .mbe-effort-thumb::after { display:none; animation:none; }
   .mbe-effort-rail i { background:CanvasText; }
   .mbe-effort-thumb { forced-color-adjust:none; border:2px solid Highlight; background:Canvas; }
 }

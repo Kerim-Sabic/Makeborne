@@ -106,6 +106,8 @@ export function markDispatchIntent(input: JobExecution, attemptId: string, accou
   if (attempt.state !== "prepared") return { execution: state, shouldDispatch: false };
   authority(authorized); live(state, now); fenced(state, holder, fence, now);
   const account = BudgetAccountSchema.parse(accountInput); assert(account.workspaceId === state.job.scope.workspaceId && account.spendingEnabled && !account.emergencyStop, "Current budget policy blocks dispatch.");
+  assert(state.reservation?.status === "reserved" && account.activeJobs > 0 && BigInt(account.vendorReservedMicrousd) >= BigInt(state.reservation.vendorMicrousd) && BigInt(account.customerReservedCredits) >= BigInt(state.reservation.customerCredits), "The durable reservation must still be held before dispatch.");
+  assert(BigInt(account.vendorSpentMicrousd) + BigInt(account.vendorReservedMicrousd) <= BigInt(account.vendorLimitMicrousd) && BigInt(account.customerSpentCredits) + BigInt(account.customerReservedCredits) <= BigInt(account.customerLimitCredits), "Current budget ceilings block dispatch.");
   assert(!state.job.cancelRequestedAt && state.job.status === "running" && attempt.fence === fence, "Cancellation or a stale worker prevents dispatch.");
   assert(state.quote && timestamp(state.quote.expiresAt) > timestamp(now), "Current quote has expired.");
   assert(!uncertain(state), "Unknown provider cost prevents another dispatch.");
@@ -153,12 +155,20 @@ export function requestCancellation(input: JobExecution, now: string) {
 export function settleExecution(input: JobExecution, accountInput: BudgetAccount, accepted: boolean, acceptedAssetIds: string[], evidenceId: string, customerLedgerId: string, now: string) {
   const state = copy(input); const account = BudgetAccountSchema.parse(accountInput);
   assert(state.reservation && state.quote, "No reservation to settle.");
-  if (["settled", "released"].includes(state.reservation.status)) return { execution: state, account, changed: false, expectedAccountRevision: account.revision, expectedJobRevision: state.job.revision };
   assert(account.workspaceId === state.job.scope.workspaceId, "Budget belongs to another workspace.");
+  assert(new Set(acceptedAssetIds).size === acceptedAssetIds.length, "Accepted assets must be unique.");
+  assert(accepted || acceptedAssetIds.length === 0, "Rejected work cannot supply accepted assets.");
+  if (["settled", "released"].includes(state.reservation.status)) {
+    const charge = state.ledger.find(entry => entry.eventKey === `accepted-work:${state.job.id}`);
+    assert(accepted === (state.job.status === "ready") && accepted === Boolean(charge), "Settlement replay changed the acceptance decision.");
+    if (accepted) assert(charge?.id === customerLedgerId && charge.evidenceId === evidenceId && JSON.stringify(state.job.acceptedAssetIds) === JSON.stringify(acceptedAssetIds), "Settlement replay changed its accepted assets or evidence.");
+    return { execution: state, account, changed: false, expectedAccountRevision: account.revision, expectedJobRevision: state.job.revision };
+  }
   assert(!uncertain(state) && !state.attempts.some((attempt) => attempt.state === "prepared"), "Do not release an unknown charge or prepared attempt.");
   assert(!accepted || (!state.job.cancelRequestedAt && state.attempts.some((attempt) => attempt.state === "succeeded")), "Acceptance needs completed work and no cancellation request.");
   const availableAssets = new Set(state.attempts.filter((attempt) => attempt.state === "succeeded").flatMap((attempt) => attempt.assetIds));
   assert(!accepted || acceptedAssetIds.every((id) => availableAssets.has(id)), "Accepted assets must belong to actual succeeded attempts.");
+  assert(!accepted || state.job.status === "reviewing", "Complete the current output review before acceptance.");
   const expectedAccountRevision = account.revision; const expectedJobRevision = state.job.revision;
   const vendorCost = sum(state.attempts.map((attempt) => attempt.actualVendorMicrousd ?? "0"));
   account.vendorSpentMicrousd = amount(BigInt(account.vendorSpentMicrousd) + vendorCost);

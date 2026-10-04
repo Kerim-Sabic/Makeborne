@@ -42,6 +42,7 @@ export function validateDraftContext(value: unknown): DraftContext {
   const context = DraftContextSchema.parse(value);
   if ((context.input.content.kind === "presentation") !== (context.presentationMode !== null)) fail("format");
   if (new Set(context.availableAssetIds).size !== context.availableAssetIds.length) fail("assets");
+  if (context.input.style.referenceAssetIds.some(id => !context.availableAssetIds.includes(id))) fail("assets");
   const allowedSources = new Set(context.input.sourceIds);
   const materialIds = context.sourceMaterial.map(source => source.id);
   if (new Set(materialIds).size !== materialIds.length || materialIds.some(id => !allowedSources.has(id))) fail("sources");
@@ -92,7 +93,7 @@ export function validateGeneratedDraft(contextInput: unknown, value: unknown) {
       const position = outputPositions.get(block.id);
       if (position === undefined || position <= previous) fail("wording");
       const next = allBlocks[position];
-      if (next.text !== block.text || next.assetId !== block.assetId || JSON.stringify(next.sourceIds) !== JSON.stringify(block.sourceIds)) fail("wording");
+      if (next.type !== block.type || next.text !== block.text || next.assetId !== block.assetId || JSON.stringify(next.sourceIds) !== JSON.stringify(block.sourceIds)) fail("wording");
       previous = position;
     }
   }
@@ -119,7 +120,9 @@ export function validateGeneratedDraft(contextInput: unknown, value: unknown) {
 export function buildDraftPrompt(contextInput: unknown) {
   const context = validateDraftContext(contextInput);
   const kind = context.input.content.kind;
-  const styleDirection = getStyleDesignInstructions(context.input.style.id, kind, context.input.style);
+  // User-controlled metadata stays in the reference input, not the system
+  // instructions. Trusted authored directions still guide the selected style.
+  const styleDirection = getStyleDesignInstructions(context.input.style.id, kind);
   const format = kind === "book"
     ? "Create coherent, useful chapters with an opening, practical detail, and a purposeful ending. Include book artwork. Design a specific editorial cover or interior image brief; never substitute website layouts."
     : kind === "presentation"

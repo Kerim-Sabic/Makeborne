@@ -144,7 +144,7 @@ export default function CreationHome() {
       <footer className="mk-footer">
         <div className="mk-footer-main">
           <div className="mk-footer-brand"><Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={25} /><span>Makeborne</span></Link><p>Make something worth sharing.</p></div>
-          <nav aria-label="Footer navigation"><Link href="/studio">Studio</Link><Link href="/chat">Expert chat</Link><a href="#templates">Styles</a><Link href="/billing">Plans &amp; credits</Link></nav>
+          <nav aria-label="Footer navigation"><Link href="/studio">Studio</Link><Link href="/chat">Expert chat</Link><a href="#templates">Styles</a><Link href="/billing">Plans &amp; credits</Link><Link href="/help">Getting started</Link></nav>
         </div>
         <div className="mk-footer-bottom"><span>© 2026 Makeborne</span><a href="#creation-heading">Back to top <ArrowUp size={13} aria-hidden="true" /></a></div>
       </footer>

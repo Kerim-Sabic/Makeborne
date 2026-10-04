@@ -5,7 +5,10 @@ const time = z.string().datetime();
 const key = z.string().min(1).max(200);
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 /** JSON-safe exact integer accounting; never parse money through Number. */
-export const ExactAmountSchema = z.string().regex(/^(0|[1-9][0-9]*)$/).refine((value) => BigInt(value) <= BigInt("9223372036854775807"), "Amount exceeds signed database bigint range.");
+export const ExactAmountSchema = z.string().max(19).regex(/^(0|[1-9][0-9]*)$/).refine(
+  (value) => /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= BigInt("9223372036854775807"),
+  "Amount exceeds signed database bigint range.",
+);
 export const ScopeSchema = z.object({ workspaceId: uuid, projectId: uuid, artifactId: uuid.nullable() }).strict();
 export type JobScope = z.infer<typeof ScopeSchema>;
 export const QuoteSchema = z.object({
@@ -80,6 +83,9 @@ export const ExecutionSchema = z.object({
   if (execution.quote?.id !== (execution.job.quoteId ?? undefined)) ctx.addIssue({ code: "custom", message: "Job quote pointer does not match its quote." });
   if (execution.reservation?.id !== (execution.job.reservationId ?? undefined)) ctx.addIssue({ code: "custom", message: "Job reservation pointer does not match its reservation." });
   if (execution.reservation && (execution.reservation.quoteId !== execution.quote?.id || execution.reservation.vendorMicrousd !== execution.quote.maximumVendorMicrousd || execution.reservation.customerCredits !== execution.quote.customerCredits)) ctx.addIssue({ code: "custom", message: "Reservation does not match the approved quote bounds." });
+  if (execution.quote && (execution.quote.inputHash !== execution.job.inputHash || execution.quote.baseVersionId !== execution.job.baseVersionId || execution.quote.routeVersion !== execution.job.routeVersion)) ctx.addIssue({ code: "custom", message: "Quote does not match the job input, base version and route." });
+  for (const attempt of execution.attempts) if (!execution.quote || attempt.inputHash !== execution.job.inputHash || attempt.baseVersionId !== execution.job.baseVersionId || attempt.routeVersion !== execution.job.routeVersion || attempt.provider !== execution.quote.provider || attempt.model !== execution.quote.model) ctx.addIssue({ code: "custom", message: "Attempt does not match the approved job and provider route." });
+  if (new Set(execution.job.acceptedAssetIds).size !== execution.job.acceptedAssetIds.length) ctx.addIssue({ code: "custom", message: "Accepted assets must be unique." });
   for (const entry of execution.ledger) if (entry.attemptId && !execution.attempts.some((attempt) => attempt.id === entry.attemptId)) ctx.addIssue({ code: "custom", message: "Ledger references an unknown job attempt." });
 });
 export type JobExecution = z.infer<typeof ExecutionSchema>;

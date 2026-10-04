@@ -32,7 +32,7 @@ Never add a public prefix to these variables:
 | `MAKEBORNE_BILLING_MIGRATIONS_VERIFIED` | Set true only after applying and verifying the billing migration |
 | `WHOP_CREATION_ENABLED` | Keep false until creation features and paid lifecycle checks pass |
 
-Current Whop docs list `checkout_configuration:create`, `checkout_configuration:basic:read`, `member:basic:read`, and `member:email:read` for the used APIs. Generic checkout creation also lists plan/product creation scopes because it supports inline plan creation; this app only uses an existing `plan_id`. Start with the narrower scopes and add others only if Whop confirms they are required. No product, plan, refund, payout, or membership mutations are performed by this app.
+Current Whop docs list `checkout_configuration:create`, `checkout_configuration:basic:read`, `member:basic:read`, and `member:email:read` for checkout/membership APIs. Refund/dispute reconciliation also retrieves the original payment; the stable payment endpoint documents `payment:basic:read`, `payment:dispute:read`, and `payment:resolution_center_case:read`. Generic checkout creation also lists plan/product creation scopes because it supports inline plan creation; this app only uses an existing `plan_id`. Start with the narrower scopes and add others only if Whop confirms they are required. No product, plan, refund, payout, or membership mutations are performed by this app. Creation readiness requires a configured `ws_` webhook signing secret as well as the API/database credentials and activation flags.
 
 ## Database migration and activation
 
@@ -60,13 +60,28 @@ Verified hidden, out-of-stock creation catalog (4 October 2026): Create $29/mont
 
 `POST /api/billing/webhook` verifies the raw Standard Webhooks signature and its timestamp, checks the merchant, retrieves current membership state from Whop, and matches its checkout ID to the saved account binding. Membership and event receipt commit atomically. The coffee plan and any checkout not created by this server never grant access. Duplicate webhook events are ignored. Out-of-order status payloads do not grant stale access because current membership state is retrieved from Whop.
 
+Payment events reconcile their linked membership. A successful payment without a membership is read again from Whop; if the link is still missing, the endpoint returns `503` so delivery can retry instead of silently dropping a paid event. An exhausted retry requires operator reconciliation, which is a remaining launch requirement. Refund and dispute events resolve the original payment through Whop and then retrieve the current membership. This refreshes access after provider-side revocation; it does not treat a partial refund as an instruction to cancel, create credit adjustments, or mutate the Whop subscription. Unknown event families cannot refresh an entitlement. Conflicting merchant IDs are rejected.
+
 The app checks the membership live before page access or mutation, including the original Whop user and plan. Database writes require a short verification lease of at most five minutes and a current billing period. Expired, missing, transferred, trialing, or unverified memberships do not grant access. No browser-local entitlement is used.
 
-`/billing/return?request=<UUID>` polls the owned checkout status for up to 30 seconds. Only server-verified membership opens the saved draft. Pending confirmation preserves the draft and offers a retry; it does not ask the customer to purchase again.
+`/billing/return?request=<UUID>` polls the owned checkout status for up to 30 seconds. Only a server-verified membership belonging to that exact checkout opens the saved draft; an unrelated active membership cannot mark a failed checkout successful. Pending confirmation preserves the draft and offers a retry; it does not ask the customer to purchase again. Checkout URLs must be absolute HTTPS links on `whop.com` naming a plan or checkout configuration, without embedded credentials.
+
+## Remaining paid-launch work
+
+The membership gate is an access foundation, not a completed subscription fulfillment service. Before opening the creation products:
+
+- Implement transactional credit grants keyed to the verified paid billing period, with unique provider payment IDs, renewal handling, expiring balances, upgrade policy, and refund/chargeback adjustments. Existing job reservations and spending limits are not funded customer credits.
+- Connect the authoritative credit ledger to billing history and generation settlement; reconcile ambiguous payment/provider outcomes without duplicate grants or charges.
+- Wire the creation plan buttons to the verified checkout route and provide customer subscription management. The current cards deliberately remain previews.
+- Verify the deployed provider API response contract and pin matching webhook/API versions. The adapter currently uses Whop's documented stable nested membership/payment objects; a switch to the native flattened API requires an explicit adapter update, not accepting unvalidated fields.
+- Configure real server credentials, the signed webhook endpoint, a durable retry/reconciliation path, and observability. A provider timeout must never create an entitlement or prompt a duplicate purchase.
+
+These are release requirements. Setting an environment flag cannot implement them.
 
 ## Required lifecycle verification before opening creation sales
 
 - Test signed Whop events against the configured endpoint; verify signature, wrong-merchant, stale-timestamp, duplicate, and modified-body rejection.
+- Subscribe to membership activation/update/deactivation events supported by the configured API version, payment success/failure, refund creation/update, and dispute creation/update. Validate actual delivered payloads against the adapter before enabling sales.
 - Complete an approved sandbox purchase and confirm the account/checkout/Whop-user binding plus original draft return.
 - Verify renewal, end-of-period cancellation, payment failure, expiry, refund/revocation, and membership transfer. The Whop membership status is authoritative; refund policy must revoke the membership when refunding access.
 - Verify entitlement recovery after a delayed webhook. Unmatched external/manual purchases need a deliberate support process; email similarity must never silently grant access.
@@ -78,3 +93,5 @@ No real purchase or live entitlement lifecycle has been verified yet. No paid AI
 The billing migration was applied on 4 October 2026. A transaction using an existing authenticated account's claims confirmed that membership/write permission was false, direct task insertion raised `MB402`, and the project-creation RPC denied access. The transaction was rolled back. Database creation remains disabled with no active plan allowlist.
 
 Official references: [checkout configuration](https://docs.whop.com/api-reference/checkout-configurations/create-checkout-configuration), [membership retrieval](https://docs.whop.com/api-reference/memberships/retrieve-membership), [webhooks](https://docs.whop.com/developer/guides/webhooks), [current SDK signature helper](https://github.com/whopio/whopsdk-typescript/blob/main/src/helpers/verifyWebhook.ts).
+
+Offline checks on 4 October 2026: `node src/lib/billing/check-access-foundation.cjs` exercises configuration gates, coffee/unknown-plan exclusion, signed/tampered/stale webhooks, expired and canceled membership states, exact checkout matching, refund/dispute payment resolution, and checkout URL restrictions. These fixtures make no live calls and do not substitute for the sandbox lifecycle checks above.

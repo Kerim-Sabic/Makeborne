@@ -23,11 +23,15 @@ export async function requireBillingUser() {
   return user;
 }
 
-export async function verifyCreationAccess(user: User): Promise<boolean> {
+export async function verifyCreationAccess(user: User, checkoutId?: string): Promise<boolean> {
   if (!billingConfig().enabled) return false;
   const db = billingDatabase();
-  const { data: memberships, error } = await db.from("billing_memberships")
-    .select("membership_id,checkout_id,whop_user_id,plan_id").eq("user_id", user.id).in("plan_id", billingConfig().accessPlanIds).order("checked_at", { ascending: false }).limit(20);
+  let query = db.from("billing_memberships")
+    .select("membership_id,checkout_id,whop_user_id,plan_id").eq("user_id", user.id).in("plan_id", billingConfig().accessPlanIds);
+  // A checkout return must verify that purchase specifically. Another active
+  // membership on the account cannot turn a failed checkout into a success.
+  if (checkoutId !== undefined) query = query.eq("checkout_id", checkoutId);
+  const { data: memberships, error } = await query.order("checked_at", { ascending: false }).limit(20);
   if (error) throw new RequestError("MEMBERSHIP_UNAVAILABLE", "Membership verification is temporarily unavailable.", 503);
   for (const stored of memberships ?? []) {
     const membership = await retrieveMembership(stored.membership_id);
