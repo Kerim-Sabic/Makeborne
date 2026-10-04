@@ -5,6 +5,7 @@ import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
 import AccountPreview from "./account-preview";
+import { appendAccountSection, appendAccountBlock } from "@/lib/cloud/section-actions";
 import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
 import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
@@ -1268,31 +1269,25 @@ export function CloudEditor({
     });
     setDirty(true);
   }
-  function add(type: "heading" | "paragraph" | "quote") {
+  function add(type: "heading" | "paragraph" | "quote", sectionId: string) {
     if (!content || role === "reviewer" || uncertainSave || conflict || recovery) return;
+    try {
+      const next = appendAccountBlock(content, sectionId, crypto.randomUUID(), type);
+      editRevision.current++; setContent(next); setDirty(true);
+    } catch (error) { notify(error instanceof Error ? error.message : "Could not add content."); }
+  }
+  function addSection() {
+    if (!content || role === "reviewer" || uncertainSave || conflict || recovery) return;
+    const title = `${content.kind === "book" ? "Chapter" : "Section"} ${content.sections.length + 1}`;
+    try {
+      const next = appendAccountSection(content, crypto.randomUUID(), title);
+      editRevision.current++; setContent(next); setDirty(true);
+    } catch (error) { notify(error instanceof Error ? error.message : "Could not add a section."); }
+  }
+  function renameSection(id: string, title: string) {
+    if (!content || role === "reviewer" || uncertainSave || conflict || recovery || title.length > 200) return;
     editRevision.current++;
-    const sections = [...content.sections];
-    if (!sections.length)
-      sections.push({
-        id: crypto.randomUUID(),
-        title: "Main content",
-        blocks: [],
-      });
-    sections[0] = {
-      ...sections[0],
-      blocks: [
-        ...sections[0].blocks,
-        {
-          id: crypto.randomUUID(),
-          type,
-          text: "",
-          assetId: null,
-          locked: false,
-          sourceIds: [],
-        },
-      ],
-    };
-    setContent({ ...content, sections });
+    setContent({ ...content, sections: content.sections.map(section => section.id === id ? { ...section, title } : section) });
     setDirty(true);
   }
   async function save() {
@@ -1560,9 +1555,11 @@ export function CloudEditor({
           <div className="account-compose">
           <div>
             {removedBlock && <div className="account-block-undo"><span role="status">Block removed.</span><button type="button" className="button secondary small" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onClick={undoRemoval}><Undo2 size={14} /> Undo removal</button></div>}
-            {content.sections.map((s) => (
-              <section key={s.id}>
-                <span className="eyebrow">{s.title}</span>
+            {content.sections.map((s, sectionIndex) => (
+              <section key={s.id} className="account-content-section">
+                <label className="account-section-title">{content.kind === "book" ? "Chapter" : "Section"} {sectionIndex + 1}
+                  <input aria-label={`Section ${sectionIndex + 1} title`} value={s.title} maxLength={200} placeholder="Untitled section" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onChange={event => renameSection(s.id, event.target.value)} />
+                </label>
                 {s.blocks.map((b, index) => (
                   <div className="account-content-block" key={b.id}>
                     <div className="account-block-tools"><label htmlFor={`account-block-${b.id}`}>{b.type}{b.locked ? " · locked" : ""}</label>
@@ -1583,22 +1580,12 @@ export function CloudEditor({
                     />
                   </div>
                 ))}
+                {role !== "reviewer" && !uncertainSave && !conflict && !recovery && <div className="button-row" aria-label={`Add content to section ${sectionIndex + 1}`}>
+                  {(["heading", "paragraph", "quote"] as const).map(type => <button key={type} type="button" className="button secondary small" aria-label={`Add ${type} to section ${sectionIndex + 1}`} onClick={() => add(type, s.id)}><Plus size={14} />{type}</button>)}
+                </div>}
               </section>
             ))}
-            {role !== "reviewer" && !uncertainSave && !conflict && !recovery && (
-              <div className="button-row">
-                {(["heading", "paragraph", "quote"] as const).map((t) => (
-                  <button
-                    key={t}
-                    className="button secondary small"
-                    onClick={() => add(t)}
-                  >
-                    <Plus size={14} />
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
+            {role !== "reviewer" && !uncertainSave && !conflict && !recovery && <button type="button" className="button secondary small" onClick={addSection}><Plus size={14} />{content.kind === "book" ? "Add chapter" : "Add section"}</button>}
           </div>
           {style && <AccountPreview content={content} style={style} dirty={dirty} />}
           </div>

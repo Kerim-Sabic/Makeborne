@@ -166,3 +166,11 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Changes update the existing preview and autosave as new versions. Read-only/reviewer, busy, uncertain, conflict and recovery states disable changes. Content blocks are not replaced by style changes.
 - Browser QA book c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45: applied Ink & Vermilion and observed saved version 5. Applied QA Botanical Edition with Source Serif 4 and #456749 accent, observed saved version 6, then reloaded and confirmed version/style and all three original text blocks persisted. Screenshot outputs/makeborne-project-styles.png.
 - Focused lint, TypeScript and production build pass. Limits: browser exercised a book at desktop width; cross-format/mobile/export visual parity and colour-contrast checks were not established. These presets change palette/type, not generated artwork or complete layout systems. No paid calls.
+
+## Section and chapter editing — 2026-10-04
+
+- Account editor now names sections/chapters and adds new sections. Each section owns its heading/paragraph/quote controls, replacing the old behavior that appended every block to the first section. Empty documents can create their first section.
+- Transformations preserve existing sections, locks and provenance and reject missing targets/duplicate IDs. Structural mutations remain unavailable during reviewer, recovery, conflict or uncertain-save states. Section names permit normal spaces while typing, are bounded to 200 characters, and use the existing save schema.
+- Browser: QA book c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45 gained chapter 2, Making room for practice, with one new paragraph. Preview reflected both and autosave confirmed version 9. Existing three blocks remained in chapter 1. Screenshot outputs/makeborne-book-chapters.png.
+- Twelve structural checks, fifteen block checks and ten preview checks pass. Focused ESLint, TypeScript and production build pass. No paid calls.
+- Limits: no section deletion/reordering or cross-section block moves yet; presentation grouping still follows the existing heading-led preview/export convention. Browser scenario covered a book; this is not evidence of full slide or website layout editing.
