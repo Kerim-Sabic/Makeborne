@@ -74,3 +74,9 @@
 .account-block-tools button:disabled { opacity: .25; cursor: default; }
 .account-block-tools button:focus-visible { outline: 2px solid #8569aa; outline-offset: 2px; }
 .account-block-undo { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; border-radius: 10px; background: #f4f0fa; font-size: 12px; margin-bottom: 16px; }
+
+.account-section-actions { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 20px; }
+.account-section-actions button { display:inline-flex; align-items:center; gap:5px; border:1px solid #e7e1ec; border-radius:7px; background:#fff; padding:6px 9px; color:#827389; font-size:10px; }
+.account-section-actions button:hover:not(:disabled) { background:#f7f3fc; color:#614c75; }
+.account-section-actions button:disabled { opacity:.4; cursor:not-allowed; }
+.account-section-actions button:focus-visible { outline:2px solid #8765ae; outline-offset:2px; }

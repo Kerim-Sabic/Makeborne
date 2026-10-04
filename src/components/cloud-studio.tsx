@@ -5,7 +5,7 @@ import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
 import AccountPreview from "./account-preview";
-import { appendAccountSection, appendAccountBlock } from "@/lib/cloud/section-actions";
+import { appendAccountSection, appendAccountBlock, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
 import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
 import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
@@ -1096,6 +1096,7 @@ export function CloudEditor({
   const [savePaused, setSavePaused] = useState(false);
   const [uncertainSave, setUncertainSave] = useState(false);
   const [content, setContent] = useState<ArtifactContent | null>(null);
+  const [removedSection, setRemovedSection] = useState<RemovedAccountSection | null>(null);
   const [removedBlock, setRemovedBlock] = useState<RemovedAccountBlock | null>(null);
   const [inspectedVersion, setInspectedVersion] = useState<ArtifactVersion | null>(null);
   const [style, setStyle] = useState<StyleProfile | null>(null);
@@ -1121,7 +1122,7 @@ export function CloudEditor({
         (a, b) => b.number - a.number,
       )[0];
       setVersions(result.versions);
-      setRemovedBlock(null);
+      setRemovedBlock(null); setRemovedSection(null);
       setInspectedVersion(null);
       setNextOffset(result.pagination?.nextOffset ?? null);
       setAssetIds(latest?.assetIds || []);
@@ -1250,6 +1251,25 @@ export function CloudEditor({
     if (!content || !removedBlock || role === "reviewer" || uncertainSave || conflict || recovery) return;
     try { const next = restoreAccountBlock(content, removedBlock); editRevision.current++; setContent(next); setDirty(true); setRemovedBlock(null); }
     catch (error) { notify(error instanceof Error ? error.message : "Could not restore this block."); }
+  }
+  function sectionAction(sectionId: string, action: "up" | "down" | "remove") {
+    if (!content || role === "reviewer" || uncertainSave || conflict || recovery) return;
+    try {
+      let next: ArtifactContent;
+      if (action === "remove") {
+        const result = removeAccountSection(content, sectionId);
+        next = result.content; setRemovedSection(result.removed);
+        if (removedBlock?.sectionId === sectionId) setRemovedBlock(null);
+      } else next = moveAccountSection(content, sectionId, action === "up" ? -1 : 1);
+      editRevision.current++; setContent(next); setDirty(true);
+    } catch (error) { notify(error instanceof Error ? error.message : "Could not change this section."); }
+  }
+  function undoSectionRemoval() {
+    if (!content || !removedSection || role === "reviewer" || uncertainSave || conflict || recovery) return;
+    try {
+      const next = restoreAccountSection(content, removedSection);
+      editRevision.current++; setContent(next); setDirty(true); setRemovedSection(null);
+    } catch (error) { notify(error instanceof Error ? error.message : "Could not restore this section."); }
   }
   function editBlock(sectionId: string, blockId: string, text: string) {
     if (!content || role === "reviewer" || uncertainSave || content.sections.find(section => section.id === sectionId)?.blocks.find(block => block.id === blockId)?.locked) return;
@@ -1381,7 +1401,7 @@ export function CloudEditor({
       setStyle(restored.style);
       setAssetIds(restored.assetIds);
       setNote(restored.changeSummary);
-      setRemovedBlock(null);
+      setRemovedBlock(null); setRemovedSection(null);
       setInspectedVersion(null);
       setDirty(true);
       notify(`Version ${version.number} restored into your editor. Saving it as a new version…`);
@@ -1555,11 +1575,17 @@ export function CloudEditor({
           <div className="account-compose">
           <div>
             {removedBlock && <div className="account-block-undo"><span role="status">Block removed.</span><button type="button" className="button secondary small" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onClick={undoRemoval}><Undo2 size={14} /> Undo removal</button></div>}
+            {removedSection && <div className="account-block-undo"><span role="status">{content.kind === "book" ? "Chapter" : "Section"} removed.</span><button type="button" className="button secondary small" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onClick={undoSectionRemoval}><Undo2 size={14} /> Undo section removal</button></div>}
             {content.sections.map((s, sectionIndex) => (
               <section key={s.id} className="account-content-section">
                 <label className="account-section-title">{content.kind === "book" ? "Chapter" : "Section"} {sectionIndex + 1}
                   <input aria-label={`Section ${sectionIndex + 1} title`} value={s.title} maxLength={200} placeholder="Untitled section" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onChange={event => renameSection(s.id, event.target.value)} />
                 </label>
+                {role !== "reviewer" && <div className="account-section-actions" aria-label={`Section ${sectionIndex + 1} actions`}>
+                  <button type="button" aria-label={`Move section ${sectionIndex + 1} up`} disabled={uncertainSave || conflict || !!recovery || s.blocks.some(b => b.locked) || sectionIndex === 0 || content.sections[sectionIndex - 1]?.blocks.some(b => b.locked)} onClick={() => sectionAction(s.id, "up")}><ArrowUp size={13} />Move up</button>
+                  <button type="button" aria-label={`Move section ${sectionIndex + 1} down`} disabled={uncertainSave || conflict || !!recovery || s.blocks.some(b => b.locked) || sectionIndex === content.sections.length - 1 || content.sections[sectionIndex + 1]?.blocks.some(b => b.locked)} onClick={() => sectionAction(s.id, "down")}><ArrowDown size={13} />Move down</button>
+                  <button type="button" aria-label={`Remove section ${sectionIndex + 1}`} disabled={uncertainSave || conflict || !!recovery || s.blocks.some(b => b.locked)} onClick={() => sectionAction(s.id, "remove")}><Trash2 size={13} />Remove</button>
+                </div>}
                 {s.blocks.map((b, index) => (
                   <div className="account-content-block" key={b.id}>
                     <div className="account-block-tools"><label htmlFor={`account-block-${b.id}`}>{b.type}{b.locked ? " · locked" : ""}</label>

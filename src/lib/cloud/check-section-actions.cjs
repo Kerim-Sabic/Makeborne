@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Offline structural checks. */
 const fs=require('node:fs'),ts=require('typescript'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto');
 require.extensions['.ts']=(module,filename)=>module._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
-const {appendAccountSection,appendAccountBlock}=require('./section-actions.ts');
+const {appendAccountSection,appendAccountBlock,moveAccountSection,removeAccountSection,restoreAccountSection}=require('./section-actions.ts');
 const first=randomUUID(), second=randomUUID(), block=randomUUID();
 const original={schemaVersion:1,title:'Fixture',kind:'book',sections:[{id:first,title:'Original',blocks:[{id:block,type:'paragraph',text:'Locked text',locked:true,sourceIds:[randomUUID()],assetId:null}]}]};
 let count=0;function check(name,fn){fn();count++;console.log(`PASS ${name}`);}
@@ -19,4 +19,22 @@ check('duplicate block ID rejected',()=>assert.throws(()=>appendAccountBlock(ori
 check('invalid block type rejected',()=>assert.throws(()=>appendAccountBlock(original,first,randomUUID(),'image')));
 check('section title length bounded',()=>assert.throws(()=>appendAccountSection(original,second,'x'.repeat(201))));
 check('empty document accepts first section',()=>assert.equal(appendAccountSection({...original,sections:[]},second,'First').sections.length,1));
+
+const unlocked=structuredClone(withBlock); unlocked.sections[0].blocks[0].locked=false;
+const moved=moveAccountSection(unlocked,second,-1);
+check('whole section moves with all blocks',()=>assert.deepEqual(moved.sections[0],unlocked.sections[1]));
+check('reordering leaves input unchanged',()=>assert.equal(unlocked.sections[0].id,first));
+check('reordering preserves provenance',()=>assert.deepEqual(moved.sections[1].blocks[0].sourceIds,original.sections[0].blocks[0].sourceIds));
+check('locked section cannot move',()=>assert.throws(()=>moveAccountSection(withBlock,first,1),/locked/));
+check('locked neighbor cannot move',()=>assert.throws(()=>moveAccountSection(withBlock,second,-1),/locked/));
+check('edge movement rejected',()=>assert.throws(()=>moveAccountSection(unlocked,first,-1),/edge/));
+check('non adjacent movement rejected',()=>assert.throws(()=>moveAccountSection(unlocked,first,2),/adjacent/));
+check('locked section cannot be removed',()=>assert.throws(()=>removeAccountSection(withBlock,first),/locked/));
+const removed=removeAccountSection(unlocked,first);
+check('removal keeps other sections',()=>assert.deepEqual(removed.content.sections,[unlocked.sections[1]]));
+check('undo restores entire section exactly',()=>assert.deepEqual(restoreAccountSection(removed.content,removed.removed),unlocked));
+check('duplicate section restoration rejected',()=>assert.throws(()=>restoreAccountSection(unlocked,removed.removed)));
+check('missing section removal rejected',()=>assert.throws(()=>removeAccountSection(unlocked,randomUUID()),/no longer/));
+check('last section can be removed and restored',()=>{const only={...unlocked,sections:[unlocked.sections[0]]};const r=removeAccountSection(only,first);assert.equal(r.content.sections.length,0);assert.deepEqual(restoreAccountSection(r.content,r.removed),only);});
+check('invalid restoration position rejected',()=>assert.throws(()=>restoreAccountSection(removed.content,{...removed.removed,index:-1}),/Invalid/));
 console.log(`${count} section checks passed.`);

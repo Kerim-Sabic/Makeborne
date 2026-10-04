@@ -199,3 +199,12 @@ Migration `20261004012849_client_project_directory` applied locally and to the l
 Evidence: nine local transactional SQL checks passed (56-item paging, no overlap, empty projects, client isolation/minimal payload, workspace/client/offset/anonymous denial). Seven cloud API fixture checks passed, including directory response validation. TypeScript and touched component lint passed. Local security advisor clean; cloud retained only the existing leaked-password-protection warning. Browser displayed two linked QA documents and opened the correct book at saved version 9.
 
 Limits: pagination uses offsets, so concurrent inserts/updates can move page boundaries; UI deduplicates loaded IDs. The count represents document items plus documentless projects, not unique projects. Generation, publishing, and billing are not changed by this work.
+
+## Chapter and section editing — 2026-10-04
+
+Account editors now support moving adjacent sections, removing a section, and undoing the latest section removal. Complete sections retain block IDs, source references, artwork references, and text. Locked sections and locked neighbors cannot be reordered; a section containing locked blocks cannot be removed. Reviewer, conflict, recovery, and uncertain-save restrictions remain in force. Reload/version restore clears stale undo state.
+
+Evidence: 26 section action checks passed; TypeScript and component lint passed. Browser QA book: chapter two moved above chapter one (saved version 10), original order restored (11), chapter two removed (12), then undone with its original paragraph restored. Prior versions remain available.
+
+Limits: undo retains the latest removed section during the current editor session. It is not a multi-step undo history. Previous saved versions remain the recovery mechanism across reloads. Reordering uses explicit up/down controls rather than drag-and-drop.
+The undo result saved successfully as version 13, confirmed by the account editor's Saved status.
