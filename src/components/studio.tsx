@@ -108,6 +108,7 @@ export default function Studio() {
   const [initialStyle, setInitialStyle] = useState("editorial");
   const [initialBrief, setInitialBrief] = useState("");
   const [initialTitle, setInitialTitle] = useState("");
+  const [initialWorkspaceId, setInitialWorkspaceId] = useState<string | null>(null);
   const [initialClient, setInitialClient] = useState("");
   const [draftBrief, setDraftBrief] = useState("");
   const [draftKind, setDraftKind] = useState<Kind>("website");
@@ -229,7 +230,7 @@ export default function Studio() {
       : { tab: "settings", projectId: null, clientId: null } as const;
     setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
     // Keep unsaved client/style forms mounted when the underlying route changes.
-    setCreating(null); setInitialClient(""); setMobileNav(false);
+    setCreating(null); setInitialWorkspaceId(null); setInitialClient(""); setMobileNav(false);
     if ("notice" in route && route.notice) setNotice(route.notice);
   });
   useEffect(() => {
@@ -825,7 +826,9 @@ export default function Studio() {
               setInitialClient(opportunityClient); setInitialBrief(brief); setInitialTitle(title); setInitialStyle("editorial"); setHomeHandoff(false); setCreating(kind); setOpportunityClient(null);
             }} />}
             {tab === "clients" && !opportunityClient && (
-              <AccountClients key={clientDetail ? "device" : "account"} initialDevice={!!clientDetail} target={accountClientRoute} navigate={accountClient => openRoute({ tab: "clients", projectId: null, clientId: null, accountClient })} deviceClients={
+              <AccountClients key={clientDetail ? "device" : "account"} initialDevice={!!clientDetail} onOpenProject={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} onCreate={(workspaceId, client) => {
+                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(""); setInitialTitle(""); setInitialStyle("editorial"); setHomeHandoff(false); setCreating("website");
+              }} target={accountClientRoute} navigate={accountClient => openRoute({ tab: "clients", projectId: null, clientId: null, accountClient })} deviceClients={
               <ClientWorkspace
                 clients={workspace.clients}
                 projects={workspace.projects}
@@ -1015,6 +1018,7 @@ export default function Studio() {
       {creating && (
         <CreateModal
           initialClient={initialClient}
+          initialWorkspaceId={initialWorkspaceId}
           initialStyle={initialStyle}
           initialBrief={initialBrief}
           initialTitle={initialTitle}
@@ -1022,10 +1026,10 @@ export default function Studio() {
           onKind={setCreating}
           clients={workspace.clients}
           styles={creationStyles(workspace.styles, creating)}
-          close={() => { setCreating(null); setInitialClient(""); }}
+          close={() => { setCreating(null); setInitialWorkspaceId(null); setInitialClient(""); }}
           create={createProject}
           accountCreated={(workspaceId, artifact) => {
-            setCreating(null); setInitialClient(""); setInitialBrief(""); setInitialTitle(""); setDraftBrief("");
+            setCreating(null); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief(""); setInitialTitle(""); setDraftBrief("");
             openRoute({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId: artifact.id } });
             toast("Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
           }}
@@ -1208,6 +1212,7 @@ function creationSeed(brief: string, title: string, style: string) {
 }
 
 function CreateModal({
+  initialWorkspaceId,
   initialClient,
   initialBrief,
   initialTitle,
@@ -1220,6 +1225,7 @@ function CreateModal({
   create,
   accountCreated,
 }: {
+  initialWorkspaceId: string | null;
   initialClient: string;
   initialBrief: string;
   initialTitle: string;
@@ -1243,7 +1249,7 @@ function CreateModal({
     kind: Kind;
   }) => boolean;
 }) {
-  const account = useCreationAccount();
+  const account = useCreationAccount(initialWorkspaceId);
   const clients = account.accountId ? account.clients : deviceClients;
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -1271,7 +1277,7 @@ function CreateModal({
   const [styleId, setStyle] = useState(initialStyle);
   const [clientId, setClient] = useState(initialClient);
   const [seed] = useState(() =>
-    creationSeed(initialBrief, initialTitle, initialStyle + (initialClient ? `::${initialClient}` : "")),
+    creationSeed(initialBrief, initialTitle, initialStyle + (initialClient ? `::${initialClient}` : "") + (initialWorkspaceId ? `::workspace:${initialWorkspaceId}` : "")),
   );
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftWritable, setDraftWritable] = useState(true);
@@ -1306,11 +1312,9 @@ function CreateModal({
           setWording(draft.wording);
           if (styles.some((style) => style.id === draft.styleId))
             setStyle(draft.styleId);
-          setClient(
-            clients.some((client) => client.id === draft.clientId)
-              ? draft.clientId
-              : "",
-          );
+          // Membership is checked after account loading and again before saving.
+          // Do not erase a restored client while the account list is still loading.
+          setClient(draft.clientId);
           setDraftNotice(
             "Your saved creation draft has been restored in this tab.",
           );
@@ -1456,6 +1460,7 @@ function CreateModal({
                 onChange={(e) => setClient(e.target.value)}
               >
                 <option value="">For myself</option>
+                {clientId && !clients.some(client => client.id === clientId) && <option value={clientId} disabled>{account.ready ? "Client unavailable — choose another" : "Loading selected client…"}</option>}
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -1635,6 +1640,7 @@ function CreateModal({
             };
             let saved = false;
             try {
+              if (initialWorkspaceId && (!account.accountId || account.workspace?.id !== initialWorkspaceId)) throw new Error("The selected client workspace is unavailable. Close and reopen this form from Clients.");
               if (account.accountId) {
                 const verified = await createClient().auth.getUser();
                 if (verified.error || verified.data.user?.id !== account.accountId) throw new Error("Your account changed. Close this form and reopen it before saving.");

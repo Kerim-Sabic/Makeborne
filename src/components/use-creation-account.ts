@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { CloudWorkspace, CloudWorkspaceSnapshot } from "@/lib/cloud/contracts";
 import { api, setCloudAccount } from "./cloud-api";
+import { creationWorkspace } from "@/lib/cloud/creation-workspace";
 
 export type CreationAccount = {
   ready: boolean; error: string; accountId: string | null;
@@ -11,7 +12,7 @@ export type CreationAccount = {
 const initial: CreationAccount = { ready: false, error: "", accountId: null, workspace: null, clients: [] };
 
 /** Resolve the save destination before offering account clients or accepting a write. */
-export function useCreationAccount() {
+export function useCreationAccount(requestedWorkspaceId?: string | null) {
   const [state, setState] = useState<CreationAccount>(initial);
   useEffect(() => {
     let active = true;
@@ -23,11 +24,10 @@ export function useCreationAccount() {
       if (!active) return;
       setCloudAccount(accountId);
       setState({ ...initial, accountId });
-      if (!accountId) { setState({ ...initial, ready: true }); return; }
+      if (!accountId) { setState(requestedWorkspaceId ? { ...initial, error: "Sign back in to create a project for this account client." } : { ...initial, ready: true }); return; }
       try {
         const { workspaces } = await api<{ workspaces: CloudWorkspace[] }>("/api/workspaces");
-        const workspace = workspaces.find(item => item.role === "owner") ?? workspaces.find(item => item.role === "editor") ?? null;
-        if (!workspace && workspaces.length) throw new Error("Your account has read-only access. Ask the workspace owner for editing access before creating a project.");
+        const workspace = creationWorkspace(workspaces, requestedWorkspaceId);
         const clients: CloudWorkspaceSnapshot["clients"] = [];
         if (workspace) {
           let offset: number | null = 0;
@@ -61,6 +61,6 @@ export function useCreationAccount() {
       } catch (error) { if (active) setState({ ...initial, error: error instanceof Error ? error.message : "Account connection unavailable." }); }
     })();
     return () => { active = false; generation++; unsubscribe?.(); };
-  }, []);
+  }, [requestedWorkspaceId]);
   return state;
 }

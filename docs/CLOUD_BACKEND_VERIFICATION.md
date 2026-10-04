@@ -92,3 +92,14 @@ Page margin counters follow the Chromium-supported CSS margin-box mechanism docu
 - Verification: 19 pure Studio route checks and 22 auth destination checks passed. TypeScript, focused ESLint and production build passed.
 - Browser: opened QA client `53bd4aa2-505e-444b-9a57-45684441fb51` in workspace `e68ff1eb-ed26-42ac-8864-689451e39c30`; verified detail URL, reloaded the same record, Back returned to the list, Forward restored the record including saved outreach fields/history.
 - Limit: full signed-out sign-in return, missing-membership UI, device-client deep link browser scenario, and cross-workspace navigation were not browser-tested this pass. Route unit checks are not a substitute for those scenarios. Unsaved draft navigation protection remains outstanding.
+
+
+## Create projects from account clients — 2026-10-04
+
+- Client detail now has Create for this client, opening the shared website/book/presentation wizard with the account client preselected.
+- Explicit workspace handoffs are resolved against current memberships. Missing or reviewer-only destinations fail instead of falling back to another workspace. Signed-out handoffs cannot silently create a device project.
+- Creation draft identity includes the workspace. Restoring a client selection no longer clears it while the account client list is loading; the live client list is checked before submission.
+- Fixed linked-project navigation: a normal click now updates both the URL and Studio state. The link retains its real href for modified/new-tab clicks.
+- Browser verified: QA client selection survived dialog reopening; created `QA client presentation — CRM handoff` with supplied text, then found it under that client's Projects tab. Artifact `03edc914-01d5-4838-9824-1f684bd705b5` in workspace `e68ff1eb-ed26-42ac-8864-689451e39c30`. Followed the client project link and confirmed the account editor opened. QA project retained; no provider calls or outreach messages.
+- Nine workspace-selection checks and nine creation-payload checks pass; TypeScript, focused ESLint and production build pass.
+- Limits: browser scenario covers presentation in one owner workspace. Website/book use the same handoff but were not separately created this pass. Multi-workspace and reviewer behavior have pure selection checks, not browser proof. Wizard resumes by initial format; resuming the last-used format after changing format and closing still needs improvement. Full AI generation remains disabled.

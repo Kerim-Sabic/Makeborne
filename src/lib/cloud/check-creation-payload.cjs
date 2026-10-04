@@ -11,6 +11,7 @@ check("preserves supplied text", () => assert.deepEqual(body.content.sections[0]
 check("preserves effort", () => assert.equal(body.project.effort, "ultra"));
 check("keeps custom dark palette", () => assert.equal(body.style.colors.canvas, "#122822"));
 check("empty client is null", () => assert.equal(body.project.clientId, null));
+check("selected client remains attached", () => { const clientId = randomUUID(); assert.equal(buildCreationPayload({ ...values, clientId }, style, randomUUID).project.clientId, clientId); });
 check("JSON retry retains stable IDs", () => assert.deepEqual(JSON.parse(JSON.stringify(body)), body));
 check("empty material starts with supplied title", () => assert.equal(buildCreationPayload({ ...values, content: "" }, style, randomUUID).content.sections[0].blocks[0].text, values.title));
 check("mismatched style rejected", () => assert.throws(() => buildCreationPayload(values, { ...style, id: "other" }, randomUUID)));

@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowUpRight, Plus, RefreshCw, Search, Users } from "lucide-
 import { createClient } from "@/lib/supabase/client";
 import type { CloudClient, CloudWorkspace, CloudWorkspaceSnapshot } from "@/lib/cloud/contracts";
 import { outreachStages } from "@/lib/client-outreach";
-import { studioHref, type AccountClientRoute } from "@/lib/studio-navigation";
+import { studioHref, type AccountClientRoute, type AccountProjectRoute } from "@/lib/studio-navigation";
 import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import CloudClientOutreach from "./cloud-client-outreach";
 import PendingCloudWrites from "./pending-cloud-writes";
@@ -17,8 +17,9 @@ type Page = { nextOffset: number | null; total: number };
 type Snapshot = CloudWorkspaceSnapshot & { pagination: Record<"clients" | "projects" | "artifacts", Page> };
 
 /** Account changes unmount every client draft and invalidate outstanding reads. */
+type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient) => void };
 type ClientNavigation = { target: AccountClientRoute | null; navigate: (route: AccountClientRoute | null) => void };
-export default function AccountClients({ deviceClients, target, navigate, initialDevice = false }: ClientNavigation & { deviceClients: ReactNode; initialDevice?: boolean }) {
+export default function AccountClients({ deviceClients, target, navigate, onCreate, onOpenProject, initialDevice = false }: ClientNavigation & ClientCreation & { deviceClients: ReactNode; initialDevice?: boolean }) {
   const [account, setAccount] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -50,10 +51,10 @@ export default function AccountClients({ deviceClients, target, navigate, initia
   if (!account && target) return <section className="ac-workspace"><h1>Sign in to open this client</h1><p>Client records are available to members of their workspace.</p><Link className="button primary" href={`/login?next=${encodeURIComponent(studioHref({ tab: "clients", projectId: null, clientId: null, accountClient: target }))}`}>Sign in</Link></section>;
   if (!account) return <><p className="small-note">These clients are saved on this device. <Link href="/login">Sign in</Link> to manage account clients.</p>{deviceClients}</>;
   return <><div className="ac-source" aria-label="Client storage"><button disabled={saving} aria-pressed={!device} onClick={() => { setDevice(false); if (initialDevice) navigate(null); }}>Account clients</button><button disabled={saving} aria-pressed={device} onClick={() => { setDevice(true); navigate(null); }}>On this device</button></div>
-    {device ? <><p className="small-note">These records stay on this device and are not uploaded automatically.</p>{deviceClients}</> : <SavedClients key={account} accountId={account} target={target} navigate={navigate} onSaving={setSaving} />}</>;
+    {device ? <><p className="small-note">These records stay on this device and are not uploaded automatically.</p>{deviceClients}</> : <SavedClients key={account} accountId={account} target={target} navigate={navigate} onCreate={onCreate} onOpenProject={onOpenProject} onSaving={setSaving} />}</>;
 }
 
-function SavedClients({ accountId, onSaving, target, navigate }: ClientNavigation & { accountId: string; onSaving: (value: boolean) => void }) {
+function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenProject }: ClientNavigation & ClientCreation & { accountId: string; onSaving: (value: boolean) => void }) {
   const [saving, setSaving] = useState(false);
   function savingChanged(value: boolean) { setSaving(value); onSaving(value); }
   const [workspaces, setWorkspaces] = useState<CloudWorkspace[]>([]);
@@ -161,6 +162,7 @@ function SavedClients({ accountId, onSaving, target, navigate }: ClientNavigatio
   return <section className="ac-workspace" aria-label="Account clients">
     <header className="ac-heading"><div><span className="eyebrow">YOUR CLIENT RELATIONSHIPS</span><h1>{selected ? selected.name : "Good work starts with people."}</h1><p>{selected ? "Contact details, conversations, and the work you create together." : "Keep every conversation, next step, and project together."}</p></div>
       {!selected && snapshot && canEdit && <button className="button primary" disabled={busy || adding} onClick={() => setAdding(true)}><Plus size={16} /> Add client</button>}</header>
+    {selected && snapshot && canEdit && <button className="button primary" disabled={busy || saving} onClick={() => onCreate(snapshot.workspace.id, selected)}><Plus size={16} /> Create for this client</button>}
     {!selected && <div className="ac-toolbar">
       <label className="ac-search"><Search size={16} /><input aria-label="Search account clients" placeholder="Search name, company, or email" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <select aria-label="Outreach stage" value={stage} onChange={event => setStage(event.target.value)}><option>All stages</option>{outreachStages.map(item => <option key={item}>{item}</option>)}</select>
@@ -177,7 +179,7 @@ function SavedClients({ accountId, onSaving, target, navigate }: ClientNavigatio
       <nav className="ac-source" aria-label="Client sections">{(["outreach", "details", "projects"] as const).map(item => <button key={item} disabled={busy || saving} aria-pressed={view === item} onClick={() => void open(selected.id, item)}>{item === "outreach" ? "Outreach & activity" : item === "details" ? "Contact details" : "Projects"}</button>)}</nav>
       {view === "outreach" && <CloudClientOutreach key={`${selected.id}:${selected.updatedAt}`} initialClient={selected} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={() => navigate({ workspaceId: snapshot.workspace.id, clientId: null })} onSaved={client => { setSelected(client); setSnapshot(current => current ? { ...current, clients: current.clients.map(item => item.id === client.id ? { ...client, outreachSummary: client.outreach ? { stage: client.outreach.stage, nextFollowUp: client.outreach.nextFollowUp } : undefined } : item) } : current); }} />}
       {view === "details" && <ClientDetails key={`${selected.id}:${selected.updatedAt}`} client={selected} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={() => navigate({ workspaceId: snapshot.workspace.id, clientId: null })} notify={setMessage} saved={async () => { await load(snapshot.workspace.id); setMessage("Client details saved to your account."); }} />}
-      {view === "projects" && <div className="ac-projects"><h2>Projects for {selected.name}</h2>{snapshot.projects.filter(project => project.clientId === selected.id).map(project => <article key={project.id}><strong>{project.title}</strong><small>{project.kind} · {project.status}</small>{snapshot.artifacts.filter(artifact => artifact.projectId === project.id).map(artifact => <Link key={artifact.id} href={studioHref({ tab: "projects", projectId: null, clientId: null, account: { workspaceId: snapshot.workspace.id, artifactId: artifact.id } })}>{artifact.title}<ArrowUpRight size={14} /></Link>)}</article>)}
+      {view === "projects" && <div className="ac-projects"><h2>Projects for {selected.name}</h2>{snapshot.projects.filter(project => project.clientId === selected.id).map(project => <article key={project.id}><strong>{project.title}</strong><small>{project.kind} · {project.status}</small>{snapshot.artifacts.filter(artifact => artifact.projectId === project.id).map(artifact => <Link key={artifact.id} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpenProject({ workspaceId: snapshot.workspace.id, artifactId: artifact.id }); }} href={studioHref({ tab: "projects", projectId: null, clientId: null, account: { workspaceId: snapshot.workspace.id, artifactId: artifact.id } })}>{artifact.title}<ArrowUpRight size={14} /></Link>)}</article>)}
         {!snapshot.projects.some(project => project.clientId === selected.id) && <p>No linked projects in the loaded records. Assign this client when creating a project.</p>}
         {(["projects", "artifacts"] as const).map(collection => snapshot.pagination[collection].nextOffset !== null && <button key={collection} className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id, collection)}>Load more {collection}</button>)}
       </div>}
