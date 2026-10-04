@@ -41,7 +41,9 @@ function PreviewFrame({ direction }: { direction: Direction }) {
 }
 export default function TemplateGallery({
   onChoose,
+  initialFilter = "all",
 }: {
+  initialFilter?: Kind | "all";
   onChoose?: (
     kind: Kind,
     brief: string,
@@ -49,7 +51,7 @@ export default function TemplateGallery({
     style?: Style,
   ) => void;
 }) {
-  const [filter, setFilter] = useState<Kind | "all">("all");
+  const [filter, setFilter] = useState<Kind | "all">(initialFilter);
   const [error, setError] = useState("");
   const router = useRouter();
   const visible = directions.filter(

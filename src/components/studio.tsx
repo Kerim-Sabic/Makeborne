@@ -6,6 +6,8 @@ import Image from "next/image";
 import { creationStyles, retainCreationStyle, styleConcept } from "@/lib/creation-styles";
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
+import ComposerControls from "./composer-controls";
+import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
 import AccountClients from "./account-clients";
 import { useCreationAccount, type CreationAccount } from "./use-creation-account";
@@ -63,6 +65,7 @@ import {
   ImagePlus,
   Menu,
   MoreHorizontal,
+  MessageCircle,
   Palette,
   Plus,
   Presentation,
@@ -103,6 +106,10 @@ export default function Studio() {
   const [initialClient, setInitialClient] = useState("");
   const [draftBrief, setDraftBrief] = useState("");
   const [draftKind, setDraftKind] = useState<Kind>("website");
+  const [directStart, setDirectStart] = useState(false);
+  const [creationMode, setCreationMode] = useState<"create" | "plan">("create");
+  const [creationEffort, setCreationEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
+  const [creationRequestId, setCreationRequestId] = useState("");
   const [homeHandoff, setHomeHandoff] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("projects");
@@ -172,11 +179,17 @@ export default function Studio() {
                 brief: z.string().trim().min(1).max(20000),
                 styleId: z.string().min(1).max(100).optional(),
                 style: LocalStyleSchema.optional(),
+                mode: z.enum(["create", "plan"]).default("create"),
+                effort: EffortLevelSchema.default(DEFAULT_EFFORT),
+                requestId: z.string().uuid().optional(),
               })
               .strict()
               .safeParse(JSON.parse(raw));
             if (draft.success && draft.data.kind === kind) {
               setInitialBrief(draft.data.brief);
+              setCreationMode(draft.data.mode); setCreationEffort(draft.data.effort);
+              setCreationRequestId(draft.data.requestId ?? crypto.randomUUID());
+              setDirectStart(true);
               setInitialTitle(`Untitled ${draft.data.kind}`);
               setDraftBrief(draft.data.brief);
               setDraftKind(draft.data.kind);
@@ -407,7 +420,8 @@ export default function Studio() {
       return false;
     }
     setWorkspace(nextWorkspace);
-    openRoute({ tab: "projects", projectId: p.id, clientId: null });
+    setDirectStart(false);
+    openRoute({ tab: "projects", projectId: p.id, clientId: null }, directStart || homeHandoff);
     setCreating(null);
     if (homeHandoff && persistenceAllowed) {
       try {
@@ -481,6 +495,32 @@ export default function Studio() {
     setCreating(kind);
   }
 
+  const creationView = creating && (
+        <CreateModal
+          directStart={directStart}
+          initialMode={creationMode}
+          initialEffort={creationEffort}
+          requestId={creationRequestId}
+          initialClient={initialClient}
+          initialWorkspaceId={initialWorkspaceId}
+          initialStyle={initialStyle}
+          initialBrief={initialBrief}
+          initialTitle={initialTitle}
+          kind={creating}
+          onKind={setCreating}
+          clients={workspace.clients}
+          styles={creationStyles(workspace.styles, creating)}
+          close={() => { if (directStart) openRoute({ tab: "projects", projectId: null, clientId: null }, true); setCreating(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); }}
+          create={createProject}
+          accountCreated={(workspaceId, artifact) => {
+            setCreating(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief("");
+            try { sessionStorage.removeItem("makeborne.creation-draft.v1"); } catch { /* Saved project takes precedence. */ } setInitialTitle(""); setDraftBrief("");
+            openRoute({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId: artifact.id } }, directStart || homeHandoff);
+            toast("Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
+          }}
+        />
+      );
+  if (directStart && creating) return <div className="studio-shell creation-route">{creationView}</div>;
   return (
     <div className="studio-shell">
       {mobileNav && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
@@ -493,12 +533,9 @@ export default function Studio() {
           Makeborne
         </Link>
         <button className="sidebar-close icon-button" aria-label="Close sidebar" onClick={() => setMobileNav(false)}><X size={18} /></button>
-        <button
-          className="button create-button"
-          onClick={() => { setMobileNav(false); setCreating("website"); }}
-        >
+        <Link className="button create-button" href="/">
           <Plus size={18} /> New project
-        </button>
+        </Link>
         <div className="nav-label">My workspace</div>
         <nav className="studio-nav" aria-label="Workspace">
           {[
@@ -519,6 +556,7 @@ export default function Studio() {
               </button>
             );
           })}
+          <Link href="/chat" className="studio-chat-link"><MessageCircle size={18} />Expert chat</Link>
         </nav>
         <div className="sidebar-bottom">
           <button
@@ -618,12 +656,9 @@ export default function Studio() {
                     <h1>What will you make next?</h1>
                     <p>Your ideas, projects, and clients. All in one place.</p>
                   </div>
-                  <button
-                    className="button primary"
-                    onClick={() => setCreating("website")}
-                  >
+                  <Link className="button primary" href="/">
                     <Plus size={17} /> New project
-                  </button>
+                  </Link>
                 </div>
                 <section
                   className="studio-composer"
@@ -664,14 +699,13 @@ export default function Studio() {
                     />
                   </label>
                   <div className="composer-bottom">
-                    <span>
-                      <Sparkles size={14} /> Set the direction. Keep control of
-                      the details.
-                    </span>
+                    <ComposerControls mode={creationMode} onMode={setCreationMode} effort={creationEffort} onEffort={setCreationEffort} />
                     <button
                       className="button primary"
-                      aria-label="Continue with this brief"
+                      disabled={!draftBrief.trim()}
+                      aria-label={creationMode === "plan" ? "Plan this project" : "Create this project"}
                       onClick={() => {
+                        setDirectStart(true); setCreationRequestId(crypto.randomUUID());
                         setInitialBrief(draftBrief.trim());
                         setInitialTitle(`Untitled ${draftKind}`);
                         setCreating(draftKind);
@@ -884,17 +918,13 @@ export default function Studio() {
                             type="button"
                             key={style.id}
                             onClick={() =>
-                              chooseDirection("website", "", style.id)
+                              chooseDirection(styleConcept(style)?.kind ?? "website", "", style.id, style)
                             }
                           >
-                            <span
-                              className="saved-style-swatch"
-                              style={{ background: style.color }}
-                            />
-                            <span>
-                              <strong>{style.name}</strong>
-                              <small>{style.description}</small>
+                            <span className="saved-style-preview" style={{ background: style.background, color: style.textColor, fontFamily: style.font === "serif" ? "Georgia, serif" : "Arial, sans-serif" }}>
+                              {styleConcept(style) ? <Image src={`/gallery/${styleConcept(style)!.id}.png`} alt="" fill sizes="(max-width: 700px) 90vw, 320px" /> : <><small>YOUR CREATIVE DIRECTION</small><b>A different<br />point of view.</b><i style={{ background: style.color }} /></>}
                             </span>
+                            <span className="saved-style-caption"><strong>{style.name}</strong><small>{style.description || "Your palette and typography, ready to use."}</small><span className="saved-style-colors" aria-label="Style palette">{[style.background, style.textColor, style.color].map((color, index) => <i key={index} style={{ background: color }} />)}</span></span>
                             <ArrowUpRight size={17} />
                           </button>
                         ))}
@@ -1006,26 +1036,7 @@ export default function Studio() {
           </div>
         )}
       </div>
-      {creating && (
-        <CreateModal
-          initialClient={initialClient}
-          initialWorkspaceId={initialWorkspaceId}
-          initialStyle={initialStyle}
-          initialBrief={initialBrief}
-          initialTitle={initialTitle}
-          kind={creating}
-          onKind={setCreating}
-          clients={workspace.clients}
-          styles={creationStyles(workspace.styles, creating)}
-          close={() => { setCreating(null); setInitialWorkspaceId(null); setInitialClient(""); }}
-          create={createProject}
-          accountCreated={(workspaceId, artifact) => {
-            setCreating(null); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief(""); setInitialTitle(""); setDraftBrief("");
-            openRoute({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId: artifact.id } });
-            toast("Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
-          }}
-        />
-      )}
+      {creationView}
       {clientModal && (
         <ClientModal
           existing={clientModal === "new" ? null : clientModal}
@@ -1202,13 +1213,19 @@ function creationSeed(brief: string, title: string, style: string) {
   return (hash >>> 0).toString(36) + "-" + value.length;
 }
 
+function CreationSession({ children, close }: { children: React.ReactNode; close: () => void; title?: string }) {
+  return <main className="creation-session"><header><Link href="/" aria-label="Makeborne home"><BrandMark size={25} />Makeborne</Link><button type="button" onClick={close}><ArrowLeft size={15} />Back to projects</button></header><section className="creation-session-content">{children}</section></main>;
+}
+
 function CreateModal(props: Omit<Parameters<typeof CreationWizard>[0], "account">) {
   const account = useCreationAccount(props.initialWorkspaceId);
-  if (!account.ready) return <Modal close={props.close} title="Create a project"><h2>{account.error ? "Account unavailable" : "Opening your setup…"}</h2><p role="status">{account.error || "Checking where your project and draft will be saved."}</p><button className="button secondary" onClick={props.close}>Close</button></Modal>;
+  const LoadingFrame = props.directStart ? CreationSession : Modal;
+  if (!account.ready) return <LoadingFrame close={props.close} title="Create a project"><h2>{account.error ? "Account unavailable" : "Opening your project…"}</h2><p role="status">{account.error || "Checking where your project and draft will be saved."}</p><button className="button secondary" onClick={props.close}>Back</button></LoadingFrame>;
   return <CreationWizard {...props} account={account} key={`${account.accountId ?? "device"}:${account.workspace?.id ?? "new"}`} />;
 }
 
 function CreationWizard({
+  directStart, initialMode, initialEffort, requestId,
   account,
   initialWorkspaceId,
   initialClient,
@@ -1223,6 +1240,7 @@ function CreationWizard({
   create,
   accountCreated,
 }: {
+  directStart: boolean; initialMode: "create" | "plan"; initialEffort: EffortLevel; requestId: string;
   account: CreationAccount;
   initialWorkspaceId: string | null;
   initialClient: string;
@@ -1255,8 +1273,8 @@ function CreationWizard({
   const [uncertain, setUncertain] = useState(false);
   const pending = useRef<{ accountId: string; workspaceId: string; body: ReturnType<typeof buildCreationPayload> } | null>(null);
   const step = 1; // Retain compatibility with saved drafts from the previous wizard.
-  const [mode, setMode] = useState<"plan" | "create">("create");
-  const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
+  const [mode, setMode] = useState<"plan" | "create">(initialMode);
+  const [effort, setEffort] = useState<EffortLevel>(initialEffort);
   const [requirements, setRequirements] = useState("");
   const [outline, setOutline] = useState<string | null>(null);
   const wizardContent = useRef<HTMLDivElement>(null);
@@ -1277,7 +1295,7 @@ function CreationWizard({
   const styleId = selectedStyle?.id ?? "";
   const [clientId, setClient] = useState(initialClient);
   const [seed] = useState(() =>
-    creationSeed(initialBrief, initialTitle, initialStyle + (initialClient ? `::${initialClient}` : "") + (initialWorkspaceId ? `::workspace:${initialWorkspaceId}` : "")),
+    creationSeed(initialBrief, initialTitle, (directStart ? requestId : "") + initialStyle + (initialClient ? `::${initialClient}` : "") + (initialWorkspaceId ? `::workspace:${initialWorkspaceId}` : "")),
   );
   const storageSeed = wizardDraftScope(seed, account.accountId, account.workspace?.id ?? null);
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -1374,70 +1392,7 @@ function CreationWizard({
   ]);
   const plan = creationPlan({ kind, title, brief, audience, purpose, requirements, outline, style: selectedStyle?.name || "Custom direction" });
   const needsPlanAnswers = mode === "plan" && plan.structure.length === 0;
-  return (
-    <Modal close={() => { if (!savingRef.current) close(); }} title="Create a project">
-      <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
-      {saveError && <p role="alert" className="small-note">{saveError}</p>}
-      <div className="wizard-content" ref={wizardContent} inert={saving || uncertain || !account.ready}>
-        <h2 tabIndex={-1}>What would you like to make?</h2>
-        <p className="modal-intro">Start with your idea. Everything else can be refined as you go.</p>
-        {draftNotice && <p className="wizard-draft-notice" role="status">{draftNotice}</p>}
-        <div className="prompt-format-switch" role="group" aria-label="Project format">
-          {(["website", "book", "presentation"] as Kind[]).map(k => {
-            const Icon = icons[k];
-            return <button type="button" key={k} aria-pressed={kind === k} onClick={() => onKind(k)}><Icon size={16} />{kindLabel[k]}</button>;
-          })}
-        </div>
-        <label className="prompt-main-label">Your idea
-          <textarea className="prompt-main-input" value={brief} onChange={e => setBrief(e.target.value)} rows={5} maxLength={20000} placeholder={`Describe the ${kind} you have in mind…`} />
-        </label>
-        <div className="prompt-mode-switch" role="group" aria-label="Creation mode">
-          <button type="button" aria-pressed={mode === "create"} onClick={() => setMode("create")}>Create</button>
-          <button type="button" aria-pressed={mode === "plan"} onClick={() => setMode("plan")}>Plan first</button>
-          <span>{mode === "create" ? "Open your project directly" : "Review a starting outline below"}</span>
-        </div>
-        <details className="prompt-options">
-          <summary><span>Style <small>{selectedStyle?.name}</small></span><span>Browse all {styles.length}</span></summary>
-          <p className="creation-style-note">Choose a style for your {kind}. You can refine it in the editor.</p>
-          <div className="prompt-style-grid" role="group" aria-label="Project style">
-            {styles.map(s => {
-              const concept = styleConcept(s);
-              return <button type="button" key={s.id} aria-pressed={selectedStyle?.id === s.id} onClick={() => setStyle(s.id)}>
-                <span className="prompt-style-visual" style={{ background: s.background, color: s.textColor }} aria-hidden="true">
-                  {concept ? <Image src={`/gallery/${concept.id}.png`} alt="" fill sizes="(max-width: 600px) 42vw, 220px" /> : <span className={`prompt-style-composition composition-${kind}`} style={{ fontFamily: s.font === "serif" ? "Georgia, serif" : "Arial, sans-serif" }}><i style={{ background: s.color }} /><small>MAKE SOMETHING MEANINGFUL</small><b>{kind === "book" ? "A new perspective." : kind === "presentation" ? "Ideas worth sharing." : "A different point of view."}</b><span style={{ background: s.color }} /><em>Thoughtfully made. Uniquely yours.</em></span>}
-                </span>
-                <span className="prompt-style-caption"><strong>{s.name}</strong>{selectedStyle?.id === s.id && <Check size={15} />}</span>
-                <small>{concept ? "Artwork concept" : "Palette & typography"}</small>
-              </button>;
-            })}
-          </div>
-          <p className="creation-style-note">Concept artwork is inspiration. Palette and typography are applied to your project; example images are not included.</p>
-        </details>
-        <details className="prompt-options">
-          <summary><span>Project details</span><span>Optional</span></summary>
-          <label>Project title<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} placeholder="Name it now or later" /></label>
-          <label>Client<select value={clientId} onChange={e => setClient(e.target.value)}><option value="">For myself</option>{clientId && !clients.some(c => c.id === clientId) && <option value={clientId} disabled>Client unavailable — choose another</option>}{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-          <div className="form-grid"><label>Audience<input value={audience} onChange={e => setAudience(e.target.value)} maxLength={1000} placeholder="Who is it for?" /></label><label>Outcome<input value={purpose} onChange={e => setPurpose(e.target.value)} maxLength={2000} placeholder="What should it achieve?" /></label></div>
-          <label>Your source text<textarea value={content} onChange={e => setContent(e.target.value)} maxLength={50000} rows={5} placeholder="Paste any text you want included in your project." /></label>
-          <label>Wording preference<select value={wording} onChange={e => setWording(e.target.value)}><option value="preserve">Preserve my wording</option><option value="improve">Improve my wording</option><option value="summarise">Summarise my material</option></select></label>
-          <label>Requirements<textarea value={requirements} onChange={e => setRequirements(e.target.value)} maxLength={4000} rows={3} placeholder="Anything to include or avoid" /></label>
-        </details>
-        <details className="prompt-options"><summary><span>Creative effort</span><span>{effort.replaceAll("_", " ")}</span></summary><EffortControl value={effort} onChange={setEffort} /></details>
-        {mode === "plan" && <div className="creation-plan"><h3>Your starting plan</h3><label className="creation-outline">Sections to include<textarea rows={6} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={e => setOutline(e.target.value)} /></label><p>Edit one section, chapter, or slide per line. Creating the project confirms this outline.</p></div>}
-        <p className="creation-plan-note">Your brief and source text will be saved in an editable project. Live AI generation is not connected yet.</p>
-      </div>
-      <div className="modal-actions">
-        <button
-          className="button secondary"
-          disabled={saving || uncertain}
-          onClick={close}
-        >
-          Cancel
-        </button>
-        <button
-          className="button primary"
-          disabled={saving || !account.ready || (!brief.trim() && !content.trim()) || !draftLoaded || needsPlanAnswers}
-          onClick={async () => {
+  async function submitProject() {
             if (savingRef.current) return;
             savingRef.current = true; setSaving(true); setSaveError("");
             const values = {
@@ -1489,13 +1444,86 @@ function CreationWizard({
                 /* A retained draft is safe; the created project is saved. */
               }
             }
-          }}
+  }
+  const Frame = directStart ? CreationSession : Modal;
+  const started = useRef(false);
+  const startDirect = useEffectEvent(() => { void submitProject(); });
+  useEffect(() => {
+    if (!directStart || mode !== "create" || !draftLoaded || !draftWritable || !account.ready || started.current) return;
+    started.current = true; startDirect();
+  }, [directStart, mode, draftLoaded, draftWritable, account.ready]);
+  return (
+    <Frame close={() => { if (!savingRef.current) close(); }} title="Create a project">
+      <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
+      {saveError && <p role="alert" className="small-note">{saveError}</p>}
+      <div className="wizard-content" ref={wizardContent} inert={saving || uncertain || !account.ready}>
+        <h2 tabIndex={-1}>{directStart ? mode === "plan" ? "Let’s shape your idea" : "Opening your project" : "What would you like to make?"}</h2>
+        <p className={directStart ? "creation-user-message" : "modal-intro"}>{directStart ? brief : "Start with your idea. Everything else can be refined as you go."}</p>
+        {draftNotice && <p className="wizard-draft-notice" role="status">{draftNotice}</p>}
+        {directStart && mode === "plan" && <div className="form-grid"><label>Who is it for?<input value={audience} onChange={e => setAudience(e.target.value)} maxLength={1000} placeholder="Your audience" /></label><label>What should it achieve?<input value={purpose} onChange={e => setPurpose(e.target.value)} maxLength={2000} placeholder="The outcome you want" /></label></div>}
+        {!directStart && <>
+        <div className="prompt-format-switch" role="group" aria-label="Project format">
+          {(["website", "book", "presentation"] as Kind[]).map(k => {
+            const Icon = icons[k];
+            return <button type="button" key={k} aria-pressed={kind === k} onClick={() => onKind(k)}><Icon size={16} />{kindLabel[k]}</button>;
+          })}
+        </div>
+        <label className="prompt-main-label">Your idea
+          <textarea className="prompt-main-input" value={brief} onChange={e => setBrief(e.target.value)} rows={5} maxLength={20000} placeholder={`Describe the ${kind} you have in mind…`} />
+        </label>
+        <div className="prompt-mode-switch" role="group" aria-label="Creation mode">
+          <button type="button" aria-pressed={mode === "create"} onClick={() => setMode("create")}>Create</button>
+          <button type="button" aria-pressed={mode === "plan"} onClick={() => setMode("plan")}>Plan first</button>
+          <span>{mode === "create" ? "Open your project directly" : "Review a starting outline below"}</span>
+        </div>
+        <CreationSource kind={kind} content={content} wording={wording} onContent={setContent} onWording={setWording} />
+        <details className="prompt-options">
+          <summary><span>Style <small>{selectedStyle?.name}</small></span><span>Browse all {styles.length}</span></summary>
+          <p className="creation-style-note">Choose a style for your {kind}. You can refine it in the editor.</p>
+          <div className="prompt-style-grid" role="group" aria-label="Project style">
+            {styles.map(s => {
+              const concept = styleConcept(s);
+              return <button type="button" key={s.id} aria-pressed={selectedStyle?.id === s.id} onClick={() => setStyle(s.id)}>
+                <span className="prompt-style-visual" style={{ background: s.background, color: s.textColor }} aria-hidden="true">
+                  {concept ? <Image src={`/gallery/${concept.id}.png`} alt="" fill sizes="(max-width: 600px) 42vw, 220px" /> : <span className={`prompt-style-composition composition-${kind}`} style={{ fontFamily: s.font === "serif" ? "Georgia, serif" : "Arial, sans-serif" }}><i style={{ background: s.color }} /><small>MAKE SOMETHING MEANINGFUL</small><b>{kind === "book" ? "A new perspective." : kind === "presentation" ? "Ideas worth sharing." : "A different point of view."}</b><span style={{ background: s.color }} /><em>Thoughtfully made. Uniquely yours.</em></span>}
+                </span>
+                <span className="prompt-style-caption"><strong>{s.name}</strong>{selectedStyle?.id === s.id && <Check size={15} />}</span>
+                <small>{concept ? "Artwork concept" : "Palette & typography"}</small>
+              </button>;
+            })}
+          </div>
+          <p className="creation-style-note">Concept artwork is inspiration. Palette and typography are applied to your project; example images are not included.</p>
+        </details>
+        <details className="prompt-options">
+          <summary><span>Project details</span><span>Optional</span></summary>
+          <label>Project title<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} placeholder="Name it now or later" /></label>
+          <label>Client<select value={clientId} onChange={e => setClient(e.target.value)}><option value="">For myself</option>{clientId && !clients.some(c => c.id === clientId) && <option value={clientId} disabled>Client unavailable — choose another</option>}{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+          <div className="form-grid"><label>Audience<input value={audience} onChange={e => setAudience(e.target.value)} maxLength={1000} placeholder="Who is it for?" /></label><label>Outcome<input value={purpose} onChange={e => setPurpose(e.target.value)} maxLength={2000} placeholder="What should it achieve?" /></label></div>
+          <label>Requirements<textarea value={requirements} onChange={e => setRequirements(e.target.value)} maxLength={4000} rows={3} placeholder="Anything to include or avoid" /></label>
+        </details>
+        <details className="prompt-options"><summary><span>Creative effort</span><span>{effort.replaceAll("_", " ")}</span></summary><EffortControl value={effort} onChange={setEffort} /></details>
+        </>}
+        {mode === "plan" && <div className="creation-plan"><h3>Your starting plan</h3><label className="creation-outline">Sections to include<textarea rows={6} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={e => setOutline(e.target.value)} /></label><p>Edit one section, chapter, or slide per line. This is a starter outline, not AI research. Confirming saves it with your brief.</p></div>}
+        <p className="creation-plan-note">Your brief and source text will be saved in an editable project. Live AI generation is not connected yet.</p>
+      </div>
+      <div className="modal-actions">
+        <button
+          className="button secondary"
+          disabled={saving || uncertain}
+          onClick={close}
+        >
+          Cancel
+        </button>
+        <button
+          className="button primary"
+          disabled={saving || (directStart && mode === "create" && !saveError && draftWritable) || !account.ready || (!brief.trim() && !content.trim()) || !draftLoaded || needsPlanAnswers}
+          onClick={() => void submitProject()}
         >
           {saving ? "Saving project…" : uncertain ? "Retry the same save" : mode === "plan" ? "Confirm plan & create" : "Create project"}
           <ArrowRight size={16} />
         </button>
       </div>
-    </Modal>
+    </Frame>
   );
 }
 function ClientModal({

@@ -1,8 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Globe2, Layers3, Menu, Plus, Presentation, X } from "lucide-react";
+import { type CSSProperties, useRef, useState } from "react";
+import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Globe2, Menu, Plus, Presentation, X } from "lucide-react";
+import ComposerControls from "./composer-controls";
+import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
 import BrandMark from "./brand-mark";
 import TemplateGallery from "./template-gallery";
 import type { Style } from "./studio-model";
@@ -35,6 +37,8 @@ const ideas: Record<Kind, { label: string; text: string }[]> = {
 export default function CreationHome() {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>("website");
+  const [mode, setMode] = useState<"create" | "plan">("create");
+  const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   const [brief, setBrief] = useState("");
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -47,7 +51,7 @@ export default function CreationHome() {
     if (!text.trim()) { promptRef.current?.focus(); return; }
     if (text.trim().length > 20000) { setError("Keep your brief and style instructions under 20,000 characters."); return; }
     try {
-      sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify({ kind: selectedKind, brief: text.trim(), styleId, style }));
+      sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify({ kind: selectedKind, brief: text.trim(), styleId, style, mode, effort, requestId: crypto.randomUUID() }));
       setBusy(true);
       router.push(`/studio?create=${selectedKind}&from=home`);
     } catch { setError("Your browser could not keep this brief. Copy your text before opening the studio."); }
@@ -71,20 +75,20 @@ export default function CreationHome() {
     <main className="mk-home">
       <header className="mk-nav">
         <Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={30} /><span>Makeborne</span></Link>
-        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
+        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
         <div className="mk-nav-actions"><Link className="mk-login" href="/login">Log in</Link><Link className="mk-nav-cta" href="/studio">Open studio <ArrowUpRight size={14} /></Link><button className="mk-menu-toggle" aria-label={menu ? "Close navigation" : "Open navigation"} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X size={20} /> : <Menu size={20} />}</button></div>
-        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/studio?tab=clients">Client work</Link><Link href="/login">Log in</Link></nav>}
+        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">Client work</Link><Link href="/login">Log in</Link></nav>}
       </header>
       <section className="mk-hero" aria-labelledby="creation-heading">
         <div className="mk-atmosphere" aria-hidden="true"><span /><span /><span /></div>
         <div className="mk-hero-content">
           <h1 id="creation-heading">What will you<br className="mk-mobile-break" /> make next?</h1>
           <p className="mk-hero-subtitle">Beautiful websites. Books worth opening. Slides that stay with you.</p>
-          <div className="mk-format-switch" role="group" aria-label="What would you like to create?">{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { setKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
+          <div className="mk-format-switch" style={{ "--format-index": formats.findIndex(item => item.id === kind) } as CSSProperties} role="group" aria-label="What would you like to create?"><span className="mk-format-indicator" aria-hidden="true" />{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { setKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
           <form className="mk-composer" onSubmit={event => { event.preventDefault(); start(); }}>
             <label className="mk-sr-only" htmlFor="creation-brief">Describe your project</label>
             <textarea ref={promptRef} id="creation-brief" maxLength={20000} value={brief} onChange={event => { setBrief(event.target.value); setError(""); }} placeholder={kind === "website" ? "A beautiful website for my business, with…" : kind === "book" ? "An illustrated book about something I know well…" : "A presentation that tells the story of…"} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); start(); } }} />
-            <div className="mk-composer-bottom"><button className="mk-attach" type="button" onClick={() => uploadRef.current?.click()} aria-label="Add a text or Markdown file"><Plus size={19} /><span>Add your text</span></button><input ref={uploadRef} type="file" hidden accept=".txt,.md,text/plain,text/markdown" onChange={event => { void importText(event.target.files?.[0]); event.target.value = ""; }} /><div className="mk-composer-right"><button className="mk-send" type="submit" disabled={busy || !brief.trim()} aria-label="Create this project"><span>{busy ? "Opening…" : "Continue"}</span><ArrowUp size={17} strokeWidth={2} /></button></div></div>
+            <ComposerControls mode={mode} onMode={setMode} effort={effort} onEffort={setEffort} /><div className="mk-composer-bottom"><button className="mk-attach" type="button" onClick={() => uploadRef.current?.click()} aria-label="Add a text or Markdown file"><Plus size={19} /><span>Add your text</span></button><input ref={uploadRef} type="file" hidden accept=".txt,.md,text/plain,text/markdown" onChange={event => { void importText(event.target.files?.[0]); event.target.value = ""; }} /><div className="mk-composer-right"><button className="mk-send" type="submit" disabled={busy || !brief.trim()} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button></div></div>
           </form>
           {fileName && <div className="mk-file-note"><FileText size={13} />{fileName}<span>Text added to your brief</span></div>}
           {error && <p className="mk-error" role="alert">{error}</p>}
@@ -93,11 +97,14 @@ export default function CreationHome() {
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>
-      <section className="mk-discovery" id="templates" aria-label="Style directions"><TemplateGallery onChoose={(selectedKind, text, styleId, style) => start(selectedKind, [brief.trim(), text].filter(Boolean).join("\n\n"), styleId, style)} /></section>
-      <section className="mk-client-band"><div className="mk-client-icon"><Layers3 size={24} strokeWidth={1.4} /></div><div><span className="mk-overline">BUILT FOR THE WORK AFTER THE IDEA</span><h2>Your clients. Your projects.<br />All in one place.</h2><p>Keep every website, revision and next step connected to the right client.</p><Link href="/studio?tab=clients">Explore your client workspace <ArrowUpRight size={16} /></Link></div><div className="mk-client-preview" aria-label="Illustrative client workflow"><div className="mk-client-preview-head"><span>CLIENT WORKSPACE</span><span>Illustration</span></div><div className="mk-client-preview-row"><span className="mk-client-avatar">A</span><div><strong>A client’s next chapter</strong><span>Website · Brand guide · Presentation</span></div><span className="mk-preview-dot" /></div><div className="mk-client-progress"><span><Check size={12} /> Brief</span><i /><span><Check size={12} /> Direction</span><i /><span>Review</span></div></div></section>
+      <section className="mk-discovery" id="templates" aria-label="Style directions"><TemplateGallery key={kind} initialFilter={kind} onChoose={(selectedKind, text, styleId, style) => start(selectedKind, [brief.trim(), text].filter(Boolean).join("\n\n"), styleId, style)} /></section>
+      <section className="mk-client-band" aria-labelledby="client-work-heading">
+        <div className="mk-client-copy"><span className="mk-overline">MADE FOR CLIENT WORK</span><h2 id="client-work-heading">Great work.<br />Happy clients.</h2><p>Keep the brief, the latest version, and the next conversation together. From first hello to final handoff.</p><Link href="/studio?tab=clients">Open your client workspace <ArrowUpRight size={16} /></Link></div>
+        <div className="mk-client-board" aria-label="Example client workspace"><header><span>Client projects</span><small>Illustration</small></header><div className="mk-client-board-labels"><span>CLIENT / PROJECT</span><span>STATUS</span></div>{[{initial:"F",name:"Form Studio",project:"Portfolio website",status:"In progress",tone:"violet"},{initial:"M",name:"Moss & Paper",project:"Illustrated field guide",status:"In review",tone:"amber"},{initial:"A",name:"Atlas Collective",project:"Workshop presentation",status:"Delivered",tone:"green"}].map(item => <div className="mk-client-board-row" key={item.initial}><span className={`mk-board-avatar ${item.tone}`}>{item.initial}</span><div><strong>{item.name}</strong><small>{item.project}</small></div><span className={`mk-board-status ${item.tone}`}><i />{item.status}</span></div>)}<footer><span>Every version. Every next step.</span><span>One workspace <Check size={13} /></span></footer></div>
+      </section>
       <footer className="mk-footer">
         <div className="mk-footer-main"><div className="mk-footer-brand"><Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={28} /><span>Makeborne</span></Link><p>From a first thought<br />to something worth sharing.</p></div>
-          <nav aria-label="Footer navigation"><div><h3>Create</h3><Link href="/studio">Your studio</Link><a href="#templates">Explore styles</a><Link href="/studio?tab=clients">Client workspace</Link></div><div><h3>Your account</h3><Link href="/login">Sign in</Link><Link href="/billing">Plans &amp; credits</Link><Link href="/studio?tab=projects">Your projects</Link></div></nav>
+          <nav aria-label="Footer navigation"><div><h3>Create</h3><Link href="/studio">Your studio</Link><Link href="/chat">Expert chat</Link><a href="#templates">Explore styles</a><Link href="/studio?tab=clients">Client workspace</Link></div><div><h3>Your account</h3><Link href="/login">Sign in</Link><Link href="/billing">Plans &amp; credits</Link><Link href="/studio?tab=projects">Your projects</Link></div></nav>
         </div><div className="mk-footer-bottom"><span>© 2026 Makeborne</span><span>A place for things worth making.</span><a href="#creation-heading">Back to top ↑</a></div>
       </footer>
     </main>

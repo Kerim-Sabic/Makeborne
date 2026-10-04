@@ -16,4 +16,6 @@ check("JSON retry retains stable IDs", () => assert.deepEqual(JSON.parse(JSON.st
 check("empty material starts with supplied title", () => assert.equal(buildCreationPayload({ ...values, content: "" }, style, randomUUID).content.sections[0].blocks[0].text, values.title));
 check("mismatched style rejected", () => assert.throws(() => buildCreationPayload(values, { ...style, id: "other" }, randomUUID)));
 check("overlong title rejected", () => assert.throws(() => buildCreationPayload({ ...values, title: "a".repeat(161) }, style, randomUUID)));
+for (const wording of ["preserve", "improve", "summarise"]) check(`retains ${wording} preference`, () => assert.equal(buildCreationPayload({ ...values, wording }, style, randomUUID).project.wording, wording));
+check("source-only creation supported", () => assert.equal(buildCreationPayload({ ...values, brief: "" }, style, randomUUID).content.sections[0].blocks[1].text, "Supplied paragraph"));
 console.log(`${checks} creation payload checks passed.`);

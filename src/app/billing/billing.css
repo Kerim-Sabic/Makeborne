@@ -17,3 +17,5 @@
 .billing-effort-preview p { font-size: 13px; line-height: 1.7; color: #716c80; }
 .billing-effort-preview .billing-effort-note { font-size: 11px; }
 @media(max-width:720px) { .billing-effort-preview { grid-template-columns: 1fr; padding: 20px; gap: 10px; } }
+
+.billing-effort-preview{background:#fff;border:1px solid #e8e4ec;border-radius:16px;padding:32px;gap:48px;align-items:start}.billing-effort-preview>.mbe-effort{padding:0 0 0 28px;border-left:1px solid #eeeaf2;border-radius:0}.billing-effort-preview h3{font-size:25px;line-height:1.25;max-width:270px;font-weight:550}.billing-effort-preview p{max-width:340px}.billing-effort-preview .mbe-effort-cost{font-size:10px;line-height:1.6}.billing-effort-preview .mbe-effort legend{padding-left:0}@media(max-width:720px){.billing-effort-preview{padding:22px;gap:25px}.billing-effort-preview>.mbe-effort{border-left:0;border-top:1px solid #eeeaf2;padding:20px 0 0}}
