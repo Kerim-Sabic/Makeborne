@@ -132,17 +132,17 @@ export default function AccountForm() {
     <main className="login-page auth-refined">
       <header className="auth-header">
         <Link className="wordmark" href="/" aria-label="Makeborne home"><BrandMark size={28} /> Makeborne</Link>
-        <Link href="/studio" className="auth-back">Back to studio <ArrowRight size={14} /></Link>
+        <Link href="/" className="auth-back">Back to home <ArrowRight size={14} /></Link>
       </header>
       <div className="auth-center">
         <section className="login-card" aria-labelledby="account-heading">
           <div className="auth-heading">
             <h1 id="account-heading">{verification ? "Check your inbox" : mode === "signup" ? "Make room for your ideas" : mode === "recovery" ? "Reset your password" : "Welcome back"}</h1>
-            <p>{verification ? "One more step, then you’re in." : mode === "signup" ? "Your next website, book or presentation starts here." : mode === "recovery" ? "We’ll help you get back to your projects." : "Pick up where your ideas left off."}</p>
+            <p>{verification ? "Confirm your email to continue." : mode === "signup" ? "Your next website, book or presentation starts here." : mode === "recovery" ? "We’ll help you get back to your projects." : "Pick up where your ideas left off."}</p>
           </div>
           {enabled === null ? <p role="status">Checking account availability…</p> : !enabled ? <>
             <div className="inline-info"><LockKeyhole size={20} /><p>Account access is temporarily unavailable.</p></div>
-            <Link className="button primary" href="/studio">Open your device drafts <ArrowRight size={16} /></Link>
+            <Link className="button primary" href="/">Back to home <ArrowRight size={16} /></Link>
           </> : verification ? <>
             <div className="auth-mail-icon"><Mail size={26} /></div>
             <p>If <strong>{email}</strong> is eligible, you’ll receive a confirmation link. Check your inbox and spam folder.</p>
