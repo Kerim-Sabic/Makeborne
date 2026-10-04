@@ -86,6 +86,12 @@ try:
     assert run(f"select vendor_reserved||','||credit_reserved||','||active_reservations||','||revision from makeborne_private.generation_budgets where workspace_id='{workspace}';").stdout.strip() == '24,6,2,2'
     assert run(f"select count(*) from makeborne_private.generation_reservations where workspace_id='{workspace}';").stdout.strip() == '2'
     print('PASS observed lock wait: competing proposals cannot exceed shared budget')
+    release = f"select makeborne_private.release_generation_reservation('{first_id}','{owner}','Concurrent cancellation');"
+    released, duplicate_release = race(release, release)
+    assert released == first_id and duplicate_release.returncode == 0 and duplicate_release.stdout.strip() == first_id
+    assert run(f"select vendor_reserved||','||credit_reserved||','||active_reservations||','||revision from makeborne_private.generation_budgets where workspace_id='{workspace}';").stdout.strip() == '12,3,1,3'
+    print('PASS observed lock wait: concurrent cancellation releases balances once')
+
 finally:
     if created:
         run(f"""begin;
