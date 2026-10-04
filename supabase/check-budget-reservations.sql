@@ -44,6 +44,11 @@ begin
  update makeborne_private.generation_budgets set vendor_limit=20,credit_limit=100 where workspace_id=w;
  begin perform makeborne_private.reserve_generation_proposal(q2,gen_random_uuid(),u,repeat('c',64),repeat('a',64)); raise exception 'unexpected vendor overspend'; exception when sqlstate 'MB402' then raise notice 'PASS vendor bound independently enforced'; end;
  update makeborne_private.generation_budgets set vendor_limit=100,credit_limit=100 where workspace_id=w;
+ insert into public.artifact_versions(workspace_id,artifact_id,version_number,content,style_snapshot,created_by)
+ values(w,a,1,jsonb_build_object('schemaVersion',1,'title','Fixture','kind','website','sections','[]'::jsonb),jsonb_build_object('id','fixture','name','Fixture','version',1,'typography',jsonb_build_object('headingFont','Inter','bodyFont','Inter'),'colors',jsonb_build_object('ink','#111111'),'description','','referenceAssetIds','[]'::jsonb),u);
+ begin perform makeborne_private.reserve_generation_proposal(q2,gen_random_uuid(),u,repeat('c',64),repeat('a',64)); raise exception 'unexpected stale version'; exception when sqlstate 'PT409' then
+ if sqlerrm<>'Project version changed' then raise; end if;
+ raise notice 'PASS stale artifact version denied'; end;
  update makeborne_private.generation_proposals set prepared_at=t-interval '2 hours', expires_at=t-interval '1 hour',snapshot=jsonb_set(jsonb_set(snapshot,'{workflow,preparedAt}',to_jsonb(t-interval '2 hours')),'{workflow,expiresAt}',to_jsonb(t-interval '1 hour')) where id=q2;
  begin perform makeborne_private.reserve_generation_proposal(q2,gen_random_uuid(),u,repeat('c',64),repeat('a',64)); raise exception 'unexpected expiry'; exception when sqlstate 'PT409' then raise notice 'PASS expired proposal denied'; end;
 end $$;
