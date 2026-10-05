@@ -12,7 +12,7 @@ export const SITE = {
 export const IS_PREVIEW = process.env.VERCEL_ENV === "preview";
 
 /** Only public, useful pages belong here. Never add customer projects or account URLs. */
-export const PUBLIC_PATHS = ["/", "/help"] as const;
+export const PUBLIC_PATHS = ["/", "/help", "/privacy"] as const;
 
 export const PUBLIC_ROBOTS: Metadata["robots"] = {
   index: !IS_PREVIEW,
