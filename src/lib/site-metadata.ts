@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 /** Public identity shared by search metadata, the sitemap, and link previews. */
 export const SITE = {
   name: "Makeborne",
-  url: "https://makeborne.vercel.app",
+  url: "https://makeborne.com",
   title: "Makeborne — Websites, books & presentations",
   description:
     "A creation and client workspace for websites, books, and presentations. Organize your briefs, edit your projects, and keep client work together.",

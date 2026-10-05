@@ -18,7 +18,7 @@ export default function OpenGraphImage() {
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #d8dbe8", paddingTop: 22, fontSize: 20, color: "#626474" }}>
         <span>Your creation &amp; client workspace</span>
-        <span>makeborne.vercel.app</span>
+        <span>makeborne.com</span>
       </div>
     </div>,
     size,
