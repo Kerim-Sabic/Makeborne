@@ -8,6 +8,7 @@ export async function GET() {
   const enabled = accountsEnabled();
   const config = getSupabaseConfig();
   let google = false;
+  let github = false;
   if (enabled && config) {
     try {
       const response = await fetch(new URL("/auth/v1/settings", config.url), {
@@ -16,12 +17,13 @@ export async function GET() {
         signal: AbortSignal.timeout(5_000),
       });
       if (response.ok) {
-        const settings: { external?: { google?: boolean } } = await response.json();
+        const settings: { external?: { google?: boolean; github?: boolean } } = await response.json();
         google = settings.external?.google === true;
+        github = settings.external?.github === true;
       }
     } catch {
       // Email sign-in can still work while provider discovery is unavailable.
     }
   }
-  return Response.json({ enabled, google }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ enabled, google, github }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -20,6 +20,7 @@ export default function AccountForm() {
   const emailInput = useRef<HTMLInputElement>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [google, setGoogle] = useState(false);
+  const [github, setGithub] = useState(false);
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,9 +53,10 @@ export default function AccountForm() {
     const abort = new AbortController();
     fetch("/api/auth/providers", { signal: abort.signal, cache: "no-store" })
       .then((response) => { if (!response.ok) throw new Error("Unavailable"); return response.json(); })
-      .then((capability: { enabled: boolean; google: boolean }) => {
+      .then((capability: { enabled: boolean; google: boolean; github: boolean }) => {
         setEnabled(capability.enabled === true);
         setGoogle(capability.google === true);
+        setGithub(capability.github === true);
       })
       .catch(() => { if (!abort.signal.aborted) setEnabled(false); });
     queueMicrotask(() => {
@@ -189,14 +191,14 @@ export default function AccountForm() {
     }
   }
 
-  async function signInWithGoogle() {
-    if (!enabled || !google || busy) return;
+  async function signInWithProvider(provider: "google" | "github") {
+    if (!enabled || !(provider === "google" ? google : github) || busy) return;
     setBusy(true);
     setNotice(null);
     try {
       const { error } = await createClient().auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${redirectUrl()}&provider=google`, queryParams: { prompt: "select_account" } },
+        provider,
+        options: { redirectTo: `${redirectUrl()}&provider=${provider}`, ...(provider === "google" ? { queryParams: { prompt: "select_account" } } : { scopes: "user:email" }) },
       });
       if (error) throw error;
       clearPendingEmail();
@@ -255,7 +257,7 @@ export default function AccountForm() {
           <p className="auth-verification-footnote">Check your spam folder, too. Use the most recent email; each confirmation works once.</p>
           <div className="auth-mode-switch"><button disabled={busy} onClick={() => changeMode("login")}><ArrowLeft size={14} />Back to sign in</button></div>
         </> : <>
-          {google && mode !== "recovery" && <><button type="button" className="auth-google" disabled={busy} onClick={signInWithGoogle}><GoogleMark />Continue with Google</button><div className="auth-divider"><span>or use your email</span></div></>}
+          {(google || github) && mode !== "recovery" && <><div className="auth-social-providers">{google && <button type="button" className="auth-google" disabled={busy} onClick={() => void signInWithProvider("google")}><GoogleMark />Continue with Google</button>}{github && <button type="button" className="auth-google" disabled={busy} onClick={() => void signInWithProvider("github")}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .75a11.25 11.25 0 0 0-3.56 21.92c.56.1.77-.24.77-.54v-2.1c-3.13.68-3.79-1.33-3.79-1.33-.51-1.3-1.25-1.65-1.25-1.65-1.02-.7.08-.69.08-.69 1.13.08 1.72 1.16 1.72 1.16 1 .1.98 2.29 3.28 1.39.1-.73.4-1.23.71-1.52-2.5-.28-5.13-1.25-5.13-5.56 0-1.23.44-2.23 1.16-3.01-.12-.29-.5-1.43.11-2.98 0 0 .95-.3 3.1 1.15a10.78 10.78 0 0 1 5.62 0c2.15-1.45 3.1-1.15 3.1-1.15.61 1.55.23 2.69.11 2.98.72.78 1.16 1.78 1.16 3.01 0 4.32-2.63 5.28-5.14 5.56.41.35.76 1.03.76 2.08v3.06c0 .3.2.65.78.54A11.25 11.25 0 0 0 12 .75Z"/></svg>Continue with GitHub</button>}</div><div className="auth-divider"><span>or use your email</span></div></>}
           <form onSubmit={submit}>
             <div className="auth-field"><label htmlFor="account-email">Email address</label><input ref={emailInput} id="account-email" type="email" placeholder="you@example.com" autoComplete="email" required disabled={busy} value={email} onChange={event => setEmail(event.target.value)} maxLength={254} /></div>
             {mode !== "recovery" && <div className="auth-field">

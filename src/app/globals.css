@@ -2946,3 +2946,5 @@ label input[type="color"] {
   font-size: 10px;
   margin: 6px 0 12px;
 }
+
+.auth-social-providers{display:grid;gap:10px}.auth-social-providers .auth-google{margin:0}

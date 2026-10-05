@@ -18,6 +18,6 @@ export async function GET(request: Request) {
       /* The user receives a safe recovery route. */
     }
   }
-  const error = url.searchParams.get("provider") === "google" ? "oauth" : "confirmation";
+  const error = ["google", "github"].includes(url.searchParams.get("provider") ?? "") ? "oauth" : "confirmation";
   return authRedirect(origin, `/login?error=${error}&next=${encodeURIComponent(next)}`);
 }
