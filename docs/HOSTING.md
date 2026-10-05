@@ -48,9 +48,9 @@ The application sends signup/resend links to `/auth/callback` with a validated l
 
 Origin and callback configuration is saved on the deployed origin; authenticated browser and email-delivery checks remain. Supabase documents matching redirect URLs to its allowlist, exact production paths, and the difference between Site URL and per-request redirect destinations. [Redirect configuration](https://supabase.com/docs/guides/auth/redirect-urls), [Email templates](https://supabase.com/docs/guides/auth/auth-email-templates)
 
-### Email delivery blocker
+### Email delivery (updated 5 October 2026)
 
-Supabase's dashboard confirms the default email sender is active. It only delivers to project team addresses and is unsuitable for public signup. Configure a verified sending domain and custom SMTP, then exercise confirmation and recovery end to end. Do not disable email confirmation as a workaround. [Supabase SMTP restrictions](https://supabase.com/docs/guides/auth/auth-smtp)
+Resend has verified `makeborne.com`, and Supabase custom SMTP is active with sender `Makeborne <no-reply@makeborne.com>`. An authorized verification email to the existing owner's account was accepted by Supabase and reported delivered by Resend. Confirmation, recovery, and sign-in code templates are branded; source and configuration notes are in `supabase/templates/README.md`. Keep email confirmation enabled. Complete the wider signup/recovery matrix with controlled test accounts before launch; one delivery check does not establish inbox placement for every provider. [Supabase SMTP documentation](https://supabase.com/docs/guides/auth/auth-smtp)
 
 ## Production feature gates and limits
 
