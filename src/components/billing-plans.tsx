@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Check, ChevronDown, Coffee, LoaderCircle } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, Coffee, LoaderCircle, ShieldCheck } from "lucide-react";
 import EffortControl from "./effort-control";
 import BillingTopups from "./billing-topups";
 import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
@@ -88,7 +88,7 @@ function SupportPlan() {
   </section>;
 }
 
-export default function BillingPlans() {
+export default function BillingPlans({ unlimitedCredits = false }: { unlimitedCredits?: boolean }) {
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   return <><section id="plans" className="billing-plans-section" aria-labelledby="plans-heading">
     <div className="billing-section-heading billing-plans-heading">
@@ -106,7 +106,7 @@ export default function BillingPlans() {
     </article>)}</div>
     <p className="billing-plan-note">Proposed prices in USD, before tax. Generation, hosting, collaboration, and allowances are still being prepared.</p>
     <details className="billing-compare"><summary>Compare proposed allowances <ChevronDown size={15} aria-hidden="true" /></summary><div className="billing-table-wrap"><table><caption className="billing-sr-only">Proposed membership allowances, not currently available</caption><thead><tr><th>Monthly allowance</th>{proposals.map(plan => <th key={plan.name}>{plan.name}</th>)}</tr></thead><tbody><tr><th>Generation credits</th>{proposals.map(plan => <td key={plan.name}>{plan.credits}</td>)}</tr><tr><th>Team seats</th>{proposals.map(plan => <td key={plan.name}>{plan.seats}</td>)}</tr><tr><th>Hosted static sites</th>{proposals.map(plan => <td key={plan.name}>{plan.sites}</td>)}</tr><tr><th>Asset storage</th>{proposals.map(plan => <td key={plan.name}>{plan.storage}</td>)}</tr></tbody></table></div><p>Domain registration is separate. Final allowances and terms will be published before creation memberships open.</p></details>
-    </section><BillingTopups /><SupportPlan />
+    </section>{unlimitedCredits ? <section className="billing-unlimited-topups" aria-label="Credit top-ups"><ShieldCheck size={19} aria-hidden="true" /><div><h2>You’re covered.</h2><p>Your unlimited administrator allowance means you do not need credit top-ups.</p></div></section> : <BillingTopups />}<SupportPlan />
     <details className="billing-effort-details"><summary><span>How does thinking effort affect credits?</span><ChevronDown size={16} aria-hidden="true" /></summary><div className="billing-effort-preview"><div><h3>Set the pace for each project.</h3><p>Higher effort allows more planning and review, which can use more credits. Your estimate will depend on the work, including its length and artwork.</p><small>Try the slider. This preview changes no project settings.</small></div><EffortControl value={effort} onChange={setEffort} /></div></details>
   </>;
 }

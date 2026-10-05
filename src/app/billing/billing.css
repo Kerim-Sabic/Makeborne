@@ -2,6 +2,13 @@
 .billing-top{height:84px;max-width:1120px;margin:auto;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eae7ef;gap:20px}
 .billing-brand{display:inline-flex;align-items:center;gap:9px;font-size:22px;font-weight:650;letter-spacing:-.8px}
 .billing-back{display:inline-flex;align-items:center;gap:8px;min-height:40px;font-size:12px;color:#766e81}
+.billing-top-actions{display:flex;align-items:center;gap:22px}
+.billing-admin-link{display:inline-flex;align-items:center;gap:7px;min-height:40px;font-size:12px;color:#6c547f}
+.billing-allowance-link{display:inline-flex;align-items:center;gap:7px;min-height:34px;margin-top:5px;color:#69517f;font-size:12px;font-weight:500}
+.billing-unlimited-topups{display:flex;align-items:flex-start;gap:12px;margin-top:24px;padding:21px 24px;border:1px solid #e4dceb;border-radius:14px;background:#faf8fd;color:#806c91}
+.billing-unlimited-topups>svg{flex-shrink:0;margin-top:2px}
+.billing-unlimited-topups h2{font-size:15px;font-weight:500;letter-spacing:-.2px;color:#655073;margin:0 0 5px}
+.billing-unlimited-topups p{font-size:12px;line-height:1.7;margin:0}
 .billing-main{max-width:1080px;margin:50px auto 0}
 .billing-heading h1{margin:13px 0 12px;font-size:clamp(34px,4vw,44px);font-weight:500;letter-spacing:-1.8px;line-height:1.12}
 .billing-heading p{margin:0;color:#7a7283;font-size:14px;line-height:1.6}
@@ -165,5 +172,6 @@
 @media(max-width:380px){.billing-topups,.billing-support{padding:19px}.billing-addon-icon{display:none}.billing-topups-heading>.billing-coming-soon{margin-left:0}.billing-pack-options{gap:7px}.billing-pack-surface{padding-inline:10px}.billing-pack-surface>strong{font-size:21px}.billing-topup-benefits{gap:8px;font-size:9px}.billing-support-action{column-gap:10px}.billing-support-button{min-width:132px}}
 @media(max-width:760px){.billing-topups{position:relative}.billing-topups-heading{display:block}.billing-topups-heading .billing-addon-icon{display:none}.billing-topups-heading .billing-eyebrow{font-size:8px;letter-spacing:1px;padding-right:76px}.billing-topups-heading>.billing-coming-soon{position:absolute;top:20px;right:22px;margin:0;padding:3px 6px;font-size:9px}.billing-topups-heading h2{margin-top:9px}}
 @media(prefers-reduced-motion:reduce){.billing-shell *{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+@media(max-width:520px){.billing-top{gap:10px;min-height:84px;height:auto;padding-block:12px}.billing-top-actions{align-items:flex-end;flex-direction:column;gap:0}.billing-top-actions>a{min-height:30px;font-size:11px}.billing-credit-section>.billing-section-heading{flex-wrap:wrap}.billing-balance-number{font-size:36px;gap:9px}.billing-unlimited-topups{padding:19px}}
 @media(prefers-reduced-transparency:reduce){.billing-shell,.billing-plan,.billing-support,.billing-topups,.billing-balance{background:#fff}}
 @media(forced-colors:active){.billing-shell,.billing-plan,.billing-support,.billing-balance,.billing-topups{background:Canvas;color:CanvasText}.billing-support-button,.billing-topup-button,.billing-section-heading>button{border:1px solid ButtonText}.billing-filters button[aria-pressed=true],.billing-pack input:checked+.billing-pack-surface{outline:2px solid Highlight}.billing-plan-state,.billing-coming-soon{border-color:CanvasText}}

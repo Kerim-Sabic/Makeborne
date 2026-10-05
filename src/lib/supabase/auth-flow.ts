@@ -8,7 +8,7 @@ export function authDestination(next: string | null): string {
   if (url.pathname === "/auth/update-password") {
     const after = url.searchParams.get("next");
     // One recovery nesting level; never allow another auth route inside it.
-    if (after && /^\/(studio|chat|billing)([/?#]|$)/.test(after)) {
+    if (after && /^\/(studio|chat|billing|admin)([/?#]|$)/.test(after)) {
       safe.set("next", authDestination(after));
       return `/auth/update-password?${safe}`;
     }
@@ -32,7 +32,7 @@ export function authDestination(next: string | null): string {
     if (url.searchParams.get("from") === "home") safe.set("from", "home");
     return `/studio${safe.size ? `?${safe}` : ""}`;
   }
-  if (["/studio/cloud", "/chat"].includes(url.pathname)) return url.pathname;
+  if (["/studio/cloud", "/chat", "/admin"].includes(url.pathname)) return url.pathname;
   if (url.pathname === "/billing") {
     // One nesting level only: billing may return to a creation route, never itself.
     const after = url.searchParams.get("next");

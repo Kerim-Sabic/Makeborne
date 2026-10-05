@@ -8,8 +8,10 @@ const output = ts.transpileModule(source, { compilerOptions: { module: ts.Module
 const context = { exports: {}, URLSearchParams, URL };
 vm.runInNewContext(output, context);
 const { authDestination, emailAuthDestination, passwordRecoveryDestination } = context.exports;
-for (const target of [null, "", "https://example.com", "//example.com", "/\\example.com", "/auth/update-password?next=evil", "/admin", "/billingevil", "/studioevil"]) assert.equal(authDestination(target), "/studio");
-for (const target of ["/studio", "/studio/cloud", "/chat", "/billing", "/auth/update-password"]) assert.equal(authDestination(target), target);
+for (const target of [null, "", "https://example.com", "//example.com", "/\\example.com", "/auth/update-password?next=evil", "/adminevil", "/billingevil", "/studioevil"]) assert.equal(authDestination(target), "/studio");
+for (const target of ["/studio", "/studio/cloud", "/chat", "/billing", "/admin", "/auth/update-password"]) assert.equal(authDestination(target), target);
+assert.equal(authDestination("/admin?role=admin&next=https://evil.example#anything"), "/admin");
+assert.equal(authDestination(passwordRecoveryDestination("/admin")), "/auth/update-password?next=%2Fadmin");
 const workspace = "12345678-1234-1234-1234-123456789012", artifact = "22345678-1234-1234-1234-123456789012";
 for (const tab of ["clients", "projects", "styles", "settings"]) {
   const url = new URL(authDestination(`/studio?tab=${tab}&workspace=${workspace}&artifact=${artifact}&next=https://evil.example`), "https://makeborne.invalid");

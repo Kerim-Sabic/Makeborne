@@ -8,6 +8,7 @@ import { RequestError } from "@/lib/server/http";
 import { billingConfig } from "./config";
 import { billingDatabase } from "./database";
 import { activeMembership, retrieveMembership } from "./whop";
+import { getAccountPrivileges } from "@/lib/account/privileges";
 
 export async function billingUser(): Promise<User | null> {
   if (!accountsEnabled()) return null;
@@ -24,6 +25,8 @@ export async function requireBillingUser() {
 }
 
 export async function verifyCreationAccess(user: User, checkoutId?: string): Promise<boolean> {
+  // An operator grant unlocks the workspace, but never marks a checkout paid.
+  if (checkoutId === undefined && (await getAccountPrivileges(user.id)).isAdmin) return true;
   if (!billingConfig().enabled) return false;
   const db = billingDatabase();
   let query = db.from("billing_memberships")

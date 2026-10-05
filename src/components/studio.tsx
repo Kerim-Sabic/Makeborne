@@ -97,7 +97,7 @@ function date(value: string) {
   });
 }
 
-export default function Studio() {
+export default function Studio({ isAdmin = false, unlimitedCredits = false }: { isAdmin?: boolean; unlimitedCredits?: boolean }) {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [accountClientRoute, setAccountClientRoute] = useState<AccountClientRoute | null>(null);
   const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
@@ -511,8 +511,8 @@ export default function Studio() {
           >
             <Settings size={18} /> Settings
           </button>
-          <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> Plan & credits <ArrowUpRight size={14} /></Link>
-          {process.env.NODE_ENV === "development" && <Link className="sidebar-home" href="/admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
+          <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> {unlimitedCredits ? "Unlimited credits" : "Plan & credits"} <ArrowUpRight size={14} /></Link>
+          {isAdmin && <Link className="sidebar-home" href="/admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
           <div className="sidebar-device">
             <span className="sidebar-device-label"><span className="status-dot" /> Device backup & recovery</span>
             <button type="button" onClick={() => navigate("settings")}>Backup & recovery <ArrowUpRight size={12} /></button>

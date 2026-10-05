@@ -89,12 +89,16 @@ async function lifecycleChecks() {
     return query;
   }, rpc: async () => ({ data: true, error: null }) };
   const access = load("./access.ts", env, {
+    "@/lib/account/privileges": { getAccountPrivileges: async () => ({ isAdmin: true, unlimitedCredits: true }) },
     "next/navigation": {}, "@/lib/supabase/auth-server": {}, "@/lib/supabase/server": {}, "@/lib/supabase/auth-flow": {}, "@/lib/server/http": { RequestError }, "./config": config, "./database": { billingDatabase: () => db },
     "./whop": { activeMembership: whop.activeMembership, retrieveMembership: async id => { readIds.push(id); return { ...active, id, checkout_configuration_id: id === "mem_active" ? "ch_active" : "ch_canceled", status: id === "mem_active" ? "active" : "canceled" }; } },
   });
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_canceled"), false);
   assert.deepEqual(readIds, ["mem_canceled"]);
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_active"), true);
+  env.WHOP_CREATION_ENABLED = "false";
+  assert.equal(await access.verifyCreationAccess({ id: "account_test" }), true);
+  assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_canceled"), false);
   console.log("PASS: coffee exclusion, configuration gates, signatures/replay, membership lifecycle, exact checkout binding, refund/dispute reconciliation and redirect validation. No live services called.");
 }
 void lifecycleChecks().catch(error => { console.error(error); process.exitCode = 1; });
