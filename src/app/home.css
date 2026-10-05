@@ -5,6 +5,22 @@
 .mk-nav-middle a,.mk-nav-cta{display:inline-flex;align-items:center;gap:6px}
 .mk-nav-middle a:hover,.mk-login:hover{color:#161619}
 .mk-nav-actions{display:flex;align-items:center;gap:25px;font-size:13px;font-weight:500}
+.mk-account{position:relative;color:#606065}
+.mk-account .studio-account-link{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 2px;border:0;background:transparent;box-shadow:none;color:inherit;font-size:13px;font-weight:500;text-decoration:none;cursor:pointer;list-style:none}
+.mk-account .studio-account-menu summary::-webkit-details-marker{display:none}
+.mk-account .studio-account-link:hover{color:#29232f;background:transparent}
+.mk-account .studio-account-popover{position:absolute;z-index:50;right:0;top:calc(100% + 10px);width:min(270px,calc(100vw - 40px));padding:16px;border:1px solid #e9e5ed;border-radius:14px;background:#fff;box-shadow:0 12px 40px #30284517;display:grid;gap:8px}
+.mk-account .studio-account-popover>span{font-size:10px;color:#82788d}
+.mk-account .studio-account-popover strong{padding-bottom:10px;border-bottom:1px solid #f0edf3;color:#413847;font-size:12px;font-weight:550;overflow-wrap:anywhere}
+.mk-account .studio-account-popover>a,.mk-account .studio-account-popover>button{display:flex;align-items:center;gap:9px;min-height:40px;margin:0;padding:9px 10px;border:0;border-radius:8px;background:transparent;color:#655970;font-size:12px;font-weight:450;text-align:left;cursor:pointer}
+.mk-account .studio-account-popover>a:hover,.mk-account .studio-account-popover>button:hover{background:#f6f3f9;color:#41314f}
+.mk-account .studio-account-popover>button:disabled{opacity:.6;cursor:wait}
+.mk-account .studio-account-error{position:absolute;z-index:51;right:0;top:calc(100% + 10px);width:min(270px,calc(100vw - 40px));padding:12px;background:#fff8eb;color:#725526;border:1px solid #eedcc0;border-radius:10px;font-size:12px;line-height:1.5}
+.mk-account :is(a,button,summary):focus-visible{outline:2px solid #9276bd;outline-offset:3px}
+.mk-account-home-mobile{border-top:1px solid #eeebf2;padding-top:8px}
+.mk-account-home-mobile .studio-account-link{width:100%;justify-content:flex-start}
+.mk-account-home-mobile .studio-account-popover{position:static;width:100%;margin-top:5px;box-shadow:none;border:0;border-radius:9px;background:#faf8fc}
+@media(max-width:720px){.mk-nav-actions>.mk-account-home{display:none}}
 .mk-nav-cta{padding:11px 17px;background:#202024;color:white;border-radius:9px;transition:background .18s}
 .mk-nav-cta:hover{background:#3a3a40}
 .mk-menu-toggle{display:none;border:0;background:none;padding:8px}

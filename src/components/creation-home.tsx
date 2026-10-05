@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { type CSSProperties, useRef, useState } from "react";
 import { ArrowUp, ArrowUpRight, BookOpen, Check, Globe2, Menu, Presentation, X } from "lucide-react";
 import ComposerControls from "./composer-controls";
+import StudioAccount from "./studio-account";
 import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
 import BrandMark from "./brand-mark";
 import TemplateGallery from "./template-gallery";
@@ -39,7 +40,7 @@ const ideas: Record<Kind, { label: string; text: string }[]> = {
   ],
 };
 
-export default function CreationHome() {
+export default function CreationHome({ initialEmail, accountsEnabled }: { initialEmail: string | null; accountsEnabled: boolean }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>("website");
   const [mode, setMode] = useState<"create" | "plan">("create");
@@ -92,8 +93,8 @@ export default function CreationHome() {
       <header className="mk-nav">
         <Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={30} /><span>Makeborne</span></Link>
         <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
-        <div className="mk-nav-actions"><Link className="mk-login" href="/login">Log in</Link><Link className="mk-nav-cta" href="/studio">Open studio <ArrowUpRight size={14} /></Link><button className="mk-menu-toggle" aria-label={menu ? "Close navigation" : "Open navigation"} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X size={20} /> : <Menu size={20} />}</button></div>
-        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">Client work</Link><Link href="/login">Log in</Link></nav>}
+        <div className="mk-nav-actions"><StudioAccount variant="home" initialEmail={initialEmail} enabled={accountsEnabled} /><Link className="mk-nav-cta" href="/studio">Open studio <ArrowUpRight size={14} /></Link><button className="mk-menu-toggle" aria-label={menu ? "Close navigation" : "Open navigation"} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X size={20} /> : <Menu size={20} />}</button></div>
+        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
       </header>
       <section className="mk-hero" aria-labelledby="creation-heading">
         <div className="mk-atmosphere" aria-hidden="true"><span /><span /><span /></div>
