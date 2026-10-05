@@ -276,6 +276,6 @@ export default function AccountForm() {
       </section>
       {!verification && <p className="auth-caption">A little space for your next big thing.</p>}
     </div>
-    <footer className="auth-footer"><span>© 2026 Makeborne</span><span>Websites. Books. Presentations.</span></footer>
+    <footer className="auth-footer"><span>© 2026 Makeborne</span><Link href="/privacy">Privacy</Link></footer>
   </main>;
 }
