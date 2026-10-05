@@ -18,6 +18,6 @@ for (const [id, monthly, firstMonth, yearly, firstYear, credits] of [
 }
 assert.throws(() => planPrice("coffee", "monthly", true));
 const ui = fs.readFileSync(require.resolve("../../components/founding-plans.tsx"), "utf8");
-assert.ok(ui.includes('disabled>Opens at launch'));
+assert.ok(ui.includes('disabled>{founding ? "Founder checkout being prepared" : "Opens at launch"}'));
 assert.ok(!ui.includes('fetch('));
 console.log("21 pricing and closed-checkout checks passed; no payment or API calls.");

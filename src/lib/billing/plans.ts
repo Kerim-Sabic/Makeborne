@@ -1,5 +1,5 @@
 /** Public prices in integer USD cents. Provider IDs and credentials stay server-side. */
-export const BILLING_TERMS_VERSION = "2026-10-05-subscription-v2";
+export const BILLING_TERMS_VERSION = "2026-10-05-founder-waitlist-v3";
 export const CREATION_PLANS = [
   { id: "create", name: "Create", monthlyCents: 2900, monthlyCredits: 300, seats: 1, sites: 1, storage: "2 GB", description: "For your next independent project.", features: ["Websites, books and presentations", "Client tracking and follow-ups", "Custom styles and editable exports"] },
   { id: "studio", name: "Studio", monthlyCents: 7900, monthlyCredits: 1000, seats: 3, sites: 5, storage: "10 GB", description: "For a growing client business.", features: ["Everything planned for Create", "More capacity for client projects", "Shared reviews and spending controls"] },
