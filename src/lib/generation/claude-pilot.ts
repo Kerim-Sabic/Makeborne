@@ -54,7 +54,7 @@ export async function generatePilotDraft(userId:string,input:z.infer<typeof Pilo
   catch{await db.from('claude_pilot_runs').update({status:'rejected',usage:result.evidence.usage}).eq('id',input.attemptId).eq('user_id',userId);throw new RequestError('WEBSITE_INVALID','The website did not pass the output checks. Existing content is unchanged.',422);}
  }
  const output={...(website?{website}:{}),title:result.value.title,blocks:result.value.blocks.map(block=>({...block,id:randomUUID()})),notice:input.kind==='website'?'Website design ready. Review mobile layout and links. Backend services are not connected.':input.kind==='book'?'Text draft ready. Book artwork still needs the image-generation connection.':'Text draft ready for review. Check facts and layout before sharing.',pilot:true};
- const {error}=await db.from('claude_pilot_runs').update({status:'completed',result:output,usage:{...result.evidence.usage,rejection_reason:result.reason,model:result.evidence.model}}).eq('id',input.attemptId).eq('user_id',userId).eq('status','reserved');
+ const {error}=await db.from('claude_pilot_runs').update({status:'completed',result:output,usage:{...result.evidence.usage,model:result.evidence.model}}).eq('id',input.attemptId).eq('user_id',userId).eq('status','reserved');
  if(error)throw new RequestError('RESULT_SAVE_FAILED','The provider responded, but saving the draft failed. No automatic retry was made.',503);
  return output;
 }
