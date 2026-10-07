@@ -662,8 +662,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
                   </div>
                 </section>
                 <div className="composer-note">
-                  Your brief becomes a saved project. Live AI generation is not
-                  enabled.
+                  Your brief becomes a saved project. Available generation controls appear in its editor.
                 </div>
                 <div
                   className="brief-suggestions"

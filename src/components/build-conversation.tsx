@@ -72,11 +72,11 @@ function Conversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, ef
     <div className="build-messages" ref={messages}>
       {brief ? <article className="build-user-message"><small>Your brief</small><p>{brief}</p></article> : <div className="build-no-brief"><FileText size={18} /><p>Your {kind} workspace is ready for your content.</p></div>}
       <AttachmentList files={attachments.files} onRemove={readonly ? undefined : id => void attachments.remove(id)} disabled={attachments.busy} compact />
-      <div className="build-system-message"><span className="build-system-mark"><BrandMark size={20} /></span><div><h2>Your idea has a home.</h2><p>Your project is saved. AI generation isn’t connected yet, so your brief hasn’t been turned into a finished {kind}.</p><div className="build-quick-actions"><button type="button" onClick={onOpenEditor}><FileText size={14} />Edit content<ChevronRight size={13} /></button>{onOpenHistory && <button type="button" onClick={onOpenHistory}><History size={14} />Version history<ChevronRight size={13} /></button>}</div></div></div>
+      <div className="build-system-message"><span className="build-system-mark"><BrandMark size={20} /></span><div><h2>Your idea has a home.</h2><p>Your project is saved. Review and shape your {kind} in the editor. Available generation controls appear beside the preview.</p><div className="build-quick-actions"><button type="button" onClick={onOpenEditor}><FileText size={14} />Edit content<ChevronRight size={13} /></button>{onOpenHistory && <button type="button" onClick={onOpenHistory}><History size={14} />Version history<ChevronRight size={13} /></button>}</div></div></div>
       {instructions.map(item => <article className="build-user-message build-followup" key={item.id}><small>{item.mode === "plan" ? "Planning note" : "Change request"}</small><p>{item.text}</p><span><Check size={11} />Saved in this tab · not applied</span></article>)}
     </div>
     <div className="build-compose-area">
-      <div className="build-availability"><Sparkles size={12} />AI generation is not connected</div>
+      <div className="build-availability"><Sparkles size={12} />Project instructions</div>
       <form className={`build-composer${drop.dragging ? " is-file-dragging" : ""}`} {...drop.handlers} onSubmit={event => { event.preventDefault(); submit(); }}>
         {drop.dragging && <p className="attachment-drop-hint">Drop files to attach to this project</p>}
         <label className="sr-only" htmlFor={`build-message-${projectKey}`}>Message about your project</label>
