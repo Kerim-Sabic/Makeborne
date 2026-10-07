@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- standalone Node validation harness */
 const ts = require('typescript');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -6,12 +7,12 @@ const cache = {};
 function load(file) {
   file = path.resolve(file);
   if (cache[file]) return cache[file].exports;
-  const module = {exports: {}};
-  cache[file] = module;
+  const compiledModule = {exports: {}};
+  cache[file] = compiledModule;
   const localRequire = id => id.startsWith('.') ? load(path.resolve(path.dirname(file), id + '.ts')) : require(id);
   const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true}}).outputText;
-  new Function('require', 'module', 'exports', js)(localRequire, module, module.exports);
-  return module.exports;
+  new Function('require', 'module', 'exports', js)(localRequire, compiledModule, compiledModule.exports);
+  return compiledModule.exports;
 }
 const {cleanWebsite, websiteDocument} = load('src/lib/generation/website-document.ts');
 const {WEBSITE_IMAGE_ASSETS, websiteAssetInstructions} = load('src/lib/generation/website-assets.ts');
