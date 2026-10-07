@@ -1,4 +1,5 @@
 "use client";
+import ClaudePilotButton from "./claude-pilot-button";
 import Link from "next/link";
 import BrandMark from "./brand-mark";
 import PendingCloudWrites from "./pending-cloud-writes";
@@ -1618,8 +1619,12 @@ export function CloudEditor({
           {isStartingDraft ? <div className="cloud-workbench-empty">
             <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
             <h3>Your {artifact.kind} starts here</h3>
-            <p>{project?.brief.trim() ? "Your brief is saved. " : ""}AI generation is not connected yet. {role === "reviewer" ? "You have view access to this project." : "You can add your own content in the editor."}</p>
+            <p>{project?.brief.trim() ? "Your brief is saved. " : ""}Your editable draft will appear here. {role === "reviewer" ? "You have view access to this project." : "You can add your own content in the editor."}</p>
             <button type="button" onClick={() => setView("edit")} className="button secondary small"><PencilLine size={14} />Open editor</button>
+            {role !== "reviewer" && !dirty && !conflict && !uncertainSave && !recovery && <ClaudePilotButton kind={artifact.kind} brief={project?.brief ?? ""} styleId={style.id} onStart={() => editRevision.current} onDraft={(draft,pilotRevision) => {
+              if(editRevision.current !== pilotRevision) { notify("Your draft changed during generation. Existing edits have been preserved."); return; }
+              editRevision.current++; setContent(draft); setDirty(true); setNote("AI text draft for review");
+            }} />}
           </div> : <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} />}
         </div>}
         <div className="cloud-workbench-edit" hidden={view !== "edit"}>

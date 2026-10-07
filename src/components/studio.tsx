@@ -1,6 +1,7 @@
 "use client";
 import "@/app/studio-refresh.css";
 import { z } from "zod";
+import { PilotDraftSchema } from "@/lib/generation/pilot-contract";
 import Link from "next/link";
 import Image from "next/image";
 import { creationStyles, styleConcept } from "@/lib/creation-styles";
@@ -1833,32 +1834,31 @@ function ProjectEditor({
   }
   async function generate() {
     setBusy(true);
+    const original = structuredClone(project);
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: project.kind,
-          brief: project.brief,
-          audience: project.audience,
-          purpose: project.purpose,
+          attemptId: uid(), kind: project.kind, brief: project.brief,
+          audience: project.audience, purpose: project.purpose,
           styleId: project.styleId,
           content: project.blocks.map((b) => b.text).join("\n\n"),
           mode: project.wording,
         }),
       });
       const result = await response.json();
-      notify(
-        result.error?.message ||
-          "No generation result was returned. Your existing content has been preserved.",
-      );
+      if (!response.ok) { notify(result.error?.message || "Generation could not be completed."); return; }
+      const checked = PilotDraftSchema.safeParse({title:result.title,blocks:Array.isArray(result.blocks)?result.blocks.map((block: Block)=>({type:block.type,text:block.text})):result.blocks});
+      if (!checked.success) { notify("The returned draft could not be verified. Your content has been preserved."); return; }
+      const at=now();
+      update({...original,title:checked.data.title,blocks:checked.data.blocks.map(block=>({...block,id:uid()})),updatedAt:at,
+        versions:[...original.versions,{id:uid(),at,blocks:original.blocks,note:"Before AI text draft"}],
+        activity:[...original.activity,{at,text:"Generated an AI text draft for review."}]});
+      notify(typeof result.notice==='string'?result.notice:"Draft ready for review.");
     } catch {
-      notify(
-        "Could not reach the generation service. Your content has been preserved.",
-      );
-    } finally {
-      setBusy(false);
-    }
+      notify("Could not reach the generation service. Your content has been preserved.");
+    } finally { setBusy(false); }
   }
   async function exportFile(format: string) {
     setBusy(true);
