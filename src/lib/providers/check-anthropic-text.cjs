@@ -22,6 +22,10 @@ function fixture(overrides={},change=()=>{}) {
  for(const [name,change] of [['truncation',r=>r.stop_reason='max_tokens'],['refusal',r=>r.stop_reason='refusal'],['wrong model',r=>r.model='other'],['usage missing',r=>r.usage=null],['overspend',r=>r.usage.output_tokens=101],['invalid output',r=>r.content[0].text='{}'],['tool output',r=>r.content[0]={type:'tool_use',name:'bad'}],['malformed JSON',r=>r.content[0].text='invalid']]) {
   const f=fixture({},change);assert.equal((await f.run()).status,'rejected');assert.equal(f.calls,1);n++;console.log('PASS '+name);
  }
+ for(const type of ['thinking','redacted_thinking']) {
+  const f=fixture({},r=>{r.content.unshift(type==='thinking'?{type,thinking:'',signature:'fixture'}:{type,data:'fixture'});});
+  assert.equal((await f.run()).status,'accepted');n++;
+ }
  let attempts=0;const f=fixture({fetch:async()=>{attempts++;throw Error('private secret');}});const uncertain=await f.run();assert.equal(uncertain.status,'uncertain');assert.equal(attempts,1);assert.ok(!JSON.stringify(uncertain).includes('private secret'));n++;
  const abort=new AbortController();abort.abort();const canceled=fixture();assert.equal((await canceled.run(abort.signal)).status,'not_dispatched');assert.equal(canceled.calls,0);n++;
  console.log(`${n} offline Claude checks passed; no paid API calls.`);

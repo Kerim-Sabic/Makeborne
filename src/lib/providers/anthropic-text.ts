@@ -96,8 +96,12 @@ export function createAnthropicTextAdapter<T>(configuration: AnthropicTextConfig
       if (data.stop_reason !== "end_turn") return { status: "rejected", reason: "incomplete", evidence };
       if (data.model !== config.model) return { status: "rejected", reason: "model", evidence };
       if (!evidence.usage || evidence.usage.input_tokens > config.maximumInputTokens || evidence.usage.output_tokens > config.maximumOutputTokens || !evidence.responseId || !evidence.providerRequestId) return { status: "rejected", reason: "usage", evidence };
-      if (data.role !== "assistant" || !Array.isArray(data.content) || data.content.length !== 1 || data.content[0].type !== "text") return { status: "rejected", reason: "output", evidence };
-      const text = data.content[0].text;
+      // Opus 5.5 always returns adaptive-thinking blocks. Never render or persist
+      // their contents; accept only the final text and reject tool/action blocks.
+      if (data.role !== "assistant" || !Array.isArray(data.content) || data.content.some(block => !["text", "thinking", "redacted_thinking"].includes(block.type))) return { status: "rejected", reason: "output", evidence };
+      const finalText = data.content.filter(block => block.type === "text");
+      if (finalText.length !== 1) return { status: "rejected", reason: "output", evidence };
+      const text = finalText[0].text;
       if (Buffer.byteLength(text) > 1_000_000) return { status: "rejected", reason: "output", evidence };
       let value: unknown;
       try { value = JSON.parse(text); } catch { return { status: "rejected", reason: "output", evidence }; }
