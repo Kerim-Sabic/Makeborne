@@ -1832,6 +1832,7 @@ function ProjectEditor({
     notify("Project status updated locally.");
   }
   async function generate() {
+    if(project.kind === "website") { notify("Open an account-saved website project to build and save its full design."); return; }
     setBusy(true);
     const original = structuredClone(project);
     try {

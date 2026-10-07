@@ -4,7 +4,7 @@ import { billingUser, requireCreationAccess } from "@/lib/billing/access";
 import { PilotBriefSchema } from "@/lib/generation/pilot-contract";
 import { generatePilotDraft } from "@/lib/generation/claude-pilot";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 180;
 export async function POST(request: Request) {
  try {
   sameOrigin(request);

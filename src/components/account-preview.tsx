@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Image as ImageIcon, Monitor, Smartphone } fr
 import type { ArtifactContent, StyleProfile } from "@/lib/domain";
 import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
 import "@/app/account-preview.css";
+import WebsitePreview from "./website-preview";
 import AccountArtwork, { type ArtworkScope } from "./account-artwork";
 
 const fonts: Record<string, string> = {
@@ -30,6 +31,7 @@ export default function AccountPreview({ content, style, dirty, artworkScope }: 
     "--ap-canvas": style.colors.canvas ?? "#F8F7F4", "--ap-ink": style.colors.ink ?? "#16181D", "--ap-accent": style.colors.accent ?? "#7862A7",
     "--ap-heading": fonts[style.typography.headingFont] ?? "Georgia, serif", "--ap-body": fonts[style.typography.bodyFont] ?? "Arial, sans-serif",
   } as CSSProperties;
+  if(content.kind === "website" && content.website) return <WebsitePreview title={content.title} website={content.website} dirty={dirty} />;
   return <section className="account-preview" aria-label="Project layout preview">
     <header className="ap-toolbar"><div><strong>Preview</strong><small>{dirty ? "Current edits" : "Current content"} · {style.name}</small></div>
       {content.kind === "website" && <div className="ap-devices" aria-label="Preview width"><button type="button" aria-label="Desktop preview" aria-pressed={!mobile} onClick={() => setMobile(false)}><Monitor size={16} /></button><button type="button" aria-label="Mobile preview" aria-pressed={mobile} onClick={() => setMobile(true)}><Smartphone size={16} /></button></div>}

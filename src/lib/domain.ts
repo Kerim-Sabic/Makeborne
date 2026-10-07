@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WebsiteDesignSchema } from "./generation/website-contract";
 import { ClientOutreachSchema } from "./client-outreach";
 
 export const ArtifactKindSchema = z.enum(["website", "book", "presentation"]);
@@ -81,6 +82,7 @@ export const ContentBlockSchema = z.object({
 export const ArtifactContentSchema = z
   .object({
     schemaVersion: z.literal(1),
+    website: WebsiteDesignSchema.optional(),
     title: text.min(1).max(200),
     kind: ArtifactKindSchema,
     sections: z.array(

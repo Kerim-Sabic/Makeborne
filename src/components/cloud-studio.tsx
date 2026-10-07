@@ -1521,7 +1521,7 @@ export function CloudEditor({
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
             <div>
               <button type="button" aria-pressed={view === "preview"} onClick={() => setView("preview")}><Eye size={15} />Preview</button>
-              <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />Edit</button>
+              <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />{content?.website ? "Code" : "Edit"}</button>
               <button type="button" aria-pressed={view === "history"} onClick={() => setView("history")}><History size={15} />History</button>
             </div>
             <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>
@@ -1625,7 +1625,7 @@ export function CloudEditor({
               if(editRevision.current !== pilotRevision) { notify("Your draft changed during generation. Existing edits have been preserved."); return; }
               editRevision.current++; setContent(draft); setDirty(true); setNote("AI text draft for review");
             }} />}
-          </div> : <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} />}
+          </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} />{artifact.kind === "website" && !content.website && role !== "reviewer" && !dirty && !conflict && !uncertainSave && !recovery && <ClaudePilotButton kind="website" brief={project?.brief ?? ""} styleId={style.id} onStart={() => editRevision.current} onDraft={(draft,revision) => { if(editRevision.current !== revision) { notify("Existing edits preserved. Save before generating again."); return; } editRevision.current++; setContent(draft); setDirty(true); setNote("Generated website design"); }} />}</>}
         </div>}
         <div className="cloud-workbench-edit" hidden={view !== "edit"}>
         <div className="cloud-edit-grid account-visual-editor">
@@ -1634,6 +1634,7 @@ export function CloudEditor({
           <div>
             {removedBlock && <div className="account-block-undo"><span role="status">Block removed.</span><button type="button" className="button secondary small" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onClick={undoRemoval}><Undo2 size={14} /> Undo removal</button></div>}
             {removedSection && <div className="account-block-undo"><span role="status">{content.kind === "book" ? "Chapter" : "Section"} removed.</span><button type="button" className="button secondary small" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onClick={undoSectionRemoval}><Undo2 size={14} /> Undo section removal</button></div>}
+            {content.website && <section className="account-content-section"><h3>Website source</h3><p className="small-note">Edit the complete design here. The outline below is a separate content reference.</p>{(["html", "css"] as const).map(field => <label key={field} style={{display:"grid",gap:8,marginBottom:16}}>{field.toUpperCase()}<textarea aria-label={`Website ${field.toUpperCase()}`} rows={16} value={content.website![field]} disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onChange={event => {editRevision.current++; setContent({...content,website:{...content.website!,[field]:event.target.value}}); setDirty(true); setNote("Edited website source");}} /></label>)}</section>}
             {content.sections.map((s, sectionIndex) => (
               <section key={s.id} className="account-content-section">
                 <label className="account-section-title">{content.kind === "book" ? "Chapter" : "Section"} {sectionIndex + 1}

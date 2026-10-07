@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WebsiteDesignSchema } from "./website-contract";
 export const PilotBriefSchema = z.object({
   attemptId: z.string().uuid(), kind: z.enum(["website", "book", "presentation"]),
   brief: z.string().trim().min(3).max(12000), audience: z.string().max(1000).optional(),
@@ -9,3 +10,5 @@ export const PilotDraftSchema = z.object({
  title: z.string().min(1).max(160),
  blocks: z.array(z.object({type:z.enum(["heading","paragraph","quote"]),text:z.string().min(1).max(6000)}).strict()).min(2).max(60),
 }).strict();
+
+export const PilotWebsiteSchema = PilotDraftSchema.extend({website:WebsiteDesignSchema});
