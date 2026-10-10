@@ -380,7 +380,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
     if (!revision.changed) return true;
     const next = { ...workspace, projects: workspace.projects.map(item => item.id === projectId ? {
       ...item, websiteRecord: revision.record, websiteHistory: revision.history, updatedAt: at,
-      activity: [...item.activity, { at, text: "Updated website preview, live link, or hosting details (user-recorded; deployment not verified)." }],
+      activity: [...item.activity, { at, text: "Updated the website preview, live link, or hosting details." }],
     } : item) };
     try { saveLocalWorkspace(next, localStorage); }
     catch { toast("Website details could not be saved. Keep the form open and download a workspace backup before retrying."); return false; }
@@ -1733,6 +1733,8 @@ function ProjectEditor({
   const [versionNote, setVersionNote] = useState("");
   const [comment, setComment] = useState("");
   const [previewWidth, setPreviewWidth] = useState("desktop");
+  // Lets the title field be cleared while typing; blur restores the saved title.
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const latestProject = useRef(project);
   useEffect(() => {
@@ -1877,14 +1879,11 @@ function ProjectEditor({
         ...project.activity,
         {
           at,
-          text: `Locally marked ${status.replace("_", " ")}. This is an internal record, not a client signature.`,
+          text: `Marked ${status.replace("_", " ")} on this device. This status is for your own tracking and isn't shared with your client.`,
         },
       ],
     });
     notify("Project status updated locally.");
-  }
-  async function generate() {
-    notify("Open an account-saved project to create a new revision. Your local content is preserved.");
   }
   async function exportFile(format: string) {
     setBusy(true);
@@ -1923,7 +1922,7 @@ function ProjectEditor({
         `${project.title.replace(/[^a-z0-9 -]/gi, "").slice(0, 70) || "makeborne"}.${format}`,
       );
       notify(
-        `${format.toUpperCase()} downloaded. This is an export of your manually authored content.`,
+        `${format.toUpperCase()} downloaded.`,
       );
     } catch (error) {
       notify(
@@ -1982,14 +1981,13 @@ function ProjectEditor({
             className="title-input"
             aria-label="Project title"
             maxLength={160}
-            value={project.title}
-            onChange={(e) =>
-              update({
-                ...project,
-                title: e.target.value.trim() ? e.target.value : project.title,
-                updatedAt: now(),
-              })
-            }
+            value={titleDraft ?? project.title}
+            onChange={(e) => {
+              setTitleDraft(e.target.value);
+              if (e.target.value.trim())
+                update({ ...project, title: e.target.value, updatedAt: now() });
+            }}
+            onBlur={() => setTitleDraft(null)}
           />
           <p>
             {kindLabel[project.kind]} · {client?.name || "Personal project"} ·
@@ -2344,6 +2342,8 @@ function ProjectEditor({
                         />
                       </label>
                       {block.image && (
+                        // Device-local data URL; next/image cannot optimize it.
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           className="inspector-image"
                           src={block.image}
@@ -2472,16 +2472,9 @@ function ProjectEditor({
                 <Sparkles size={19} />
                 <h3>A thoughtful next draft.</h3>
                 <p>
-                  Live AI generation is not enabled. Keep writing here, or save
-                  your brief for later.
+                  AI drafts are available in projects saved to your account.
+                  Keep writing here; this project stays on this device.
                 </p>
-                <button
-                  className="button secondary small"
-                  disabled={busy}
-                  onClick={generate}
-                >
-                  {busy ? "Checking service…" : "Check generation availability"}
-                </button>
               </div>
               <div className="export-options">
                 {project.kind === "book" && (
@@ -2593,6 +2586,8 @@ function ArtifactPreview({
   function renderBlock(b: Block) {
     return b.type === "image" ? (
       <figure>
+        {/* Device-local data URL; next/image cannot optimize it. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={b.image} alt={b.text} />
         <figcaption>{b.text}</figcaption>
       </figure>
@@ -2672,17 +2667,30 @@ function ArtifactPreview({
                       active === b.id && select ? "selected-block" : ""
                     }
                     key={b.id}
-                    onClick={() => select?.(b.id)}
+                    onClick={select ? () => select(b.id) : undefined}
+                    role={select ? "button" : undefined}
+                    aria-label={
+                      select
+                        ? `Edit ${b.type}: ${b.text.slice(0, 100) || "Untitled block"}`
+                        : undefined
+                    }
                     tabIndex={select ? 0 : undefined}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") select?.(b.id);
-                    }}
+                    onKeyDown={
+                      select
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              select(b.id);
+                            }
+                          }
+                        : undefined
+                    }
                   >
                     {renderBlock(b)}
                   </div>
                 ))}
               </div>
-              <div className="slide-footer">MAKEBORNE / MANUALLY AUTHORED</div>
+              <div className="slide-footer">MAKEBORNE</div>
             </div>
           ))
         )}
@@ -2761,12 +2769,12 @@ function ArtifactPreview({
         </main>
         <div className="site-contact" id="site-contact">
           <h3>Let’s start a conversation.</h3>
-          <p>A live contact form requires a configured destination.</p>
+          <p>The contact form is shown for layout only in this preview.</p>
           <label>
             Email
             <input type="email" placeholder="you@example.com" disabled />
           </label>
-          <button disabled>Contact form not connected</button>
+          <button disabled>Send message</button>
         </div>
         <footer>{project.title} · Local content preview</footer>
       </div>
@@ -2829,7 +2837,7 @@ function ArtifactPreview({
             </div>
           ))}
       </div>
-      <div className="book-page-end">MAKEBORNE / MANUALLY AUTHORED CONTENT</div>
+      <div className="book-page-end">MAKEBORNE</div>
     </div>
   );
 }

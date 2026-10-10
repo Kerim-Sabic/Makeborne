@@ -51,6 +51,7 @@ import {
   Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { clearAccountLocalData } from "@/lib/account-local-data";
 import { z } from "zod";
 import {
   ArtifactContentSchema,
@@ -366,6 +367,7 @@ export default function CloudStudio() {
     try {
       const { error } = await createClient().auth.signOut();
       if (error) throw error;
+      clearAccountLocalData(accountId);
       setCloudAccount(null);
       setAccountId(null);
       setOverview(null);
@@ -714,7 +716,7 @@ export default function CloudStudio() {
               </label>
               <form onSubmit={createWorkspace}>
                 <label>
-                  Initial owner workspace
+                  New workspace name
                   <input
                     required
                     value={name}
@@ -926,7 +928,7 @@ export default function CloudStudio() {
                                 (p) => p.clientId === c.id,
                               ).length
                             }{" "}
-                            linked projects �{" "}
+                            linked projects ·{" "}
                             {
                               overview.projects.filter(
                                 (p) =>
@@ -981,7 +983,7 @@ export default function CloudStudio() {
                         >
                           Load more{" "}
                           {collection === "artifacts"
-                            ? "content records"
+                            ? "content"
                             : collection}
                         </button>
                       ) : null,
@@ -1026,13 +1028,13 @@ export default function CloudStudio() {
                             </strong>
                             <p>
                               {project?.blocks.length || 0} current content
-                              blocks � {project?.kind}
+                              blocks · {project?.kind}
                             </p>
                             {client && (
                               <>
                                 <h3>Client details to be copied</h3>
                                 <p>
-                                  {client.name} � {client.company}
+                                  {client.name} · {client.company}
                                   <br />
                                   {client.email}
                                   <br />

@@ -38,7 +38,7 @@ export default function PendingCloudWrites({
     if (busy) return;
     if (
       !window.confirm(
-        "Retry this exact saved request? The server will return its original result if it already completed.",
+        "Try saving this again? If it already went through, nothing will be duplicated.",
       )
     )
       return;
@@ -48,13 +48,13 @@ export default function PendingCloudWrites({
       await refresh();
       scan();
       setMessage(
-        "The saved request was confirmed. Review your account projects before continuing.",
+        "Saved. Check your projects to make sure everything looks right.",
       );
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : "The request is still unconfirmed. Its original identity has been preserved.",
+          : "We still couldn't confirm this save. A copy is kept on this device so you can try again.",
       );
     } finally {
       setBusy(false);
@@ -64,14 +64,14 @@ export default function PendingCloudWrites({
   return (
     <section className="cloud-conflict">
       <span className="eyebrow">SAVES AWAITING CONFIRMATION</span>
-      <h3>Keep uncertain work recoverable.</h3>
+      <h3>Some changes may not have saved.</h3>
       <p>
-        These requests have a preserved identity. They are never retried
-        automatically. A content-save draft should be reviewed in its editor
-        before saving again.
+        We couldn&apos;t confirm these saves, so a copy is kept on this device.
+        Nothing is retried automatically. For content changes, open the
+        project and review them in the editor before saving again.
       </p>
       {pending.map((item) => {
-        let label = "Cloud write";
+        let label = "Unsaved change";
         try {
           const body = JSON.parse(item.body);
           label = String(
@@ -104,7 +104,7 @@ export default function PendingCloudWrites({
                 className="button secondary small"
                 onClick={() => download(item)}
               >
-                Download pending request
+                Download a copy
               </button>
               {!version && (
                 <button
@@ -112,7 +112,7 @@ export default function PendingCloudWrites({
                   disabled={busy}
                   onClick={() => retry(item)}
                 >
-                  Retry exact request
+                  Try saving again
                 </button>
               )}
             </div>

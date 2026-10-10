@@ -9,7 +9,8 @@
     "prebuild": "node scripts/prepare-builder-runtime.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node scripts/run-checks.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
