@@ -5,8 +5,10 @@ import { ArrowUpRight, Copy, Globe2, LoaderCircle } from "lucide-react";
 import { cloudAccountGuard } from "./cloud-api";
 import { siteAddress, validSiteSlug, type HostedSite } from "@/lib/hosting/config";
 
-export default function WebsitePublish({ accountId, workspaceId, artifactId, title, version, dirty, disabled, owner }: {
+export default function WebsitePublish({ accountId, workspaceId, artifactId, title, version, dirty, disabled, owner, capture }: {
   accountId:string; workspaceId:string; artifactId:string; title:string; version:number; dirty:boolean; disabled:boolean; owner:boolean;
+  /** React projects: render the saved site and return static HTML to publish. */
+  capture?: () => Promise<string>;
 }) {
   const [site,setSite]=useState<HostedSite|null>(null);
   const [slug,setSlug]=useState(`${title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,30)||"website"}-${artifactId.slice(0,8)}`);
@@ -28,7 +30,8 @@ export default function WebsitePublish({ accountId, workspaceId, artifactId, tit
     setBusy(true);setMessage("");
     try {
       const assertAccount=cloudAccountGuard(accountId); assertAccount();
-      const operation=pending??{key:crypto.randomUUID(),body:JSON.stringify({live,slug,version,revision:site?.revision??0,acknowledged:true})};
+      const snapshot=!pending&&live&&capture?await capture():undefined;
+      const operation=pending??{key:crypto.randomUUID(),body:JSON.stringify({live,slug,version,revision:site?.revision??0,acknowledged:true,...(snapshot?{snapshot}:{})})};
       setPending(operation);
       const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":operation.key,"X-Makeborne-Account":accountId},body:operation.body,signal:AbortSignal.timeout(60_000)});
       const result=await response.json(); assertAccount();
@@ -51,6 +54,6 @@ export default function WebsitePublish({ accountId, workspaceId, artifactId, tit
     </>}
     {message&&<p className="website-publish-message" role="status">{message}</p>}
     {!ready&&<button type="button" className="website-publish-text-button" onClick={()=>void reload().catch(()=>setMessage("Publishing is temporarily unavailable."))}>Refresh publishing status</button>}
-    <p className="website-publish-note">Publishes the saved content and artwork. Custom code, checkout, forms, and customer domains aren’t included in this release.</p>
+    <p className="website-publish-note">Publishes the saved content and artwork. {capture?"The live site is a static version of your design: interactive scripts, checkout and form submissions aren’t included yet.":"Custom code, checkout, forms, and customer domains aren’t included in this release."}</p>
   </section>;
 }

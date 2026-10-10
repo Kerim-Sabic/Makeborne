@@ -6,12 +6,13 @@ import { ArtifactContentSchema } from "@/lib/domain";
 import { RequestError } from "@/lib/server/http";
 import { renderAssetPreview, MAX_PREVIEW_SOURCE_BYTES } from "@/lib/cloud/image-preview";
 import { renderHostedSite } from "@/lib/hosting/render";
+import { renderHostedSnapshot } from "@/lib/hosting/snapshot";
 import { siteAddress, validSiteSlug } from "@/lib/hosting/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 type Context = { params: Promise<{ workspaceId: string; artifactId: string }> };
-const input = z.object({ live: z.boolean(), slug: z.string().max(48), version: z.number().int().positive(), revision: z.number().int().nonnegative(), acknowledged: z.literal(true) }).strict();
+const input = z.object({ live: z.boolean(), slug: z.string().max(48), version: z.number().int().positive(), revision: z.number().int().nonnegative(), acknowledged: z.literal(true), snapshot: z.string().max(4_000_000).optional() }).strict();
 const columns = "slug,live,version_number,revision,updated_at";
 
 export async function GET(_request: Request, context: Context) {
@@ -27,7 +28,7 @@ export async function GET(_request: Request, context: Context) {
 
 export async function POST(request: Request, context: Context) {
   try {
-    const body = await cloudBody(request, input, 2000);
+    const body = await cloudBody(request, input, 4_200_000);
     const key = requestKey(request);
     const { workspaceId, artifactId } = await context.params;
     validId(artifactId);
@@ -45,7 +46,12 @@ export async function POST(request: Request, context: Context) {
       databaseError(vError);
       if (!version) throw new RequestError("NOT_FOUND","Save a version before publishing.",404);
       const content = ArtifactContentSchema.parse(version.content);
-      if (content.websiteSource) throw new RequestError("BUILD_REQUIRED", "Build and verify this source project before publishing it.", 409);
+      if (content.websiteSource) {
+        // React projects publish as a static snapshot rendered in the editor's sandbox.
+        if (!body.snapshot) throw new RequestError("SNAPSHOT_REQUIRED", "Open the preview and publish again so the latest render can be captured.", 409);
+        try { html = renderHostedSnapshot(body.snapshot, content.title, content.websiteSource.designDirection?.positioning.slice(0, 160) ?? content.title, siteAddress(body.slug)); }
+        catch (error) { throw new RequestError("SITE_NOT_READY", error instanceof Error ? error.message : "Review this website before publishing."); }
+      }
       const sourceIds = [...new Set(content.sections.flatMap(section => section.blocks.flatMap(block => block.sourceIds)))];
       if (sourceIds.length) {
         const { data: sources, error: sourceError } = await client.from("sources").select("id,permission,approved").eq("workspace_id", workspaceId).eq("project_id", artifact.project_id).in("id", sourceIds);
@@ -69,7 +75,7 @@ export async function POST(request: Request, context: Context) {
         if(total>2_500_000) throw new RequestError("SITE_TOO_LARGE","Reduce image sizes before publishing (2.5 MB combined image limit).",413);
         images.set(id,`data:image/webp;base64,${bytes.toString("base64")}`);
       }
-      try { html=renderHostedSite(content,version.style_snapshot,siteAddress(body.slug),images); }
+      if (!content.websiteSource) try { html=renderHostedSite(content,version.style_snapshot,siteAddress(body.slug),images); }
       catch(error) { throw new RequestError("SITE_NOT_READY",error instanceof Error ? error.message : "Review this website before publishing."); }
       if(Buffer.byteLength(html)>4_000_000) throw new RequestError("SITE_TOO_LARGE","This website exceeds the 4 MB publishing limit.",413);
     }

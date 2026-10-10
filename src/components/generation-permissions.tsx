@@ -11,10 +11,12 @@ export function useGenerationConsent(accountId:string|null,initial:GenerationCon
   useEffect(()=>{
     if(!accountId)return;
     const controller=new AbortController();
-    fetch("/api/generate",{cache:"no-store",headers:{"X-Makeborne-Account":accountId},signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15_000)])})
-      .then(async response=>response.ok?response.json():null)
-      .then(value=>{if(!controller.signal.aborted)setAccess({accountId,enabled:value?.operatorSubmissionEnabled===true});})
-      .catch(()=>{if(!controller.signal.aborted)setAccess({accountId,enabled:false});});
+    const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(15_000)]);
+    const read=(path:string)=>fetch(path,{cache:"no-store",headers:{"X-Makeborne-Account":accountId},signal}).then(response=>response.ok?response.json():null).catch(()=>null);
+    // The live builder (streaming) or the operator worker path can start a website from the prompt.
+    void Promise.all([read("/api/generate"),read("/api/build")]).then(([worker,builder])=>{
+      if(!controller.signal.aborted)setAccess({accountId,enabled:worker?.operatorSubmissionEnabled===true||builder?.available===true});
+    });
     return()=>controller.abort();
   },[accountId]);
   const processing=permissions.accountId===accountId&&permissions.processing;

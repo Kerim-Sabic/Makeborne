@@ -24,6 +24,16 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // Static preview runtime (React + bundler). Sandboxed previews have an
+        // opaque origin, so module scripts need CORS. Contains no user data.
+        source: "/builder-runtime/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
+        ],
+      },
       ...["studio", "chat", "login", "billing", "admin", "auth", "api"].map((route) => ({
         source: `/${route}/:path*`,
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],

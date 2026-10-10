@@ -130,7 +130,7 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
           {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
           <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>
-          <p className="mk-availability">{immediateWebsite ? "Your website request starts after your brief is saved." : "An account and creation plan are required. Public AI generation is coming next."}</p>
+          <p className="mk-availability">{immediateWebsite ? "Your website starts building as soon as your project opens." : "Sign in to start building. New accounts include free trial credits."}</p>
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>

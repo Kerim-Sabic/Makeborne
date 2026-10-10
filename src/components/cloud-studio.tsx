@@ -13,6 +13,11 @@ import WebsiteSourceDownload from "./website-source-download";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
+import LiveBuilder, { type LiveUpdate } from "./live-builder";
+import LivePreview from "./live-preview";
+import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
+import "@/app/live-builder.css";
+import { captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
 import "@/app/cloud-workbench.css";
 const WebsiteSourceEditor = dynamic(() => import("./website-source-editor"), {ssr: false, loading: () => <p role="status">Opening code editor…</p>});
 import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
@@ -22,7 +27,7 @@ import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type Removed
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
-import { useCallback, useEffect, useEffectEvent, useState, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useState, useRef } from "react";
 import {
   ArrowLeft,
   ArrowUp,
@@ -32,6 +37,7 @@ import {
   ArrowRight,
   Cloud,
   FileText,
+  Globe2,
   Eye,
   History,
   PencilLine,
@@ -1107,8 +1113,17 @@ export function CloudEditor({
   back: () => void;
   notify: (s: string) => void;
 }) {
-  const [view, setView] = useState<"preview" | "edit" | "history">("preview");
+  const [view, setView] = useState<"preview" | "edit" | "history" | "publish">("preview");
   const [generatedVersionId,setGeneratedVersionId]=useState<string|null>(null);
+  const [builderAvailable, setBuilderAvailable] = useState(false);
+  const [live, setLive] = useState<LiveUpdate | null>(null);
+  const [autoStart, setAutoStart] = useState<string | null>(null);
+  useEffect(() => {
+    if (artifact.kind !== "website") return;
+    let current = true;
+    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) setBuilderAvailable(value?.available === true); }).catch(() => undefined);
+    return () => { current = false; };
+  }, [artifact.kind]);
   const recoveryKey = `makeborne.cloud-draft.${accountId}.${workspaceId}.${artifact.id}`;
   const [recovery, setRecovery] = useState<RecoveryDraft | null>(null);
   const saveBusy = useRef(false);
@@ -1486,6 +1501,20 @@ export function CloudEditor({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const previewBlocks = content?.sections.flatMap(section => section.blocks) ?? [];
+  const useLiveBuilder = builderAvailable && artifact.kind === "website" && role !== "reviewer";
+  const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
+    .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content])), [content?.websiteSource]);
+  // A project created from the home prompt starts building as soon as it opens.
+  useEffect(() => {
+    if (!useLiveBuilder || !content || content.websiteSource || !project?.brief.trim() || expectedVersion > 1) return;
+    const scope = { workspaceId, projectId: artifact.projectId, artifactId: artifact.id };
+    try {
+      const reference = readGenerationReference(localStorage, accountId, scope);
+      if (!reference?.autoStart || reference.jobId) return;
+      saveGenerationReference(localStorage, { ...reference, autoStart: false });
+      setAutoStart(project.brief.trim());
+    } catch { /* storage unavailable: the user can send the brief manually */ }
+  }, [useLiveBuilder, content, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
   const isStartingDraft = !content?.websiteSource && (!previewBlocks.length || (expectedVersion <= 1 && previewBlocks.length === 1 && previewBlocks[0].type === "heading" && previewBlocks[0].text === content?.title && !previewBlocks[0].assetId));
   const PreviewIcon = artifact.kind === "website" ? PanelsTopLeft : artifact.kind === "book" ? BookOpen : Presentation;
   return (
@@ -1523,13 +1552,19 @@ export function CloudEditor({
         </button>
       </div>
       <div className="workbench-layout">
-        <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />
+        {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
+          history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
+          baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
+          defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} autoStart={autoStart}
+          onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
+        : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
             <div>
               <button type="button" aria-pressed={view === "preview"} onClick={() => setView("preview")}><Eye size={15} />Preview</button>
               <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />{content?.website || content?.websiteSource ? "Code" : "Edit"}</button>
               <button type="button" aria-pressed={view === "history"} onClick={() => setView("history")}><History size={15} />History</button>
+              {useLiveBuilder && content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} onClick={() => setView("publish")}><Globe2 size={15} />Publish</button>}
             </div>
             {(content?.website || content?.websiteSource) && role !== "reviewer" ? <WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} /> : <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>}
           </nav>
@@ -1622,19 +1657,24 @@ export function CloudEditor({
       {!content ? (
         <p className="cloud-workbench-loading" role="status">Opening your project…</p>
       ) : (<>
-        {artifact.kind === "website" && role !== "reviewer" && <WebsiteGeneration accountId={accountId} workspaceId={workspaceId} projectId={artifact.projectId} artifactId={artifact.id}
+        {artifact.kind === "website" && role !== "reviewer" && !useLiveBuilder && <WebsiteGeneration accountId={accountId} workspaceId={workspaceId} projectId={artifact.projectId} artifactId={artifact.id}
           baseVersionId={versions.find(version => version.number === expectedVersion)?.id ?? null}
           sourceIds={[...new Set(content.sections.flatMap(section => section.blocks.flatMap(block => block.sourceIds)))]}
           canStart={!dirty && !conflict && !uncertainSave && !recovery && !busy}
           onOutputVersionChange={setGeneratedVersionId}
           onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
-        {view === "preview" && artifact.kind === "website" && (content.websiteSource || generatedVersionId) && (() => {
+        {view === "preview" && useLiveBuilder && (live || content.websiteSource) && <LivePreview
+          files={live?.files ?? sourceFiles}
+          assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
+          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)} />}
+        {view === "preview" && useLiveBuilder && !live && !content.websiteSource && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
+        {view === "preview" && !useLiveBuilder && artifact.kind === "website" && (content.websiteSource || generatedVersionId) && (() => {
           const generated=versions.find(version=>version.id===generatedVersionId);
           const saved=versions.find(version=>version.number===expectedVersion);
           const versionId=generated&&saved&&saved.number>generated.number?saved.id:generatedVersionId??saved?.id;
           return versionId?<SavedWebsitePreview key={`${accountId}:${workspaceId}:${artifact.id}:${versionId}`} accountId={accountId} workspaceId={workspaceId} projectId={artifact.projectId} artifactId={artifact.id} versionId={versionId}/>:<p className="small-note" role="status">Opening the saved website revision…</p>;
         })()}
-        {view === "preview" && style && !(artifact.kind === "website" && (content.websiteSource || generatedVersionId)) && <div className="cloud-workbench-preview">
+        {view === "preview" && style && !useLiveBuilder && !(artifact.kind === "website" && (content.websiteSource || generatedVersionId)) && <div className="cloud-workbench-preview">
           {isStartingDraft ? <div className="cloud-workbench-empty">
             <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
             <h3>Your {artifact.kind} starts here</h3>
@@ -1642,6 +1682,8 @@ export function CloudEditor({
             <button type="button" onClick={() => setView("edit")} className="button secondary small"><PencilLine size={14} />Open editor</button>
           </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} /></>}
         </div>}
+        {view === "publish" && useLiveBuilder && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
+          capture={() => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} /></div>}
         <div className="cloud-workbench-edit" hidden={view !== "edit"}>
         {content.websiteSource ? (view === "edit" && <WebsiteSourceEditor source={content.websiteSource} readOnly={role === "reviewer" || uncertainSave || conflict || !!recovery || lockChangePending} onChange={(next, summary) => {
           if (role === "reviewer" || uncertainSave || conflict || recovery || lockChangePending) return;
