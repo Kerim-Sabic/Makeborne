@@ -25,6 +25,6 @@ export default function CloudClientOutreach({ initialClient, workspaceId, canEdi
           setClient(result.client); onSaved(result.client); return true;
         } finally { setBusy(false); onSaving?.(false); }
       }} />
-    <p className="small-note">A conflicting save preserves your draft. Copy your edits before closing and reloading the workspace to reconcile changes.</p>
+    <p className="small-note">If these details were changed somewhere else at the same time, your draft is kept. Copy your edits, then reload the workspace to see the latest version.</p>
   </section>;
 }

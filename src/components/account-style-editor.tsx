@@ -37,7 +37,7 @@ export default function AccountStyleEditor({ style, kind, disabled, onChange }: 
         <button className="button secondary small" type="submit">Apply custom style</button>
       </fieldset>
     </form>
-    {disabled && <p className="small-note">Design changes are unavailable while this project is read-only or needs save reconciliation.</p>}
+    {disabled && <p className="small-note">Design changes are unavailable while this project is read-only or has a save that needs your review.</p>}
     {error && <p role="alert">{error}</p>}
   </details>;
 }

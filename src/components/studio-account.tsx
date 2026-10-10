@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, CreditCard, LogOut, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { clearAccountLocalData } from "@/lib/account-local-data";
 
 export default function StudioAccount({ initialEmail, enabled, variant = "studio" }: { initialEmail?: string | null; enabled?: boolean; variant?: "studio" | "home" | "home-mobile" }) {
   const router = useRouter();
@@ -44,8 +45,11 @@ export default function StudioAccount({ initialEmail, enabled, variant = "studio
     if (busy) return;
     setBusy(true); setError("");
     try {
-      const { error } = await createClient().auth.signOut({ scope: "local" });
+      const client = createClient();
+      const { data } = await client.auth.getSession();
+      const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
+      clearAccountLocalData(data.session?.user.id);
       setEmail(null);
       router.refresh();
     } catch { setError("Could not sign out. Please try again."); }

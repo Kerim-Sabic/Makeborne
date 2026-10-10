@@ -178,7 +178,7 @@ async function checkCreationGate() {
     "../billing/access": {requireCreationAccess:async()=>({id:"verified-administrator"})},
     "../account/privileges": {getAccountPrivileges:async()=>({isAdmin:true})},
     "../server/http": {RequestError,sameOrigin:()=>{}},
-    "../routing/proposal": {},"./submission-contract": {},
+    "../routing/proposal": {},"./submission-contract": {},"./execution-operation": {},
   });
   const route = load("src/app/api/generate/route.ts", {
     "@/lib/account/privileges": {getAccountPrivileges: async () => ({isAdmin: true})},
@@ -200,7 +200,7 @@ async function checkCreationGate() {
     "../billing/database": {billingDatabase:()=>{throw Error("Closed preparation reached service database");}},
     "../server/http": {RequestError,sameOrigin:()=>{}},
     "./submission-server": submission,
-    "./submission-contract": {}, "./prepare-saved-website": {},
+    "./submission-contract": {}, "./prepare-saved-website": {}, "./prepare-saved-presentation": {},
   });
   await assert.rejects(preparation.prepareGeneration(new Request("https://makeborne.com/api/generate/prepare", {method:"POST"})),
     error=>error.code==="GENERATION_NOT_ENABLED"&&error.status===503);
