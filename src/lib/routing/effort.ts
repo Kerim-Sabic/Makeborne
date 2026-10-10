@@ -4,7 +4,8 @@ export const EFFORT_LEVELS = ["light", "medium", "high", "super_high", "ultra"] 
 export const EffortLevelSchema = z.enum(EFFORT_LEVELS);
 export type EffortLevel = z.infer<typeof EffortLevelSchema>;
 export const DEFAULT_EFFORT: EffortLevel = "medium";
-export const EFFORT_POLICY_VERSION = "effort-v1";
+export const EFFORT_POLICY_VERSION = "effort-v2";
+export const ReasoningIntensitySchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
 
 export const EFFORT_PRESENTATION: Readonly<Record<EffortLevel, Readonly<{ label: string; purpose: string }>>> = Object.freeze({
   light: Object.freeze({ label: "Light", purpose: "Focused work for small changes and clear requests." }),
@@ -17,6 +18,7 @@ export const EFFORT_PRESENTATION: Readonly<Record<EffortLevel, Readonly<{ label:
 export type EffortPolicy = Readonly<{
   version: typeof EFFORT_POLICY_VERSION;
   level: EffortLevel;
+  reasoningIntensity: z.infer<typeof ReasoningIntensitySchema>;
   maximumPlanningSteps: number;
   maximumReviewPasses: number;
   maximumAttemptsPerStep: number;
@@ -29,10 +31,13 @@ export type EffortPolicy = Readonly<{
 const budgets: Record<EffortLevel, readonly [number, number, number]> = {
   light: [1, 1, 1], medium: [2, 1, 2], high: [3, 2, 2], super_high: [4, 3, 3], ultra: [6, 4, 3],
 };
+const reasoning: Record<EffortLevel, z.infer<typeof ReasoningIntensitySchema>> = {
+  light: "low", medium: "medium", high: "high", super_high: "xhigh", ultra: "max",
+};
 export function getEffortPolicy(input: unknown): EffortPolicy {
   const level = EffortLevelSchema.parse(input);
   const [maximumPlanningSteps, maximumReviewPasses, maximumAttemptsPerStep] = budgets[level];
-  return Object.freeze({ version: EFFORT_POLICY_VERSION, level, maximumPlanningSteps, maximumReviewPasses, maximumAttemptsPerStep, minimumQuality: 80 });
+  return Object.freeze({ version: EFFORT_POLICY_VERSION, level, reasoningIntensity: reasoning[level], maximumPlanningSteps, maximumReviewPasses, maximumAttemptsPerStep, minimumQuality: 80 });
 }
 
 /** Resolve trusted job caps before routing each step. This never authorizes dispatch.

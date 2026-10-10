@@ -1,11 +1,12 @@
 import type { Kind, Style } from "../components/studio-model";
 import { templateDirections } from "./template-directions";
+import { AUTOMATIC_STYLE } from "./automatic-style";
 
 /** Saved customisations take precedence; only missing authored directions are added. */
 export function creationStyles(saved: Style[], kind?: Kind): Style[] {
   const ids = new Set(saved.map(style => style.id));
   const authored = templateDirections;
-  const options = [...saved, ...authored.filter(item => !ids.has(item.style.id)).map(item => ({ ...item.style }))];
+  const options = [{...AUTOMATIC_STYLE}, ...saved.filter(style => style.id !== AUTOMATIC_STYLE.id), ...authored.filter(item => !ids.has(item.style.id)).map(item => ({ ...item.style }))];
   if (!kind) return options;
   const suggested = new Set(authored.filter(item => item.kind === kind).map(item => item.style.id));
   const authoredIds = new Set(authored.map(item => item.style.id));

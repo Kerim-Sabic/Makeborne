@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!build.mjs
+!identity.mjs
+!watchdog.mjs
+!toolchain
+!toolchain/package.json
+!toolchain/package-lock.json

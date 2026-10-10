@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ArtifactContentSchema, type ArtifactContent } from "../domain";
 import { GenerationInputSchema } from "../routing/proposal";
-import { getStyleDesignInstructions } from "../style-design-instructions";
+import { getModelStyleReference, getStyleDesignInstructions } from "../style-design-instructions";
 
 const uuid = z.string().uuid();
 const block = z.object({
@@ -126,7 +126,7 @@ export function buildDraftPrompt(contextInput: unknown) {
   const format = kind === "book"
     ? "Create coherent, useful chapters with an opening, practical detail, and a purposeful ending. Include book artwork. Design a specific editorial cover or interior image brief; never substitute website layouts."
     : kind === "presentation"
-      ? `Create one section per slide, a clear narrative, concise slide copy and deliberate pacing. Presentation mode: ${context.presentationMode}. In full_visual mode include an image block and slide_design artwork request for every slide; its prompt must specify all exact slide wording and the approved typography, palette and composition. Retain the slide copy in editable text blocks as well.`
+      ? `Create one section per slide, a clear narrative, concise slide copy and deliberate pacing. For new editable copy, use the section title as the slide headline and paragraph/quote blocks for its supporting content. Give each independent point or process step its own paragraph block so it can be composed independently; avoid packing several unrelated steps into one paragraph. Do not split or rewrite supplied blocks when the wording policy is preserve. Presentation mode: ${context.presentationMode}. In full_visual mode include an image block and slide_design artwork request for every slide; its prompt must specify all exact slide wording and the approved typography, palette and composition. Retain the slide copy in editable text blocks as well.`
       : "Create website sections with a clear hierarchy, useful copy, responsive design intent and a clear next action. Do not invent testimonials, awards, customers, performance figures, contact details or working integrations.";
   return {
     instructions: [
@@ -144,6 +144,8 @@ export function buildDraftPrompt(contextInput: unknown) {
       "For needed artwork use an image block with assetId null and one matching artworkRequests entry. Write a specific art-direction prompt consistent with the approved style. Existing available artwork can retain its assetId. Text generation does not create or validate image pixels.",
       "Put consequential missing facts in questions rather than fabricating them. Do not claim that a website is published, an integration works, a fact is verified, or a product passed quality review. Return a draft for subsequent review.",
     ].join("\n"),
-    input: JSON.stringify(context),
+    // This is the model's reference projection, not a replacement for the
+    // validated stored input or its approval hash. Never mutate that authority.
+    input: JSON.stringify({...context, input: {...context.input, style: getModelStyleReference(context.input.style.id, context.input.style)}}),
   };
 }

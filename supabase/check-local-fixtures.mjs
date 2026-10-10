@@ -15,6 +15,30 @@ const path = process.env.MAKEBORNE_LOCAL_STATUS_FILE;
 if (!path) { console.log("NOT RUN: provide MAKEBORNE_LOCAL_STATUS_FILE securely."); process.exit(2); }
 let stage = "read local credentials";
 const clients = [];
+const fixtureAccountIds = [];
+// Current schema requires creation access even for disposable workspace setup.
+// Grant only the generated local actors; never enable public billing or modify real users.
+async function localFixtureGrants(enabled) {
+  if (fixtureAccountIds.length === 0) return;
+  if (!fixtureAccountIds.every(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+    throw new Error("LOCAL_FIXTURE_ID_INVALID");
+  }
+  const ids = fixtureAccountIds.map(id => `'${id}'::uuid`).join(",");
+  const sql = enabled
+    ? `insert into makeborne_private.account_privileges(user_id,is_admin,unlimited_credits,reason)
+       select id,true,false,'Disposable local isolation fixture' from auth.users where id in (${ids});`
+    : `delete from makeborne_private.account_privileges where user_id in (${ids})
+       and reason='Disposable local isolation fixture';`;
+  await new Promise((resolve, reject) => {
+    const child = spawn("docker", ["exec", "-i", "supabase_db_makeborne-local", "psql",
+      "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
+    {windowsHide: true, timeout: 15000, stdio: ["pipe", "ignore", "ignore"]});
+    child.on("error", () => reject(new Error("LOCAL_FIXTURE_GRANT_PROCESS_FAILED")));
+    child.on("exit", code => code === 0 ? resolve() : reject(new Error("LOCAL_FIXTURE_GRANT_FAILED")));
+    child.stdin.on("error", () => reject(new Error("LOCAL_FIXTURE_GRANT_INPUT_FAILED")));
+    child.stdin.end(sql);
+  });
+}
 try {
   const status = JSON.parse((await readFile(path, "utf8")).replace(/^\uFEFF/, ""));
   const publicKey = status.PUBLISHABLE_KEY || status.ANON_KEY;
@@ -54,8 +78,12 @@ try {
     const login = requireData(await client.auth.signInWithPassword({ email, password }));
     if (!login.session?.access_token || account.user.id !== login.user.id) throw new Error("AUTH_CONTROL_FAILED");
     actors[role] = { client, id: account.user.id, token: login.session.access_token };
+    if (role !== "reviewer") fixtureAccountIds.push(account.user.id);
   }
   console.log("PASS: four independent local accounts authenticate");
+  stage = "grant scoped local fixture creation access";
+  await localFixtureGrants(true);
+  console.log("PASS: local owner fixtures receive scoped admin creation access without unlimited credits; public billing remains unchanged");
   for (const role of ["ownerA", "ownerB"]) {
     stage = `create ${role} workspace and project`;
     const actor = actors[role];
@@ -130,6 +158,59 @@ try {
   const preserved = requireData(await actors.ownerA.client.storage.from(bucket).download(objectPath));
   if (!Buffer.from(await preserved.arrayBuffer()).equals(bytes)) throw new Error("STORAGE_BYTES_CHANGED");
   console.log("PASS: owner upload/download and reviewer read; cross-workspace read, reviewer upload and overwrite denied");
+  stage = "verify project-scoped source and asset references";
+  const siblingProject = requireData(await actors.ownerA.client.rpc("makeborne_create_record", {
+    p_workspace_id: actors.ownerA.workspace, p_request_key: randomUUID(), p_operation: "create_project",
+    p_payload: {title: "Sibling reference fixture", kind: "website"},
+  })).record.id;
+  const referenceLocations = [
+    {workspace: actors.ownerA.workspace, project: actors.ownerA.project},
+    {workspace: actors.ownerA.workspace, project: siblingProject},
+    {workspace: actors.ownerB.workspace, project: actors.ownerB.project},
+  ];
+  const fixtureAssets = requireData(await admin.from("assets").insert(referenceLocations.map(location => ({
+    workspace_id: location.workspace, project_id: location.project,
+    object_path: `${location.workspace}/${randomUUID()}/reference.png`, content_type: "image/png",
+  }))).select("id,project_id"));
+  const fixtureSources = requireData(await admin.from("sources").insert(referenceLocations.map(location => ({
+    workspace_id: location.workspace, project_id: location.project, kind: "text", title: "Local source fixture",
+    content: "Permitted local fixture content", approved: true,
+  }))).select("id,project_id"));
+  const assetFor = projectId => fixtureAssets.find(asset => asset.project_id === projectId).id;
+  const sourceFor = projectId => fixtureSources.find(source => source.project_id === projectId).id;
+  const referenceArtifact = requireData(await actors.ownerA.client.rpc("makeborne_create_record", {
+    p_workspace_id: actors.ownerA.workspace, p_request_key: randomUUID(), p_operation: "create_artifact",
+    p_payload: {project_id: actors.ownerA.project, title: "Reference isolation fixture", kind: "website"},
+  })).record.id;
+  const referenceVersion = {
+    p_workspace_id: actors.ownerA.workspace, p_artifact_id: referenceArtifact, p_expected_version: 0,
+    p_content: {schemaVersion: 1, kind: "website", title: "Reference isolation fixture", sections: [{
+      id: randomUUID(), title: "Fixture section", blocks: [{id: randomUUID(), type: "paragraph", text: "Fixture",
+        locked: false, assetId: assetFor(actors.ownerA.project), sourceIds: [sourceFor(actors.ownerA.project)]}],
+    }]},
+    p_style: {id: "fixture", name: "Fixture", version: 1, typography: {headingFont: "Inter", bodyFont: "Inter"},
+      colors: {ink: "#16181D"}, description: "Local reference fixture", referenceAssetIds: []},
+    p_asset_ids: [assetFor(actors.ownerA.project)], p_change_summary: "Local reference control", p_request_key: randomUUID(),
+  };
+  const ownVersion = requireData(await actors.ownerA.client.rpc("makeborne_save_artifact_version", referenceVersion));
+  if (ownVersion.version.version_number !== 1) throw new Error("PROJECT_REFERENCE_CONTROL_FAILED");
+  for (const location of referenceLocations.slice(1)) {
+    for (const referenceKind of ["asset", "source"]) {
+      const changed = structuredClone(referenceVersion);
+      changed.p_expected_version = 1;
+      changed.p_request_key = randomUUID();
+      if (referenceKind === "asset") {
+        changed.p_asset_ids = [assetFor(location.project)];
+        changed.p_content.sections[0].blocks[0].assetId = assetFor(location.project);
+      } else changed.p_content.sections[0].blocks[0].sourceIds = [sourceFor(location.project)];
+      const rejected = await actors.ownerA.client.rpc("makeborne_save_artifact_version", changed);
+      if (!rejected.error || rejected.error.code !== "23514") throw new Error("FOREIGN_PROJECT_REFERENCE_ACCEPTED");
+    }
+  }
+  const preservedVersion = requireData(await actors.ownerA.client.from("artifacts").select("current_version").eq("id", referenceArtifact).single());
+  const preservedSnapshots = requireData(await actors.ownerA.client.from("artifact_versions").select("id").eq("artifact_id", referenceArtifact));
+  if (preservedVersion.current_version !== 1 || preservedSnapshots.length !== 1) throw new Error("REJECTED_REFERENCE_CHANGED_REVISION");
+  console.log("PASS: own-project asset/source references save; sibling-project and foreign-workspace references reject without changing accepted revision");
   stage = "revoke reviewer membership";
   const revoked = requireData(await admin.from("workspace_members").delete()
     .eq("workspace_id", actors.ownerA.workspace).eq("user_id", actors.reviewer.id).select("user_id"));
@@ -139,12 +220,19 @@ try {
   await deniedStorage(await actors.reviewer.client.storage.from(bucket).download(objectPath), "REVOKED_MEMBER_STORAGE_ACCESS");
   console.log("PASS: membership revocation immediately removes project and storage access with existing session");
   console.log(`LOCAL FIXTURES PASSED. Run ${runId}; fixtures remain in the dedicated local database for inspection.`);
-  console.log("Not production acceptance: browser auth/recovery, cross-project asset references, provider workers, payments and hosting remain separate checks.");
+  console.log("Not production acceptance: browser auth/recovery, provider workers, payments and hosting remain separate checks.");
 } catch (error) {
   // Never log upstream exception messages: they can contain request URLs or credentials.
   const code = /^[A-Z0-9_]{3,60}$/.test(error?.message ?? "") ? error.message : "DETAILS_REDACTED";
   console.error(`FAIL: ${stage} (${code}). Local fixtures may remain; no unrelated data was changed.`);
   process.exitCode = 1;
 } finally {
+  try {
+    await localFixtureGrants(false);
+    console.log("PASS: temporary local fixture administrator grants revoked");
+  } catch {
+    console.error("FAIL: temporary local fixture grants require scoped cleanup; never enable public billing to bypass this failure.");
+    process.exitCode = 1;
+  }
   for (const client of clients) await client.auth.stopAutoRefresh();
 }

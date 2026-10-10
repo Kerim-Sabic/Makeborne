@@ -10,12 +10,9 @@ export class RequestError extends Error {
   }
 }
 
-export async function boundedJson(
-  request: Request,
-  limit = 256_000,
-): Promise<unknown> {
-  if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json")
-    throw new RequestError("CONTENT_TYPE", "Send JSON content.", 415);
+/** Shared streaming limit for JSON and one-use preview form posts. */
+export async function boundedBytes(request:Pick<Request,"headers"|"body">,limit=256_000,signal?:AbortSignal):Promise<Uint8Array> {
+  signal?.throwIfAborted();
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > limit)
     throw new RequestError(
@@ -28,9 +25,13 @@ export async function boundedJson(
     throw new RequestError("EMPTY_REQUEST", "Request content is missing.");
   let size = 0;
   const chunks: Uint8Array[] = [];
+  const abort=()=>{void reader.cancel().catch(()=>{});};
+  signal?.addEventListener("abort",abort,{once:true});
   try {
+    signal?.throwIfAborted();
     while (true) {
       const { value, done } = await reader.read();
+      signal?.throwIfAborted();
       if (done) break;
       size += value.byteLength;
       if (size > limit) {
@@ -49,17 +50,16 @@ export async function boundedJson(
       bytes.set(chunk, offset);
       offset += chunk.length;
     }
-    try {
-      return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    } catch {
-      throw new RequestError(
-        "INVALID_JSON",
-        "Request content must be valid JSON.",
-      );
-    }
-  } finally {
-    reader.releaseLock();
-  }
+    return bytes;
+  } finally {signal?.removeEventListener("abort",abort);reader.releaseLock();}
+}
+
+export async function boundedJson(request:Request,limit=256_000):Promise<unknown> {
+  if(request.headers.get("content-type")?.split(";")[0].trim().toLowerCase()!=="application/json")
+    throw new RequestError("CONTENT_TYPE","Send JSON content.",415);
+  const bytes=await boundedBytes(request,limit,request.signal);
+  try {return JSON.parse(new TextDecoder("utf-8",{fatal:true,ignoreBOM:false}).decode(bytes));}
+  catch {throw new RequestError("INVALID_JSON","Request content must be valid JSON.");}
 }
 
 export function sameOrigin(request: Request) {

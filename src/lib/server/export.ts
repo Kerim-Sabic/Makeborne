@@ -1,10 +1,16 @@
 import "server-only";
+import {createHash} from "node:crypto";
 import { z } from "zod";
 import PptxGenJS from "pptxgenjs";
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import sharp from "sharp";
 import { RequestError } from "./http";
 import { artifactDesignCss } from "../artifact-design";
+import {BOOK_PAGE} from "../book-layout";
+import {groupPresentationBlocks, slideBoxPercent} from "../presentations/composition";
+import {SlideDesignSchema,slideDesignSourceIssues} from "../presentations/slide-design";
+import {presentationScene} from "../presentations/render-scene";
+import {NATIVE_SLIDE_CSS} from "../presentations/native-css";
 
 const imageSchema = z
   .string()
@@ -43,6 +49,7 @@ export const ExportRequestSchema = z
             type: z.enum(["heading", "paragraph", "quote", "image"]),
             text: z.string().max(20000).default(""),
             image: imageSchema.optional(),
+
           })
           .strict(),
       )
@@ -56,6 +63,8 @@ export const ExportRequestSchema = z
             title: z.string().max(200),
             body: z.string().max(5000),
             notes: z.string().max(10000).optional(),
+            design: SlideDesignSchema.optional(),
+            sourceBlocks: z.array(z.object({id:z.string().uuid(),type:z.enum(["paragraph","quote","image"]),text:z.string().max(20000),assetId:z.string().uuid().nullable(),image:imageSchema.optional()}).strict()).max(40).optional(),
             image: imageSchema.optional(),
           })
           .strict(),
@@ -133,6 +142,15 @@ export const ExportRequestSchema = z
     });
     const slideIds = new Set<string>();
     input.slides.forEach((slide, index) => {
+      if(slide.design){
+        if(input.kind!=="presentation"||input.presentationMode!=="native"||!slide.sourceBlocks||slide.image)ctx.addIssue({code:"custom",path:["slides",index,"design"],message:"Custom geometry requires native slide source blocks."});
+        else{
+          for(const message of slideDesignSourceIssues(slide.design,{title:slide.title,blocks:slide.sourceBlocks}))ctx.addIssue({code:"custom",path:["slides",index,"design"],message});
+          if(slide.body!==slide.sourceBlocks.map(block=>block.text).filter(Boolean).join("\n\n"))ctx.addIssue({code:"custom",path:["slides",index,"body"],message:"Custom slide text must match the supplied source blocks."});
+          for(const block of slide.sourceBlocks)if((block.type==='image')!==!!block.image)ctx.addIssue({code:"custom",path:["slides",index,"sourceBlocks"],message:"Each image block requires its own embedded artwork."});
+          if(new Set(slide.sourceBlocks.map(block=>block.id)).size!==slide.sourceBlocks.length)ctx.addIssue({code:"custom",path:["slides",index,"sourceBlocks"],message:"Slide source block IDs must be unique."});
+        }
+      }else if(slide.sourceBlocks)ctx.addIssue({code:"custom",path:["slides",index,"sourceBlocks"],message:"Custom source blocks require saved geometry."});
       if (slideIds.has(slide.id))
         ctx.addIssue({
           code: "custom",
@@ -259,11 +277,11 @@ export async function prepareExport(
       ...(block.image ? { image: await normalise(block.image) } : {}),
     });
   const slides = [];
-  for (const slide of input.slides)
-    slides.push({
-      ...slide,
-      ...(slide.image ? { image: await normalise(slide.image) } : {}),
-    });
+  for (const slide of input.slides) {
+    const sourceBlocks: ExportRequest["slides"][number]["sourceBlocks"] = slide.sourceBlocks ? [] : undefined;
+    for (const block of slide.sourceBlocks ?? []) sourceBlocks!.push({...block, ...(block.image ? {image: await normalise(block.image)} : {})});
+    slides.push({...slide, ...(slide.image ? {image: await normalise(slide.image)} : {}), ...(sourceBlocks ? {sourceBlocks} : {})});
+  }
   let slideAspectRatio = input.slideAspectRatio;
   if (input.presentationMode === "visual") {
     const ratios = { "16:9": 16 / 9, "3:2": 3 / 2, "4:3": 4 / 3, "1:1": 1 };
@@ -332,17 +350,12 @@ export function htmlDocument(input: ExportRequest) {
       .map((slide, index) =>
         input.presentationMode === "visual"
           ? `<section class="slide visual" aria-label="Slide ${index + 1}"><img src="${slide.image}" alt="${escapeHtml(slide.title || `Slide ${index + 1}`)}"></section>`
-          : `<section class="slide${!slide.image && slide.title.length <= 100 && slide.body.length <= 180 ? " slide-statement" : ""}"><span class="slide-number">${String(index + 1).padStart(2, "0")}</span><h2>${escapeHtml(slide.title)}</h2><div class="slide-body">${slide.image ? `<img src="${slide.image}" alt="${escapeHtml(slide.title)}">` : ""}<p>${escapeHtml(slide.body)}</p></div></section>`,
+          : nativeSlideHtml(slide, index, slides.length),
       )
       .join("");
-    css = `@page{size:13.333in 7.5in;margin:0}.slide{width:100%;aspect-ratio:16/9;padding:6%;background:${style.background ?? "#F8F7F4"};break-after:page;position:relative;overflow:hidden}.slide h2{font-size:36px;max-width:90%;line-height:1.15}.slide.slide-statement:not(.visual){display:flex;flex-direction:column;justify-content:center}.slide.slide-statement:not(.visual) h2{font-size:64px;max-width:19ch;line-height:1.08;margin:0 0 32px;letter-spacing:-.035em}.slide.slide-statement:not(.visual) .slide-body{font-size:27px;max-width:42ch;line-height:1.55}.slide.slide-statement:not(.visual) .slide-body p{margin:0}.slide-number{font:12px Arial,sans-serif;color:${style.color};display:block;margin-bottom:30px}.slide-body{display:flex;gap:5%;align-items:flex-start;font-size:23px}.slide-body img{width:43%;max-height:300px;object-fit:contain}.visual{padding:0;background:#16181D;display:flex;align-items:center;justify-content:center}.visual img{width:100%;height:100%;object-fit:contain}@media print{.slide{width:13.333in;height:7.5in;aspect-ratio:auto}.slide:last-child{break-after:auto}}`;
-    css = css
-      .replace(
-        "size:13.333in 7.5in",
-        `size:${dimensions.width}in ${dimensions.height}in`,
-      )
-      .replace("aspect-ratio:16/9", `aspect-ratio:${dimensions.ratio}`)
-      .replace("height:7.5in", `height:${dimensions.height}in`);
+    css = input.presentationMode === "native"
+      ? `@page{size:13.333333in 7.5in;margin:0}body{--native-paper:${style.background ?? "#F8F7F4"};--native-ink:${style.textColor ?? "#16181D"};--native-accent:${style.color};--native-heading:${font}}${NATIVE_SLIDE_CSS}.slide{break-after:page}.slide:last-child{break-after:auto}@media print{.slide{width:13.333333in;height:7.5in;aspect-ratio:auto}}`
+      : `@page{size:${dimensions.width}in ${dimensions.height}in;margin:0}.slide{width:100%;aspect-ratio:${dimensions.ratio};break-after:page;overflow:hidden}.visual{padding:0;background:#16181D;display:flex;align-items:center;justify-content:center}.visual img{width:100%;height:100%;object-fit:contain}@media print{.slide{width:${dimensions.width}in;height:${dimensions.height}in;aspect-ratio:auto}.slide:last-child{break-after:auto}}`;
   } else if (input.kind === "website") {
     const sections: { title: string; blocks: ExportRequest["blocks"] }[] = [];
     for (const block of input.blocks) {
@@ -378,12 +391,12 @@ export function htmlDocument(input: ExportRequest) {
         ? `<section class="contents"><span class="eyebrow">CONTENTS</span><h2>A guide to what follows.</h2><ol>${chapters.map((chapter) => `<li><a href="#heading-${escapeHtml(chapter.id)}">${escapeHtml(chapter.text)}</a></li>`).join("")}</ol></section>`
         : "";
     content = `<section class="cover"><h1>${title}</h1>${input.author ? `<p class="book-author">${escapeHtml(input.author)}</p>` : ""}${art ? `<figure><img class="cover-art" src="${art.image}" alt="${escapeHtml(art.text)}">${art.text ? `<figcaption>${escapeHtml(art.text)}</figcaption>` : ""}</figure>` : ""}<span class="cover-rule"></span></section>${toc}<main class="book-body">${bookBodyHtml(input.blocks.filter((block) => block !== art))}<footer>Made with Makeborne</footer></main>`;
-    css = `@page{size:A4;margin:22mm 20mm;@bottom-center{content:counter(page) " / " counter(pages);font:9px Arial,sans-serif;color:${style.textColor ?? "#5C616D"}}}@page:first{@bottom-center{content:none}}.book-quote-context{break-inside:avoid}.cover{min-height:240mm;break-after:page;padding:12mm 0;display:flex;flex-direction:column;gap:12mm}.cover h1{font-size:44px;margin:0;overflow-wrap:anywhere}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.cover-art{width:100%;height:145mm;object-fit:contain}.cover-rule{height:2px;width:60px;background:${style.color};margin-top:auto}.contents{break-after:page;padding:20mm 0}.contents li{padding:8px 0;border-bottom:1px solid #DCDDD9}.book-body h2{margin:35px 0 18px}.book-body h2:not(:first-child){break-before:page}.book-body{font-size:16px}.book-body p{margin-bottom:20px}.book-body>figure{margin:25px 0}body{padding:40px;max-width:920px;margin:auto}@media print{body{padding:0;max-width:none}.cover{min-height:240mm}.cover h1{font-size:40px}.book-body h2{margin-top:0}}`;
+    css = `@page{size:${BOOK_PAGE.widthInches}in ${BOOK_PAGE.heightInches}in;margin:${BOOK_PAGE.marginYInches}in ${BOOK_PAGE.marginXInches}in;@bottom-center{content:counter(page) " / " counter(pages);font:9px Arial,sans-serif;color:${style.textColor ?? "#5C616D"}}}@page:first{@bottom-center{content:none}}.book-quote-context{break-inside:avoid}.cover{min-height:7.8in;break-after:page;padding:12mm 0;display:flex;flex-direction:column;gap:12mm}.cover h1{font-size:44px;margin:0;overflow-wrap:anywhere}.eyebrow{font:11px Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:${style.color}}.cover-art{width:100%;height:145mm;object-fit:contain}.cover-rule{height:2px;width:60px;background:${style.color};margin-top:auto}.contents{break-after:page;padding:20mm 0}.contents li{padding:8px 0;border-bottom:1px solid #DCDDD9}.book-body h2{margin:35px 0 18px}.book-body h2:not(:first-child){break-before:page}.book-body{font-size:11pt}.book-body p{margin-bottom:20px}.book-body>figure{margin:25px 0}body{padding:40px;max-width:920px;margin:auto}@media print{body{padding:0;max-width:none}.cover{min-height:7.8in}.cover h1{font-size:36px}.book-body h2{margin-top:0}}`;
   }
-  const coverPrint = input.kind === "book" ? `@media print{.cover{height:240mm;min-height:0;gap:6mm}.cover h1{flex:none;margin:0}.cover .book-author{flex:none;margin:0}.cover figure{flex:1;min-height:0;display:flex;flex-direction:column;margin:0}.cover .cover-art{flex:1;min-height:0;height:0;width:100%;max-height:none;object-fit:contain}.cover figcaption{flex:none}.cover-rule{flex:none;margin-top:auto}}` : "";
-  return `<!doctype html><html lang="${escapeHtml(input.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}${input.presentationMode === "visual" ? "" : artifactDesignCss(input.styleId, input.kind)}${coverPrint}</style></head><body>${content}</body></html>`;
+  const coverPrint = input.kind === "book" ? `@media print{.cover{height:7.8in;min-height:0;gap:6mm}.cover h1{flex:none;margin:0}.cover .book-author{flex:none;margin:0}.cover figure{flex:1;min-height:0;display:flex;flex-direction:column;margin:0}.cover .cover-art{flex:1;min-height:0;height:0;width:100%;max-height:none;object-fit:contain}.cover figcaption{flex:none}.cover-rule{flex:none;margin-top:auto}}` : "";
+  return `<!doctype html><html lang="${escapeHtml(input.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}${input.kind === "presentation" ? "" : artifactDesignCss(input.styleId, input.kind)}${coverPrint}</style></head><body>${content}</body></html>`;
 }
-export async function pdfDocument(input: ExportRequest) {
+async function withExportPage<T>(input: ExportRequest, operation: (page: Page) => Promise<T>, options: {reviewOnly?: boolean} = {}): Promise<T> {
   const browser = await chromium.launch({
     headless: true,
     ...(process.env.CHROMIUM_EXECUTABLE_PATH
@@ -404,8 +417,8 @@ export async function pdfDocument(input: ExportRequest) {
     });
     if (input.kind === "book") {
       await page.emulateMedia({ media: "print" });
-      // Match the A4 content width after the renderer's 20mm side margins.
-      await page.setViewportSize({ width: 643, height: 957 });
+      // Match the physical book content box used by @page and its cover guard.
+      await page.setViewportSize({width: Math.round((BOOK_PAGE.widthInches - 2 * BOOK_PAGE.marginXInches) * 96), height: Math.round((BOOK_PAGE.heightInches - 2 * BOOK_PAGE.marginYInches) * 96)});
       const coverOverflow = await page.evaluate(() => {
         const cover = document.querySelector<HTMLElement>(".cover");
         return !!cover && (cover.scrollHeight > cover.clientHeight + 2 || cover.scrollWidth > cover.clientWidth + 2);
@@ -422,61 +435,110 @@ export async function pdfDocument(input: ExportRequest) {
             slide.scrollHeight > slide.clientHeight + 2 ||
             slide.scrollWidth > slide.clientWidth + 2 ||
             Array.from(slide.querySelectorAll<HTMLElement>("h2,p")).some(
-              (text) => text.scrollWidth > text.clientWidth + 2,
+              (text) => text.scrollWidth > text.clientWidth + 2 || text.scrollHeight > text.clientHeight + 2,
             ) ? [index + 1] : [],
           ),
       );
-      if (overflowing.length)
+      if (overflowing.length && !options.reviewOnly)
         throw new RequestError(
           "SLIDE_CONTENT_OVERFLOW",
           `Slide ${overflowing.join(", ")} contains more content than fits on the page. Split it into shorter slides before exporting; your original text is preserved.`,
         );
     }
-    return await page.pdf({
-      printBackground: true,
-      preferCSSPageSize: true,
-      tagged: true,
-    });
+    return await operation(page);
   } finally {
     await browser.close();
   }
 }
-function effectiveSlides(input: ExportRequest): ExportRequest["slides"] {
-  if (input.slides.length) return input.slides;
-  const slides: ExportRequest["slides"] = [];
-  for (const block of input.blocks) {
-    if (block.type === "heading" || !slides.length)
-      slides.push({
-        id: block.id,
-        title: block.type === "heading" ? block.text : input.title,
-        body:
-          block.type === "heading"
-            ? ""
-            : block.text,
-        ...(block.image ? { image: block.image } : {}),
-      });
-    else if (block.type === "image") {
-      if (slides[slides.length - 1].image)
-        slides.push({
-          id: block.id,
-          title: input.title,
-          body: block.text,
-          image: block.image,
-        });
-      else {
-        const slide = slides[slides.length - 1];
-        slide.image = block.image;
-        if (block.text) slide.body += `${slide.body ? "\n\n" : ""}${block.text}`;
+export async function pdfDocument(input: ExportRequest) {
+  return withExportPage(input, page => page.pdf({printBackground: true, preferCSSPageSize: true, tagged: true}));
+}
+/** Measured native layout check for the generation workflow, without creating a
+ * PDF. This is not an aesthetic, factual, OCR, font-fidelity or publication gate. */
+export async function inspectNativePresentation(input:unknown){
+  const parsed=ExportRequestSchema.parse(input);
+  if(parsed.kind!=='presentation'||parsed.presentationMode!=='native')throw new RequestError('NATIVE_PRESENTATION_REQUIRED','Choose an editable presentation for this layout check.');
+  const prepared=await prepareExport(parsed);
+  const review=await withExportPage(prepared,page=>page.evaluate(()=>{
+    const results=Array.from(document.querySelectorAll<HTMLElement>('.ap-native-slide')).map((slide,index)=>{
+      const text=Array.from(slide.querySelectorAll<HTMLElement>('.ap-native-text')).filter(node=>node.textContent?.trim());
+      const images=Array.from(slide.querySelectorAll<HTMLElement>('.ap-native-image')).map(node=>node.getBoundingClientRect());
+      const rects=text.map(node=>{const range=document.createRange();range.selectNodeContents(node);return Array.from(range.getClientRects());});
+      const intersects=(a:DOMRect,b:DOMRect)=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
+      const overlap:number[][]=[];
+      for(let a=0;a<rects.length;a++)for(let b=a+1;b<rects.length;b++)if(rects[a].some(first=>rects[b].some(second=>intersects(first,second))))overlap.push([a,b]);
+      const luminance=(color:string)=>{const rgb=color.match(/[\d.]+/g)?.slice(0,3).map(Number);if(!rgb||rgb.length!==3)return null;const [r,g,b]=rgb.map(channel=>{const value=channel/255;return value<=.04045?value/12.92:((value+.055)/1.055)**2.4;});return .2126*r+.7152*g+.0722*b;};
+      const paper=luminance(getComputedStyle(slide).backgroundColor),lowContrast:number[]=[],textOverImage:number[]=[];
+      for(const [position,node]of text.entries()){
+        if(rects[position].some(rect=>images.some(image=>intersects(rect,image)))){textOverImage.push(position);continue;}
+        const ink=luminance(getComputedStyle(node).color);
+        if(paper!==null&&ink!==null&&(Math.max(paper,ink)+.05)/(Math.min(paper,ink)+.05)<3)lowContrast.push(position);
       }
-    } else
-      slides[slides.length - 1].body +=
-        `${slides[slides.length - 1].body ? "\n\n" : ""}${block.text}`;
-  }
-  return slides.length
-    ? slides
-    : [{ id: "title", title: input.title, body: "" }];
+      // Measure actual word placement, not a character-count approximation.
+      // These diagnostics never rewrite copy or approve aesthetic quality.
+      const title=slide.querySelector<HTMLElement>('.ap-native-title'),titleLines:{top:number;text:string}[]=[];
+      if(title){const walker=document.createTreeWalker(title,NodeFilter.SHOW_TEXT);let node:Node|null;
+        while((node=walker.nextNode()))for(const word of (node.textContent??'').matchAll(/\S+/gu)){
+          const range=document.createRange();range.setStart(node,word.index!);range.setEnd(node,word.index!+word[0].length);
+          const box=range.getClientRects()[0];if(!box)continue;
+          const line=titleLines.find(line=>Math.abs(line.top-box.top)<2);
+          if(line)line.text+=' '+word[0];else titleLines.push({top:box.top,text:word[0]});
+        }
+      }
+      const lines=titleLines.map(line=>line.text),typographyWarnings=lines.slice(0,-1).flatMap((line,index)=>/\b(a|an|the|and|or|to|of|for|with|in|on|at)$/i.test(line)?[{code:'title_line_ends_with_english_function_word' as const,line:index+1}]:[]);
+      const overflowingText=text.flatMap((node,element)=>node.scrollWidth>node.clientWidth+2||node.scrollHeight>node.clientHeight+2?[{
+        element,elementId:node.dataset.nativeElementId??null,role:node.classList.contains('ap-native-title')?'title':'body',
+        width:node.clientWidth,height:node.clientHeight,requiredWidth:node.scrollWidth,requiredHeight:node.scrollHeight,
+      }]:[]);
+      const slideOverflow=slide.scrollHeight>slide.clientHeight+2||slide.scrollWidth>slide.clientWidth+2;
+      return {slide:index+1,textElements:text.length,overflowingText,slideOverflow,overlap,lowContrast,textOverImage,titleLines:lines,typographyWarnings};
+    });
+    return results;
+  }),{reviewOnly:true});
+  return {status:'layout_measured' as const,renderer:'native-slide-v1' as const,
+    inputDigest:createHash('sha256').update(JSON.stringify(prepared)).digest('hex'),
+    htmlDigest:createHash('sha256').update(htmlDocument(prepared)).digest('hex'),slides:review,
+    minimumSolidBackgroundContrast:3,fontFidelityVerified:false as const,
+    needsVisualReview:true as const,readyForPublication:false as const};
+}
+/** Private workflow feedback remains available even when the candidate fails.
+ * Review never relaxes the independent PDF/PPTX overflow guard. */
+export class NativePresentationLayoutError extends RequestError {
+  constructor(code:string,message:string,readonly review:Awaited<ReturnType<typeof inspectNativePresentation>>){super(code,message);}
+}
+export async function reviewNativePresentation(input:unknown){
+  const review=await inspectNativePresentation(input);
+  if(review.slides.some(slide=>slide.slideOverflow||slide.overflowingText.length))throw new NativePresentationLayoutError('SLIDE_CONTENT_OVERFLOW','Presentation text does not fit its allocated boxes. Revise the composition; original copy is preserved.',review);
+  if(review.slides.some(slide=>slide.overlap.length))throw new NativePresentationLayoutError('SLIDE_TEXT_OVERLAP','Presentation text overlaps. Revise the composition before accepting it; original copy is preserved.',review);
+  if(review.slides.some(slide=>slide.lowContrast.length))throw new NativePresentationLayoutError('SLIDE_LOW_CONTRAST','Presentation text has insufficient contrast against its solid background. Revise the colors before accepting it.',review);
+  return {...review,status:'layout_checked' as const};
+}
+function effectiveSlides(input: ExportRequest): ExportRequest["slides"] {
+  const slides = input.slides.length ? input.slides : groupPresentationBlocks(input.title, input.blocks).map(slide => {
+    const image = slide.blocks.find(block => block.image)?.image;
+    return {id: slide.id, title: slide.title, body: slide.blocks.map(block => block.text).filter(Boolean).join("\n\n"), ...(image ? {image} : {})};
+  });
+  if (slides.length > 40 || slides.some(slide => slide.title.length > 200 || slide.body.length > 5000)) throw new RequestError("SLIDE_LIMIT", "Split large sections into shorter slides before exporting.");
+  return slides;
+}
+function sceneForSlide(slide: ExportRequest["slides"][number], index:number,total:number) {
+  const blocks=slide.sourceBlocks ?? [{id:"body",type:"paragraph",text:slide.body},...(slide.image?[{id:"artwork",type:"image",text:"",image:slide.image}]:[])];
+  return {scene:presentationScene({title:slide.title,blocks,design:slide.design},index,total),blocks};
+}
+function nativeSlideHtml(slide: ExportRequest["slides"][number], index: number, total: number) {
+  const {scene,blocks}=sceneForSlide(slide,index,total);
+  const boxStyle = (box: Parameters<typeof slideBoxPercent>[0]) => Object.entries(slideBoxPercent(box)).map(([key,value]) => `${key}:${value}`).join(";");
+  const elements=scene.elements.map(element=>{
+    if(element.kind==='image')return `<div class="ap-native-image" style="${boxStyle(element)};--native-image-fit:${element.fit}"><img src="${blocks.find(block=>block.id===element.blockId)?.image}" alt="${escapeHtml(slide.title)}"></div>`;
+    const tag=element.role==='title'?'h2':'p';
+    return `<${tag} class="ap-native-text ap-native-${element.role}" data-native-element-id="${escapeHtml(element.id)}" style="${boxStyle(element)};font-size:${element.fontSize / 12.8}cqw;line-height:${element.lineHeight};font-family:${element.font==='heading'?'var(--native-heading)':'Arial,sans-serif'};font-weight:${element.weight==='bold'?700:400};text-align:${element.align}${element.color?`;color:${element.color}`:''}">${escapeHtml(element.text)}</${tag}>`;
+  }).join('');
+  return `<section class="slide ap-native-slide ap-native-${scene.layout}" ${scene.background?`style="--native-paper:${scene.background}"`:''} aria-label="Slide ${index+1}">${elements}</section>`;
 }
 export async function presentationDocument(input: ExportRequest) {
+  const slides = effectiveSlides(input);
+  if (input.presentationMode === "native") await withExportPage(input, async () => undefined);
+
   const pptx = new PptxGenJS();
   const dimensions = slideDimensions(input);
   if (input.presentationMode === "visual") {
@@ -496,15 +558,6 @@ export async function presentationDocument(input: ExportRequest) {
   const style = exportStyle(input),
     accent = style.color.slice(1),
     font = style.font === "serif" ? "Georgia" : "Arial";
-  const slides = effectiveSlides(input);
-  if (
-    slides.length > 40 ||
-    slides.some((slide) => slide.title.length > 200 || slide.body.length > 5000)
-  )
-    throw new RequestError(
-      "SLIDE_LIMIT",
-      "Split large sections into shorter slides before exporting.",
-    );
   for (const [index, content] of slides.entries()) {
     const slide = pptx.addSlide();
     slide.background = {
@@ -526,75 +579,22 @@ export async function presentationDocument(input: ExportRequest) {
         altText: content.title || `Slide ${index + 1}`,
       });
     } else {
-      const statement = !content.image && content.title.length <= 100 && content.body.length <= 180;
-      const signal = style.id === "direction-signal";
-      const atlas = style.id === "direction-atlas";
-      if (signal && statement) {
-        // Native vectors remain editable. Artwork stays out of the text area.
-        for (const diameter of [2.2, 1.7, 1.2])
-          slide.addShape(pptx.ShapeType.ellipse, {
-            x: 12.05 - diameter / 2, y: 1.8 - diameter / 2,
-            w: diameter, h: diameter,
-            line: { color: accent, transparency: 55, width: 0.8 },
-            fill: { color: accent, transparency: 100 },
-          });
-      }
-      slide.addShape(pptx.ShapeType.rect, {
-        x: 0.6,
-        y: 0.5,
-        w: atlas ? 12.1 : 0.7,
-        h: 0.06,
-        line: { color: accent },
-        fill: { color: accent },
-      });
-      slide.addText(content.title, {
-        x: 0.6,
-        y: statement ? 1.5 : 0.9,
-        w: statement && signal ? 9.3 : 12.1,
-        h: statement ? 2.1 : 1.3,
-        fontFace: font,
-        fontSize: statement ? 48 : 32,
-        bold: !atlas,
-        color: (style.textColor ?? "#16181D").slice(1),
-        margin: 0,
-        fit: "shrink",
-        valign: "top",
-      });
-      if (content.image)
-        slide.addImage({
-          data: content.image,
-          x: 0.6,
-          y: 2.5,
-          w: 5.65,
-          h: 3.8,
-          sizing: { type: "contain", w: 5.65, h: 3.8 },
-          altText: content.title,
+      const {scene,blocks}=sceneForSlide(content,index,slides.length);
+      if(scene.background)slide.background={color:scene.background.slice(1)};
+      const inch = (pixels: number) => pixels / 96;
+      for (const element of scene.elements) {
+        if(element.kind==='text')slide.addText(element.text, {
+          x:inch(element.x),y:inch(element.y),w:inch(element.width),h:inch(element.height),
+          fontFace:element.font==='heading'?font:'Arial',fontSize:element.fontSize*.75,
+          color:element.color?.slice(1)??(element.role==='folio'?accent:(style.textColor??'#16181D').slice(1)),
+          margin:0,valign:'top',bold:element.weight==='bold',align:element.align,lineSpacingMultiple:element.lineHeight,
         });
-      slide.addText(content.body, {
-        x: content.image ? 6.7 : 0.6,
-        y: statement ? 4.1 : 2.5,
-        w: content.image ? 5.9 : 12.1,
-        h: statement ? 1.8 : 3.8,
-        fontFace: font,
-        fontSize: statement ? 24 : 20,
-        color: (style.textColor ?? "#16181D").slice(1),
-        margin: 0,
-        valign: "top",
-        paraSpaceAfter: 10,
-        fit: "shrink",
-      });
-      slide.addText(
-        `${String(index + 1).padStart(2, "0")} / ${String(slides.length).padStart(2, "0")}`,
-        {
-          x: 11.5,
-          y: 6.9,
-          w: 1.2,
-          h: 0.2,
-          color: (style.textColor ?? "#5C616D").slice(1),
-          fontSize: 10,
-          align: "right",
-        },
-      );
+        else{
+          const image=blocks.find(block=>block.id===element.blockId)?.image;
+          if(!image)throw new RequestError('VISUAL_SLIDE_IMAGE','The saved slide artwork is unavailable.');
+          slide.addImage({data:image,x:inch(element.x),y:inch(element.y),w:inch(element.width),h:inch(element.height),sizing:{type:element.fit==='cover'?'crop':'contain',w:inch(element.width),h:inch(element.height)},altText:content.title});
+        }
+      }
     }
     if (content.notes) slide.addNotes(content.notes);
   }

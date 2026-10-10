@@ -5,15 +5,15 @@ const { creationStyles, retainCreationStyle, styleConcept } = require("./creatio
 let count = 0;
 function check(name, fn) { fn(); count++; console.log(`PASS ${name}`); }
 for (const [kind, expected] of [["book", ["direction-field", "direction-handbook"]], ["website", ["direction-form", "direction-solstice"]], ["presentation", ["direction-signal", "direction-atlas"]]]) {
-  check(`${kind} directions first`, () => assert.deepEqual(creationStyles([], kind).slice(0, 2).map(style => style.id), expected));
-  check(`${kind} shows only its six authored directions`, () => assert.equal(new Set(creationStyles([], kind).map(style => style.id)).size, 6));
+  check(`${kind} defaults to automatic design before optional directions`, () => assert.deepEqual(creationStyles([], kind).slice(0, 3).map(style => style.id), ["automatic", ...expected]));
+  check(`${kind} shows automatic design and its six authored directions`, () => assert.equal(new Set(creationStyles([], kind).map(style => style.id)).size, 7));
 }
 const field = retainCreationStyle([], "direction-field");
 check("retains only chosen direction", () => assert.equal(field.length, 1));
 check("retains exact palette", () => assert.equal(field[0].color, "#274BBD"));
 check("retention is idempotent", () => assert.equal(retainCreationStyle(field, "direction-field"), field));
 const changed = { ...field[0], color: "#123456" };
-check("saved palette wins", () => assert.equal(creationStyles([changed], "book")[0].color, "#123456"));
+check("saved palette wins for its selected direction", () => assert.equal(creationStyles([changed], "book").find(style => style.id === changed.id).color, "#123456"));
 check("changed palette hides original concept", () => assert.equal(styleConcept(changed), undefined));
 check("original palette has concept", () => assert.equal(styleConcept(field[0]).id, "field"));
 check("unknown style is rejected", () => assert.throws(() => retainCreationStyle([], "unknown")));

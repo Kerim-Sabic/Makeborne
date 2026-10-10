@@ -1,14 +1,20 @@
 "use client";
-import ClaudePilotButton from "./claude-pilot-button";
+import dynamic from "next/dynamic";
+import WebsiteGeneration from "./website-generation";
+import SavedWebsitePreview from "./saved-website-preview";
 import Link from "next/link";
 import BrandMark from "./brand-mark";
 import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
+import WebsitePublish from "./website-publish";
+import WebsiteGithub from "./website-github";
+import WebsiteSourceDownload from "./website-source-download";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
 import "@/app/cloud-workbench.css";
+const WebsiteSourceEditor = dynamic(() => import("./website-source-editor"), {ssr: false, loading: () => <p role="status">Opening code editor…</p>});
 import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
 import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
@@ -726,7 +732,7 @@ export default function CloudStudio() {
             </div>
             {selected && overview ? (
               <CloudEditor
-                key={selected.id}
+                key={`${accountId}:${overview.workspace.id}:${selected.id}`}
                 accountId={accountId!}
                 workspaceId={overview.workspace.id}
                 artifact={selected}
@@ -1102,6 +1108,7 @@ export function CloudEditor({
   notify: (s: string) => void;
 }) {
   const [view, setView] = useState<"preview" | "edit" | "history">("preview");
+  const [generatedVersionId,setGeneratedVersionId]=useState<string|null>(null);
   const recoveryKey = `makeborne.cloud-draft.${accountId}.${workspaceId}.${artifact.id}`;
   const [recovery, setRecovery] = useState<RecoveryDraft | null>(null);
   const saveBusy = useRef(false);
@@ -1325,7 +1332,7 @@ export function CloudEditor({
     editRevision.current++; setContent(next); setAssetIds(current => [...new Set([...current, assetId])]); setDirty(true);
   }
   function addSection() {
-    if (!content || role === "reviewer" || uncertainSave || conflict || recovery) return;
+    if (!content || content.websiteSource || role === "reviewer" || uncertainSave || conflict || recovery) return;
     const title = `${content.kind === "book" ? "Chapter" : "Section"} ${content.sections.length + 1}`;
     try {
       const next = appendAccountSection(content, crypto.randomUUID(), title);
@@ -1479,7 +1486,7 @@ export function CloudEditor({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const previewBlocks = content?.sections.flatMap(section => section.blocks) ?? [];
-  const isStartingDraft = !previewBlocks.length || (expectedVersion <= 1 && previewBlocks.length === 1 && previewBlocks[0].type === "heading" && previewBlocks[0].text === content?.title && !previewBlocks[0].assetId);
+  const isStartingDraft = !content?.websiteSource && (!previewBlocks.length || (expectedVersion <= 1 && previewBlocks.length === 1 && previewBlocks[0].type === "heading" && previewBlocks[0].text === content?.title && !previewBlocks[0].assetId));
   const PreviewIcon = artifact.kind === "website" ? PanelsTopLeft : artifact.kind === "book" ? BookOpen : Presentation;
   return (
     <section className="cloud-editor workspace-workbench cloud-workbench">
@@ -1521,10 +1528,10 @@ export function CloudEditor({
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
             <div>
               <button type="button" aria-pressed={view === "preview"} onClick={() => setView("preview")}><Eye size={15} />Preview</button>
-              <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />{content?.website ? "Code" : "Edit"}</button>
+              <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />{content?.website || content?.websiteSource ? "Code" : "Edit"}</button>
               <button type="button" aria-pressed={view === "history"} onClick={() => setView("history")}><History size={15} />History</button>
             </div>
-            <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>
+            {(content?.website || content?.websiteSource) && role !== "reviewer" ? <WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} /> : <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>}
           </nav>
           <div className="cloud-workbench-content">
       {uncertainSave && (
@@ -1615,20 +1622,31 @@ export function CloudEditor({
       {!content ? (
         <p className="cloud-workbench-loading" role="status">Opening your project…</p>
       ) : (<>
-        {view === "preview" && style && <div className="cloud-workbench-preview">
+        {artifact.kind === "website" && role !== "reviewer" && <WebsiteGeneration accountId={accountId} workspaceId={workspaceId} projectId={artifact.projectId} artifactId={artifact.id}
+          baseVersionId={versions.find(version => version.number === expectedVersion)?.id ?? null}
+          sourceIds={[...new Set(content.sections.flatMap(section => section.blocks.flatMap(block => block.sourceIds)))]}
+          canStart={!dirty && !conflict && !uncertainSave && !recovery && !busy}
+          onOutputVersionChange={setGeneratedVersionId}
+          onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
+        {view === "preview" && artifact.kind === "website" && (content.websiteSource || generatedVersionId) && (() => {
+          const generated=versions.find(version=>version.id===generatedVersionId);
+          const saved=versions.find(version=>version.number===expectedVersion);
+          const versionId=generated&&saved&&saved.number>generated.number?saved.id:generatedVersionId??saved?.id;
+          return versionId?<SavedWebsitePreview key={`${accountId}:${workspaceId}:${artifact.id}:${versionId}`} accountId={accountId} workspaceId={workspaceId} projectId={artifact.projectId} artifactId={artifact.id} versionId={versionId}/>:<p className="small-note" role="status">Opening the saved website revision…</p>;
+        })()}
+        {view === "preview" && style && !(artifact.kind === "website" && (content.websiteSource || generatedVersionId)) && <div className="cloud-workbench-preview">
           {isStartingDraft ? <div className="cloud-workbench-empty">
             <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
             <h3>Your {artifact.kind} starts here</h3>
             <p>{project?.brief.trim() ? "Your brief is saved. " : ""}Your editable draft will appear here. {role === "reviewer" ? "You have view access to this project." : "You can add your own content in the editor."}</p>
             <button type="button" onClick={() => setView("edit")} className="button secondary small"><PencilLine size={14} />Open editor</button>
-            {role !== "reviewer" && !dirty && !conflict && !uncertainSave && !recovery && <ClaudePilotButton kind={artifact.kind} brief={project?.brief ?? ""} styleId={style.id} onStart={() => editRevision.current} onDraft={(draft,pilotRevision) => {
-              if(editRevision.current !== pilotRevision) { notify("Your draft changed during generation. Existing edits have been preserved."); return; }
-              editRevision.current++; setContent(draft); setDirty(true); setNote("AI text draft for review");
-            }} />}
-          </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} />{artifact.kind === "website" && !content.website && role !== "reviewer" && !dirty && !conflict && !uncertainSave && !recovery && <ClaudePilotButton kind="website" brief={project?.brief ?? ""} styleId={style.id} onStart={() => editRevision.current} onDraft={(draft,revision) => { if(editRevision.current !== revision) { notify("Existing edits preserved. Save before generating again."); return; } editRevision.current++; setContent(draft); setDirty(true); setNote("Generated website design"); }} />}</>}
+          </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} /></>}
         </div>}
         <div className="cloud-workbench-edit" hidden={view !== "edit"}>
-        <div className="cloud-edit-grid account-visual-editor">
+        {content.websiteSource ? (view === "edit" && <WebsiteSourceEditor source={content.websiteSource} readOnly={role === "reviewer" || uncertainSave || conflict || !!recovery || lockChangePending} onChange={(next, summary) => {
+          if (role === "reviewer" || uncertainSave || conflict || recovery || lockChangePending) return;
+          editRevision.current++; setContent({...content, websiteSource: next}); setDirty(true); setNote(summary);
+        }} />) : <div className="cloud-edit-grid account-visual-editor">
           {lockChangePending && <p role="status" className="small-note account-protection-status">Saving content protection. Editing resumes after the save is confirmed; use Save now to retry if needed.</p>}
           <div className="account-compose" inert={lockChangePending}>
           <div>
@@ -1637,7 +1655,7 @@ export function CloudEditor({
             {content.website && <section className="account-content-section"><h3>Website source</h3><p className="small-note">Edit the complete design here. The outline below is a separate content reference.</p>{(["html", "css"] as const).map(field => <label key={field} style={{display:"grid",gap:8,marginBottom:16}}>{field.toUpperCase()}<textarea aria-label={`Website ${field.toUpperCase()}`} rows={16} value={content.website![field]} disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onChange={event => {editRevision.current++; setContent({...content,website:{...content.website!,[field]:event.target.value}}); setDirty(true); setNote("Edited website source");}} /></label>)}</section>}
             {content.sections.map((s, sectionIndex) => (
               <section key={s.id} className="account-content-section">
-                <label className="account-section-title">{content.kind === "book" ? "Chapter" : "Section"} {sectionIndex + 1}
+                <label className="account-section-title">{content.kind === "book" ? "Chapter" : content.kind === "presentation" ? "Slide" : "Section"} {sectionIndex + 1}
                   <input aria-label={`Section ${sectionIndex + 1} title`} value={s.title} maxLength={200} placeholder="Untitled section" disabled={role === "reviewer" || uncertainSave || conflict || !!recovery} onChange={event => renameSection(s.id, event.target.value)} />
                 </label>
                 {role !== "reviewer" && <div className="account-section-actions" aria-label={`Section ${sectionIndex + 1} actions`}>
@@ -1666,13 +1684,14 @@ export function CloudEditor({
                     />
                   </div>
                 ))}
-                {role !== "reviewer" && !uncertainSave && !conflict && !recovery && <div className="button-row" aria-label={`Add content to section ${sectionIndex + 1}`}>
+                {s.slideDesign&&<p className="small-note">Custom slide composition. Editing text preserves its placement; new content needs a canvas element.</p>}
+                {role !== "reviewer" && !s.slideDesign && !uncertainSave && !conflict && !recovery && <div className="button-row" aria-label={`Add content to section ${sectionIndex + 1}`}>
                   {(["heading", "paragraph", "quote"] as const).map(type => <button key={type} type="button" className="button secondary small" aria-label={`Add ${type} to section ${sectionIndex + 1}`} onClick={() => add(type, s.id)}><Plus size={14} />{type}</button>)}
                   {process.env.NODE_ENV !== "production" && <AccountArtworkUpload accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} sectionNumber={sectionIndex + 1} disabled={busy || lockChangePending} onUploaded={assetId => attachImage(s.id, assetId)} />}
                 </div>}
               </section>
             ))}
-            {role !== "reviewer" && !uncertainSave && !conflict && !recovery && <button type="button" className="button secondary small" onClick={addSection}><Plus size={14} />{content.kind === "book" ? "Add chapter" : "Add section"}</button>}
+            {!content.websiteSource && role !== "reviewer" && !uncertainSave && !conflict && !recovery && <button type="button" className="button secondary small" onClick={addSection}><Plus size={14} />{content.kind === "book" ? "Add chapter" : "Add section"}</button>}
           </div>
           </div>
           <aside>
@@ -1699,12 +1718,14 @@ export function CloudEditor({
             <button className="button secondary" onClick={backup}>
               <FileText size={16} /> Download draft
             </button>
+            {content.kind === "website" && !content.websiteSource && <WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} />}
+            {content.kind === "website" && !content.websiteSource && <WebsiteGithub key={`github:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} />}
             {style && <AccountExport key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
             <p className="small-note">
-              {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Uploaded artwork can be included in development exports. Automatic generation and publication are not connected." : "Artwork upload, automatic generation, and publication are not connected."}
+              {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Save your website before publishing." : "Live AI generation and new artwork uploads are still being prepared. Saved websites can be published from this editor."}
             </p>
           </aside>
-        </div>
+        </div>}
         </div>
         <section className="cloud-workbench-history" hidden={view !== "history"} aria-label="Project version history">
             <h3>Version history</h3>
