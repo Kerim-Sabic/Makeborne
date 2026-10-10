@@ -27,7 +27,7 @@ env.MAKEBORNE_BILLING_MIGRATIONS_VERIFIED = "false";
 assert.equal(config.billingConfig().enabled, false);
 const secret = "ws_fake_for_offline_signature_verification_only";
 const webhook = load("./webhook.ts", { WHOP_WEBHOOK_SECRET: secret }, {
-  "@/lib/server/http": { RequestError }, "./config": config, "./database": {}, "./whop": {},
+  "@/lib/server/http": { RequestError }, "./config": config, "./database": {}, "./plan-credits": {}, "@/lib/credits/server": {}, "./whop": {},
 });
 const body = JSON.stringify({ id: "msg_test", type: "membership.activated", account_id: "biz_CV9cZg1zFX3h7f", data: { id: "mem_test" } });
 const now = new Date();
@@ -58,7 +58,7 @@ async function lifecycleChecks() {
 
   const paymentReads = [];
   const eventHandler = load("./webhook.ts", env, {
-    "@/lib/server/http": { RequestError }, "./config": config, "./database": {},
+    "@/lib/server/http": { RequestError }, "./config": config, "./database": {}, "./plan-credits": {}, "@/lib/credits/server": {},
     "./whop": { retrievePaymentMembership: async id => { paymentReads.push(id); return "mem_resolved"; } },
   });
   const event = { id: "msg_test", type: "membership.activated", account_id: env.WHOP_COMPANY_ID, data: { id: "mem_test" } };
@@ -68,7 +68,7 @@ async function lifecycleChecks() {
   assert.equal(await eventHandler.eventMembershipId({ ...event, type: "payment.succeeded", data: { id: "pay_test" } }), "mem_resolved");
   assert.equal(paymentReads.length, 5);
   const unlinkedPayment = load("./webhook.ts", env, {
-    "@/lib/server/http": { RequestError }, "./config": config, "./database": {},
+    "@/lib/server/http": { RequestError }, "./config": config, "./database": {}, "./plan-credits": {}, "@/lib/credits/server": {},
     "./whop": { retrievePaymentMembership: async () => null },
   });
   await assert.rejects(unlinkedPayment.eventMembershipId({ ...event, type: "payment.succeeded", data: { id: "pay_test" } }), error => error.code === "PAYMENT_MEMBERSHIP_PENDING" && error.status === 503);
@@ -88,17 +88,35 @@ async function lifecycleChecks() {
     const query = { select: () => query, eq: (key, value) => { if (key === "checkout_id") rows = rows.filter(row => row[key] === value); return query; }, in: () => query, order: () => query, limit: async () => ({ data: rows, error: null }), update: () => { const update = { eq: () => update, then: resolve => resolve({ error: null }) }; return update; } };
     return query;
   }, rpc: async () => ({ data: true, error: null }) };
+  let sessionUser = "account_test", databaseAccess = true;
+  const databaseCalls = [], trials = [], grants = [];
   const access = load("./access.ts", env, {
     "@/lib/account/privileges": { getAccountPrivileges: async () => ({ isAdmin: true, unlimitedCredits: true }) },
-    "next/navigation": {}, "@/lib/supabase/auth-server": {}, "@/lib/supabase/server": {}, "@/lib/supabase/auth-flow": {}, "@/lib/server/http": { RequestError }, "./config": config, "./database": { billingDatabase: () => db },
+    "next/navigation": {}, "@/lib/supabase/auth-server": {}, "@/lib/supabase/auth-flow": {}, "@/lib/server/http": { RequestError }, "./config": config, "./database": { billingDatabase: () => db },
+    "@/lib/supabase/server": { createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: sessionUser } }, error: null }) }, rpc: async name => { databaseCalls.push(name); return { data: databaseAccess, error: null }; } }) },
+    "@/lib/credits/server": { ensureTrialCredits: async id => { trials.push(id); }, grantPlanCredits: async (...args) => { grants.push(args); } },
     "./whop": { activeMembership: whop.activeMembership, retrieveMembership: async id => { readIds.push(id); return { ...active, id, checkout_configuration_id: id === "mem_active" ? "ch_active" : "ch_canceled", status: id === "mem_active" ? "active" : "canceled" }; } },
   });
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_canceled"), false);
   assert.deepEqual(readIds, ["mem_canceled"]);
+  assert.equal(grants.length, 0);
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_active"), true);
+  assert.deepEqual(grants, [["account_test", config.CREATION_CATALOG.create, "mem_active", active.renewal_period_end]]);
+  // Database access (free tier/admin/recorded membership) comes first and grants the trial.
+  assert.equal(await access.hasCreationAccess({ id: "account_test" }), true);
+  assert.deepEqual(databaseCalls, ["makeborne_creation_access"]);
+  assert.deepEqual(trials, ["account_test"]);
+  // A session for another account cannot answer for this user; fall back to Whop.
+  sessionUser = "someone_else";
+  assert.equal(await access.hasCreationAccess({ id: "account_test" }), true);
+  assert.equal(databaseCalls.length, 1);
+  assert.equal(trials.length, 1);
+  sessionUser = "account_test"; databaseAccess = false;
+  assert.equal(await access.hasCreationAccess({ id: "account_test" }), true);
+  assert.equal(trials.length, 1);
   env.WHOP_CREATION_ENABLED = "false";
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }), true);
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_canceled"), false);
-  console.log("PASS: coffee exclusion, configuration gates, signatures/replay, membership lifecycle, exact checkout binding, refund/dispute reconciliation and redirect validation. No live services called.");
+  console.log("PASS: coffee exclusion, configuration gates, signatures/replay, membership lifecycle, exact checkout binding, plan credit self-heal, database-first creation access with trial grant, refund/dispute reconciliation and redirect validation. No live services called.");
 }
 void lifecycleChecks().catch(error => { console.error(error); process.exitCode = 1; });

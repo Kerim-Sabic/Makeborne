@@ -13,6 +13,8 @@ begin
     (unconfirmed_id,'unconfirmed-fixture-'||unconfirmed_id||'@example.invalid',null,false);
   insert into makeborne_private.account_privileges(user_id,is_admin,unlimited_credits,reason)
     values(admin_id,true,true,'Transaction fixture'),(unconfirmed_id,true,true,'Transaction fixture');
+  -- This fixture covers the paid/admin path; check-credit-wallets.sql covers the free tier.
+  update makeborne_private.billing_settings set free_tier_enabled=false where singleton;
   insert into public.workspaces(id,name,owner_id) values(w,'Admin fixture',admin_id),(other_w,'Ordinary fixture',ordinary_id);
   insert into public.workspace_members(workspace_id,user_id,role) values(w,ordinary_id,'editor');
   insert into public.projects(id,workspace_id,title,kind) values(p,w,'Allowance fixture','website');

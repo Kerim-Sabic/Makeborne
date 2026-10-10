@@ -5,6 +5,8 @@ import { RequestError } from "@/lib/server/http";
 import { billingConfig } from "./config";
 import { billingDatabase } from "./database";
 import { activeMembership, retrieveMembership, retrievePaymentMembership } from "./whop";
+import { creditPlanFor } from "./plan-credits";
+import { grantPlanCredits } from "@/lib/credits/server";
 
 const eventSchema = z.object({ id: z.string().min(1).max(200), type: z.string().min(1).max(100), account_id: z.string().optional(), company_id: z.string().optional(), data: z.record(z.string(), z.unknown()) });
 
@@ -50,7 +52,9 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
   const db = billingDatabase();
   const { data: existing, error: eventError } = await db.from("billing_webhook_events").select("id").eq("id", event.id).maybeSingle();
   if (eventError) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Membership storage is unavailable.", 503);
-  if (existing) return;
+  // A redelivered event is already recorded, but its credit grant may have
+  // failed after recording. Re-run only the idempotent grant in that case.
+  const alreadyRecorded = Boolean(existing);
   const membershipId = await eventMembershipId(event);
   if (!membershipId) return;
   // Event data may be delayed or delivered out of order. Retrieve current state
@@ -63,13 +67,25 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
   if (!checkout || checkout.plan_id !== membership.plan.id || !membership.user) return;
   const active = activeMembership(membership);
   const verifiedUntil = active ? new Date(Math.min(Date.parse(membership.renewal_period_end!), Date.now() + 5 * 60_000)).toISOString() : new Date(0).toISOString();
-  // The service-only SQL function writes the membership + event receipt in one
-  // transaction, preserves the original binding, and safely ignores duplicates.
-  const { error } = await db.rpc("makeborne_record_whop_membership", {
-    p_event_id: event.id, p_user_id: checkout.user_id, p_membership_id: membership.id,
-    p_checkout_id: membership.checkout_configuration_id, p_whop_user_id: membership.user.id,
-    p_plan_id: membership.plan.id, p_status: membership.status, p_period_end: membership.renewal_period_end,
-    p_verified_until: verifiedUntil,
-  });
-  if (error) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Membership update could not be confirmed.", 503);
+  if (!alreadyRecorded) {
+    // The service-only SQL function writes the membership + event receipt in one
+    // transaction, preserves the original binding, and safely ignores duplicates.
+    const { error } = await db.rpc("makeborne_record_whop_membership", {
+      p_event_id: event.id, p_user_id: checkout.user_id, p_membership_id: membership.id,
+      p_checkout_id: membership.checkout_configuration_id, p_whop_user_id: membership.user.id,
+      p_plan_id: membership.plan.id, p_status: membership.status, p_period_end: membership.renewal_period_end,
+      p_verified_until: verifiedUntil,
+    });
+    if (error) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Membership update could not be confirmed.", 503);
+  } else {
+    // Grant only to the account the recorded membership is bound to.
+    const { data: bound, error: boundError } = await db.from("billing_memberships").select("membership_id")
+      .eq("membership_id", membership.id).eq("user_id", checkout.user_id).maybeSingle();
+    if (boundError) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Membership storage is unavailable.", 503);
+    if (!bound) return;
+  }
+  // Monthly plan credits, once per membership period. A failure returns 503 so
+  // the provider retries; the retry skips recording and repeats only this grant.
+  if (active && membership.renewal_period_end && creditPlanFor(membership.plan.id))
+    await grantPlanCredits(checkout.user_id, membership.plan.id, membership.id, membership.renewal_period_end);
 }
