@@ -49,12 +49,12 @@ function tools(images: boolean): BetaToolUnion[] {
       input_schema: { type: "object", properties: { path: { type: "string" }, old_string: { type: "string" }, new_string: { type: "string" }, replace_all: { type: "boolean" } }, required: ["path", "old_string", "new_string"], additionalProperties: false } },
     { name: "delete_file", description: "Delete a file that is no longer used.",
       input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false } },
-    { name: "finish", description: "Call once the website is complete and checked. Provide a short, friendly summary of what you built or changed (2-4 sentences, no code). Optionally set the site title, the list of page routes and the design direction.",
+    { name: "finish", description: "Call once the website is complete and checked. Provide a short, friendly summary of what you built or changed (2-4 sentences, no code), the site title (the brand or business name, used as the page title), and optionally the list of page routes and the design direction.",
       input_schema: { type: "object", properties: {
         summary: { type: "string" }, title: { type: "string" },
         routes: { type: "array", items: { type: "object", properties: { path: { type: "string" }, title: { type: "string" } }, required: ["path", "title"], additionalProperties: false } },
         design: { type: "object", properties: { positioning: { type: "string" }, composition: { type: "string" }, typography: { type: "string" }, palette: { type: "string" }, imagery: { type: "string" }, motion: { type: "string" } }, required: ["positioning", "composition", "typography", "palette", "imagery", "motion"], additionalProperties: false },
-      }, required: ["summary"], additionalProperties: false } },
+      }, required: ["summary", "title"], additionalProperties: false } },
   ];
   if (images) list.splice(3, 0, { name: "generate_image", description: "Generate one original, art-directed image for the website and register it in the project. Returns the URL to use in code (e.g. /images/hero-portrait.webp). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood. Never request text, logos or watermarks in images.",
     input_schema: { type: "object", properties: { name: { type: "string", description: "kebab-case file name without extension" }, prompt: { type: "string" }, aspect: { type: "string", enum: ["landscape", "portrait", "square"] } }, required: ["name", "prompt", "aspect"], additionalProperties: false } });
@@ -72,6 +72,8 @@ export type BuilderRun = {
   attachments: BetaContentBlockParam[];
   emit: (event: BuilderEvent) => void;
   signal: AbortSignal;
+  /** Epoch ms by which the run must have stopped (platform time limit). */
+  deadline: number;
 };
 
 export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean };
@@ -92,7 +94,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   ] }];
 
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
-    if (run.signal.aborted) break;
+    // Never start a step that cannot finish before the platform limit.
+    if (run.signal.aborted || Date.now() > run.deadline - 45_000) break;
     const stream = anthropic.beta.messages.stream({
       model, max_tokens: policy.maxTokens,
       betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
@@ -106,17 +109,32 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     }, { signal: run.signal });
 
     const announced = new Set<number>();
-    const partial = new Map<number, string>();
+    const partial = new Map<number, { name: string; json: string }>();
     stream.on("streamEvent", event => {
-      if (event.type === "content_block_start" && event.content_block.type === "tool_use") partial.set(event.index, "");
+      if (event.type === "content_block_start" && event.content_block.type === "tool_use") partial.set(event.index, { name: event.content_block.name, json: "" });
+      if (event.type === "content_block_stop") {
+        // Show each finished file in the live preview immediately; the edit is
+        // applied (and validated) to the project when the turn completes.
+        const block = partial.get(event.index);
+        partial.delete(event.index);
+        if (block?.name !== "write_file") return;
+        try {
+          const input = ToolInputs.write_file.parse(JSON.parse(block.json));
+          ProjectFiles.checkPath(input.path);
+          run.emit({ type: "file", path: input.path, op: "write", content: input.content });
+        } catch { /* invalid input is reported when the tool runs */ }
+        return;
+      }
       if (event.type !== "content_block_delta") return;
       if (event.delta.type === "text_delta") run.emit({ type: "text", delta: event.delta.text });
       else if (event.delta.type === "thinking_delta" && event.delta.thinking) run.emit({ type: "progress", delta: event.delta.thinking });
-      else if (event.delta.type === "input_json_delta" && !announced.has(event.index)) {
-        const text = (partial.get(event.index) ?? "") + event.delta.partial_json;
-        partial.set(event.index, text.slice(0, 600));
-        const path = /"path"\s*:\s*"([^"]+)"/.exec(text)?.[1];
-        if (path) { announced.add(event.index); run.emit({ type: "file_start", path, op: "write" }); }
+      else if (event.delta.type === "input_json_delta") {
+        const block = partial.get(event.index);
+        if (!block) return;
+        block.json += event.delta.partial_json;
+        if (announced.has(event.index)) return;
+        const path = /"path"\s*:\s*"([^"]+)"/.exec(block.json.slice(0, 600))?.[1];
+        if (path) { announced.add(event.index); run.emit({ type: "file_start", path, op: block.name === "edit_file" ? "edit" : "write" }); }
       }
     });
 
@@ -212,8 +230,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     messages.push({ role: "user", content: results });
     const remaining = budgetUsd - usd;
     if (remaining <= 0) break;
-    if (remaining < budgetUsd * 0.25 || turn === policy.maxTurns - 2) {
-      messages.push({ role: "system", content: "Budget is nearly used up. Finish the most important remaining work in this step and call finish now." });
+    if (remaining < budgetUsd * 0.25 || turn === policy.maxTurns - 2 || Date.now() > run.deadline - 120_000) {
+      messages.push({ role: "system", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }
   }
   return { summary, title, credits: creditsForUsd(usd), usd, finished };

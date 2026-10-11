@@ -19,7 +19,7 @@ const eslintConfig = defineConfig([
     // Generated output.
     "infra/**/worker-configuration.d.ts",
     "**/.wrangler/**",
-    "public/generated/**",
+    "public/generated/**", "public/builder-runtime/**",
     "docs/execution/evidence/**",
     "coverage/**",
   ]),

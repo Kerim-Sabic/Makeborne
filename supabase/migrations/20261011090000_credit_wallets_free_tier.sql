@@ -6,7 +6,7 @@ begin;
 
 alter table makeborne_private.billing_settings
   add column free_tier_enabled boolean not null default true,
-  add column trial_credits integer not null default 50 check(trial_credits between 0 and 100000);
+  add column trial_credits integer not null default 150 check(trial_credits between 0 and 100000);
 
 -- balance: credits owned, including amounts held by open reservations.
 -- reserved: credits held for work in progress. available = balance - reserved.

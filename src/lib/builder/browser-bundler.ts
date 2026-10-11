@@ -7,9 +7,9 @@ type Loader = import("esbuild-wasm").Loader;
 let engine: Promise<Esbuild> | null = null;
 function esbuild(): Promise<Esbuild> {
   engine ??= (async () => {
-    const module = await import("esbuild-wasm");
-    await module.initialize({ wasmURL: "/builder-runtime/esbuild.wasm", worker: true });
-    return module;
+    const loaded = await import("esbuild-wasm");
+    await loaded.initialize({ wasmURL: "/builder-runtime/esbuild.wasm", worker: true });
+    return loaded;
   })().catch(error => { engine = null; throw error; });
   return engine;
 }
@@ -61,9 +61,8 @@ scrollTo(0,0);setTimeout(function(){var c=document.documentElement.cloneNode(tru
 c.classList.remove("js");post({type:"snapshot",html:"<!doctype html>"+c.outerHTML});},900);})();});
 post({type:"ready"});})();</script>`;
 
-/** Bundle a project into one self-contained HTML document.
- * preview: React loads from the shared runtime (fast rebuilds).
- * publish: React is inlined so the document has no runtime dependency. */
+/** Bundle a project into one self-contained HTML document (React inlined).
+ * preview adds the editor shim; publish minifies. */
 export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" = "preview"): Promise<BundleResult> {
   const files = new Map(Object.entries(input));
   if (!files.has("src/main.tsx")) return { ok: false, error: "The project has no src/main.tsx entry yet." };
@@ -83,10 +82,9 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
           builder.onResolve({ filter: /.*/ }, args => {
             const specifier = args.path;
             if (args.namespace === "vendor") return { path: new URL(specifier, args.importer).href, namespace: "vendor" };
-            if (VENDOR[specifier]) {
-              const url = `${origin}/builder-runtime/vendor/${VENDOR[specifier]}`;
-              return mode === "preview" ? { path: url, external: true } : { path: url, namespace: "vendor" };
-            }
+            // React is inlined from the same-origin runtime: sandboxed documents
+            // cannot rely on network access (e.g. private-network protections).
+            if (VENDOR[specifier]) return { path: `${origin}/builder-runtime/vendor/${VENDOR[specifier]}`, namespace: "vendor" };
             if (args.kind === "entry-point") return { path: specifier, namespace: "project" };
             if (specifier.startsWith("/") || /^(?:data|https?):/.test(specifier)) return { path: specifier, external: true };
             if (specifier.startsWith(".")) {
@@ -114,9 +112,8 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
   const source = files.get("index.html") ?? '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website</title></head><body><div id="root"></div></body></html>';
   let html = source.replace(/<script\b[^>]*\bsrc=["'][^"']*["'][^>]*>\s*<\/script>/gi, "").replace(/<link\b[^>]*rel=["']?(?:modulepreload|stylesheet)["']?[^>]*>/gi, "");
   if (!/<\/head>/i.test(html)) html = html.replace(/<body/i, "<head></head><body");
-  const imports = mode === "preview" ? `<script type="importmap">${JSON.stringify({ imports: Object.fromEntries(Object.entries(VENDOR).map(([name, file]) => [name, `${origin}/builder-runtime/vendor/${file}`])) })}</script>` : "";
   // Function replacers: generated code may contain `$&`-style sequences.
-  const head = `${mode === "preview" ? PREVIEW_SHIM : ""}${imports}<style>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
+  const head = `${mode === "preview" ? PREVIEW_SHIM : ""}<style>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
   html = html.replace(/<\/head>/i, () => head);
   const script = `<script type="module">${scriptSafe(js)}</script>`;
   html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, () => `${script}</body>`) : `${html}${script}`;

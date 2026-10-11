@@ -1514,7 +1514,8 @@ export function CloudEditor({
       const reference = readGenerationReference(localStorage, accountId, scope);
       if (!reference?.autoStart || reference.jobId) return;
       saveGenerationReference(localStorage, { ...reference, autoStart: false });
-      setAutoStart(project.brief.trim());
+      const brief = project.brief.trim();
+      queueMicrotask(() => setAutoStart(brief));
     } catch { /* storage unavailable: the user can send the brief manually */ }
   }, [useLiveBuilder, content, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
   const isStartingDraft = !content?.websiteSource && (!previewBlocks.length || (expectedVersion <= 1 && previewBlocks.length === 1 && previewBlocks[0].type === "heading" && previewBlocks[0].text === content?.title && !previewBlocks[0].assetId));

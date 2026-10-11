@@ -11,7 +11,8 @@ import { BUILDER_EFFORT, MINIMUM_RUN_CREDITS } from "@/lib/builder/pricing";
 import { getCreditBalance, releaseCredits, reserveCredits, settleCredits } from "@/lib/credits/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 800;
+// Vercel Hobby allows 300s; raise to 800 on Pro for long Ultra runs.
+export const maxDuration = 300;
 
 const Attachment = z.object({
   name: z.string().min(1).max(200),
@@ -106,8 +107,19 @@ export async function POST(request: Request) {
         let charged = 0;
         try {
           emit({ type: "status", message: files.files.size ? "Reading your project…" : "Planning your website…" });
-          const result = await runBuilder({ client, scope: { workspaceId: body.workspaceId, projectId: artifact.project_id }, files, effort: body.effort,
-            creditBudget: budget, request: body.message, context, attachments, emit, signal: controller.signal });
+          const deadline = Date.now() + (maxDuration - 20) * 1000;
+          let result, spent = 0;
+          const track = (event: BuilderEvent) => { if (event.type === "usage") spent = event.credits; emit(event); };
+          try {
+            result = await runBuilder({ client, scope: { workspaceId: body.workspaceId, projectId: artifact.project_id }, files, effort: body.effort,
+              creditBudget: budget, request: body.message, context, attachments, emit: track, signal: controller.signal, deadline });
+          } catch (error) {
+            // A step was cut off (time limit or provider error): keep finished work if it is valid.
+            if (!files.changed.size || (error as { code?: string }).code === "REFUSED") throw error;
+            try { files.toSource(); } catch { throw error; }
+            emit({ type: "status", message: "Saving the work finished so far…" });
+            result = { summary: "Saved the progress made so far. Ask me to continue to finish the remaining parts.", title: undefined, credits: spent, usd: 0, finished: false };
+          }
           let source;
           try { source = files.toSource(); } catch { source = null; }
           if (!source || !files.changed.size && !result.finished) {

@@ -107,7 +107,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
         referrerPolicy="no-referrer"
         srcDoc={html}
         style={{ width: width ? `${width}px` : "100%" }}
-      /> : <div className="lp-empty">{buildError ? "Fixing the first build…" : "Your website will appear here as it's built."}</div>}
+      /> : <div className="lp-empty">{building || !buildError ? "Your website will appear here as it's built." : "The first build needs a fix — ask the builder to repair it."}</div>}
     </div>
   </section>;
 }
