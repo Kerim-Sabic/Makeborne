@@ -58,13 +58,15 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, autoStart, autoStartMode, prefill, onLive, onSaved, kind = "website", baseDocument }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, onLive, onSaved, kind = "website", baseDocument }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback. Never sent automatically. */
   prefill?: { key: string; text: string } | null;
   history: { number: number; summary: string }[];
   baseFiles: Record<string, string>; baseAssets: { id: string; path: string }[];
-  defaultEffort?: EffortLevel; disabled?: boolean; autoStart?: string | null;
+  defaultEffort?: EffortLevel; disabled?: boolean;
+  /** Shown while disabled, when the reason is something the user can act on. */
+  disabledReason?: string; autoStart?: string | null;
   /** "plan" starts the first message in Plan mode (from a Plan-first creation). */
   autoStartMode?: "create" | "plan";
   onLive: (update: LiveUpdate | null) => void;
@@ -195,7 +197,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     onLive({ ...live, building: false });
     let capture;
     try {
-      capture = await captureDesign(live.files, await assetDataUrls(live.assets, { accountId, workspaceId, artifactId }));
+      capture = await captureDesign(live.files, await assetDataUrls(live.assets, { accountId, workspaceId, artifactId }), undefined,
+        () => update(reply.id, turn => ({ ...turn, activity: [{ id: "capture", kind: "note", label: "Waiting for you to return to this tab to take screenshots…", done: false }] })));
     } catch (error) {
       update(reply.id, turn => ({ ...turn, state: "error", activity: [], text: `The design review couldn't capture the page: ${error instanceof Error ? error.message : "unknown error"}. No credits were used.` }));
       return null;
@@ -363,7 +366,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
         <span className="lb-balance">{balance ? balance.unlimited ? "Unlimited credits" : `${balance.available} credits` : ""}</span>
         <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || disabled || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>
       </div>
-      {(notice || disabled) && <p className="lb-notice" role="status">{notice || "Save or resolve the current draft before building."}</p>}
+      {(notice || (disabled && disabledReason)) && <p className="lb-notice" role="status">{notice || disabledReason}</p>}
     </form>
   </aside>;
 }

@@ -30,11 +30,16 @@ function renderViewport(html: string, viewport: Viewport, errors: string[], sign
   // outside the top-level viewport, and browsers throttle off-screen frames.
   Object.assign(frame.style, { position: "fixed", left: "0", top: "0", width: `${viewport.width}px`, height: `${viewport.height}px`, border: "0", opacity: "0", pointerEvents: "none", zIndex: "-1" });
   return new Promise<Raw>((resolve, reject) => {
-    let requested = false;
-    const timer = setTimeout(() => finish(new Error(`The ${viewport.label.toLowerCase()} screenshot timed out.`)), 45_000);
+    let requested = false, timer: ReturnType<typeof setTimeout> | undefined;
+    // Hidden tabs throttle timers and skip painting: a slow capture there is
+    // not a failure, so the clock only runs out while the tab is visible.
+    const arm = () => { timer = setTimeout(() => document.visibilityState === "visible"
+      ? finish(new Error(`The ${viewport.label.toLowerCase()} screenshot timed out.`))
+      : document.addEventListener("visibilitychange", arm, { once: true }), 45_000); };
+    arm();
     const abort = () => finish(new Error("Capture cancelled."));
     const finish = (error: Error | null, raw?: Raw) => {
-      clearTimeout(timer); window.removeEventListener("message", listen); signal?.removeEventListener("abort", abort); frame.remove();
+      clearTimeout(timer); document.removeEventListener("visibilitychange", arm); window.removeEventListener("message", listen); signal?.removeEventListener("abort", abort); frame.remove();
       if (error) reject(error); else resolve(raw!);
     };
     const listen = (event: MessageEvent) => {
@@ -102,7 +107,20 @@ async function tiles(raw: Raw, viewport: Viewport): Promise<ReviewShot[]> {
 
 /** Capture desktop and mobile screenshots, layout diagnostics and runtime
  * errors for the given project files. `assets` maps /images/... paths to data URLs. */
-export async function captureDesign(files: Record<string, string>, assets: Record<string, string>, signal?: AbortSignal): Promise<DesignCapture> {
+/** Resolves once the page is visible: browsers do not paint hidden tabs. */
+function whenVisible(signal?: AbortSignal) {
+  if (document.visibilityState === "visible") return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const done = () => { if (document.visibilityState !== "visible") return; cleanup(); resolve(); };
+    const abort = () => { cleanup(); reject(new Error("Capture cancelled.")); };
+    const cleanup = () => { document.removeEventListener("visibilitychange", done); signal?.removeEventListener("abort", abort); };
+    document.addEventListener("visibilitychange", done);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+export async function captureDesign(files: Record<string, string>, assets: Record<string, string>, signal?: AbortSignal, onWaitForVisible?: () => void): Promise<DesignCapture> {
+  if (document.visibilityState !== "visible") { onWaitForVisible?.(); await whenVisible(signal); }
   const bundle = await bundleProject(files, assets, "capture");
   if (!bundle.ok) return { screenshots: [], viewports: [], errors: [clip(`Build error: ${bundle.error}`)], failures: [] };
   const errors: string[] = [];

@@ -1568,7 +1568,7 @@ export function CloudEditor({
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
-          defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
+          defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : undefined} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
           kind={artifact.kind} baseDocument={content?.document}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}

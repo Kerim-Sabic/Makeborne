@@ -11,6 +11,9 @@ import { generateProjectImage, imageGenerationAvailable } from "./images";
 import { BUILDER_EFFORT, IMAGE_COST_USD, creditsForUsd, usageCost, usdPerCredit } from "./pricing";
 import { BUILDER_SYSTEM } from "./prompt";
 
+/** Conservative streaming output rate used to size steps to the time left. */
+const OUTPUT_TOKENS_PER_SECOND = 50;
+
 export const builderModel = () => process.env.MAKEBORNE_BUILDER_MODEL || "claude-opus-5-5";
 
 export type BuilderEvent =
@@ -98,8 +101,12 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
     // Never start a step that cannot finish before the platform limit.
     if (run.signal.aborted || Date.now() > run.deadline - 45_000) break;
+    // Size each step to the time left so it ends (and its files are kept)
+    // before the platform limit, instead of being cut off mid-response.
+    const secondsLeft = (run.deadline - Date.now()) / 1000 - 25;
+    const turnTokens = Math.min(policy.maxTokens, Math.max(8_000, Math.floor(secondsLeft * OUTPUT_TOKENS_PER_SECOND)));
     const stream = anthropic.beta.messages.stream({
-      model, max_tokens: policy.maxTokens,
+      model, max_tokens: turnTokens,
       betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
       fallbacks: "default",
       thinking: { type: "adaptive", display: "updates" },
@@ -115,14 +122,15 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     stream.on("streamEvent", event => {
       if (event.type === "content_block_start" && event.content_block.type === "tool_use") partial.set(event.index, { name: event.content_block.name, json: "" });
       if (event.type === "content_block_stop") {
-        // Show each finished file in the live preview immediately; the edit is
-        // applied (and validated) to the project when the turn completes.
+        // Keep and show each finished file immediately, so work survives a step
+        // that is cut off later. Writes are idempotent: the tool call re-applies
+        // it (and reports problems) when the turn completes.
         const block = partial.get(event.index);
         partial.delete(event.index);
         if (block?.name !== "write_file") return;
         try {
           const input = ToolInputs.write_file.parse(JSON.parse(block.json));
-          ProjectFiles.checkPath(input.path);
+          run.files.write(input.path, input.content);
           run.emit({ type: "file", path: input.path, op: "write", content: input.content });
         } catch { /* invalid input is reported when the tool runs */ }
         return;
@@ -166,12 +174,14 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
       break;
     }
 
-    const truncated = message.stop_reason === "max_tokens";
+    // On the output limit only the block being written last is incomplete.
+    const last = message.content.at(-1);
+    const incomplete = message.stop_reason === "max_tokens" && last?.type === "tool_use" ? last.id : null;
     const results: BetaToolResultBlockParam[] = [];
     const imageJobs: Promise<void>[] = [];
     for (const use of uses) {
       const fail = (text: string) => { results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: text }); run.emit({ type: "tool_error", tool: use.name, message: text }); };
-      if (truncated) { fail("Your response hit the output limit before this tool call completed. Write smaller files, one or two per step."); continue; }
+      if (use.id === incomplete) { fail("Your response hit the output limit before this tool call completed; the calls before it were applied. Continue with this file, writing one or two files per step."); continue; }
       try {
         switch (use.name) {
           case "write_file": {

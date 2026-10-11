@@ -2,6 +2,9 @@ import { z } from "zod";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
 import { mapProject, mapVersion } from "@/lib/cloud/mappers";
+import { randomUUID } from "node:crypto";
+import { ArtifactContentSchema, StyleProfileSchema, type ArtifactVersion } from "@/lib/domain";
+import { baseStyles } from "@/components/studio-model";
 import { apiError, boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
 import { EffortLevelSchema } from "@/lib/routing/effort";
 import { ProjectFiles } from "@/lib/builder/files";
@@ -37,6 +40,16 @@ const BuildRequest = z.object({
   review: ReviewInputSchema.optional(),
 }).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review);
 
+function blankVersion(artifactId: string, kind: string, title: string, userId: string): ArtifactVersion {
+  const style = baseStyles[0];
+  return {
+    id: randomUUID(), artifactId, number: 0, parentVersionId: null, createdAt: new Date().toISOString(), createdBy: userId, assetIds: [], changeSummary: "",
+    content: ArtifactContentSchema.parse({ schemaVersion: 1, title: title.slice(0, 200) || "Untitled", kind, sections: [] }),
+    style: StyleProfileSchema.parse({ id: style.id, name: style.name, version: 1, typography: { headingFont: "Source Serif 4", bodyFont: "Inter" },
+      colors: { accent: style.color, ink: "#16181D", canvas: "#F8F7F4" }, description: style.description, referenceAssetIds: [] }),
+  };
+}
+
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 
 export async function GET() {
@@ -68,8 +81,11 @@ export async function POST(request: Request) {
     if (!projectResult.data) throw new RequestError("NOT_FOUND", "This project is unavailable.", 404);
     const project = mapProject(projectResult.data);
     const versions = (versionsResult.data ?? []).map(mapVersion);
-    const current = versions.find(version => version.number === artifact.current_version);
-    if (!current) throw new RequestError("NOT_FOUND", "The current website revision is unavailable.", 404);
+    // Projects created empty start at version 0 with no saved revision: build
+    // from a blank document and the default style, as the studio editor does.
+    const current = versions.find(version => version.number === artifact.current_version)
+      ?? (artifact.current_version === 0 ? blankVersion(artifact.id, artifact.kind, artifact.title, user.id) : undefined);
+    if (!current) throw new RequestError("NOT_FOUND", "The current revision is unavailable.", 404);
     if (reviewing && !current.content.websiteSource?.files.length) throw new RequestError("NOTHING_TO_REVIEW", "Build the website before reviewing its design.", 409);
 
     const policy = BUILDER_EFFORT[body.effort];
