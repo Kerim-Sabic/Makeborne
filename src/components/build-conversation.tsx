@@ -9,15 +9,19 @@ import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop } fr
 import "@/app/build-workspace.css";
 
 type Instruction = { id: string; text: string; mode: "create" | "plan"; effort: EffortLevel };
-export default function BuildConversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, effort = DEFAULT_EFFORT, onEffort, readonly = false }: {
+export default function BuildConversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, effort = DEFAULT_EFFORT, onEffort, readonly = false, prefill }: {
   projectKey: string; brief: string; kind: "website" | "book" | "presentation";
+  /** Text placed in the composer for review (e.g. client feedback). Never submitted automatically. */
+  prefill?: { key: string; text: string } | null;
   onOpenEditor: () => void; onOpenHistory?: () => void;
   effort?: EffortLevel; onEffort?: (value: EffortLevel) => void; readonly?: boolean;
 }) {
-  return <Conversation key={projectKey} {...{ projectKey, brief, kind, onOpenEditor, onOpenHistory, effort, onEffort, readonly }} />;
+  return <Conversation key={projectKey} {...{ projectKey, brief, kind, onOpenEditor, onOpenHistory, effort, onEffort, readonly, prefill }} />;
 }
-function Conversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, effort, onEffort, readonly }: Parameters<typeof BuildConversation>[0] & { effort: EffortLevel }) {
+function Conversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, effort, onEffort, readonly, prefill }: Parameters<typeof BuildConversation>[0] & { effort: EffortLevel }) {
   const [draft, setDraft] = useState("");
+  const [prefilled, setPrefilled] = useState<string | null>(null);
+  if (prefill && prefill.key !== prefilled) { setPrefilled(prefill.key); setDraft(prefill.text.slice(0, 4000)); }
   const [instructions, setInstructions] = useState<Instruction[]>([]);
   const [mode, setMode] = useState<"create" | "plan">("create");
   const [localEffort, setLocalEffort] = useState(effort);
@@ -40,7 +44,7 @@ function Conversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, ef
         if (raw) {
           const data = JSON.parse(raw);
           if (!data || typeof data.draft !== "string" || data.draft.length > 4000 || !Array.isArray(data.instructions) || data.instructions.length > 20 || data.instructions.some((item: Instruction) => !item || typeof item.id !== "string" || typeof item.text !== "string" || item.text.length > 4000 || !["create", "plan"].includes(item.mode) || !["light", "medium", "high", "super_high", "ultra"].includes(item.effort))) throw new Error("Invalid draft");
-          setDraft(data.draft); setInstructions(data.instructions);
+          setDraft(current => current || data.draft); setInstructions(data.instructions);
         }
       } catch { setWritable(false); setError("This conversation draft could not be loaded. Its original data is preserved."); }
       setReady(true);

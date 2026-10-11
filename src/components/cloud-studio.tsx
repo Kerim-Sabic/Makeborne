@@ -8,6 +8,8 @@ import PendingCloudWrites from "./pending-cloud-writes";
 import CloudClientOutreach from "./cloud-client-outreach";
 import AccountExport from "./account-export";
 import WebsitePublish from "./website-publish";
+import ClientReviewPanel from "./client-review-panel";
+import { takeReviewPrefill } from "@/lib/client-review/prefill";
 import WebsiteGithub from "./website-github";
 import WebsiteSourceDownload from "./website-source-download";
 import AccountPreview from "./account-preview";
@@ -49,6 +51,7 @@ import {
   Plus,
   Save,
   Users,
+  MessageSquareText,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { clearAccountLocalData } from "@/lib/account-local-data";
@@ -1115,7 +1118,12 @@ export function CloudEditor({
   back: () => void;
   notify: (s: string) => void;
 }) {
-  const [view, setView] = useState<"preview" | "edit" | "history" | "publish">("preview");
+  const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
+  // Client feedback placed in the builder composer for review. Never auto-sent.
+  const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string } | null>(null);
+  useEffect(() => {
+    queueMicrotask(() => { const text = takeReviewPrefill(artifact.id); if (text) setBuilderPrefill({ key: crypto.randomUUID(), text }); });
+  }, [artifact.id]);
   const [generatedVersionId,setGeneratedVersionId]=useState<string|null>(null);
   const [builderAvailable, setBuilderAvailable] = useState(false);
   const [live, setLive] = useState<LiveUpdate | null>(null);
@@ -1558,9 +1566,9 @@ export function CloudEditor({
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
-          defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} autoStart={autoStart}
+          defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} autoStart={autoStart} prefill={builderPrefill}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
-        : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
+        : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
             <div>
@@ -1568,6 +1576,7 @@ export function CloudEditor({
               <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />{content?.website || content?.websiteSource ? "Code" : "Edit"}</button>
               <button type="button" aria-pressed={view === "history"} onClick={() => setView("history")}><History size={15} />History</button>
               {useLiveBuilder && content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} onClick={() => setView("publish")}><Globe2 size={15} />Publish</button>}
+              <button type="button" aria-pressed={view === "review"} onClick={() => setView("review")}><MessageSquareText size={15} />Client review</button>
             </div>
             {(content?.website || content?.websiteSource) && role !== "reviewer" ? <WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} /> : <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>}
           </nav>
@@ -1687,6 +1696,10 @@ export function CloudEditor({
         </div>}
         {view === "publish" && useLiveBuilder && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
           capture={() => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} /></div>}
+        {view === "review" && <div className="lb-publish cloud-client-review"><ClientReviewPanel key={`review:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id}
+          version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || Boolean(live)} canEdit={role !== "reviewer"}
+          capture={content.websiteSource ? () => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id }) : undefined}
+          onSendToBuilder={role === "reviewer" ? undefined : text => { setBuilderPrefill({ key: crypto.randomUUID(), text }); if (useLiveBuilder) setView("preview"); }} /></div>}
         <div className="cloud-workbench-edit" hidden={view !== "edit"}>
         {content.websiteSource ? (view === "edit" && <WebsiteSourceEditor source={content.websiteSource} readOnly={role === "reviewer" || uncertainSave || conflict || !!recovery || lockChangePending} onChange={(next, summary) => {
           if (role === "reviewer" || uncertainSave || conflict || recovery || lockChangePending) return;

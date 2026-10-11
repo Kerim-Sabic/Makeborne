@@ -12,6 +12,7 @@ import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud
 import CloudClientOutreach from "./cloud-client-outreach";
 import { useClientDirectory } from "./use-client-directory";
 import ClientProjectDirectory from "./client-project-directory";
+import ClientReviewFeed from "./client-review-feed";
 import PendingCloudWrites from "./pending-cloud-writes";
 import "@/app/account-clients.css";
 
@@ -63,7 +64,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const [workspaces, setWorkspaces] = useState<CloudWorkspace[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selected, setSelected] = useState<CloudClient | null>(null);
-  const [view, setView] = useState<"outreach" | "details" | "projects">("outreach");
+  const [view, setView] = useState<"outreach" | "details" | "projects" | "reviews">("outreach");
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("All stages");
   const [followUp, setFollowUp] = useState<"all" | Exclude<FollowUpBucket, "closed">>("all");
@@ -177,7 +178,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     <header className="ac-heading"><div><span className="eyebrow">YOUR CLIENT RELATIONSHIPS</span><h1>{selected ? selected.name : "Good work starts with people."}</h1><p>{selected ? "Contact details, conversations, and the work you create together." : "Keep every conversation, next step, and project together."}</p></div>
       {!selected && snapshot && canEdit && <button className="button primary" disabled={busy || adding} onClick={() => setAdding(true)}><Plus size={16} /> Add client</button>}</header>
     {selected && snapshot && canEdit && <button className="button primary" disabled={busy || saving} onClick={() => onCreate(snapshot.workspace.id, selected)}><Plus size={16} /> Create for this client</button>}
-    {!selected && snapshot && <><div className="ac-followup-tabs" aria-label="Follow-up views">{followUps.map(item => <button type="button" key={item.id} aria-pressed={followUp === item.id} onClick={() => setFollowUp(item.id)}><span>{item.label}</span><strong>{item.count ?? "—"}</strong></button>)}</div><p className="small-note">Follow-ups across this workspace · Dates use your local calendar. Won and lost clients are excluded from follow-up views.</p></>}
+    {!selected && snapshot && <><div className="ac-followup-tabs" aria-label="Follow-up views">{followUps.map(item => <button type="button" key={item.id} aria-pressed={followUp === item.id} onClick={() => setFollowUp(item.id)}><span>{item.label}</span><strong>{item.count ?? "—"}</strong></button>)}</div><p className="small-note">Follow-ups across this workspace · Dates use your local calendar. Won, delivered and lost clients are excluded from follow-up views.</p></>}
     {!selected && <div className="ac-toolbar">
       <label className="ac-search"><Search size={16} /><input aria-label="Search account clients" maxLength={200} placeholder="Search name, company, or email" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <select aria-label="Outreach stage" value={stage} onChange={event => setStage(event.target.value)}><option>All stages</option>{outreachStages.map(item => <option key={item}>{item}</option>)}</select>
@@ -193,9 +194,10 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     {busy && <p role="status">Loading…</p>}
     {selected && snapshot ? <div className="ac-detail">
       <button className="button ghost small" disabled={busy || saving} onClick={() => navigate({ workspaceId: snapshot.workspace.id, clientId: null })}><ArrowLeft size={15} /> All clients</button>
-      <nav className="ac-source" aria-label="Client sections">{(["outreach", "details", "projects"] as const).map(item => <button key={item} disabled={busy || saving} aria-pressed={view === item} onClick={() => void open(selected.id, item)}>{item === "outreach" ? "Outreach & activity" : item === "details" ? "Contact details" : "Projects"}</button>)}</nav>
+      <nav className="ac-source" aria-label="Client sections">{(["outreach", "details", "projects", "reviews"] as const).map(item => <button key={item} disabled={busy || saving} aria-pressed={view === item} onClick={() => void open(selected.id, item)}>{item === "outreach" ? "Outreach & activity" : item === "details" ? "Contact details" : item === "projects" ? "Projects" : "Client reviews"}</button>)}</nav>
       {view === "outreach" && <CloudClientOutreach key={`${selected.id}:${selected.updatedAt}`} initialClient={selected} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={() => navigate({ workspaceId: snapshot.workspace.id, clientId: null })} onSaved={client => { setSelected(client); setSnapshot(current => current ? { ...current, clients: current.clients.map(item => item.id === client.id ? { ...client, outreachSummary: client.outreach ? { stage: client.outreach.stage, nextFollowUp: client.outreach.nextFollowUp } : undefined } : item) } : current); }} />}
       {view === "details" && <ClientDetails key={`${selected.id}:${selected.updatedAt}`} client={selected} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={() => navigate({ workspaceId: snapshot.workspace.id, clientId: null })} notify={setMessage} saved={async () => { await load(snapshot.workspace.id); setMessage("Client details saved to your account."); }} />}
+      {view === "reviews" && <ClientReviewFeed key={`${snapshot.workspace.id}:${selected.id}:reviews`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={selected.id} clientName={selected.name} canEdit={canEdit} onOpenProject={onOpenProject} />}
       {view === "projects" && <ClientProjectDirectory key={`${snapshot.workspace.id}:${selected.id}`} workspaceId={snapshot.workspace.id} clientId={selected.id} clientName={selected.name} onOpenProject={onOpenProject} />}
     </div> : !adding && <><div className="ac-list">{clients.map(client => <button className="ac-row" key={client.id} disabled={busy || directory.busy} onClick={() => void open(client.id, "outreach")}><span className="ac-avatar">{client.name.slice(0, 1).toUpperCase()}</span><span className="ac-person"><strong>{client.name}</strong><small>{client.company || client.email || "Add contact details"}</small></span><span className="ac-stage">{client.outreachSummary?.stage ?? client.outreach?.stage ?? "Lead"}</span><small className={`ac-followup ac-followup-${followUpBucket(summary(client), today)}`}>{followUpLabel(summary(client), today)}</small><ArrowUpRight size={16} /></button>)}</div>
       {!busy && !directory.busy && !directory.error && !clients.length && !message && <div className="ac-empty"><Users size={28} /><h2>{snapshot ? (search || stage !== "All stages" || followUp !== "all" ? "No clients match this view." : "A place for your next client.") : "Start your client workspace."}</h2><p>{snapshot ? "Add a client or adjust your filters to start tracking the relationship." : "Keep client relationships and their projects saved to your account."}</p>{snapshot && (search || stage !== "All stages" || followUp !== "all") && <button className="button secondary" onClick={() => { setSearch(""); setStage("All stages"); setFollowUp("all"); }}>Clear filters</button>}{!snapshot && !workspaces.length && <button onClick={() => void createWorkspace()} className="button primary">Set up client workspace</button>}</div>}
