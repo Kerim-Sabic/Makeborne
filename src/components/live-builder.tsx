@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Check, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, Paperclip, Sparkles, X } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
 import type { SitePlan } from "@/lib/builder/plan";
+import type { DocumentSource } from "@/lib/documents/schema";
 import { captureDesign } from "@/lib/builder/design-capture";
 import { autoReviewRounds } from "@/lib/builder/review-policy";
 import { readCloudImage } from "./cloud-api";
@@ -13,9 +14,14 @@ type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: 
 type Shot = { label: string; url: string; viewport: string };
 type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[] };
 type Attachment = { name: string; mediaType: string; data: string; size: number };
-type Live = { files: Record<string, string>; assets: { id: string; path: string }[] };
+type Live = { files: Record<string, string>; assets: { id: string; path: string }[]; document?: DocumentSource; focus?: string };
 type RunResult = { version: number; changed: boolean; touched: number; finished: boolean };
-export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean };
+export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean; document?: DocumentSource; focus?: string };
+const COPY = {
+  website: { title: "What should we build?", intro: "Describe the website, its audience and the feeling you want. Attach a logo, screenshot or brief for reference. Then keep chatting to refine it.", start: "A premium website for a makeup brand selling three products…", edit: "Ask for a change — e.g. make the hero bolder and add an FAQ" },
+  presentation: { title: "What's the presentation?", intro: "Describe the audience, the goal and the key message. Attach notes, data or a brief. Slides appear live as they are written; then refine by chat.", start: "A 10-slide seed pitch for a community solar startup…", edit: "Ask for a change — e.g. make slide 4 a chart, or a warmer palette" },
+  book: { title: "What's the book?", intro: "Describe the story or topic, the reader, the tone and the length. Pages are typeset live at 6 × 9 in with illustrations; then refine by chat.", start: "A short illustrated children's book about a lighthouse cat…", edit: "Ask for a change — e.g. shorten chapter 2, or a warmer palette" },
+} as const;
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.txt";
 const MAX_FILE = 6 * 1024 * 1024;
@@ -52,7 +58,7 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, autoStart, autoStartMode, prefill, onLive, onSaved }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, autoStart, autoStartMode, prefill, onLive, onSaved, kind = "website", baseDocument }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback. Never sent automatically. */
   prefill?: { key: string; text: string } | null;
@@ -63,7 +69,10 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   autoStartMode?: "create" | "plan";
   onLive: (update: LiveUpdate | null) => void;
   onSaved: () => Promise<void> | void;
+  /** Books and presentations use the structured document builder: no Plan mode or visual review. */
+  kind?: "website" | "book" | "presentation"; baseDocument?: DocumentSource;
 }) {
+  const copy = COPY[kind], website = kind === "website";
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [effort, setEffort] = useState<EffortLevel>(defaultEffort ?? "medium");
@@ -77,7 +86,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [chosenMode, setMode] = useState<"create" | "plan" | null>(null);
   const planner = usePlanMode({ accountId, workspaceId, artifactId });
   // An open draft plan from an earlier session keeps the composer in Plan mode.
-  const mode = chosenMode ?? (planner.restored ? "plan" : "create");
+  const mode = !website ? "create" : chosenMode ?? (planner.restored ? "plan" : "create");
   const draftPlan = planner.active && planner.active.stored.status === "draft" ? planner.active : null;
   const [prefilled, setPrefilled] = useState<string | null>(null);
   if (prefill && prefill.key !== prefilled) { setPrefilled(prefill.key); setDraft(prefill.text.slice(0, 8000)); }
@@ -149,6 +158,12 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
               onLive({ ...live, building: true });
               activity({ kind: "image", label: `Created ${event.url}`, done: true }, `image:${String(event.path).replace(/^public\/images\/|\.webp$/g, "")}`);
               break;
+            case "document":
+              live.document = event.document; live.focus = event.focus;
+              onLive({ ...live, building: true });
+              break;
+            case "item_start": activity({ kind: "file", label: event.label, done: false }, `item:${event.key}`); break;
+            case "item": activity({ kind: "file", label: event.label, done: true }, `item:${event.key}`); break;
             case "tool_error": activity({ kind: "note", label: "Fixing an issue…", done: true }); break;
             case "usage": update(replyId, turn => ({ ...turn, credits: event.credits })); break;
             case "done":
@@ -211,7 +226,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done" };
     const reply: Turn = { id: newId(), role: "assistant", text: "", activity: [], state: "streaming" };
     setTurns(current => [...current, userTurn, reply]);
-    const live: Live = { files: { ...baseFiles }, assets: [...baseAssets] };
+    const live: Live = { files: { ...baseFiles }, assets: [...baseAssets], document: baseDocument };
     onLive({ ...live, building: true });
     try {
       const level = options?.effort ?? effort;
@@ -233,7 +248,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
         result = continued;
       }
       // First builds and large changes get an automatic look-and-fix pass.
-      const rounds = result?.changed ? autoReviewRounds(level, { firstBuild: !Object.keys(baseFiles).length, filesTouched: touched }) : 0;
+      const rounds = result?.changed && website ? autoReviewRounds(level, { firstBuild: !Object.keys(baseFiles).length, filesTouched: touched }) : 0;
       for (let round = 1; round <= rounds && result?.changed; round++) {
         refreshBalance();
         result = await reviewRound({ version: result.version, round, effort: level }, live);
@@ -241,7 +256,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
     } finally {
       await finishRun();
     }
-  }, [baseAssets, baseFiles, busy, disabled, effort, finishRun, onLive, planner, refreshBalance, reviewRound, stream, version]);
+  }, [baseAssets, baseDocument, baseFiles, busy, disabled, effort, finishRun, onLive, planner, refreshBalance, reviewRound, stream, version, website]);
 
   /** Manual "Review design" for the current saved version. */
   const review = useCallback(async () => {
@@ -287,8 +302,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
   useEffect(() => {
     if (!autoStart || started.current || disabled || turns.length) return;
     started.current = true;
-    void (autoStartMode === "plan" ? plan(autoStart) : send(autoStart));
-  }, [autoStart, autoStartMode, disabled, plan, send, turns.length]);
+    void (autoStartMode === "plan" && website ? plan(autoStart) : send(autoStart));
+  }, [autoStart, autoStartMode, disabled, plan, send, turns.length, website]);
 
   async function attach(list: FileList | null) {
     if (!list) return;
@@ -303,10 +318,10 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
   }
 
   const empty = !turns.length && !history.length && !planner.restored;
-  const canReview = Object.keys(baseFiles).length > 0;
+  const canReview = website && Object.keys(baseFiles).length > 0;
   return <aside className="lb" aria-label="Builder chat">
     <div className="lb-log" ref={log} aria-live="polite">
-      {empty && <div className="lb-intro"><Sparkles size={18} /><h3>What should we build?</h3><p>Describe the website, its audience and the feeling you want. Attach a logo, screenshot or brief for reference. Then keep chatting to refine it.</p></div>}
+      {empty && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {!!history.length && <details className="lb-history"><summary>{history.length} earlier change{history.length === 1 ? "" : "s"}</summary>
         <ol>{history.map(item => <li key={item.number}><strong>v{item.number}</strong> {item.summary}</li>)}</ol></details>}
       {planner.restored && <div className="lb-turn lb-assistant">
@@ -332,14 +347,14 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
     <form className="lb-composer" data-mode={mode} onSubmit={event => { event.preventDefault(); submit(draft, attachments); }}>
       {mode === "plan" && <p className="lb-plan-note"><ListChecks size={12} />{draftPlan ? "Plan mode — your reply revises the plan above." : "Plan mode — I'll study your project and propose a plan. No code is written."}</p>}
       {!!attachments.length && <ul className="lb-files">{attachments.map((file, index) => <li key={`${file.name}:${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setAttachments(attachments.filter((_, item) => item !== index))}><X size={12} /></button></li>)}</ul>}
-      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? "A premium website for a makeup brand selling three products…" : "Ask for a change — e.g. make the hero bolder and add an FAQ"} value={draft} rows={3} maxLength={8000} disabled={busy || disabled}
+      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || disabled}
         onChange={event => setDraft(event.target.value)}
         onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(draft, attachments); } }} />
       <div className="lb-controls">
-        <div className="lb-mode" role="group" aria-label="Mode">
+        {website && <div className="lb-mode" role="group" aria-label="Mode">
           <button type="button" aria-pressed={mode === "create"} disabled={busy} onClick={() => setMode("create")} title="Build: edit the website directly"><Hammer size={12} />Build</button>
           <button type="button" aria-pressed={mode === "plan"} disabled={busy} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
-        </div>
+        </div>}
         <label className="lb-attach" aria-label="Attach files"><Paperclip size={15} /><input type="file" multiple accept={ACCEPT} disabled={busy || disabled} onChange={event => { void attach(event.target.files); event.target.value = ""; }} /></label>
         <select aria-label="Effort" value={effort} disabled={busy} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}

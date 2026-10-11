@@ -398,7 +398,7 @@ export function htmlDocument(input: ExportRequest) {
 }
 /** Serverless hosts (Vercel) ship no browser: use the matching @sparticuz/chromium
  * build there. Elsewhere, Playwright's installed Chromium or an explicit path. */
-async function chromiumLaunchOptions(): Promise<{ executablePath?: string; args?: string[] }> {
+export async function chromiumLaunchOptions(): Promise<{ executablePath?: string; args?: string[] }> {
   if (process.env.CHROMIUM_EXECUTABLE_PATH) return { executablePath: process.env.CHROMIUM_EXECUTABLE_PATH };
   if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) return {};
   const { default: serverless } = await import("@sparticuz/chromium");
