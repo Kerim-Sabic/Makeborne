@@ -61,9 +61,11 @@ scrollTo(0,0);setTimeout(function(){var c=document.documentElement.cloneNode(tru
 c.classList.remove("js");post({type:"snapshot",html:"<!doctype html>"+c.outerHTML});},900);})();});
 post({type:"ready"});})();</script>`;
 
-/** Bundle a project into one self-contained HTML document (React inlined).
- * preview adds the editor shim; publish minifies. */
-export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" = "preview"): Promise<BundleResult> {
+type CompileResult = { ok: true; js: string; css: string } | { ok: false; error: string };
+
+/** Compile src/main.tsx with React inlined from the same-origin runtime.
+ * Preview keeps readable output; publish minifies. Neither includes the shim. */
+async function compileProject(input: Record<string, string>, mode: "preview" | "publish"): Promise<CompileResult> {
   const files = new Map(Object.entries(input));
   if (!files.has("src/main.tsx")) return { ok: false, error: "The project has no src/main.tsx entry yet." };
   const origin = typeof location === "undefined" ? "" : location.origin;
@@ -74,7 +76,7 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
   try {
     result = await build.build({
       entryPoints: ["src/main.tsx"], bundle: true, write: false, format: "esm", outdir: "/out",
-      target: "es2022", jsx: "automatic", minify: mode === "publish", sourcemap: false, logLevel: "silent",
+      target: "es2022", jsx: "automatic", minify: mode === "publish", sourcemap: false, logLevel: "silent", legalComments: mode === "publish" ? "none" : "inline",
       define: { "process.env.NODE_ENV": '"production"', "import.meta.env.MODE": '"production"', "import.meta.env.DEV": "false", "import.meta.env.PROD": "true" },
       plugins: [{
         name: "makeborne-project",
@@ -106,19 +108,39 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
     const messages = failure.errors?.slice(0, 5).map(item => item.location ? `${item.location.file.replace(/^project:/, "")}:${item.location.line}: ${item.text}` : item.text);
     return { ok: false, error: messages?.join("\n") || "The project could not be bundled." };
   }
-  const js = result.outputFiles.find(file => file.path.endsWith(".js"))?.text ?? "";
-  const css = result.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
+  return {
+    ok: true,
+    js: result.outputFiles.find(file => file.path.endsWith(".js"))?.text ?? "",
+    css: result.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "",
+  };
+}
 
-  const source = files.get("index.html") ?? '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website</title></head><body><div id="root"></div></body></html>';
+/** Bundle a project into one self-contained HTML document (React inlined).
+ * preview adds the editor shim; publish minifies. */
+export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" = "preview"): Promise<BundleResult> {
+  const compiled = await compileProject(input, mode);
+  if (!compiled.ok) return compiled;
+  const { js, css } = compiled;
+  const source = input["index.html"] ?? '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website</title></head><body><div id="root"></div></body></html>';
   let html = source.replace(/<script\b[^>]*\bsrc=["'][^"']*["'][^>]*>\s*<\/script>/gi, "").replace(/<link\b[^>]*rel=["']?(?:modulepreload|stylesheet)["']?[^>]*>/gi, "");
   if (!/<\/head>/i.test(html)) html = html.replace(/<body/i, "<head></head><body");
-  // Function replacers: generated code may contain `$&`-style sequences.
-  const head = `${mode === "preview" ? PREVIEW_SHIM : ""}<style>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
+  // Function replacers: generated code may contain `$&`-style sequences. The
+  // marker lets publishing swap this inline copy for the hosted stylesheet.
+  const head = `${mode === "preview" ? PREVIEW_SHIM : ""}<style data-makeborne-bundle>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
   html = html.replace(/<\/head>/i, () => head);
   const script = `<script type="module">${scriptSafe(js)}</script>`;
   html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, () => `${script}</body>`) : `${html}${script}`;
   for (const [path, url] of Object.entries(assets)) html = html.split(path).join(url);
   return { ok: true, html };
+}
+
+/** Production build for the isolated site host: one minified ES module plus one
+ * stylesheet. Project images keep their public paths (served by the host). */
+export async function buildPublishBundle(input: Record<string, string>): Promise<{ js: string; css: string }> {
+  const compiled = await compileProject(input, "publish");
+  if (!compiled.ok) throw new Error(`Fix the build before publishing: ${compiled.error}`);
+  if (!compiled.js.trim()) throw new Error("The website build produced no script.");
+  return { js: compiled.js, css: compiled.css };
 }
 
 /** Render the project off-screen in the same sandbox and capture its final DOM
