@@ -318,20 +318,28 @@ function compose(ctx: Ctx, slide: Slide) {
     case "compare": {
       const top = header(ctx, slide) + 40, cmp = slide.compare!, gap = 32, pw = (CONTENT_W - gap) / 2;
       const many = [cmp.left, cmp.right].some(side => side.points.length > 4 || side.points.some(point => point.length > 80));
-      const size = many ? 19 : 23;
-      const needed = Math.max(...[cmp.left, cmp.right].map(side => 34 + 50 + 26 + side.points.reduce((sum, point) => sum + textHeight(point, pw - 102, size, 1.4, ctx.m.body) + 18, 0) + 30));
-      const ph = Math.min(SAFE_BOTTOM - top, Math.max(280, needed));
-      ([["left", cmp.left], ["right", cmp.right]] as const).forEach(([side, data], i) => {
-        const x = MX + i * (pw + gap), strong = side === "right";
-        const fill = strong ? c.accent : c.surface, ink = strong ? readableOn(c.accent, "#FFFFFF", "#111111", c.bg) : c.ink;
-        rect(ctx, { x, y: top, w: pw, h: ph, fill, radius: 8 });
-        let y = top + 34;
-        y += text(ctx, data.heading, { x: x + 36, y, w: pw - 72 }, { font: "heading", size: 34, weight: 700, color: ink, maxH: 84, min: 22 }) + 26;
-        for (const point of data.points) {
-          ctx.prims.push({ k: "line", x1: x + 36, y1: y + size * 0.7, x2: x + 52, y2: y + size * 0.7, color: strong ? ink : c.accent, width: 3 });
-          y += text(ctx, point, { x: x + 66, y, w: pw - 102 }, { size, color: ink, maxH: Math.max(size * 1.4, top + ph - 24 - y), min: 14 }) + 16;
-        }
-      });
+      const limit = SAFE_BOTTOM - top;
+      // Lay both sides out, shrinking the type until the taller side fits; then size the panels to it.
+      const layout = (size: number) => {
+        const sides = ([["left", cmp.left], ["right", cmp.right]] as const).map(([side, data], i) => {
+          const x = MX + i * (pw + gap), strong = side === "right";
+          const fill = strong ? c.accent : c.surface, ink = strong ? readableOn(c.accent, "#FFFFFF", "#111111", c.bg) : c.ink;
+          const sub: Ctx = { ...ctx, prims: [], issues: [] };
+          let y = top + 34;
+          y += text(sub, data.heading, { x: x + 36, y, w: pw - 72 }, { font: "heading", size: 34, weight: 700, color: ink, maxH: 84, min: 22 }) + 26;
+          for (const point of data.points) {
+            sub.prims.push({ k: "line", x1: x + 36, y1: y + size * 0.7, x2: x + 52, y2: y + size * 0.7, color: strong ? ink : c.accent, width: 3 });
+            y += text(sub, point, { x: x + 66, y, w: pw - 102 }, { size, color: ink }) + 16;
+          }
+          return { x, fill, prims: sub.prims, height: y - top + 18 };
+        });
+        return { sides, height: Math.max(...sides.map(side => side.height)) };
+      };
+      let size = many ? 20 : 23, result = layout(size);
+      while (result.height > limit && size > 14) result = layout(--size);
+      if (result.height > limit) ctx.issues.push("the comparison has too much text for one slide");
+      const ph = Math.min(limit, Math.max(260, result.height));
+      for (const side of result.sides) { rect(ctx, { x: side.x, y: top, w: pw, h: ph, fill: side.fill, radius: 8 }); ctx.prims.push(...side.prims); }
       footer(ctx);
       return;
     }

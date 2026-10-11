@@ -1122,7 +1122,6 @@ export function CloudEditor({
   const [live, setLive] = useState<LiveUpdate | null>(null);
   const [autoStart, setAutoStart] = useState<string | null>(null);
   useEffect(() => {
-    if (artifact.kind !== "website") return;
     let current = true;
     fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) setBuilderAvailable(value?.available === true); }).catch(() => undefined);
     return () => { current = false; };
@@ -1671,7 +1670,7 @@ export function CloudEditor({
           onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
         {view === "preview" && useLiveBuilder && liveDocument && (live?.document ?? content.document) && <DocumentPreview document={(live?.document ?? content.document)!} focus={live?.focus}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} />}
-        {view === "preview" && useLiveBuilder && liveDocument && !live?.document && !content.document && <div className="lp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
+        {view === "preview" && useLiveBuilder && liveDocument && !live?.document && !content.document && <div className="lp-empty dp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
         {view === "preview" && useLiveBuilder && !liveDocument && (live || content.websiteSource) && <LivePreview
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}

@@ -67,3 +67,4 @@
 .lp-bar .dp-export { width:auto; gap:5px; padding:0 10px; font-size:11.5px; font-weight:600; color:#4b3a59; border:1px solid #e3dde9; background:#fff; display:inline-flex; align-items:center; }
 .lp-bar .dp-export:disabled { opacity:.45; cursor:default; }
 .dp-stage { background:#e7e5e0; }
+.dp-empty { min-height:60vh; }
