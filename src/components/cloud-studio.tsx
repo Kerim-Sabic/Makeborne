@@ -19,7 +19,7 @@ import LiveBuilder, { type LiveUpdate } from "./live-builder";
 import LivePreview from "./live-preview";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
 import "@/app/live-builder.css";
-import { captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
+import { captureProjectPublication, captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
 import "@/app/cloud-workbench.css";
 const WebsiteSourceEditor = dynamic(() => import("./website-source-editor"), {ssr: false, loading: () => <p role="status">Opening code editor…</p>});
 import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
@@ -1696,7 +1696,7 @@ export function CloudEditor({
           </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} /></>}
         </div>}
         {view === "publish" && useLiveBuilder && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
-          capture={() => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} /></div>}
+          capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} /></div>}
         {view === "review" && <div className="lb-publish cloud-client-review"><ClientReviewPanel key={`review:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id}
           version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || Boolean(live)} canEdit={role !== "reviewer"}
           capture={content.websiteSource ? () => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id }) : undefined}

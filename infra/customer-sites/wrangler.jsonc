@@ -1,1 +1,40 @@
-{"name":"makeborne-sites","compatibility_date":"2026-10-05","pages_build_output_dir":".","compatibility_flags":["nodejs_compat"]}
+// Published customer websites: one Worker serving every site on its own origin
+// under the isolated site domain (see docs/HOSTING_JS.md).
+// The top-level environment is LOCAL ONLY (wrangler dev against the local
+// Supabase stack) and is never routed. Deploy with `--env production`.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "makeborne-sites-local",
+  "main": "_worker.js",
+  "compatibility_date": "2026-10-05",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "SUPABASE_URL": "http://127.0.0.1:55321",
+    "ALLOW_LOCAL_SUPABASE": "true",
+    "SITES_DOMAIN": "localhost",
+    "APP_ORIGIN": "http://localhost:3205",
+    "LEGACY_SITES_HOST": "sites.localhost"
+  },
+  "env": {
+    "production": {
+      // Distinct from the legacy Pages project `makeborne-sites` (see legacy-redirect/).
+      "name": "makeborne-site-host",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [
+        { "pattern": "*.makeborne.site/*", "zone_name": "makeborne.site" },
+        { "pattern": "makeborne.site/*", "zone_name": "makeborne.site" }
+      ],
+      "vars": {
+        "SUPABASE_URL": "https://rklojnmmsmhwnkbzuidp.supabase.co",
+        "ALLOW_LOCAL_SUPABASE": "false",
+        "SITES_DOMAIN": "makeborne.site",
+        "APP_ORIGIN": "https://makeborne.com",
+        "LEGACY_SITES_HOST": "sites.makeborne.com"
+      },
+      // SUPABASE_PUBLISHABLE_KEY: `wrangler secret put SUPABASE_PUBLISHABLE_KEY --env production`
+      "observability": { "enabled": true, "head_sampling_rate": 0.1, "logs": { "enabled": true, "invocation_logs": false } }
+    }
+  }
+}
