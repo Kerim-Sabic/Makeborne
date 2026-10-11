@@ -251,7 +251,7 @@ check("worker refuses local or non-Supabase upstreams unless explicitly in local
   assert.equal(calls[0].url, "http://127.0.0.1:55321/rest/v1/rpc/makeborne_read_hosted_site_v2");
 }));
 check("migration keeps file storage private and readers bounded", () => {
-  const sql = fs.readFileSync("supabase/migrations/20261011150000_hosted_site_bundles.sql", "utf8");
+  const sql = fs.readFileSync("supabase/migrations/20261011140000_hosted_site_bundles.sql", "utf8");
   assert.match(sql, /revoke all on public\.hosted_site_files from public, anon, authenticated;/);
   assert.match(sql, /grant execute on function public\.makeborne_read_hosted_site_file\(text,text\) to anon/);
   assert.doesNotMatch(sql, /grant (?:select|insert|update|delete)[^;]*hosted_site_files[^;]*to (?:anon|authenticated)/i);

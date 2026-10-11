@@ -15,7 +15,7 @@ export default function WebsitePublish({ accountId, workspaceId, artifactId, tit
   const [site,setSite]=useState<HostedSite|null>(null);
   const [slug,setSlug]=useState(`${title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,30)||"website"}-${artifactId.slice(0,8)}`);
   const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[agreed,setAgreed]=useState(false),[message,setMessage]=useState("");
-  const [interactive,setInteractive]=useState(true);
+  const [interactive,setInteractive]=useState(true),[switching,setSwitching]=useState(false);
   const [confirmOffline,setConfirmOffline]=useState(false);
   const [pending,setPending]=useState<{key:string;body:string}|null>(null);
   const path=`/api/cloud/workspaces/${workspaceId}/artifacts/${artifactId}/publication`;
@@ -46,10 +46,11 @@ export default function WebsitePublish({ accountId, workspaceId, artifactId, tit
   }
   /** Live sites switch JavaScript immediately; otherwise the choice applies on publish. */
   async function changeInteractive(next:boolean) {
-    if(busy||!owner) return;
+    if(busy||switching||!owner) return;
     if(!site?.live||!site.scripted&&!next){setInteractive(next);return;}
     if(next&&!site.scripted){setInteractive(next);setMessage("Publish the website again to turn on JavaScript.");return;}
-    setBusy(true);setMessage("");
+    const previous=interactive;
+    setInteractive(next);setSwitching(true);setMessage("");
     try {
       const assertAccount=cloudAccountGuard(accountId); assertAccount();
       const response=await fetch(path,{method:"PATCH",headers:{"Content-Type":"application/json","Idempotency-Key":crypto.randomUUID(),"X-Makeborne-Account":accountId},body:JSON.stringify({interactive:next,revision:site.revision}),signal:AbortSignal.timeout(30_000)});
@@ -57,8 +58,8 @@ export default function WebsitePublish({ accountId, workspaceId, artifactId, tit
       if(!response.ok) throw new Error(result.error?.message||"The setting could not be changed. Reload and try again.");
       setSite(result.site);setInteractive(result.site.interactive);
       setMessage(result.site.interactive?"JavaScript is on: menus, tabs, forms and animations run on the live site.":"JavaScript is off: visitors see the static version of your website.");
-    } catch(error){setMessage(error instanceof Error?error.message:"The setting could not be changed.");}
-    finally{setBusy(false);}
+    } catch(error){setInteractive(previous);setMessage(error instanceof Error?error.message:"The setting could not be changed.");}
+    finally{setSwitching(false);}
   }
   const address=site?siteAddress(site.slug):null;
   const scriptsLive=Boolean(site?.live&&site.scripted&&site.interactive);
@@ -68,11 +69,11 @@ export default function WebsitePublish({ accountId, workspaceId, artifactId, tit
     <label className="website-publish-label">Website address<span className="website-publish-address"><span>{SITE_ADDRESS_PARTS.before}<em>{slug||"your-site"}</em>{SITE_ADDRESS_PARTS.after}</span><input aria-label="Website address" value={slug} maxLength={48} disabled={!owner||!!site||busy||!!pending} onChange={e=>{setSlug(e.target.value.toLowerCase());setAgreed(false);}} autoCapitalize="none" spellCheck={false}/></span></label>
     {site?.live&&address&&<div className="website-publish-links"><a href={address} target="_blank" rel="noopener noreferrer" className="website-publish-url">{address.replace(/^https?:\/\//,"").replace(/\/$/,"")}<ArrowUpRight size={14}/></a><button type="button" onClick={()=>void navigator.clipboard.writeText(address).then(()=>setMessage("Website address copied.")).catch(()=>setMessage("Copy the address from the link above."))}><Copy size={13}/>Copy link</button></div>}
     {site?.live&&capture&&<p className={`website-publish-runtime${scriptsLive?" on":""}`} role="note">{scriptsLive?"JavaScript enabled: interactive features work on the live site.":"Static version: scripts don’t run on the live site."}</p>}
-    {capture&&owner&&<label className="website-publish-toggle"><input type="checkbox" role="switch" aria-checked={interactive} checked={interactive} disabled={busy||!!pending} onChange={e=>void changeInteractive(e.target.checked)}/><span><strong>Interactive (JavaScript)</strong><small>Runs your site’s code (menus, tabs, carousels, forms, animations) on its own isolated domain. Turn off to publish a static version.</small></span></label>}
+    {capture&&owner&&<label className="website-publish-toggle"><input type="checkbox" role="switch" aria-checked={interactive} checked={interactive} disabled={busy||switching||!!pending} onChange={e=>void changeInteractive(e.target.checked)}/><span><strong>Interactive (JavaScript)</strong><small>Runs your site’s code (menus, tabs, carousels, forms, animations) on its own isolated domain. Turn off to publish a static version.</small></span></label>}
     {dirty&&<p className="website-publish-detail">Save your changes before publishing a new version.</p>}
     {!owner?<p className="website-publish-detail">Only the workspace owner can publish this website.</p>:<>
       <label className="website-publish-consent"><input type="checkbox" checked={agreed} disabled={busy||!!pending} onChange={e=>setAgreed(e.target.checked)}/><span>I’ve reviewed this version and have permission to make its text and images public.</span></label>
-      <button type="button" className="button primary" disabled={busy||!ready||disabled||(!pending&&(dirty||!agreed||!validSiteSlug(slug)||version<1))} onClick={()=>void publish(true)}>{busy?<LoaderCircle size={15} className="auth-spinner"/>:<Globe2 size={15}/>} {busy?"Publishing…":pending?"Retry publishing request":site?.live?"Publish saved changes":"Publish website"}</button>
+      <button type="button" className="button primary" disabled={busy||switching||!ready||disabled||(!pending&&(dirty||!agreed||!validSiteSlug(slug)||version<1))} onClick={()=>void publish(true)}>{busy?<LoaderCircle size={15} className="auth-spinner"/>:<Globe2 size={15}/>} {busy?"Publishing…":pending?"Retry publishing request":site?.live?"Publish saved changes":"Publish website"}</button>
       {site?.live&&!pending&&(confirmOffline?<div className="website-publish-offline"><p>Take this website offline? Visitors will no longer see it.</p><button type="button" className="button secondary small" disabled={busy} onClick={()=>void publish(false)}>Take offline</button><button type="button" className="button secondary small" disabled={busy} onClick={()=>setConfirmOffline(false)}>Cancel</button></div>:<button type="button" className="website-publish-text-button" disabled={busy} onClick={()=>setConfirmOffline(true)}>Take website offline</button>)}
     </>}
     {message&&<p className="website-publish-message" role="status">{message}</p>}

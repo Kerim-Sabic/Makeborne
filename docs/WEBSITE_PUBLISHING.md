@@ -2,6 +2,8 @@
 
 ## Scope
 
+> **Superseded for hosting by [HOSTING_JS.md](HOSTING_JS.md)** (11 October 2026): published sites move to their own origin on `*.makeborne.site`, React projects run their JavaScript there, and `sites.makeborne.com/<slug>` becomes a redirect. The renderer notes below still apply to the static snapshot/fallback.
+
 Generated HTML/CSS websites use the same sanitised document renderer as preview and HTML download. Publishing preserves their generated body and stylesheet, adding canonical/Open Graph metadata for the public address. A malformed generated design fails publication rather than falling back to the compatibility outline. Older outline-only sites retain the structured renderer and embedded, re-encoded WebP images.
 
 This release does not execute arbitrary JavaScript or provision customer databases, authentication, APIs, forms, checkout, or server processes. Main Makeborne remains on Vercel; customer pages run on Cloudflare Pages.
@@ -11,6 +13,8 @@ Public URL: `https://sites.makeborne.com/<slug>`. Five live sites and twenty res
 The generated renderer sanitises HTML, strips executable elements and enforces the curated image allowlist. The legacy renderer escapes text and embeds vetted image bytes. The shared `infra/customer-sites/website-policy.js` defines approved concept imagery and the Cloudflare response policy. Cloudflare sends a sandboxed CSP with scripts, network connections and forms disabled, approved remote image paths plus legacy image data allowed, no-store responses, no referrer, and no framing. Only a publishable Supabase key is deployed there. The public database RPC exposes only eligible published HTML. Revoked or expired creation entitlements stop serving websites; no five-minute activity lease is applied to public viewing.
 
 ## Cloudflare deployment
+
+> Historical (static Pages release). Current steps: [HOSTING_JS.md](HOSTING_JS.md).
 
 Project: `makeborne-sites`; account `edda2b12d52321e4df2012e196b33640`. Deploy `infra/customer-sites` using Wrangler Pages. Set `SUPABASE_PUBLISHABLE_KEY` for the Pages project before deployment. It must be the public `sb_publishable_` key, never the secret server key. The first dashboard deployment embedded that public key in the upload bundle; use a normal environment binding for future deployments.
 

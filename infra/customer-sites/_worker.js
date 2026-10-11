@@ -119,7 +119,7 @@ const customerSites = {
       const slug = url.pathname.replace(/^\//, "").replace(/\/$/, "");
       if (!slug) return Response.redirect(config.appOrigin, 302);
       if (!validSiteLabel(slug)) return failure(404, secure, head);
-      return Response.redirect(`${siteOrigin(slug, config.domain, secure)}/`, 301);
+      return Response.redirect(`${siteOrigin(slug, config.domain, secure)}${url.port ? `:${url.port}` : ""}/`, 301);
     }
     if (host === config.domain || host === `www.${config.domain}`) return Response.redirect(config.appOrigin, 302);
     const slug = siteSlugFromHost(host, config.domain);
