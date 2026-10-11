@@ -9,6 +9,7 @@ import { runBuilder, newRunId, type BuilderEvent } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
 import { BUILDER_EFFORT, MINIMUM_RUN_CREDITS } from "@/lib/builder/pricing";
 import { getCreditBalance, releaseCredits, reserveCredits, settleCredits } from "@/lib/credits/server";
+import { SitePlanSchema, planToBrief } from "@/lib/builder/plan";
 
 export const runtime = "nodejs";
 // Vercel Hobby allows 300s; raise to 800 on Pro for long Ultra runs.
@@ -26,6 +27,8 @@ const BuildRequest = z.object({
   message: z.string().trim().min(1).max(8000),
   effort: EffortLevelSchema.default("medium"),
   attachments: z.array(Attachment).max(5).default([]),
+  /** An approved Plan mode plan the build must follow. */
+  plan: SitePlanSchema.optional(),
 }).strict();
 
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
@@ -82,6 +85,7 @@ export async function POST(request: Request) {
       current.content.website ? `Existing static design to convert into the React project (keep its look and copy unless asked otherwise):\n<html>${current.content.website.html.slice(0, 40_000)}</html>\n<css>${current.content.website.css.slice(0, 30_000)}</css>` : "",
       history ? `Recent revisions:\n${history}` : "",
       "</project>",
+      body.plan ? `<approved_plan>\nThe client reviewed and approved this plan. Build exactly this: the same pages and section order, content, type pairing, palette hex values, layout ideas, imagery and signature interaction. Do not add or drop pages or sections unless the request says so. Where the plan names fonts the toolchain cannot load, use the closest permitted stack.\n\n${planToBrief(body.plan)}\n</approved_plan>` : "",
       files.files.size
         ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: ${[...files.assets.values()].map(asset => `/${asset.path.slice(7)}`).join(", ") || "none"}`
         : "<current_files>(empty — build the complete website from scratch)</current_files>",
