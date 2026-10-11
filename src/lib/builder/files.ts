@@ -4,6 +4,8 @@ import {
   SourcePathSchema, WebsiteProjectSourceSchema, WEBSITE_SOURCE_LIMITS,
   type WebsiteProjectSource,
 } from "../projects/website-source";
+import { FONT_IMPORT, FONTS_BY_ID, unavailableFonts } from "./fonts";
+import { LUCIDE, lucideImports, unknownLucideIcons } from "./icons";
 
 export type SourceAsset = WebsiteProjectSource["assets"][number];
 export type DesignDirection = NonNullable<WebsiteProjectSource["designDirection"]>;
@@ -35,7 +37,7 @@ export class ProjectFiles {
   static checkPath(path: string) {
     const parsed = SourcePathSchema.safeParse(path);
     if (!parsed.success) throw new FileToolError(`Invalid path "${path}". Use a relative project path like src/components/Hero.tsx.`);
-    if (PROTECTED.test(path)) throw new FileToolError(`${path} is managed by Makeborne and cannot be edited. Only react and react-dom are available; do not add dependencies or build configuration.`);
+    if (PROTECTED.test(path)) throw new FileToolError(`${path} is managed by Makeborne and cannot be edited. Only react, react-dom and lucide-react are available; do not add dependencies or build configuration.`);
     if (path.startsWith("public/")) throw new FileToolError("Files under public/ are reserved for generated images. Use generate_image for artwork and plain CSS/SVG for decoration.");
     if (!EDITABLE_EXTENSION.test(path)) throw new FileToolError(`Unsupported file type for ${path}. Use .tsx, .ts, .css, .html, .json, .svg or .md.`);
     return parsed.data;
@@ -97,7 +99,8 @@ export class ProjectFiles {
     for (const required of ["index.html", "src/main.tsx"]) if (!this.files.has(required)) issues.push(`Missing ${required}.`);
     const html = this.files.get("index.html");
     if (html && !/id=["']root["']/.test(html)) issues.push("index.html needs an element with id=\"root\".");
-    const allowed = new Set(["react", "react-dom", "react-dom/client", "react/jsx-runtime"]);
+    const allowed = new Set(["react", "react-dom", "react-dom/client", "react/jsx-runtime", LUCIDE]);
+    const icons = new Set<string>();
     const assetPaths = new Set([...this.assets.keys()].map(path => `/${path.slice("public/".length)}`));
     for (const [path, content] of this.files) {
       if (!/\.(?:tsx?|jsx?|css)$/.test(path)) continue;
@@ -110,11 +113,25 @@ export class ProjectFiles {
           if (!this.resolve(path, specifier)) issues.push(`${path} imports "${specifier}", which does not exist.`);
         } else if (specifier.startsWith("/")) {
           if (!assetPaths.has(specifier)) issues.push(`${path} references "${specifier}", which is not a generated image.`);
+        } else if (FONT_IMPORT.test(specifier)) {
+          if (!FONTS_BY_ID.has(FONT_IMPORT.exec(specifier)![1])) issues.push(`${path} imports "${specifier}", which is not in the font library.`);
+        } else if (/^(?:https?:)?\/\//.test(specifier)) {
+          issues.push(`${path} loads "${specifier}". Remote stylesheets, fonts and scripts are not allowed: use the built-in font library by family name.`);
         } else if (!allowed.has(specifier)) {
-          issues.push(`${path} imports "${specifier}". Only react and react-dom are installed; implement it with React and CSS instead.`);
+          issues.push(`${path} imports "${specifier}". Only react, react-dom and lucide-react are installed; implement it with React and CSS instead.`);
         }
       }
+      if (path.endsWith(".css") || /\bfontFamily\b/.test(content)) {
+        for (const family of unavailableFonts(content)) issues.push(`${path} uses the font "${family}", which is not available. Choose a family from the font library (see the system prompt).`);
+      }
+      if (!path.endsWith(".css") && content.includes(LUCIDE)) {
+        const found = lucideImports(content);
+        issues.push(...found.problems.map(problem => `${path}: ${problem}`));
+        found.names.forEach(name => icons.add(name));
+      }
     }
+    const missing = unknownLucideIcons(icons);
+    if (missing.length) issues.push(`These are not Lucide icon names: ${missing.join(", ")}. Pick existing Lucide icons (lucide-react has no brand logos; draw those as inline SVG or use text links).`);
     return issues.slice(0, 20);
   }
 

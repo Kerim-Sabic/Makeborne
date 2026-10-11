@@ -12,7 +12,7 @@ const SVG_ATTRIBUTES = ["viewbox", "viewBox", "xmlns", "fill", "stroke", "stroke
 export function renderHostedSnapshot(snapshot: string, title: string, description: string, url: string) {
   if (Buffer.byteLength(snapshot) > MAX_SNAPSHOT_BYTES) throw new Error("This website exceeds the 4 MB publishing limit. Use fewer or smaller images.");
   const styles = [...snapshot.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map(match => match[1]).join("\n")
-    .replace(/<\/?style/gi, "").replace(/@import[^;]*;?/gi, "").replace(/url\(\s*(['"]?)(?!data:image\/)[^)]*\1\s*\)/gi, "none");
+    .replace(/<\/?style/gi, "").replace(/@import[^;]*;?/gi, "").replace(/url\(\s*(['"]?)(?!data:image\/|data:font\/woff2;base64,)[^)]*\1\s*\)/gi, "none");
   const body = /<body[^>]*>([\s\S]*)<\/body>/i.exec(snapshot)?.[1] ?? "";
   const lang = /<html[^>]*\blang=["']([a-zA-Z-]{2,12})["']/i.exec(snapshot)?.[1] ?? "en";
   const clean = sanitizeHtml(body, {

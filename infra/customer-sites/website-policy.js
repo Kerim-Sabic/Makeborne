@@ -20,4 +20,5 @@ export const websiteImageCsp = WEBSITE_IMAGE_ASSETS.map(asset => asset.url).join
 
 // The HTTP policy and document policy intersect. Both must permit curated
 // imagery, while arbitrary remote resources and executable content stay denied.
-export const CUSTOMER_SITE_CSP = `sandbox; default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: ${websiteImageCsp}; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+// Builder snapshots embed their (OFL, self-hosted) woff2 fonts as data: URLs.
+export const CUSTOMER_SITE_CSP = `sandbox; default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: ${websiteImageCsp}; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
