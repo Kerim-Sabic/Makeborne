@@ -24,7 +24,7 @@ export type BuilderEvent =
   | { type: "image"; path: string; url: string; assetId: string }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
-  | { type: "done"; version: number; summary: string; charged: number; changed?: boolean }
+  | { type: "done"; version: number; summary: string; charged: number; changed?: boolean; finished?: boolean }
   | { type: "error"; code: string; message: string };
 
 const name = z.string().regex(/^[a-z0-9][a-z0-9-]{1,48}$/, "Use a short kebab-case name like hero-portrait.");
@@ -143,6 +143,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     let message;
     try { message = await stream.finalMessage(); }
     catch (error) {
+      // Tokens generated before the failure are still billed by the provider.
+      const partial = stream.currentMessage?.usage;
+      if (partial) { usd += usageCost(model, partial); run.emit({ type: "usage", credits: creditsForUsd(usd) }); }
       if (error instanceof Anthropic.APIError || run.signal.aborted || ++malformedTurns > 2) throw error;
       // A tool input that could not be parsed: the turn never completed, so re-issue it.
       run.emit({ type: "status", message: "Retrying an incomplete step…" });

@@ -14,7 +14,7 @@ type Shot = { label: string; url: string; viewport: string };
 type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[] };
 type Attachment = { name: string; mediaType: string; data: string; size: number };
 type Live = { files: Record<string, string>; assets: { id: string; path: string }[] };
-type RunResult = { version: number; changed: boolean; touched: number };
+type RunResult = { version: number; changed: boolean; touched: number; finished: boolean };
 export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean };
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.txt";
@@ -26,6 +26,8 @@ const readBase64 = (file: File) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 const newId = () => crypto.randomUUID();
+/** Follow-up runs after a time-limited run saved partial progress. */
+const MAX_CONTINUATIONS = 2;
 
 /** Project images as data URLs keyed by their in-code path (/images/x.webp),
  * so the sandboxed capture frame needs no network access. */
@@ -151,7 +153,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
             case "usage": update(replyId, turn => ({ ...turn, credits: event.credits })); break;
             case "done":
               finished = true;
-              result = { version: Number(event.version), changed: event.changed !== false, touched: touched.size };
+              result = { version: Number(event.version), changed: event.changed !== false, touched: touched.size, finished: event.finished !== false };
               update(replyId, turn => ({ ...turn, state: "done", text: turn.text.trim() ? `${turn.text.trim()}\n\n${event.summary}` : event.summary, credits: event.charged,
                 activity: turn.activity.filter(item => item.id !== "status") }));
               break;
@@ -216,8 +218,22 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       let result = await stream({ expectedVersion: version, message: text.trim(), effort: level,
         attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan } : {}) }, reply.id, live);
       if (result && options?.plan) planner.markBuilt(options.plan);
+      // A run cut off by the platform time limit saves its progress; pick up
+      // where it stopped in a fresh request instead of asking the user to.
+      let touched = result?.touched ?? 0;
+      for (let attempt = 0; attempt < MAX_CONTINUATIONS && result?.changed && !result.finished; attempt++) {
+        const next: Turn = { id: newId(), role: "assistant", text: "", activity: [{ id: "status", kind: "note", label: "Continuing where I left off…", done: false }], state: "streaming" };
+        setTurns(current => [...current, next]);
+        refreshBalance();
+        const continued: RunResult | null = await stream({ expectedVersion: result.version, effort: level,
+          message: `Continue the previous request and complete everything that is still missing, then check the project and call finish. The previous request was:
+${text.trim().slice(0, 6000)}` }, next.id, live);
+        if (!continued) break;
+        touched += continued.touched;
+        result = continued;
+      }
       // First builds and large changes get an automatic look-and-fix pass.
-      const rounds = result?.changed ? autoReviewRounds(level, { firstBuild: !Object.keys(baseFiles).length, filesTouched: result.touched }) : 0;
+      const rounds = result?.changed ? autoReviewRounds(level, { firstBuild: !Object.keys(baseFiles).length, filesTouched: touched }) : 0;
       for (let round = 1; round <= rounds && result?.changed; round++) {
         refreshBalance();
         result = await reviewRound({ version: result.version, round, effort: level }, live);

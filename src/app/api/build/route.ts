@@ -132,7 +132,7 @@ export async function POST(request: Request) {
             if (!files.changed.size || (error as { code?: string }).code === "REFUSED") throw error;
             try { files.toSource(); } catch { throw error; }
             emit({ type: "status", message: "Saving the work finished so far…" });
-            result = { summary: "Saved the progress made so far. Ask me to continue to finish the remaining parts.", title: undefined, credits: spent, usd: 0, finished: false };
+            result = { summary: "Saved the progress made so far.", title: undefined, credits: spent, usd: 0, finished: false };
           }
           if (reviewing && !files.changed.size) {
             // The review found nothing to fix (or ran out of room before editing):
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
             return;
           }
           const assetIds = [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])];
-          const summary = result.summary || "Updated the website.";
+          const summary = result.summary || (result.finished ? "Updated the website." : "Saved the progress made so far.");
           const saved = await client.rpc("makeborne_save_artifact_version", {
             p_workspace_id: body.workspaceId, p_artifact_id: artifact.id, p_expected_version: artifact.current_version,
             p_content: { schemaVersion: 1, kind: "website", title: ((reviewing ? "" : result.title) || current.content.title).slice(0, 200), sections: [], websiteSource: source },
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
             return;
           }
           charged = (await settleCredits(user.id, runId, Math.min(result.credits, budget))).charged;
-          emit({ type: "done", version: saved.data.version.version_number ?? artifact.current_version + 1, summary, charged, changed: true });
+          emit({ type: "done", version: saved.data.version.version_number ?? artifact.current_version + 1, summary, charged, changed: true, finished: result.finished });
         } catch (error) {
           await releaseCredits(user.id, runId).catch(() => undefined);
           const message = (error as { code?: string }).code === "REFUSED" ? "This request can't be built. Try rephrasing it." : "The builder hit a problem and stopped. Your project is unchanged and no credits were charged.";
