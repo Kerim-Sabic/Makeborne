@@ -38,7 +38,7 @@ COPY LIMITS: titles ≤ 90 chars (shorter is better), body ≤ 300 chars, 5–6 
 
 SPEAKER NOTES: every slide has notes: 2–5 sentences the presenter can say, with the supporting detail that is not on the slide.
 
-EDITS like "make slide 4 a chart": rewrite that slide with write_slide using the same id and a new layout and data.
+EDITS like "make slide 4 a chart": rewrite that slide with write_slide using the same id and a new layout. Chart figures the user actually supplied (from the brief, attachments or other slides) that support the slide's point; only if none fit, use clearly labelled illustrative values and say so in your summary.
 
 ${SHARED}`;
 

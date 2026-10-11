@@ -135,7 +135,9 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
         const title = /"title"\s*:\s*"((?:[^"\\]|\\.){3,})"/.exec(block.json.slice(0, 1200))?.[1];
         if (title || block.json.length > 400 || !["write_slide", "write_chapter"].includes(block.name)) {
           block.announced = true;
-          const label = block.name === "write_slide" ? `Writing slide${title ? `: ${JSON.parse(`"${title}"`)}` : ""}` : block.name === "write_chapter" ? `Writing chapter${title ? `: ${JSON.parse(`"${title}"`)}` : ""}` : describeTool(block.name, null, run.editor);
+          let name = "";
+          try { name = title ? `: ${JSON.parse(`"${title}"`)}` : ""; } catch { /* partial escape: show no title */ }
+          const label = block.name === "write_slide" ? `Writing slide${name}` : block.name === "write_chapter" ? `Writing chapter${name}` : describeTool(block.name, null, run.editor);
           run.emit({ type: "item_start", key: block.id, label });
         }
       }
@@ -144,8 +146,12 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     let message;
     try { message = await stream.finalMessage(); }
     catch (error) {
+      console.error("document builder step failed", error instanceof Error ? `${error.name}: ${error.message.slice(0, 300)}` : error);
       if (error instanceof Anthropic.APIError || run.signal.aborted || ++malformedTurns > 2) throw error;
       run.emit({ type: "status", message: "Retrying an incomplete step…" });
+      // Tool calls that completed before the step broke are already applied; don't redo them.
+      const done = [...applied.values()].filter(result => result.ok).map(result => result.text);
+      if (done.length) messages.push({ role: "user", content: `Your last step was cut off, but these changes were already applied:\n- ${done.join("\n- ")}\nDo not repeat them; continue with what remains, then call finish.` });
       continue;
     }
     malformedTurns = 0;

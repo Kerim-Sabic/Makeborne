@@ -109,7 +109,7 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .pending{color:${muted};font-style:italic}.waiting{color:${muted};font-style:italic}`;
   const css = mode === "print"
     ? `${shared}
-@page{size:${T.width}in ${T.height}in;margin:${T.top}in ${T.outside}in ${T.bottom}in ${T.inside}in}
+@page{size:${T.width}in ${T.height}in;margin:${T.top}in ${T.outside}in ${T.bottom}in ${T.inside}in;background:${p.background}}
 @page :left{margin-left:${T.outside}in;margin-right:${T.inside}in;@top-left{content:${cssString(book.title.length > 60 ? `${book.title.slice(0, 58)}…` : book.title)};${marginBox}}@bottom-left{content:counter(page);${folio}}}
 @page :right{margin-left:${T.inside}in;margin-right:${T.outside}in;@bottom-right{content:counter(page);${folio}}@top-right{${marginBox}}}
 @page full{margin:0;${none}}${runningHeads}
