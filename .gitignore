@@ -50,3 +50,6 @@ next-env.d.ts
 
 # local operator scratch (SQL receipts, fixtures, zips) — never commit
 /work/
+
+# Local agent execution logs and evidence (contain machine paths and account emails)
+/docs/execution/
