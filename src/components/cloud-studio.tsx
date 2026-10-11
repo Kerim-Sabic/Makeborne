@@ -1120,6 +1120,7 @@ export function CloudEditor({
   const [builderAvailable, setBuilderAvailable] = useState(false);
   const [live, setLive] = useState<LiveUpdate | null>(null);
   const [autoStart, setAutoStart] = useState<string | null>(null);
+  const [autoStartMode, setAutoStartMode] = useState<"create" | "plan">("create");
   useEffect(() => {
     if (artifact.kind !== "website") return;
     let current = true;
@@ -1515,7 +1516,7 @@ export function CloudEditor({
       if (!reference?.autoStart || reference.jobId) return;
       saveGenerationReference(localStorage, { ...reference, autoStart: false });
       const brief = project.brief.trim();
-      queueMicrotask(() => setAutoStart(brief));
+      queueMicrotask(() => { setAutoStartMode(reference.planFirst ? "plan" : "create"); setAutoStart(brief); });
     } catch { /* storage unavailable: the user can send the brief manually */ }
   }, [useLiveBuilder, content, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
   const isStartingDraft = !content?.websiteSource && (!previewBlocks.length || (expectedVersion <= 1 && previewBlocks.length === 1 && previewBlocks[0].type === "heading" && previewBlocks[0].text === content?.title && !previewBlocks[0].assetId));
@@ -1558,7 +1559,7 @@ export function CloudEditor({
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
-          defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} autoStart={autoStart}
+          defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} autoStart={autoStart} autoStartMode={autoStartMode}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
