@@ -3,8 +3,10 @@ import sanitizeHtml from "sanitize-html";
 const escapeSiteText = (value: string) => value.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const MAX_SNAPSHOT_BYTES = 3_900_000;
 const DATA_IMAGE = /^data:image\/(?:webp|png|jpeg|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
-const SVG_TAGS = ["svg", "g", "path", "circle", "ellipse", "line", "polyline", "polygon", "rect", "defs", "lineargradient", "radialgradient", "stop", "clippath", "mask", "pattern", "symbol", "use", "title", "desc", "text", "tspan"];
-const SVG_ATTRIBUTES = ["viewbox", "viewBox", "xmlns", "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset", "stroke-opacity", "fill-opacity", "fill-rule", "clip-rule", "opacity", "d", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "x2", "y1", "y2", "width", "height", "points", "transform", "offset", "stop-color", "stop-opacity", "gradientUnits", "gradientTransform", "preserveAspectRatio", "clip-path", "mask", "href", "text-anchor", "dominant-baseline", "font-size", "font-weight", "letter-spacing"];
+/** Self-hosted library fonts embedded by the builder as data: URLs. */
+const DATA_FONT = /^data:font\/woff2;base64,[A-Za-z0-9+/=]+$/;
+const SVG_TAGS = ["svg", "g", "path", "circle", "ellipse", "line", "polyline", "polygon", "rect", "defs", "lineargradient", "radialgradient", "stop", "clippath", "mask", "pattern", "symbol", "use", "title", "desc", "text", "tspan", "textpath", "textPath"];
+const SVG_ATTRIBUTES = ["viewbox", "viewBox", "xmlns", "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset", "stroke-opacity", "fill-opacity", "fill-rule", "clip-rule", "opacity", "d", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "x2", "y1", "y2", "width", "height", "points", "transform", "offset", "stop-color", "stop-opacity", "gradientUnits", "gradientTransform", "preserveAspectRatio", "clip-path", "mask", "href", "text-anchor", "dominant-baseline", "font-size", "font-weight", "letter-spacing", "startOffset", "dx", "dy", "font-family", "font-style", "textLength"];
 /** The editor marks the project's own compiled stylesheet in captured snapshots. */
 const BUNDLE_STYLE = /\bdata-makeborne-bundle\b/i;
 
@@ -23,9 +25,11 @@ export function renderHostedSnapshot(snapshot: string, title: string, descriptio
   const assets = options.assetPaths ?? new Set<string>();
   const stylesheet = options.stylesheet && /^\/_mb\/app-[0-9a-f]{16}\.css$/.test(options.stylesheet) ? options.stylesheet : null;
   const allowedImage = (value: string) => DATA_IMAGE.test(value) || assets.has(value);
+  // CSS may also reference the builder's embedded library fonts (font-src data:).
+  const allowedStyleUrl = (value: string) => allowedImage(value) || DATA_FONT.test(value);
   const styles = [...snapshot.matchAll(/<style([^>]*)>([\s\S]*?)<\/style>/gi)].filter(match => !(stylesheet && BUNDLE_STYLE.test(match[1]))).map(match => match[2]).join("\n")
     .replace(/<\/?style/gi, "").replace(/@import[^;]*;?/gi, "")
-    .replace(/url\(\s*(['"]?)([^)'"]*)\1\s*\)/gi, (match: string, _quote: string, target: string) => allowedImage(target.trim()) ? match : "none");
+    .replace(/url\(\s*(['"]?)([^)'"]*)\1\s*\)/gi, (match: string, _quote: string, target: string) => allowedStyleUrl(target.trim()) ? match : "none");
   const body = /<body[^>]*>([\s\S]*)<\/body>/i.exec(snapshot)?.[1] ?? "";
   const lang = /<html[^>]*\blang=["']([a-zA-Z-]{2,12})["']/i.exec(snapshot)?.[1] ?? "en";
   const clean = sanitizeHtml(body, {
@@ -47,6 +51,8 @@ export function renderHostedSnapshot(snapshot: string, title: string, descriptio
       img: (tagName, attribs) => ({ tagName, attribs: { ...attribs, src: allowedImage(attribs.src ?? "") ? attribs.src : "" } }),
       form: (_tagName, attribs) => ({ tagName: "form", attribs: { ...attribs, action: "#" } }),
       use: (tagName, attribs) => ({ tagName, attribs: { ...attribs, href: (attribs.href ?? "").startsWith("#") ? attribs.href : "" } }),
+      textpath: (tagName, attribs) => ({ tagName, attribs: { ...attribs, href: (attribs.href ?? "").startsWith("#") ? attribs.href : "" } }),
+      textPath: (tagName, attribs) => ({ tagName, attribs: { ...attribs, href: (attribs.href ?? "").startsWith("#") ? attribs.href : "" } }),
     },
     exclusiveFilter: frame => frame.tag === "img" && !frame.attribs.src,
   });

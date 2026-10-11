@@ -21,7 +21,8 @@ export const SITE_STYLE_PATH = /^\/_mb\/app-[0-9a-f]{16}\.css$/;
 /** Project images keep the public path the site code references (`/images/hero.webp`). */
 export const SITE_IMAGE_PATH = /^\/(?!_mb\/)(?:[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}\/){0,7}[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}\.(?:webp|png|jpe?g)$/i;
 export const SITE_CONTENT_TYPES = Object.freeze({ script: "text/javascript; charset=utf-8", style: "text/css; charset=utf-8", image: "image/webp" });
-export const SITE_LIMITS = Object.freeze({ html: 4_000_000, script: 1_500_000, style: 512_000, image: 2_000_000, images: 40, files: 42, total: 6_000_000 });
+/** The stylesheet embeds the builder's used library fonts (woff2 data: URLs, font-src data:), hence its larger limit. */
+export const SITE_LIMITS = Object.freeze({ html: 4_000_000, script: 1_500_000, style: 1_200_000, image: 2_000_000, images: 40, files: 42, total: 6_000_000 });
 
 /** Path served by the Worker as a stored file (otherwise: document or 404). */
 export function siteFilePath(pathname) {

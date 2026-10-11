@@ -1,6 +1,9 @@
 /** In-browser bundler for Makeborne React/Vite projects. Runs only trusted
  * esbuild code in the app; the generated site executes solely inside an opaque
  * sandboxed iframe that cannot reach Makeborne cookies, storage or APIs. */
+import { FONT_IMPORT, FONTS_BY_ID, detectFonts, fontFaceRule, fontFileName, type FontEntry } from "./fonts";
+import { LUCIDE, LUCIDE_CORE, lucideIconFile, lucideImports, unknownLucideIcons } from "./icons";
+
 type Esbuild = typeof import("esbuild-wasm");
 type Loader = import("esbuild-wasm").Loader;
 
@@ -27,6 +30,49 @@ const vendorSource = (url: string) => {
   }));
   return vendorCache.get(url)!;
 };
+
+const fontCache = new Map<string, Promise<string>>();
+/** Fonts are inlined as data: URLs: the sandboxed preview has an opaque origin
+ * (no CORS font loads) and published snapshots must not depend on a font host. */
+const fontDataUrl = (url: string) => {
+  if (!fontCache.has(url)) fontCache.set(url, fetch(url, { cache: "force-cache" }).then(async response => {
+    if (!response.ok) throw new Error(`Font file unavailable: ${url}`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    return `data:font/woff2;base64,${btoa(binary)}`;
+  }).catch(error => { fontCache.delete(url); throw error; }));
+  return fontCache.get(url)!;
+};
+
+/** @font-face rules (with embedded woff2) for the catalogue fonts a project uses. */
+export async function projectFontCss(files: Map<string, string>, origin: string) {
+  const { fonts, italic } = detectFonts(files);
+  const rules = await Promise.all(fonts.flatMap((font: FontEntry) => (italic && font.italic ? ["normal", "italic"] as const : ["normal"] as const)
+    .map(async style => fontFaceRule(font, style, await fontDataUrl(`${origin}/builder-runtime/fonts/${fontFileName(font, style)}`)))));
+  return rules.join("\n");
+}
+
+/** Virtual "lucide-react" module that re-exports only the icons the project
+ * imports, each from its own vendored module. */
+function lucideModule(files: Map<string, string>, origin: string) {
+  const names = new Set<string>(), problems: string[] = [];
+  for (const [path, content] of files) {
+    if (!/\.(?:tsx?|jsx?)$/.test(path) || !content.includes(LUCIDE)) continue;
+    const found = lucideImports(content);
+    found.names.forEach(name => names.add(name));
+    problems.push(...found.problems.map(problem => `${path}: ${problem}`));
+  }
+  const missing = unknownLucideIcons(names);
+  if (missing.length) problems.push(`Not Lucide icons: ${missing.join(", ")}. Use existing Lucide names (e.g. ArrowRight, Check, Mail, MapPin, Phone, Star); Lucide has no brand logos.`);
+  const base = `${origin}/builder-runtime/vendor/lucide`;
+  const lines = [`export { ${LUCIDE_CORE.join(", ")} } from "${base}/core.js";`];
+  for (const name of names) {
+    const file = lucideIconFile(name);
+    if (file && !(LUCIDE_CORE as readonly string[]).includes(name)) lines.push(`export { default as ${name} } from "${base}/icons/${file}.js";`);
+  }
+  return { contents: lines.join("\n"), problems };
+}
 
 function resolveRelative(files: Map<string, string>, importer: string, specifier: string) {
   const base = importer.split("/").slice(0, -1);
@@ -114,22 +160,38 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
         setup(builder) {
           builder.onResolve({ filter: /.*/ }, args => {
             const specifier = args.path;
-            if (args.namespace === "vendor") return { path: new URL(specifier, args.importer).href, namespace: "vendor" };
+            if (args.namespace === "vendor" || args.namespace === "lucide") {
+              // Vendored modules import React by bare name: map it to the one shared copy.
+              if (VENDOR[specifier]) return { path: `${origin}/builder-runtime/vendor/${VENDOR[specifier]}`, namespace: "vendor" };
+              return { path: args.namespace === "lucide" ? specifier : new URL(specifier, args.importer).href, namespace: "vendor" };
+            }
             // React is inlined from the same-origin runtime: sandboxed documents
             // cannot rely on network access (e.g. private-network protections).
             if (VENDOR[specifier]) return { path: `${origin}/builder-runtime/vendor/${VENDOR[specifier]}`, namespace: "vendor" };
             if (args.kind === "entry-point") return { path: specifier, namespace: "project" };
+            if (specifier === LUCIDE) return { path: LUCIDE, namespace: "lucide" };
+            // Fonts are embedded from usage detection; the explicit import is a no-op marker.
+            const font = FONT_IMPORT.exec(specifier);
+            if (font) {
+              if (FONTS_BY_ID.has(font[1])) return { path: font[1], namespace: "font" };
+              return { errors: [{ text: `"${specifier}" is not in the font library.` }] };
+            }
             if (specifier.startsWith("/") || /^(?:data|https?):/.test(specifier)) return { path: specifier, external: true };
             if (specifier.startsWith(".")) {
               const resolved = resolveRelative(files, args.importer, specifier);
               if (resolved) return { path: resolved, namespace: "project" };
               return { errors: [{ text: `Cannot find "${specifier}" imported from ${args.importer}` }] };
             }
-            return { errors: [{ text: `"${specifier}" is not installed. Only react and react-dom are available.` }] };
+            return { errors: [{ text: `"${specifier}" is not installed. Only react, react-dom and lucide-react are available.` }] };
           });
           builder.onLoad({ filter: /.*/, namespace: "project" }, args => ({
             contents: files.get(args.path) ?? "", loader: LOADERS[extension(args.path)] ?? "text",
           }));
+          builder.onLoad({ filter: /.*/, namespace: "lucide" }, () => {
+            const icons = lucideModule(files, origin);
+            return icons.problems.length ? { errors: icons.problems.map(text => ({ text })) } : { contents: icons.contents, loader: "js" };
+          });
+          builder.onLoad({ filter: /.*/, namespace: "font" }, () => ({ contents: "", loader: "css" }));
           builder.onLoad({ filter: /.*/, namespace: "vendor" }, async args => ({ contents: await vendorSource(args.path), loader: "js" }));
         },
       }],
@@ -139,10 +201,17 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
     const messages = failure.errors?.slice(0, 5).map(item => item.location ? `${item.location.file.replace(/^project:/, "")}:${item.location.line}: ${item.text}` : item.text);
     return { ok: false, error: messages?.join("\n") || "The project could not be bundled." };
   }
+  // Every output (preview, review capture, static snapshot, hosted bundle)
+  // carries the used fonts as embedded @font-face rules at the top of its CSS.
+  let fonts = "";
+  try { fonts = await projectFontCss(files, origin); }
+  catch { /* fonts are progressive: fall back to the declared system stacks */ }
+  const css = result.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
   return {
     ok: true,
     js: result.outputFiles.find(file => file.path.endsWith(".js"))?.text ?? "",
-    css: result.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "",
+    css: fonts ? `${fonts}
+${css}` : css,
   };
 }
 
