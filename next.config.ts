@@ -37,6 +37,16 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
         ],
       },
+      {
+        // Client review links carry a bearer token in the path: never index,
+        // cache, or leak it through the Referer header.
+        source: "/review/:path*",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "private, no-store" },
+        ],
+      },
       ...["studio", "chat", "login", "billing", "admin", "auth", "api"].map((route) => ({
         source: `/${route}/:path*`,
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],

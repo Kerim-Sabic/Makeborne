@@ -14,7 +14,7 @@ const fonts: Record<string, string> = {
   Georgia: "Georgia, serif", Inter: 'var(--font-inter), Arial, sans-serif', Arial: "Arial, sans-serif",
 };
 type Block = ArtifactContent["sections"][number]["blocks"][number];
-function PreviewBlock({ block, artworkScope }: { block: Block; artworkScope?: ArtworkScope }) {
+export function PreviewBlock({ block, artworkScope }: { block: Block; artworkScope?: ArtworkScope }) {
   if (block.assetId && artworkScope) return <AccountArtwork key={`${artworkScope.accountId}:${artworkScope.artifactId}:${block.assetId}`} scope={artworkScope} assetId={block.assetId} caption={block.text} />;
   if (block.assetId || block.type === "image") return <figure className="ap-placeholder"><ImageIcon size={24} /><figcaption>{block.text || "Artwork"}</figcaption><small>Artwork preview unavailable</small></figure>;
   if (block.type === "heading") return <h3>{block.text}</h3>;
@@ -24,15 +24,20 @@ function PreviewBlock({ block, artworkScope }: { block: Block; artworkScope?: Ar
   return <div className="ap-structured"><small>{block.type} · text preview</small><p>{block.text || "No text supplied"}</p></div>;
 }
 
+/** CSS variables that theme the outline, book and slide previews. */
+export function previewPalette(style: Pick<StyleProfile, "colors" | "typography">) {
+  return {
+    "--ap-canvas": style.colors.canvas ?? "#F8F7F4", "--ap-ink": style.colors.ink ?? "#16181D", "--ap-accent": style.colors.accent ?? "#7862A7",
+    "--ap-heading": fonts[style.typography.headingFont] ?? "Georgia, serif", "--ap-body": fonts[style.typography.bodyFont] ?? "Arial, sans-serif",
+  } as CSSProperties;
+}
+
 export default function AccountPreview({ content, style, dirty, artworkScope }: { content: ArtifactContent; style: StyleProfile; dirty: boolean; artworkScope?: ArtworkScope }) {
   const [mobile, setMobile] = useState(false);
   const [slideIndex, setSlideIndex] = useState(0);
   const slides = content.kind === "presentation" ? previewSlides(content) : [];
   const current = Math.min(slideIndex, Math.max(0, slides.length - 1));
-  const palette = {
-    "--ap-canvas": style.colors.canvas ?? "#F8F7F4", "--ap-ink": style.colors.ink ?? "#16181D", "--ap-accent": style.colors.accent ?? "#7862A7",
-    "--ap-heading": fonts[style.typography.headingFont] ?? "Georgia, serif", "--ap-body": fonts[style.typography.bodyFont] ?? "Arial, sans-serif",
-  } as CSSProperties;
+  const palette = previewPalette(style);
   if (content.websiteSource) return <section className="account-preview" aria-label="Website build status"><header className="ap-toolbar"><strong>{content.title}</strong><small>Source project</small></header><div className="ap-document"><h3>Source saved. Preview build required.</h3><p>This website contains {content.websiteSource.files.length} source files and {content.websiteSource.routes.length} routes. Its running preview will appear after an isolated build is verified.</p><p>The outline renderer cannot display this project.</p></div></section>;
   if(content.kind === "website" && content.website) return <WebsitePreview title={content.title} website={content.website} dirty={dirty} />;
   return <section className="account-preview" aria-label="Project layout preview">

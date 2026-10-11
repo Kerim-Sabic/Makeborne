@@ -23,8 +23,10 @@ const newId = () => crypto.randomUUID();
 
 /** Chat-driven website builder: every message streams real edits into the
  * project, previews them live and saves a new version when finished. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, autoStart, autoStartMode, onLive, onSaved }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, autoStart, autoStartMode, prefill, onLive, onSaved }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
+  /** Text placed in the composer for the user to review, e.g. client feedback. Never sent automatically. */
+  prefill?: { key: string; text: string } | null;
   history: { number: number; summary: string }[];
   baseFiles: Record<string, string>; baseAssets: { id: string; path: string }[];
   defaultEffort?: EffortLevel; disabled?: boolean; autoStart?: string | null;
@@ -41,13 +43,16 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [notice, setNotice] = useState("");
   const [balance, setBalance] = useState<{ available: number; unlimited: boolean } | null>(null);
   const log = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
   const started = useRef(false);
-  const input = useRef<HTMLTextAreaElement>(null);
   const [chosenMode, setMode] = useState<"create" | "plan" | null>(null);
   const planner = usePlanMode({ accountId, workspaceId, artifactId });
   // An open draft plan from an earlier session keeps the composer in Plan mode.
   const mode = chosenMode ?? (planner.restored ? "plan" : "create");
   const draftPlan = planner.active && planner.active.stored.status === "draft" ? planner.active : null;
+  const [prefilled, setPrefilled] = useState<string | null>(null);
+  if (prefill && prefill.key !== prefilled) { setPrefilled(prefill.key); setDraft(prefill.text.slice(0, 8000)); }
+  useEffect(() => { if (prefilled) composer.current?.focus(); }, [prefilled]);
 
   const refreshBalance = useCallback(() => {
     fetch("/api/credits", { cache: "no-store", headers: { "X-Makeborne-Account": accountId } })
@@ -171,7 +176,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     setMode("create"); setEffort(level);
     void send(`Build the approved plan: ${approved.title}`, [], { plan: approved, effort: level });
   };
-  const revisePlan = () => { setMode("plan"); input.current?.focus(); };
+  const revisePlan = () => { setMode("plan"); composer.current?.focus(); };
   const planCard = (active: NonNullable<typeof planner.active>) => <PlanCard key={`${active.turnId}:${active.stored.revision}`} plan={active.stored.plan} estimate={active.estimate} recommended={active.recommended}
     revision={active.stored.revision} built={active.stored.status === "built"} save={active.save} busy={busy || disabled}
     onChange={planner.edit} onBuild={buildPlan} onRevise={revisePlan} />;
@@ -219,7 +224,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     <form className="lb-composer" data-mode={mode} onSubmit={event => { event.preventDefault(); submit(draft, attachments); }}>
       {mode === "plan" && <p className="lb-plan-note"><ListChecks size={12} />{draftPlan ? "Plan mode — your reply revises the plan above." : "Plan mode — I'll study your project and propose a plan. No code is written."}</p>}
       {!!attachments.length && <ul className="lb-files">{attachments.map((file, index) => <li key={`${file.name}:${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setAttachments(attachments.filter((_, item) => item !== index))}><X size={12} /></button></li>)}</ul>}
-      <textarea ref={input} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? "A premium website for a makeup brand selling three products…" : "Ask for a change — e.g. make the hero bolder and add an FAQ"} value={draft} rows={3} maxLength={8000} disabled={busy || disabled}
+      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? "A premium website for a makeup brand selling three products…" : "Ask for a change — e.g. make the hero bolder and add an FAQ"} value={draft} rows={3} maxLength={8000} disabled={busy || disabled}
         onChange={event => setDraft(event.target.value)}
         onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(draft, attachments); } }} />
       <div className="lb-controls">

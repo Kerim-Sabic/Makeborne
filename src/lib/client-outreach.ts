@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { websiteHref } from "./website-record";
-export const outreachStages = ["Lead", "Contacted", "Replied", "Meeting", "Proposal", "Won", "Lost"] as const;
+/** Pipeline order. "Won" is an active engagement; "Review" and "Delivered" follow client review links. */
+export const outreachStages = ["Lead", "Contacted", "Replied", "Meeting", "Proposal", "Won", "Review", "Delivered", "Lost"] as const;
+export const closedOutreachStages: readonly string[] = ["Won", "Delivered", "Lost"];
 export const outreachChannels = ["Not set", "Email", "Instagram", "LinkedIn", "Phone", "Other"] as const;
 const day = z.iso.date().nullable();
 export const OutreachActivitySchema = z.object({ id: z.string().uuid(), at: z.string().datetime(), text: z.string().trim().min(1).max(2000), type: z.enum(["update", "contact", "note"]) }).strict();
@@ -12,7 +14,7 @@ export const ClientOutreachSchema = z.object({
 }).strict();
 export type ClientOutreach = z.infer<typeof ClientOutreachSchema>;
 export const emptyOutreach = (): ClientOutreach => ({ stage: "Lead", channel: "Not set", profileUrl: "", lastContact: null, nextFollowUp: null, notes: "", activity: [] });
-export function followUpDue(outreach: ClientOutreach | undefined, day: string) { return !!outreach?.nextFollowUp && outreach.stage !== "Won" && outreach.stage !== "Lost" && outreach.nextFollowUp <= day; }
+export function followUpDue(outreach: ClientOutreach | undefined, day: string) { return !!outreach?.nextFollowUp && !closedOutreachStages.includes(outreach.stage) && outreach.nextFollowUp <= day; }
 export function saveOutreach(previous: ClientOutreach | undefined, raw: unknown, entry: { id: string; at: string; text?: string; type?: "update" | "contact" | "note" }) {
   const prior = previous ? ClientOutreachSchema.parse(previous) : emptyOutreach();
   const next = ClientOutreachSchema.parse(raw);
