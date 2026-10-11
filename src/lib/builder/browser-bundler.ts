@@ -61,9 +61,41 @@ scrollTo(0,0);setTimeout(function(){var c=document.documentElement.cloneNode(tru
 c.classList.remove("js");post({type:"snapshot",html:"<!doctype html>"+c.outerHTML});},900);})();});
 post({type:"ready"});})();</script>`;
 
+/** Design-review capture runtime (only in "capture" bundles, after the
+ * modern-screenshot UMD). The site runs in an opaque-origin sandbox, so it
+ * rasterises itself: on request it scrolls once to trigger reveal effects,
+ * measures objective layout problems and posts a JPEG of the page to the host.
+ * Console errors are forwarded so the review sees them too. modern-screenshot
+ * normally reads default styles from a nested srcdoc iframe, which an opaque
+ * origin cannot access; an unstyled shadow root stands in for it. */
+const CAPTURE_SHIM = `<script>(function(){
+var post=function(m){try{parent.postMessage(Object.assign({source:"makeborne-preview"},m),"*")}catch(e){}};
+var sent=0,original=console.error;console.error=function(){try{if(sent++<10)post({type:"console-error",message:Array.prototype.map.call(arguments,function(a){return a&&a.stack?String(a.stack):String(a)}).join(" ").slice(0,600)})}catch(e){}return original.apply(console,arguments)};
+var wait=function(ms){return new Promise(function(r){setTimeout(r,ms)})};
+var clear=function(c){return !c||c==="transparent"||c==="rgba(0, 0, 0, 0)"};
+function describe(el){var s=el.tagName.toLowerCase();if(el.id)s+="#"+el.id;var c=typeof el.className==="string"?el.className.trim().split(" ").filter(Boolean).slice(0,2):[];if(c.length)s+="."+c.join(".");var t=(el.textContent||"").trim().split(String.fromCharCode(10)).join(" ").replace(/ {2,}/g," ").slice(0,48);return t?s+' "'+t+'"':s}
+function diagnose(){var de=document.documentElement,vw=de.clientWidth,d={overflowX:Math.max(0,de.scrollWidth-vw),wide:[],brokenImages:[],missingAlt:0};
+if(d.overflowX>1){var all=document.body.querySelectorAll("*");for(var i=0;i<all.length&&d.wide.length<6;i++){var r=all[i].getBoundingClientRect();if(!r.width||(r.right<=vw+1&&r.left>=-1))continue;
+var p=all[i].parentElement;if(p&&p!==document.body){var q=p.getBoundingClientRect();if(q.right>vw+1||q.left<-1)continue}d.wide.push(describe(all[i])+" spans x="+Math.round(r.left)+" to "+Math.round(r.right))}}
+Array.prototype.forEach.call(document.images,function(img){if(!img.hasAttribute("alt"))d.missingAlt++;if(img.complete&&!img.naturalWidth&&d.brokenImages.length<6)d.brokenImages.push((img.getAttribute("src")||"(no src)").slice(0,90))});return d}
+async function capture(o){var de=document.documentElement,h=de.scrollHeight,y=0,n=0;
+while(y<Math.min(h,o.maxHeight)+innerHeight&&n++<60){scrollTo({top:y,behavior:"instant"});y+=Math.max(300,innerHeight*.6);await wait(90);h=de.scrollHeight}
+scrollTo({top:0,behavior:"instant"});await wait(900);try{await document.fonts.ready}catch(e){}
+var w=de.clientWidth,full=de.scrollHeight,height=Math.min(full,o.maxHeight),bg=getComputedStyle(document.body).backgroundColor;if(clear(bg))bg=getComputedStyle(de).backgroundColor;if(clear(bg))bg="#ffffff";
+var diagnostics=diagnose(),host=document.createElement("div");host.style.cssText="all:initial;position:fixed;left:0;top:0;width:0;height:0;overflow:hidden";
+var root=host.attachShadow({mode:"open"}),body=document.createElement("div");root.appendChild(body);de.appendChild(host);
+var ctx=await modernScreenshot.createContext(de,{width:w,height:height,scale:o.scale,quality:o.quality,type:"image/jpeg",backgroundColor:bg,timeout:15000,filter:function(n){return n!==host}});
+ctx.sandbox={remove:function(){host.remove()},contentWindow:{getComputedStyle:function(e,p){return getComputedStyle(e,p)},document:{body:body,createElement:function(t){return document.createElement(t)},createElementNS:function(n,t){return document.createElementNS(n,t)}}}};
+try{var url=await modernScreenshot.domToDataUrl(ctx)}finally{try{modernScreenshot.destroyContext(ctx)}catch(e){}host.remove()}
+post({type:"capture",dataUrl:url,width:w,height:height,fullHeight:full,diagnostics:diagnostics})}
+addEventListener("message",function(e){if(e.source!==parent||!e.data||e.data.source!=="makeborne-host"||e.data.type!=="capture")return;
+if(typeof modernScreenshot==="undefined"){post({type:"capture-error",message:"capture runtime missing"});return}
+capture(e.data).catch(function(err){post({type:"capture-error",message:String(err&&err.message||err).slice(0,300)})})});})();</script>`;
+
 /** Bundle a project into one self-contained HTML document (React inlined).
- * preview adds the editor shim; publish minifies. */
-export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" = "preview"): Promise<BundleResult> {
+ * preview adds the editor shim; capture adds it plus the design-review
+ * rasteriser; publish minifies. */
+export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" | "capture" = "preview"): Promise<BundleResult> {
   const files = new Map(Object.entries(input));
   if (!files.has("src/main.tsx")) return { ok: false, error: "The project has no src/main.tsx entry yet." };
   const origin = typeof location === "undefined" ? "" : location.origin;
@@ -113,7 +145,12 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
   let html = source.replace(/<script\b[^>]*\bsrc=["'][^"']*["'][^>]*>\s*<\/script>/gi, "").replace(/<link\b[^>]*rel=["']?(?:modulepreload|stylesheet)["']?[^>]*>/gi, "");
   if (!/<\/head>/i.test(html)) html = html.replace(/<body/i, "<head></head><body");
   // Function replacers: generated code may contain `$&`-style sequences.
-  const head = `${mode === "preview" ? PREVIEW_SHIM : ""}<style>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
+  let capture = "";
+  if (mode === "capture") {
+    try { capture = `<script>${scriptSafe(await vendorSource(`${origin}/builder-runtime/vendor/modern-screenshot.js`))}</script>${CAPTURE_SHIM}`; }
+    catch { return { ok: false, error: "The screenshot runtime could not be loaded." }; }
+  }
+  const head = `${mode === "publish" ? "" : PREVIEW_SHIM}${capture}<style>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
   html = html.replace(/<\/head>/i, () => head);
   const script = `<script type="module">${scriptSafe(js)}</script>`;
   html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, () => `${script}</body>`) : `${html}${script}`;

@@ -1,0 +1,45 @@
+import type { EffortLevel } from "../routing/effort";
+
+/** Visual self-review: shared limits and policy (safe for client and server).
+ * The browser renders each viewport in a sandboxed frame, rasterises the page
+ * and slices it into viewport-sized tiles; the server validates the same limits. */
+
+export type ReviewViewport = "desktop" | "mobile";
+export const REVIEW_VIEWPORTS: readonly { id: ReviewViewport; label: string; width: number; height: number; scale: number; maxTiles: number }[] = [
+  // ~1080×675 tiles (~1k image tokens each): enough to judge type, spacing and alignment.
+  { id: "desktop", label: "Desktop", width: 1440, height: 900, scale: 0.75, maxTiles: 6 },
+  // ~390×844 tiles (~450 tokens each); mobile pages run longer, so allow more of them.
+  // Together about 9k image tokens (~$0.04) covers most of a typical landing page.
+  { id: "mobile", label: "Mobile", width: 390, height: 844, scale: 1, maxTiles: 8 },
+];
+
+export const REVIEW_LIMITS = Object.freeze({
+  maxShots: REVIEW_VIEWPORTS.reduce((total, viewport) => total + viewport.maxTiles, 0),
+  /** Base64 characters per screenshot (~520 KB of JPEG). */
+  maxShotBase64: 700_000,
+  /** Longest edge of a screenshot in pixels (Claude downsizes beyond ~1568). */
+  maxShotEdge: 1568,
+  /** Smallest trailing tile worth sending, in source pixels. */
+  minTileHeight: 120,
+  maxErrors: 12,
+  maxErrorChars: 600,
+});
+
+/** Automatic review rounds after a build, by effort level. Light skips the
+ * review (it is the cheap, focused mode); Ultra may review its own fixes. */
+export const AUTO_REVIEW_ROUNDS: Readonly<Record<EffortLevel, number>> = Object.freeze({ light: 0, medium: 1, high: 1, super_high: 1, ultra: 2 });
+
+/** Only first builds and large changes are reviewed automatically; small
+ * edits stay fast and cheap (the user can still ask for a review). */
+export function autoReviewRounds(effort: EffortLevel, change: { firstBuild: boolean; filesTouched: number }): number {
+  if (!change.firstBuild && change.filesTouched < 3) return 0;
+  return AUTO_REVIEW_ROUNDS[effort] ?? 0;
+}
+
+/** Credit ceiling for one review round: about 30% of the effort ceiling, with
+ * a floor that still affords reading the project plus a few fixes. */
+export function reviewCreditCeiling(effortCeiling: number): number {
+  return Math.min(effortCeiling, Math.max(12, Math.ceil(effortCeiling * 0.3)));
+}
+/** Tool-loop turns for one review round (look, fix, verify, finish). */
+export const REVIEW_MAX_TURNS = 6;

@@ -1,11 +1,17 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, FileCode2, ImageIcon, Loader2, Paperclip, Sparkles, X } from "lucide-react";
+import { ArrowUp, Check, Eye, FileCode2, ImageIcon, Loader2, Paperclip, Sparkles, X } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
+import { captureDesign } from "@/lib/builder/design-capture";
+import { autoReviewRounds } from "@/lib/builder/review-policy";
+import { readCloudImage } from "./cloud-api";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
-type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number };
+type Shot = { label: string; url: string; viewport: string };
+type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; review?: boolean; shots?: Shot[] };
 type Attachment = { name: string; mediaType: string; data: string; size: number };
+type Live = { files: Record<string, string>; assets: { id: string; path: string }[] };
+type RunResult = { version: number; changed: boolean; touched: number };
 export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean };
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.txt";
@@ -18,8 +24,29 @@ const readBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 });
 const newId = () => crypto.randomUUID();
 
+/** Project images as data URLs keyed by their in-code path (/images/x.webp),
+ * so the sandboxed capture frame needs no network access. */
+async function assetDataUrls(assets: Live["assets"], scope: { accountId: string; workspaceId: string; artifactId: string }): Promise<Record<string, string>> {
+  const controller = new AbortController();
+  const entries = await Promise.all(assets.map(async asset => {
+    try {
+      const blob = await readCloudImage(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/assets/${asset.id}`, scope.accountId, controller.signal);
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      return [`/${asset.path.replace(/^public\//, "")}`, url] as const;
+    } catch { return null; }
+  }));
+  return Object.fromEntries(entries.filter(entry => entry !== null));
+}
+
 /** Chat-driven website builder: every message streams real edits into the
- * project, previews them live and saves a new version when finished. */
+ * project, previews them live and saves a new version when finished. After
+ * first builds and large changes it looks at the rendered result (desktop and
+ * mobile screenshots) and fixes visual problems in a review pass. */
 export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, autoStart, onLive, onSaved }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   history: { number: number; summary: string }[];
@@ -49,26 +76,21 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
 
   const update = (id: string, change: (turn: Turn) => Turn) => setTurns(current => current.map(turn => turn.id === id ? change(turn) : turn));
 
-  const send = useCallback(async (text: string, files: Attachment[] = []) => {
-    if (!text.trim() || busy || disabled) return;
-    setBusy(true); setNotice(""); setDraft(""); setAttachments([]);
-    const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done" };
-    const reply: Turn = { id: newId(), role: "assistant", text: "", activity: [], state: "streaming" };
-    setTurns(current => [...current, userTurn, reply]);
-    const live = { files: { ...baseFiles }, assets: [...baseAssets] };
-    onLive({ ...live, building: true });
-    const activity = (item: Omit<Activity, "id">, key?: string) => update(reply.id, turn => {
+  /** Stream one /api/build run into a reply turn, mirroring edits into the live
+   * preview. Resolves with the saved result, or null when the run failed. */
+  const stream = useCallback(async (payload: Record<string, unknown>, replyId: string, live: Live): Promise<RunResult | null> => {
+    const activity = (item: Omit<Activity, "id">, key?: string) => update(replyId, turn => {
       const existing = key ? turn.activity.findIndex(entry => entry.id === key) : -1;
       if (existing >= 0) { const next = [...turn.activity]; next[existing] = { ...next[existing], ...item }; return { ...turn, activity: next }; }
       return { ...turn, activity: [...turn.activity, { id: key ?? newId(), ...item }] };
     });
-    let finished = false;
+    const touched = new Set<string>();
+    let result: RunResult | null = null, finished = false;
     try {
       const response = await fetch("/api/build", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
-        body: JSON.stringify({ workspaceId, artifactId, expectedVersion: version, message: text.trim(), effort,
-          attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })) }),
+        body: JSON.stringify({ workspaceId, artifactId, ...payload }),
       });
       if (!response.ok || !response.body) {
         const failure = await response.json().catch(() => null);
@@ -87,15 +109,17 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
           if (!line) continue;
           const event = JSON.parse(line.slice(6));
           switch (event.type) {
-            case "text": update(reply.id, turn => ({ ...turn, text: turn.text + event.delta })); break;
+            case "text": update(replyId, turn => ({ ...turn, text: turn.text + event.delta })); break;
             case "status": activity({ kind: "note", label: event.message, done: false }, "status"); break;
             case "file_start": activity({ kind: "file", label: `${event.op === "edit" ? "Editing" : "Writing"} ${event.path}`, done: false }, `file:${event.path}`); break;
             case "file":
+              touched.add(event.path);
               live.files = { ...live.files, [event.path]: event.content };
               onLive({ ...live, building: true });
               activity({ kind: "file", label: `${event.op === "edit" ? "Edited" : "Wrote"} ${event.path}`, done: true }, `file:${event.path}`);
               break;
             case "delete": {
+              touched.add(event.path);
               const next = { ...live.files }; delete next[event.path]; live.files = next;
               onLive({ ...live, building: true });
               activity({ kind: "file", label: `Removed ${event.path}`, done: true }, `file:${event.path}`);
@@ -108,29 +132,91 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
               activity({ kind: "image", label: `Created ${event.url}`, done: true }, `image:${String(event.path).replace(/^public\/images\/|\.webp$/g, "")}`);
               break;
             case "tool_error": activity({ kind: "note", label: "Fixing an issue…", done: true }); break;
-            case "usage": update(reply.id, turn => ({ ...turn, credits: event.credits })); break;
+            case "usage": update(replyId, turn => ({ ...turn, credits: event.credits })); break;
             case "done":
               finished = true;
-              update(reply.id, turn => ({ ...turn, state: "done", text: turn.text.trim() ? `${turn.text.trim()}\n\n${event.summary}` : event.summary, credits: event.charged,
+              result = { version: Number(event.version), changed: event.changed !== false, touched: touched.size };
+              update(replyId, turn => ({ ...turn, state: "done", text: turn.text.trim() ? `${turn.text.trim()}\n\n${event.summary}` : event.summary, credits: event.charged,
                 activity: turn.activity.filter(item => item.id !== "status") }));
               break;
             case "error":
               finished = true;
-              update(reply.id, turn => ({ ...turn, state: "error", text: `${turn.text.trim() ? `${turn.text.trim()}\n\n` : ""}${event.message}`, activity: turn.activity.filter(item => item.id !== "status") }));
+              update(replyId, turn => ({ ...turn, state: "error", text: `${turn.text.trim() ? `${turn.text.trim()}\n\n` : ""}${event.message}`, activity: turn.activity.filter(item => item.id !== "status") }));
               break;
           }
         }
       }
-      if (!finished) update(reply.id, turn => ({ ...turn, state: "error", text: `${turn.text}\n\nThe connection closed early. If the build finished, it has been saved — reload to see it.` }));
+      if (!finished) update(replyId, turn => ({ ...turn, state: "error", text: `${turn.text}\n\nThe connection closed early. If the build finished, it has been saved — reload to see it.` }));
     } catch (error) {
-      update(reply.id, turn => ({ ...turn, state: "error", text: error instanceof Error ? error.message : "Something went wrong." }));
-    } finally {
-      setBusy(false);
-      refreshBalance();
-      await onSaved();
-      onLive(null);
+      update(replyId, turn => ({ ...turn, state: "error", text: error instanceof Error ? error.message : "Something went wrong." }));
     }
-  }, [accountId, artifactId, baseAssets, baseFiles, busy, disabled, effort, onLive, onSaved, refreshBalance, version, workspaceId]);
+    return result;
+  }, [accountId, artifactId, onLive, workspaceId]);
+
+  /** One visual review round: render the saved version at desktop and mobile
+   * sizes, show the screenshots, and let the builder fix what it sees. */
+  const reviewRound = useCallback(async (base: { version: number; round: number; effort: EffortLevel }, live: Live): Promise<RunResult | null> => {
+    const reply: Turn = { id: newId(), role: "assistant", text: "", review: true, state: "streaming",
+      activity: [{ id: "capture", kind: "note", label: "Capturing desktop and mobile screenshots…", done: false }] };
+    setTurns(current => [...current, reply]);
+    onLive({ ...live, building: false });
+    let capture;
+    try {
+      capture = await captureDesign(live.files, await assetDataUrls(live.assets, { accountId, workspaceId, artifactId }));
+    } catch (error) {
+      update(reply.id, turn => ({ ...turn, state: "error", activity: [], text: `The design review couldn't capture the page: ${error instanceof Error ? error.message : "unknown error"}. No credits were used.` }));
+      return null;
+    }
+    const { screenshots, viewports, errors, failures } = capture;
+    if (!screenshots.length && !errors.length) {
+      update(reply.id, turn => ({ ...turn, state: "error", activity: [], text: `The design review couldn't capture the page${failures.length ? ` (${failures.join("; ")})` : ""}. No credits were used.` }));
+      return null;
+    }
+    update(reply.id, turn => ({ ...turn,
+      shots: screenshots.map(shot => ({ label: `${shot.viewport === "desktop" ? "Desktop" : "Mobile"} ${shot.index + 1}/${shot.of}`, url: `data:${shot.mediaType};base64,${shot.data}`, viewport: shot.viewport })),
+      activity: [{ id: "capture", kind: "note", done: true,
+        label: `Captured ${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}${errors.length ? ` · ${errors.length} runtime error${errors.length === 1 ? "" : "s"}` : ""}` }] }));
+    return stream({ expectedVersion: base.version, message: "Design review", effort: base.effort, mode: "review",
+      review: { round: base.round, screenshots, viewports, errors } }, reply.id, live);
+  }, [accountId, artifactId, onLive, stream, workspaceId]);
+
+  const finishRun = useCallback(async () => {
+    setBusy(false);
+    refreshBalance();
+    await onSaved();
+    onLive(null);
+  }, [onLive, onSaved, refreshBalance]);
+
+  const send = useCallback(async (text: string, files: Attachment[] = []) => {
+    if (!text.trim() || busy || disabled) return;
+    setBusy(true); setNotice(""); setDraft(""); setAttachments([]);
+    const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done" };
+    const reply: Turn = { id: newId(), role: "assistant", text: "", activity: [], state: "streaming" };
+    setTurns(current => [...current, userTurn, reply]);
+    const live: Live = { files: { ...baseFiles }, assets: [...baseAssets] };
+    onLive({ ...live, building: true });
+    try {
+      let result = await stream({ expectedVersion: version, message: text.trim(), effort,
+        attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })) }, reply.id, live);
+      // First builds and large changes get an automatic look-and-fix pass.
+      const rounds = result?.changed ? autoReviewRounds(effort, { firstBuild: !Object.keys(baseFiles).length, filesTouched: result.touched }) : 0;
+      for (let round = 1; round <= rounds && result?.changed; round++) {
+        refreshBalance();
+        result = await reviewRound({ version: result.version, round, effort }, live);
+      }
+    } finally {
+      await finishRun();
+    }
+  }, [baseAssets, baseFiles, busy, disabled, effort, finishRun, onLive, refreshBalance, reviewRound, stream, version]);
+
+  /** Manual "Review design" for the current saved version. */
+  const review = useCallback(async () => {
+    if (busy || disabled || !Object.keys(baseFiles).length) return;
+    setBusy(true); setNotice("");
+    setTurns(current => [...current, { id: newId(), role: "user", text: "Review the design", activity: [], state: "done" }]);
+    try { await reviewRound({ version, round: 1, effort }, { files: { ...baseFiles }, assets: [...baseAssets] }); }
+    finally { await finishRun(); }
+  }, [baseAssets, baseFiles, busy, disabled, effort, finishRun, reviewRound, version]);
 
   useEffect(() => {
     if (!autoStart || started.current || disabled || turns.length) return;
@@ -151,18 +237,23 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   }
 
   const empty = !turns.length && !history.length;
+  const canReview = Object.keys(baseFiles).length > 0;
   return <aside className="lb" aria-label="Builder chat">
     <div className="lb-log" ref={log} aria-live="polite">
       {empty && <div className="lb-intro"><Sparkles size={18} /><h3>What should we build?</h3><p>Describe the website, its audience and the feeling you want. Attach a logo, screenshot or brief for reference. Then keep chatting to refine it.</p></div>}
       {!!history.length && <details className="lb-history"><summary>{history.length} earlier change{history.length === 1 ? "" : "s"}</summary>
         <ol>{history.map(item => <li key={item.number}><strong>v{item.number}</strong> {item.summary}</li>)}</ol></details>}
-      {turns.map(turn => <div key={turn.id} className={`lb-turn lb-${turn.role}`} data-state={turn.state}>
+      {turns.map(turn => <div key={turn.id} className={`lb-turn lb-${turn.role}`} data-state={turn.state} data-review={turn.review || undefined}>
+        {turn.review && <p className="lb-review-title"><Eye size={13} />{turn.state === "streaming" ? "Reviewing the design…" : "Design review"}</p>}
+        {!!turn.shots?.length && <ul className="lb-shots" aria-label="Review screenshots">{turn.shots.map(shot =>
+          // eslint-disable-next-line @next/next/no-img-element -- data URL screenshots, not optimisable
+          <li key={shot.label} data-viewport={shot.viewport}><img src={shot.url} alt={`${shot.label} screenshot`} title={shot.label} /></li>)}</ul>}
         {turn.text && <p>{turn.text}</p>}
         {!!turn.activity.length && <ul className="lb-activity">{turn.activity.map(item => <li key={item.id} data-done={item.done}>
           {item.done ? <Check size={13} /> : <Loader2 size={13} className="lb-spin" />}
           {item.kind === "image" ? <ImageIcon size={13} /> : item.kind === "file" ? <FileCode2 size={13} /> : null}
           <span>{item.label}</span></li>)}</ul>}
-        {turn.role === "assistant" && turn.state === "streaming" && !turn.text && !turn.activity.length && <p className="lb-thinking"><Loader2 size={14} className="lb-spin" /> Thinking…</p>}
+        {turn.role === "assistant" && !turn.review && turn.state === "streaming" && !turn.text && !turn.activity.length && <p className="lb-thinking"><Loader2 size={14} className="lb-spin" /> Thinking…</p>}
         {turn.role === "assistant" && typeof turn.credits === "number" && turn.credits > 0 && <small className="lb-cost">{turn.state === "streaming" ? `${turn.credits} credits so far` : `${turn.credits} credits`}</small>}
       </div>)}
     </div>
@@ -176,6 +267,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         <select aria-label="Effort" value={effort} disabled={busy} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}
         </select>
+        {canReview && <button type="button" className="lb-review" aria-label="Review design" disabled={busy || disabled} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} />Review</button>}
         <span className="lb-balance">{balance ? balance.unlimited ? "Unlimited credits" : `${balance.available} credits` : ""}</span>
         <button type="submit" className="lb-send" aria-label="Send" disabled={busy || disabled || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>
       </div>
