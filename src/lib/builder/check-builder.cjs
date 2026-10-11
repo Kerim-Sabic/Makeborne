@@ -143,6 +143,9 @@ check("published snapshots keep embedded woff2 fonts and Lucide SVG markup", () 
   assert.match(html, /url\(data:font\/woff2;base64,d09GMgAB\)/);
   assert.doesNotMatch(html, /gstatic/);
   assert.ok(html.includes(icon), "inline Lucide SVG survives sanitising");
+  const ring = renderHostedSnapshot('<!doctype html><html><body><svg viewBox="0 0 10 10"><defs><path id="ring" d="M0 0"/></defs><text><textPath href="#ring" startOffset="0">Osteria</textPath><textPath href="https://evil.test/x">bad</textPath></text></svg></body></html>', "Site", "Desc", "https://sites.makeborne.com/site");
+  assert.match(ring, /<textpath href="#ring" startOffset="0">Osteria<\/textpath>/i);
+  assert.doesNotMatch(ring, /evil\.test/);
 });
 
 /** The in-browser bundler, run in Node against the prepared runtime files. */
