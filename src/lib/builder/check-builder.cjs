@@ -59,10 +59,14 @@ check("file and folder names cannot collide", () => {
 check("pricing converts usage to whole credits and respects effort ceilings", () => {
   const usd = usageCost("claude-opus-5-5", {input_tokens: 100_000, output_tokens: 20_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0});
   assert.equal(Math.round(usd * 100) / 100, 0.8);
-  assert.equal(creditsForUsd(0.8), 80);
+  assert.equal(creditsForUsd(0.8), 27); // $0.03 per credit, rounded up
+  assert.equal(creditsForUsd(0.03), 1);
   assert.equal(creditsForUsd(0), 0);
   assert.ok(usageCost("unknown-model", {input_tokens: 1_000_000, output_tokens: 0}) >= 4);
   for (const level of Object.values(BUILDER_EFFORT)) assert.ok(level.ceilingCredits > 0 && level.maxTurns > 0);
+  const ceilings = Object.values(BUILDER_EFFORT).map(level => level.ceilingCredits);
+  assert.deepEqual([...ceilings].sort((a, b) => a - b), ceilings);
+  assert.ok(ceilings[0] * 0.03 >= 0.5, "light must afford a typical ~$0.20 chat edit with headroom");
 });
 check("published snapshots drop scripts, handlers and remote resources", () => {
   const html = renderHostedSnapshot('<!doctype html><html lang="de"><head><style>body{background:url(https://evil.test/x.png)} .a{color:red}</style><script>alert(1)</script></head><body><main><h1 onclick="steal()">Hi</h1><img src="https://evil.test/a.png" alt="x"><img src="data:image/webp;base64,AAAA" alt="ok"><a href="javascript:alert(1)">bad</a><a href="#top">top</a><script>evil()</script><iframe src="https://x"></iframe><svg viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg></main></body></html>', "Site", "Desc", "https://sites.makeborne.com/site");

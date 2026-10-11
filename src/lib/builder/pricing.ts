@@ -23,21 +23,23 @@ export function usageCost(model: string, usage: TokenUsage): number {
 }
 
 /** USD of provider cost represented by one credit. Plan credit allowances are
- * priced against this value, so change both together. */
+ * priced against this value, so change both together. At $0.03 a typical chat
+ * edit costs ~7 credits and a full first build ~20–35; plan prices then keep a
+ * ~65–70% gross margin even when an allowance is fully used. */
 export function usdPerCredit(): number {
-  const parsed = z.coerce.number().positive().max(10).safeParse(process.env.MAKEBORNE_USD_PER_CREDIT ?? "0.01");
-  return parsed.success ? parsed.data : 0.01;
+  const parsed = z.coerce.number().positive().max(10).safeParse(process.env.MAKEBORNE_USD_PER_CREDIT ?? "0.03");
+  return parsed.success ? parsed.data : 0.03;
 }
 export const creditsForUsd = (usd: number) => Math.max(0, Math.ceil(usd / usdPerCredit() - 1e-9));
 
 /** Builder behavior per effort level. The credit ceiling is the most a single
  * request may charge; the run stops gracefully before exceeding it. */
 export const BUILDER_EFFORT: Record<EffortLevel, { intensity: "low" | "medium" | "high" | "xhigh" | "max"; maxTurns: number; maxImages: number; ceilingCredits: number; maxTokens: number }> = {
-  light: { intensity: "low", maxTurns: 8, maxImages: 1, ceilingCredits: 60, maxTokens: 32000 },
-  medium: { intensity: "medium", maxTurns: 12, maxImages: 3, ceilingCredits: 150, maxTokens: 64000 },
-  high: { intensity: "high", maxTurns: 16, maxImages: 4, ceilingCredits: 250, maxTokens: 64000 },
-  super_high: { intensity: "xhigh", maxTurns: 20, maxImages: 6, ceilingCredits: 400, maxTokens: 96000 },
-  ultra: { intensity: "max", maxTurns: 28, maxImages: 8, ceilingCredits: 700, maxTokens: 128000 },
+  light: { intensity: "low", maxTurns: 8, maxImages: 1, ceilingCredits: 20, maxTokens: 32000 },
+  medium: { intensity: "medium", maxTurns: 12, maxImages: 3, ceilingCredits: 50, maxTokens: 64000 },
+  high: { intensity: "high", maxTurns: 16, maxImages: 4, ceilingCredits: 90, maxTokens: 64000 },
+  super_high: { intensity: "xhigh", maxTurns: 20, maxImages: 6, ceilingCredits: 140, maxTokens: 96000 },
+  ultra: { intensity: "max", maxTurns: 28, maxImages: 8, ceilingCredits: 240, maxTokens: 128000 },
 };
 /** Smallest balance worth starting a run with. */
-export const MINIMUM_RUN_CREDITS = 5;
+export const MINIMUM_RUN_CREDITS = 2;
