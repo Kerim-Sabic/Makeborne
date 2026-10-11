@@ -32,13 +32,20 @@
 .lb-attach input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 .lb-attach:focus-within { outline:2px solid #9c7fb0; outline-offset:2px; }
 .lb-controls select { min-height:30px; padding:4px 8px; border:1px solid #e6e0ec; border-radius:8px; background:#fff; color:#5b4d66; font:inherit; font-size:11px; }
-.lb-balance { margin-left:auto; font-size:10.5px; color:#9a8fa3; white-space:nowrap; }
-.lb-send { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:9px; color:#fff; background:#765887; cursor:pointer; }
+.lb-balance { margin-left:auto; min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:10.5px; color:#9a8fa3; white-space:nowrap; }
+.lb-send { flex:0 0 auto; display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:9px; color:#fff; background:#765887; cursor:pointer; }
 .lb-send:disabled { opacity:.35; cursor:default; }
 .lb-files { list-style:none; display:flex; flex-wrap:wrap; gap:6px; margin:0 0 8px; padding:0; }
 .lb-files li { display:flex; align-items:center; gap:4px; padding:3px 6px 3px 9px; border-radius:999px; background:#f2eef6; color:#5b4d66; font-size:10.5px; }
 .lb-files button { display:grid; place-items:center; width:18px; height:18px; padding:0; border:0; border-radius:50%; background:transparent; color:inherit; cursor:pointer; }
 .lb-notice { margin:6px 2px 0; font-size:10.5px; color:#8c6a3d; }
+.lb-review { display:inline-flex; align-items:center; gap:5px; min-height:30px; padding:4px 9px; border:1px solid #e6e0ec; border-radius:8px; background:#fff; color:#5b4d66; font:inherit; font-size:11px; cursor:pointer; white-space:nowrap; }
+.lb-review:hover:not(:disabled) { background:#f4f1f7; }
+.lb-review:disabled { opacity:.45; cursor:default; }
+.lb-turn .lb-review-title { display:flex; align-items:center; gap:6px; margin:0 0 8px; font-size:11px; font-weight:600; letter-spacing:.02em; color:#765887; }
+.lb-shots { list-style:none; display:flex; gap:6px; margin:0 0 10px; padding:0 0 4px; overflow-x:auto; scrollbar-width:thin; }
+.lb-shots li { flex:0 0 auto; height:76px; border:1px solid #e6e0ec; border-radius:6px; overflow:hidden; background:#fbfafc; }
+.lb-shots img { display:block; height:100%; width:auto; }
 .lb :focus-visible { outline:2px solid #9c7fb0; outline-offset:2px; }
 
 .lp { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; }

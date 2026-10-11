@@ -1,0 +1,4 @@
+// Existing Cloudflare Pages project behind sites.makeborne.com (external CNAME to
+// makeborne-sites.pages.dev). Once the isolated site domain is live it only redirects:
+//   npx wrangler pages deploy infra/customer-sites/legacy-redirect --project-name makeborne-sites
+{"name":"makeborne-sites","compatibility_date":"2026-10-05","pages_build_output_dir":"."}

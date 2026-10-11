@@ -107,9 +107,42 @@ scrollTo(0,0);setTimeout(function(){var c=document.documentElement.cloneNode(tru
 c.classList.remove("js");post({type:"snapshot",html:"<!doctype html>"+c.outerHTML});},900);})();});
 post({type:"ready"});})();</script>`;
 
-/** Bundle a project into one self-contained HTML document (React inlined).
- * preview adds the editor shim; publish minifies. */
-export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" = "preview"): Promise<BundleResult> {
+/** Design-review capture runtime (only in "capture" bundles, after the
+ * modern-screenshot UMD). The site runs in an opaque-origin sandbox, so it
+ * rasterises itself: on request it scrolls once to trigger reveal effects,
+ * measures objective layout problems and posts a JPEG of the page to the host.
+ * Console errors are forwarded so the review sees them too. modern-screenshot
+ * normally reads default styles from a nested srcdoc iframe, which an opaque
+ * origin cannot access; an unstyled shadow root stands in for it. */
+const CAPTURE_SHIM = `<script>(function(){
+var post=function(m){try{parent.postMessage(Object.assign({source:"makeborne-preview"},m),"*")}catch(e){}};
+var sent=0,original=console.error;console.error=function(){try{if(sent++<10)post({type:"console-error",message:Array.prototype.map.call(arguments,function(a){return a&&a.stack?String(a.stack):String(a)}).join(" ").slice(0,600)})}catch(e){}return original.apply(console,arguments)};
+var wait=function(ms){return new Promise(function(r){setTimeout(r,ms)})};
+var clear=function(c){return !c||c==="transparent"||c==="rgba(0, 0, 0, 0)"};
+function describe(el){var s=el.tagName.toLowerCase();if(el.id)s+="#"+el.id;var c=typeof el.className==="string"?el.className.trim().split(" ").filter(Boolean).slice(0,2):[];if(c.length)s+="."+c.join(".");var t=(el.textContent||"").trim().split(String.fromCharCode(10)).join(" ").replace(/ {2,}/g," ").slice(0,48);return t?s+' "'+t+'"':s}
+function diagnose(){var de=document.documentElement,vw=de.clientWidth,d={overflowX:Math.max(0,de.scrollWidth-vw),wide:[],brokenImages:[],missingAlt:0};
+if(d.overflowX>1){var all=document.body.querySelectorAll("*");for(var i=0;i<all.length&&d.wide.length<6;i++){var r=all[i].getBoundingClientRect();if(!r.width||(r.right<=vw+1&&r.left>=-1))continue;
+var p=all[i].parentElement;if(p&&p!==document.body){var q=p.getBoundingClientRect();if(q.right>vw+1||q.left<-1)continue}d.wide.push(describe(all[i])+" spans x="+Math.round(r.left)+" to "+Math.round(r.right))}}
+Array.prototype.forEach.call(document.images,function(img){if(!img.hasAttribute("alt"))d.missingAlt++;if(img.complete&&!img.naturalWidth&&d.brokenImages.length<6)d.brokenImages.push((img.getAttribute("src")||"(no src)").slice(0,90))});return d}
+async function capture(o){var de=document.documentElement,h=de.scrollHeight,y=0,n=0;
+while(y<Math.min(h,o.maxHeight)+innerHeight&&n++<60){scrollTo({top:y,behavior:"instant"});y+=Math.max(300,innerHeight*.6);await wait(90);h=de.scrollHeight}
+scrollTo({top:0,behavior:"instant"});await wait(900);try{await document.fonts.ready}catch(e){}
+var w=de.clientWidth,full=de.scrollHeight,height=Math.min(full,o.maxHeight),bg=getComputedStyle(document.body).backgroundColor;if(clear(bg))bg=getComputedStyle(de).backgroundColor;if(clear(bg))bg="#ffffff";
+var diagnostics=diagnose(),host=document.createElement("div");host.style.cssText="all:initial;position:fixed;left:0;top:0;width:0;height:0;overflow:hidden";
+var root=host.attachShadow({mode:"open"}),body=document.createElement("div");root.appendChild(body);de.appendChild(host);
+var ctx=await modernScreenshot.createContext(de,{width:w,height:height,scale:o.scale,quality:o.quality,type:"image/jpeg",backgroundColor:bg,timeout:15000,filter:function(n){return n!==host}});
+ctx.sandbox={remove:function(){host.remove()},contentWindow:{getComputedStyle:function(e,p){return getComputedStyle(e,p)},document:{body:body,createElement:function(t){return document.createElement(t)},createElementNS:function(n,t){return document.createElementNS(n,t)}}}};
+try{var url=await modernScreenshot.domToDataUrl(ctx)}finally{try{modernScreenshot.destroyContext(ctx)}catch(e){}host.remove()}
+post({type:"capture",dataUrl:url,width:w,height:height,fullHeight:full,diagnostics:diagnostics})}
+addEventListener("message",function(e){if(e.source!==parent||!e.data||e.data.source!=="makeborne-host"||e.data.type!=="capture")return;
+if(typeof modernScreenshot==="undefined"){post({type:"capture-error",message:"capture runtime missing"});return}
+capture(e.data).catch(function(err){post({type:"capture-error",message:String(err&&err.message||err).slice(0,300)})})});})();</script>`;
+
+type CompileResult = { ok: true; js: string; css: string } | { ok: false; error: string };
+
+/** Compile src/main.tsx with React inlined from the same-origin runtime.
+ * Preview keeps readable output; publish minifies. Neither includes the shim. */
+async function compileProject(input: Record<string, string>, mode: "preview" | "publish"): Promise<CompileResult> {
   const files = new Map(Object.entries(input));
   if (!files.has("src/main.tsx")) return { ok: false, error: "The project has no src/main.tsx entry yet." };
   const origin = typeof location === "undefined" ? "" : location.origin;
@@ -120,7 +153,7 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
   try {
     result = await build.build({
       entryPoints: ["src/main.tsx"], bundle: true, write: false, format: "esm", outdir: "/out",
-      target: "es2022", jsx: "automatic", minify: mode === "publish", sourcemap: false, logLevel: "silent",
+      target: "es2022", jsx: "automatic", minify: mode === "publish", sourcemap: false, logLevel: "silent", legalComments: mode === "publish" ? "none" : "inline",
       define: { "process.env.NODE_ENV": '"production"', "import.meta.env.MODE": '"production"', "import.meta.env.DEV": "false", "import.meta.env.PROD": "true" },
       plugins: [{
         name: "makeborne-project",
@@ -168,22 +201,53 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
     const messages = failure.errors?.slice(0, 5).map(item => item.location ? `${item.location.file.replace(/^project:/, "")}:${item.location.line}: ${item.text}` : item.text);
     return { ok: false, error: messages?.join("\n") || "The project could not be bundled." };
   }
-  let fontCss = "";
-  try { fontCss = await projectFontCss(files, origin); }
+  // Every output (preview, review capture, static snapshot, hosted bundle)
+  // carries the used fonts as embedded @font-face rules at the top of its CSS.
+  let fonts = "";
+  try { fonts = await projectFontCss(files, origin); }
   catch { /* fonts are progressive: fall back to the declared system stacks */ }
-  const js = result.outputFiles.find(file => file.path.endsWith(".js"))?.text ?? "";
   const css = result.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
+  return {
+    ok: true,
+    js: result.outputFiles.find(file => file.path.endsWith(".js"))?.text ?? "",
+    css: fonts ? `${fonts}
+${css}` : css,
+  };
+}
 
-  const source = files.get("index.html") ?? '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website</title></head><body><div id="root"></div></body></html>';
+/** Bundle a project into one self-contained HTML document (React inlined).
+ * preview adds the editor shim; capture adds it plus the design-review
+ * rasteriser; publish minifies. */
+export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" | "capture" = "preview"): Promise<BundleResult> {
+  const compiled = await compileProject(input, mode === "publish" ? "publish" : "preview");
+  if (!compiled.ok) return compiled;
+  const { js, css } = compiled;
+  const source = input["index.html"] ?? '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website</title></head><body><div id="root"></div></body></html>';
   let html = source.replace(/<script\b[^>]*\bsrc=["'][^"']*["'][^>]*>\s*<\/script>/gi, "").replace(/<link\b[^>]*rel=["']?(?:modulepreload|stylesheet)["']?[^>]*>/gi, "");
   if (!/<\/head>/i.test(html)) html = html.replace(/<body/i, "<head></head><body");
-  // Function replacers: generated code may contain `$&`-style sequences.
-  const head = `${mode === "preview" ? PREVIEW_SHIM : ""}<style>${fontCss}${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
+  // Function replacers: generated code may contain `$&`-style sequences. The
+  // marker lets publishing swap this inline copy for the hosted stylesheet.
+  let capture = "";
+  if (mode === "capture") {
+    const origin = typeof location === "undefined" ? "" : location.origin;
+    try { capture = `<script>${scriptSafe(await vendorSource(`${origin}/builder-runtime/vendor/modern-screenshot.js`))}</script>${CAPTURE_SHIM}`; }
+    catch { return { ok: false, error: "The screenshot runtime could not be loaded." }; }
+  }
+  const head = `${mode === "publish" ? "" : PREVIEW_SHIM}${capture}<style data-makeborne-bundle>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
   html = html.replace(/<\/head>/i, () => head);
   const script = `<script type="module">${scriptSafe(js)}</script>`;
   html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, () => `${script}</body>`) : `${html}${script}`;
   for (const [path, url] of Object.entries(assets)) html = html.split(path).join(url);
   return { ok: true, html };
+}
+
+/** Production build for the isolated site host: one minified ES module plus one
+ * stylesheet. Project images keep their public paths (served by the host). */
+export async function buildPublishBundle(input: Record<string, string>): Promise<{ js: string; css: string }> {
+  const compiled = await compileProject(input, "publish");
+  if (!compiled.ok) throw new Error(`Fix the build before publishing: ${compiled.error}`);
+  if (!compiled.js.trim()) throw new Error("The website build produced no script.");
+  return { js: compiled.js, css: compiled.css };
 }
 
 /** Render the project off-screen in the same sandbox and capture its final DOM

@@ -53,3 +53,6 @@ next-env.d.ts
 
 # Local agent execution logs and evidence (contain machine paths and account emails)
 /docs/execution/
+
+# Wrangler local secrets
+.dev.vars*

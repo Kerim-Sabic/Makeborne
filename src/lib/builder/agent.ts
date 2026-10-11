@@ -24,7 +24,7 @@ export type BuilderEvent =
   | { type: "image"; path: string; url: string; assetId: string }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
-  | { type: "done"; version: number; summary: string; charged: number }
+  | { type: "done"; version: number; summary: string; charged: number; changed?: boolean }
   | { type: "error"; code: string; message: string };
 
 const name = z.string().regex(/^[a-z0-9][a-z0-9-]{1,48}$/, "Use a short kebab-case name like hero-portrait.");
@@ -74,6 +74,8 @@ export type BuilderRun = {
   signal: AbortSignal;
   /** Epoch ms by which the run must have stopped (platform time limit). */
   deadline: number;
+  /** Tighter limits for focused passes such as the design review. */
+  limits?: { maxTurns?: number; maxImages?: number };
 };
 
 export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean };
@@ -81,7 +83,7 @@ export type BuilderResult = { summary: string; title?: string; credits: number; 
 /** Agentic edit loop: Claude edits the in-memory project through tools until it
  * calls finish with a project that passes static checks, or the budget runs out. */
 export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
-  const policy = BUILDER_EFFORT[run.effort];
+  const policy = { ...BUILDER_EFFORT[run.effort], ...run.limits };
   const model = builderModel();
   const anthropic = new Anthropic({ maxRetries: 2, timeout: 600_000 });
   const imagesEnabled = imageGenerationAvailable() && policy.maxImages > 0;

@@ -396,13 +396,16 @@ export function htmlDocument(input: ExportRequest) {
   const coverPrint = input.kind === "book" ? `@media print{.cover{height:7.8in;min-height:0;gap:6mm}.cover h1{flex:none;margin:0}.cover .book-author{flex:none;margin:0}.cover figure{flex:1;min-height:0;display:flex;flex-direction:column;margin:0}.cover .cover-art{flex:1;min-height:0;height:0;width:100%;max-height:none;object-fit:contain}.cover figcaption{flex:none}.cover-rule{flex:none;margin-top:auto}}` : "";
   return `<!doctype html><html lang="${escapeHtml(input.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${title}</title><style>${shared}${css}${input.kind === "presentation" ? "" : artifactDesignCss(input.styleId, input.kind)}${coverPrint}</style></head><body>${content}</body></html>`;
 }
+/** Serverless hosts (Vercel) ship no browser: use the matching @sparticuz/chromium
+ * build there. Elsewhere, Playwright's installed Chromium or an explicit path. */
+async function chromiumLaunchOptions(): Promise<{ executablePath?: string; args?: string[] }> {
+  if (process.env.CHROMIUM_EXECUTABLE_PATH) return { executablePath: process.env.CHROMIUM_EXECUTABLE_PATH };
+  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) return {};
+  const { default: serverless } = await import("@sparticuz/chromium");
+  return { executablePath: await serverless.executablePath(), args: serverless.args };
+}
 async function withExportPage<T>(input: ExportRequest, operation: (page: Page) => Promise<T>, options: {reviewOnly?: boolean} = {}): Promise<T> {
-  const browser = await chromium.launch({
-    headless: true,
-    ...(process.env.CHROMIUM_EXECUTABLE_PATH
-      ? { executablePath: process.env.CHROMIUM_EXECUTABLE_PATH }
-      : {}),
-  });
+  const browser = await chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
   try {
     const context = await browser.newContext({
       javaScriptEnabled: false,

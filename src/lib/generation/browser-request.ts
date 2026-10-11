@@ -3,7 +3,9 @@ import {GenerationPreparationSchema, PreparedGenerationSchema, GenerationProgres
 
 export const GenerationReferenceSchema = z.object({version:z.literal(1), accountId:z.string().uuid(),
   requestKey:z.string().uuid(), input:GenerationPreparationSchema, prepared:PreparedGenerationSchema.nullable(),
-  jobId:z.string().uuid().nullable(),autoStart:z.boolean().optional()}).strict();
+  jobId:z.string().uuid().nullable(),autoStart:z.boolean().optional(),
+  /** Plan-first creation: the live builder opens in Plan mode instead of building. */
+  planFirst:z.boolean().optional()}).strict();
 export type GenerationReference = z.infer<typeof GenerationReferenceSchema>;
 type Scope = GenerationReference["input"]["scope"];
 type Storage = Pick<globalThis.Storage,"getItem"|"setItem"|"removeItem">;

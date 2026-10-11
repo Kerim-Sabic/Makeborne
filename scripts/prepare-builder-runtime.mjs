@@ -1,7 +1,8 @@
 // Prepares the self-hosted in-browser preview runtime under public/builder-runtime:
 // the esbuild WebAssembly bundler, one shared ESM build of React, per-icon
-// Lucide modules and the curated woff2 font library. Runs before `next dev`
-// and `next build`; output is generated, not committed.
+// Lucide modules, the curated woff2 font library and the DOM rasteriser
+// (modern-screenshot) inlined into design-review captures. Runs before
+// `next dev` and `next build`; output is generated, not committed.
 // `--icons-manifest` regenerates src/lib/builder/lucide-icons.json (committed)
 // after a lucide-react upgrade.
 import { createRequire } from "node:module";
@@ -52,7 +53,9 @@ const iconManifest = JSON.parse(await readFile(iconManifestPath, "utf8"));
 if (iconManifest.version !== lucideVersion) {
   throw new Error(`src/lib/builder/lucide-icons.json is for lucide-react ${iconManifest.version}, installed ${lucideVersion}. Run: node scripts/prepare-builder-runtime.mjs --icons-manifest`);
 }
-const stamp = `${esbuildVersion}-${reactVersion}-${lucideVersion}-${createHash("sha256").update(catalogText).digest("hex").slice(0, 12)}`;
+const screenshotDir = join(modules, "modern-screenshot");
+const { version: screenshotVersion } = JSON.parse(await readFile(join(screenshotDir, "package.json"), "utf8"));
+const stamp = `${esbuildVersion}-${reactVersion}-${screenshotVersion}-${lucideVersion}-${createHash("sha256").update(catalogText).digest("hex").slice(0, 12)}`;
 
 try {
   if ((await readFile(join(out, "VERSION"), "utf8")).trim() === stamp) process.exit(0);
@@ -63,6 +66,8 @@ await mkdir(join(out, "vendor", "lucide", "icons"), { recursive: true });
 await mkdir(join(out, "fonts", "licenses"), { recursive: true });
 await copyFile(join(wasmDir, "esbuild.wasm"), join(out, "esbuild.wasm"));
 await copyFile(join(wasmDir, "esm", "browser.min.js"), join(out, "esbuild.js"));
+// UMD build: defines globalThis.modernScreenshot when inlined as a classic script.
+await copyFile(join(screenshotDir, "dist", "index.js"), join(out, "vendor", "modern-screenshot.js"));
 
 // React ships CommonJS, so `export *` would drop named exports. Re-export each
 // key explicitly. Splitting keeps a single shared React instance across entries.
@@ -124,4 +129,4 @@ for (const font of catalog) {
 }
 
 await writeFile(join(out, "VERSION"), stamp);
-console.log(`builder runtime ready (esbuild ${esbuildVersion}, react ${reactVersion}, lucide ${lucideVersion}, ${catalog.length} fonts)`);
+console.log(`builder runtime ready (esbuild ${esbuildVersion}, react ${reactVersion}, modern-screenshot ${screenshotVersion}, lucide ${lucideVersion}, ${catalog.length} fonts)`);

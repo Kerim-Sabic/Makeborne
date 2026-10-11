@@ -80,30 +80,40 @@ assert(CUSTOMER_SITE_CSP.includes("connect-src 'none'"));
 assert(CUSTOMER_SITE_CSP.startsWith('sandbox;'));
 
 async function checkDelivery() {
+  // Static (outline/generated) sites are served by the interactive-hosting Worker
+  // from their own origin with scripts disabled; see src/lib/hosting/check-hosting.cjs.
   const {default: worker} = load('infra/customer-sites/_worker.js');
+  const {siteDocumentCsp} = load('infra/customer-sites/site-policy.js');
+  const env = {SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture', SUPABASE_URL: 'https://abcdefghijklmnopqrst.supabase.co', SITES_DOMAIN: 'makeborne.site'};
+  const siteUrl = 'https://good-dog.makeborne.site/';
   const originalFetch = global.fetch;
   let calls = 0;
-  global.fetch = async (_url, init) => {
+  global.fetch = async (url, init) => {
     calls++;
+    assert.equal(url, 'https://abcdefghijklmnopqrst.supabase.co/rest/v1/rpc/makeborne_read_hosted_site_v2');
     assert.deepEqual(JSON.parse(init.body), {p_slug: 'good-dog'});
     assert.equal(init.headers.apikey, 'sb_publishable_fixture');
     assert(!init.headers.cookie && !init.headers.Authorization);
-    return new Response(JSON.stringify(published), {headers: {'Content-Type': 'application/json'}});
+    return new Response(JSON.stringify({html: published, interactive: true, script: null, revision: 3}), {headers: {'Content-Type': 'application/json'}});
   };
   try {
-    const response = await worker.fetch(new Request(address), {SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture'});
+    const response = await worker.fetch(new Request(siteUrl), env);
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get('Content-Security-Policy'), CUSTOMER_SITE_CSP);
-    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    assert.equal(response.headers.get('Content-Security-Policy'), siteDocumentCsp({interactive: false, secure: true}));
+    assert.match(response.headers.get('Content-Security-Policy'), /script-src 'none'/);
+    assert.equal(response.headers.get('Cache-Control'), 'public, max-age=0, must-revalidate');
     assert.equal(await response.text(), published);
-    const head = await worker.fetch(new Request(address, {method: 'HEAD'}), {SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture'});
+    const head = await worker.fetch(new Request(siteUrl, {method: 'HEAD'}), env);
     assert.equal(head.status, 200);
     assert.equal(await head.text(), '');
-    assert.equal(head.headers.get('Content-Security-Policy'), CUSTOMER_SITE_CSP);
-    const denied = await worker.fetch(new Request(address, {method: 'POST'}), {});
+    assert.equal(head.headers.get('Content-Security-Policy'), siteDocumentCsp({interactive: false, secure: true}));
+    const denied = await worker.fetch(new Request(siteUrl, {method: 'POST'}), env);
     assert.equal(denied.status, 405);
-    const missing = await worker.fetch(new Request(address), {});
+    const missing = await worker.fetch(new Request(siteUrl), {});
     assert.equal(missing.status, 503);
+    const legacy = await worker.fetch(new Request(address), env);
+    assert.equal(legacy.status, 301);
+    assert.equal(legacy.headers.get('Location'), siteUrl);
     assert.equal(calls, 2);
   } finally {
     global.fetch = originalFetch;

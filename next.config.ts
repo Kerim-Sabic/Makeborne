@@ -10,6 +10,9 @@ if (publicSupabaseKey && !publicSupabaseKey.startsWith("sb_publishable_")) {
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // PDF export runs Chromium; on Vercel it comes from @sparticuz/chromium's packed binary.
+  serverExternalPackages: ["@sparticuz/chromium", "playwright", "playwright-core"],
+  outputFileTracingIncludes: { "/api/export": ["./node_modules/@sparticuz/chromium/bin/**"] },
   async headers() {
     return [
       {
@@ -32,6 +35,16 @@ const nextConfig: NextConfig = {
           { key: "Access-Control-Allow-Origin", value: "*" },
           { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
           { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
+        ],
+      },
+      {
+        // Client review links carry a bearer token in the path: never index,
+        // cache, or leak it through the Referer header.
+        source: "/review/:path*",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "private, no-store" },
         ],
       },
       ...["studio", "chat", "login", "billing", "admin", "auth", "api"].map((route) => ({

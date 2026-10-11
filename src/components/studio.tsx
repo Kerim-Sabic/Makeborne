@@ -1364,7 +1364,9 @@ function CreationWizard({
     mode, requirements, outline, effort,
   ]);
   const plan = creationPlan({ kind, title, brief, audience, purpose, requirements, outline, style: selectedStyle?.name || "Custom direction" });
-  const needsPlanAnswers = mode === "plan" && plan.structure.length === 0;
+  // Websites with the live builder get a real AI plan once the project opens.
+  const aiPlan = mode === "plan" && willGenerate;
+  const needsPlanAnswers = mode === "plan" && !aiPlan && plan.structure.length === 0;
   useEffect(() => {
     if (!draftLoaded || !account.accountId) return;
     try {
@@ -1381,7 +1383,7 @@ function CreationWizard({
     const controller = lifetime.current;
     const current = () => !!controller && !controller.signal.aborted;
     const values = { effort, kind, title: title.trim() || `Untitled ${kind}`,
-      brief: mode === "plan" ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n"),
+      brief: mode === "plan" && !aiPlan ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n"),
       audience, purpose, wording, styleId, clientId, content };
     try {
       if (!account.accountId) throw new Error("Sign in with an active creation plan to continue. Your draft and files are preserved.");
@@ -1419,7 +1421,7 @@ function CreationWizard({
           const scope={workspaceId:result.workspaceId,projectId:result.artifact.projectId,artifactId:result.artifact.id};
           await navigator.locks.request(generationStorageKey(accountId,scope),{signal:controller!.signal},()=>{
             if (!current()) return;
-            stageCreationGeneration(localStorage,result,snapshot.artifact.currentVersion,snapshot.versions.find(version=>version.number===1));
+            stageCreationGeneration(localStorage,result,snapshot.artifact.currentVersion,snapshot.versions.find(version=>version.number===1),mode==="plan");
           });
         }
         if (initialAttachmentOwner) await finishAttachmentHandoff(initialAttachmentOwner, requestId).catch(() => {});
@@ -1494,7 +1496,8 @@ function CreationWizard({
         </details>
         <details className="prompt-options"><summary><span>Creative effort</span><span>{effort.replaceAll("_", " ")}</span></summary><EffortControl value={effort} onChange={setEffort} /></details>
         </>}
-        {mode === "plan" && <div className="creation-plan"><h3>Your starting plan</h3><label className="creation-outline">Sections to include<textarea rows={6} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={e => setOutline(e.target.value)} /></label><p>Edit one section, chapter, or slide per line. This is a starter outline, not AI research. Confirming saves it with your brief.</p></div>}
+        {aiPlan && <div className="creation-plan"><h3>Plan before building</h3><p>When your project opens, Makeborne studies your brief and proposes a complete plan: sitemap, sections, design direction with palette and type, and a credit estimate. You edit and approve it before any code is written. Planning costs at most 10 credits.</p></div>}
+        {mode === "plan" && !aiPlan && <div className="creation-plan"><h3>Your starting plan</h3><label className="creation-outline">Sections to include<textarea rows={6} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={e => setOutline(e.target.value)} /></label><p>Edit one section, chapter, or slide per line. This is a starter outline, not AI research. Confirming saves it with your brief.</p></div>}
         {willGenerate&&!initialGenerationConsent&&!uncertain&&<GenerationPermissions value={permissions} disabled={saving}/>}
         <p className="creation-plan-note">{willGenerate ? "Your brief is saved first, then its website request continues in the workspace. Attached files remain separate on this device." : "Your brief and source text will be saved in an editable project. Public AI generation remains paused."}</p>
       </div>

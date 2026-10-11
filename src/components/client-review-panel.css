@@ -1,0 +1,52 @@
+.crp{padding:20px;border:1px solid #e4e5eb;border-radius:18px;background:#fff;display:grid;gap:16px;margin:16px 0;font-size:13px;color:#20222a}
+.crp h3{font-size:14px;margin:0}.crp h4{display:flex;align-items:center;gap:7px;font-size:13px;margin:0;letter-spacing:-.01em}
+.crp-head{display:flex;align-items:flex-start;gap:10px}.crp-head>div{flex:1;min-width:0}.crp-head p{font-size:12px;line-height:1.55;color:#6a6b78;margin:3px 0 0}
+.crp-icon{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:12px;background:#eef1fb;color:#3358d4}
+.crp-icon-button{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;border:1px solid #e4e5eb;background:#fff;color:#5c616d;flex:0 0 auto}
+.crp-icon-button:hover{background:#f4f5f8}
+.crp-muted{margin:0;font-size:12px;color:#7a7c88}
+.crp-client{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:12px;color:#4a4d57;padding:10px 12px;border-radius:12px;background:#f7f7f4}
+.crp-client small{width:100%;color:#7a7c88;font-size:11px}
+.crp-pill{display:inline-flex;padding:2px 9px;border-radius:999px;background:#fff;border:1px solid #e1e1e6;font-size:11px;font-weight:600}
+.crp-create{display:grid;gap:12px;padding-top:4px}
+.crp-create label{display:grid;gap:6px;font-size:11px;font-weight:600;color:#4a4d57}.crp-create label small{font-weight:400;color:#8a8c97}
+.crp-create input,.crp-create select,.crp-create textarea{width:100%;min-width:0;border:1px solid #dedee7;border-radius:10px;padding:9px 11px;font:inherit;font-size:13px;font-weight:400;background:#fff;color:#20222a}
+.crp-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.crp-scope{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.crp-scope label{display:flex;gap:9px;align-items:flex-start;padding:11px;border:1px solid #e1e1e8;border-radius:12px;cursor:pointer;font-weight:400}
+.crp-scope label.is-selected{border-color:#3358d4;background:#f6f8ff}
+.crp-scope input{width:auto;margin-top:2px;accent-color:#3358d4}
+.crp-scope span{display:grid;gap:2px}.crp-scope strong{font-size:12px;color:#20222a}.crp-scope small{font-size:11px;color:#7a7c88}
+.crp-created{display:grid;gap:10px;padding:14px;border-radius:14px;background:#f2f8f4;border:1px solid #cfe7d8}
+.crp-created small{font-size:11px;color:#56705f}
+.crp-url{display:flex;gap:8px}.crp-url input{flex:1;min-width:0;border:1px solid #cfe2d6;border-radius:10px;padding:8px 10px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:#fff;color:#20222a}
+.crp-created-actions{display:flex;flex-wrap:wrap;gap:8px}
+.crp-message{margin:0;font-size:12px;color:#3d4a7a}
+.crp-stale{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-radius:12px;background:#fff8ec;border:1px solid #f1dfbd}.crp-stale p{margin:0;font-size:12px;color:#7a5512}
+.crp-decision{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px}
+.crp-decision.is-approved{background:#ecf7f0;color:#1f6b45}.crp-decision.is-changes_requested{background:#fff3e8;color:#94470f}
+.crp-decision strong{font-size:13px}.crp-decision p{margin:2px 0 0;font-size:11px;color:inherit;opacity:.85}
+.crp-decision blockquote{margin:8px 0 0;padding-left:10px;border-left:2px solid currentColor;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;color:#2a2d35}
+.crp-feedback{display:grid;gap:10px;border-top:1px solid #efeff3;padding-top:14px}
+.crp-feedback-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.crp-feedback-head h4 span{font-size:11px;font-weight:600;color:#6a6b78;background:#f1f1f4;border-radius:999px;padding:2px 8px}
+.crp-comments{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.crp-comments li{display:grid;gap:4px;padding:12px;border:1px solid #ececf1;border-radius:12px;background:#fcfcfd}
+.crp-comments li.is-resolved{opacity:.6}
+.crp-comment-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:12px}.crp-comment-head a{color:#5a5d6a;font-size:11px}.crp-comment-head time{margin-left:auto;font-size:11px;color:#9496a1}
+.crp-where{font-size:11px;color:#3358d4;font-weight:600}
+.crp-comments p{margin:0;font-size:13px;line-height:1.55;color:#2a2d35;white-space:pre-wrap;overflow-wrap:anywhere}
+.crp-comment-actions{display:flex;gap:12px;margin-top:4px}
+.crp-comment-actions button,.crp-text-button{display:inline-flex;align-items:center;gap:5px;border:0;background:none;padding:0;font-size:11px;font-weight:600;color:#5a5d6a}
+.crp-comment-actions button:hover,.crp-text-button:hover{color:#3358d4}.crp-text-button{justify-self:start}
+.crp-links{display:grid;gap:8px;border-top:1px solid #efeff3;padding-top:14px}
+.crp-links ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.crp-links li{position:relative;display:grid;gap:3px;padding:10px 44px 10px 12px;border-radius:12px;background:#f8f8fa}
+.crp-links li>div{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px}
+.crp-links small{font-size:11px;color:#7a7c88}
+.crp-links .crp-icon-button{position:absolute;right:8px;top:50%;transform:translateY(-50%)}
+.crp-state{display:inline-flex;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em}
+.crp-state.is-active{background:#e8f0ff;color:#2845aa}.crp-state.is-expired,.crp-state.is-revoked{background:#ececef;color:#6a6b78}
+.crp-state.is-approved{background:#e3f4ea;color:#1f6b45}.crp-state.is-changes_requested{background:#fff0e3;color:#94470f}
+@media(max-width:560px){.crp-row,.crp-scope{grid-template-columns:1fr}.crp-url{flex-direction:column}}
+.crp-feed{display:grid;gap:4px}
