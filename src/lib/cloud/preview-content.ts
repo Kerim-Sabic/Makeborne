@@ -1,4 +1,6 @@
 import type { ArtifactContent } from "../domain";
+import {groupPresentationBlocks} from "../presentations/composition";
+import type {SlideDesign} from "../presentations/slide-design";
 type Block = ArtifactContent["sections"][number]["blocks"][number];
 export function previewBlocks(content: ArtifactContent): Block[] {
   return content.sections.flatMap(section => [
@@ -7,14 +9,7 @@ export function previewBlocks(content: ArtifactContent): Block[] {
     ...section.blocks,
   ]);
 }
-export function previewSlides(content: ArtifactContent) {
-  const slides: { id: string; title: string; blocks: Block[] }[] = [];
-  for (const block of previewBlocks(content)) {
-    if (block.type === "heading") slides.push({ id: block.id, title: block.text, blocks: [] });
-    else {
-      if (!slides.length) slides.push({ id: block.id, title: content.title, blocks: [] });
-      slides[slides.length - 1].blocks.push(block);
-    }
-  }
-  return slides.length ? slides : [{ id: "title", title: content.title, blocks: [] }];
+export function previewSlides(content: ArtifactContent): {id:string;title:string;blocks:Block[];design?:SlideDesign}[] {
+  if(content.sections.some(section=>section.slideDesign))return content.sections.flatMap(section=>section.slideDesign?[{id:section.id,title:section.title,blocks:section.blocks,design:section.slideDesign}]:groupPresentationBlocks(content.title,previewBlocks({...content,sections:[section]})));
+  return groupPresentationBlocks(content.title, previewBlocks(content));
 }

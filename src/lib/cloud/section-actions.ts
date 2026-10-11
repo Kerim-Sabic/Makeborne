@@ -11,6 +11,7 @@ export function appendAccountBlock(input: ArtifactContent, sectionId: string, id
   const content = ArtifactContentSchema.parse(input);
   const section = content.sections.find(item => item.id === sectionId);
   if (!section) throw new Error("This section is no longer available.");
+  if(section.slideDesign)throw new Error("Adding content to a custom slide requires placing its new element on the canvas.");
   section.blocks.push({ id, type: z.enum(["heading", "paragraph", "quote"]).parse(type), text: "", sourceIds: [], assetId: null, locked: false });
   return ArtifactContentSchema.parse(content);
 }
@@ -48,6 +49,7 @@ export function appendAccountImage(input: ArtifactContent, sectionId: string, bl
   const content = ArtifactContentSchema.parse(input);
   const section = content.sections.find(item => item.id === sectionId);
   if (!section) throw new Error("The target section is no longer available.");
+  if(section.slideDesign)throw new Error("Adding artwork to a custom slide requires placing its new element on the canvas.");
   section.blocks.push({ id: blockId, type: "image", text: "", sourceIds: [], assetId: z.string().uuid().parse(assetId), locked: false });
   return ArtifactContentSchema.parse(content);
 }

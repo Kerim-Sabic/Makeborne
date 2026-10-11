@@ -24,7 +24,7 @@ export function billingConfig() {
     .filter(value => Object.values(CREATION_CATALOG).includes(value as typeof CREATION_CATALOG[keyof typeof CREATION_CATALOG]) && value !== SUPPORT.planId);
   const configured = Boolean(apiKey && companyId === SUPPORT.companyId && webhookSecret?.startsWith("ws_") && secretKey?.startsWith("sb_secret_") && accessPlanIds.length);
   return {
-    apiKey, companyId, secretKey, accessPlanIds,
+    apiKey, companyId, secretKey, accessPlanIds, configured,
     enabled: configured && process.env.WHOP_CREATION_ENABLED === "true" && process.env.MAKEBORNE_BILLING_MIGRATIONS_VERIFIED === "true",
   };
 }

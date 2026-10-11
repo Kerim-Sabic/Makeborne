@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { WebsiteDesignSchema } from "./generation/website-contract";
 import { ClientOutreachSchema } from "./client-outreach";
+import { WebsiteProjectSourceSchema } from "./projects/website-source";
+import {SlideDesignSchema,slideDesignSourceIssues} from "./presentations/slide-design";
 
 export const ArtifactKindSchema = z.enum(["website", "book", "presentation"]);
 export const ProjectStatusSchema = z.enum([
@@ -83,19 +85,29 @@ export const ArtifactContentSchema = z
   .object({
     schemaVersion: z.literal(1),
     website: WebsiteDesignSchema.optional(),
+    websiteSource: WebsiteProjectSourceSchema.optional(),
+    reviewQuestions: z.array(z.string().min(1).max(1000)).max(20).optional(),
     title: text.min(1).max(200),
     kind: ArtifactKindSchema,
     sections: z.array(
       z.object({
         id,
         title: text.max(200),
+        slideDesign: SlideDesignSchema.optional(),
         blocks: z.array(ContentBlockSchema),
       }),
     ),
   })
   .superRefine((content, context) => {
+    if (content.websiteSource && (content.kind !== "website" || content.website || content.sections.length)) {
+      context.addIssue({code: "custom", path: ["websiteSource"], message: "A full-source website cannot also contain a static design or outline."});
+    }
     const ids = new Set<string>();
     content.sections.forEach((section, sectionIndex) => {
+      if(section.slideDesign){
+        if(content.kind!=="presentation")context.addIssue({code:"custom",path:["sections",sectionIndex,"slideDesign"],message:"Slide composition belongs to presentations only."});
+        for(const message of slideDesignSourceIssues(section.slideDesign,section))context.addIssue({code:"custom",path:["sections",sectionIndex,"slideDesign"],message});
+      }
       if (ids.has(section.id))
         context.addIssue({
           code: "custom",
@@ -136,6 +148,11 @@ export const ArtifactVersionSchema = z.object({
   createdAt: timestamp,
   createdBy: id,
   changeSummary: text.max(2000),
+}).superRefine((version, context) => {
+  const manifest = new Set(version.assetIds.map(value => value.toLowerCase()));
+  for (const asset of version.content.websiteSource?.assets ?? []) {
+    if (!manifest.has(asset.id)) context.addIssue({code: "custom", path: ["assetIds"], message: "Source artwork must be included in the saved asset manifest."});
+  }
 });
 export type ArtifactVersion = z.infer<typeof ArtifactVersionSchema>;
 

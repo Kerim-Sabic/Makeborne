@@ -6,8 +6,8 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const { planPrice } = require("./plans.ts");
 for (const [id, monthly, firstMonth, yearly, firstYear, credits] of [
   ["create", 2900, 2030, 27840, 19488, 300],
-  ["studio", 7900, 5530, 75840, 53088, 1000],
-  ["scale", 19900, 13930, 191040, 133728, 2800],
+  ["studio", 7900, 5530, 75840, 53088, 850],
+  ["scale", 19900, 13930, 191040, 133728, 2200],
 ]) {
   assert.equal(planPrice(id, "monthly", false).priceCents, monthly);
   assert.equal(planPrice(id, "monthly", true).priceCents, firstMonth);

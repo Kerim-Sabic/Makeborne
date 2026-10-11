@@ -89,6 +89,7 @@ export async function api<T>(
   path: string,
   body?: unknown,
   method = "POST",
+  options?: { idempotencyKey: string },
 ): Promise<T> {
   const verb = body ? method : method === "POST" ? "GET" : method;
   const bodyText = body ? JSON.stringify(body) : undefined;
@@ -120,7 +121,9 @@ export async function api<T>(
     const needsKey =
       verb === "POST" &&
       (path.startsWith("/api/cloud/") || path === "/api/workspaces");
+    if (options && !needsKey) throw new CloudError(400, "This operation does not accept a creation request key.", "UNSUPPORTED_REQUEST_KEY");
     if (needsKey) {
+      const suppliedKey = options ? z.string().uuid().parse(options.idempotencyKey) : undefined;
       if (!requestAccount)
         throw new CloudError(
           401,
@@ -150,12 +153,13 @@ export async function api<T>(
             pending.accountId !== requestAccount ||
             pending.path !== path ||
             pending.method !== verb ||
-            pending.body !== bodyText
+            pending.body !== bodyText ||
+            (suppliedKey !== undefined && pending.key !== suppliedKey)
           )
             throw new Error("Pending request does not match");
           requestKey = pending.key;
         } else {
-          requestKey = crypto.randomUUID();
+          requestKey = suppliedKey ?? crypto.randomUUID();
           localStorage.setItem(
             storageId,
             JSON.stringify({

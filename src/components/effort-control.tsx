@@ -1,6 +1,7 @@
 "use client";
 import { useId, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
+import { BUILDER_EFFORT } from "@/lib/builder/pricing";
 import "@/app/effort-control.css";
 
 const descriptions: Record<EffortLevel, string> = {
@@ -57,6 +58,6 @@ export default function EffortControl({ value, onChange, disabled = false, varia
       {EFFORT_LEVELS.map((level, index) => <button key={level} type="button" tabIndex={-1} aria-label={`Set effort to ${EFFORT_PRESENTATION[level].label}`} aria-pressed={preview === level} onClick={() => commit(index)} style={{ "--stop": `${index * 25}%` } as CSSProperties}>{EFFORT_PRESENTATION[level].label}</button>)}
     </div>
     <p className="mbe-effort-description" id={`${id}-description`}>{descriptions[preview]}</p>
-    <p className="mbe-effort-cost" id={`${id}-cost`}>Higher effort can use more credits.</p>
+    <p className="mbe-effort-cost" id={`${id}-cost`}>Up to {BUILDER_EFFORT[preview].ceilingCredits} credits per request; you are charged only for what is used.</p>
   </fieldset>;
 }

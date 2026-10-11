@@ -6,6 +6,7 @@ import { z } from "zod";
 export function inspectAccountContent(input: unknown) {
   const content = ArtifactContentSchema.parse(input);
   const reasons: string[] = [];
+  if (content.websiteSource) reasons.push("Full-source projects require the code editor; the outline editor cannot replace their source.");
   const blocks: Block[] = [];
   for (const section of content.sections) for (const block of section.blocks) {
     if (!["heading", "paragraph", "quote"].includes(block.type)) reasons.push(`The editor needs support for ${block.type} blocks.`);

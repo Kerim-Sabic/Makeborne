@@ -1,7 +1,8 @@
 import "server-only";
 import { createOpenAIImageAdapter, type ImageDependencies, type OpenAIImageConfig } from "../providers/openai-image";
 import { DraftValidationError, validateDraftContext, validateGeneratedDraft } from "./draft-contract";
-import { getStyleDesignInstructions } from "../style-design-instructions";
+import { getModelStyleReference, getStyleDesignInstructions } from "../style-design-instructions";
+import { AUTOMATIC_STYLE } from "../automatic-style";
 
 export function buildArtworkPrompt(contextInput: unknown, draftInput: unknown, blockId: string) {
   const context = validateDraftContext(contextInput);
@@ -10,10 +11,12 @@ export function buildArtworkPrompt(contextInput: unknown, draftInput: unknown, b
   if (!request) throw new DraftValidationError("artwork");
   const section = draft.content.sections.find(item => item.blocks.some(block => block.id === blockId))!;
   const style = context.input.style;
+  const automatic = style.id === AUTOMATIC_STYLE.id || style.id.trim() === "";
   const brief = {
     role: request.role, aspect: request.aspect, direction: request.prompt,
     projectTitle: draft.content.title, sectionTitle: section.title,
-    typography: style.typography, colors: style.colors, styleDescription: style.description,
+    projectBrief: context.input.brief, audience: context.input.audience, purpose: context.input.purpose,
+    style: getModelStyleReference(style.id, style),
     exactSlideText: request.role === "slide_design" ? section.blocks.filter(block => block.type !== "image").map(block => block.text) : [],
   };
   const prompt = [
@@ -25,7 +28,9 @@ export function buildArtworkPrompt(contextInput: unknown, draftInput: unknown, b
         : request.role === "book_interior"
           ? "Produce purposeful editorial interior artwork for a book, not a website screenshot or book mockup. Avoid decorative text or invented labels."
           : "Produce an original website image asset suitable for the described section. Do not render an entire website or invent brand logos unless the approved direction explicitly calls for them.",
-    "Follow the specified palette, visual direction and aspect. Aim for coherent composition and legibility. Do not add watermarks or quality claims.",
+    automatic
+      ? "Follow the project's explicit brand requirements, established visual direction, artwork brief and aspect. No default palette or font has been chosen for this project. Aim for coherent composition and legibility. Do not add watermarks or quality claims."
+      : "Follow the specified palette, visual direction and aspect. Aim for coherent composition and legibility. Do not add watermarks or quality claims.",
     getStyleDesignInstructions(style.id, context.input.content.kind, style, request.role),
     JSON.stringify(brief),
   ].join("\n");

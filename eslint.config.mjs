@@ -12,6 +12,16 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local scratch, agent worktrees and environment folders (never committed).
+    "work/**",
+    ".claude/**",
+    ".env*/**",
+    // Generated output.
+    "infra/**/worker-configuration.d.ts",
+    "**/.wrangler/**",
+    "public/generated/**", "public/builder-runtime/**",
+    "docs/execution/evidence/**",
+    "coverage/**",
   ]),
 ]);
 

@@ -1,22 +1,27 @@
 "use client";
 import "@/app/studio-refresh.css";
 import { z } from "zod";
-import { PilotDraftSchema } from "@/lib/generation/pilot-contract";
 import Link from "next/link";
 import Image from "next/image";
 import { creationStyles, styleConcept } from "@/lib/creation-styles";
+import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
 import BuildConversation from "./build-conversation";
 import { AttachmentList, useFileAttachments } from "./file-attachments";
 import ComposerControls from "./composer-controls";
+import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
 import AccountClients from "./account-clients";
 import { useCreationAccount, type CreationAccount } from "./use-creation-account";
-import { api, CloudError, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
+import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import { createClient } from "@/lib/supabase/client";
 import { buildCreationPayload } from "@/lib/cloud/creation-payload";
+import { continueProjectCreation, creationReferenceKey, readCreationReference } from "@/lib/cloud/creation-reference";
+import { GenerationConsentSchema, type GenerationConsent } from "@/lib/generation/submission-contract";
+import { stageCreationGeneration } from "@/lib/generation/creation-handoff";
+import { generationStorageKey } from "@/lib/generation/browser-request";
 import { readWizardDraft, writeWizardDraft, clearWizardDrafts, wizardDraftScope } from "@/lib/wizard-draft-storage";
 import { attachmentOwner, claimCreationDraft, copyAttachments, finishAttachmentHandoff, projectAttachmentKey } from "@/lib/attachments";
 import type { CloudArtifact, CloudWorkspace } from "@/lib/cloud/contracts";
@@ -103,7 +108,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
   const [accountClientRoute, setAccountClientRoute] = useState<AccountClientRoute | null>(null);
   const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
   const [persistenceAllowed, setPersistenceAllowed] = useState(false);
-  const [initialStyle, setInitialStyle] = useState("editorial");
+  const [initialStyle, setInitialStyle] = useState<string>(AUTOMATIC_STYLE.id);
   const [initialBrief, setInitialBrief] = useState("");
   const [initialTitle, setInitialTitle] = useState("");
   const [initialWorkspaceId, setInitialWorkspaceId] = useState<string | null>(null);
@@ -115,6 +120,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
   const [creationEffort, setCreationEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   const [creationRequestId, setCreationRequestId] = useState("");
   const [initialAttachmentOwner, setInitialAttachmentOwner] = useState<string | null>(null);
+  const [initialGenerationConsent, setInitialGenerationConsent] = useState<GenerationConsent | null>(null);
+  const composerAccount=useCreationAccount(undefined,{includeClients:false});
+  const composerPermissions=useGenerationConsent(composerAccount.accountId);
+  const immediateWebsite=draftKind==="website"&&creationMode==="create"&&composerPermissions.enabled;
   const [homeHandoff, setHomeHandoff] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("projects");
@@ -131,6 +140,21 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
   const [clientDetail, setClientDetail] = useState<string | null>(null);
   const [opportunityClient, setOpportunityClient] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  function startStudioPrompt() {
+    if(!draftBrief.trim()||!composerAccount.ready||!composerAccount.accountId||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent)return;
+    const requestId=crypto.randomUUID(),owner=attachmentOwner(composerAccount.accountId);
+    const consent=immediateWebsite?composerPermissions.consent:null;
+    const draft={kind:draftKind,brief:draftBrief.trim(),mode:creationMode,effort:creationEffort,
+      styleId:AUTOMATIC_STYLE.id,requestId,attachmentOwner:owner,generationConsent:consent??undefined};
+    try {
+      sessionStorage.setItem("makeborne.creation-draft.v1",JSON.stringify(draft));
+      const url=new URL(window.location.href);url.search="";url.searchParams.set("create",draftKind);url.searchParams.set("from","home");
+      window.history.pushState(window.history.state,"",url);
+    } catch {setNotice("This browser could not preserve your prompt. Keep a copy and free browser storage before creating.");return;}
+    setDirectStart(true);setCreationRequestId(requestId);setInitialBrief(draft.brief);setInitialTitle(`Untitled ${draftKind}`);
+    setInitialStyle(AUTOMATIC_STYLE.id);setInitialClient("");setInitialWorkspaceId(null);setInitialAttachmentOwner(owner);
+    setInitialGenerationConsent(consent);setHomeHandoff(false);setCreating(draftKind);
+  }
   useEffect(() => {
     if (!mobileNav) return;
     const closeNavigation = (event: KeyboardEvent) => {
@@ -201,6 +225,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
                 effort: EffortLevelSchema.default(DEFAULT_EFFORT),
                 requestId: z.string().uuid().optional(),
                 attachmentOwner: z.string().regex(/^(device|account:[0-9a-f-]{36})$/).optional(),
+                generationConsent: GenerationConsentSchema.optional(),
               })
               .strict()
               .safeParse(JSON.parse(raw));
@@ -209,6 +234,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
               setCreationMode(draft.data.mode); setCreationEffort(draft.data.effort);
               setCreationRequestId(draft.data.requestId ?? crypto.randomUUID());
               setInitialAttachmentOwner(draft.data.attachmentOwner ?? null);
+              setInitialGenerationConsent(draft.data.kind === "website" && draft.data.mode === "create" ? draft.data.generationConsent ?? null : null);
               setDirectStart(Boolean(draft.data.brief.trim()));
               setInitialTitle(`Untitled ${draft.data.kind}`);
               setDraftBrief(draft.data.brief);
@@ -228,7 +254,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
                 setInitialStyle(style.id);
               } else if (
                 draft.data.styleId &&
-                baseStyles.some((style) => style.id === draft.data.styleId)
+                creationStyles(restored.styles, draft.data.kind).some((style) => style.id === draft.data.styleId)
               )
                 setInitialStyle(draft.data.styleId);
               setHomeHandoff(true);
@@ -255,7 +281,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
       : { tab: "settings", projectId: null, clientId: null } as const;
     setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
     // Keep unsaved client/style forms mounted when the underlying route changes.
-    setCreating(null); setInitialAttachmentOwner(null); setInitialWorkspaceId(null); setInitialClient(""); setMobileNav(false);
+    setCreating(null); setInitialAttachmentOwner(null); setInitialGenerationConsent(null); setInitialWorkspaceId(null); setInitialClient(""); setMobileNav(false);
     if ("notice" in route && route.notice) setNotice(route.notice);
   });
   useEffect(() => {
@@ -354,7 +380,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
     if (!revision.changed) return true;
     const next = { ...workspace, projects: workspace.projects.map(item => item.id === projectId ? {
       ...item, websiteRecord: revision.record, websiteHistory: revision.history, updatedAt: at,
-      activity: [...item.activity, { at, text: "Updated website preview, live link, or hosting details (user-recorded; deployment not verified)." }],
+      activity: [...item.activity, { at, text: "Updated the website preview, live link, or hosting details." }],
     } : item) };
     try { saveLocalWorkspace(next, localStorage); }
     catch { toast("Website details could not be saved. Keep the form open and download a workspace backup before retrying."); return false; }
@@ -448,6 +474,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
           initialEffort={creationEffort}
           requestId={creationRequestId}
           initialAttachmentOwner={initialAttachmentOwner}
+          initialGenerationConsent={initialGenerationConsent}
           initialClient={initialClient}
           initialWorkspaceId={initialWorkspaceId}
           initialStyle={initialStyle}
@@ -457,12 +484,12 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
           onKind={setCreating}
           clients={workspace.clients}
           styles={creationStyles(workspace.styles, creating)}
-          close={() => { if (directStart) openRoute({ tab: "projects", projectId: null, clientId: null }, true); setCreating(null); setInitialAttachmentOwner(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); }}
-          accountCreated={(workspaceId, artifact) => {
-            setCreating(null); setInitialAttachmentOwner(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief("");
+          close={() => { if (directStart) openRoute({ tab: "projects", projectId: null, clientId: null }, true); setCreating(null); setInitialAttachmentOwner(null); setInitialGenerationConsent(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); }}
+          accountCreated={(workspaceId, artifact, generationStaged) => {
+            setCreating(null); setInitialAttachmentOwner(null); setInitialGenerationConsent(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief("");
             try { sessionStorage.removeItem("makeborne.creation-draft.v1"); } catch { /* Saved project takes precedence. */ } setInitialTitle(""); setDraftBrief("");
             openRoute({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId: artifact.id } }, directStart || homeHandoff);
-            toast("Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
+            toast(generationStaged ? "Brief saved. Follow your website request in the workspace." : "Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
           }}
         />
       );
@@ -648,21 +675,17 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
                     <ComposerControls mode={creationMode} onMode={setCreationMode} effort={creationEffort} onEffort={setCreationEffort} />
                     <button
                       className="button primary"
-                      disabled={!draftBrief.trim()}
+                      disabled={!draftBrief.trim()||!composerAccount.ready||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent}
                       aria-label={creationMode === "plan" ? "Plan this project" : "Create this project"}
-                      onClick={() => {
-                        setDirectStart(true); setCreationRequestId(crypto.randomUUID());
-                        setInitialBrief(draftBrief.trim());
-                        setInitialTitle(`Untitled ${draftKind}`);
-                        setCreating(draftKind);
-                      }}
+                      onClick={startStudioPrompt}
                     >
                       <ArrowUp size={19} />
                     </button>
                   </div>
+                  {immediateWebsite&&<GenerationPermissions value={composerPermissions}/>}
                 </section>
                 <div className="composer-note">
-                  Your brief becomes a saved project. Available generation controls appear in its editor.
+                  {immediateWebsite?"Your website request starts after your brief is saved.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
                 </div>
                 <div
                   className="brief-suggestions"
@@ -793,11 +816,11 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
               </>
             )}
             {tab === "clients" && opportunityClient && <ClientOpportunity clientName={workspace.clients.find(client => client.id === opportunityClient)?.name} onClose={() => setOpportunityClient(null)} onCreateBrief={(kind, brief, title) => {
-              setInitialClient(opportunityClient); setInitialBrief(brief); setInitialTitle(title); setInitialStyle("editorial"); setHomeHandoff(false); setCreating(kind); setOpportunityClient(null);
+              setInitialClient(opportunityClient); setInitialBrief(brief); setInitialTitle(title); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating(kind); setOpportunityClient(null);
             }} />}
             {tab === "clients" && !opportunityClient && (
               <AccountClients key={clientDetail ? "device" : "account"} initialDevice={!!clientDetail} onOpenProject={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} onCreate={(workspaceId, client) => {
-                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(""); setInitialTitle(""); setInitialStyle("editorial"); setHomeHandoff(false); setCreating("website");
+                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(""); setInitialTitle(""); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating("website");
               }} target={accountClientRoute} navigate={accountClient => openRoute({ tab: "clients", projectId: null, clientId: null, accountClient })} deviceClients={
               <ClientWorkspace
                 clients={workspace.clients}
@@ -819,7 +842,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
                 onCreateProject={(clientId) => {
                   setInitialClient(clientId);
                   setHomeHandoff(false);
-                  setInitialBrief(""); setInitialTitle(""); setInitialStyle("editorial");
+                  setInitialBrief(""); setInitialTitle(""); setInitialStyle(AUTOMATIC_STYLE.id);
                   setCreating("website");
                 }}
               />
@@ -1135,6 +1158,7 @@ const WizardDraftSchema = z
   .object({
     effort: EffortLevelSchema.default(DEFAULT_EFFORT),
     seed: z.string().max(100),
+    creationId: z.string().uuid().optional(),
     kind: z.enum(["website", "book", "presentation"]),
     step: z.number().int().min(1).max(4),
     mode: z.enum(["plan", "create"]).default("create"),
@@ -1163,7 +1187,7 @@ function CreationSession({ children, close }: { children: React.ReactNode; close
 }
 
 function CreateModal(props: Omit<Parameters<typeof CreationWizard>[0], "account">) {
-  const account = useCreationAccount(props.initialWorkspaceId);
+  const account = useCreationAccount(props.initialWorkspaceId,{includeClients:!props.directStart||!!props.initialClient});
   const LoadingFrame = props.directStart ? CreationSession : Modal;
   if (!account.ready) return <LoadingFrame close={props.close} title="Create a project"><h2>{account.error ? "Account unavailable" : "Opening your project…"}</h2><p role="status">{account.error || "Checking where your project and draft will be saved."}</p><button className="button secondary" onClick={props.close}>Back</button></LoadingFrame>;
   if (!account.accountId) return <LoadingFrame close={props.close} title="Create a project"><h2>Sign in to create</h2><p>Your account connection is unavailable. Creation requires a signed-in account and an active creation plan. Your draft is preserved.</p><Link className="button" href="/login?next=%2Fstudio">Sign in</Link><button className="button secondary" onClick={props.close}>Back to projects</button></LoadingFrame>;
@@ -1173,6 +1197,7 @@ function CreateModal(props: Omit<Parameters<typeof CreationWizard>[0], "account"
 
 function CreationWizard({
   directStart, initialMode, initialEffort, requestId, initialAttachmentOwner,
+  initialGenerationConsent,
   account,
   initialWorkspaceId,
   initialClient,
@@ -1188,6 +1213,7 @@ function CreationWizard({
 }: {
   directStart: boolean; initialMode: "create" | "plan"; initialEffort: EffortLevel; requestId: string;
   initialAttachmentOwner: string | null;
+  initialGenerationConsent: GenerationConsent | null;
   account: CreationAccount;
   initialWorkspaceId: string | null;
   initialClient: string;
@@ -1199,16 +1225,20 @@ function CreationWizard({
   clients: Client[];
   styles: Style[];
   close: () => void;
-  accountCreated: (workspaceId: string, artifact: CloudArtifact) => void;
+  accountCreated: (workspaceId: string, artifact: CloudArtifact, generationStaged?: boolean) => void;
 }) {
   const clients = account.accountId ? account.clients : deviceClients;
+  const permissions=useGenerationConsent(account.accountId,initialGenerationConsent);
+  const willGenerate=kind==="website"&&(permissions.enabled||!!initialGenerationConsent);
   const sourceAttachments = useFileAttachments(initialAttachmentOwner, `draft:${requestId}`);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState("");
   const [uncertain, setUncertain] = useState(false);
-  const pending = useRef<{ accountId: string; workspaceId: string; body: ReturnType<typeof buildCreationPayload> } | null>(null);
-  const createdCloudArtifact = useRef<CloudArtifact | null>(null);
+  const needsPermissions=willGenerate&&!permissions.consent&&!uncertain;
+  const [creationId, setCreationId] = useState(() => directStart && z.string().uuid().safeParse(requestId).success ? requestId : crypto.randomUUID());
+  const lifetime = useRef<AbortController | null>(null);
+  useEffect(() => { const controller = new AbortController(); lifetime.current = controller; return () => { controller.abort(); }; }, []);
   const step = 1; // Retain compatibility with saved drafts from the previous wizard.
   const [mode, setMode] = useState<"plan" | "create">(initialMode);
   const [effort, setEffort] = useState<EffortLevel>(initialEffort);
@@ -1252,6 +1282,10 @@ function CreationWizard({
           )
             throw new Error("Invalid draft");
           const draft = parsed.data;
+          if (draft.creationId) {
+            if (directStart && draft.creationId !== requestId) throw new Error("The saved creation request differs from its return link.");
+            setCreationId(draft.creationId);
+          }
           onKind(savedKind);
           setEffort(draft.effort);
 
@@ -1290,6 +1324,7 @@ function CreationWizard({
         effort,
         mode, requirements, outline,
         seed,
+        creationId,
         kind,
         step,
         title,
@@ -1314,6 +1349,7 @@ function CreationWizard({
     draftLoaded,
     draftWritable,
     storageSeed,
+    creationId,
     seed,
     kind,
     step,
@@ -1329,68 +1365,83 @@ function CreationWizard({
   ]);
   const plan = creationPlan({ kind, title, brief, audience, purpose, requirements, outline, style: selectedStyle?.name || "Custom direction" });
   const needsPlanAnswers = mode === "plan" && plan.structure.length === 0;
+  useEffect(() => {
+    if (!draftLoaded || !account.accountId) return;
+    try {
+      if (readCreationReference(localStorage, account.accountId, creationId)) {
+        queueMicrotask(() => { setUncertain(true); setDraftNotice("Your original save is preserved. Continuing reopens that project and finishes its file handoff."); });
+      }
+    } catch (error) {
+      queueMicrotask(() => { setDraftWritable(false); setDraftNotice(error instanceof Error ? error.message : "The original request could not be read."); });
+    }
+  }, [draftLoaded, account.accountId, creationId]);
   async function submitProject() {
-            if (savingRef.current) return;
-            savingRef.current = true; setSaving(true); setSaveError("");
-            const values = {
-              effort,
-              kind,
-              title: title.trim() || `Untitled ${kind}`,
-              brief: mode === "plan" ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n"),
-              audience,
-              purpose,
-              wording,
-              styleId,
-              clientId,
-              content,
-            };
-            let saved = false;
-            try {
-              if (initialWorkspaceId && (!account.accountId || account.workspace?.id !== initialWorkspaceId)) throw new Error("The selected client workspace is unavailable. Close and reopen this form from Clients.");
-              if (account.accountId) {
-                const verified = await createClient().auth.getUser();
-                if (verified.error || verified.data.user?.id !== account.accountId) throw new Error("Your account changed. Close this form and reopen it before saving.");
-                if (pending.current && pending.current.accountId !== account.accountId) throw new Error("Retry this draft from the account that started it.");
-                setCloudAccount(account.accountId);
-                if (!pending.current) {
-                  if (getPendingCloudWrites(account.accountId).some(item => item.path.endsWith("/studio-projects"))) throw new Error("An earlier project save needs confirmation. Close this form and retry that exact request in Projects before creating another project.");
-                  if (values.clientId && !account.clients.some(client => client.id === values.clientId)) throw new Error("Choose an account client or select no client. Device-only clients are not uploaded automatically.");
-                  if (!selectedStyle || selectedStyle.id !== values.styleId) throw new Error("Choose an available style before creating.");
-                  const body = buildCreationPayload(values, selectedStyle);
-                  const target = account.workspace ?? (await api<{ workspace: CloudWorkspace }>("/api/workspaces", { name: "My workspace" })).workspace;
-                  pending.current = { accountId: account.accountId, workspaceId: target.id, body };
-                }
-                const request = pending.current;
-                const artifact = createdCloudArtifact.current ?? (await api<{ artifact: CloudArtifact }>(`/api/cloud/workspaces/${request.workspaceId}/studio-projects`, request.body)).artifact;
-                createdCloudArtifact.current = artifact;
-                if (initialAttachmentOwner) await copyAttachments(initialAttachmentOwner, `draft:${requestId}`, projectAttachmentKey(`${account.accountId}:${request.workspaceId}:${artifact.id}`));
-                saved = true; pending.current = null; setUncertain(false);
-                accountCreated(request.workspaceId, artifact);
-              } else {
-                throw new Error("Sign in with an active creation plan to continue. Your draft and files are preserved.");
-              }
-            } catch (error) {
-              const unknown = !!createdCloudArtifact.current || (!!pending.current && error instanceof CloudError && error.uncertain);
-              if (!unknown && !uncertain) pending.current = null;
-              setUncertain(unknown || uncertain);
-              setSaveError(error instanceof z.ZodError ? "Some details exceed the supported limits. Shorten the title or content and try again." : error instanceof Error ? error.message : "Could not save. Your draft is preserved.");
-            } finally { savingRef.current = false; setSaving(false); }
-            if (saved) {
-              if (initialAttachmentOwner) await finishAttachmentHandoff(initialAttachmentOwner, requestId).catch(() => { /* Project files are saved; a retained home draft is safe. */ });
-              try {
-                clearWizardDrafts(sessionStorage, storageSeed);
-              } catch {
-                /* A retained draft is safe; the created project is saved. */
-              }
-            }
+    if (savingRef.current || !draftWritable || !draftLoaded) return;
+    savingRef.current = true; setSaving(true); setSaveError("");
+    const controller = lifetime.current;
+    const current = () => !!controller && !controller.signal.aborted;
+    const values = { effort, kind, title: title.trim() || `Untitled ${kind}`,
+      brief: mode === "plan" ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n"),
+      audience, purpose, wording, styleId, clientId, content };
+    try {
+      if (!account.accountId) throw new Error("Sign in with an active creation plan to continue. Your draft and files are preserved.");
+      if (!navigator.locks) throw new Error("Use a current browser to safely continue this project save.");
+      const accountId = account.accountId;
+      await navigator.locks.request(creationReferenceKey(accountId, creationId), { signal: controller!.signal }, async () => {
+        if (!current()) return;
+        const verified = await createClient().auth.getUser();
+        if (!current()) return;
+        if (verified.error || verified.data.user?.id !== accountId) throw new Error("Your account changed. Reopen the original brief before saving.");
+        setCloudAccount(accountId);
+        const result = await continueProjectCreation(localStorage, accountId, creationId, {
+          current,
+          expectedWorkspaceId: initialWorkspaceId ?? undefined,
+          prepare: async () => {
+            if (!permissions.ready || needsPermissions) throw new Error("Confirm processing and source permissions before creating.");
+            if (initialWorkspaceId && account.workspace?.id !== initialWorkspaceId) throw new Error("The selected client workspace is unavailable. Reopen this form from Clients.");
+            if (getPendingCloudWrites(accountId).some(item => item.path.endsWith("/studio-projects"))) throw new Error("An earlier project save needs confirmation. Retry that exact request in Projects before creating another project.");
+            if (values.clientId && !account.clients.some(client => client.id === values.clientId)) throw new Error("Choose an available account client before saving.");
+            if (!selectedStyle || selectedStyle.id !== values.styleId) throw new Error("Choose an available style before creating.");
+            const body = buildCreationPayload(values, selectedStyle);
+            const target = account.workspace ?? (await api<{ workspace: CloudWorkspace }>("/api/workspaces", { name: "My workspace" }, "POST", { idempotencyKey: creationId })).workspace;
+            return { workspaceId: target.id, body, generationConsent: willGenerate ? permissions.consent ?? undefined : undefined };
+          },
+          submit: async reference => (await api<{ artifact: CloudArtifact }>(`/api/cloud/workspaces/${reference.workspaceId}/studio-projects`, reference.body, "POST", { idempotencyKey: reference.requestKey })).artifact,
+        });
+        if (initialWorkspaceId && result.workspaceId !== initialWorkspaceId) throw new Error("The original save belongs to another client workspace. Reopen it from Projects.");
+        if (initialAttachmentOwner) await copyAttachments(initialAttachmentOwner, `draft:${requestId}`, projectAttachmentKey(`${accountId}:${result.workspaceId}:${result.artifact.id}`));
+        const confirmed = await createClient().auth.getUser();
+        if (!current()) return;
+        if (confirmed.error || confirmed.data.user?.id !== accountId) throw new Error("Your account changed. Return to the original account to open this saved project.");
+        if (result.generationConsent) {
+          const snapshot=await api<{artifact:CloudArtifact;versions:import("@/lib/cloud/contracts").CloudVersion[]}>(`/api/cloud/workspaces/${result.workspaceId}/artifacts/${result.artifact.id}`);
+          if (!current()) return;
+          const scope={workspaceId:result.workspaceId,projectId:result.artifact.projectId,artifactId:result.artifact.id};
+          await navigator.locks.request(generationStorageKey(accountId,scope),{signal:controller!.signal},()=>{
+            if (!current()) return;
+            stageCreationGeneration(localStorage,result,snapshot.artifact.currentVersion,snapshot.versions.find(version=>version.number===1));
+          });
+        }
+        if (initialAttachmentOwner) await finishAttachmentHandoff(initialAttachmentOwner, requestId).catch(() => {});
+        if (!current()) return;
+        try { clearWizardDrafts(sessionStorage, storageSeed); } catch { /* The durable original reference remains available. */ }
+        setUncertain(false);
+        accountCreated(result.workspaceId, result.artifact, !!result.generationConsent);
+      });
+    } catch (error) {
+      if (!current()) return;
+      try { if (account.accountId && readCreationReference(localStorage, account.accountId, creationId)) setUncertain(true); }
+      catch { setDraftWritable(false); }
+      setSaveError(error instanceof z.ZodError ? "Some details exceed the supported limits. Your original request is preserved." : error instanceof Error ? error.message : "Could not confirm the save. Your brief is preserved.");
+    } finally { savingRef.current = false; if (current()) setSaving(false); }
   }
   const Frame = directStart ? CreationSession : Modal;
   const started = useRef(false);
   const startDirect = useEffectEvent(() => { void submitProject(); });
   useEffect(() => {
-    if (!directStart || mode !== "create" || !draftLoaded || !draftWritable || !account.ready || started.current) return;
+    if (!directStart || mode !== "create" || !draftLoaded || !draftWritable || !account.ready || !permissions.ready || needsPermissions || started.current) return;
     started.current = true; startDirect();
-  }, [directStart, mode, draftLoaded, draftWritable, account.ready]);
+  }, [directStart, mode, draftLoaded, draftWritable, account.ready, permissions.ready, needsPermissions]);
   return (
     <Frame close={() => { if (!savingRef.current) close(); }} title="Create a project">
       <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
@@ -1419,7 +1470,7 @@ function CreationWizard({
         <CreationSource kind={kind} content={content} wording={wording} onContent={setContent} onWording={setWording} />
         <details className="prompt-options">
           <summary><span>Style <small>{selectedStyle?.name}</small></span><span>Browse all {styles.length}</span></summary>
-          <p className="creation-style-note">Choose a style for your {kind}. You can refine it in the editor.</p>
+          <p className="creation-style-note">Let us design around your idea, or choose an optional visual direction. Your brief shapes the layout, imagery and personality.</p>
           <div className="prompt-style-grid" role="group" aria-label="Project style">
             {styles.map(s => {
               const concept = styleConcept(s);
@@ -1444,7 +1495,8 @@ function CreationWizard({
         <details className="prompt-options"><summary><span>Creative effort</span><span>{effort.replaceAll("_", " ")}</span></summary><EffortControl value={effort} onChange={setEffort} /></details>
         </>}
         {mode === "plan" && <div className="creation-plan"><h3>Your starting plan</h3><label className="creation-outline">Sections to include<textarea rows={6} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={e => setOutline(e.target.value)} /></label><p>Edit one section, chapter, or slide per line. This is a starter outline, not AI research. Confirming saves it with your brief.</p></div>}
-        <p className="creation-plan-note">Your brief and source text will be saved in an editable project. Live AI generation is not connected yet.</p>
+        {willGenerate&&!initialGenerationConsent&&!uncertain&&<GenerationPermissions value={permissions} disabled={saving}/>}
+        <p className="creation-plan-note">{willGenerate ? "Your brief is saved first, then its website request continues in the workspace. Attached files remain separate on this device." : "Your brief and source text will be saved in an editable project. Public AI generation remains paused."}</p>
       </div>
       <div className="modal-actions">
         <button
@@ -1456,7 +1508,7 @@ function CreationWizard({
         </button>
         <button
           className="button primary"
-          disabled={saving || (directStart && mode === "create" && !saveError && draftWritable) || !account.ready || (!brief.trim() && !content.trim()) || !draftLoaded || needsPlanAnswers}
+          disabled={saving || (directStart && mode === "create" && !saveError && draftWritable) || !account.ready || !permissions.ready || needsPermissions || (!brief.trim() && !content.trim()) || !draftLoaded || needsPlanAnswers}
           onClick={() => void submitProject()}
         >
           {saving ? "Saving project…" : uncertain ? "Retry the same save" : mode === "plan" ? "Confirm plan & create" : "Create project"}
@@ -1681,6 +1733,8 @@ function ProjectEditor({
   const [versionNote, setVersionNote] = useState("");
   const [comment, setComment] = useState("");
   const [previewWidth, setPreviewWidth] = useState("desktop");
+  // Lets the title field be cleared while typing; blur restores the saved title.
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const latestProject = useRef(project);
   useEffect(() => {
@@ -1825,40 +1879,11 @@ function ProjectEditor({
         ...project.activity,
         {
           at,
-          text: `Locally marked ${status.replace("_", " ")}. This is an internal record, not a client signature.`,
+          text: `Marked ${status.replace("_", " ")} on this device. This status is for your own tracking and isn't shared with your client.`,
         },
       ],
     });
     notify("Project status updated locally.");
-  }
-  async function generate() {
-    if(project.kind === "website") { notify("Open an account-saved website project to build and save its full design."); return; }
-    setBusy(true);
-    const original = structuredClone(project);
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          attemptId: uid(), kind: project.kind, brief: project.brief,
-          audience: project.audience, purpose: project.purpose,
-          styleId: project.styleId,
-          content: project.blocks.map((b) => b.text).join("\n\n"),
-          mode: project.wording,
-        }),
-      });
-      const result = await response.json();
-      if (!response.ok) { notify(result.error?.message || "Generation could not be completed."); return; }
-      const checked = PilotDraftSchema.safeParse({title:result.title,blocks:Array.isArray(result.blocks)?result.blocks.map((block: Block)=>({type:block.type,text:block.text})):result.blocks});
-      if (!checked.success) { notify("The returned draft could not be verified. Your content has been preserved."); return; }
-      const at=now();
-      update({...original,title:checked.data.title,blocks:checked.data.blocks.map(block=>({...block,id:uid()})),updatedAt:at,
-        versions:[...original.versions,{id:uid(),at,blocks:original.blocks,note:"Before AI text draft"}],
-        activity:[...original.activity,{at,text:"Generated an AI text draft for review."}]});
-      notify(typeof result.notice==='string'?result.notice:"Draft ready for review.");
-    } catch {
-      notify("Could not reach the generation service. Your content has been preserved.");
-    } finally { setBusy(false); }
   }
   async function exportFile(format: string) {
     setBusy(true);
@@ -1897,7 +1922,7 @@ function ProjectEditor({
         `${project.title.replace(/[^a-z0-9 -]/gi, "").slice(0, 70) || "makeborne"}.${format}`,
       );
       notify(
-        `${format.toUpperCase()} downloaded. This is an export of your manually authored content.`,
+        `${format.toUpperCase()} downloaded.`,
       );
     } catch (error) {
       notify(
@@ -1956,14 +1981,13 @@ function ProjectEditor({
             className="title-input"
             aria-label="Project title"
             maxLength={160}
-            value={project.title}
-            onChange={(e) =>
-              update({
-                ...project,
-                title: e.target.value.trim() ? e.target.value : project.title,
-                updatedAt: now(),
-              })
-            }
+            value={titleDraft ?? project.title}
+            onChange={(e) => {
+              setTitleDraft(e.target.value);
+              if (e.target.value.trim())
+                update({ ...project, title: e.target.value, updatedAt: now() });
+            }}
+            onBlur={() => setTitleDraft(null)}
           />
           <p>
             {kindLabel[project.kind]} · {client?.name || "Personal project"} ·
@@ -2318,6 +2342,8 @@ function ProjectEditor({
                         />
                       </label>
                       {block.image && (
+                        // Device-local data URL; next/image cannot optimize it.
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           className="inspector-image"
                           src={block.image}
@@ -2446,16 +2472,9 @@ function ProjectEditor({
                 <Sparkles size={19} />
                 <h3>A thoughtful next draft.</h3>
                 <p>
-                  Live AI generation is not enabled. Keep writing here, or save
-                  your brief for later.
+                  AI drafts are available in projects saved to your account.
+                  Keep writing here; this project stays on this device.
                 </p>
-                <button
-                  className="button secondary small"
-                  disabled={busy}
-                  onClick={generate}
-                >
-                  {busy ? "Checking service…" : "Check generation availability"}
-                </button>
               </div>
               <div className="export-options">
                 {project.kind === "book" && (
@@ -2567,6 +2586,8 @@ function ArtifactPreview({
   function renderBlock(b: Block) {
     return b.type === "image" ? (
       <figure>
+        {/* Device-local data URL; next/image cannot optimize it. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={b.image} alt={b.text} />
         <figcaption>{b.text}</figcaption>
       </figure>
@@ -2646,17 +2667,30 @@ function ArtifactPreview({
                       active === b.id && select ? "selected-block" : ""
                     }
                     key={b.id}
-                    onClick={() => select?.(b.id)}
+                    onClick={select ? () => select(b.id) : undefined}
+                    role={select ? "button" : undefined}
+                    aria-label={
+                      select
+                        ? `Edit ${b.type}: ${b.text.slice(0, 100) || "Untitled block"}`
+                        : undefined
+                    }
                     tabIndex={select ? 0 : undefined}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") select?.(b.id);
-                    }}
+                    onKeyDown={
+                      select
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              select(b.id);
+                            }
+                          }
+                        : undefined
+                    }
                   >
                     {renderBlock(b)}
                   </div>
                 ))}
               </div>
-              <div className="slide-footer">MAKEBORNE / MANUALLY AUTHORED</div>
+              <div className="slide-footer">MAKEBORNE</div>
             </div>
           ))
         )}
@@ -2735,12 +2769,12 @@ function ArtifactPreview({
         </main>
         <div className="site-contact" id="site-contact">
           <h3>Let’s start a conversation.</h3>
-          <p>A live contact form requires a configured destination.</p>
+          <p>The contact form is shown for layout only in this preview.</p>
           <label>
             Email
             <input type="email" placeholder="you@example.com" disabled />
           </label>
-          <button disabled>Contact form not connected</button>
+          <button disabled>Send message</button>
         </div>
         <footer>{project.title} · Local content preview</footer>
       </div>
@@ -2803,7 +2837,7 @@ function ArtifactPreview({
             </div>
           ))}
       </div>
-      <div className="book-page-end">MAKEBORNE / MANUALLY AUTHORED CONTENT</div>
+      <div className="book-page-end">MAKEBORNE</div>
     </div>
   );
 }

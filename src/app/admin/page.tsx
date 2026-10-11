@@ -5,8 +5,7 @@ import { ArrowLeft, ArrowUpRight, Check, ChevronRight, CircleDashed, CreditCard,
 import BrandMark from "@/components/brand-mark";
 import { getAccountPrivileges } from "@/lib/account/privileges";
 import { billingUser } from "@/lib/billing/access";
-import { getCloudStatus } from "@/lib/cloud/config";
-import { PLANNED_ROUTES } from "@/lib/routing/registry";
+import { getCapabilities } from "@/lib/capabilities/server";
 import "./admin.css";
 
 export const metadata: Metadata = { title: "Studio operations", robots: { index: false, follow: false } };
@@ -17,8 +16,8 @@ export default async function AdminPage() {
   if (!user) redirect("/login?next=%2Fadmin");
   const accountPrivileges = await getAccountPrivileges(user.id);
   if (!accountPrivileges.isAdmin) notFound();
-  const cloud = getCloudStatus();
-  const configuredRoutes = PLANNED_ROUTES.filter(route => route.status !== "unconfigured").length;
+  const { operations } = getCapabilities({ administrator: true });
+  const { cloud, pilot, hosting, billing, routing } = operations;
   const checks = [
     { label: "Supabase configuration", set: cloud.configured, detail: "Project URL and publishable key are accepted by the app configuration reader." },
     { label: "Migration verification flag", set: cloud.migrationsVerified, detail: "Operator acknowledgement only. This page does not run database or permission checks." },
@@ -35,8 +34,8 @@ export default async function AdminPage() {
       <section className="mbo-heading"><div><span className="mbo-eyebrow">YOUR STUDIO, BEHIND THE SCENES</span><h1>A clear view of what’s next.</h1><p>Configuration, connected services, and the path to launch.</p></div><form action="/admin" method="get"><button className="mbo-refresh" type="submit"><RefreshCw size={15} />Refresh status</button></form></section>
 
       <section className="mbo-overview" aria-labelledby="launch-heading">
-        <div className="mbo-overview-copy"><span className="mbo-pill"><ShieldCheck size={13} />Administrator access</span><h2 id="launch-heading">Your studio.<br />A clear view ahead.</h2><p>{accountPrivileges.unlimitedCredits ? "Your account has an unlimited administrator credit allowance. No creation subscription or top-up is required. Generation remains disabled while the creation services are being prepared." : "Your account can view studio operations. Generation remains disabled while the creation services are being prepared."}</p><Link href="/billing#credits">View your allowance<ChevronRight size={16} /></Link></div>
-        <div className="mbo-overview-stats"><div><span className="mbo-stat-icon"><ShieldCheck size={20} /></span><strong>{accountPrivileges.unlimitedCredits ? "Unlimited credits" : "Administrator account"}</strong><span>{accountPrivileges.unlimitedCredits ? "Administrator allowance" : "Operations access enabled"}</span></div><div><span className="mbo-stat-icon"><Sparkles size={20} /></span><strong>{configuredRoutes} / {PLANNED_ROUTES.length} routes</strong><span>Configured in the model registry</span></div><div><span className="mbo-stat-icon"><LockKeyhole size={20} /></span><strong>Generation off</strong><span>Paid creation remains disabled</span></div></div>
+        <div className="mbo-overview-copy"><span className="mbo-pill"><ShieldCheck size={13} />Administrator access</span><h2 id="launch-heading">Your studio.<br />A clear view ahead.</h2><p>{accountPrivileges.unlimitedCredits ? "Your administrator credit allowance requires no creation subscription. Provider spending limits still apply. " : "Your account can view studio operations. "}{pilot.reason}</p><Link href="/billing#credits">View your allowance<ChevronRight size={16} /></Link></div>
+        <div className="mbo-overview-stats"><div><span className="mbo-stat-icon"><ShieldCheck size={20} /></span><strong>{accountPrivileges.unlimitedCredits ? "Unlimited credits" : "Administrator account"}</strong><span>{accountPrivileges.unlimitedCredits ? "Administrator allowance" : "Operations access enabled"}</span></div><div><span className="mbo-stat-icon"><Sparkles size={20} /></span><strong>{routing.configured} / {routing.total} routes</strong><span>Registry configuration; pilot tracked separately</span></div><div><span className="mbo-stat-icon"><LockKeyhole size={20} /></span><strong>{pilot.available ? "Administrator pilot" : "Pilot unavailable"}</strong><span>Public generation is not active</span></div></div>
       </section>
 
       <div className="mbo-content-grid">
@@ -46,9 +45,9 @@ export default async function AdminPage() {
       </div>
 
       <section aria-labelledby="services-heading" className="mbo-services"><div className="mbo-section-heading"><div><span className="mbo-eyebrow">CONNECTED SERVICES</span><h2 id="services-heading">The engines behind the studio</h2></div><span className="mbo-muted">No live service checks performed</span></div><div className="mbo-service-grid">
-        <article><Sparkles size={21} /><span className="mbo-status">Disabled</span><h3>Generation & media</h3><p>Generation remains disabled, including for administrators. An unlimited allowance does not activate paid models or media processing.</p><details><summary>View generation capabilities</summary><ul>{["Content & website creation", "Image & slide design", "Media transcription", "Clip selection & rendering"].map(capability => <li key={capability}><span>{capability}</span><small>Disabled</small></li>)}</ul></details></article>
-        <article><CreditCard size={21} /><span className="mbo-status">Creation plans closed</span><h3>Payments & credits</h3><p>{accountPrivileges.unlimitedCredits ? "Your administrator allowance requires no purchase. Public creation memberships and credit packs remain closed while credit delivery is prepared." : "Public creation memberships and credit packs remain closed while credit delivery is prepared."}</p><Link href="/billing">View plans & credits<ArrowUpRight size={15} /></Link></article>
-        <article><Globe2 size={21} /><span className="mbo-status">Not connected</span><h3>Website hosting</h3><p>Client websites can have delivery links. Automatic deployment and domain management are not connected.</p><Link href="/studio?tab=clients">Open client workspace<ArrowUpRight size={15} /></Link></article>
+        <article><Sparkles size={21} /><span className="mbo-status">{pilot.available ? "Restricted testing" : "Pilot unavailable"}</span><h3>Generation & media</h3><p>{pilot.reason} The pilot covers static websites and text drafts; image generation and media processing remain unavailable.</p><details><summary>View generation capabilities</summary><ul>{[{name:"Static websites & text drafts",status:pilot.available ? "Admin testing" : "Unavailable"},{name:"Image & full-slide generation",status:"Unavailable"},{name:"Media transcription",status:"Unavailable"},{name:"Clip selection & rendering",status:"Unavailable"}].map(capability => <li key={capability.name}><span>{capability.name}</span><small>{capability.status}</small></li>)}</ul></details></article>
+        <article><CreditCard size={21} /><span className="mbo-status">Credit delivery incomplete</span><h3>Payments & credits</h3><p>{billing.reason} Coffee support does not unlock creation.</p><Link href="/billing">View plans & credits<ArrowUpRight size={15} /></Link></article>
+        <article><Globe2 size={21} /><span className="mbo-status">{hosting.configured ? "Configuration set" : "Setup incomplete"}</span><h3>Website hosting</h3><p>{hosting.reason} Customer backends and self-service custom domains require further implementation.</p><Link href="/studio?tab=clients">Open client workspace<ArrowUpRight size={15} /></Link></article>
       </div></section>
       <footer className="mbo-note"><ShieldCheck size={19} /><div><strong>Protected administrator workspace</strong><p>Access is checked against your authenticated account and its administrator role on the server, including in production. This page shows configuration and your allowance; it does not certify service availability or launch readiness.</p></div></footer>
     </main>

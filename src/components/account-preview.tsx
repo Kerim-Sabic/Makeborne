@@ -6,6 +6,8 @@ import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
 import "@/app/account-preview.css";
 import WebsitePreview from "./website-preview";
 import AccountArtwork, { type ArtworkScope } from "./account-artwork";
+import AccountBookPreview from "./account-book-preview";
+import AccountSlidePreview from "./account-slide-preview";
 
 const fonts: Record<string, string> = {
   "Source Serif 4": 'var(--font-serif), Georgia, serif',
@@ -31,6 +33,7 @@ export default function AccountPreview({ content, style, dirty, artworkScope }: 
     "--ap-canvas": style.colors.canvas ?? "#F8F7F4", "--ap-ink": style.colors.ink ?? "#16181D", "--ap-accent": style.colors.accent ?? "#7862A7",
     "--ap-heading": fonts[style.typography.headingFont] ?? "Georgia, serif", "--ap-body": fonts[style.typography.bodyFont] ?? "Arial, sans-serif",
   } as CSSProperties;
+  if (content.websiteSource) return <section className="account-preview" aria-label="Website build status"><header className="ap-toolbar"><strong>{content.title}</strong><small>Source project</small></header><div className="ap-document"><h3>Source saved. Preview build required.</h3><p>This website contains {content.websiteSource.files.length} source files and {content.websiteSource.routes.length} routes. Its running preview will appear after an isolated build is verified.</p><p>The outline renderer cannot display this project.</p></div></section>;
   if(content.kind === "website" && content.website) return <WebsitePreview title={content.title} website={content.website} dirty={dirty} />;
   return <section className="account-preview" aria-label="Project layout preview">
     <header className="ap-toolbar"><div><strong>Preview</strong><small>{dirty ? "Current edits" : "Current content"} · {style.name}</small></div>
@@ -38,10 +41,10 @@ export default function AccountPreview({ content, style, dirty, artworkScope }: 
     </header>
     <div className={`ap-stage ${content.kind}${mobile && content.kind === "website" ? " ap-mobile" : ""}`} style={palette}>
       {content.kind === "presentation" ? <>
-        <article className="ap-slide" aria-label={`Slide ${current + 1} of ${slides.length}`}><span className="ap-slide-number">{String(current + 1).padStart(2, "0")}</span><h3>{slides[current].title}</h3>{slides[current].blocks.map(block => <PreviewBlock key={block.id} block={block} artworkScope={artworkScope} />)}</article>
+        <AccountSlidePreview slide={slides[current]} index={current} total={slides.length} renderImage={block => <PreviewBlock block={block} artworkScope={artworkScope} />} />
         <nav className="ap-slide-nav" aria-label="Preview slides"><button type="button" disabled={current === 0} aria-label="Previous slide" onClick={() => setSlideIndex(current - 1)}><ChevronLeft size={16} /></button><span aria-live="polite">{current + 1} / {slides.length}</span><button type="button" disabled={current === slides.length - 1} aria-label="Next slide" onClick={() => setSlideIndex(current + 1)}><ChevronRight size={16} /></button></nav>
-      </> : <div className="ap-document">
-        {content.kind === "book" ? <header className="ap-book-cover"><span className="ap-cover-rule" /><h2>{content.title}</h2><span className="ap-cover-rule" /></header> : <header className="ap-site-brand">{content.title}<span className="ap-brand-dot" /></header>}
+      </> : content.kind === "book" ? <AccountBookPreview title={content.title} blocks={previewBlocks(content)} renderBlock={block => <PreviewBlock block={block} artworkScope={artworkScope} />} /> : <div className="ap-document">
+        <header className="ap-site-brand">{content.title}<span className="ap-brand-dot" /></header>
         <div className="ap-reading">{previewBlocks(content).map(block => <PreviewBlock key={block.id} block={block} artworkScope={artworkScope} />)}{!content.sections.some(section => section.blocks.length) && <p>Add content to begin shaping your {content.kind}.</p>}</div>
       </div>}
     </div>
