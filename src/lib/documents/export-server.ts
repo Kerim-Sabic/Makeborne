@@ -6,6 +6,7 @@ import type { DocumentSource } from "./schema";
 import { deckHtml } from "./render-deck";
 import { bookHtml } from "./render-book";
 import { deckPptx } from "./pptx";
+import { chromiumLaunchOptions } from "../server/export";
 
 /** Read the document's generated artwork through the caller's RLS-bound client. */
 export async function loadDocumentImages(client: SupabaseClient, workspaceId: string, projectId: string, doc: DocumentSource) {
@@ -38,7 +39,7 @@ async function dataUrls(buffers: Record<string, Buffer>) {
 export async function documentPdf(doc: DocumentSource, buffers: Record<string, Buffer>) {
   const images = await dataUrls(buffers);
   const html = doc.kind === "deck" ? deckHtml(doc, images, "print") : bookHtml(doc, images, "print");
-  const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.CHROMIUM_EXECUTABLE_PATH } : {}) });
+  const browser = await chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
   try {
     const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: doc.kind === "deck" ? { width: 1280, height: 720 } : { width: 576, height: 864 } });
     await context.route("**/*", route => route.abort());

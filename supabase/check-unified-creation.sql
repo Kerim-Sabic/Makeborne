@@ -6,7 +6,8 @@ declare actor uuid:=gen_random_uuid(); reviewer uuid:=gen_random_uuid(); outside
   style jsonb:='{"id":"electric-mint","name":"Electric Mint","version":1,"typography":{"headingFont":"Inter","bodyFont":"Inter"},"colors":{"accent":"#8FEBC8","ink":"#F0FAF4","canvas":"#142824"},"description":"Fixture","referenceAssetIds":[]}';
 begin
   begin
-    insert into auth.users(id) values(actor),(reviewer),(outsider);
+    update makeborne_private.billing_settings set free_tier_enabled=true where singleton;
+    insert into auth.users(id,email,email_confirmed_at) select id,id::text||'@fixture.example.invalid',now() from unnest(array[actor,reviewer,outsider]) id;
     insert into public.workspaces(id,name,owner_id) values(workspace,'Atomic creation fixture',actor);
     insert into public.workspace_members(workspace_id,user_id,role) values(workspace,reviewer,'reviewer');
     perform set_config('request.jwt.claim.sub',actor::text,true);

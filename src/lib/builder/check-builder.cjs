@@ -6,6 +6,8 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const {ProjectFiles, FileToolError} = require("./files.ts");
 const {usageCost, creditsForUsd, BUILDER_EFFORT} = require("./pricing.ts");
 const {renderHostedSnapshot} = require("../hosting/snapshot.ts");
+const {ReviewInputSchema, reviewRequest, reviewAttachments} = require("./review.ts");
+const {REVIEW_LIMITS, REVIEW_VIEWPORTS, autoReviewRounds, reviewCreditCeiling, REVIEW_MAX_TURNS} = require("./review-policy.ts");
 
 let count = 0;
 function check(name, fn) { fn(); count++; console.log(`PASS ${name}`); }
@@ -76,5 +78,59 @@ check("published snapshots drop scripts, handlers and remote resources", () => {
   assert.match(html, /<svg viewBox="0 0 10 10"><path d="M0 0L10 10"/);
   assert.match(html, /lang="de"/);
   assert.match(html, /\.a\{color:red\}/);
+});
+const shot = (viewport, index, of, extra = {}) => ({viewport, index, of, mediaType: "image/jpeg", width: viewport === "desktop" ? 1080 : 390, height: 600, data: "A".repeat(400), ...extra});
+const report = (viewport, extra = {}) => ({viewport, width: viewport === "desktop" ? 1440 : 390, height: viewport === "desktop" ? 900 : 844, pageHeight: 5000, capturedHeight: 3600, overflowX: 0, wide: [], brokenImages: [], missingAlt: 0, ...extra});
+check("review requests validate screenshot counts, sizes and encoding", () => {
+  const valid = {round: 1, screenshots: [shot("desktop", 0, 2), shot("desktop", 1, 2), shot("mobile", 0, 1)], viewports: [report("desktop"), report("mobile")], errors: []};
+  assert.ok(ReviewInputSchema.safeParse(valid).success);
+  assert.equal(ReviewInputSchema.parse({...valid, round: undefined}).round, 1);
+  const reject = (input, why) => assert.equal(ReviewInputSchema.safeParse(input).success, false, why);
+  reject({...valid, screenshots: [], errors: []}, "needs screenshots or errors");
+  assert.ok(ReviewInputSchema.safeParse({...valid, screenshots: [], errors: ["Build error: x"]}).success, "errors alone are reviewable");
+  reject({...valid, screenshots: [shot("desktop", 0, 1, {data: "A".repeat(REVIEW_LIMITS.maxShotBase64 + 4)})]}, "oversized screenshot");
+  reject({...valid, screenshots: [shot("desktop", 0, 1, {data: "<script>".repeat(40)})]}, "non-base64 data");
+  reject({...valid, screenshots: [shot("desktop", 0, 1, {width: REVIEW_LIMITS.maxShotEdge + 1})]}, "edge over the limit");
+  reject({...valid, screenshots: [shot("desktop", 3, 2)]}, "index past the count");
+  reject({...valid, screenshots: [shot("desktop", 0, 1, {mediaType: "image/svg+xml"})]}, "svg screenshots");
+  const desktopMax = REVIEW_VIEWPORTS.find(v => v.id === "desktop").maxTiles;
+  reject({...valid, screenshots: Array.from({length: desktopMax + 1}, (_, i) => shot("desktop", i, desktopMax + 1))}, "too many desktop tiles");
+  reject({...valid, viewports: [report("mobile"), report("mobile")]}, "duplicate viewport report");
+  reject({...valid, round: 3}, "at most two rounds");
+  reject({...valid, errors: Array.from({length: REVIEW_LIMITS.maxErrors + 1}, () => "x")}, "too many errors");
+  reject({...valid, extra: true}, "unknown fields");
+});
+check("review prompt carries diagnostics, errors and ordered screenshots", () => {
+  const input = ReviewInputSchema.parse({round: 2, screenshots: [shot("mobile", 0, 1), shot("desktop", 1, 2), shot("desktop", 0, 2)],
+    viewports: [report("mobile", {overflowX: 37, wide: ['div.pricing "Plans"'], brokenImages: ["/images/missing.webp"], missingAlt: 2})], errors: ["Desktop: TypeError: x is undefined"]});
+  const text = reviewRequest(input);
+  assert.match(text, /37px wider than the viewport/);
+  assert.match(text, /div\.pricing/);
+  assert.match(text, /missing\.webp/);
+  assert.match(text, /TypeError: x is undefined/);
+  assert.match(text, /review round 2/);
+  assert.match(text, /No changes needed — the design passed review\./);
+  const blocks = reviewAttachments(input);
+  assert.equal(blocks.filter(block => block.type === "image").length, 3);
+  assert.deepEqual(blocks.filter(block => block.type === "text").map(block => block.text), ["Desktop 1440px — screen 1 of 2", "Desktop 1440px — screen 2 of 2", "Mobile 390px — screen 1 of 1"]);
+});
+check("review policy: auto rounds by effort and change size, bounded credits and tiles", () => {
+  assert.equal(autoReviewRounds("light", {firstBuild: true, filesTouched: 9}), 0);
+  assert.equal(autoReviewRounds("medium", {firstBuild: true, filesTouched: 1}), 1);
+  assert.equal(autoReviewRounds("high", {firstBuild: false, filesTouched: 2}), 0);
+  assert.equal(autoReviewRounds("high", {firstBuild: false, filesTouched: 3}), 1);
+  assert.equal(autoReviewRounds("ultra", {firstBuild: true, filesTouched: 5}), 2);
+  for (const [level, policy] of Object.entries(BUILDER_EFFORT)) {
+    const ceiling = reviewCreditCeiling(policy.ceilingCredits);
+    assert.ok(ceiling <= policy.ceilingCredits && ceiling >= Math.min(12, policy.ceilingCredits), level);
+    assert.ok(ceiling <= Math.max(12, Math.ceil(policy.ceilingCredits * 0.3)), `${level} review stays a fraction of a build`);
+  }
+  assert.ok(REVIEW_MAX_TURNS >= 2 && REVIEW_MAX_TURNS <= 8);
+  assert.equal(REVIEW_LIMITS.maxShots, REVIEW_VIEWPORTS.reduce((sum, v) => sum + v.maxTiles, 0));
+  for (const v of REVIEW_VIEWPORTS) {
+    assert.ok(Math.round(v.width * v.scale) <= REVIEW_LIMITS.maxShotEdge && Math.round(v.height * v.scale) <= REVIEW_LIMITS.maxShotEdge, v.id);
+    // Rough Claude image-token estimate (w*h/750) keeps one round of screenshots cheap.
+    assert.ok(v.maxTiles * (v.width * v.scale) * (v.height * v.scale) / 750 < 8000, `${v.id} tiles stay under ~8k tokens`);
+  }
 });
 console.log(`${count} builder checks passed`);

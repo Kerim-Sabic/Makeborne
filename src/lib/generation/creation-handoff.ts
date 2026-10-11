@@ -8,7 +8,7 @@ import { readGenerationReference, saveGenerationReference } from "./browser-requ
  * Existing job references always win. Returning through an old creation link
  * cannot replace ongoing work or rotate the original request identity. */
 export function stageCreationGeneration(storage: Pick<Storage,"getItem"|"setItem"|"removeItem">,
-  creation: CreationReference, currentVersion: number, originalVersion: unknown) {
+  creation: CreationReference, currentVersion: number, originalVersion: unknown, planFirst = false) {
   if (!creation.generationConsent) return null;
   const consent = GenerationConsentSchema.parse(creation.generationConsent);
   const artifact = creation.artifact;
@@ -20,7 +20,7 @@ export function stageCreationGeneration(storage: Pick<Storage,"getItem"|"setItem
   if (artifact.currentVersion !== 1 || currentVersion !== 1 || version.number !== 1 || version.artifactId !== artifact.id || version.createdBy !== creation.accountId)
     throw Error("This project has changed since its original prompt. Open the saved project to create from its current version.");
   const reference = {version:1 as const,accountId:creation.accountId,requestKey:creation.intentId,
-    input:{scope,baseVersionId:version.id,sourceIds:[],...consent},prepared:null,jobId:null,autoStart:true};
+    input:{scope,baseVersionId:version.id,sourceIds:[],...consent},prepared:null,jobId:null,autoStart:true,...(planFirst?{planFirst:true}:{})};
   saveGenerationReference(storage,reference);
   return reference;
 }

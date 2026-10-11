@@ -1,5 +1,6 @@
 // Prepares the self-hosted in-browser preview runtime under public/builder-runtime:
-// the esbuild WebAssembly bundler plus one shared ESM build of React for previews.
+// the esbuild WebAssembly bundler, one shared ESM build of React for previews, and
+// the DOM rasteriser (modern-screenshot) inlined into design-review captures.
 // Runs before `next dev` and `next build`; output is generated, not committed.
 import { createRequire } from "node:module";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -12,7 +13,9 @@ const out = join(root, "public", "builder-runtime");
 const wasmDir = join(root, "node_modules", "esbuild-wasm");
 const { version: esbuildVersion } = JSON.parse(await readFile(join(wasmDir, "package.json"), "utf8"));
 const { version: reactVersion } = require("react/package.json");
-const stamp = `${esbuildVersion}-${reactVersion}`;
+const screenshotDir = join(root, "node_modules", "modern-screenshot");
+const { version: screenshotVersion } = JSON.parse(await readFile(join(screenshotDir, "package.json"), "utf8"));
+const stamp = `${esbuildVersion}-${reactVersion}-${screenshotVersion}`;
 
 try {
   if ((await readFile(join(out, "VERSION"), "utf8")).trim() === stamp) process.exit(0);
@@ -22,6 +25,8 @@ await rm(out, { recursive: true, force: true });
 await mkdir(join(out, "vendor"), { recursive: true });
 await copyFile(join(wasmDir, "esbuild.wasm"), join(out, "esbuild.wasm"));
 await copyFile(join(wasmDir, "esm", "browser.min.js"), join(out, "esbuild.js"));
+// UMD build: defines globalThis.modernScreenshot when inlined as a classic script.
+await copyFile(join(screenshotDir, "dist", "index.js"), join(out, "vendor", "modern-screenshot.js"));
 
 // React ships CommonJS, so `export *` would drop named exports. Re-export each
 // key explicitly. Splitting keeps a single shared React instance across entries.
@@ -50,4 +55,4 @@ await esbuild.build({
   }],
 });
 await writeFile(join(out, "VERSION"), stamp);
-console.log(`builder runtime ready (esbuild ${esbuildVersion}, react ${reactVersion})`);
+console.log(`builder runtime ready (esbuild ${esbuildVersion}, react ${reactVersion}, modern-screenshot ${screenshotVersion})`);

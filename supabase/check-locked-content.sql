@@ -3,7 +3,7 @@ do $$
 declare u uuid:=gen_random_uuid(); w uuid:=gen_random_uuid(); section_id uuid:=gen_random_uuid(); block_id uuid:=gen_random_uuid(); a uuid; result jsonb; content jsonb; changed jsonb;
 style jsonb:='{"id":"editorial","name":"Editorial","version":1,"typography":{"headingFont":"Inter","bodyFont":"Inter"},"colors":{"ink":"#111111"},"description":"Fixture","referenceAssetIds":[]}';
 begin
- insert into auth.users(id) values(u);
+ update makeborne_private.billing_settings set free_tier_enabled=true where singleton; insert into auth.users(id,email,email_confirmed_at) values(u,u::text||'@fixture.example.invalid',now());
  insert into public.workspaces(id,name,owner_id) values(w,'Lock fixture',u);
  content:=jsonb_build_object('schemaVersion',1,'title','Lock fixture','kind','book','sections',jsonb_build_array(jsonb_build_object('id',section_id,'title','Section','blocks',jsonb_build_array(jsonb_build_object('id',block_id,'type','paragraph','text','Protected text','locked',true,'sourceIds','[]'::jsonb,'assetId',null)))));
  perform set_config('request.jwt.claim.sub',u::text,true);

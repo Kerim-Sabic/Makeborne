@@ -4,7 +4,7 @@ import { RequestError } from "@/lib/server/http";
 import { documentPdf, documentPptx, loadDocumentImages } from "@/lib/documents/export-server";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 let active = 0;
 
 /** PDF (books and presentations) and editable PPTX (presentations) for a saved
@@ -15,9 +15,6 @@ export async function GET(request: Request, context: { params: Promise<{ workspa
     const url = new URL(request.url);
     const format = url.searchParams.get("format");
     if (format !== "pdf" && format !== "pptx") throw new RequestError("INVALID_FORMAT", "Choose PDF or PPTX.");
-    // PDF printing needs a Chromium binary, which hosted functions do not ship yet.
-    if (format === "pdf" && process.env.NODE_ENV === "production" && process.env.MAKEBORNE_DOCUMENT_PDF_ENABLED !== "true")
-      throw new RequestError("EXPORT_NOT_CONFIGURED", "PDF rendering is not configured in this environment yet. PPTX download is available.", 503);
     const { workspaceId, artifactId } = await context.params;
     validId(artifactId);
     const versionParam = url.searchParams.get("version");
