@@ -2,11 +2,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Check, FileCode2, ImageIcon, Loader2, Paperclip, Sparkles, X } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
+import type { DocumentSource } from "@/lib/documents/schema";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number };
 type Attachment = { name: string; mediaType: string; data: string; size: number };
-export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean };
+export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean; document?: DocumentSource; focus?: string };
+const COPY = {
+  website: { title: "What should we build?", intro: "Describe the website, its audience and the feeling you want. Attach a logo, screenshot or brief for reference. Then keep chatting to refine it.", start: "A premium website for a makeup brand selling three products…", edit: "Ask for a change — e.g. make the hero bolder and add an FAQ" },
+  presentation: { title: "What's the presentation?", intro: "Describe the audience, the goal and the key message. Attach notes, data or a brief. Slides appear live as they are written; then refine by chat.", start: "A 10-slide seed pitch for a community solar startup…", edit: "Ask for a change — e.g. make slide 4 a chart, or a warmer palette" },
+  book: { title: "What's the book?", intro: "Describe the story or topic, the reader, the tone and the length. Pages are typeset live at 6 × 9 in with illustrations; then refine by chat.", start: "A short illustrated children's book about a lighthouse cat…", edit: "Ask for a change — e.g. shorten chapter 2, or a warmer palette" },
+} as const;
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.txt";
 const MAX_FILE = 6 * 1024 * 1024;
@@ -20,14 +26,16 @@ const newId = () => crypto.randomUUID();
 
 /** Chat-driven website builder: every message streams real edits into the
  * project, previews them live and saves a new version when finished. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, autoStart, onLive, onSaved }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, autoStart, onLive, onSaved, kind = "website", baseDocument }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   history: { number: number; summary: string }[];
   baseFiles: Record<string, string>; baseAssets: { id: string; path: string }[];
   defaultEffort?: EffortLevel; disabled?: boolean; autoStart?: string | null;
   onLive: (update: LiveUpdate | null) => void;
   onSaved: () => Promise<void> | void;
+  kind?: "website" | "book" | "presentation"; baseDocument?: DocumentSource;
 }) {
+  const copy = COPY[kind];
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [effort, setEffort] = useState<EffortLevel>(defaultEffort ?? "medium");
@@ -55,7 +63,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done" };
     const reply: Turn = { id: newId(), role: "assistant", text: "", activity: [], state: "streaming" };
     setTurns(current => [...current, userTurn, reply]);
-    const live = { files: { ...baseFiles }, assets: [...baseAssets] };
+    const live: Omit<LiveUpdate, "building"> = { files: { ...baseFiles }, assets: [...baseAssets], document: baseDocument };
     onLive({ ...live, building: true });
     const activity = (item: Omit<Activity, "id">, key?: string) => update(reply.id, turn => {
       const existing = key ? turn.activity.findIndex(entry => entry.id === key) : -1;
@@ -107,6 +115,12 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
               onLive({ ...live, building: true });
               activity({ kind: "image", label: `Created ${event.url}`, done: true }, `image:${String(event.path).replace(/^public\/images\/|\.webp$/g, "")}`);
               break;
+            case "document":
+              live.document = event.document; live.focus = event.focus;
+              onLive({ ...live, building: true });
+              break;
+            case "item_start": activity({ kind: "file", label: event.label, done: false }, `item:${event.key}`); break;
+            case "item": activity({ kind: "file", label: event.label, done: true }, `item:${event.key}`); break;
             case "tool_error": activity({ kind: "note", label: "Fixing an issue…", done: true }); break;
             case "usage": update(reply.id, turn => ({ ...turn, credits: event.credits })); break;
             case "done":
@@ -130,7 +144,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       await onSaved();
       onLive(null);
     }
-  }, [accountId, artifactId, baseAssets, baseFiles, busy, disabled, effort, onLive, onSaved, refreshBalance, version, workspaceId]);
+  }, [accountId, artifactId, baseAssets, baseDocument, baseFiles, busy, disabled, effort, onLive, onSaved, refreshBalance, version, workspaceId]);
 
   useEffect(() => {
     if (!autoStart || started.current || disabled || turns.length) return;
@@ -153,7 +167,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const empty = !turns.length && !history.length;
   return <aside className="lb" aria-label="Builder chat">
     <div className="lb-log" ref={log} aria-live="polite">
-      {empty && <div className="lb-intro"><Sparkles size={18} /><h3>What should we build?</h3><p>Describe the website, its audience and the feeling you want. Attach a logo, screenshot or brief for reference. Then keep chatting to refine it.</p></div>}
+      {empty && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {!!history.length && <details className="lb-history"><summary>{history.length} earlier change{history.length === 1 ? "" : "s"}</summary>
         <ol>{history.map(item => <li key={item.number}><strong>v{item.number}</strong> {item.summary}</li>)}</ol></details>}
       {turns.map(turn => <div key={turn.id} className={`lb-turn lb-${turn.role}`} data-state={turn.state}>
@@ -168,7 +182,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     </div>
     <form className="lb-composer" onSubmit={event => { event.preventDefault(); void send(draft, attachments); }}>
       {!!attachments.length && <ul className="lb-files">{attachments.map((file, index) => <li key={`${file.name}:${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setAttachments(attachments.filter((_, item) => item !== index))}><X size={12} /></button></li>)}</ul>}
-      <textarea aria-label="Message the builder" placeholder={empty ? "A premium website for a makeup brand selling three products…" : "Ask for a change — e.g. make the hero bolder and add an FAQ"} value={draft} rows={3} maxLength={8000} disabled={busy || disabled}
+      <textarea aria-label="Message the builder" placeholder={empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || disabled}
         onChange={event => setDraft(event.target.value)}
         onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(draft, attachments); } }} />
       <div className="lb-controls">

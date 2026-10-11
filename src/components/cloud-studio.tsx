@@ -14,6 +14,7 @@ import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
 import LiveBuilder, { type LiveUpdate } from "./live-builder";
+import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
 import "@/app/live-builder.css";
@@ -1503,12 +1504,13 @@ export function CloudEditor({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const previewBlocks = content?.sections.flatMap(section => section.blocks) ?? [];
-  const useLiveBuilder = builderAvailable && artifact.kind === "website" && role !== "reviewer";
+  const useLiveBuilder = builderAvailable && role !== "reviewer";
+  const liveDocument = artifact.kind !== "website";
   const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
     .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content])), [content?.websiteSource]);
   // A project created from the home prompt starts building as soon as it opens.
   useEffect(() => {
-    if (!useLiveBuilder || !content || content.websiteSource || !project?.brief.trim() || expectedVersion > 1) return;
+    if (!useLiveBuilder || !content || (liveDocument ? content.document : content.websiteSource) || !project?.brief.trim() || expectedVersion > 1) return;
     const scope = { workspaceId, projectId: artifact.projectId, artifactId: artifact.id };
     try {
       const reference = readGenerationReference(localStorage, accountId, scope);
@@ -1517,7 +1519,7 @@ export function CloudEditor({
       const brief = project.brief.trim();
       queueMicrotask(() => setAutoStart(brief));
     } catch { /* storage unavailable: the user can send the brief manually */ }
-  }, [useLiveBuilder, content, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
+  }, [useLiveBuilder, liveDocument, content, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
   const isStartingDraft = !content?.websiteSource && (!previewBlocks.length || (expectedVersion <= 1 && previewBlocks.length === 1 && previewBlocks[0].type === "heading" && previewBlocks[0].text === content?.title && !previewBlocks[0].assetId));
   const PreviewIcon = artifact.kind === "website" ? PanelsTopLeft : artifact.kind === "book" ? BookOpen : Presentation;
   return (
@@ -1559,6 +1561,7 @@ export function CloudEditor({
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} autoStart={autoStart}
+          kind={artifact.kind} baseDocument={content?.document}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
@@ -1666,11 +1669,14 @@ export function CloudEditor({
           canStart={!dirty && !conflict && !uncertainSave && !recovery && !busy}
           onOutputVersionChange={setGeneratedVersionId}
           onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
-        {view === "preview" && useLiveBuilder && (live || content.websiteSource) && <LivePreview
+        {view === "preview" && useLiveBuilder && liveDocument && (live?.document ?? content.document) && <DocumentPreview document={(live?.document ?? content.document)!} focus={live?.focus}
+          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} />}
+        {view === "preview" && useLiveBuilder && liveDocument && !live?.document && !content.document && <div className="lp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
+        {view === "preview" && useLiveBuilder && !liveDocument && (live || content.websiteSource) && <LivePreview
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)} />}
-        {view === "preview" && useLiveBuilder && !live && !content.websiteSource && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
+        {view === "preview" && useLiveBuilder && !liveDocument && !live && !content.websiteSource && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
         {view === "preview" && !useLiveBuilder && artifact.kind === "website" && (content.websiteSource || generatedVersionId) && (() => {
           const generated=versions.find(version=>version.id===generatedVersionId);
           const saved=versions.find(version=>version.number===expectedVersion);
@@ -1765,7 +1771,8 @@ export function CloudEditor({
             </button>
             {content.kind === "website" && !content.websiteSource && <WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} />}
             {content.kind === "website" && !content.websiteSource && <WebsiteGithub key={`github:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} />}
-            {style && <AccountExport key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
+            {content.document && <p className="small-note">This {artifact.kind} was made with the live builder. Download PDF{artifact.kind === "presentation" ? " or editable PPTX" : ""} from the Preview tab; the outline below is generated from it and is updated on every build.</p>}
+            {style && !content.document && <AccountExport key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
             <p className="small-note">
               {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Save your website before publishing." : "Live AI generation and new artwork uploads are still being prepared. Saved websites can be published from this editor."}
             </p>

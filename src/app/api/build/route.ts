@@ -9,6 +9,7 @@ import { runBuilder, newRunId, type BuilderEvent } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
 import { BUILDER_EFFORT, MINIMUM_RUN_CREDITS } from "@/lib/builder/pricing";
 import { getCreditBalance, releaseCredits, reserveCredits, settleCredits } from "@/lib/credits/server";
+import { documentBuildResponse } from "@/lib/builder/docs-run";
 
 export const runtime = "nodejs";
 // Vercel Hobby allows 300s; raise to 800 on Pro for long Ultra runs.
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     const artifactResult = await client.from("artifacts").select("id,project_id,kind,title,current_version").eq("workspace_id", body.workspaceId).eq("id", body.artifactId).maybeSingle();
     databaseError(artifactResult.error);
     const artifact = artifactResult.data;
-    if (!artifact || artifact.kind !== "website") throw new RequestError("NOT_FOUND", "This website project is unavailable.", 404);
+    if (!artifact || !["website", "book", "presentation"].includes(artifact.kind)) throw new RequestError("NOT_FOUND", "This project is unavailable.", 404);
     if (artifact.current_version !== body.expectedVersion) throw new RequestError("REVISION_CONFLICT", "This project changed. Reload the latest version before asking for more changes.", 409);
     const [projectResult, versionsResult] = await Promise.all([
       client.from("projects").select("*").eq("workspace_id", body.workspaceId).eq("id", artifact.project_id).maybeSingle(),
@@ -91,6 +92,14 @@ export async function POST(request: Request) {
       : file.mediaType.startsWith("text/")
         ? { type: "document", source: { type: "text", media_type: "text/plain", data: Buffer.from(file.data, "base64").toString("utf8").slice(0, 200_000) }, title: file.name }
         : { type: "image", source: { type: "base64", media_type: file.mediaType as "image/png" | "image/jpeg" | "image/webp" | "image/gif", data: file.data } });
+
+    // Books and presentations: structured document builder (same credits, versions and SSE contract).
+    if (artifact.kind === "book" || artifact.kind === "presentation") {
+      const response = documentBuildResponse({ client, userId: user.id, runId, budget, workspaceId: body.workspaceId, artifact, project, current, versions,
+        message: body.message, effort: body.effort, attachments, maxDuration });
+      reserved = null;
+      return response;
+    }
 
     const encoder = new TextEncoder();
     // The run continues even if the browser disconnects, so paid work is saved.
