@@ -15,7 +15,8 @@ import { epubDocument } from "@/lib/server/epub";
 import { requireCreationAccess } from "@/lib/billing/access";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+// Cold Chromium start plus long books with artwork can exceed 30s.
+export const maxDuration = 120;
 let activeExports = 0;
 
 export async function POST(request: Request) {

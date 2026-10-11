@@ -10,6 +10,9 @@ if (publicSupabaseKey && !publicSupabaseKey.startsWith("sb_publishable_")) {
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // PDF export runs Chromium; on Vercel it comes from @sparticuz/chromium's packed binary.
+  serverExternalPackages: ["@sparticuz/chromium", "playwright", "playwright-core"],
+  outputFileTracingIncludes: { "/api/export": ["./node_modules/@sparticuz/chromium/bin/**"] },
   async headers() {
     return [
       {
