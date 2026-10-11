@@ -183,6 +183,20 @@ begin
   exception when insufficient_privilege then null; end;
   reset role;
   raise notice 'PASS RLS and privileges';
+
+  -- Holds from killed runs expire after 15 minutes.
+  perform public.makeborne_credit_grant(b,40,'topup','expiry-fixture','{}'::jsonb);
+  perform public.makeborne_credit_reserve(b,60,'dead-run');
+  assert (public.makeborne_credit_wallet(b)->>'available')::bigint=30, 'Fresh hold not counted';
+  update makeborne_private.credit_reservations set created_at=now()-interval '16 minutes' where user_id=b and reference='dead-run';
+  assert (public.makeborne_credit_wallet(b)->>'available')::bigint=90, 'Stale hold still blocks reads';
+  s:=public.makeborne_credit_reserve(b,20,'next-run');
+  assert (s->>'available')::bigint=70 and (s->>'reserved')::bigint=20, 'Stale hold not released on mutation: '||s;
+  assert (select status from makeborne_private.credit_reservations where user_id=b and reference='dead-run')='released', 'Stale reservation not marked released';
+  assert exists(select 1 from public.credit_ledger where user_id=b and reference='dead-run' and kind='release' and delta=60 and metadata->>'expired'='true'), 'Expiry not in ledger';
+  begin perform public.makeborne_credit_settle(b,'dead-run',10); raise exception 'Expired hold was settled';
+  exception when sqlstate 'PT409' then null; end;
+  raise notice 'PASS stale hold expiry';
 end $$;
 select 'PASS: free tier gate, trial/grant idempotency, reserve MB402, settle partial/over, release, ledger invariants, admin bypass, RLS' as result;
 rollback;
