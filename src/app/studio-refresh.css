@@ -2743,3 +2743,15 @@
 @media(max-width:600px){.creation-session>header{padding:0 20px}.creation-session-content{padding:25px 20px 60px}.creation-session h2{font-size:23px}.creation-session .form-grid{grid-template-columns:1fr}.studio-shell .saved-style-grid{grid-template-columns:1fr}}
 
 .studio-shell .studio-chat-link{display:flex;align-items:center;gap:12px;padding:12px 16px;color:#80758c;text-decoration:none;font-size:13px;border-radius:9px;margin-top:4px}.studio-shell .studio-chat-link:hover{background:#f0ecf5;color:#51435f}
+
+/* 2026-10-13 readability pass (studio only; the home page keeps its own type).
+   Labels and meta text never go below 12px; miniature previews are untouched. */
+.studio-shell .studio-account-popover > span,
+.studio-shell .composer-mode > button,
+.studio-shell .account-project-card small,
+.studio-shell .account-projects .small-note,
+.studio-shell .mbg-filter,
+.studio-shell .mbg-card-details p,
+.studio-shell .mbg-kind{font-size:12px}
+.studio-shell .mbg-filter{font-size:13px}
+.studio-shell .mbg-card-details p{line-height:1.55}

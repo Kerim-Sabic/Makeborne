@@ -1,6 +1,6 @@
 import { ArtifactContentSchema, StyleProfileSchema } from "../domain";
 import type { ExportRequest } from "../server/export";
-import {previewSlides} from "./preview-content";
+import {isSpeakerNotes, previewSlides} from "./preview-content";
 
 export type AccountExportFormat = "html" | "pdf" | "pptx" | "epub";
 export function accountExportRequest(contentInput: unknown, styleInput: unknown, options: {
@@ -15,6 +15,8 @@ export function accountExportRequest(contentInput: unknown, styleInput: unknown,
   for (const section of content.sections) {
     if (section.title && !(section.blocks[0]?.type === "heading" && section.blocks[0].text === section.title)) blocks.push({ id: section.id, type: "heading", text: section.title });
     for (const block of section.blocks) {
+      // Presenter notes travel as slide notes below, never as slide or page content.
+      if (isSpeakerNotes(block)) continue;
       if (block.type === "image" && block.assetId) {
         const image = artwork.get(block.assetId);
         if (!image || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(image)) throw new Error("Artwork could not be included. Retry the export; nothing has been removed.");
@@ -34,7 +36,7 @@ export function accountExportRequest(contentInput: unknown, styleInput: unknown,
   const slides:ExportRequest["slides"]=content.kind==='presentation'&&content.sections.some(section=>section.slideDesign)?previewSlides(content).map(slide=>{
     const sourceBlocks=slide.blocks.map(block=>({...byId.get(block.id)!,id:block.id,assetId:block.assetId,type:block.type as 'paragraph'|'quote'|'image'}));
     const image=sourceBlocks.find(block=>block.image)?.image;
-    return {id:slide.id,title:slide.title,body:sourceBlocks.map(block=>block.text).filter(Boolean).join('\n\n'),...(slide.design?{design:slide.design,sourceBlocks}:image?{image}:{})};
+    return {id:slide.id,title:slide.title,body:sourceBlocks.map(block=>block.text).filter(Boolean).join('\n\n'),...(slide.notes?{notes:slide.notes.slice(0,10000)}:{}),...(slide.design?{design:slide.design,sourceBlocks}:image?{image}:{})};
   }):[];
   return {
     ...options, kind: content.kind, title: content.title, styleId: style.id,

@@ -1,0 +1,22 @@
+{
+  "target": "xzwikrunwpurxnxgkznh",
+  "productionTouched": false,
+  "startedAt": "2026-10-12T23:04:37.485Z",
+  "dryRun": false,
+  "verifiedApplied": 44,
+  "pending": [
+    {
+      "file": "20261013090000_hosting_review_fixes.sql",
+      "sha256": "bba270d3b9fd308ecda9fca150e6d5bf46e13633cd543ca029fd370ac8db6c15"
+    }
+  ],
+  "applied": [
+    {
+      "file": "20261013090000_hosting_review_fixes.sql",
+      "sha256": "bba270d3b9fd308ecda9fca150e6d5bf46e13633cd543ca029fd370ac8db6c15",
+      "at": "2026-10-12T23:04:37.602Z"
+    }
+  ],
+  "totalApplied": 45,
+  "finishedAt": "2026-10-12T23:04:37.668Z"
+}

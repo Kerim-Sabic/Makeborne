@@ -1,0 +1,125 @@
+{
+  "source": "Real Whop sandbox responses, 2026-10-12, Api-Version-Date 2025-01-01. IDs replaced; no customer details or credentials.",
+  "samples": [
+    {
+      "case": "membership-pinned",
+      "response": {
+        "id": "mem_fixture",
+        "status": "active",
+        "company": {
+          "id": "biz_fixture"
+        },
+        "plan": {
+          "id": "plan_monthly"
+        },
+        "user": {
+          "id": "user_fixture"
+        },
+        "checkout_configuration_id": null,
+        "renewal_period_start": "2026-10-12T16:48:24.917Z",
+        "renewal_period_end": "2026-11-11T16:48:24.917Z"
+      },
+      "cancelAtPeriodEnd": false
+    },
+    {
+      "case": "membership-at_period_end",
+      "response": {
+        "id": "mem_fixture",
+        "status": "active",
+        "company": {
+          "id": "biz_fixture"
+        },
+        "plan": {
+          "id": "plan_monthly"
+        },
+        "user": {
+          "id": "user_fixture"
+        },
+        "checkout_configuration_id": null,
+        "renewal_period_start": "2026-10-12T16:48:24.917Z",
+        "renewal_period_end": "2026-11-11T16:48:24.917Z"
+      },
+      "cancelAtPeriodEnd": true
+    },
+    {
+      "case": "membership-immediate",
+      "response": {
+        "id": "mem_fixture",
+        "status": "canceled",
+        "company": {
+          "id": "biz_fixture"
+        },
+        "plan": {
+          "id": "plan_monthly"
+        },
+        "user": {
+          "id": "user_fixture"
+        },
+        "checkout_configuration_id": null,
+        "renewal_period_start": "2026-10-12T16:48:24.917Z",
+        "renewal_period_end": "2026-11-11T16:48:24.917Z"
+      },
+      "cancelAtPeriodEnd": true
+    },
+    {
+      "case": "linked-cancel-end",
+      "response": {
+        "id": "mem_fixture",
+        "status": "active",
+        "company": {
+          "id": "biz_fixture"
+        },
+        "plan": {
+          "id": "plan_monthly"
+        },
+        "user": {
+          "id": "user_fixture"
+        },
+        "checkout_configuration_id": "ch_fixture",
+        "renewal_period_start": "2026-10-12T17:33:43.209Z",
+        "renewal_period_end": "2026-11-11T17:33:43.209Z"
+      },
+      "cancelAtPeriodEnd": true
+    },
+    {
+      "case": "linked-cancel-immediate",
+      "response": {
+        "id": "mem_fixture",
+        "status": "canceled",
+        "company": {
+          "id": "biz_fixture"
+        },
+        "plan": {
+          "id": "plan_monthly"
+        },
+        "user": {
+          "id": "user_fixture"
+        },
+        "checkout_configuration_id": "ch_fixture",
+        "renewal_period_start": "2026-10-12T17:33:43.209Z",
+        "renewal_period_end": "2026-11-11T17:33:43.209Z"
+      },
+      "cancelAtPeriodEnd": true
+    },
+    {
+      "case": "annual-membership",
+      "response": {
+        "id": "mem_fixture",
+        "status": "active",
+        "company": {
+          "id": "biz_fixture"
+        },
+        "plan": {
+          "id": "plan_annual"
+        },
+        "user": {
+          "id": "user_fixture"
+        },
+        "checkout_configuration_id": "ch_fixture",
+        "renewal_period_start": "2026-10-12T17:40:46.384Z",
+        "renewal_period_end": "2027-10-12T17:40:46.384Z"
+      },
+      "cancelAtPeriodEnd": false
+    }
+  ]
+}

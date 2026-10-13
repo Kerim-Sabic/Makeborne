@@ -1,0 +1,7 @@
+BEGIN
+CREATE EXTENSION
+NOTICE:  Client records are briefly read-only while Makeborne finishes an update. Try again in a minute.
+NOTICE:  This version of Makeborne is out of date. Reload the page to keep working with clients.
+NOTICE:  PASS G concurrency: freeze drained an in-flight write, blocked a racing write, out-of-date server rejected after contract, previous app restored after rollback
+DO
+ROLLBACK

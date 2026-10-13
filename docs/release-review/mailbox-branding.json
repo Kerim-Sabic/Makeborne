@@ -1,0 +1,19 @@
+{
+  "address": "admin@makeborne.com",
+  "senderDisplayName": "Makeborne",
+  "avatar": "Existing Makeborne monochrome mark, padded white 512px PNG",
+  "signatureName": "Makeborne",
+  "signatureText": [
+    "Makeborne Team",
+    "Websites \u00b7 Books \u00b7 Presentations",
+    "admin@makeborne.com",
+    "makeborne.com"
+  ],
+  "defaultSignature": true,
+  "newComposeVerified": true,
+  "personalNameIncluded": false,
+  "messagesSent": 0,
+  "paidAICalls": 0,
+  "limitation": "Spacemail profile avatars are visible only to other Spacemail users. Signature image was stripped by editor; saved signature uses branded text and purple rule.",
+  "source": "https://www.spaceship.com/knowledgebase/getting-started-with-spacemail/"
+}

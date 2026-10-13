@@ -1,36 +1,35 @@
 import { z } from "zod";
 import type { EffortLevel } from "../routing/effort";
+import { MARGIN_POLICY, creditOffers, maxAiCostUsdPerCredit } from "../billing/margins";
 
-/** Provider list prices in USD per million tokens. Keep in sync with the
- * provider's published price card; unknown models fail closed in `usageCost`. */
-const TEXT_PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
-  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
-  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
-};
-/** Conservative per-image estimate for one gpt-image generation at the sizes we request. */
-export const IMAGE_COST_USD = 0.08;
+/** Provider prices live in ../ai/prices.ts (verified price card; unknown models
+ * fail closed). Live builder calls are bounded and metered by ../ai/run-spend.ts. */
 
-export type TokenUsage = { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null };
+/** Internal AI provider cost (USD) that one credit represents: usage is
+ * converted to credits at this rate. It is NOT what customers pay per credit
+ * (plans and top-ups sell credits at $0.05–0.12; see src/lib/billing/margins.ts).
+ * At $0.03 a chat edit is ~5–7 credits and a full first build ~25–50. */
+export const DEFAULT_AI_COST_USD_PER_CREDIT = 0.03;
+/** A higher value gives customers more AI per credit; above this ceiling some
+ * live offer would drop below MARGIN_POLICY.enforcedMinAiMargin. */
+export const MAX_AI_COST_USD_PER_CREDIT = maxAiCostUsdPerCredit(creditOffers(), MARGIN_POLICY.enforcedMinAiMargin);
 
-/** Unknown or fallback models are charged at a conservative rate. */
-const FALLBACK_PRICE = { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 };
-
-export function usageCost(model: string, usage: TokenUsage): number {
-  const price = TEXT_PRICES[model] ?? FALLBACK_PRICE;
-  return (usage.input_tokens * price.input + usage.output_tokens * price.output
-    + (usage.cache_read_input_tokens ?? 0) * price.cacheRead
-    + (usage.cache_creation_input_tokens ?? 0) * price.cacheWrite) / 1_000_000;
+let warned = false;
+/** Reads MAKEBORNE_AI_COST_USD_PER_CREDIT, falling back to the legacy
+ * MAKEBORNE_USD_PER_CREDIT that existing deployments set. Invalid values, and
+ * values that would break the enforced margin floor, use the default. */
+export function aiCostUsdPerCredit(env: Record<string, string | undefined> = process.env): number {
+  const raw = [env.MAKEBORNE_AI_COST_USD_PER_CREDIT, env.MAKEBORNE_USD_PER_CREDIT].find(value => value !== undefined && value.trim() !== "");
+  if (raw === undefined) return DEFAULT_AI_COST_USD_PER_CREDIT;
+  const parsed = z.coerce.number().positive().safeParse(raw.trim());
+  if (parsed.success && parsed.data <= MAX_AI_COST_USD_PER_CREDIT) return parsed.data;
+  if (!warned) {
+    warned = true;
+    console.error(`Ignoring AI cost per credit "${raw}": it must be a positive number no higher than ${MAX_AI_COST_USD_PER_CREDIT.toFixed(4)} to keep the enforced margin floor. Using ${DEFAULT_AI_COST_USD_PER_CREDIT}.`);
+  }
+  return DEFAULT_AI_COST_USD_PER_CREDIT;
 }
-
-/** USD of provider cost represented by one credit. Plan credit allowances are
- * priced against this value, so change both together. At $0.03 a typical chat
- * edit costs ~7 credits and a full first build ~20–35; plan prices then keep a
- * ~65–70% gross margin even when an allowance is fully used. */
-export function usdPerCredit(): number {
-  const parsed = z.coerce.number().positive().max(10).safeParse(process.env.MAKEBORNE_USD_PER_CREDIT ?? "0.03");
-  return parsed.success ? parsed.data : 0.03;
-}
-export const creditsForUsd = (usd: number) => Math.max(0, Math.ceil(usd / usdPerCredit() - 1e-9));
+export const creditsForUsd = (usd: number) => Math.max(0, Math.ceil(usd / aiCostUsdPerCredit() - 1e-9));
 
 /** Builder behavior per effort level. The credit ceiling is the most a single
  * request may charge; the run stops gracefully before exceeding it. */

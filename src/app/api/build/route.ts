@@ -1,54 +1,43 @@
 import { z } from "zod";
+import { BuilderAttachmentsSchema, builderAttachmentBlocks, MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
 import { mapProject, mapVersion } from "@/lib/cloud/mappers";
-import { randomUUID } from "node:crypto";
-import { ArtifactContentSchema, StyleProfileSchema, type ArtifactVersion } from "@/lib/domain";
-import { baseStyles } from "@/components/studio-model";
-import { apiError, boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
+import { blankVersion } from "@/lib/builder/blank-version";
+import { boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
 import { EffortLevelSchema } from "@/lib/routing/effort";
 import { ProjectFiles } from "@/lib/builder/files";
-import { runBuilder, newRunId, type BuilderEvent } from "@/lib/builder/agent";
+import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
-import { BUILDER_EFFORT, MINIMUM_RUN_CREDITS } from "@/lib/builder/pricing";
+import { BUILDER_EFFORT } from "@/lib/builder/pricing";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
 import { REVIEW_MAX_TURNS, reviewCreditCeiling } from "@/lib/builder/review-policy";
-import { getCreditBalance, releaseCredits, reserveCredits, settleCredits } from "@/lib/credits/server";
+import { OperationRequestSchema } from "@/lib/builder/operation-contract";
+import { beginOperation, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
 import { documentBuildResponse } from "@/lib/builder/docs-run";
+import { websiteBuildResponse } from "@/lib/builder/website-run";
+import { requireProviderCapacity } from "@/lib/ai/live-run";
+import { requirePricedModel } from "@/lib/ai/model-check";
 import { SitePlanSchema, planToBrief } from "@/lib/builder/plan";
 
 export const runtime = "nodejs";
 // Vercel Hobby allows 300s; raise to 800 on Pro for long Ultra runs.
 export const maxDuration = 300;
 
-const Attachment = z.object({
-  name: z.string().min(1).max(200),
-  mediaType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf", "text/plain", "text/markdown"]),
-  data: z.string().max(8_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/),
-}).strict();
 const BuildRequest = z.object({
   workspaceId: z.string().uuid(),
   artifactId: z.string().uuid(),
   expectedVersion: z.number().int().nonnegative(),
   message: z.string().trim().min(1).max(8000),
   effort: EffortLevelSchema.default("medium"),
-  attachments: z.array(Attachment).max(5).default([]),
+  attachments: BuilderAttachmentsSchema.default([]),
   /** An approved Plan mode plan the build must follow. */
   plan: SitePlanSchema.optional(),
   /** "review": look at client-captured screenshots of the current version and fix visual problems. */
   mode: z.enum(["build", "review"]).default("build"),
   review: ReviewInputSchema.optional(),
+  operation: OperationRequestSchema.optional(),
 }).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review);
-
-function blankVersion(artifactId: string, kind: string, title: string, userId: string): ArtifactVersion {
-  const style = baseStyles[0];
-  return {
-    id: randomUUID(), artifactId, number: 0, parentVersionId: null, createdAt: new Date().toISOString(), createdBy: userId, assetIds: [], changeSummary: "",
-    content: ArtifactContentSchema.parse({ schemaVersion: 1, title: title.slice(0, 200) || "Untitled", kind, sections: [] }),
-    style: StyleProfileSchema.parse({ id: style.id, name: style.name, version: 1, typography: { headingFont: "Source Serif 4", bodyFont: "Inter" },
-      colors: { accent: style.color, ink: "#16181D", canvas: "#F8F7F4" }, description: style.description, referenceAssetIds: [] }),
-  };
-}
 
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -57,13 +46,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let reserved: { userId: string; runId: string } | null = null;
+  let reserved: OperationRun | null = null;
   try {
     sameOrigin(request);
     if (!builderEnabled()) throw new RequestError("BUILDER_UNAVAILABLE", "The builder is not connected in this environment.", 503);
-    const parsed = BuildRequest.safeParse(await boundedJson(request, 14_000_000));
-    if (!parsed.success) throw new RequestError("INVALID_BUILD", "Describe what to build (up to 8,000 characters) and attach at most five files under 6 MB each.");
+    const parsed = BuildRequest.safeParse(await boundedJson(request, MAX_BUILDER_REQUEST_BYTES));
+    if (!parsed.success) throw new RequestError("INVALID_BUILD", "Describe what to build (up to 8,000 characters) and attach up to five supported source files (3 MB combined).");
     const body = parsed.data;
+    if (!body.operation) throw new RequestError("OPERATION_REQUIRED", "Reload the builder to use the request's shared credit limit.", 409);
     const reviewing = body.mode === "review" ? body.review! : null;
     validId(body.artifactId);
     const { client, user } = await cloudContext(body.workspaceId, true);
@@ -72,7 +62,6 @@ export async function POST(request: Request) {
     databaseError(artifactResult.error);
     const artifact = artifactResult.data;
     if (!artifact || !["website", "book", "presentation"].includes(artifact.kind)) throw new RequestError("NOT_FOUND", "This project is unavailable.", 404);
-    if (artifact.current_version !== body.expectedVersion) throw new RequestError("REVISION_CONFLICT", "This project changed. Reload the latest version before asking for more changes.", 409);
     const [projectResult, versionsResult] = await Promise.all([
       client.from("projects").select("*").eq("workspace_id", body.workspaceId).eq("id", artifact.project_id).maybeSingle(),
       client.from("artifact_versions").select("*").eq("workspace_id", body.workspaceId).eq("artifact_id", artifact.id).order("version_number", { ascending: false }).limit(8),
@@ -91,17 +80,24 @@ export async function POST(request: Request) {
     const policy = BUILDER_EFFORT[body.effort];
     // A review round is a focused pass with its own, smaller ceiling.
     const ceiling = reviewing ? reviewCreditCeiling(policy.ceilingCredits) : policy.ceilingCredits;
-    const balance = await getCreditBalance(user.id);
-    const budget = balance.unlimited ? ceiling : Math.min(ceiling, balance.available);
-    if (budget < MINIMUM_RUN_CREDITS) throw new RequestError("INSUFFICIENT_CREDITS", "You're out of credits. Upgrade your plan or add credits to keep building.", 402);
-    const runId = newRunId();
-    await reserveCredits(user.id, budget, runId);
-    reserved = { userId: user.id, runId };
+    // Unknown pricing fails closed before anything is reserved or sent.
+    requirePricedModel(builderModel());
+    // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
+    await requireProviderCapacity("anthropic");
+    const { operation: envelope, ...requestBody } = body;
+    // SQL binds the stage to its original authorization and creates its hold atomically.
+    const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
+      expectedVersion: body.expectedVersion, effort: body.effort, kind: reviewing ? "review" : "build", ceiling,
+      envelope, request: requestBody });
+    if (!admitted.run) return operationReplayResponse(admitted.status);
+    const operation = admitted.run, hold = operation.hold;
+    reserved = operation;
 
     const files = new ProjectFiles(current.content.websiteSource);
     const outline = current.content.websiteSource ? "" : current.content.sections.map(section => [section.title, ...section.blocks.map(block => block.text)].filter(Boolean).join("\n")).join("\n\n").slice(0, 20_000);
     const history = versions.filter(version => version.number <= artifact.current_version).slice(0, 6).reverse()
       .map(version => `v${version.number}: ${version.changeSummary}`).join("\n");
+    const approvedPlan = body.plan ?? operation.originalPlan;
     const context = [
       `<project title="${artifact.title.replace(/"/g, "'")}">`,
       `Brief: ${project.brief || "(none)"}`,
@@ -110,99 +106,33 @@ export async function POST(request: Request) {
       outline ? `Existing outline content to use:\n${outline}` : "",
       current.content.website ? `Existing static design to convert into the React project (keep its look and copy unless asked otherwise):\n<html>${current.content.website.html.slice(0, 40_000)}</html>\n<css>${current.content.website.css.slice(0, 30_000)}</css>` : "",
       history ? `Recent revisions:\n${history}` : "",
+      operation.originalMessage ? `Original authorized request: ${operation.originalMessage}` : "",
       "</project>",
-      body.plan ? `<approved_plan>\nThe client reviewed and approved this plan. Build exactly this: the same pages and section order, content, type pairing, palette hex values, layout ideas, imagery and signature interaction. Do not add or drop pages or sections unless the request says so. Where the plan names fonts the toolchain cannot load, use the closest permitted stack.\n\n${planToBrief(body.plan)}\n</approved_plan>` : "",
+      approvedPlan ? `<approved_plan>\nThe client reviewed and approved this plan. Build exactly this: the same pages and section order, content, type pairing, palette hex values, layout ideas, imagery and signature interaction. Do not add or drop pages or sections unless the request says so. Where the plan names fonts the toolchain cannot load, use the closest permitted stack.\n\n${planToBrief(approvedPlan)}\n</approved_plan>` : "",
       files.files.size
         ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: ${[...files.assets.values()].map(asset => `/${asset.path.slice(7)}`).join(", ") || "none"}`
         : "<current_files>(empty — build the complete website from scratch)</current_files>",
     ].filter(Boolean).join("\n");
-    const attachments: BetaContentBlockParam[] = reviewing ? reviewAttachments(reviewing) : body.attachments.map(file => file.mediaType === "application/pdf"
-      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: file.data }, title: file.name }
-      : file.mediaType.startsWith("text/")
-        ? { type: "document", source: { type: "text", media_type: "text/plain", data: Buffer.from(file.data, "base64").toString("utf8").slice(0, 200_000) }, title: file.name }
-        : { type: "image", source: { type: "base64", media_type: file.mediaType as "image/png" | "image/jpeg" | "image/webp" | "image/gif", data: file.data } });
+    const attachments: BetaContentBlockParam[] = reviewing ? reviewAttachments(reviewing) : builderAttachmentBlocks(body.attachments);
+
+    // Provider dollars: the effort ceiling, independent of the customer's credits (admins included).
+    const spend = createOperationSpend(operation, Date.now() + (maxDuration - 20) * 1000);
 
     // Books and presentations: structured document builder (same credits, versions and SSE contract).
     if (artifact.kind === "book" || artifact.kind === "presentation") {
-      const response = documentBuildResponse({ client, userId: user.id, runId, budget, workspaceId: body.workspaceId, artifact, project, current, versions,
+      const response = documentBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, project, current, versions,
         message: body.message, effort: body.effort, attachments, maxDuration });
       reserved = null;
       return response;
     }
 
-    const encoder = new TextEncoder();
-    // The run continues even if the browser disconnects, so paid work is saved.
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), (maxDuration - 20) * 1000);
-    const stream = new ReadableStream<Uint8Array>({
-      async start(output) {
-        let open = true;
-        const emit = (event: BuilderEvent) => {
-          if (!open) return;
-          try { output.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)); } catch { open = false; }
-        };
-        const heartbeat = setInterval(() => { if (open) try { output.enqueue(encoder.encode(": keep-alive\n\n")); } catch { open = false; } }, 15_000);
-        let charged = 0;
-        try {
-          emit({ type: "status", message: reviewing ? "Reviewing the design…" : files.files.size ? "Reading your project…" : "Planning your website…" });
-          const deadline = Date.now() + (maxDuration - 20) * 1000;
-          let result, spent = 0;
-          const track = (event: BuilderEvent) => { if (event.type === "usage") spent = event.credits; emit(event); };
-          try {
-            result = await runBuilder({ client, scope: { workspaceId: body.workspaceId, projectId: artifact.project_id }, files, effort: body.effort,
-              creditBudget: budget, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments, emit: track, signal: controller.signal, deadline,
-              limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : undefined });
-          } catch (error) {
-            // A step was cut off (time limit or provider error): keep finished work if it is valid.
-            if (!files.changed.size || (error as { code?: string }).code === "REFUSED") throw error;
-            try { files.toSource(); } catch { throw error; }
-            emit({ type: "status", message: "Saving the work finished so far…" });
-            result = { summary: "Saved the progress made so far.", title: undefined, credits: spent, usd: 0, finished: false };
-          }
-          if (reviewing && !files.changed.size) {
-            // The review found nothing to fix (or ran out of room before editing):
-            // charge for the look it took, keep the current version.
-            charged = (await settleCredits(user.id, runId, Math.min(result.credits, budget))).charged;
-            const summary = result.finished ? result.summary || "No changes needed — the design passed review." : "The review ran out of room before making changes. Your website is unchanged.";
-            emit({ type: "done", version: artifact.current_version, summary, charged, changed: false });
-            return;
-          }
-          let source;
-          try { source = files.toSource(); } catch { source = null; }
-          if (!source || !files.changed.size && !result.finished) {
-            charged = (await settleCredits(user.id, runId, Math.min(result.credits, budget))).charged;
-            emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Your project is unchanged — try a more focused request or a higher effort level." });
-            return;
-          }
-          const assetIds = [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])];
-          const summary = result.summary || (result.finished ? "Updated the website." : "Saved the progress made so far.");
-          const saved = await client.rpc("makeborne_save_artifact_version", {
-            p_workspace_id: body.workspaceId, p_artifact_id: artifact.id, p_expected_version: artifact.current_version,
-            p_content: { schemaVersion: 1, kind: "website", title: ((reviewing ? "" : result.title) || current.content.title).slice(0, 200), sections: [], websiteSource: source },
-            p_style: current.style, p_asset_ids: assetIds,
-            p_change_summary: `${reviewing ? "Design review" : body.message.slice(0, 600)} → ${summary}`.slice(0, 2000), p_request_key: runId,
-          });
-          if (saved.error || !saved.data?.version) {
-            await releaseCredits(user.id, runId);
-            emit({ type: "error", code: saved.error?.code === "PT409" ? "REVISION_CONFLICT" : "SAVE_FAILED", message: saved.error?.code === "PT409" ? "The project changed while building. Reload and try again — no credits were charged." : "The website was built but could not be saved. No credits were charged; please try again." });
-            return;
-          }
-          charged = (await settleCredits(user.id, runId, Math.min(result.credits, budget))).charged;
-          emit({ type: "done", version: saved.data.version.version_number ?? artifact.current_version + 1, summary, charged, changed: true, finished: result.finished });
-        } catch (error) {
-          await releaseCredits(user.id, runId).catch(() => undefined);
-          const message = (error as { code?: string }).code === "REFUSED" ? "This request can't be built. Try rephrasing it." : "The builder hit a problem and stopped. Your project is unchanged and no credits were charged.";
-          emit({ type: "error", code: "BUILD_FAILED", message });
-        } finally {
-          clearTimeout(timeout); clearInterval(heartbeat);
-          if (open) try { output.close(); } catch { /* client already gone */ }
-        }
-      },
-    });
+    const response = websiteBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing),
+      message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments,
+      limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : undefined, maxDuration });
     reserved = null;
-    return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" } });
+    return response;
   } catch (error) {
-    if (reserved) await releaseCredits(reserved.userId, reserved.runId).catch(() => undefined);
-    return apiError(error);
+    if (reserved) await finishOperation(reserved, 0, "failed", { code: "REQUEST_FAILED", message: "This step could not start. Your previous saved work is safe." }).catch(() => undefined);
+    return operationApiError(error);
   }
 }

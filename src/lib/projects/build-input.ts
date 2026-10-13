@@ -7,6 +7,7 @@ import {canonicalSourceJson} from "./canonical-json";
 import {websiteProjectManifest} from "./source-manifest";
 import {websiteSourceFiles} from "./source-files";
 import type {resolveWebsiteSourceAssets} from "./source-assets";
+import compatibility from "../../../infra/project-runtime/toolchain-compatibility.cjs";
 
 export const PROJECT_TOOLCHAIN = {id: "react-vite-v1", package: projectPackage, lock: projectLock} as const;
 const digest = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -17,12 +18,7 @@ export function websiteBuildInput(input: unknown, artwork: Awaited<ReturnType<ty
   const version = ArtifactVersionSchema.parse(input);
   if (!version.content.websiteSource) throw new Error("Choose a saved full-source website revision.");
   const {source, sourceHash, manifest: sourceManifest} = websiteProjectManifest(version.content.websiteSource);
-  for (const [path, expected] of [["package.json", projectPackage], ["package-lock.json", projectLock]] as const) {
-    const file = source.files.find(file => file.path === path)!;
-    if (canonicalSourceJson(JSON.parse(file.content)) !== canonicalSourceJson(expected)) {
-      throw new Error("This project needs the approved React/Vite dependency lock. Package changes need a reviewed toolchain update.");
-    }
-  }
+  compatibility.toolchainCompatibility(source.files, projectPackage, projectLock);
   // Fail explicitly rather than ignore project configuration the user expects.
   if (source.files.some(file => /(?:^|\/)(?:vite|postcss|tailwind)\.config\./i.test(file.path))) {
     throw new Error("Custom build configuration needs a supported toolchain. Keep visual styles in the project's source and CSS.");

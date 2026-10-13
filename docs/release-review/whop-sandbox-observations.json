@@ -1,0 +1,266 @@
+{
+  "sandboxOnly": true,
+  "productionTouched": false,
+  "realMoneySpent": 0,
+  "observations": [
+    {
+      "at": "2026-10-12T23:22:16.922Z",
+      "actions": [
+        {
+          "action": "full refund",
+          "payment": "pay_JVp4TjClPsS0Hs",
+          "before": {
+            "id": "pay_JVp4TjClPsS0Hs",
+            "status": "paid",
+            "substatus": "succeeded",
+            "billingReason": "subscription_create",
+            "total": 29,
+            "refunded": 0,
+            "membership": "mem_aUUFmYZa3qqw0I",
+            "created": "2026-10-12T17:33:43.498Z",
+            "paidAt": "2026-10-12T17:33:44.905Z"
+          },
+          "status": 200,
+          "after": {
+            "id": "pay_JVp4TjClPsS0Hs",
+            "status": "paid",
+            "substatus": "refunded",
+            "billingReason": "subscription_create",
+            "total": 29,
+            "refunded": 29,
+            "membership": "mem_aUUFmYZa3qqw0I",
+            "created": "2026-10-12T17:33:43.498Z",
+            "paidAt": "2026-10-12T17:33:44.905Z"
+          },
+          "membershipAfter": {
+            "id": "mem_aUUFmYZa3qqw0I",
+            "status": "canceled",
+            "plan": "plan_00mHHGVMtYzRL",
+            "cancelAtPeriodEnd": true,
+            "periodStart": "2026-10-12T17:33:43.209Z",
+            "periodEnd": "2026-11-11T17:33:43.209Z",
+            "updated": "2026-10-12T17:37:06.831Z"
+          }
+        }
+      ],
+      "memberships": [
+        {
+          "id": "mem_qghwLUAqqHkFCM",
+          "status": "canceled",
+          "plan": "plan_00mHHGVMtYzRL",
+          "cancelAtPeriodEnd": true,
+          "periodStart": "2026-10-12T16:48:24.917Z",
+          "periodEnd": "2026-11-11T16:48:24.917Z",
+          "updated": "2026-10-12T16:50:39.787Z"
+        },
+        {
+          "id": "mem_aUUFmYZa3qqw0I",
+          "status": "canceled",
+          "plan": "plan_00mHHGVMtYzRL",
+          "cancelAtPeriodEnd": true,
+          "periodStart": "2026-10-12T17:33:43.209Z",
+          "periodEnd": "2026-11-11T17:33:43.209Z",
+          "updated": "2026-10-12T17:37:06.831Z"
+        },
+        {
+          "id": "mem_V8jdBVz3Fn6k9m",
+          "status": "canceled",
+          "plan": "plan_9B9KMOqqdJXv4",
+          "cancelAtPeriodEnd": false,
+          "periodStart": "2026-10-12T17:40:46.384Z",
+          "periodEnd": "2027-10-12T17:40:46.384Z",
+          "updated": "2026-10-12T17:44:04.925Z"
+        }
+      ],
+      "payments": [
+        {
+          "id": "pay_syR15Hkmt7pjhf",
+          "status": "paid",
+          "substatus": "succeeded",
+          "billingReason": "subscription_create",
+          "total": 279,
+          "refunded": 0,
+          "membership": "mem_V8jdBVz3Fn6k9m",
+          "created": "2026-10-12T17:40:46.655Z",
+          "paidAt": "2026-10-12T17:40:47.462Z"
+        },
+        {
+          "id": "pay_JVp4TjClPsS0Hs",
+          "status": "paid",
+          "substatus": "refunded",
+          "billingReason": "subscription_create",
+          "total": 29,
+          "refunded": 29,
+          "membership": "mem_aUUFmYZa3qqw0I",
+          "created": "2026-10-12T17:33:43.498Z",
+          "paidAt": "2026-10-12T17:33:44.905Z"
+        },
+        {
+          "id": "pay_cONPleFVVW16yo",
+          "status": "paid",
+          "substatus": "succeeded",
+          "billingReason": "subscription_create",
+          "total": 29,
+          "refunded": 0,
+          "membership": "mem_qghwLUAqqHkFCM",
+          "created": "2026-10-12T16:48:25.244Z",
+          "paidAt": "2026-10-12T16:48:26.616Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T00:00:35.618Z",
+      "actions": [],
+      "memberships": [
+        {
+          "id": "mem_qghwLUAqqHkFCM",
+          "status": "canceled",
+          "plan": "plan_00mHHGVMtYzRL",
+          "cancelAtPeriodEnd": true,
+          "periodStart": "2026-10-12T16:48:24.917Z",
+          "periodEnd": "2026-11-11T16:48:24.917Z",
+          "updated": "2026-10-12T16:50:39.787Z"
+        },
+        {
+          "id": "mem_aUUFmYZa3qqw0I",
+          "status": "canceled",
+          "plan": "plan_00mHHGVMtYzRL",
+          "cancelAtPeriodEnd": true,
+          "periodStart": "2026-10-12T17:33:43.209Z",
+          "periodEnd": "2026-11-11T17:33:43.209Z",
+          "updated": "2026-10-12T17:37:06.831Z"
+        },
+        {
+          "id": "mem_V8jdBVz3Fn6k9m",
+          "status": "canceled",
+          "plan": "plan_9B9KMOqqdJXv4",
+          "cancelAtPeriodEnd": false,
+          "periodStart": "2026-10-12T17:40:46.384Z",
+          "periodEnd": "2027-10-12T17:40:46.384Z",
+          "updated": "2026-10-12T17:44:04.925Z"
+        }
+      ],
+      "payments": [
+        {
+          "id": "pay_syR15Hkmt7pjhf",
+          "status": "paid",
+          "substatus": "succeeded",
+          "billingReason": "subscription_create",
+          "total": 279,
+          "refunded": 0,
+          "membership": "mem_V8jdBVz3Fn6k9m",
+          "created": "2026-10-12T17:40:46.655Z",
+          "paidAt": "2026-10-12T17:40:47.462Z"
+        },
+        {
+          "id": "pay_JVp4TjClPsS0Hs",
+          "status": "paid",
+          "substatus": "refunded",
+          "billingReason": "subscription_create",
+          "total": 29,
+          "refunded": 29,
+          "membership": "mem_aUUFmYZa3qqw0I",
+          "created": "2026-10-12T17:33:43.498Z",
+          "paidAt": "2026-10-12T17:33:44.905Z"
+        },
+        {
+          "id": "pay_cONPleFVVW16yo",
+          "status": "paid",
+          "substatus": "succeeded",
+          "billingReason": "subscription_create",
+          "total": 29,
+          "refunded": 0,
+          "membership": "mem_qghwLUAqqHkFCM",
+          "created": "2026-10-12T16:48:25.244Z",
+          "paidAt": "2026-10-12T16:48:26.616Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-10-13T00:10:50.070Z",
+      "actions": [],
+      "memberships": [
+        {
+          "id": "mem_qghwLUAqqHkFCM",
+          "status": "canceled",
+          "plan": "plan_00mHHGVMtYzRL",
+          "cancelAtPeriodEnd": true,
+          "periodStart": "2026-10-12T16:48:24.917Z",
+          "periodEnd": "2026-11-11T16:48:24.917Z",
+          "updated": "2026-10-12T16:50:39.787Z"
+        },
+        {
+          "id": "mem_aUUFmYZa3qqw0I",
+          "status": "canceled",
+          "plan": "plan_00mHHGVMtYzRL",
+          "cancelAtPeriodEnd": true,
+          "periodStart": "2026-10-12T17:33:43.209Z",
+          "periodEnd": "2026-11-11T17:33:43.209Z",
+          "updated": "2026-10-12T17:37:06.831Z"
+        },
+        {
+          "id": "mem_V8jdBVz3Fn6k9m",
+          "status": "canceled",
+          "plan": "plan_9B9KMOqqdJXv4",
+          "cancelAtPeriodEnd": false,
+          "periodStart": "2026-10-12T17:40:46.384Z",
+          "periodEnd": "2027-10-12T17:40:46.384Z",
+          "updated": "2026-10-12T17:44:04.925Z"
+        },
+        {
+          "id": "mem_FkPEG6rdisMols",
+          "status": "trialing",
+          "plan": "plan_ph23AtuxtNWzD",
+          "cancelAtPeriodEnd": false,
+          "periodStart": "2026-10-13T00:08:59.333Z",
+          "periodEnd": "2026-10-14T00:08:59.341Z",
+          "updated": "2026-10-13T00:09:00.395Z"
+        },
+        {
+          "id": "mem_Vl3ZSgCqlLCAlb",
+          "status": "trialing",
+          "plan": "plan_JWikpAgY1kqqI",
+          "cancelAtPeriodEnd": false,
+          "periodStart": "2026-10-13T00:10:27.340Z",
+          "periodEnd": "2026-10-14T00:10:27.345Z",
+          "updated": "2026-10-13T00:10:30.449Z"
+        }
+      ],
+      "payments": [
+        {
+          "id": "pay_syR15Hkmt7pjhf",
+          "status": "paid",
+          "substatus": "succeeded",
+          "billingReason": "subscription_create",
+          "total": 279,
+          "refunded": 0,
+          "membership": "mem_V8jdBVz3Fn6k9m",
+          "created": "2026-10-12T17:40:46.655Z",
+          "paidAt": "2026-10-12T17:40:47.462Z"
+        },
+        {
+          "id": "pay_JVp4TjClPsS0Hs",
+          "status": "paid",
+          "substatus": "refunded",
+          "billingReason": "subscription_create",
+          "total": 29,
+          "refunded": 29,
+          "membership": "mem_aUUFmYZa3qqw0I",
+          "created": "2026-10-12T17:33:43.498Z",
+          "paidAt": "2026-10-12T17:33:44.905Z"
+        },
+        {
+          "id": "pay_cONPleFVVW16yo",
+          "status": "paid",
+          "substatus": "succeeded",
+          "billingReason": "subscription_create",
+          "total": 29,
+          "refunded": 0,
+          "membership": "mem_qghwLUAqqHkFCM",
+          "created": "2026-10-12T16:48:25.244Z",
+          "paidAt": "2026-10-12T16:48:26.616Z"
+        }
+      ]
+    }
+  ]
+}

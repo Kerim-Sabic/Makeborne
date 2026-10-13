@@ -51,6 +51,8 @@ export async function cloudBody<T extends z.ZodType>(
 }
 export function databaseError(error: { code?: string } | null) {
   if (!error) return;
+  if (error.code === "MB423") throw new RequestError("CRM_UPDATING", "Client records are briefly read-only while Makeborne finishes an update. Try again in a minute.", 423);
+  if (error.code === "MB426") throw new RequestError("APP_OUT_OF_DATE", "Makeborne was updated. Reload this page to keep working with clients.", 426);
   if (error.code === "MB402") throw new RequestError("MEMBERSHIP_REQUIRED", "A verified creation membership is required before changing this workspace.", 402);
   if (error.code === "MB412") throw new RequestError("WORKSPACE_EXISTS", "Your private workspace already exists. Reload the workspace list to continue.", 409);
   if (error.code === "MB409") throw new RequestError("IDEMPOTENCY_CONFLICT", "This request key was already used for different content. Review the earlier operation before creating another request.", 409);

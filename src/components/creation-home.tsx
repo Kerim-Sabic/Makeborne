@@ -42,7 +42,7 @@ const ideas: Record<Kind, { label: string; text: string }[]> = {
   ],
 };
 
-export default function CreationHome({ initialEmail, accountsEnabled }: { initialEmail: string | null; accountsEnabled: boolean }) {
+export default function CreationHome({ initialEmail, accountsEnabled, trialCredits = null }: { initialEmail: string | null; accountsEnabled: boolean; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>("website");
   const [mode, setMode] = useState<"create" | "plan">("create");
@@ -52,6 +52,14 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
   const selectedStyle = selectedStyles[kind];
   const selectedConcept = templateDirections.find(direction => direction.style.id === selectedStyle?.id);
   const [error, setError] = useState("");
+  // Which way the format pill last travelled: its leading edge moves first, so it stretches like liquid.
+  const [slide, setSlide] = useState<"left" | "right">("right");
+  const formatIndex = formats.findIndex(item => item.id === kind);
+  function pickKind(next: Kind) {
+    const to = formats.findIndex(item => item.id === next);
+    if (to !== formatIndex) setSlide(to > formatIndex ? "right" : "left");
+    setKind(next);
+  }
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -83,7 +91,7 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
   }
   function chooseStyle(selectedKind: Kind, styleId: string, style: Style) {
     if (starting.current || style.id !== styleId) return;
-    setKind(selectedKind);
+    pickKind(selectedKind);
     setSelectedStyles(previous => ({ ...previous, [selectedKind]: style }));
     setError("");
     requestAnimationFrame(() => {
@@ -109,7 +117,7 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
         <div className="mk-hero-content">
           <h1 id="creation-heading">What will you<br className="mk-mobile-break" /> make next?</h1>
           <p className="mk-hero-subtitle">Beautiful websites. Books worth opening. Slides that stay with you.</p>
-          <div className="mk-format-switch" style={{ "--format-index": formats.findIndex(item => item.id === kind) } as CSSProperties} role="group" aria-label="What would you like to create?"><span className="mk-format-indicator" aria-hidden="true" />{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { setKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
+          <div className="mk-format-switch" data-slide={slide} style={{ "--format-index": formatIndex } as CSSProperties} role="group" aria-label="What would you like to create?"><span className="mk-format-indicator" aria-hidden="true" />{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { pickKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
           <form className={`mk-composer${drop.dragging ? " is-file-dragging" : ""}`} {...drop.handlers} onSubmit={event => { event.preventDefault(); void start(); }}>
             {drop.dragging && <p className="attachment-drop-hint">Drop files to attach</p>}
             <AttachmentList files={attachments.files} onRemove={id => void attachments.remove(id)} disabled={attachments.busy || busy} />
@@ -130,7 +138,7 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
           {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
           <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>
-          <p className="mk-availability">{immediateWebsite ? "Your website starts building as soon as your project opens." : "Start free — confirmed accounts get trial credits to build their first website."}</p>
+          <p className="mk-availability">{immediateWebsite ? "Your website starts building as soon as your project opens." : trialCredits ? `Start free — confirmed accounts get ${trialCredits} trial credits to build their first website.` : "Every creation plan includes monthly credits to build with."}</p>
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>

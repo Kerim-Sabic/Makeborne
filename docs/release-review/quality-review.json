@@ -1,0 +1,9 @@
+{
+  "environment": "isolated local",
+  "guestView": true,
+  "pinnedComment": true,
+  "changesRequested": true,
+  "approvalUpdatesProject": true,
+  "revocationBlocksWrites": true,
+  "productionTouched": false
+}

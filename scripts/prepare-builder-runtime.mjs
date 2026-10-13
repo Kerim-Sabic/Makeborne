@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as esbuild from "esbuild-wasm";
+import {prepareFontLicenses} from "./prepare-font-licenses.mjs";
 
 const require = createRequire(import.meta.url);
 const root = process.cwd();
@@ -17,13 +18,15 @@ const out = join(root, "public", "builder-runtime");
 const modules = join(root, "node_modules");
 const wasmDir = join(modules, "esbuild-wasm");
 const lucideDir = join(modules, "lucide-react", "dist", "esm");
-const catalogPath = join(root, "src", "lib", "builder", "font-catalog.json");
+const catalogPath = join(root, "infra", "project-runtime", "font-catalog.json");
 const iconManifestPath = join(root, "src", "lib", "builder", "lucide-icons.json");
 const { version: esbuildVersion } = JSON.parse(await readFile(join(wasmDir, "package.json"), "utf8"));
 const { version: reactVersion } = require("react/package.json");
 const { version: lucideVersion } = require("lucide-react/package.json");
 const catalogText = await readFile(catalogPath, "utf8");
 const catalog = JSON.parse(catalogText);
+// Verify even when the browser runtime cache is current.
+await prepareFontLicenses();
 
 /** Lucide's own export list: canonical icon file -> every exported name. */
 async function lucideExports() {

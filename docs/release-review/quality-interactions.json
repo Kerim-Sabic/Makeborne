@@ -1,0 +1,44 @@
+[
+  {
+    "name": "restaurant",
+    "width": 1440,
+    "validation": "passed",
+    "interactions": "passed",
+    "runtimeErrors": []
+  },
+  {
+    "name": "restaurant",
+    "width": 390,
+    "validation": "passed",
+    "interactions": "passed",
+    "runtimeErrors": []
+  },
+  {
+    "name": "saas",
+    "width": 1440,
+    "validation": "passed",
+    "interactions": "passed",
+    "runtimeErrors": []
+  },
+  {
+    "name": "saas",
+    "width": 390,
+    "validation": "passed",
+    "interactions": "passed",
+    "runtimeErrors": []
+  },
+  {
+    "name": "portfolio",
+    "width": 1440,
+    "validation": "passed",
+    "interactions": "passed",
+    "runtimeErrors": []
+  },
+  {
+    "name": "portfolio",
+    "width": 390,
+    "validation": "passed",
+    "interactions": "passed",
+    "runtimeErrors": []
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "productionTouched": false,
+  "paidCalls": 0,
+  "cloudApiAndSql": true,
+  "publicCloudflareTransport": false,
+  "temporaryGatewayTokenExpiresAt": "2026-10-13T09:42:25.000Z",
+  "passed": [
+    "Real signed Worker handler → protected Vercel staging gateway → staging SQL accepted",
+    "Duplicate form delivery accepted idempotently",
+    "Changed duplicate payload rejected",
+    "Cross-origin submission denied",
+    "Unsigned app-gateway request denied despite valid staging transport authentication"
+  ]
+}

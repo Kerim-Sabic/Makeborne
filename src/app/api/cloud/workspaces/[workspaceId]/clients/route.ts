@@ -4,6 +4,7 @@ import { mapClient, mapClientSummary } from "@/lib/cloud/mappers";
 import { z } from "zod";
 import { outreachStages } from "@/lib/client-outreach";
 import { RequestError } from "@/lib/server/http";
+import { speaksCurrentCrmProtocol } from "@/lib/crm-protocol";
 
 const directoryQuery = z.object({
   search: z.string().max(200).default(""), stage: z.enum(["All stages", ...outreachStages]).default("All stages"),
@@ -26,6 +27,8 @@ export async function GET(request: Request, context: { params: Promise<{ workspa
 export async function POST(request: Request, context: { params: Promise<{ workspaceId: string }> }) {
   try {
     const { workspaceId } = await context.params;
+    // Compatibility cutoff: browser bundles from before the CRM protocol change must reload.
+    if (!speaksCurrentCrmProtocol(request.headers)) throw new RequestError("APP_OUT_OF_DATE", "Makeborne was updated. Reload this page to keep working with clients.", 426);
     const { client } = await cloudContext(workspaceId, true);
     const body = await cloudBody(request, CloudClientCreateSchema);
     const key = requestKey(request);

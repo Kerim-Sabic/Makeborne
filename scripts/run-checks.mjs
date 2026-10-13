@@ -32,7 +32,9 @@ function findChecks(dir) {
 const all = process.argv.includes("--all");
 const filters = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("MAKEBORNE_VERIFY_")));
-const checks = findChecks(join(root, "src")).sort()
+// Explicit script harnesses that require no environment, browser or services.
+const extras = ["scripts/check-trusted-publication-worker.cjs", "infra/project-runtime/vercel-publication-check.mjs"];
+const checks = [...findChecks(join(root, "src")), ...extras].sort()
   .filter((file) => all || !excluded.has(file))
   .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)));
 

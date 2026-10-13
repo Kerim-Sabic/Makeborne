@@ -109,6 +109,7 @@ async function tiles(raw: Raw, viewport: Viewport): Promise<ReviewShot[]> {
  * errors for the given project files. `assets` maps /images/... paths to data URLs. */
 /** Resolves once the page is visible: browsers do not paint hidden tabs. */
 function whenVisible(signal?: AbortSignal) {
+  if (signal?.aborted) return Promise.reject(new Error("Capture cancelled."));
   if (document.visibilityState === "visible") return Promise.resolve();
   return new Promise<void>((resolve, reject) => {
     const done = () => { if (document.visibilityState !== "visible") return; cleanup(); resolve(); };

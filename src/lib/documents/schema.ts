@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { CoverCompositionSchema } from "./composition-schema";
+import { bookCoverScene, slideCoverScene } from "./cover-composition";
 
 /** Structured source for live-built presentations and books. It is the single
  * input to the preview renderer, the PDF printer and the PPTX writer, and is
@@ -90,8 +92,10 @@ export const SlideSchema = z.object({
   quote: z.object({ text: line(280), attribution: z.string().trim().max(90).optional() }).strict().optional(),
   image: ImageName.optional(),
   imageSide: z.enum(["left", "right"]).optional(),
+  composition: CoverCompositionSchema.optional().describe("Optional authored geometry for a cover or closing slide. Omit to keep the existing layout."),
   notes: z.string().trim().min(1, "Every slide needs speaker notes.").max(3000),
 }).strict().superRefine((slide, ctx) => {
+  if (slide.composition && slide.layout !== "cover" && slide.layout !== "closing") ctx.addIssue({ code: "custom", path: ["composition"], message: "Authored composition is supported only on cover and closing slides." });
   const need = (field: keyof typeof slide, why: string) => { if (slide[field] === undefined) ctx.addIssue({ code: "custom", path: [field], message: why }); };
   switch (slide.layout) {
     case "points": need("points", "A points slide needs 2–6 points."); if (slide.points && slide.points.length < 2) ctx.addIssue({ code: "custom", path: ["points"], message: "A points slide needs at least 2 points; use a statement slide for one idea." }); break;
@@ -123,6 +127,7 @@ export const CHAPTER_TEXT_LIMIT = 40_000;
 export const ChapterSchema = z.object({
   id: ItemId,
   label: z.string().trim().max(40).optional().describe("e.g. Chapter One, Part II, Prologue"),
+  opening: z.enum(["page", "inline"]).optional().describe("page (default) gives a separate chapter opener; inline places the heading with the body, useful for short sections."),
   title: line(120),
   epigraph: z.object({ text: line(300), attribution: z.string().trim().max(90).optional() }).strict().optional(),
   image: ImageName.optional().describe("Opener illustration (landscape)"),
@@ -137,7 +142,7 @@ export const BookSchema = z.object({
   subtitle: z.string().trim().max(220).optional(),
   author: z.string().trim().max(120).optional(),
   dedication: z.string().trim().max(400).optional(),
-  cover: z.object({ image: ImageName.optional(), tagline: z.string().trim().max(160).optional() }).strict().default({}),
+  cover: z.object({ image: ImageName.optional(), tagline: z.string().trim().max(160).optional(), composition: CoverCompositionSchema.optional() }).strict().default({}),
   theme: ThemeSchema,
   chapters: z.array(ChapterSchema).max(40),
   assets: z.array(AssetSchema).max(60),
@@ -145,6 +150,14 @@ export const BookSchema = z.object({
 export type Book = z.infer<typeof BookSchema>;
 
 export const DocumentSourceSchema = z.discriminatedUnion("kind", [DeckSchema, BookSchema]).superRefine((doc, ctx) => {
+  // Authored fit/contrast failures must never be silently dropped or accepted on retry.
+  if (doc.kind === "book" && doc.cover.composition && CoverCompositionSchema.safeParse(doc.cover.composition).success) {
+    for (const message of bookCoverScene(doc).issues) ctx.addIssue({ code: "custom", path: ["cover", "composition"], message });
+  } else if (doc.kind === "deck") {
+    doc.slides.forEach((slide, index) => {
+      if (slide.composition && CoverCompositionSchema.safeParse(slide.composition).success) for (const message of slideCoverScene(doc.theme, slide, doc.assets, doc.author).issues) ctx.addIssue({ code: "custom", path: ["slides", index, "composition"], message });
+    });
+  }
   const names = new Set<string>();
   doc.assets.forEach((asset, index) => {
     if (names.has(asset.name)) ctx.addIssue({ code: "custom", path: ["assets", index, "name"], message: "Image names must be unique." });

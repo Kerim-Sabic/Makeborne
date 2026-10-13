@@ -1,5 +1,7 @@
 # Interactive website hosting (JavaScript on an isolated domain)
 
+> **Addresses and enablement now follow [HOSTING_DOMAIN.md](HOSTING_DOMAIN.md).** By default sites keep `https://sites.makeborne.com/<slug>` and publish static. The isolated domain below, and JavaScript with it, turns on only with the three explicit, attested variables described there. Every publish also keeps a portable copy for the existing host.
+
 Published React websites now run their own JavaScript, so menus, tabs, carousels, forms, calculators and animations behave exactly like the editor preview. Nothing here has been deployed: this document is the owner's checklist.
 
 ## Architecture
@@ -60,7 +62,7 @@ Cloudflare account: `edda2b12d52321e4df2012e196b33640`. Supabase project: `rkloj
    npx wrangler deploy --env production                 # Worker "makeborne-site-host", routes *.makeborne.site/* and makeborne.site/*
    ```
    Vars are in `wrangler.jsonc` → `env.production.vars`: `SUPABASE_URL=https://rklojnmmsmhwnkbzuidp.supabase.co`, `SITES_DOMAIN=makeborne.site`, `APP_ORIGIN=https://makeborne.com`, `ALLOW_LOCAL_SUPABASE=false`. The top-level (non-`--env`) config is local-only and has no routes. Check: `curl -sI https://<a-live-slug>.makeborne.site/` returns 200 with the CSP above; `curl -sI https://nope-123.makeborne.site/` returns 404.
-4. **App (Vercel).** Deploy this branch. Optional env `NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE` (default `https://{slug}.makeborne.site/`; must be `https://{slug}.<domain>/`). The default changes every displayed and canonical site address, so deploy only after step 3 serves HTTPS.
+4. **App (Vercel).** Deploying this branch changes nothing about addresses. To switch to the isolated domain, set `NEXT_PUBLIC_MAKEBORNE_SITE_HOSTING=isolated`, `NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE=https://{slug}.<domain>/` and `NEXT_PUBLIC_MAKEBORNE_SITE_DOMAIN_VERIFIED=<domain>`, only after step 3 serves HTTPS (see HOSTING_DOMAIN.md).
 5. **Legacy address.** Replace the old static Pages deployment with the redirector:
    `npx wrangler pages deploy infra/customer-sites/legacy-redirect --project-name makeborne-sites`
    (`sites.makeborne.com` keeps its external CNAME to `makeborne-sites.pages.dev`). `https://sites.makeborne.com/<slug>` then 301s to `https://<slug>.makeborne.site/`.

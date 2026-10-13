@@ -4,6 +4,9 @@ import {createHash} from "node:crypto";
 import {build} from "vite";
 import ts from "typescript";
 import {canonicalRuntimeJson as canonical} from "./identity.mjs";
+import portableFonts from "./font-portability.cjs";
+import fontLicenseFiles from "./font-licenses.cjs";
+import compatibility from "./toolchain-compatibility.cjs";
 
 const digest = value => createHash("sha256").update(value).digest("hex");
 const root = "/tmp/project", output = "/tmp/result";
@@ -37,14 +40,24 @@ try {
     const expected = expectedFiles.get(file.path);
     if (!expected || expected.bytes !== file.bytes || expected.sha256 !== file.sha256
       || bytes.length !== file.bytes || digest(bytes) !== file.sha256 || total > 42_000_000) throw new Error("FILE_CHANGED");
-    if (["package.json", "package-lock.json"].includes(file.path)) {
-      if (canonical(JSON.parse(bytes)) !== canonical(file.path === "package.json" ? pinnedPackage : pinnedLock)) throw new Error("PACKAGE_REJECTED");
-    }
     const destination = `${root}/${file.path}`;
     await mkdir(destination.slice(0, destination.lastIndexOf("/")), {recursive: true});
     await writeFile(destination, bytes, {flag: "wx", mode: 0o600});
   }
   for (const required of ["package.json", "package-lock.json", "index.html", "src/main.tsx"]) if (!paths.has(required)) throw new Error("SOURCE_MISSING");
+  // The original input has been verified above. Materialise trusted local fonts
+  // only now; sourceHash continues to identify the untouched saved source.
+  const toolchain = compatibility.portableToolchainFiles(request.files.filter(file => sourceManifest.files.some(item => item.path === file.path))
+    .map(file => ({path: file.path, content: Buffer.from(file.base64, "base64").toString("utf8")})), pinnedPackage, pinnedLock);
+  const portable = portableFonts.portableFontFiles(toolchain.files);
+  const licenses = fontLicenseFiles(portable.fonts);
+  if (portable.fonts.length && sourceManifest.assets.some(asset => [portableFonts.FONT_CSS, portableFonts.FONT_MARKER].some(path => asset.path.toLowerCase() === path || asset.path.toLowerCase().startsWith(`${path}/`)))) throw new Error("FONT_STYLESHEET_PATH_CONFLICT");
+  for (const file of licenses) if (paths.has(file.path.toLowerCase()) || [...paths].some(path => path.startsWith(`${file.path.toLowerCase()}/`) || file.path.toLowerCase().startsWith(`${path}/`))) throw new Error("FONT_LICENSE_PATH_CONFLICT");
+  for (const file of [...portable.files, ...licenses]) {
+    const destination = `${root}/${file.path}`;
+    await mkdir(destination.slice(0, destination.lastIndexOf("/")), {recursive: true});
+    await writeFile(destination, file.content, {mode: 0o600});
+  }
   await symlink("/opt/makeborne/node_modules", `${root}/node_modules`, "dir");
   const started = Date.now();
   const program = ts.createProgram(request.files.filter(file => /\.[cm]?tsx?$/.test(file.path)).map(file => `${root}/${file.path}`), {
@@ -60,6 +73,11 @@ try {
   await build({root, configFile: false, envDir: false, mode: "production", logLevel: "warn",
     oxc: {jsx: {runtime: "automatic"}}, css: {postcss: {plugins: []}},
     build: {outDir: output, emptyOutDir: true, sourcemap: false, assetsInlineLimit: 0, target: "es2022"}});
+  // This trusted record is itself covered by the final output/build hash.
+  await writeFile(`${output}/makeborne-materialization.json`, JSON.stringify({schemaVersion: 1, materialization: "makeborne-portable-fonts-v1",
+    compatibility: toolchain.compatibility, sourceHash: request.sourceHash, toolchainHash: request.toolchainHash, runtimeImageId,
+    files: [...portable.files, ...licenses].map(file => ({path: file.path, bytes: Buffer.byteLength(file.content), sha256: digest(file.content)})),
+    fonts: portable.styles.map(({font, style}) => ({id: font.id, family: font.family, style}))}));
   const files = []; let outputBytes = 0;
   async function inspect(directory, prefix = "") {
     for (const name of (await readdir(directory)).sort()) {

@@ -8,7 +8,7 @@ const ts = require("typescript");
 function load(file, modules = {}, env = {}) {
   const source = fs.readFileSync(path.resolve(file), "utf8");
   const compiled = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX}}).outputText;
-  const context = {exports: {}, Request, Response, Headers, URL, process: {env}, require: name => {
+  const context = {exports: {}, Request, Response, Headers, URL, URLSearchParams, process: {env}, require: name => {
     if (name === "server-only") return {};
     if (Object.hasOwn(modules, name)) return modules[name];
     throw new Error(`Unexpected dependency in capability check: ${name}`);
@@ -19,14 +19,16 @@ function load(file, modules = {}, env = {}) {
 
 const policy = load("src/lib/capabilities/snapshot.ts");
 const enabledCloud = {enabled: true, configured: true, migrationsVerified: true, reason: null};
-const input = {environment: "production", hostname: "makeborne.com", administrator: true, cloud: enabledCloud, pilotProviderConfigured: true, hostingCredentialConfigured: true, billingConfigured: true, billingEnabledByConfiguration: true, routing: {configured: 0, total: 8}};
+const input = {environment: "production", hostname: "makeborne.com", administrator: true, cloud: enabledCloud, pilotProviderConfigured: true, liveBuilderEnabledByConfiguration: true, hostingCredentialConfigured: true, billingConfigured: true, billingEnabledByConfiguration: true, routing: {configured: 0, total: 8}};
 let checks = 0;
 function check(name, run) {run(); checks++; console.log(`PASS ${name}`);}
 
 check("configured administrator pilot remains closed pending durable worker", () => {
   const result = policy.capabilitySnapshot(input);
   assert.equal(result.operations.pilot.available, false);
-  assert.equal(result.public.aiGeneration.available, false);
+  assert.equal(result.public.aiGeneration.available, null);
+  assert.equal(result.operations.liveBuilder.enabledByConfiguration, true);
+  assert.equal(result.operations.liveBuilder.health, "unverified");
   assert.equal(result.operations.pilot.health, "unverified");
   assert.equal(result.operations.pilot.budget, "closed_pending_durable_worker");
   assert.equal(result.operations.routing.configured, 0);
@@ -46,20 +48,32 @@ for (const hostname of ["localhost", "127.0.0.1", "[::1]", "makeborne.com", "loc
     });
   }
 }
-check("flags do not certify delivery or activate unfinished credits", () => {
+check("flags do not certify delivery or credit fulfilment health", () => {
   const result = policy.capabilitySnapshot(input);
-  assert.equal(result.public.payments.available, false);
+  assert.equal(result.public.payments.available, null);
   assert.equal(result.public.payments.support.grantsCreationAccess, false);
   assert.equal(result.operations.billing.enabledByConfiguration, true);
-  assert.equal(result.operations.billing.creditFulfilmentReady, false);
+  assert.equal(result.operations.billing.creditFulfilmentReady, null);
   assert.equal(result.operations.hosting.configured, true);
   assert.equal(result.operations.hosting.health, "unverified");
-  assert.equal(result.public.publicPublishing.available, false);
+  assert.equal(result.public.publicPublishing.available, null);
   assert.equal(result.public.cloudWorkspace.migrationEvidence, "operator_acknowledgement");
+});
+for (const cloudEnabled of [false, true]) for (const credentialConfigured of [false, true]) check(`hosting configuration leaves delivery unverified: ${cloudEnabled}/${credentialConfigured}`, () => {
+  const result = policy.capabilitySnapshot({...input, cloud: {...enabledCloud, enabled: cloudEnabled}, hostingCredentialConfigured: credentialConfigured});
+  const configured = cloudEnabled && credentialConfigured;
+  assert.equal(result.public.publicPublishing.configured, configured);
+  assert.equal(result.public.publicPublishing.available, configured ? null : false);
+  assert.equal(result.operations.hosting.health, "unverified");
+  assert.equal(result.operations.hosting.configurationScope, "cloud_and_server_credential");
+  assert.equal(result.public.publicPublishing.implementation, "restricted_static_and_opt_in_interactive_customer_hosting");
+  assert.equal(result.operations.hosting.implementation, result.public.publicPublishing.implementation);
+  assert(result.operations.hosting.reason.includes("domain configuration are not verified here"));
+  assert(result.public.publicPublishing.reason.includes("isolated hosting configuration and site consent"));
 });
 check("public snapshot cannot contain account-specific pilot state", () => {
   const publicA = JSON.stringify(policy.capabilitySnapshot({...input, administrator: true}).public);
-  const publicB = JSON.stringify(policy.capabilitySnapshot({...input, administrator: false, pilotProviderConfigured: false, billingConfigured: false, hostingCredentialConfigured: false}).public);
+  const publicB = JSON.stringify(policy.capabilitySnapshot({...input, administrator: false}).public);
   assert.equal(publicA, publicB);
   assert(!publicA.includes("Paid API calls are not authorised"));
 });
@@ -81,6 +95,34 @@ check("server snapshot projects safe values without credentials", () => {
 });
 check("whitespace provider configuration cannot enable testing", () => {
   assert.equal(serverSnapshot({ANTHROPIC_API_KEY: "  "}).getCapabilities({administrator: true}).operations.pilot.available, false);
+  assert.equal(serverSnapshot({ANTHROPIC_API_KEY: "  "}).getCapabilities().operations.liveBuilder.enabledByConfiguration, false);
+});
+check("live builder flag is separate from retired operator jobs", () => {
+  const enabled = serverSnapshot().getCapabilities();
+  const disabled = serverSnapshot({MAKEBORNE_LIVE_BUILDER_ENABLED: "false"}).getCapabilities();
+  assert.equal(enabled.operations.liveBuilder.enabledByConfiguration, true);
+  assert.equal(disabled.operations.liveBuilder.configured, true);
+  assert.equal(disabled.operations.liveBuilder.enabledByConfiguration, false);
+  assert.equal(disabled.public.aiGeneration.available, false);
+  assert.equal(enabled.operations.pilot.available, false);
+});
+for (const key of ["pilotProviderConfigured", "hostingCredentialConfigured"]) check(`live builder requires ${key}`, () => {
+  const result = policy.capabilitySnapshot({...input, [key]: false});
+  assert.equal(result.operations.liveBuilder.configured, false);
+  assert.equal(result.operations.liveBuilder.available, false);
+});
+check("cloud acknowledgement never certifies builder health", () => {
+  const result = policy.capabilitySnapshot({...input, cloud: {...enabledCloud, enabled: false, migrationsVerified: false}});
+  assert.equal(result.operations.liveBuilder.configured, true);
+  assert.equal(result.operations.liveBuilder.enabledByConfiguration, false);
+  assert.equal(result.operations.liveBuilder.health, "unverified");
+});
+for (const configured of [false, true]) check(`billing activation is reported separately from setup: ${configured}`, () => {
+  const result = policy.capabilitySnapshot({...input, billingConfigured: configured, billingEnabledByConfiguration: false});
+  assert.equal(result.operations.billing.configured, configured);
+  assert.equal(result.public.payments.available, false);
+  assert.equal(result.operations.billing.health, "unverified");
+  assert(!result.operations.billing.reason.includes("founder"));
 });
 check("public route ignores administrator query flags and excludes operations", () => {
   const server = serverSnapshot();
@@ -95,7 +137,8 @@ async function checkRoutes() {
   const publicRoute = load("src/app/api/capabilities/route.ts", {"@/lib/capabilities/server": server});
   const publicBody = await publicRoute.GET(new Request("https://makeborne.com/api/capabilities?administrator=true")).json();
   assert(!Object.hasOwn(publicBody, "operations"));
-  assert.equal(publicBody.aiGeneration.available, false);
+  assert.equal(publicBody.aiGeneration.available, null);
+  assert.equal(publicBody.schemaVersion, 2);
   assert.equal(publicBody.manualExports.available, false);
   checks++;
 
@@ -128,13 +171,41 @@ async function checkRoutes() {
   }
 }
 
+const ADMIN_OVERVIEW = {
+  generatedAt: "2026-10-13T00:00:00.000Z",
+  users: {total: 42, confirmed: 40, new7d: 3, new30d: 9, active7d: 12, admins: 1},
+  subscriptions: [{status: "active", tier: "studio", interval: "monthly", current: true, count: 1}],
+  checkouts: {open24h: 0, total: 2},
+  credits: {balance: 850, reserved: 0, wallets: 2, ledger30d: {plan_grant: {credits: 850, entries: 1}}},
+  ai: {today: [], runs7d: {}, limits: {day: "2026-10-13", scopes: [], openCalls: 0, staleOpenCalls: 0, overrunsToday: 0, uncertainTodayMicrousd: 0}},
+  billingJobs: {lastSuccessAt: null, failuresLast24h: 0, openIssues: 0, overdue: true},
+  openPlanIssues: 0,
+  hosting: {sites: 1, live: 1, interactive: 0, enquiries7d: 0},
+  content: {workspaces: 2, artifacts: {website: 1}},
+};
+
 async function checkAdmin() {
   const React = require("react");
   const {renderToStaticMarkup} = require("react-dom/server");
   for (const state of ["signed_out", "ordinary", "administrator"]) {
     for (const providerConfigured of [false, true]) {
       let snapshotReads = 0;
+      const shared = {
+        "react/jsx-runtime": require("react/jsx-runtime"),
+        "next/link": {default: ({children, ...props}) => React.createElement("a", props, children)},
+        "lucide-react": require("lucide-react"),
+        "@/lib/billing/plans": load("src/lib/billing/plans.ts"),
+      };
+      const format = load("src/app/admin/format.ts");
+      const revenue = load("src/lib/admin/revenue.ts", {"@/lib/billing/plans": shared["@/lib/billing/plans"]});
+      const adminModule = file => load(`src/app/admin/${file}.tsx`, {...shared, "./format": format, "@/lib/admin/console": {CUSTOMER_FILTERS: ["all", "subscribed", "admin", "unconfirmed"], CUSTOMER_PAGE_SIZE: 25}});
+      const customers = adminModule("customers");
+      let overviewReads = 0;
       const page = load("src/app/admin/page.tsx", {
+        "./format": format, "./customers": customers, "./money": adminModule("money"), "./overview": adminModule("overview"), "./system": adminModule("system"),
+        "@/lib/admin/console": {CUSTOMER_FILTERS: ["all", "subscribed", "admin", "unconfirmed"],
+          adminOverview: async actor => { overviewReads++; assert.equal(actor, "verified-user"); return {...ADMIN_OVERVIEW, revenue: revenue.subscriptionRevenue(ADMIN_OVERVIEW.subscriptions)}; },
+          adminCustomers: async () => { throw new Error("customers not requested"); }, adminCustomer: async () => null},
         "react/jsx-runtime": require("react/jsx-runtime"),
         "next/link": {default: ({children, ...props}) => React.createElement("a", props, children)},
         "next/navigation": {redirect: value => {throw new Error(`redirect:${value}`);}, notFound: () => {throw new Error("not_found");}},
@@ -150,18 +221,26 @@ async function checkAdmin() {
         }},
         "./admin.css": {},
       });
-      if (state === "signed_out") await assert.rejects(page.default, /redirect:\/login/);
-      else if (state === "ordinary") await assert.rejects(page.default, /not_found/);
+      const at = tab => ({searchParams: Promise.resolve({tab})});
+      if (state === "signed_out") await assert.rejects(page.default(at("overview")), /redirect:\/login/);
+      else if (state === "ordinary") await assert.rejects(page.default(at("overview")), /not_found/);
       else {
-        const html = renderToStaticMarkup(await page.default());
-        assert(html.includes("Pilot unavailable"));
+        // Overview: real figures from the administrator-checked RPC, revenue priced from the plan catalog.
+        const overview = renderToStaticMarkup(await page.default(at("overview")));
+        assert(overview.includes("Customers") && overview.includes(">42<") && overview.includes("$79"), "overview shows customers and revenue");
+        assert.equal(overviewReads, 1);
+        const html = renderToStaticMarkup(await page.default(at("system")));
+        assert(html.includes("Live builder") && html.includes("Legacy operator jobs") && html.includes("Retired"));
+        assert(html.includes(providerConfigured ? "Health unverified" : "Setup incomplete"));
         assert(html.includes("Provider spending limits still apply."));
         assert(html.includes("Verify an authorised publish"));
-        assert(html.includes("Credit delivery incomplete"));
+        assert(html.includes("Delivery unverified"));
+        assert(!html.includes("Credit delivery incomplete") && !html.includes("founder activation"));
         assert(!html.includes("Generation remains disabled, including for administrators"));
         assert(!html.includes("Automatic deployment and domain management are not connected"));
       }
       assert.equal(snapshotReads, state === "administrator" ? 1 : 0);
+      assert.equal(overviewReads, state === "administrator" ? 1 : 0);
       checks++;
       console.log(`PASS admin role/render boundary for ${state}, provider configured ${providerConfigured}`);
     }

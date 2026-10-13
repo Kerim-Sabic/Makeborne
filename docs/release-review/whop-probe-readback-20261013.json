@@ -1,0 +1,33 @@
+{
+  "observedAt": "2026-10-13T07:14:58.172Z",
+  "sandboxOnly": true,
+  "readOnly": true,
+  "apiVersion": "2025-01-01",
+  "productionTouched": false,
+  "paidAiCalls": 0,
+  "paymentScanComplete": true,
+  "memberships": [
+    {
+      "id": "mem_FkPEG6rdisMols",
+      "status": "trialing",
+      "planId": "plan_ph23AtuxtNWzD",
+      "periodStart": "2026-10-13T00:08:59.333Z",
+      "periodEnd": "2026-10-14T00:08:59.341Z",
+      "cancelAtPeriodEnd": false
+    },
+    {
+      "id": "mem_Vl3ZSgCqlLCAlb",
+      "status": "trialing",
+      "planId": "plan_JWikpAgY1kqqI",
+      "periodStart": "2026-10-13T00:10:27.340Z",
+      "periodEnd": "2026-10-14T00:10:27.345Z",
+      "cancelAtPeriodEnd": false
+    }
+  ],
+  "payments": [],
+  "limitations": [
+    "API observation only; not signed app webhook or credit delivery evidence.",
+    "Trial completion is distinct from a subsequent renewal cycle.",
+    "No subscription change, checkout, refund, or payment mutation performed."
+  ]
+}

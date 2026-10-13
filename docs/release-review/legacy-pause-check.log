@@ -1,0 +1,4 @@
+BEGIN
+DO
+ROLLBACK
+NOTICE:  PASS old pilot pause: admin denied, no new dispatch, existing reserved cost unchanged

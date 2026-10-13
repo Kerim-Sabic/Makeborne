@@ -54,9 +54,9 @@ function addChart(pptx: PptxGenJS, slide: PptxGenJS.Slide, prim: ChartPrim, font
     showValue: true, dataLabelPosition: "outEnd", valAxisHidden: true, valGridLine: { style: "none" }, catGridLine: { style: "none" }, catAxisOrientation: (chart.type === "bar" ? "maxMin" : "minMax") as "minMax" });
 }
 
-async function cropped(image: Buffer, w: number, h: number) {
+async function cropped(image: Buffer, w: number, h: number, position: "center" | "attention" = "attention") {
   const scale = Math.min(2, 2400 / Math.max(w, h));
-  const bytes = await sharp(image, { limitInputPixels: 40_000_000 }).rotate().resize(Math.round(w * scale), Math.round(h * scale), { fit: "cover", position: "attention" }).jpeg({ quality: 88 }).toBuffer();
+  const bytes = await sharp(image, { limitInputPixels: 40_000_000 }).rotate().resize(Math.round(w * scale), Math.round(h * scale), { fit: "cover", position }).jpeg({ quality: 88 }).toBuffer();
   return `data:image/jpeg;base64,${bytes.toString("base64")}`;
 }
 
@@ -94,7 +94,7 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
           break;
         case "image": {
           const bytes = images[prim.name];
-          if (bytes) slide.addImage({ data: await cropped(bytes, prim.w, prim.h), x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), altText: prim.alt });
+          if (bytes) slide.addImage({ data: await cropped(bytes, prim.w, prim.h, prim.crop), x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), altText: prim.alt });
           else slide.addShape(pptx.ShapeType.rect, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), fill: { color: "D9D6CF" }, line: { type: "none" } });
           break;
         }

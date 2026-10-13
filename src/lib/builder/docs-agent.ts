@@ -1,14 +1,18 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import type { BetaContentBlockParam, BetaMessageParam, BetaToolResultBlockParam, BetaToolUnion, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, BetaRawMessageStreamEvent, BetaToolResultBlockParam, BetaToolUnion, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { EffortLevel } from "../routing/effort";
 import { DocToolError, DocToolInputs, DocumentEditor, docToolDefinitions } from "../documents/editor";
 import type { DocumentSource } from "../documents/schema";
-import { builderModel } from "./agent";
-import { generateProjectImage, imageGenerationAvailable } from "./images";
-import { BUILDER_EFFORT, IMAGE_COST_USD, creditsForUsd, usageCost, usdPerCredit } from "./pricing";
+import { MIN_STEP_TOKENS, builderModel, isProviderOrSpendError } from "./agent";
+import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage } from "./images";
+import { BUILDER_EFFORT, aiCostUsdPerCredit } from "./pricing";
+import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
+import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
+import { imageCallBoundMicrousd } from "../ai/prices";
+import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BOOK_SYSTEM, DECK_SYSTEM } from "./docs-prompt";
 
 /** Events streamed to the chat. Shares the website builder's text/status/
@@ -25,22 +29,27 @@ export type DocBuilderEvent =
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
   | { type: "done"; version: number; summary: string; charged: number }
-  | { type: "error"; code: string; message: string };
+  | { type: "error"; code: string; message: string; retryable?: boolean };
 
 export type DocBuilderRun = {
   client: SupabaseClient;
   scope: { workspaceId: string; projectId: string };
   editor: DocumentEditor;
   effort: EffortLevel;
-  creditBudget: number;
+  /** Provider and customer limits for this run; every call is bounded against it. */
+  spend: RunSpend;
   request: string;
   context: string;
   attachments: BetaContentBlockParam[];
   emit: (event: DocBuilderEvent) => void;
   signal: AbortSignal;
   deadline: number;
+  /** Injected providers (tests). Production uses the SDKs with retries disabled. */
+  anthropic?: AnthropicLike;
+  imageClient?: ImageClientLike;
+  storeImage?: (request: { name: string; prompt: string; model: string }, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
 };
-export type DocBuilderResult = { summary: string; credits: number; usd: number; finished: boolean };
+export type DocBuilderResult = { summary: string; credits: number; usd: number; finished: boolean; stopped: string | null };
 
 const LIVE_TOOLS = new Set(["set_theme", "set_deck_details", "set_book_details", "write_slide", "delete_slide", "move_slide", "write_chapter", "edit_chapter", "delete_chapter", "move_chapter"]);
 
@@ -72,36 +81,35 @@ export function describeTool(name: string, input: Record<string, unknown> | null
 export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilderResult> {
   const policy = BUILDER_EFFORT[run.effort];
   const model = builderModel();
-  const anthropic = new Anthropic({ maxRetries: 2, timeout: 600_000 });
-  const imagesEnabled = imageGenerationAvailable() && policy.maxImages > 0;
-  const budgetUsd = run.creditBudget * usdPerCredit();
+  const models = builderModels(model);
+  const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 600_000 }) as unknown as AnthropicLike);
+  const rate = aiCostUsdPerCredit();
+  const spend = run.spend;
+  // The configured image model, or null when images are off (see imageConfiguration).
+  const imageModelId = policy.maxImages > 0 ? imageConfiguration().model : null;
+  const imageBound = imageModelId ? imageCallBoundMicrousd(imageModelId, "medium", IMAGE_SIZES.portrait, "x".repeat(4000)) : Infinity;
+  const imageLimit = imageModelId ? Math.min(policy.maxImages, Math.max(0, Math.floor(spend.allowanceMicrousd / imageBound / 3))) : 0;
+  const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
+  const storeImage = run.storeImage ?? ((request: { name: string; prompt: string; model: string }, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes));
   const kind = run.editor.kind;
-  const tools = docToolDefinitions(kind, imagesEnabled) as unknown as BetaToolUnion[];
-  let usd = 0, imagesUsed = 0, summary = "", finished = false, malformedTurns = 0;
-  const imageLimit = Math.min(policy.maxImages, Math.max(0, Math.floor(budgetUsd / IMAGE_COST_USD / 3)));
+  const tools = docToolDefinitions(kind, imageLimit > 0) as unknown as BetaToolUnion[];
+  const system = [{ type: "text" as const, text: kind === "deck" ? DECK_SYSTEM : BOOK_SYSTEM }];
+  const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
+  const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
+  let imagesUsed = 0, summary = "", finished = false, malformedTurns = 0;
 
   const messages: BetaMessageParam[] = [{ role: "user", content: [
     ...run.attachments,
-    { type: "text", text: `${run.context}\n\nImage generation: ${imagesEnabled ? `available (up to ${imageLimit} images this run)` : "unavailable — design without images"}.\n\n<request>\n${run.request}\n</request>` },
+    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run)` : "unavailable — design without images"}.\n\n<request>\n${run.request}\n</request>` },
   ] }];
 
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
-    if (run.signal.aborted || Date.now() > run.deadline - 45_000) break;
-    const stream = anthropic.beta.messages.stream({
-      model, max_tokens: policy.maxTokens,
-      betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
-      fallbacks: "default",
-      thinking: { type: "adaptive", display: "updates" },
-      output_config: { effort: policy.intensity },
-      cache_control: { type: "ephemeral" },
-      system: [{ type: "text", text: kind === "deck" ? DECK_SYSTEM : BOOK_SYSTEM }],
-      tools,
-      messages,
-    }, { signal: run.signal });
+    const deadline = Math.min(run.deadline, spend.deadline);
+    if (run.signal.aborted || Date.now() > deadline - 45_000) break;
 
     const partial = new Map<number, { id: string; name: string; json: string; announced: boolean }>();
     const applied = new Map<string, { ok: boolean; text: string }>();
-    stream.on("streamEvent", event => {
+    const onEvent = (event: BetaRawMessageStreamEvent) => {
       if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
         partial.set(event.index, { id: event.content_block.id, name: event.content_block.name, json: "", announced: false });
         return;
@@ -141,26 +149,32 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
           run.emit({ type: "item_start", key: block.id, label });
         }
       }
-    });
+    };
 
     let message;
-    try { message = await stream.finalMessage(); }
-    catch (error) {
+    try {
+      ({ message } = await budgetedStream({ client: anthropic, spend, meter, models, maxTokens: policy.maxTokens, minTokens: MIN_STEP_TOKENS, signal: run.signal, onEvent,
+        params: { betas: ["thinking-display-updates-2026-08-18"], thinking: { type: "adaptive", display: "updates" }, output_config: { effort: policy.intensity },
+          cache_control: { type: "ephemeral" }, system, tools, messages } }));
+    } catch (error) {
+      usage();
+      if (error instanceof SpendError && error.graceful) break;
       console.error("document builder step failed", error instanceof Error ? `${error.name}: ${error.message.slice(0, 300)}` : error);
-      if (error instanceof Anthropic.APIError || run.signal.aborted || ++malformedTurns > 2) throw error;
+      if (isProviderOrSpendError(error) || run.signal.aborted || ++malformedTurns > 2) throw error;
       run.emit({ type: "status", message: "Retrying an incomplete step…" });
       // Tool calls that completed before the step broke are already applied; don't redo them.
       const done = [...applied.values()].filter(result => result.ok).map(result => result.text);
-      if (done.length) messages.push({ role: "user", content: `Your last step was cut off, but these changes were already applied:\n- ${done.join("\n- ")}\nDo not repeat them; continue with what remains, then call finish.` });
+      messages.push({ role: "user", content: `The previous step did not return valid complete tool arguments. Use exactly one tool call in the next response, with one valid JSON object, properly escaped text, and no trailing text inside its arguments. ${kind === "book" ? "Write one chapter at a time; keep this next chapter under 600 words." : "Write one slide at a time."}${done.length ? ` These changes were already applied:\n- ${done.join("\n- ")}\nDo not repeat them.` : " No completed changes from that step were applied."} Continue with what remains, then call finish.` });
       continue;
     }
     malformedTurns = 0;
-    usd += usageCost(message.model, message.usage);
-    run.emit({ type: "usage", credits: creditsForUsd(usd) });
-    messages.push({ role: "assistant", content: message.content as BetaContentBlockParam[] });
+    usage();
+    const content = message.content as BetaContentBlock[];
+    messages.push({ role: "assistant", content: content as BetaContentBlockParam[] });
+    meter.afterReply(message.usage, messages);
 
     if (message.stop_reason === "refusal") throw Object.assign(new Error("The request was declined by the model's safety policy."), { code: "REFUSED" });
-    const uses = message.content.filter((block): block is BetaToolUseBlock => block.type === "tool_use");
+    const uses = content.filter((block): block is BetaToolUseBlock => block.type === "tool_use");
     if (!uses.length) {
       if (message.stop_reason === "end_turn") { messages.push({ role: "user", content: "Continue. When the document is complete and checked, call finish." }); continue; }
       break;
@@ -180,11 +194,20 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
         if (use.name === "finish") { finishUse = use; continue; }
         if (use.name === "generate_image") {
           const input = DocToolInputs.generate_image.parse(use.input);
-          if (!imagesEnabled) { fail("Image generation is unavailable. Design without images."); continue; }
-          if (imagesUsed >= imageLimit || usd + IMAGE_COST_USD > budgetUsd * 0.9) { fail("The image budget for this run is used up. Reuse existing images or remove the image field."); continue; }
-          imagesUsed++; usd += IMAGE_COST_USD;
+          if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Design without images."); continue; }
+          if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("The image budget for this run is used up. Reuse existing images or remove the image field."); continue; }
+          const prompt = run.editor.imagePrompt(input.prompt);
+          let job: { done: Promise<Buffer> };
+          try {
+            // The image's bound is reserved before the provider is contacted.
+            job = await startBudgetedImage({ client: imageClient, spend, model: imageModelId, prompt, size: IMAGE_SIZES[input.aspect], quality: "medium", signal: run.signal });
+          } catch (error) {
+            fail(error instanceof SpendError && !error.graceful ? `${error.message} Continue without this image.` : "The image budget for this run is used up. Reuse existing images or remove the image field.");
+            continue;
+          }
+          imagesUsed++;
           run.emit({ type: "image_start", name: input.name, prompt: input.prompt });
-          imageJobs.push(generateProjectImage(run.client, run.scope, { name: input.name, prompt: run.editor.imagePrompt(input.prompt), aspect: input.aspect }, run.signal).then(asset => {
+          imageJobs.push(job.done.then(bytes => storeImage({ name: input.name, prompt, model: imageModelId }, bytes)).then(asset => {
             run.editor.addAsset({ name: input.name, id: asset.id, aspect: input.aspect, alt: input.alt, prompt: input.prompt });
             run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id });
             run.emit({ type: "document", document: run.editor.doc });
@@ -205,24 +228,24 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
       try {
         const input = DocToolInputs.finish.parse(finishUse.input);
         const problems = run.editor.problems();
+        if (results.some(result => result.is_error)) problems.unshift("A tool failed in this step. Correct that tool input before declaring the document complete.");
         if (problems.length) {
           results.push({ type: "tool_result", tool_use_id: finishUse.id, is_error: true, content: `Not finished yet. Fix these, then call finish again:\n- ${problems.join("\n- ")}` });
           run.emit({ type: "tool_error", tool: "finish", message: problems[0] });
         } else { summary = input.summary; finished = true; results.push({ type: "tool_result", tool_use_id: finishUse.id, content: "Saved." }); }
       } catch (error) { results.push({ type: "tool_result", tool_use_id: finishUse.id, is_error: true, content: toolMessage("finish", error) }); }
     }
-    run.emit({ type: "usage", credits: creditsForUsd(usd) });
+    usage();
     if (finished) break;
     const order = new Map(uses.map((use, index) => [use.id, index]));
     results.sort((a, b) => order.get(a.tool_use_id)! - order.get(b.tool_use_id)!);
     messages.push({ role: "user", content: results });
-    const remaining = budgetUsd - usd;
-    if (remaining <= 0) break;
-    if (remaining < budgetUsd * 0.25 || turn === policy.maxTurns - 2 || Date.now() > run.deadline - 120_000) {
-      messages.push({ role: "system", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
+    if (spend.stopped || spend.remainingMicrousd <= 0) break;
+    if (spend.remainingMicrousd < spend.allowanceMicrousd * 0.25 || turn === policy.maxTurns - 2 || Date.now() > deadline - 120_000) {
+      messages.push({ role: "user", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }
   }
-  return { summary, credits: creditsForUsd(usd), usd, finished };
+  return { summary, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, stopped: spend.stopped };
 }
 
 function toolMessage(name: string, error: unknown) {

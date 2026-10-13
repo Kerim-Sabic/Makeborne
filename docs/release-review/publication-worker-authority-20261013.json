@@ -1,0 +1,37 @@
+{
+  "container": "makeborne_publication_20261013034802",
+  "startedAt": "2026-10-13T05:45:10.027Z",
+  "passed": true,
+  "providerCalls": 0,
+  "cloudWrites": 0,
+  "productionTouched": false,
+  "stagingTouched": false,
+  "checks": [
+    "catalog: explicit preparation/journal RPC grants; role attributes and no table/unrelated function access; original service grants retained",
+    "real dedicated LOGIN requires SET ROLE; anon/authenticated/service LOGIN memberships cannot SET ROLE worker or spoof JWT; raw/request/promote/legacy claim denied",
+    "concurrent claims grant one lease; active lease excluded; expired lease rediscovered/reclaimed with increased fence; stale/cross-worker loads and unrelated assets denied",
+    "restricted completion retains immutable ready output; lost-response completion replay exact; late failure cannot overwrite ready output",
+    "three claim/fail cycles exhaust retries and permanently leave candidate discovery",
+    "third abandoned lease is terminalized by discovery without another claim or failure callback",
+    "105 expired rows cleaned in bounded100+5 batches without starving usable work; ready output untouched",
+    "candidate response capped at25 ids without source/actor data and deterministic on an unchanged queue",
+    "unexpected cleanup SQL fault propagates and rolls back; retry then terminalizes expired work",
+    "revoked session before claim terminalizes unusable work rather than repeatedly returning a starving candidate"
+  ],
+  "inputHashes": [
+    {
+      "file": "supabase/migrations/20261013190000_publication_worker_authority.sql",
+      "sha256": "254f1c9d2c2e20e6cd95e7d1b39a9e0aefc820563410559dd2c1db1e20a43e89"
+    },
+    {
+      "file": "supabase/check-publication-worker-authority.sql",
+      "sha256": "9d9e2c3d3f31a5e119954fd7a3dab1f2ea2ee6e55006bd46595fea614e868437"
+    },
+    {
+      "file": "supabase/check-publication-worker-authority.mjs",
+      "sha256": "893b173ec76aca68c5168abdada477a866fa3c3c7fe7b41fbee4557872945a1d"
+    }
+  ],
+  "changedInputs": [],
+  "finishedAt": "2026-10-13T05:45:29.438Z"
+}

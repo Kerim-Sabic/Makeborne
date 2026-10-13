@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { cloudContext, cloudError, cloudJson, databaseError, validId } from "@/lib/cloud/server";
-import { MAX_PREVIEW_SOURCE_BYTES, renderAssetPreview } from "@/lib/cloud/image-preview";
+import { renderAssetPreview } from "@/lib/cloud/image-preview";
 import { RequestError, sameOrigin } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 export async function POST(request: Request, context: { params: Promise<{ workspaceId: string; artifactId: string }> }) {
   try {
-    if (process.env.NODE_ENV === "production") throw new RequestError("UPLOAD_UNAVAILABLE", "Artwork uploads are available in the development workspace while storage quotas are being connected.", 503);
+    if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_MAKEBORNE_ARTWORK_UPLOADS_ENABLED !== "true") throw new RequestError("UPLOAD_UNAVAILABLE", "Artwork uploads are available in the development workspace while storage quotas are being connected.", 503);
     sameOrigin(request);
     const { workspaceId, artifactId } = await context.params;
     validId(artifactId);
@@ -15,7 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const { data: artifact, error } = await client.from("artifacts").select("project_id").eq("workspace_id", workspaceId).eq("id", artifactId).maybeSingle();
     databaseError(error);
     if (!artifact) throw new RequestError("NOT_FOUND", "This project is unavailable.", 404);
-    if (Number(request.headers.get("content-length")) > MAX_PREVIEW_SOURCE_BYTES) throw new RequestError("TOO_LARGE", "Choose an image under 8 MB.", 413);
+    if (Number(request.headers.get("content-length")) > 4 * 1024 * 1024) throw new RequestError("TOO_LARGE", "Choose an image under 4 MB.", 413);
     const reader = request.body?.getReader();
     if (!reader) throw new RequestError("EMPTY_IMAGE", "Choose an image to upload.");
     const chunks: Uint8Array[] = []; let size = 0;
@@ -23,14 +23,14 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
       while (true) {
         const { value, done } = await reader.read(); if (done) break;
         size += value.length;
-        if (size > MAX_PREVIEW_SOURCE_BYTES) { await reader.cancel(); throw new RequestError("TOO_LARGE", "Choose an image under 8 MB.", 413); }
+        if (size > 4 * 1024 * 1024) { await reader.cancel(); throw new RequestError("TOO_LARGE", "Choose an image under 4 MB.", 413); }
         chunks.push(value);
       }
     } finally { reader.releaseLock(); }
     const bytes = Buffer.concat(chunks);
     let format: string;
     try { await renderAssetPreview(bytes); format = (await sharp(bytes).metadata()).format!; }
-    catch { throw new RequestError("INVALID_IMAGE", "Choose a still PNG, JPEG, or WebP under 8 MB and 20 megapixels.", 415); }
+    catch { throw new RequestError("INVALID_IMAGE", "Choose a still PNG, JPEG, or WebP under 4 MB and 20 megapixels.", 415); }
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const digest = createHash("sha256").update(`${workspaceId}:${artifact.project_id}:${sha256}`).digest("hex");
     const id = `${digest.slice(0,8)}-${digest.slice(8,12)}-5${digest.slice(13,16)}-a${digest.slice(17,20)}-${digest.slice(20,32)}`;

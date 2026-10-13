@@ -1,0 +1,14 @@
+BEGIN
+UPDATE 7
+UPDATE 7
+CREATE FUNCTION
+NOTICE:  PASS disabled caps block even unlimited administrator; worker cannot mutate policy or call legacy dispatch/outcome
+NOTICE:  PASS missing draft, expired price, global stop and independently disabled provider deny before allocation
+NOTICE:  PASS durable dispatch draws on the shared daily provider limits: disabled or exhausted limits refuse it atomically
+NOTICE:  PASS global and independent provider concurrency are atomic; dispatch replay does not allocate twice
+NOTICE:  PASS shared global cap and per-provider cap deny independently; invalid fence rolls back allocations
+NOTICE:  PASS unknown outcomes retain both caps; operator reconciliation must match route and settles actual cost once
+NOTICE:  PASS outcome cannot change approved provider; debit failure rolls back all cap counters; zero-cost settlement and replay are exact
+NOTICE:  PASS incurred overrun stops both authorities and retains full cost; immutable cap holds prevent audit rewrite
+DO
+ROLLBACK

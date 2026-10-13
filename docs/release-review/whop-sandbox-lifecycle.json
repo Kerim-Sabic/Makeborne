@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-12",
+  "sandboxOnly": true,
+  "realMoneySpent": 0,
+  "paymentStatus": "paid",
+  "apiVersion": "2025-01-01",
+  "membership": "mem_qghwLUAqqHkFCM",
+  "results": [
+    {
+      "status": "active",
+      "cancelAtPeriodEnd": false,
+      "parsed": true,
+      "active": true,
+      "start": "2026-10-12T16:48:24.917Z",
+      "end": "2026-11-11T16:48:24.917Z"
+    },
+    {
+      "status": "active",
+      "cancelAtPeriodEnd": true,
+      "parsed": true,
+      "active": true,
+      "start": "2026-10-12T16:48:24.917Z",
+      "end": "2026-11-11T16:48:24.917Z"
+    },
+    {
+      "status": "canceled",
+      "cancelAtPeriodEnd": true,
+      "parsed": true,
+      "active": false,
+      "start": "2026-10-12T16:48:24.917Z",
+      "end": "2026-11-11T16:48:24.917Z"
+    }
+  ],
+  "notVerified": [
+    "App checkout binding and credit delivery",
+    "Signed provider webhook delivery",
+    "Annual renewal and replacement",
+    "Refund and dispute"
+  ],
+  "productionTouched": false
+}

@@ -10,6 +10,15 @@ export const CREDIT_TOPUP_PACKS = [
 export type CreditTopupPack = typeof CREDIT_TOPUP_PACKS[number];
 export type CreditTopupPackId = CreditTopupPack["id"];
 
+/** Append-only price history. Never replace a past version after a purchase. */
+export const CREDIT_TOPUP_CATALOGS: Readonly<Record<string, readonly CreditTopupPack[]>> = Object.freeze({
+  [CREDIT_TOPUP_CATALOG_VERSION]: CREDIT_TOPUP_PACKS,
+});
+export function creditTopupPackForVersion(id: string, version: string): CreditTopupPack | undefined {
+  if (!Object.prototype.hasOwnProperty.call(CREDIT_TOPUP_CATALOGS, version)) return undefined;
+  return CREDIT_TOPUP_CATALOGS[version].find(pack => pack.id === id);
+}
+
 export function creditTopupPack(id: string): CreditTopupPack | undefined {
   return CREDIT_TOPUP_PACKS.find(pack => pack.id === id);
 }

@@ -1,0 +1,92 @@
+▲ Next.js 16.3.8 (Turbopack)
+- Environments: .env.local
+✓ Running next.config.ts took 51ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1135ms
+  Running TypeScript ...
+  Finished TypeScript in 7.9s ...
+  Collecting page data using 31 workers ...
+  Generating static pages using 31 workers (0/21) ...
+  Generating static pages using 31 workers (5/21) 
+  Generating static pages using 31 workers (10/21) 
+  Generating static pages using 31 workers (15/21) 
+✓ Generating static pages using 31 workers (21/21) in 1193ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /api/auth/providers
+├ ƒ /api/billing/access
+├ ƒ /api/billing/checkout
+├ ƒ /api/billing/checkout-status
+├ ƒ /api/billing/support-checkout
+├ ƒ /api/billing/topups
+├ ƒ /api/billing/webhook
+├ ƒ /api/billing/whop-events
+├ ƒ /api/build
+├ ƒ /api/build/plan
+├ ƒ /api/capabilities
+├ ƒ /api/cloud/workspaces/[workspaceId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/assets
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/assets/[assetId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/document-export
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/github
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/preview
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/publication
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/review-snapshot
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/reviews
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/reviews/[linkId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/source
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/versions
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/projects
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/reviews
+├ ƒ /api/cloud/workspaces/[workspaceId]/projects
+├ ƒ /api/cloud/workspaces/[workspaceId]/projects/[projectId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/projects/[projectId]/artifacts
+├ ƒ /api/cloud/workspaces/[workspaceId]/review-comments/[commentId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/studio-projects
+├ ƒ /api/credits
+├ ƒ /api/cron/billing-reconcile
+├ ƒ /api/export
+├ ƒ /api/generate
+├ ƒ /api/generate/[jobId]
+├ ƒ /api/generate/[jobId]/preview
+├ ƒ /api/generate/prepare
+├ ƒ /api/generate/requests/[requestKey]
+├ ƒ /api/github/callback
+├ ƒ /api/github/connect
+├ ƒ /api/github/connection
+├ ƒ /api/review/[token]/comments
+├ ƒ /api/review/[token]/decision
+├ ƒ /api/workspaces
+├ ƒ /auth/callback
+├ ƒ /auth/confirm
+├ ƒ /auth/update-password
+├ ƒ /auth/verify
+├ ƒ /billing
+├ ƒ /billing/return
+├ ○ /billing/terms
+├ ƒ /chat
+├ ○ /help
+├ ○ /icon.svg
+├ ƒ /login
+├ ○ /opengraph-image
+├ ○ /privacy
+├ ƒ /review/[token]
+├ ○ /robots.txt
+├ ○ /sitemap.xml
+├ ƒ /studio
+└ ƒ /studio/cloud
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

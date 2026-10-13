@@ -1,0 +1,16 @@
+BEGIN
+SET
+NOTICE:  PASS gate ships disabled and refuses calls
+NOTICE:  PASS global and per-provider daily limits are both enforced; begin is idempotent
+NOTICE:  PASS actual cost settled once, unknown usage charged at the bound, overrun stops the provider until an operator clears it
+NOTICE:  PASS abandoned calls expire at their full bound
+NOTICE:  PASS UTC days: calls charge their own day, a new day is a fresh allowance; late usage reconciles once, never released twice; preflight reports only paused/limit
+NOTICE:  PASS run outcomes: settled (capped at the hold, excess absorbed), replayed, missing_hold, released_hold, released, exempt
+NOTICE:  PASS privileges: service role uses the gate; only the database owner sets limits; browsers have no access
+DO
+                                                 result                                                  
+---------------------------------------------------------------------------------------------------------
+ PASS: live AI spend gate (fail closed, daily limits, actual/uncertain/overrun/expired) and run outcomes
+(1 row)
+
+ROLLBACK

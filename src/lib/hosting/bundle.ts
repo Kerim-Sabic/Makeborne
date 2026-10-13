@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { SITE_CONTENT_TYPES, SITE_IMAGE_PATH, SITE_LIMITS } from "../../../infra/customer-sites/site-policy";
+import { SITE_CONTENT_TYPES, SITE_IMAGE_PATH, SITE_LIMITS, siteFileContentType } from "../../../infra/customer-sites/site-policy";
 
 /** One stored file of a published site, served by the site Worker at `path`. */
 export type SiteFile = { path: string; contentType: string; body: Buffer; sha256: string };
@@ -49,4 +49,27 @@ export function prepareSiteBundle(input: { js: string; css: string; images: { pa
 /** Wire format for the publishing RPC (bytes travel as base64 inside JSON). */
 export function serializeSiteFiles(files: SiteFile[]) {
   return files.map(file => ({ path: file.path, content_type: file.contentType, sha256: file.sha256, body: file.body.toString("base64") }));
+}
+
+/** Exact retained Vite bytes only; callers must verify the build receipt first.
+ * Private compiler metadata/licenses remain in retained storage, never hosted. */
+export function prepareCompiledSiteFiles(input: readonly {path: string; bytes: Uint8Array; sha256: string}[]): SiteFile[] {
+  const paths = new Set<string>(); let total = 0, images = 0;
+  const files = input.map(file => {
+    const path = `/${file.path}`, contentType = siteFileContentType(path);
+    if (!contentType || paths.has(path.toLowerCase())) throw new SiteBundleError("PUBLICATION_OUTPUT_PATH_INVALID");
+    paths.add(path.toLowerCase());
+    const body = Buffer.from(file.bytes), sha256 = digest(body);
+    const limit = contentType === SITE_CONTENT_TYPES.script ? SITE_LIMITS.script : contentType === SITE_CONTENT_TYPES.style ? SITE_LIMITS.style : SITE_LIMITS.image;
+    if (sha256 !== file.sha256 || body.length > limit) throw new SiteBundleError("PUBLICATION_OUTPUT_BYTES_INVALID");
+    if ((contentType === SITE_CONTENT_TYPES.font && body.subarray(0,4).toString("ascii") !== "wOF2")
+      || (contentType === SITE_CONTENT_TYPES.image && !isWebp(body))
+      || (contentType === SITE_CONTENT_TYPES.png && !body.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))
+      || (contentType === SITE_CONTENT_TYPES.jpeg && !body.subarray(0,3).equals(Buffer.from([255,216,255])))) throw new SiteBundleError("PUBLICATION_OUTPUT_FORMAT_INVALID");
+    if (contentType.startsWith("image/")) images++;
+    total += body.length;
+    return {path, contentType, body, sha256};
+  });
+  if (files.length > SITE_LIMITS.files || images > SITE_LIMITS.images || total > SITE_LIMITS.total) throw new SiteBundleError("PUBLICATION_OUTPUT_LIMIT");
+  return files;
 }

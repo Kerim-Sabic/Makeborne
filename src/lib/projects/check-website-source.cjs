@@ -12,6 +12,8 @@ function load(file) {
       if (name === "server-only") return {};
       if (["zod", "node:crypto", "sharp", "jszip"].includes(name)) return require(name);
       if (!name.startsWith("./") && !name.startsWith("../")) throw new Error(`Unexpected source-contract dependency: ${name}`);
+      if (name.endsWith(".cjs")) return require(path.resolve(path.dirname(file), name));
+      if (name.endsWith(".json")) return JSON.parse(fs.readFileSync(path.resolve(path.dirname(file), name), "utf8"));
       return load(path.resolve(path.dirname(file), name + ".ts"));
     }}, {filename: file});
   return compiledModule.exports;
@@ -233,6 +235,7 @@ async function checkSourceAssets() {
   const {accountExportRequest} = load("src/lib/cloud/account-export.ts");
   const {prepareVersionRestore} = load("src/lib/cloud/version-restore.ts");
   const source = setup().input;
+  for (const file of source.files) if (["package.json", "package-lock.json"].includes(file.path)) file.content = fs.readFileSync(`infra/project-runtime/toolchain/${file.path}`, "utf8");
   const content = {schemaVersion: 1, kind: "website", title: "Full project", sections: [], websiteSource: source};
   const style = {id: "automatic", name: "Automatic", version: 1, typography: {headingFont: "Inter", bodyFont: "Inter"}, colors: {canvas: "#FFFFFF", ink: "#000000", accent: "#3559D8"}, description: "Original direction", referenceAssetIds: []};
   const version = {id: "50000000-0000-4000-8000-000000000001", artifactId: "60000000-0000-4000-8000-000000000001", number: 1, parentVersionId: null, content, style, assetIds: [assetId], createdAt: "2026-10-08T00:00:00.000Z", createdBy: "70000000-0000-4000-8000-000000000001", changeSummary: "Full source"};

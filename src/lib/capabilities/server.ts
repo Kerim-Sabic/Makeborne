@@ -15,6 +15,7 @@ export function getCapabilities({ administrator = false, hostname }: { administr
     administrator,
     cloud: getCloudStatus(),
     pilotProviderConfigured: Boolean(process.env.ANTHROPIC_API_KEY?.trim()),
+    liveBuilderEnabledByConfiguration: process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false",
     hostingCredentialConfigured: Boolean(process.env.SUPABASE_SECRET_KEY?.startsWith("sb_secret_")),
     billingConfigured: billing.configured,
     billingEnabledByConfiguration: billing.enabled,

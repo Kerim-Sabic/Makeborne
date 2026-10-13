@@ -1,0 +1,19 @@
+{
+  "deployment": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+  "passed": [
+    "Real cloud password authentication (synthetic preconfirmed account; no email test)",
+    "Staging support checkout refused",
+    "Unpaid creation denied",
+    "Authenticated Vercel route writes to isolated cloud database",
+    "Real Vercel book pdf export",
+    "Real Vercel presentation pdf export",
+    "Real Vercel presentation pptx export",
+    "Cloud version conflict rejects a stale edit",
+    "Cloud guest pinned comment, change request, approval and revocation",
+    "Cloud private upload/download succeeds; anonymous read denied"
+  ],
+  "failedStage": null,
+  "productionTouched": false,
+  "paidCalls": 0,
+  "emailDeliveryTested": false
+}

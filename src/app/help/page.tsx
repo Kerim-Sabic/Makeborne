@@ -50,8 +50,8 @@ const questions = [
   },
   {
     id: "coffee",
-    question: "What does Pay a coffee include?",
-    answer: "Pay a coffee is an optional US$1 monthly subscription that supports Makeborne’s development. Checkout is handled by Whop after you sign in. It does not include app access, AI credits or a creation membership. You can manage or cancel the subscription through your Whop account.",
+    question: "What does Buy us a coffee include?",
+    answer: "Buy us a coffee is an optional US$1 monthly subscription that supports Makeborne’s development. Checkout is handled by Whop after you sign in. It does not include app access, AI credits or a creation membership. You can manage or cancel the subscription through your Whop account.",
     href: "/billing#support",
     link: "View optional support",
   },
@@ -110,7 +110,7 @@ export default function HelpPage() {
       <nav aria-label="Breadcrumb" className={styles.breadcrumb}><Link href="/">Makeborne</Link><span aria-hidden="true">/</span><span aria-current="page">Getting started</span></nav>
       <div className={styles.hero}>
         <span className={styles.eyebrow}>A LITTLE CLARITY</span>
-        <h1>From your idea<br />to a clear direction.</h1>
+        <h1>From your idea <br />to a clear direction.</h1>
         <p>What to bring, how styles work, and what you can use today.</p>
       </div>
       <section className={styles.formats} aria-label="What you can make with Makeborne">

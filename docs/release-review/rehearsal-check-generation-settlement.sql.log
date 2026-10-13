@@ -1,0 +1,12 @@
+BEGIN
+CREATE FUNCTION
+NOTICE:  PASS unknown and undispatched outcomes cannot settle or create cost evidence
+NOTICE:  PASS live fenced outcome binds exact saved result; stale, foreign and conflicting replays denied
+NOTICE:  PASS injected debit failure rolls back settlement and all reservation counters together
+NOTICE:  PASS accepted settlement atomically charges exact quoted credits once and releases unused vendor hold
+NOTICE:  PASS failed output records actual provider expense and charges no customer credits
+NOTICE:  PASS cancelled workers cannot attest; explicit operator reconciliation resolves actual cost without a refund
+NOTICE:  PASS exact integer cost above JavaScript safe range is preserved, stops dispatch and never expands customer charge
+NOTICE:  PASS accounting evidence is append-only; browser model details and direct worker ledger writes denied
+DO
+ROLLBACK

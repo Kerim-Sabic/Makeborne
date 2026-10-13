@@ -50,12 +50,13 @@ export function localRuntimeFlags(name, inputDirectory) {
 
 /** Input must come from websiteBuildInput after existing saved-revision authority.
  * No arbitrary image, shell, mount, environment or command is accepted. */
-export async function runLocalBuild(request, {timeoutMs = 60000, signal} = {}) {
+export async function runLocalBuild(request, {timeoutMs = 60000, signal, qualifiedImageId} = {}) {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) throw new Error("RUNTIME_DEADLINE_INVALID");
   const command = (args, timeout = 15000, limit = 1_000_000) => dockerCommand(args, timeout, limit, signal);
   const image = await command(["image", "inspect", "makeborne-react-vite:local-v1", "--format", "{{.Id}}"]);
   const imageId = image.output.trim();
   if (image.code !== 0 || !/^sha256:[a-f0-9]{64}$/.test(imageId)) throw new Error("RUNTIME_IMAGE_MISSING");
+  if (qualifiedImageId !== undefined && imageId !== qualifiedImageId) throw new Error("RUNTIME_IMAGE_UNQUALIFIED");
   const directory = await mkdtemp(join(tmpdir(), "makeborne-build-"));
   const input = join(directory, "input"), output = join(directory, "output"), name = `makeborne-build-${randomUUID()}`;
   const started = Date.now(); let copied = false;

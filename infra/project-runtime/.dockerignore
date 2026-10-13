@@ -6,3 +6,9 @@
 !toolchain
 !toolchain/package.json
 !toolchain/package-lock.json
+!font-portability.cjs
+!font-licenses.cjs
+!font-licenses.json
+!font-catalog.json
+!toolchain-compatibility.cjs
+!legacy-toolchain.json

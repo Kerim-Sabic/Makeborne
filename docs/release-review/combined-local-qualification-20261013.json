@@ -1,0 +1,38 @@
+{
+  "reviewedAt": "2026-10-13",
+  "scope": "Local candidate only; not a frozen release artifact or refreshed staging qualification",
+  "productionTouched": false,
+  "committed": false,
+  "paidProviderCallsThisRound": 0,
+  "newRoundSpendUsd": 0,
+  "checks": {
+    "offlineHarnesses": { "passed": 86, "failed": 0, "environmentQualificationSkipped": 5, "note": "Combined suite rerun passed after commercial/status corrections. Opt-in production export fixture additionally ran separately." },
+    "mountedBuilderOperationAndPreviewGroups": 8,
+    "mountedLiveBuilderScenarios": ["shared operation chain", "exhausted cap and explicit additional consent", "declined review resumes review", "provider-free retained candidate recovery"],
+    "mountedPlanClientGroups": 14,
+    "productionBuild": "root combined rerun passed after font-license catalogue and commercial/status corrections",
+    "productionNextSourceExportHttpFixture": "passed independently by font review agent; exact original source, fonts, licenses and archive hashes checked",
+    "runtimeExportCurrentHistoricalBuilds": 4,
+    "migrationRehearsal": {
+      "migrationCount": 53,
+      "report": "docs/release-review/candidate-rehearsal.json",
+      "passed": true,
+      "normalFailureInterruptedSameFingerprint": "850e5c162ed70215779444b394df42ad",
+      "consumedInputsChanged": false,
+      "migrationListChanged": false
+    },
+    "typecheck": "passed after commercial/status changes",
+    "eslint": { "errors": 0, "existingWarnings": 6 }
+  },
+  "competitorEvidence": "docs/release-review/competitor-verification-20261013.json",
+  "openGates": [
+    "Supported, paid app-bound subscription switching and replacement evidence",
+    "Real signed credit-pack fulfillment and payment lifecycle qualification",
+    "Creation checkout UI connected to validated server availability",
+    "Trusted source-to-published-output provenance",
+    "Live image qualification after server-only OpenAI configuration",
+    "Fresh product visual qualification, not only reuse of old samples",
+    "Refreeze and refresh the exact candidate on isolated staging, then repeat auth/upload/export/hosting flows"
+  ],
+  "releaseDecision": "Not launch-ready; no production approval requested"
+}

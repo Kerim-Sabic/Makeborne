@@ -1,0 +1,27 @@
+{
+  "book": {
+    "pages": 44,
+    "dimensionsPoints": [
+      432.0,
+      648.0
+    ],
+    "textOutsidePage": [],
+    "pagesWithoutText": [],
+    "words": 7340
+  },
+  "presentation": {
+    "pages": 10,
+    "dimensionsPoints": [
+      960.0,
+      540.0
+    ],
+    "textOutsidePage": [],
+    "pagesWithoutText": [],
+    "words": 632
+  },
+  "pptx": {
+    "slides": 10,
+    "nativeCharts": 1,
+    "speakerNotes": 10
+  }
+}

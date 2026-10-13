@@ -18,16 +18,30 @@ export function validSiteLabel(value) {
 /** Built entry points are content-addressed under a reserved prefix. */
 export const SITE_SCRIPT_PATH = /^\/_mb\/app-[0-9a-f]{16}\.js$/;
 export const SITE_STYLE_PATH = /^\/_mb\/app-[0-9a-f]{16}\.css$/;
+/** Vite emits these files; storage lookup must still find an exact published manifest row. */
+export const SITE_VITE_PATH = /^\/assets\/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,180}\.(?:js|css|woff2)$/;
+export const siteScriptPath = path => SITE_SCRIPT_PATH.test(path) || (SITE_VITE_PATH.test(path) && path.endsWith(".js"));
+export const siteStylePath = path => SITE_STYLE_PATH.test(path) || (SITE_VITE_PATH.test(path) && path.endsWith(".css"));
 /** Project images keep the public path the site code references (`/images/hero.webp`). */
 export const SITE_IMAGE_PATH = /^\/(?!_mb\/)(?:[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}\/){0,7}[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}\.(?:webp|png|jpe?g)$/i;
-export const SITE_CONTENT_TYPES = Object.freeze({ script: "text/javascript; charset=utf-8", style: "text/css; charset=utf-8", image: "image/webp" });
+export const SITE_CONTENT_TYPES = Object.freeze({ script: "text/javascript; charset=utf-8", style: "text/css; charset=utf-8", image: "image/webp", png: "image/png", jpeg: "image/jpeg", font: "font/woff2" });
 /** The stylesheet embeds the builder's used library fonts (woff2 data: URLs, font-src data:), hence its larger limit. */
-export const SITE_LIMITS = Object.freeze({ html: 4_000_000, script: 1_500_000, style: 1_200_000, image: 2_000_000, images: 40, files: 42, total: 6_000_000 });
+export const SITE_LIMITS = Object.freeze({ html: 4_000_000, script: 1_500_000, style: 1_200_000, image: 2_000_000, font: 2_000_000, images: 40, files: 128, total: 6_000_000 });
 
 /** Path served by the Worker as a stored file (otherwise: document or 404). */
 export function siteFilePath(pathname) {
   if (typeof pathname !== "string" || pathname.length > 240 || pathname.includes("..") || pathname.includes("//")) return false;
-  return SITE_SCRIPT_PATH.test(pathname) || SITE_STYLE_PATH.test(pathname) || SITE_IMAGE_PATH.test(pathname);
+  return SITE_SCRIPT_PATH.test(pathname) || SITE_STYLE_PATH.test(pathname) || SITE_VITE_PATH.test(pathname) || SITE_IMAGE_PATH.test(pathname);
+}
+
+export function siteFileContentType(pathname) {
+  if (!siteFilePath(pathname)) return null;
+  if (siteScriptPath(pathname)) return SITE_CONTENT_TYPES.script;
+  if (siteStylePath(pathname)) return SITE_CONTENT_TYPES.style;
+  if (SITE_VITE_PATH.test(pathname) && pathname.endsWith(".woff2")) return SITE_CONTENT_TYPES.font;
+  if (/\.png$/i.test(pathname)) return SITE_CONTENT_TYPES.png;
+  if (/\.jpe?g$/i.test(pathname)) return SITE_CONTENT_TYPES.jpeg;
+  return SITE_CONTENT_TYPES.image;
 }
 
 /** Client-side (hash/state/history) routes: extension-less paths fall back to the document. */
@@ -152,10 +166,14 @@ export function siteErrorPage(status) {
 
 /** Attach the site bundle to the prerendered snapshot. The snapshot paints first
  * (and is the no-JS/SEO fallback); the module then re-renders the root. */
-export function composeSiteDocument(html, { script, interactive }) {
+export function composeSiteDocument(html, { script, interactive, branding = false }) {
   if (typeof html !== "string" || !html.startsWith("<!doctype html>")) throw new Error("invalid_document");
+  if (branding) {
+    const footer = '<footer data-makeborne-attribution style="position:relative;display:flex;justify-content:center;padding:18px 24px;font:12px/1.5 system-ui,sans-serif"><a href="https://makeborne.com/" rel="nofollow noopener" target="_blank" aria-label="Made with Makeborne, opens in a new tab" style="display:inline-flex;align-items:center;gap:7px;color:#575766;background:#ffffff;border:1px solid #e8e8ef;border-radius:999px;padding:7px 12px;text-decoration:none;box-shadow:0 2px 8px #16162408"><span aria-hidden="true" style="font-weight:800;color:#303041">m</span>Made with Makeborne</a></footer>';
+    html = html.replace(/<\/body>/i, () => `${footer}</body>`);
+  }
   if (!interactive || !script) return html;
-  if (!SITE_SCRIPT_PATH.test(script)) throw new Error("invalid_script");
+  if (!siteScriptPath(script)) throw new Error("invalid_script");
   const tag = `<script type="module" src="${script}"></script>`;
   return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, () => `${tag}</head>`) : html.replace(/<body/i, () => `<head>${tag}</head><body`);
 }

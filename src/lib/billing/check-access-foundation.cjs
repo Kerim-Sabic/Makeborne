@@ -7,16 +7,31 @@ const { Webhook } = require("standardwebhooks");
 class RequestError extends Error { constructor(code, message, status) { super(message); this.code = code; this.status = status; } }
 function load(file, env, modules = {}) {
   const output = ts.transpileModule(fs.readFileSync(require.resolve(file), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const context = { exports: {}, process: { env }, Buffer, Date, URL, require: name => name === "server-only" ? {} : modules[name] ?? require(name) };
+  const context = { exports: {}, process: { env }, Buffer, Date, URL, require: name => name === "server-only" ? {} : modules[name] ?? (name === "./topup-delivery" ? {} : require(name)) };
   vm.runInNewContext(output, context);
   return context.exports;
 }
 const env = { WHOP_API_KEY: "fake-api", WHOP_COMPANY_ID: "biz_CV9cZg1zFX3h7f", WHOP_WEBHOOK_SECRET: "ws_fake", SUPABASE_SECRET_KEY: "sb_secret_fake", WHOP_ACCESS_PLAN_IDS: "plan_B7Dgm9ZqM3V0M,plan_unknown", WHOP_CREATION_ENABLED: "true", MAKEBORNE_BILLING_MIGRATIONS_VERIFIED: "true" };
-const config = load("./config.ts", env);
+const schedule = load("./plan-schedule.ts", env, { "./plans": load("./plans.ts", env) });
+const config = load("./config.ts", env, { "./plan-schedule": schedule });
 assert.equal(config.billingConfig().enabled, false);
 assert.equal(config.billingConfig().accessPlanIds.length, 0);
 env.WHOP_ACCESS_PLAN_IDS = config.CREATION_CATALOG.create;
 assert.equal(config.billingConfig().enabled, true);
+// Sandbox never opens against a cloud database or the production merchant.
+const savedEnv = { ...env };
+Object.assign(env, { WHOP_API_BASE_URL: "https://sandbox-api.whop.com/api/v1", MAKEBORNE_WHOP_SANDBOX: "true", WHOP_COMPANY_ID: "biz_sandbox", WHOP_SANDBOX_COMPANY_ID: "biz_sandbox", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55435" });
+assert.equal(config.billingConfig().enabled, true);
+env.NEXT_PUBLIC_SUPABASE_URL = "https://production.supabase.co";
+assert.equal(config.billingConfig().enabled, false);
+env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:55435";
+env.VERCEL = "1";
+assert.equal(config.billingConfig().enabled, false);
+delete env.VERCEL;
+env.WHOP_COMPANY_ID = config.SUPPORT.companyId;
+assert.equal(config.billingConfig().enabled, false);
+for (const key of Object.keys(env)) delete env[key];
+Object.assign(env, savedEnv);
 env.WHOP_WEBHOOK_SECRET = "";
 assert.equal(config.billingConfig().enabled, false);
 env.WHOP_WEBHOOK_SECRET = "ws_fake";
@@ -27,7 +42,7 @@ env.MAKEBORNE_BILLING_MIGRATIONS_VERIFIED = "false";
 assert.equal(config.billingConfig().enabled, false);
 const secret = "ws_fake_for_offline_signature_verification_only";
 const webhook = load("./webhook.ts", { WHOP_WEBHOOK_SECRET: secret }, {
-  "@/lib/server/http": { RequestError }, "./config": config, "./database": {}, "./plan-credits": {}, "@/lib/credits/server": {}, "./whop": {},
+  "@/lib/server/http": { RequestError }, "./config": config, "./database": {}, "./plan-credits": {}, "@/lib/credits/server": {}, "./whop": {}, "./topup-delivery": {},
 });
 const body = JSON.stringify({ id: "msg_test", type: "membership.activated", account_id: "biz_CV9cZg1zFX3h7f", data: { id: "mem_test" } });
 const now = new Date();
@@ -44,6 +59,12 @@ assert.throws(() => webhook.verifyWhopEvent(body, oldHeaders), error => error.co
 async function lifecycleChecks() {
   env.MAKEBORNE_BILLING_MIGRATIONS_VERIFIED = "true";
   const whop = load("./whop.ts", env, { "@/lib/server/http": { RequestError }, "./config": config });
+  const fixtures = require("./fixtures/whop-sandbox/memberships.json");
+  for (const sample of fixtures.samples) {
+    const parsed = whop.membershipSchema.safeParse(sample.response);
+    assert(parsed.success, `Real sandbox membership failed: ${sample.case}`);
+    assert(parsed.data.renewal_period_start && parsed.data.renewal_period_end);
+  }
   const active = { id: "mem_test", company: { id: env.WHOP_COMPANY_ID }, plan: { id: config.CREATION_CATALOG.create }, user: { id: "user_test" }, checkout_configuration_id: "ch_test", status: "active", renewal_period_end: new Date(Date.now() + 60_000).toISOString() };
   assert.equal(whop.activeMembership(active), true);
   assert.equal(whop.activeMembership({ ...active, status: "canceling" }), true);
@@ -94,14 +115,16 @@ async function lifecycleChecks() {
     "@/lib/account/privileges": { getAccountPrivileges: async () => ({ isAdmin: true, unlimitedCredits: true }) },
     "next/navigation": {}, "@/lib/supabase/auth-server": {}, "@/lib/supabase/auth-flow": {}, "@/lib/server/http": { RequestError }, "./config": config, "./database": { billingDatabase: () => db },
     "@/lib/supabase/server": { createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: sessionUser } }, error: null }) }, rpc: async name => { databaseCalls.push(name); return { data: databaseAccess, error: null }; } }) },
-    "@/lib/credits/server": { ensureTrialCredits: async id => { trials.push(id); }, grantPlanCredits: async (...args) => { grants.push(args); } },
+    "@/lib/credits/server": { ensureTrialCredits: async id => { trials.push(id); }, recordPlanObservation: async (...args) => { grants.push(JSON.parse(JSON.stringify(args))); return { outcome: "recorded", granted: 0 }; } },
     "./whop": { activeMembership: whop.activeMembership, retrieveMembership: async id => { readIds.push(id); return { ...active, id, checkout_configuration_id: id === "mem_active" ? "ch_active" : "ch_canceled", status: id === "mem_active" ? "active" : "canceled" }; } },
   });
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_canceled"), false);
   assert.deepEqual(readIds, ["mem_canceled"]);
-  assert.equal(grants.length, 0);
+  // A verified but unpaid membership is recorded as unpaid (stops allocations), never as paid.
+  assert.deepEqual(grants, [["account_test", { membershipId: "mem_canceled", planId: config.CREATION_CATALOG.create, status: "canceled", paid: false, periodStart: null, periodEnd: active.renewal_period_end, source: "access_check" }]]);
+  grants.length = 0;
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_active"), true);
-  assert.deepEqual(grants, [["account_test", config.CREATION_CATALOG.create, "mem_active", active.renewal_period_end]]);
+  assert.deepEqual(grants, [["account_test", { membershipId: "mem_active", planId: config.CREATION_CATALOG.create, status: "active", paid: true, periodStart: null, periodEnd: active.renewal_period_end, source: "access_check" }]]);
   // Database access (free tier/admin/recorded membership) comes first and grants the trial.
   assert.equal(await access.hasCreationAccess({ id: "account_test" }), true);
   assert.deepEqual(databaseCalls, ["makeborne_creation_access"]);

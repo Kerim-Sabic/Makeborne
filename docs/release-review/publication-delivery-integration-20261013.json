@@ -1,0 +1,58 @@
+{
+  "reviewedAt": "2026-10-13",
+  "status": "Local publication delivery qualified; cloud activation and overall launch remain unqualified",
+  "productionTouched": false,
+  "stagingTouched": false,
+  "committed": false,
+  "paidProviderCalls": 0,
+  "paidComputeCalls": 0,
+  "newApiRoundSpentUsd": 0,
+  "implemented": [
+    "Dedicated NOLOGIN publication role with six worker RPCs; no raw-table, request or promotion authority",
+    "Bounded durable candidate discovery, expired lease recovery, retry exhaustion and unusable-authority cleanup",
+    "Sequential polling supervisor with backoff and sanitized events",
+    "Allowlisted parameterized PostgreSQL control adapter with transaction-local role, timeouts and destroyed ambiguous connections",
+    "Per-claim executor factory receives authoritative lease context after version/artwork/fence checks",
+    "Vercel compiler/renderer adapter with pinned identity mappings, mandatory durable journal callbacks, bounded transfer/time and cleanup reconciliation",
+    "Cancellation prevents starting later SDK calls; cleanup requires matching identity and observed terminal provider status"
+  ],
+  "checks": {
+    "offlineHarnesses": {"passed": 95, "failed": 0, "explicitEnvironmentOrLiveExclusions": 5},
+    "nextProductionBuildAndTypescript": "passed",
+    "fullLint": {"errors": 0, "warnings": 0},
+    "workerAuthorityRealSqlGroups": 10,
+    "existingPublicationSqlGroups": 8,
+    "realNodePostgresDriverGroups": 7,
+    "supervisorControlMockedGroups": 10,
+    "workerOrchestrationMockedGroups": 9,
+    "sandboxInjectedTransportGroups": 18,
+    "existingAdmissionConcurrencyGroups": 5,
+    "candidateRehearsal": {
+      "pendingMigrations": 55,
+      "normal": "passed",
+      "injectedFailureRecovery": "passed",
+      "interruptedResume": "passed",
+      "legacySiteServedDuringInterruption": true,
+      "sameFinalSchemaFingerprint": "0aa44298de45648f145ddffaedb3f31b",
+      "inputsAndMigrationHashesUnchanged": true
+    }
+  },
+  "correctedHypothesis": "The suspected cross-workspace admission race is unreachable under the existing one-owned-workspace constraint and owner-required workspace lock. A real concurrent check proved the existing cap. No migration56 or speculative admission rewrite was retained.",
+  "evidence": [
+    "publication-worker-authority-20261013.json",
+    "publication-control-driver-20261013.json",
+    "publication-control-review-20261013.md",
+    "vercel-publication-adapter-20261013.md",
+    "publication-admission-20261013.json",
+    "candidate-rehearsal.json"
+  ],
+  "limitations": [
+    "No actual Vercel Sandbox session, VCR image or Chromium OS/network boundary has been qualified",
+    "Durable supervisor hosting, lifecycle journal deployment, scoped credentials, private artwork/R2 integration and approved compute allowance remain required",
+    "Real SQL driver used disposable local loopback; cloud TLS/pooler behavior is unqualified",
+    "Staging customer Worker routes still overlap the production wildcard and require separate exact-host/allocation policy before deployment",
+    "Current cloud staging predates the unfrozen candidate; no deployment was made",
+    "Plan switching, signed credit-pack/payment lifecycle and required live AI images/fresh output quality remain open launch gates",
+    "No comparative superiority over competitors is established by these reliability checks"
+  ]
+}

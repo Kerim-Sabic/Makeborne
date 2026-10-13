@@ -1,0 +1,25 @@
+{
+  "sandboxOnly": true,
+  "productionTouched": false,
+  "realMoneySpent": 0,
+  "requestId": "2a07fbb3-e8d0-41e4-802b-fac96abfc425",
+  "planId": "plan_bfmAY3ekgPP6G",
+  "observations": [
+    {
+      "at": "2026-10-13T01:19:13.135Z",
+      "apiVersion": "2025-01-01",
+      "idempotencyKey": "makeborne-topup-probe-2a07fbb3-e8d0-41e4-802b-fac96abfc425",
+      "checkoutId": "ch_Z2BXwHiT6wcS1Us",
+      "purchaseUrl": "https://sandbox.whop.com/checkout/ch_Z2BXwHiT6wcS1Us/"
+    },
+    {
+      "at": "2026-10-13T01:19:13.310Z",
+      "apiVersion": "2025-01-01",
+      "idempotencyKey": "makeborne-topup-probe-2a07fbb3-e8d0-41e4-802b-fac96abfc425",
+      "checkoutId": "ch_Z2BXwHiT6wcS1Us",
+      "purchaseUrl": "https://sandbox.whop.com/checkout/ch_Z2BXwHiT6wcS1Us/"
+    }
+  ],
+  "sameCheckout": true,
+  "checkedAt": "2026-10-13T01:19:13.311Z"
+}

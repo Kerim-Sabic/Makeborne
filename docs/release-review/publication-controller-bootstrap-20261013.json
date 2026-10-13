@@ -1,0 +1,45 @@
+{
+  "passed": true,
+  "node": "v22.18.0",
+  "cloudWrites": 0,
+  "providerCalls": 0,
+  "checks": [
+    "strict staging config and locked mapping keep explicit TLS and all host credentials out of runtime data",
+    "ambient connection, proxy, TLS, admin and SDK credentials refused before any transport",
+    "database attestation rejects admin, inherited/unrelated grants, wrong namespace and unverifiedTLS",
+    "real startup composition attests and commits before constructing provider/store/broker or discovering work",
+    "startup cancellation destroys late acquisition and never falls through into controller",
+    "requested shutdown settles, uncooperative work/pool is bounded, idle database error remains failure",
+    "structured logging never includes configuration, raw SQL errors, credentials or arbitrary text",
+    "package exact versions and generated bundle excludes Supabase/admin/Next dependencies"
+  ],
+  "finishedAt": "2026-10-13T06:26:42.388Z",
+  "linuxNode24": {
+    "focusedGroups": 8,
+    "installedSdkSessionGroups": 3,
+    "nativeSharpSelfCheck": true,
+    "network": "none"
+  },
+  "executorGroups": 19,
+  "bundle": {
+    "sha256": "d8f8a9fa441da63dfa25aa99ec54d017c09b3de9d6a88e4a90128a9c473ea2e4",
+    "bytes": 1422302,
+    "inputs": 221
+  },
+  "image": "sha256:d245111dd50ead5d685f9ad235dfdb66f40b8d6b739e059d04ef87f6b42ef635",
+  "entry": {
+    "path": "infra/publication-controller/entry.mjs",
+    "sha256": "2ff7b6ed8351e75ced7e1bb78cd971c8e98a5dd0eb2688eb10b388b35355fd30"
+  },
+  "executor": {
+    "path": "infra/project-runtime/vercel-publication-executor.mjs",
+    "sha256": "1f1aa7a36258369fa0fabe03cd0e6df0e60a53ede103ea49fbd86255dee2d1fc"
+  },
+  "sqlAttestation": {
+    "groups": 6,
+    "sha256": "67b2e1d46bdace0364b3446fa1627796fd6d242941b2c29467859c574b94c0e6",
+    "liveTLSQualified": false
+  },
+  "tsc": true,
+  "scopedLint": true
+}

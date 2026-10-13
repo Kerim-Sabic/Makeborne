@@ -1,0 +1,534 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-13T05:36:01.484Z",
+  "paidCalls": 0,
+  "readyToSpend": false,
+  "credentialPresenceOnly": {
+    "process": {
+      "ANTHROPIC_API_KEY": false,
+      "OPENAI_API_KEY": false
+    },
+    "localEnv": {
+      "ANTHROPIC_API_KEY": true,
+      "OPENAI_API_KEY": false
+    },
+    "builderTestEnv": {
+      "ANTHROPIC_API_KEY": false,
+      "OPENAI_API_KEY": false
+    }
+  },
+  "proposedConfiguration": {
+    "model": "claude-opus-5-5",
+    "fallbackModels": [],
+    "internalUsdPerCredit": 0.03,
+    "images": false
+  },
+  "roundLedger": {
+    "authorizedAt": "2026-10-13T00:54:44.005631+00:00",
+    "authorization": "Owner goal: $50 more of API calls",
+    "roundBudgetUsd": 50,
+    "previousRecordedSpendUsd": 23.865144,
+    "previousAuthorizedCapUsd": 25,
+    "allocations": {
+      "Codex": {
+        "capUsd": 20,
+        "spentUsd": 0,
+        "reservedUsd": 0
+      },
+      "Claude": {
+        "capUsd": 20,
+        "spentUsd": 0,
+        "reservedUsd": 0
+      },
+      "sharedReserve": {
+        "capUsd": 10,
+        "spentUsd": 0,
+        "reservedUsd": 0
+      }
+    },
+    "calls": [],
+    "rules": [
+      "Reserve the worst-case package cost before paid calls.",
+      "Log provider usage and uncertain/failed requests; never count missing usage as zero.",
+      "No independent full $50 allowance per agent.",
+      "Production calls remain unauthorized."
+    ]
+  },
+  "sourceSha256": {
+    "src/app/api/build/route.ts": "8a7f1b1bc04079fb9911250cf4dbc881c8f83efed5ab62b2b9ac8736b207f96d",
+    "src/lib/builder/docs-run.ts": "08545c9f31e154ccb8b75402130b47ea27b0756be27bc455009d63befb36af7d",
+    "src/lib/builder/docs-agent.ts": "9225c0c051fd2a0a7a95753d9884124f9acf77cbbb2c6e63a6d1755d5d0d3f1d",
+    "src/lib/builder/docs-prompt.ts": "002874a265f7f62de6326356416e72fadfe7c5254d0ba0093ef39685c6603eea",
+    "src/lib/builder/docs-style.ts": "f4c9c5481db8dc822d3ba4dbeefd11fb108329891319446d92b325112f300bf5",
+    "src/lib/builder/agent.ts": "b55c0a5554c6bcd69674e91a5f3c58510ace48e16e4a607f93e1e25b66a1a992",
+    "src/lib/builder/prompt.ts": "cf70274aad95fdaee39983749e8a0976d9534a1bb7ec2fdc12bccca996446b07",
+    "src/lib/builder/pricing.ts": "23846d7de7ec31389e98dcb24c00c026e8496b81b0d8141aaf255aa6c845afc8",
+    "src/lib/builder/operation-server.ts": "aa2f2a058d3cba84291c6e9d1193aba5c8387ac3c30999e70e2c4d42b7223b45",
+    "src/lib/ai/anthropic-call.ts": "35d25feaea64fa29ab1f16813b8f624ab7783466ceb284cb65f37859be6c22d2",
+    "src/lib/ai/prices.ts": "2ee1baafbdf7f6edb5c8099736bdbdaee62c31ec949beb2d292b1a242483d10f",
+    "src/lib/ai/run-spend.ts": "f2eba015c8c4d279ce184a59bf43998578613c097db82c4f02a8387cdce621a7",
+    "src/lib/documents/editor.ts": "f1c4a029ec0ff88d0c1ea9307c83b6052f89d592f0f7132b8306b03043439486",
+    "src/lib/documents/schema.ts": "5753813bbf42bf1208846316a2eb79894fc11632bf32434b9a0681d79e469140",
+    "src/lib/documents/book-markup.ts": "293daf388531ce3684b7a7203f860465087e01e74e8068ccdf7c02774a076be9",
+    "src/lib/documents/render-book.ts": "70e084f339c4669f7370807dfbc207c23583a4c175ecfa5814e69ef32a317679",
+    "src/lib/documents/slide-scene.ts": "708269fba14d379a1459b0d27a8497d3ab83ff21f89fc270871e54204782307b",
+    "src/lib/documents/pptx.ts": "4bf6103f926a6c70ad789b3a163553ab7a478d4d29cd5b21da3546fe5da92ace",
+    "src/lib/documents/cover-composition.ts": "8c39e5cbe657a75975baa928ae1c5fe49ef5345d46436a270e55e77498611775",
+    "src/lib/documents/export-server.ts": "76771c8b232be33c55963a30a5d6d51fd26e0d5b593aa6fcd9201da205635bec"
+  },
+  "localLedger": {
+    "readOnly": true,
+    "calls": [
+      {
+        "id": "0947f79c-b5bf-462e-bcea-46729e06d0f4",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "470201",
+        "actual_microusd": "38897",
+        "partial_microusd": "0",
+        "charged_microusd": "38897",
+        "overrun": false
+      },
+      {
+        "id": "0afc5777-a884-4d33-91cd-caa01e5343f8",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "316273",
+        "actual_microusd": "87865",
+        "partial_microusd": "0",
+        "charged_microusd": "87865",
+        "overrun": false
+      },
+      {
+        "id": "0b3aa4aa-5e9f-436d-8308-fe6a03f94bc0",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "uncertain",
+        "bound_microusd": "1257554",
+        "actual_microusd": null,
+        "partial_microusd": "1748",
+        "charged_microusd": "1257554",
+        "overrun": false
+      },
+      {
+        "id": "0f86acdb-3056-4812-9708-067cecf7b623",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "1447744",
+        "actual_microusd": "80406",
+        "partial_microusd": "0",
+        "charged_microusd": "80406",
+        "overrun": false
+      },
+      {
+        "id": "1303d4a3-e468-499b-a503-200283230ea4",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "uncertain",
+        "bound_microusd": "397678",
+        "actual_microusd": null,
+        "partial_microusd": "32304",
+        "charged_microusd": "397678",
+        "overrun": false
+      },
+      {
+        "id": "28cbdcd2-6771-4434-aca3-0b859ad82a5c",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "403811",
+        "actual_microusd": "154935",
+        "partial_microusd": "0",
+        "charged_microusd": "154935",
+        "overrun": false
+      },
+      {
+        "id": "317156a3-29c8-4ceb-8b80-86670c6e43b0",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "335270",
+        "actual_microusd": "301296",
+        "partial_microusd": "0",
+        "charged_microusd": "301296",
+        "overrun": false
+      },
+      {
+        "id": "3e2df73f-8280-4a08-86a6-0735f5ade079",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "599979",
+        "actual_microusd": "117081",
+        "partial_microusd": "0",
+        "charged_microusd": "117081",
+        "overrun": false
+      },
+      {
+        "id": "4b14c5e4-c2fb-43ca-bc66-a7b3d26a5090",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "335891",
+        "actual_microusd": "217031",
+        "partial_microusd": "0",
+        "charged_microusd": "217031",
+        "overrun": false
+      },
+      {
+        "id": "5d5a2b0f-d938-4954-8395-4b5ba41cf912",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "324754",
+        "actual_microusd": "111381",
+        "partial_microusd": "0",
+        "charged_microusd": "111381",
+        "overrun": false
+      },
+      {
+        "id": "67a7274c-33c3-4813-82d8-1d69e55384a3",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "319237",
+        "actual_microusd": "70704",
+        "partial_microusd": "0",
+        "charged_microusd": "70704",
+        "overrun": false
+      },
+      {
+        "id": "6ce57f22-a08c-459e-94a8-b70b9785e49b",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "uncertain",
+        "bound_microusd": "1457094",
+        "actual_microusd": null,
+        "partial_microusd": "14665",
+        "charged_microusd": "1457094",
+        "overrun": false
+      },
+      {
+        "id": "7580ea3e-05c7-4e26-b992-a5bb12385fe8",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "1440060",
+        "actual_microusd": "76396",
+        "partial_microusd": "0",
+        "charged_microusd": "76396",
+        "overrun": false
+      },
+      {
+        "id": "78220aed-951b-423e-9feb-acc72eb04f09",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "1489830",
+        "actual_microusd": "29576",
+        "partial_microusd": "0",
+        "charged_microusd": "29576",
+        "overrun": false
+      },
+      {
+        "id": "7b190e60-05af-4070-937c-fafc1d1b717b",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "335941",
+        "actual_microusd": "139956",
+        "partial_microusd": "0",
+        "charged_microusd": "139956",
+        "overrun": false
+      },
+      {
+        "id": "7c4564dc-753a-414d-a9fc-46ff6bfa3e14",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "488852",
+        "actual_microusd": "237321",
+        "partial_microusd": "0",
+        "charged_microusd": "237321",
+        "overrun": false
+      },
+      {
+        "id": "82a06c37-d774-4b43-a516-c131112a02cd",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "uncertain",
+        "bound_microusd": "1166496",
+        "actual_microusd": null,
+        "partial_microusd": "2270",
+        "charged_microusd": "1166496",
+        "overrun": false
+      },
+      {
+        "id": "8c1016d8-a5d2-4e31-9460-481dccb51b3d",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "362671",
+        "actual_microusd": "34771",
+        "partial_microusd": "0",
+        "charged_microusd": "34771",
+        "overrun": false
+      },
+      {
+        "id": "8ecb8154-9fbc-4972-be7c-d55b94b15a48",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "349355",
+        "actual_microusd": "178645",
+        "partial_microusd": "0",
+        "charged_microusd": "178645",
+        "overrun": false
+      },
+      {
+        "id": "9152aa5b-083d-495a-8113-b8a77b096fdc",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "1521323",
+        "actual_microusd": "151226",
+        "partial_microusd": "0",
+        "charged_microusd": "151226",
+        "overrun": false
+      },
+      {
+        "id": "9c7ca2c5-a698-4cc9-a8c7-e50c97e49c94",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "1442431",
+        "actual_microusd": "330503",
+        "partial_microusd": "0",
+        "charged_microusd": "330503",
+        "overrun": false
+      },
+      {
+        "id": "9f529218-a3c5-4a23-8951-21bf07e9c824",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "1464227",
+        "actual_microusd": "83464",
+        "partial_microusd": "0",
+        "charged_microusd": "83464",
+        "overrun": false
+      },
+      {
+        "id": "aaacc517-0ce2-482f-8eb2-f513d354bf34",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "335919",
+        "actual_microusd": "227072",
+        "partial_microusd": "0",
+        "charged_microusd": "227072",
+        "overrun": false
+      },
+      {
+        "id": "b375d190-7d17-4071-8d39-17d82202b37d",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "335919",
+        "actual_microusd": "301876",
+        "partial_microusd": "0",
+        "charged_microusd": "301876",
+        "overrun": false
+      },
+      {
+        "id": "bea78c96-fcf2-4c7c-abce-a453cfe32259",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "475569",
+        "actual_microusd": "221621",
+        "partial_microusd": "0",
+        "charged_microusd": "221621",
+        "overrun": false
+      },
+      {
+        "id": "c20cefaa-3c3c-4f2f-85ab-e3d734717c49",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "395918",
+        "actual_microusd": "134891",
+        "partial_microusd": "0",
+        "charged_microusd": "134891",
+        "overrun": false
+      },
+      {
+        "id": "ce67238f-8ec3-442e-a980-e85676620b9e",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "uncertain",
+        "bound_microusd": "1442431",
+        "actual_microusd": null,
+        "partial_microusd": "28331",
+        "charged_microusd": "1442431",
+        "overrun": false
+      },
+      {
+        "id": "d41ddec1-bda1-4dcb-86a8-1bb3883b3dbf",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "uncertain",
+        "bound_microusd": "1549230",
+        "actual_microusd": null,
+        "partial_microusd": "86190",
+        "charged_microusd": "1549230",
+        "overrun": false
+      },
+      {
+        "id": "e4d79ecb-7cd7-4a95-bd13-840abeb6310e",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "305388",
+        "actual_microusd": "82486",
+        "partial_microusd": "0",
+        "charged_microusd": "82486",
+        "overrun": false
+      },
+      {
+        "id": "e7ef463f-4480-438a-931f-2283a7d85a91",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "298579",
+        "actual_microusd": "150423",
+        "partial_microusd": "0",
+        "charged_microusd": "150423",
+        "overrun": false
+      },
+      {
+        "id": "e94b1886-35af-43e3-860e-00fd9afa1167",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "313605",
+        "actual_microusd": "70381",
+        "partial_microusd": "0",
+        "charged_microusd": "70381",
+        "overrun": false
+      },
+      {
+        "id": "f942e6e0-7569-4e4f-ba9e-123a7eb1ddcd",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "333818",
+        "actual_microusd": "70775",
+        "partial_microusd": "0",
+        "charged_microusd": "70775",
+        "overrun": false
+      },
+      {
+        "id": "fd4611b7-8218-4e08-bd79-56d7ccb44c69",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "599979",
+        "actual_microusd": "61326",
+        "partial_microusd": "0",
+        "charged_microusd": "61326",
+        "overrun": false
+      },
+      {
+        "id": "fd6d39ad-4cca-4bcc-bd71-9f5a2eedd0c0",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "304156",
+        "actual_microusd": "64509",
+        "partial_microusd": "0",
+        "charged_microusd": "64509",
+        "overrun": false
+      },
+      {
+        "id": "fe31825c-362c-4e6e-be23-74f2b6712777",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "status": "settled",
+        "bound_microusd": "352023",
+        "actual_microusd": "187847",
+        "partial_microusd": "0",
+        "charged_microusd": "187847",
+        "overrun": false
+      }
+    ],
+    "days": [
+      {
+        "scope": "anthropic",
+        "spent_microusd": "11285144",
+        "reserved_microusd": "0"
+      },
+      {
+        "scope": "global",
+        "spent_microusd": "11285144",
+        "reserved_microusd": "0"
+      }
+    ],
+    "limits": [
+      {
+        "scope": "anthropic",
+        "enabled": false,
+        "emergency_stop": false,
+        "daily_limit_microusd": "12420000"
+      },
+      {
+        "scope": "deepseek",
+        "enabled": false,
+        "emergency_stop": false,
+        "daily_limit_microusd": "0"
+      },
+      {
+        "scope": "global",
+        "enabled": false,
+        "emergency_stop": false,
+        "daily_limit_microusd": "12420000"
+      },
+      {
+        "scope": "media_worker",
+        "enabled": false,
+        "emergency_stop": false,
+        "daily_limit_microusd": "0"
+      },
+      {
+        "scope": "openai",
+        "enabled": false,
+        "emergency_stop": false,
+        "daily_limit_microusd": "0"
+      },
+      {
+        "scope": "qwen_hosted",
+        "enabled": false,
+        "emergency_stop": false,
+        "daily_limit_microusd": "0"
+      },
+      {
+        "scope": "self_hosted",
+        "enabled": false,
+        "emergency_stop": false,
+        "daily_limit_microusd": "0"
+      }
+    ],
+    "accountedMicrousd": "11285144",
+    "reconciles": true
+  },
+  "blockers": [
+    "Root must reserve an exact package in the shared round ledger before paid calls.",
+    "Old local-quality-server uses the previous round; use a separately reviewed isolated launcher with a package cap and deadline.",
+    "Old qualify-products lacks the required operation envelope and reuses fixtures; prepare fresh project IDs and fresh evidence paths.",
+    "Pin source hashes after Claude finishes document work; compare again immediately before generation and export.",
+    "OpenAI credential absent: image generation is excluded and remains unqualified."
+  ]
+}

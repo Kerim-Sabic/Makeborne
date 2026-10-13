@@ -46,7 +46,7 @@ export default function AccountPreview({ content, style, dirty, artworkScope }: 
     </header>
     <div className={`ap-stage ${content.kind}${mobile && content.kind === "website" ? " ap-mobile" : ""}`} style={palette}>
       {content.kind === "presentation" ? <>
-        <AccountSlidePreview slide={slides[current]} index={current} total={slides.length} renderImage={block => <PreviewBlock block={block} artworkScope={artworkScope} />} />
+        <AccountSlidePreview showNotes slide={slides[current]} index={current} total={slides.length} renderImage={block => <PreviewBlock block={block} artworkScope={artworkScope} />} />
         <nav className="ap-slide-nav" aria-label="Preview slides"><button type="button" disabled={current === 0} aria-label="Previous slide" onClick={() => setSlideIndex(current - 1)}><ChevronLeft size={16} /></button><span aria-live="polite">{current + 1} / {slides.length}</span><button type="button" disabled={current === slides.length - 1} aria-label="Next slide" onClick={() => setSlideIndex(current + 1)}><ChevronRight size={16} /></button></nav>
       </> : content.kind === "book" ? <AccountBookPreview title={content.title} blocks={previewBlocks(content)} renderBlock={block => <PreviewBlock block={block} artworkScope={artworkScope} />} /> : <div className="ap-document">
         <header className="ap-site-brand">{content.title}<span className="ap-brand-dot" /></header>

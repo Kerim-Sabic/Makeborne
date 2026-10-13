@@ -26,7 +26,7 @@ function load(file) {
 const policy = load("infra/customer-sites/site-policy.js");
 const {default: worker} = load("infra/customer-sites/_worker.js");
 const {prepareSiteBundle, serializeSiteFiles, SiteBundleError} = load("src/lib/hosting/bundle.ts");
-const {renderHostedSnapshot} = load("src/lib/hosting/snapshot.ts");
+const {renderHostedSnapshot, inlineSnapshotImages} = load("src/lib/hosting/snapshot.ts");
 const config = load("src/lib/hosting/config.ts");
 
 let count = 0;
@@ -137,6 +137,10 @@ check("bundles are content-addressed and validated before storage", () => {
   assert.throws(() => prepareSiteBundle({js, css, images: big}), /6 MB/);
 });
 check("the static fallback keeps published images and the hosted stylesheet, nothing executable", () => {
+  for (const incomplete of ['<html><head></head>', '<html><body><div id="root"></div></body></html>']) {
+    assert.throws(() => renderHostedSnapshot(incomplete, "S", "D", "https://x.makeborne.site/", {requireReactRoot:true}), /preview is incomplete/);
+  }
+  assert.match(renderHostedSnapshot('<html><body><div id="root"><main>Ready</main></div></body></html>', "S", "D", "https://x.makeborne.site/", {requireReactRoot:true}), /<main>Ready<\/main>/);
   const snapshot = '<!doctype html><html lang="en"><head><style data-makeborne-bundle>.a{color:red}</style><style>.b{background:url(/images/hero.webp)} .c{background:url("https://evil.test/t.png")} .d{background:url(/images/unknown.webp)}</style></head><body><div id="root"><img src="/images/hero.webp" alt="Hero"><img src="/images/unknown.webp" alt="x"><img src="https://evil.test/p.png" alt="y"><a href="/about">About</a><a href="https://example.com">Out</a><button onclick="steal()">Go</button><script>alert(1)</script></div></body></html>';
   const html = renderHostedSnapshot(snapshot, "Site", "Desc", "https://site.makeborne.site/", {assetPaths: new Set(["/images/hero.webp"]), stylesheet: "/_mb/app-0123456789abcdef.css"});
   assert.match(html, /<link rel="stylesheet" href="\/_mb\/app-0123456789abcdef\.css">/);
@@ -153,14 +157,86 @@ check("the static fallback keeps published images and the hosted stylesheet, not
   const forged = renderHostedSnapshot(snapshot, "S", "D", "https://x.makeborne.site/", {stylesheet: "https://evil.test/x.css"});
   assert.doesNotMatch(forged, /evil\.test|<link rel="stylesheet"/, "only content-addressed same-origin stylesheets are linked");
 });
-check("site addresses use one origin per site on the isolated domain", () => {
-  assert.equal(config.siteAddress("good-dog"), "https://good-dog.makeborne.site/");
-  assert.deepEqual(config.SITE_ADDRESS_PARTS, {before: "", after: ".makeborne.site"});
+check("publication preserves safe document attributes without reviving executable markup", () => {
+  const snapshot = `<!doctype html><html lang="zh-Hant-TW" dir="rtl" class="dark" data-theme="midnight" style="--ink:#eee;background:#101010" onpointerdown="steal()"><head><style>html.dark body.wide{color:var(--ink)}</style></head><body id="page" class="wide" data-layout="a&amp;b" aria-label="A &quot;quoted&quot; page" title="x > y" style="margin:0;background-image:url('/images/hero.webp')" onload="steal()" background="https://evil.test/x.png"><div id="root"><main>Ready</main></div></body></html>`;
+  for (const options of [{}, { assetPaths: new Set(["/images/hero.webp"]), stylesheet: "/_mb/app-0123456789abcdef.css" }]) {
+    const html = renderHostedSnapshot(snapshot, "S", "D", "https://x.makeborne.site/", { ...options, requireReactRoot: true });
+    assert.match(html, /<html[^>]*lang="zh-Hant-TW"[^>]*dir="rtl"[^>]*class="dark"[^>]*data-theme="midnight"/);
+    assert.match(html, /--ink:#eee;background:#101010/);
+    assert.match(html, /<body[^>]*id="page"[^>]*class="wide"[^>]*data-layout="a&amp;b"/);
+    assert.match(html, /aria-label="A &quot;quoted&quot; page"/);
+    assert.match(html, /title="x &gt; y"/);
+    assert.match(html, /<div id="root"><main>Ready<\/main><\/div>/);
+    assert.doesNotMatch(html, /onload|onpointerdown|steal\(|evil\.test|\sbackground="/);
+    if (options.assetPaths) assert.match(html, /url\(&#39;\/images\/hero\.webp&#39;\)/);
+    else assert.doesNotMatch(html, /\/images\/hero\.webp/);
+  }
+  const bad = renderHostedSnapshot('<html lang="invalid language" dir="wrong" onclick="x()"><body style="background:url(https://evil.test/p.png)" onload="x()"><main>Ready</main></body></html>', "S", "D", "https://x.makeborne.site/");
+  assert.match(bad, /<html lang="en">/);
+  assert.doesNotMatch(bad, /onclick|onload|evil\.test|dir="wrong"/);
+});
+check("without configuration, sites keep their existing addresses and stay static", () => {
+  assert.equal(config.HOSTING.mode, "legacy", "the harness runs with no hosting variables");
+  assert.equal(config.siteAddress("good-dog"), "https://sites.makeborne.com/good-dog");
+  assert.deepEqual(config.SITE_ADDRESS_PARTS, {before: "sites.makeborne.com/", after: ""});
+  assert.equal(config.HOSTING.interactiveAllowed, false);
   assert.ok(config.validSiteSlug("good-dog"));
   for (const bad of ["xn--abc", "www", "api", "a", "-ab", "ab-", "UPPER", "a_b"]) assert.ok(!config.validSiteSlug(bad), bad);
 });
+check("the isolated domain needs explicit, validated and attested configuration", () => {
+  const resolve = config.resolveHostingConfig;
+  const valid = {NEXT_PUBLIC_MAKEBORNE_SITE_HOSTING: "isolated", NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "https://{slug}.makeborne.site/", NEXT_PUBLIC_MAKEBORNE_SITE_DOMAIN_VERIFIED: "makeborne.site", NODE_ENV: "production"};
+  const on = resolve(valid);
+  assert.deepEqual([on.mode, on.domain, on.interactiveAllowed, on.issues], ["isolated", "makeborne.site", true, []]);
+  assert.equal(config.siteAddress("good-dog", on), "https://good-dog.makeborne.site/");
+  assert.deepEqual(config.addressParts(on.template), {before: "", after: ".makeborne.site"});
+  const refused = [
+    [{}, false],
+    [{NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "https://{slug}.makeborne.site/"}, true],            // the old single variable no longer switches hosts
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_HOSTING: "yes"}, true],
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_DOMAIN_VERIFIED: undefined}, true],                       // prerequisites not attested
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_DOMAIN_VERIFIED: "other.site"}, true],
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "https://{slug}.sites.makeborne.com/", NEXT_PUBLIC_MAKEBORNE_SITE_DOMAIN_VERIFIED: "sites.makeborne.com"}, true], // application domain
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "https://{slug}.makeborne.com/", NEXT_PUBLIC_MAKEBORNE_SITE_DOMAIN_VERIFIED: "makeborne.com"}, true],
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "https://sites.makeborne.site/{slug}"}, true],  // path addresses share one origin
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "http://{slug}.makeborne.site/"}, true],
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "https://{slug}.{slug}.makeborne.site/"}, true],
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "https://{slug}.Makeborne.site/"}, true],
+    [{...valid, NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "http://{slug}.localhost:8787/"}, true],      // localhost only outside production
+  ];
+  for (const [env, reported] of refused) {
+    const result = resolve(env);
+    assert.deepEqual([result.mode, result.template, result.interactiveAllowed], ["legacy", "https://sites.makeborne.com/{slug}", false], JSON.stringify(env));
+    assert.equal(result.issues.length > 0, reported, JSON.stringify(env));
+  }
+  const local = resolve({...valid, NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE: "http://{slug}.localhost:8787/", NODE_ENV: "development"});
+  assert.deepEqual([local.mode, local.interactiveAllowed], ["isolated", true]);
+});
+check("portable copies embed project images within a budget and never carry scripts", () => {
+  const img = Buffer.from("RIFF0000WEBPVP8 fixture");
+  const big = Buffer.alloc(3_000_000, 1);
+  const snapshot = '<html><head><style>.hero{background:url("/images/hero.webp")}</style></head><body><img src="/images/hero.webp" alt="Hero"><img src="/images/team.webp" alt="Team"><img src="/images/huge.webp" alt="Huge"><script>alert(1)</script></body></html>';
+  const result = inlineSnapshotImages(snapshot, [{path: "/images/hero.webp", bytes: img}, {path: "/images/huge.webp", bytes: big}, {path: "/images/team.webp", bytes: img}], 2_500_000);
+  assert.deepEqual(result.embedded, ["/images/hero.webp", "/images/team.webp"]);
+  assert.deepEqual(result.omitted, ["/images/huge.webp"]);
+  const html = renderHostedSnapshot(result.snapshot, "Site", "Desc", "https://sites.makeborne.com/site");
+  assert.equal((html.match(/data:image\/webp;base64,/g) ?? []).length, 3, "hero (img + CSS) and team embedded");
+  assert.doesNotMatch(html, /\/images\/|<script|huge/i, "over-budget images and scripts are removed");
+  assert.match(html, /<link rel="canonical" href="https:\/\/sites\.makeborne\.com\/site">/);
+  assert.match(html, /<meta property="og:url" content="https:\/\/sites\.makeborne\.com\/site">/);
+  assert.deepEqual(inlineSnapshotImages('<img src="/images/../secret.webp">', [{path: "/images/../secret.webp", bytes: img}]).embedded, [], "only plain image paths are embedded");
+});
 
-const ENV = {SUPABASE_PUBLISHABLE_KEY: "sb_publishable_fixture", SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co", SITES_DOMAIN: "makeborne.site"};
+const ENV = {SITE_NAMESPACE: "production", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_fixture", SUPABASE_URL: "https://rklojnmmsmhwnkbzuidp.supabase.co", SITES_DOMAIN: "makeborne.site"};
+check("standalone legacy redirect excludes every reserved QA address", async () => {
+  const {default: legacy} = load("infra/customer-sites/legacy-redirect/_worker.js");
+  const {STAGING_SITE_LABELS} = load("infra/customer-sites/namespace-policy.js");
+  for(const slug of STAGING_SITE_LABELS) for(const method of ["GET","HEAD"]) {
+    const response=await legacy.fetch(new Request(`https://sites.makeborne.com/${slug}`,{method}));
+    assert.equal(response.status,404);assert.equal(response.headers.get("Location"),null);
+  }
+  assert.equal((await legacy.fetch(new Request("https://sites.makeborne.com/good-dog"))).headers.get("Location"),"https://good-dog.makeborne.site/");
+});
 const SITE_HTML = '<!doctype html><html lang="en"><head><title>Site</title><link rel="stylesheet" href="/_mb/app-1111111111111111.css"></head><body><div id="root"><h1>Hi</h1></div></body></html>';
 async function withRpc(handler, fn) {
   const original = global.fetch;
@@ -180,11 +256,11 @@ check("worker serves an interactive document with its bundle under the strict po
   const body = await response.text();
   assert.match(body, /<script type="module" src="\/_mb\/app-2222222222222222\.js"><\/script><\/head>/);
   assert.equal(response.headers.get("Content-Security-Policy"), policy.siteDocumentCsp({interactive: true, secure: true}));
-  assert.equal(response.headers.get("ETag"), '"mb2-7-1"');
+  assert.equal(response.headers.get("ETag"), '"mb4-7-1"');
   assert.equal(response.headers.get("X-Robots-Tag"), null);
-  assert.equal(calls[0].url, "https://abcdefghijklmnopqrst.supabase.co/rest/v1/rpc/makeborne_read_hosted_site_v2");
+  assert.equal(calls[0].url, "https://rklojnmmsmhwnkbzuidp.supabase.co/rest/v1/rpc/makeborne_read_hosted_site_v3");
   assert.deepEqual(Object.keys(calls[0].headers).sort(), ["Content-Type", "apikey"]);
-  const revalidated = await worker.fetch(new Request("https://good-dog.makeborne.site/", {headers: {"If-None-Match": '"mb2-7-1"'}}), ENV);
+  const revalidated = await worker.fetch(new Request("https://good-dog.makeborne.site/", {headers: {"If-None-Match": '"mb4-7-1"'}}), ENV);
   assert.equal(revalidated.status, 304);
   const route = await worker.fetch(new Request("https://good-dog.makeborne.site/services"), ENV);
   assert.equal(route.status, 200, "client routes fall back to the document");
@@ -230,7 +306,7 @@ check("worker routes hosts, unknown paths and failures safely", () => withRpc(()
   assert.equal((await worker.fetch(new Request("https://good-dog.makeborne.site/x.php"), ENV)).status, 404);
   assert.equal((await worker.fetch(new Request("https://a.b.makeborne.site/"), ENV)).status, 404);
   const apex = await worker.fetch(new Request("https://makeborne.site/"), ENV);
-  assert.equal(apex.status, 302);
+  assert.equal(apex.status, 308);
   assert.equal(apex.headers.get("Location"), "https://makeborne.com/");
   const legacy = await worker.fetch(new Request("https://sites.makeborne.com/good-dog"), ENV);
   assert.equal(legacy.headers.get("Location"), "https://good-dog.makeborne.site/");
@@ -245,11 +321,37 @@ check("worker refuses local or non-Supabase upstreams unless explicitly in local
   assert.equal((await worker.fetch(new Request("https://good-dog.makeborne.site/"), {...ENV, SUPABASE_URL: "https://evil.example"})).status, 503);
   assert.equal((await worker.fetch(new Request("https://good-dog.makeborne.site/"), {...ENV, SUPABASE_PUBLISHABLE_KEY: "sb_secret_x"})).status, 503);
   assert.equal(calls.length, 0);
-  const allowed = await worker.fetch(new Request("http://good-dog.localhost:8787/"), {...local, ALLOW_LOCAL_SUPABASE: "true", SITES_DOMAIN: "localhost"});
+  const allowed = await worker.fetch(new Request("http://good-dog.localhost:8787/"), {...local, SITE_NAMESPACE: "local", APP_ORIGIN: "http://127.0.0.1:3000", ALLOW_LOCAL_SUPABASE: "true", SITES_DOMAIN: "localhost"});
   assert.equal(allowed.status, 200);
   assert.equal(allowed.headers.get("Strict-Transport-Security"), null);
-  assert.equal(calls[0].url, "http://127.0.0.1:55321/rest/v1/rpc/makeborne_read_hosted_site_v2");
+  assert.equal(calls[0].url, "http://127.0.0.1:55321/rest/v1/rpc/makeborne_read_hosted_site_v3");
 }));
+check("worker sends enquiries only to an HTTPS app origin; a bad origin disables the host instead of falling back", () => withRpc(() => ({html: SITE_HTML, interactive: false, script: null, revision: 1}), async calls => {
+  for (const bad of ["http://makeborne.com", "https://makeborne.com/path", "ftp://x", "https://evil.example@makeborne.com", ""]) {
+    assert.equal((await worker.fetch(new Request("https://good-dog.makeborne.site/"), {...ENV, APP_ORIGIN: bad})).status, 503, bad);
+  }
+  assert.equal(calls.length, 0, "a refused configuration reads nothing");
+  assert.equal((await worker.fetch(new Request("https://good-dog.makeborne.site/"), {...ENV, APP_ORIGIN: "https://makeborne-release-staging-abc-kerimsabic-6594s-projects.vercel.app"})).status, 503);
+  assert.equal((await worker.fetch(new Request("https://good-dog.makeborne.site/"), ENV)).status, 200, "unset keeps the production default");
+  const local = {...ENV, SITE_NAMESPACE: "local", SUPABASE_URL: "http://127.0.0.1:55321", ALLOW_LOCAL_SUPABASE: "true", SITES_DOMAIN: "localhost", APP_ORIGIN: "http://127.0.0.1:3000"};
+  assert.equal((await worker.fetch(new Request("http://good-dog.localhost:8787/"), local)).status, 200, "plain HTTP only for local qualification");
+}));
+check("Vite manifest paths and exact declared document requests preserve isolation", async () => {
+  for(const path of ["/assets/index-AbCd123.js","/assets/styles-0123.css","/assets/inter-latin-123.woff2"]){assert.ok(policy.siteFilePath(path));assert.ok(policy.siteFileContentType(path));}
+  for(const path of ["/assets/.env","/assets/a.json","/assets/a.svg","/assets/nested/app.js","/assets/../app.js"]){assert.ok(!policy.siteFilePath(path));}
+  await withRpc((name,args)=>{
+    assert.equal(name,"makeborne_read_hosted_site_v3");assert.equal(args.p_slug,"good-dog");
+    return args.p_path==='/work'?{html:SITE_HTML,interactive:true,script:'/assets/index-AbCd123.js',revision:10}:null;
+  },async()=>{
+    const found=await worker.fetch(new Request('https://good-dog.makeborne.site/work'),ENV);assert.equal(found.status,200);assert.match(await found.text(),/src="\/assets\/index-AbCd123.js"/);
+    assert.equal((await worker.fetch(new Request('https://good-dog.makeborne.site/not-declared'),ENV)).status,404);
+  });
+  const font=Buffer.from('wOF2fixture');
+  await withRpc(()=>({content_type:'font/woff2',sha256:sha(font),body:font.toString('base64')}),async()=>{
+    const response=await worker.fetch(new Request('https://good-dog.makeborne.site/assets/font-123.woff2'),ENV);assert.equal(response.status,200);assert.equal(response.headers.get('Content-Type'),'font/woff2');assert.match(response.headers.get('Content-Security-Policy'),/sandbox/);
+    assert.equal((await worker.fetch(new Request('https://good-dog.makeborne.site/assets/app-123.js'),ENV)).status,503);
+  });
+});
 check("migration keeps file storage private and readers bounded", () => {
   const sql = fs.readFileSync("supabase/migrations/20261011140000_hosted_site_bundles.sql", "utf8");
   assert.match(sql, /revoke all on public\.hosted_site_files from public, anon, authenticated;/);
@@ -266,3 +368,4 @@ check("migration keeps file storage private and readers bounded", () => {
   }
   console.log(`${count} hosting checks passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
+

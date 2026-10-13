@@ -1,0 +1,5 @@
+BEGIN
+CREATE EXTENSION
+DO
+NOTICE:  PASS concurrency: 4 duplicate observations + 4 duplicate payment deliveries + a racing reconcile -> 4 started allocations granted exactly once (4 x 850; 3 ended and lapsed), 1 period, 4 observations + 1 payment kept
+ROLLBACK

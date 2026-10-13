@@ -1,0 +1,30 @@
+BEGIN
+SET
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+NOTICE:  PASS upgrade in month 6: months 1-5 unchanged, month 6 topped up, month 7 at the new tier (incl. delayed catch-up)
+NOTICE:  PASS downgrade in month 6: month 6 unchanged, month 7 at the lower tier, no clawback
+NOTICE:  PASS repeated upgrades/downgrades: each month gets its historical tier plus in-month upgrades only; repeats idempotent
+NOTICE:  PASS monthly->yearly->monthly transitions at renewal boundaries: 14 allocations, no gap or duplicate
+NOTICE:  PASS month ends (Jan 31 anchor), leap years (Feb 29 anchor) and renewal boundaries
+NOTICE:  PASS cancellation: canceling keeps months, cancelled months not granted, reactivation resumes
+NOTICE:  PASS earlier single-reference grants honoured
+NOTICE:  PASS no inferred history: months before evidence open issues; paid initial payment resolves them; duplicates ignored
+NOTICE:  PASS subscription_update and refunded payments are stored but are not entitlement evidence
+NOTICE:  PASS manual review: owed and not-owed resolutions, audit note required, other months stay open
+DO
+ROLLBACK
+BEGIN
+DO
+NOTICE:  PASS recording: stable anchors, duplicates, out-of-order, extension, renewal, missing/inconsistent data refused, unknown tiers rejected
+ROLLBACK
+BEGIN
+DO
+ROLLBACK
+NOTICE:  PASS permissions: only the service role records and reconciles; nobody grants with a caller-chosen tier
+BEGIN
+NOTICE:  PASS job control: no overlapping runs, crashed lease recovered as abandoned, heartbeat/finish once, health, stalest-first selection
+DO
+ROLLBACK

@@ -25,6 +25,27 @@ export const REVIEW_LIMITS = Object.freeze({
   maxErrorChars: 600,
 });
 
+/** A partial capture must not become a paid 'passed design review'. Runtime
+ * errors without images may still be repaired, but cannot prove visual quality.
+ */
+export function reviewCoverageIssue(input: {
+  screenshots: readonly { viewport: ReviewViewport; index: number; of: number }[];
+  viewports: readonly { viewport: ReviewViewport }[];
+  errors: readonly string[];
+  failures?: readonly string[];
+}): string | null {
+  if (input.failures?.length) return "Desktop and mobile could not both be captured. Try the review again.";
+  if (!input.screenshots.length) return input.errors.length ? null : "The page could not be captured.";
+  for (const { id, label } of REVIEW_VIEWPORTS) {
+    if (input.viewports.filter(report => report.viewport === id).length !== 1) return `${label} capture is missing or duplicated.`;
+    const shots = input.screenshots.filter(shot => shot.viewport === id);
+    if (!shots.length || shots.some(shot => shot.of !== shots.length)
+      || new Set(shots.map(shot => shot.index)).size !== shots.length
+      || shots.some(shot => shot.index < 0 || shot.index >= shots.length)) return `${label} screenshots are incomplete.`;
+  }
+  return null;
+}
+
 /** Automatic review rounds after a build, by effort level. Light skips the
  * review (it is the cheap, focused mode); Ultra may review its own fixes. */
 export const AUTO_REVIEW_ROUNDS: Readonly<Record<EffortLevel, number>> = Object.freeze({ light: 0, medium: 1, high: 1, super_high: 1, ultra: 2 });

@@ -5,9 +5,10 @@ import { ArrowUpRight, Check, Copy, Link2, LoaderCircle, Mail, MessageSquare, Re
 import { cloudAccountGuard } from "./cloud-api";
 import { linkState, type ReviewLink, type StudioReviewComment } from "@/lib/client-review/contracts";
 import { anchorLabel, builderRequestFromFeedback, reviewMailto } from "@/lib/client-review/feedback";
+import { deliveryStageLabels, type ProjectDeliveryStage } from "@/lib/project-delivery";
 
 type Kind = "website" | "book" | "presentation";
-type Overview = { currentVersion: number; kind: Kind; title: string; links: ReviewLink[]; comments: StudioReviewComment[]; snapshots: number[]; client: { id: string; name: string; email: string; stage: string } | null };
+type Overview = { currentVersion: number; kind: Kind; title: string; links: ReviewLink[]; comments: StudioReviewComment[]; snapshots: number[]; client: { id: string; name: string; email: string; stage: string } | null; deliveryStage?: ProjectDeliveryStage };
 const day = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 const moment = (value: string) => new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -118,10 +119,10 @@ export default function ClientReviewPanel({ accountId, workspaceId, artifactId, 
     {decisions.map(decision => <div key={decision.id} className={`crp-decision is-${decision.kind}`} role="status">
       {decision.kind === "approved" ? <Check size={16} /> : <RotateCcw size={16} />}
       <div><strong>{decision.kind === "approved" ? `${decision.authorName} approved version ${decision.version}` : `${decision.authorName} requested changes on version ${decision.version}`}</strong>
-        <p>{moment(decision.createdAt)}{decision.kind === "approved" ? (data.client ? ` · ${data.client.name} moved to ${data.client.stage}` : " · Link this project to a client to track delivery") : ""}</p>
+        <p>{moment(decision.createdAt)}{decision.kind === "approved" ? " · Project marked Delivered" : " · Project marked Changes requested"}</p>
         {decision.body && <blockquote>{decision.body}</blockquote>}</div>
     </div>)}
-    <div className="crp-client">{data.client ? <>For <strong>{data.client.name}</strong><span className="crp-pill">{data.client.stage}</span><small>Sending a link moves them to Review; approval moves them to Delivered.</small></> : <small>Link this project to a client to move them through Review → Delivered automatically.</small>}</div>
+    <div className="crp-client">{data.client ? <>For <strong>{data.client.name}</strong></> : <>Delivery</>}<span className="crp-pill">{deliveryStageLabels[data.deliveryStage ?? "active"]}</span><small>Sending a link marks this project In review; the client&rsquo;s decision marks it Delivered or Changes requested.{data.client ? " Their sales stage stays as you set it." : ""}</small></div>
 
     {canEdit && <div className="crp-create">
       <h4><Link2 size={15} /> Share for review</h4>

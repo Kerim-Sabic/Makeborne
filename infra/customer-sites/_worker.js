@@ -1,6 +1,8 @@
+import { submitEnquiry } from "./forms.js";
+import { siteNamespacePolicy, classifySiteNamespaceRequest } from "./namespace-policy.js";
 import {
   composeSiteDocument, siteDocumentHeaders, siteDocumentPath, siteErrorHeaders, siteErrorPage, siteFileHeaders, siteFilePath,
-  siteOrigin, siteSlugFromHost, validSiteLabel, SITE_CONTENT_TYPES, SITE_LIMITS, SITE_SCRIPT_PATH,
+  siteOrigin, SITE_CONTENT_TYPES, SITE_LIMITS, siteScriptPath, siteFileContentType,
 } from "./site-policy.js";
 
 /** Cloudflare Worker for published customer websites.
@@ -8,21 +10,18 @@ import {
  * `<slug>.<SITES_DOMAIN>` serves one site per origin: its prerendered snapshot
  * plus (when the owner keeps JavaScript on) its same-origin module bundle and
  * project images. The legacy path host (`sites.makeborne.com/<slug>`) redirects
- * there. Only the publishable Supabase key is used, against two read-only RPCs;
- * no visitor cookies, identity or headers are forwarded. */
-const WORKER_VERSION = "mb2";
+ * there. Site reads use the publishable Supabase key against read-only RPCs.
+ * Enquiries use a separately signed app gateway; visitor cookies are never
+ * forwarded and raw visitor IP addresses are never stored. */
+const WORKER_VERSION = "mb4";
 const ALLOWED_TYPES = new Set(Object.values(SITE_CONTENT_TYPES));
 
 function configuration(env) {
-  const key = env.SUPABASE_PUBLISHABLE_KEY, url = env.SUPABASE_URL, domain = env.SITES_DOMAIN;
+  const policy = siteNamespacePolicy(env);
+  if (!policy) return null;
+  const key = env.SUPABASE_PUBLISHABLE_KEY, url = env.SUPABASE_URL;
   if (typeof key !== "string" || !key.startsWith("sb_publishable_")) return null;
-  const hosted = typeof url === "string" && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url);
-  // Local qualification only (wrangler dev against the local Supabase stack).
-  const local = env.ALLOW_LOCAL_SUPABASE === "true" && typeof url === "string" && /^http:\/\/(?:127\.0\.0\.1|localhost):\d{2,5}$/.test(url);
-  if (!(hosted || local) || typeof domain !== "string" || !/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/.test(domain)) return null;
-  const appOrigin = typeof env.APP_ORIGIN === "string" && /^https?:\/\/[a-z0-9.:-]+$/.test(env.APP_ORIGIN) ? env.APP_ORIGIN : "https://makeborne.com";
-  const legacyHost = typeof env.LEGACY_SITES_HOST === "string" ? env.LEGACY_SITES_HOST.toLowerCase() : "sites.makeborne.com";
-  return { key, url, domain: domain.toLowerCase(), appOrigin, legacyHost };
+  return { key, url, ...policy };
 }
 
 function failure(status, secure, head) {
@@ -70,22 +69,27 @@ const hex = buffer => [...new Uint8Array(buffer)].map(byte => byte.toString(16).
 const notModified = (request, headers) => request.headers.get("If-None-Match") === headers.ETag ? new Response(null, { status: 304, headers }) : null;
 
 async function serveDocument(request, config, slug, pathname, secure) {
-  const site = await rpc(config, "makeborne_read_hosted_site_v2", { p_slug: slug }, 24_000_100);
+  const site = await rpc(config, "makeborne_read_hosted_site_v3", { p_slug: slug, p_path: pathname }, 24_000_100);
   if (site === null) return failure(404, secure, request.method === "HEAD");
   if (typeof site !== "object" || typeof site.html !== "string" || typeof site.interactive !== "boolean" || !Number.isInteger(site.revision)
-    || (site.script !== null && (typeof site.script !== "string" || !SITE_SCRIPT_PATH.test(site.script)))
+    || (site.script !== null && (typeof site.script !== "string" || !siteScriptPath(site.script)))
+    || (site.branding !== undefined && typeof site.branding !== "boolean")
     || new TextEncoder().encode(site.html).byteLength > SITE_LIMITS.html) throw new Error("invalid_site");
   const interactive = site.interactive && site.script !== null;
-  const headers = siteDocumentHeaders({ interactive, secure, indexable: pathname === "/", etag: `"${WORKER_VERSION}-${site.revision}-${interactive ? 1 : 0}"` });
+  // The owner can remove the badge in Settings; older readers omit the flag, so it stays on.
+  const branding = site.branding !== false;
+  const headers = siteDocumentHeaders({ interactive, secure, indexable: config.indexable && pathname === "/", etag: `"${WORKER_VERSION}-${site.revision}-${interactive ? 1 : 0}${branding ? "" : "-u"}"` });
   const cached = notModified(request, headers);
   if (cached) return cached;
-  const html = composeSiteDocument(site.html, { script: site.script, interactive });
+  const html = composeSiteDocument(site.html, { script: site.script, interactive, branding });
   return new Response(request.method === "HEAD" ? null : html, { headers });
 }
 
 async function serveFile(request, context, config, slug, url, secure) {
   const cache = typeof caches === "undefined" ? null : caches.default;
-  const key = new Request(`${url.origin}${url.pathname}`, { method: "GET" });
+  // Namespace-partitioned keys cannot reuse old production bytes on a QA URL
+  // when exact staging routes take over. Request query flags do not select it.
+  const key = new Request(`${url.origin}${url.pathname}?__mb_namespace=${config.namespace}-v1`, { method: "GET" });
   const hit = cache ? await cache.match(key) : null;
   if (hit) {
     if (request.headers.get("If-None-Match") === hit.headers.get("ETag")) return new Response(null, { status: 304, headers: hit.headers });
@@ -95,6 +99,9 @@ async function serveFile(request, context, config, slug, url, secure) {
   if (file === null) return failure(404, secure, request.method === "HEAD");
   if (typeof file !== "object" || !ALLOWED_TYPES.has(file.content_type) || typeof file.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(file.sha256)
     || typeof file.body !== "string" || file.body.length > Math.ceil(SITE_LIMITS.image * 4 / 3) + 4) throw new Error("invalid_file");
+  // Legacy publishers normalized all raster bytes to WebP while retaining paths.
+  if (file.content_type !== siteFileContentType(url.pathname)
+    && !(file.content_type === SITE_CONTENT_TYPES.image && /\.(?:png|jpe?g)$/i.test(url.pathname))) throw new Error("invalid_file_type");
   const bytes = decodeBase64(file.body);
   if (hex(await crypto.subtle.digest("SHA-256", bytes)) !== file.sha256) throw new Error("digest_mismatch");
   const headers = siteFileHeaders({ pathname: url.pathname, contentType: file.content_type, secure, etag: `"${file.sha256}"` });
@@ -110,22 +117,29 @@ const customerSites = {
     const url = new URL(request.url);
     const secure = url.protocol === "https:";
     const head = request.method === "HEAD";
-    if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
     const config = configuration(env);
     if (!config) return failure(503, secure, head);
-    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    const address = classifySiteNamespaceRequest(url, config);
+    if (!address) return failure(404, secure, head);
+    if (!secure && !config.local) {
+      return Response.redirect(`https://${url.host}${url.pathname}${url.search}`, 308);
+    }
+    if (url.pathname === "/_mb/enquiries") {
+      if(address.kind!=="site")return failure(404,secure,head);
+      return submitEnquiry(request,env,config,address.slug);
+    }
+    if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
     // Legacy path-based addresses move to the site's own origin.
-    if (host === config.legacyHost) {
-      const slug = url.pathname.replace(/^\//, "").replace(/\/$/, "");
+    if (address.kind === "legacy") {
+      const slug = address.slug;
       if (!slug) return Response.redirect(config.appOrigin, 302);
-      if (!validSiteLabel(slug)) return failure(404, secure, head);
       return Response.redirect(`${siteOrigin(slug, config.domain, secure)}${url.port ? `:${url.port}` : ""}/`, 301);
     }
-    if (host === config.domain || host === `www.${config.domain}`) return Response.redirect(config.appOrigin, 302);
-    const slug = siteSlugFromHost(host, config.domain);
-    if (!slug || url.pathname.length > 240) return failure(404, secure, head);
+    if (address.kind === "apex") return Response.redirect(`${config.appOrigin}/`, 308);
+    const slug = address.slug;
+    if (url.pathname.length > 240) return failure(404, secure, head);
     if (url.pathname === "/robots.txt") {
-      return new Response(head ? null : "User-agent: *\nAllow: /\n", { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+      return new Response(head ? null : `User-agent: *\n${config.indexable ? "Allow" : "Disallow"}: /\n`, { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
     }
     try {
       if (siteFilePath(url.pathname)) return await serveFile(request, context, config, slug, url, secure);

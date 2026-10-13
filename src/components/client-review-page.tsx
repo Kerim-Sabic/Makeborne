@@ -4,6 +4,7 @@ import { Check, ChevronLeft, ChevronRight, Clock3, Crosshair, Link2Off, MessageS
 import BrandMark from "./brand-mark";
 import AccountPreview, { PreviewBlock, previewPalette } from "./account-preview";
 import AccountBookPreview from "./account-book-preview";
+import ClientDocumentReview from "./client-document-review";
 import AccountSlidePreview from "./account-slide-preview";
 import { ArtifactContentSchema, StyleProfileSchema, type ArtifactContent, type StyleProfile } from "@/lib/domain";
 import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
@@ -68,6 +69,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [documentReady, setDocumentReady] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<"approved" | "changes_requested" | null>(null);
   const [note, setNote] = useState("");
@@ -80,9 +82,11 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     const style = StyleProfileSchema.safeParse({ referenceAssetIds: [], description: "", name: "Style", version: 1, id: "review", typography: { headingFont: "Source Serif 4", bodyFont: "Inter" }, colors: {}, ...(initial.style && typeof initial.style === "object" ? initial.style : {}) });
     return content.success ? { content: content.data, style: style.success ? style.data : null } : null;
   }, [initial]);
+  const requiresDocument = !!parsed?.content.document;
+  const approvalReady = !requiresDocument || documentReady;
   const discussion = comments.filter(comment => comment.kind === "comment");
   const numbered = new Map(discussion.filter(comment => comment.anchor.kind === "point").map((comment, index) => [comment.id, index + 1]));
-  const pins = discussion.flatMap(comment => comment.anchor.kind === "point" ? [{ id: comment.id, number: numbered.get(comment.id)!, anchor: comment.anchor, resolved: comment.resolved }] : []);
+  const pins = discussion.filter(comment => comment.version === initial.version).flatMap(comment => comment.anchor.kind === "point" ? [{ id: comment.id, number: numbered.get(comment.id)!, anchor: comment.anchor, resolved: comment.resolved }] : []);
   const needsIdentity = !identityReady || editingIdentity || !identity.name.trim();
 
   const pick = useCallback((next: Pin) => { setPin(next); setPinning(false); setTimeout(() => composer.current?.focus(), 0); }, []);
@@ -97,7 +101,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     if (!body.trim()) { setError("Write a comment first."); return; }
     setBusy(true);
     try {
-      const result = await post<{ comment: ReviewComment }>(`/api/review/${token}/comments`, { name: identity.name, email: identity.email, body, anchor: anchor() });
+      const result = await post<{ comment: ReviewComment }>(`/api/review/${token}/comments`, { version: initial.version, name: identity.name, email: identity.email, body, anchor: anchor() });
       saveIdentity(identity); setEditingIdentity(false); setIdentityReady(true);
       setComments(current => [...current, result.comment]); setBody(""); setPin(null); setActive(result.comment.id);
       setNotice("Comment added. Thank you!");
@@ -105,11 +109,11 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     finally { setBusy(false); }
   }
   async function decide(value: "approved" | "changes_requested") {
-    if (busy) return;
+    if (busy || (value === "approved" && !approvalReady)) return;
     if (!identity.name.trim()) { setEditingIdentity(true); setError("Add your name before sending your decision."); return; }
     setBusy(true); setError("");
     try {
-      const result = await post<{ decision: ReviewDecision; comment: ReviewComment }>(`/api/review/${token}/decision`, { name: identity.name, email: identity.email, decision: value, note });
+      const result = await post<{ decision: ReviewDecision; comment: ReviewComment }>(`/api/review/${token}/decision`, { version: initial.version, name: identity.name, email: identity.email, decision: value, note });
       saveIdentity(identity); setEditingIdentity(false); setIdentityReady(true);
       setDecision(result.decision); setComments(current => [...current, result.comment]); setDeciding(null); setNote("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your decision didn’t go through."); }
@@ -133,7 +137,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
       <div className="cr-top-actions">
         {decision ? <DecisionBadge decision={decision} /> : null}
         <button type="button" className="button secondary" disabled={busy} aria-pressed={deciding === "changes_requested"} onClick={() => { setDeciding(deciding === "changes_requested" ? null : "changes_requested"); setNote(""); }}><RotateCcw size={15} /> Request changes</button>
-        <button type="button" className="button primary cr-approve" disabled={busy} aria-pressed={deciding === "approved"} onClick={() => { setDeciding(deciding === "approved" ? null : "approved"); setNote(""); }}><Check size={15} /> Approve</button>
+        <button type="button" className="button primary cr-approve" disabled={busy || !approvalReady} aria-pressed={deciding === "approved"} onClick={() => { setDeciding(deciding === "approved" ? null : "approved"); setNote(""); }}><Check size={15} /> Approve</button>
       </div>
     </header>
     {deciding && <section className="cr-decision-panel" aria-label={deciding === "approved" ? "Approve this version" : "Request changes"}>
@@ -145,13 +149,15 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
       <label className="cr-field">{deciding === "approved" ? "Note (optional)" : "Summary (optional)"}<textarea rows={3} maxLength={2000} value={note} onChange={event => setNote(event.target.value)} placeholder={deciding === "approved" ? "Looks great — ready to go." : "The hero feels too dark, and pricing needs the new tiers."} /></label>
       <div className="cr-decision-actions">
         <button type="button" className="button secondary small" onClick={() => setDeciding(null)} disabled={busy}>Cancel</button>
-        <button type="button" className={`button small ${deciding === "approved" ? "primary cr-approve" : "dark"}`} disabled={busy} onClick={() => void decide(deciding)}>{busy ? "Sending…" : deciding === "approved" ? "Approve version " + initial.version : "Send change request"}</button>
+        <button type="button" className={`button small ${deciding === "approved" ? "primary cr-approve" : "dark"}`} disabled={busy || (deciding === "approved" && !approvalReady)} onClick={() => void decide(deciding)}>{busy ? "Sending…" : deciding === "approved" ? "Approve version " + initial.version : "Send change request"}</button>
       </div>
     </section>}
     <div className="cr-layout">
       <main className="cr-stage" aria-label={`${initial.title} ${kindLabel}`}>
         {pinning && <div className="cr-pin-hint" role="status"><Crosshair size={14} /> Click anywhere on the {kindLabel} to pin your comment. <button type="button" onClick={() => setPinning(false)}>Cancel</button></div>}
         {initial.mode === "html" && initial.html ? <WebsiteFrame html={initial.html} title={initial.title} pinning={pinning} pins={pins} draft={pin} active={active} onPick={pick} onPin={id => setActive(id)} />
+          : parsed?.content.document ? <ClientDocumentReview key={`${token}:${initial.version}`} document={parsed.content.document} token={token} version={initial.version} onReady={setDocumentReady}
+            render={(html, onLoaded) => <WebsiteFrame html={html} title={initial.title} documentKind={parsed.content.document!.kind} onReady={onLoaded} pinning={pinning} pins={pins} draft={pin} active={active} onPick={pick} onPin={id => setActive(id)} />} />
           : parsed ? <ContentReview content={parsed.content} style={parsed.style} location={location} onLocation={setLocation} pinning={pinning} pins={pins} draft={pin} active={active} onPick={pick} onPin={id => setActive(id)} />
           : <p className="cr-empty" role="alert">This version can’t be displayed. Ask the team for a new link.</p>}
       </main>
@@ -263,12 +269,12 @@ function ContentReview({ content, style, location, onLocation, ...surface }: Sur
 /** The published-snapshot style website: sanitized, script-free HTML in a
  * sandbox without allow-scripts. Same-origin lets this page (not the site)
  * measure clicks and draw pins; the document itself can never run code. */
-function WebsiteFrame({ html, title, pinning, pins, draft, active, onPick, onPin }: Surface & { html: string; title: string }) {
+function WebsiteFrame({ html, title, documentKind, onReady, pinning, pins, draft, active, onPick, onPin }: Surface & { html: string; title: string; documentKind?: "deck" | "book"; onReady?: () => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [mobile, setMobile] = useState(false);
   const [loaded, setLoaded] = useState(0);
-  const state = useRef({ pinning, onPick, onPin });
-  useEffect(() => { state.current = { pinning, onPick, onPin }; }, [pinning, onPick, onPin]);
+  const state = useRef({ pinning, onPick, onPin, documentKind, onReady });
+  useEffect(() => { state.current = { pinning, onPick, onPin, documentKind, onReady }; }, [pinning, onPick, onPin, documentKind, onReady]);
   const attached = useRef<Document | null>(null);
   const attach = useCallback(() => {
     const doc = frame.current?.contentDocument;
@@ -291,7 +297,7 @@ function WebsiteFrame({ html, title, pinning, pins, draft, active, onPick, onPin
         const index = section ? Math.max(0, sections.indexOf(section)) : -1;
         const heading = (section?.querySelector("h1, h2, h3") as HTMLElement | null)?.innerText?.replace(/\s+/g, " ").trim().slice(0, 70);
         const name = section?.tagName === "HEADER" ? "Header" : section?.tagName === "FOOTER" ? "Footer" : heading ? `“${heading}”` : section?.id ? section.id.replace(/[-_]/g, " ") : "";
-        state.current.onPick({ x: event.pageX / width, y: event.pageY / height, ref: index >= 0 ? `section:${index}` : "page", label: name ? `Section ${name}` : "Website" });
+        state.current.onPick({ x: event.pageX / width, y: event.pageY / height, ref: index >= 0 ? `section:${index}` : "page", label: state.current.documentKind ? section?.getAttribute("aria-label") || name || "Document" : name ? `Section ${name}` : "Website" });
         return;
       }
       const link = target?.closest?.("a");
@@ -304,6 +310,7 @@ function WebsiteFrame({ html, title, pinning, pins, draft, active, onPick, onPin
     }, true);
     doc.addEventListener("submit", event => event.preventDefault(), true);
     setLoaded(value => value + 1);
+    void doc.fonts.ready.then(() => { if (frame.current?.contentDocument === doc) state.current.onReady?.(); });
   }, []);
   // A server-rendered srcdoc frame can finish loading before hydration, so
   // its load event is missed: attach as soon as the document is complete.
@@ -341,13 +348,13 @@ function WebsiteFrame({ html, title, pinning, pins, draft, active, onPick, onPin
     <div className="cr-website-bar">
       <span className="cr-dots" aria-hidden="true"><i /><i /><i /></span>
       <span className="cr-website-title">{title}</span>
-      <div className="cr-devices" role="group" aria-label="Preview width">
+      {!documentKind && <div className="cr-devices" role="group" aria-label="Preview width">
         <button type="button" aria-label="Desktop width" aria-pressed={!mobile} onClick={() => setMobile(false)}><Monitor size={15} /></button>
         <button type="button" aria-label="Mobile width" aria-pressed={mobile} onClick={() => setMobile(true)}><Smartphone size={15} /></button>
-      </div>
+      </div>}
     </div>
     <div className={`cr-website-viewport${mobile ? " is-mobile" : ""}`}>
-      <iframe ref={frame} key={mobile ? "mobile" : "desktop"} title={`${title} website preview`} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={attach} />
+      <iframe ref={frame} key={mobile ? "mobile" : "desktop"} title={`${title} ${documentKind === "deck" ? "presentation" : documentKind === "book" ? "book" : "website"} preview`} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={attach} />
     </div>
   </section>;
 }

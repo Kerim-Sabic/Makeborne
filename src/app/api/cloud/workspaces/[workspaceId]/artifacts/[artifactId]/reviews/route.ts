@@ -1,4 +1,5 @@
 import { cloudBody, cloudContext, cloudError, cloudJson, databaseError, validId } from "@/lib/cloud/server";
+import { ProjectDeliveryStageSchema } from "@/lib/project-delivery";
 import { billingDatabase } from "@/lib/billing/database";
 import { RequestError } from "@/lib/server/http";
 import { ReviewCreateSchema } from "@/lib/client-review/contracts";
@@ -21,7 +22,7 @@ export async function GET(_request: Request, context: Context) {
     const [links, snapshots, project] = await Promise.all([
       client.from("client_review_links").select(LINK_COLUMNS).eq("workspace_id", workspaceId).eq("artifact_id", artifactId).order("created_at", { ascending: false }).limit(50),
       client.from("client_review_snapshots").select("version_number").eq("workspace_id", workspaceId).eq("artifact_id", artifactId).order("version_number", { ascending: false }).limit(20),
-      client.from("projects").select("client_id").eq("workspace_id", workspaceId).eq("id", artifact.project_id).maybeSingle(),
+      client.from("projects").select("client_id,delivery_stage").eq("workspace_id", workspaceId).eq("id", artifact.project_id).maybeSingle(),
     ]);
     databaseError(links.error); databaseError(snapshots.error); databaseError(project.error);
     const ids = (links.data ?? []).map(link => link.id as string);
@@ -37,6 +38,7 @@ export async function GET(_request: Request, context: Context) {
       currentVersion: artifact.current_version, kind: artifact.kind, title: artifact.title,
       links: (links.data ?? []).map(mapReviewLink), comments: (comments.data ?? []).map(mapReviewComment),
       snapshots: (snapshots.data ?? []).map(row => Number(row.version_number)), client: linkedClient,
+      deliveryStage: ProjectDeliveryStageSchema.catch("active").parse(project.data?.delivery_stage),
     });
   } catch (error) { return cloudError(error); }
 }

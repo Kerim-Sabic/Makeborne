@@ -1,0 +1,115 @@
+{
+  "date": "2026-10-13",
+  "status": "local capability qualification passed",
+  "scope": "Optional authored book cover and presentation cover/closing compositions using native editable scene primitives.",
+  "provenance": {
+    "synthetic": true,
+    "modelGenerated": false,
+    "providerCalls": 0,
+    "externalRequests": 0,
+    "cloudWrites": 0,
+    "commits": 0,
+    "deployments": 0,
+    "freshModelQualityQualified": false
+  },
+  "behavior": [
+    "Strict bounded normalized geometry and palette-role colors; required semantic title; accessible title and image alt; no raw HTML/SVG/URLs in model composition.",
+    "Book HTML and slide HTML/PPTX use shared primitive intent; PPTX text and shapes remain native editable objects.",
+    "Legacy document output remains byte-identical when composition is absent; optional center image crop affects authored frames only, with legacy attention crop unchanged.",
+    "Invalid geometry, semantic roles, contrast, text fit and image framing remain validation errors; invalid finish does not silently remove supplied composition.",
+    "Declared image frame and imageName can precede registered asset; finish enforces existing asset gates and later addAsset resolves them.",
+    "Theme changes that invalidate authored text contrast reject transactionally and preserve the prior document.",
+    "Synthetic architecture fixture uses centered title and a geometric band below, distinct from coastal/music split layouts."
+  ],
+  "checks": [
+    {
+      "command": "node scripts/run-checks.mjs check-cover-composition check-documents check-docs-style check-operations check-style-intent",
+      "result": "5/5 focused harnesses passed after final glyph-fit correction"
+    },
+    {
+      "command": "node scripts/check-cover-composition-browser.cjs",
+      "result": "passed: 3 portrait books and 6 slides, no measured text overflow, accessible titles, center crop pixel parity; no external requests"
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "result": "passed after final changes"
+    },
+    {
+      "command": "scoped eslint on all 12 authored-cover implementation/fixture files",
+      "result": "passed with no output"
+    },
+    {
+      "command": "SHA256 ownership guards",
+      "result": "all 12 authored-cover files matched expected hashes at handback"
+    },
+    {
+      "command": "PPTX XML/media qualification",
+      "result": "native title text/shapes and intended text coordinates verified; exact embedded crop bytes match Sharp center for authored and attention for legacy"
+    },
+    {
+      "command": "manual browser screenshot inspection",
+      "result": "all initial book/slide covers inspected; final centered grid book/slide inspected and clean"
+    },
+    {
+      "command": "root combined suite/build",
+      "result": "parent reports build passed with current glyph fix; full combined suite rerun remains parent-owned"
+    }
+  ],
+  "textFitReview": {
+    "reproduced": "80 W characters passed old average-character fit in a 103.67px high box while Chromium required 115.86px, producing 16px measured overflow.",
+    "correction": "Conservative per-glyph advances preserve whitespace/tabs, account for emphasis, check line height and widest glyph at reading floor.",
+    "regressions": [
+      "80 wide W characters",
+      "80 CJK characters",
+      "30 tabs",
+      "single W in tall narrow box"
+    ],
+    "limitation": "Fit remains a conservative font-metric heuristic; qualification establishes these fixtures and regressions, not universal font fidelity."
+  },
+  "evidence": {
+    "directory": "outputs/authored-cover-qualification",
+    "browserReport": "outputs/authored-cover-qualification/report.json",
+    "examples": [
+      "tide-book-preview.png",
+      "tide-book-print.png",
+      "tide-cover.png",
+      "tide-closing.png",
+      "night-book-print.png",
+      "night-cover.png",
+      "grid-book-print.png",
+      "grid-cover.png",
+      "grid-closing.png",
+      "center-crop.png"
+    ],
+    "exports": "Each tide/night/grid case has book.pdf, deck.pdf and native deck.pptx. Books: 576x864 CSS pixels and 432x648 PDF points; slides: 1280x720 CSS pixels and 960x540 PDF points.",
+    "ignoredOutputs": true
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "oldDocuments": "Documents with no composition preserve legacy output.",
+    "oldApplication": "Old strict DocumentSourceSchema rejects new cover/slide composition fields; old application versions cannot read newly authored composition documents.",
+    "cutover": "Refresh old clients and drain generation plus document writes during coordinated cutover.",
+    "rollback": "Retain new schema plus cover renderer and PPTX support after new composition documents are saved. Do not strip saved geometry or roll back to a wholly old strict reader."
+  },
+  "limitations": [
+    "Synthetic fixtures prove capability and regression behavior, not fresh generated model quality or bespoke design excellence.",
+    "Chromium screenshots and measurements run on Windows with available installed fonts. Production Linux may select fallback fonts; universal font fidelity is not established.",
+    "PDF page sizes were checked and browser print HTML captured; generated PDF pages were not separately rasterized for this package.",
+    "PPTX editability and geometry were checked in XML; actual Microsoft PowerPoint application rendering was not captured.",
+    "No production/staging, paid provider, cloud, database, commit or deploy operations were performed."
+  ],
+  "sha256": {
+    "src/lib/documents/schema.ts": "5753813BBF42BF1208846316A2EB79894FC11632BF32434B9A0681D79E469140",
+    "src/lib/documents/slide-scene.ts": "708269FBA14D379A1459B0D27A8497D3AB83FF21F89FC270871E54204782307B",
+    "src/lib/documents/render-book.ts": "70E084F339C4669F7370807DFBC207C23583A4C175ECFA5814E69EF32A317679",
+    "src/lib/documents/editor.ts": "F1C4A029EC0FF88D0C1EA9307C83B6052F89D592F0F7132B8306B03043439486",
+    "src/lib/builder/docs-prompt.ts": "002874A265F7F62DE6326356416E72FADFE7C5254D0BA0093EF39685C6603EEA",
+    "src/lib/documents/pptx.ts": "4BF6103F926A6C70AD789B3A163553AB7A478D4D29CD5B21DA3546FE5DA92ACE",
+    "src/lib/documents/composition-schema.ts": "121FBEEC0141FF8AFAE2D78A7DD4E27C68C1EAA2D049D41992051590F46E64D9",
+    "src/lib/documents/cover-composition.ts": "8C39E5CBE657A75975BAA928AE1C5FE49EF5345D46436A270E55E77498611775",
+    "src/lib/documents/render-book-cover.ts": "4FA7EEBCEA890918373E9066CC973B0FD515E48A817E3F9AD346A170861BA4FA",
+    "src/lib/documents/fixtures/authored-covers.cjs": "D622C2B2351736F69EABB51B3C603E8064F200366AD445FA450B5B6FB60A3C5F",
+    "src/lib/documents/check-cover-composition.cjs": "BFEEB3B8A49892B388A14AE2B12428F82A4997BE579B8078290F30E57B529ED0",
+    "scripts/check-cover-composition-browser.cjs": "448ACE0DF50B81D88C2C399281EDFF9769D0A5F5D8CF1AB576426E2A30E3B448"
+  }
+}

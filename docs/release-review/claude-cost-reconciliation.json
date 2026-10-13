@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-10-12T18:31:15.827Z",
+  "source": "Claude Console /cost filtered Makeborne server testing, last30days",
+  "dashboardUsd": 12.58,
+  "dashboardThrough": "2026-10-11",
+  "dashboardTodayUsd": 0,
+  "previousUserBaselineUsd": 2.173444,
+  "baselineDiscrepancyUnresolved": true,
+  "conservativePriorUsd": 12.58,
+  "isolatedDays": [
+    {
+      "scope": "global",
+      "spent_microusd": "10699754",
+      "reserved_microusd": "0"
+    }
+  ],
+  "remainingConservativeUsd": 1.7202459999999995
+}

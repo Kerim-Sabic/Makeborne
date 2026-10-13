@@ -1,5 +1,12 @@
 -- Transactional local authority qualification only; all synthetic rows roll back.
 begin;
+-- Controlled fixture: these assertions expect exact cap counters, so they start
+-- from zeroed counters inside this transaction. Everything rolls back; spend
+-- recorded in the database (for example local pilot runs) is left untouched.
+update makeborne_private.generation_execution_caps set vendor_spent=0, vendor_reserved=0, active_dispatches=0;
+-- Durable dispatch also draws on the shared daily provider limits (disabled by
+-- default); open them generously for this transaction only.
+update makeborne_private.live_provider_limits set enabled=true, emergency_stop=false, daily_limit_microusd=1000000000;
 do $$
 declare actor uuid:=gen_random_uuid(); owner_uuid uuid:=gen_random_uuid(); session_uuid uuid:=gen_random_uuid();
  workspace uuid:=gen_random_uuid(); project uuid:=gen_random_uuid(); artifact uuid:=gen_random_uuid(); source_uuid uuid:=gen_random_uuid();

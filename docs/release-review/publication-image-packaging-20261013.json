@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "scope": "local-image-packaging-only",
+  "createdAt": "2026-10-13T07:24:20.623Z",
+  "checks": [
+    {
+      "name": "compiler default-user transfer and real React/font/artwork build",
+      "passed": true,
+      "sourceHash": "b9ff97ee24be601dd0ab509e472ebabcbc937eaf167608bc636d5f1b5489264c",
+      "buildHash": "d68662f54cfa715dade53981857548e9cefd62cec6cdbcfee9c7cd2b5535fab3"
+    },
+    {
+      "name": "renderer dependency imports, sibling policy, binary and writable paths with HOME=/tmp",
+      "passed": true
+    },
+    {
+      "name": "renderer real watchdog and Chromium sandbox capture",
+      "passed": false,
+      "exitCode": 1,
+      "diagnostic": "Error: browserType.launch: Target page, context or browser has been closed\nBrowser logs:\nChromium sandboxing failed!\n================================\nTo avoid the sandboxing issue, do either of the following:\n  - (preferred): Configure your environment to support sandboxing\n  - (alternative): Launch Chromium without sandbox using 'chromiumSandbox: false' option\n================================\n\nCall log:\n  - <launching> /opt/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --user-data-dir=/tmp/playwright_chromiumdev_profile-ig6ApK --remote-debugging-pipe --no-startup-window\n  - <launched> pid=18\n  - [pid=18][err] [1013/072428.088772:FATAL:content/browser/zygote_host/zygote_host_impl_linux.cc:129] No usable sandbox! If you are running on Ubuntu 23.10+ or another Linux distro that has disabled unprivileged user namespaces with AppArmor, see https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md. Otherwise see https://chromium.googlesource.com/chromium/src/+/main/docs/linux/suid_sandbox_development.md for more information on developing with the (older) SUID sandbox. If you want to live dangerously and need an immediate workaround, you can try using --no-sandbox.\n  - [pid=18] <gracefully close start>\n  - [pid=18] <kill>\n  - [pid=18] <will force kill>\n  - [pid=18] <process did exit: exitCode=null, signal=SIGTRAP>\n  - [pid=18] starting temporary directories cleanup\n  - [pid=18] finished temporary directories cleanup\n  - [pid=18] <gracefully close end>\n\n"
+    },
+    {
+      "name": "renderer denied-network and timeout workloads",
+      "passed": false,
+      "skipped": true,
+      "reason": "Browser sandbox capture must work before workload checks count"
+    }
+  ],
+  "cloudQualified": false,
+  "compiler": {
+    "localImageId": "sha256:c023dbecfe711a72c76e40761992d7e489e2a90271c3c777b38b06922b22514d",
+    "os": "linux",
+    "architecture": "amd64"
+  },
+  "renderer": {
+    "localImageId": "sha256:c563eb6ad04a4a93476ec0afb499d186c42e190e5f4aef93cdef3ae34e8cde84",
+    "os": "linux",
+    "architecture": "amd64",
+    "uid": 1000,
+    "home": "/tmp",
+    "binary": "/opt/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "version": "153.0.8010.12",
+    "rendererId": "chromium-153.0.8010.12-controller-f5d57fc57ac22f85a3105e887b9b1600a45db9ada7d94f9c997988047ad857f3",
+    "playwright": "1.63.0"
+  },
+  "passed": false,
+  "contexts": {
+    "compiler": {
+      "schemaVersion": 1,
+      "kind": "compiler",
+      "files": [
+        {
+          "path": "build.mjs",
+          "bytes": 8452,
+          "sha256": "f5f6bcc34e9caa604ca77979a8300dc604a8f388b650c3f973277914dce3232e"
+        },
+        {
+          "path": "Dockerfile",
+          "bytes": 571,
+          "sha256": "e97de9b275df43c790edcf87e950865ed09b78adcf31292c27f16e7d19a1b97f"
+        },
+        {
+          "path": "font-catalog.json",
+          "bytes": 5026,
+          "sha256": "c98a459200e0c8c7a213e6594fd869d9f9829b143c7cb6ad16062f6cf08da7e7"
+        },
+        {
+          "path": "font-licenses.cjs",
+          "bytes": 497,
+          "sha256": "403f0ec973b9b4970599e7ae12a0ddd3318a9de736ad73efccf99ccfd8b28dee"
+        },
+        {
+          "path": "font-licenses.json",
+          "bytes": 95748,
+          "sha256": "422767839e67be507eb53b3f38737773f2be955fb7ed5b50653b059bdb2f95dd"
+        },
+        {
+          "path": "font-portability.cjs",
+          "bytes": 3953,
+          "sha256": "2b2597bcb6522189d2bacd61ec1a9f6beb1b0dff83b672ab91fe7b21a8662ab9"
+        },
+        {
+          "path": "identity.mjs",
+          "bytes": 399,
+          "sha256": "cc221e8f897b7db2229c1388bc85d10c598ad73c67c2f055ef346c8b42c26589"
+        },
+        {
+          "path": "legacy-toolchain.json",
+          "bytes": 29888,
+          "sha256": "2ce882382c9873eed43ba1ba4b04cd620d65c8681734ff6e29b4756a4342fb44"
+        },
+        {
+          "path": "toolchain-compatibility.cjs",
+          "bytes": 1710,
+          "sha256": "d4a6f2b564ededeefec731c21437efd70f881d17cd741b1c8806f6d668a1adc9"
+        },
+        {
+          "path": "toolchain/package-lock.json",
+          "bytes": 40291,
+          "sha256": "f1a2b6df9fbf33c3121a53b4e65d667a4f2492577ad93f634c485d66c2a37f1b"
+        },
+        {
+          "path": "toolchain/package.json",
+          "bytes": 1320,
+          "sha256": "83507ccc88ebbc5cd74ef4a8a86875b4971d78b4df611a7c5291a9f14f780c10"
+        },
+        {
+          "path": "watchdog.mjs",
+          "bytes": 757,
+          "sha256": "23975ef7b971463d0a142a68726e950cfff69f77d5b78ae63b337a04e33a5b35"
+        }
+      ],
+      "contextSha256": "d5feaafca6d9284ca5d969edc21c0dffcffccba4cb40494740150cb38df28fe9"
+    },
+    "renderer": {
+      "schemaVersion": 1,
+      "kind": "renderer",
+      "files": [
+        {
+          "path": "customer-sites/package.json",
+          "bytes": 33,
+          "sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428"
+        },
+        {
+          "path": "customer-sites/site-policy.js",
+          "bytes": 10441,
+          "sha256": "ded278fbc00c51be95492c397bce13774ea8e5144f2cc996a5ff5ce4c9820643"
+        },
+        {
+          "path": "customer-sites/website-policy.js",
+          "bytes": 1383,
+          "sha256": "f91a5333d7d709a66e286cc387f422c8371465e3d884b3c9b98be375febc304e"
+        },
+        {
+          "path": "Dockerfile",
+          "bytes": 803,
+          "sha256": "84c7001a15b96b88a0b8fb50eec8f93c514ead8a0201cee305186472d611bfcd"
+        },
+        {
+          "path": "package-lock.json",
+          "bytes": 1235,
+          "sha256": "50576b6310fad066c7d3ccb8317cfcc04e837fac10337f52d9b5d7c03493f7b1"
+        },
+        {
+          "path": "package.json",
+          "bytes": 183,
+          "sha256": "2071003b7fee970baeae8b3388cad02602da68e1b3780fc083966e506510a200"
+        },
+        {
+          "path": "runtime/identity.mjs",
+          "bytes": 399,
+          "sha256": "cc221e8f897b7db2229c1388bc85d10c598ad73c67c2f055ef346c8b42c26589"
+        },
+        {
+          "path": "runtime/publication-renderer.mjs",
+          "bytes": 7301,
+          "sha256": "20375efeeaac6f60fcdc3becbbea13bd48904872021139907a0ed2de0a38c90a"
+        },
+        {
+          "path": "runtime/vercel-publication-protocol.mjs",
+          "bytes": 5418,
+          "sha256": "2616b217b3533789df76d9d8395493bdf8c1e4355fa0143e1efcac7446320596"
+        },
+        {
+          "path": "runtime/vercel-publication-render-entry.mjs",
+          "bytes": 1624,
+          "sha256": "c1c5fbb7028a10ee1fa7ec7c0958f9b0876ec4cb78fa759ff15c508186dbcfbf"
+        },
+        {
+          "path": "runtime/vercel-publication-render-watchdog.mjs",
+          "bytes": 669,
+          "sha256": "c8856af373fd7a03bd8e4bf0bf7ca7a67dcde13fe62105d9560e75874c90a49e"
+        }
+      ],
+      "contextSha256": "7610c4c7f84e1096a7ce18cce574bd484e54bee65310cfe0c8f35c0432ac6cc7"
+    }
+  },
+  "packagingSources": {
+    "infra/project-runtime/Dockerfile": "e97de9b275df43c790edcf87e950865ed09b78adcf31292c27f16e7d19a1b97f",
+    "infra/project-runtime/renderer/check-packaging.mjs": "de94ccd16618d8b5ebd73c06c9fc102e91be4b0890176aed9e42e7053cf905af",
+    "infra/project-runtime/renderer/Dockerfile": "84c7001a15b96b88a0b8fb50eec8f93c514ead8a0201cee305186472d611bfcd",
+    "infra/project-runtime/renderer/package-lock.json": "50576b6310fad066c7d3ccb8317cfcc04e837fac10337f52d9b5d7c03493f7b1",
+    "infra/project-runtime/renderer/package.json": "2071003b7fee970baeae8b3388cad02602da68e1b3780fc083966e506510a200",
+    "infra/project-runtime/renderer/prepare-context.mjs": "cd8dd9d79888c6d7a4716443c3a44f83584567510eb4d33356de3f785abe5c43",
+    "infra/project-runtime/renderer/README.md": "7fef1158e884825b6ec348711730ff2c79ceb026cdf1b6491314b9552620c6d7"
+  },
+  "additionalChecks": {
+    "bothBuildsSucceeded": true,
+    "contextRepeatHashesMatch": true,
+    "nodeSyntaxChecksPass": true,
+    "noRemainingPackagingContainers": true
+  }
+}

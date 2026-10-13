@@ -1,0 +1,16 @@
+{
+  "project": "xzwikrunwpurxnxgkznh",
+  "productionTouched": false,
+  "updatedAt": "2026-10-13T00:01:06.463Z",
+  "keyName": "makeborne_staging_smtp_final_20261013",
+  "smtpUpdateAccepted": true,
+  "deliveryVerified": true,
+  "verificationRecipient": "admin@makeborne.com",
+  "confirmedOnFinalPreview": true,
+  "supersededKeysRevoked": [
+    "makeborne_staging_smtp",
+    "makeborne_staging_smtp_rotated_20261013",
+    "makeborne_staging_smtp_verified_20261013"
+  ],
+  "productionKeyUntouched": true
+}

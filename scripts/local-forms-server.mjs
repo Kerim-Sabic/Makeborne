@@ -1,0 +1,13 @@
+import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {randomBytes} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import assert from 'node:assert/strict';
+const cfg=JSON.parse(readFileSync('work/release-auth-stack/status.json','utf8').replace(/^\uFEFF/,''));
+assert.equal(cfg.API_URL,'http://127.0.0.1:55435');assert(cfg.DB_URL.includes('@127.0.0.1:55438/'));
+const env={...process.env};for(const file of ['.env','.env.local','.env.production','.env.production.local'])if(existsSync(file))for(const m of readFileSync(file,'utf8').matchAll(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/gm))env[m[1]]='';
+for(const key of Object.keys(env))if(/^(ANTHROPIC_|OPENAI_|WHOP_|SUPABASE_|NEXT_PUBLIC_SUPABASE_|MAKEBORNE_|NEXT_PUBLIC_MAKEBORNE_|VERCEL|CRON_SECRET|AWS_|RESEND_|GOOGLE_|GITHUB_)/.test(key))env[key]='';
+const file='work/release-auth-stack/forms-secret.json';if(!existsSync(file))writeFileSync(file,JSON.stringify({secret:randomBytes(32).toString('hex')}));
+const {secret}=JSON.parse(readFileSync(file,'utf8'));
+Object.assign(env,{NODE_ENV:'development',NEXT_PUBLIC_SUPABASE_URL:cfg.API_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:cfg.PUBLISHABLE_KEY,SUPABASE_SECRET_KEY:cfg.SECRET_KEY,MAKEBORNE_CLOUD_ENABLED:'true',MAKEBORNE_CLOUD_MIGRATIONS_VERIFIED:'true',MAKEBORNE_FORMS_SIGNING_SECRET:secret,NEXT_PUBLIC_MAKEBORNE_SITE_HOSTING:'isolated',NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE:'http://{slug}.localhost:3053/'});
+const child=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--hostname','127.0.0.1','--port','3048'],{env,stdio:'inherit'});
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>child.kill(signal));child.on('exit',code=>{process.exitCode=code??1});

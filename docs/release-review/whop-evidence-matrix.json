@@ -1,0 +1,164 @@
+{
+  "date": "2026-10-13",
+  "purpose": "Gate 2: separates real Whop sandbox observations from local simulations and unverified behaviour.",
+  "productionTouched": false,
+  "realMoneySpent": 0,
+  "seamlessSwitching": "disabled. No upgrade/downgrade route exists; an active, canceling, past-due or unresolved membership blocks another checkout (PBC01), and an open checkout is resumed or refused (PBC02).",
+  "legend": {
+    "provider": "Observed from the real Whop sandbox (signed webhook delivery or Whop API reads).",
+    "simulation": "Local or isolated-database test that drives the real app code with controlled time or mocked Whop responses. Not provider evidence.",
+    "blocked": "Not observed and not reproducible without an owner action or a provider capability."
+  },
+  "rows": [
+    {
+      "case": "First purchase: activation and payment events",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "whop-credit-delivery.json realProviderSignedEvents (membership.activated 200, payment.succeeded 200), grantCount 1, 300 credits"
+    },
+    {
+      "case": "Duplicate concurrent delivery",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "whop-credit-delivery.json concurrentDuplicateReplay [200,200,200,200], grantCount 1"
+    },
+    {
+      "case": "Invalid signature / wrong merchant",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "whop-credit-delivery.json invalidSignatureStatus 400, wrongMerchantStatus 403"
+    },
+    {
+      "case": "Cancel at period end keeps access until period end",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "whop-credit-delivery.json cancelAtPeriodEnd; whop-sandbox-lifecycle.json results[1]"
+    },
+    {
+      "case": "Immediate cancellation removes access",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "whop-credit-delivery.json immediateCancellation; whop-sandbox-lifecycle.json results[2]"
+    },
+    {
+      "case": "Annual purchase: one-year provider period, first monthly allocation only",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "whop-credit-delivery.json annualPurchase (period 2026-10-12 to 2027-10-12, initialAllocation 300, allocationCount 1)"
+    },
+    {
+      "case": "Reconcile job against the real sandbox API",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "whop-credit-delivery.json realProviderReconcile (processed 2, failed 0, no duplicate grants); unauthorized cron 401"
+    },
+    {
+      "case": "Delayed replay of a real activation",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "whop-credit-delivery.json delayedActivationReplay: real provider body re-signed locally with a fresh timestamp; no second grant"
+    },
+    {
+      "case": "Annual plan: months 2-12 released monthly, renewal boundary, month-end and leap-year anchors",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "supabase/check-plan-credit-allocations.sql (13 checks in candidate-rehearsal.json); time controlled in SQL"
+    },
+    {
+      "case": "Subsequent monthly renewal payment grants the next allocation once",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "check-plan-credit-allocations.sql 'Renewal payment evidence' and 'Renewal' assertions; plan-job-e2e.log with mocked Whop"
+    },
+    {
+      "case": "Missed webhooks (first seen in month 6)",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "check-plan-credit-allocations.sql case 8: unevidenced months become open issues, never silent grants"
+    },
+    {
+      "case": "Out-of-order and inconsistent events",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "check-plan-credit-allocations.sql 'Recording through the real entry point': late old periods change nothing; shifted anchors never re-key covered time"
+    },
+    {
+      "case": "Monthly to yearly to monthly at renewal boundaries",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "check-plan-credit-allocations.sql case 4: 14 allocations, no gap or duplicate"
+    },
+    {
+      "case": "Included-credit expiry at allocation end",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "supabase/check-credit-lots-expiry.sql (10 checks in candidate-rehearsal.json)"
+    },
+    {
+      "case": "Duplicate checkout prevention",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "duplicate-checkouts.json (8 concurrent requests, one reservation); src/lib/billing/check-checkout-contract.cjs (open checkout resumed, different plan refused)"
+    },
+    {
+      "case": "Actual subsequent Whop renewal charge and its webhooks",
+      "kind": "blocked",
+      "result": "BLOCKED",
+      "reason": "No sandbox time control and no daily billing. Prepared: hidden probe plan_ph23AtuxtNWzD (1-day trial, 7-day period, $1). After an owner purchase with test card 4242, the first scheduled charge is due after 1 day and the renewal after 8. Observe with scripts/observe-whop-sandbox.mjs."
+    },
+    {
+      "case": "Replacement subscription (cancel then repurchase, or change plan)",
+      "kind": "blocked",
+      "result": "BLOCKED",
+      "reason": "No plan-change API exists. Today a new membership after a canceled one gets its own allowance; overlap is prevented (PBC01). Leak to watch: a support refund plus immediate cancel, then a repurchase in the same month, leaves the refunded period's unspent credits until month end (bounded by one month's allowance; access ends with the old membership, so they are usable only through the new one). Policy D5/D7."
+    },
+    {
+      "case": "Full refund of a paid subscription payment (Whop API)",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "whop-sandbox-observations.json 2026-10-12T23:22Z: pay_JVp4TjClPsS0Hs refunded $29 via POST /payments/{id}/refund; status stays 'paid', substatus 'refunded', refunded_amount 29, refunded_at not set; membership (already canceled) unchanged"
+    },
+    {
+      "case": "Refunded payment is never used as allocation evidence",
+      "kind": "simulation",
+      "result": "PASS",
+      "evidence": "src/lib/billing/check-billing-reconcile-job.cjs uses the exact refunded shape observed in the sandbox; plan evidence 'evidence_refunded' is unusable (20261012110000)"
+    },
+    {
+      "case": "Refund of a period with credits already granted",
+      "kind": "blocked",
+      "result": "BLOCKED",
+      "reason": "Policy D7: granted credits are never clawed back today; access ends with the membership. Needs an owner decision, then a sandbox refund on an active membership."
+    },
+    {
+      "case": "Chargeback / dispute",
+      "kind": "blocked",
+      "result": "BLOCKED",
+      "reason": "The sandbox documents no way to raise a dispute. The webhook handler resolves refund.* and dispute.* to the membership and re-reads current state; untested against a real dispute."
+    },
+    {
+      "case": "Payment failure / past-due",
+      "kind": "blocked",
+      "result": "BLOCKED",
+      "reason": "Prepared: hidden probe plan_JWikpAgY1kqqI. An owner purchase with test card 4000 0000 0000 0341 saves the card; the first scheduled charge after 1 day declines (documented). Then observe past_due, POST /payments/{id}/retry and the app's access gate."
+    },
+    {
+      "case": "API version pinning",
+      "kind": "provider",
+      "result": "PASS",
+      "evidence": "Sandbox list calls return 400 without Api-Version-Date and 200 with 2025-01-01 (2026-10-12T23:22Z). The app pins 2025-01-01 on every request (src/lib/billing/whop.ts). The production webhook endpoint must also be pinned (RELEASE_CHECKLIST.md)."
+    },
+    {
+      "case": "Daily billing for fast renewal tests",
+      "kind": "provider",
+      "result": "NOT AVAILABLE",
+      "evidence": "POST /variants with billing_period 1 is refused: 'You cannot offer daily subscriptions'. Probes use a 1-day trial plus a 7-day period instead (whop-sandbox-probes.json)."
+    }
+  ],
+  "ownerActionsToClose": [
+    "Sandbox only, test cards only: buy plan_ph23AtuxtNWzD with 4242 4242 4242 4242 and plan_JWikpAgY1kqqI with 4000 0000 0000 0341 (links in whop-sandbox-probes.json). Then tell Claude/Codex to observe after 1 day and after 8 days.",
+    "Decide D5 (replacement) and D7 (refunds) in docs/RELEASE_DECISIONS.md.",
+    "The sandbox API key in work/release-auth-stack/whop-sandbox.json expires 2026-10-19, before the day-8 renewal of a probe bought on 2026-10-13. Create a replacement sandbox key (pinned to Api-Version-Date 2025-01-01 or rely on the app's per-request pin) before observing the renewal."
+  ],
+  "updated": "2026-10-12T23:25Z"
+}

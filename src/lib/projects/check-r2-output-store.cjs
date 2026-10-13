@@ -2,6 +2,7 @@
 require('../generation/check-website-worker.cjs');
 const assert=require('node:assert/strict'),{randomUUID,createHash}=require('node:crypto');
 const {createR2OutputStore}=require('./r2-output-store.ts'),{retainCompiledOutput,readCompiledOutputFile}=require('./compiled-output.ts'),{canonicalSourceJson}=require('./canonical-json.ts');
+const {fixture:publicationFixture}=require('./check-publication-compiler.cjs');
 const fs=require('node:fs/promises'),path=require('node:path'),{tmpdir}=require('node:os');
 const signal=()=>new AbortController().signal,digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const key=()=>`compiled-v1/${randomUUID()}/${randomUUID()}/${randomUUID()}/${'a'.repeat(64)}/files/index.html`;
@@ -12,6 +13,23 @@ async function main(){
  const directory=await fs.mkdtemp(path.join(tmpdir(),'makeborne-build-'));let mf;
  try{
   mf=await createLocalR2OutputRuntime(directory);const bucket=mf.bucket,store=createR2OutputStore(bucket);
+  let publicationMarker,publicationBytes;
+  await check('publication compiler retains its exact immutable receipt marker in actual R2',async()=>{
+   const fixture=publicationFixture();fixture.deps.store=store;const result=await fixture.run();
+   publicationMarker=`publication-v1/${fixture.input.binding.workspaceId}/${fixture.input.binding.preparationId}/${result.receipt.receiptHash}/receipt.json`;
+   publicationBytes=Buffer.from(canonicalSourceJson(result.receipt));
+   assert.deepEqual(Buffer.from(await store.get(publicationMarker,publicationBytes.length,signal())),publicationBytes);
+   await store.putIfAbsent(publicationMarker,Buffer.from('replacement'),signal());
+   assert.deepEqual(Buffer.from(await store.get(publicationMarker,publicationBytes.length,signal())),publicationBytes);
+   assert.equal(fixture.counts.disposed,1);
+  });
+  await check('publication namespace accepts only the exact marker shape before accessing R2',async()=>{
+   const noBinding=createR2OutputStore({get:async()=>assert.fail('REJECTED_KEY_READ'),put:async()=>assert.fail('REJECTED_KEY_WRITTEN')});
+   for(const invalid of [publicationMarker.replace('/receipt.json','/files/index.html'),publicationMarker+'/extra',publicationMarker.replace('/receipt.json','/other.json'),publicationMarker.replace('/receipt.json','/../receipt.json'),publicationMarker+'?x=y',publicationMarker.replace('publication-v1/','publication-v2/'),publicationMarker.replace('publication-v1/','publication-v1//'),publicationMarker.replace(/\/[a-f0-9]{64}\//,'/bad-hash/'),`publication-v1/${randomUUID()}/${randomUUID()}/${randomUUID()}/${'a'.repeat(64)}/receipt.json`]){
+    await assert.rejects(noBinding.get(invalid,100,signal()),e=>e.code==='OUTPUT_KEY_INVALID');
+    await assert.rejects(noBinding.putIfAbsent(invalid,Buffer.from('x'),signal()),e=>e.code==='OUTPUT_KEY_INVALID');
+   }
+  });
   await check('actual R2 conditional creation preserves first bytes across duplicate and competing writes',async()=>{
    const target=key();await store.putIfAbsent(target,Buffer.from('original'),signal());await store.putIfAbsent(target,Buffer.from('replacement'),signal());assert.equal(Buffer.from(await store.get(target,8,signal())).toString(),'original');
    const race=key(),values=Array.from({length:12},(_,i)=>Buffer.from(`candidate-${String(i).padStart(2,'0')}`));await Promise.all(values.map(bytes=>store.putIfAbsent(race,bytes,signal())));
@@ -59,6 +77,7 @@ async function main(){
   await mf.dispose();mf=await createLocalR2OutputRuntime(directory);
   await check('actual R2 persisted data survives workerd restart and detects administrator corruption',async()=>{
    const reopenedBucket=mf.bucket,reopened=createR2OutputStore(reopenedBucket);
+   assert.deepEqual(Buffer.from(await reopened.get(publicationMarker,publicationBytes.length,signal())),publicationBytes);
    assert.deepEqual(Buffer.from(await readCompiledOutputFile(reopened,workspace,receipt,'index.html',signal())),contents.get('index.html'));
    const target=`compiled-v1/${workspace}/${receipt.artifactId}/${receipt.revisionId}/${receipt.buildHash}/files/index.html`;await reopenedBucket.put(target,'bad');
    await assert.rejects(readCompiledOutputFile(reopened,workspace,receipt,'index.html',signal()),e=>e.code==='OUTPUT_BYTES_CHANGED');

@@ -16,6 +16,7 @@ import AccountProjects from "./account-projects";
 import AccountClients from "./account-clients";
 import { useCreationAccount, type CreationAccount } from "./use-creation-account";
 import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
+import SiteBadgeSetting from "./site-badge-setting";
 import { createClient } from "@/lib/supabase/client";
 import { buildCreationPayload } from "@/lib/cloud/creation-payload";
 import { continueProjectCreation, creationReferenceKey, readCreationReference } from "@/lib/cloud/creation-reference";
@@ -103,7 +104,7 @@ function date(value: string) {
   });
 }
 
-export default function Studio({ isAdmin = false, unlimitedCredits = false }: { isAdmin?: boolean; unlimitedCredits?: boolean }) {
+export default function Studio({ isAdmin = false, unlimitedCredits = false, initialTab = "projects" }: { isAdmin?: boolean; unlimitedCredits?: boolean; initialTab?: string }) {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [accountClientRoute, setAccountClientRoute] = useState<AccountClientRoute | null>(null);
   const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
@@ -126,13 +127,14 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
   const immediateWebsite=draftKind==="website"&&creationMode==="create"&&composerPermissions.enabled;
   const [homeHandoff, setHomeHandoff] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState("projects");
+  const [tab, setTab] = useState(initialTab);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState<Kind | null>(null);
   const [clientModal, setClientModal] = useState<Client | null | "new">(null);
   const [styleModal, setStyleModal] = useState(false);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [accountProjectCount, setAccountProjectCount] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
   const [saveInvalid, setSaveInvalid] = useState(false);
@@ -750,8 +752,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
                   </label>
                 </div>
                 </>}
-                <AccountProjects search={search} filter={filter} target={accountRoute} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
-                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (
+                <AccountProjects search={search} filter={filter} target={accountRoute} onCount={setAccountProjectCount} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
+                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (accountProjectCount ? null : (
                   <Empty
                     icon={FolderOpen}
                     title="Your projects will live here."
@@ -759,7 +761,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
                     action="Create your first project"
                     onClick={() => setCreating("website")}
                   />
-                ) : (
+                )) : (
                   <div className="project-grid">
                     {workspace.projects
                       .filter(
@@ -819,7 +821,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
               setInitialClient(opportunityClient); setInitialBrief(brief); setInitialTitle(title); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating(kind); setOpportunityClient(null);
             }} />}
             {tab === "clients" && !opportunityClient && (
-              <AccountClients key={clientDetail ? "device" : "account"} initialDevice={!!clientDetail} onOpenProject={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} onCreate={(workspaceId, client) => {
+              <AccountClients initialDevice={!!clientDetail} onOpenProject={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} onCreate={(workspaceId, client) => {
                 setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(""); setInitialTitle(""); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating("website");
               }} target={accountClientRoute} navigate={accountClient => openRoute({ tab: "clients", projectId: null, clientId: null, accountClient })} deviceClients={
               <ClientWorkspace
@@ -988,6 +990,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false }: { 
                       {workspace.sound ? "Sounds on" : "Sounds off"}
                     </button>
                   </section>
+                  <SiteBadgeSetting />
                   <section>
                     <h2>Account storage</h2>
                     <p>

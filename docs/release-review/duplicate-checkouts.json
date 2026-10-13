@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-12T18:03:07.914Z",
+  "environment": "isolated local release database",
+  "checks": [
+    "8 concurrent requests: exactly one checkout reservation",
+    "Independent account can reserve",
+    "Same request retains idempotency conflict",
+    "Active, canceling, past-due and unresolved memberships block another purchase",
+    "Terminal memberships permit an explicit new purchase",
+    "Guard function cannot be directly called by client or service roles"
+  ],
+  "providerCalls": 0,
+  "productionMutations": 0,
+  "limitations": [
+    "Existing external Whop checkout links are outside the app guard.",
+    "Uncertain checkout reservations require support reconciliation before another purchase.",
+    "Cancelled then repurchased memberships are new purchases; seamless switching remains disabled."
+  ]
+}

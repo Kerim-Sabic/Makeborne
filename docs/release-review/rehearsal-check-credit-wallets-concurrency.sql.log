@@ -1,0 +1,16 @@
+BEGIN
+CREATE EXTENSION
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+DO
+NOTICE:  PASS concurrency: 6 racing reserves of 30 on 100 credits -> 3 ok, 3 MB402; 4 racing trials -> 1 grant
+                      result                      
+--------------------------------------------------
+ PASS: concurrent reserve and trial serialization
+(1 row)
+
+ROLLBACK

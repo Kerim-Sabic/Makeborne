@@ -1,0 +1,173 @@
+<title>Makeborne Competitive Landscape</title>
+<style>
+/* Layout: one reading column, with wide comparison tables scrolling inside their own frames. */
+:root{
+  --bg:#f7f6f3;--surface:#ffffff;--ink:#1d1c22;--muted:#5d5a66;--line:#e2dfe6;--accent:#4b3fb8;--accent-soft:#ece9fb;
+  --good:#1f7a4f;--good-soft:#e5f4ec;--warn:#9a6208;--warn-soft:#fbf0dc;--bad:#a8323d;--bad-soft:#fbe7e9;
+  --display:"Fraunces",Georgia,"Times New Roman",serif;--body:"Inter Tight","Segoe UI",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131218;--surface:#1c1b23;--ink:#ecebf2;--muted:#a7a3b3;--line:#2f2d39;--accent:#a99ef5;--accent-soft:#272342;--good:#6fd3a1;--good-soft:#173527;--warn:#f0bf6a;--warn-soft:#3a2c12;--bad:#f2919b;--bad-soft:#3d1a1f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#131218;--surface:#1c1b23;--ink:#ecebf2;--muted:#a7a3b3;--line:#2f2d39;--accent:#a99ef5;--accent-soft:#272342;--good:#6fd3a1;--good-soft:#173527;--warn:#f0bf6a;--warn-soft:#3a2c12;--bad:#f2919b;--bad-soft:#3d1a1f;color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.65}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:20px;padding-block:40px 80px;display:grid;gap:44px}
+header{display:grid;gap:10px}
+.eyebrow{font:600 12px/1.4 var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+h1{font:600 clamp(32px,5vw,48px)/1.08 var(--display);letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2{font:600 26px/1.2 var(--display);margin:0 0 6px;text-wrap:balance}
+h3{font:600 17px/1.35 var(--body);margin:18px 0 6px}
+p{margin:0 0 12px;max-width:68ch}
+.lede{font-size:18px;color:var(--muted);max-width:62ch}
+.meta{font-size:13px;color:var(--muted)}
+section{display:grid;gap:10px}
+.verdict{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 24px;display:grid;gap:10px}
+.verdict ul{margin:0;padding-left:20px;display:grid;gap:8px}
+.done{display:flex;gap:12px;align-items:flex-start;background:var(--good-soft);color:var(--ink);border-radius:12px;padding:16px 18px}
+.done b{color:var(--good)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+th,td{padding:10px 12px;text-align:left;vertical-align:top;border-top:1px solid var(--line)}
+thead th{border-top:0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--bg)}
+tbody th{font-weight:600;white-space:nowrap}
+tr.us{background:var(--accent-soft)}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.y{background:var(--good-soft);color:var(--good)}.n{background:var(--bad-soft);color:var(--bad)}.p{background:var(--warn-soft);color:var(--warn)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;min-width:0}
+.card h3{margin-top:0}
+.card ul,.recs ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.recs li{padding-left:4px}
+.recs .tag{font:600 11px/1 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-right:6px}
+.note{font-size:13px;color:var(--muted)}
+code{font-family:var(--mono);font-size:.88em}
+.sources{font-size:13px;color:var(--muted);columns:2 320px;column-gap:28px}
+.sources a{color:var(--accent);word-break:break-all}
+a{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:520px){.wrap{padding-block:28px 60px}h2{font-size:22px}}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter+Tight:wght@400;600&family=JetBrains+Mono&display=swap">
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">Competitive research · 13 October 2026</span>
+  <h1>Where Makeborne stands against Lovable, Bolt, Gamma and the rest</h1>
+  <p class="lede">Twenty products across three markets: AI app builders, AI website builders, and AI deck and book tools. Prices and limits come from each vendor's own pricing page or docs as of 13 October 2026, with a few marked third-party figures.</p>
+  <p class="meta">Prepared for Kerim. Read-only research; no accounts created. Makeborne figures come from its own code.</p>
+</header>
+
+<div class="verdict">
+  <h2>The short version</h2>
+  <ul>
+    <li><b>Site limits were our biggest self-inflicted gap.</b> Lovable, Replit, Base44, Bolt, Canva Pro, Durable and Hostinger don't cap how many sites you publish. Framer and Webflow charge per site, and that is their most-cited complaint. Makeborne advertised 1, 5 and 15 sites, while the code actually allowed 5 for everyone.</li>
+    <li><b>The entry price is in line ($29 vs $20–25), but the free entry points are missing.</b> No free tier, no daily free credits, no rollover, and the badge stays on even when you pay.</li>
+    <li><b>Our clearest edge is one brand across website, deck and book, plus client work.</b> No competitor does all three formats in one style, and none of the app builders has client CRM, review links and an enquiry inbox. Lovable has no white-label or client billing at all.</li>
+    <li><b>The most common complaint about every competitor is paying for the AI's own mistakes.</b> Makeborne already doesn't charge for unconfirmed usage. We should say so loudly and guarantee it.</li>
+  </ul>
+</div>
+
+<div class="done"><span>✓</span><div><b>Changed today: unlimited websites on every plan.</b> The 5-live-site and 20-site caps are gone. A quiet fair-use guard stops abuse only: 50 new sites per workspace per day, and a ceiling of 1,000 live sites. Pricing and publishing copy now say "Unlimited websites". Tested locally; not deployed yet.</div></div>
+
+<section>
+  <h2>Price and allowance at the entry plan</h2>
+  <p>"Credits" mean different things at each company, so compare what a credit buys, not the number.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Product</th><th>Entry paid plan</th><th>What it includes</th><th>Sites you can publish</th><th>Custom domain</th><th>Badge removed</th><th>Seats</th><th>Unused credits</th></tr></thead>
+    <tbody>
+      <tr class="us"><th>Makeborne (today)</th><td class="num">$29/mo</td><td>300 credits ($0.03 AI cost each)</td><td><span class="chip y">Unlimited</span> (from today)</td><td><span class="chip n">Not yet</span></td><td><span class="chip n">No</span></td><td>1 (Studio 3, Scale 5)</td><td>Expire monthly</td></tr>
+      <tr><th>Lovable Pro</th><td class="num">$25/mo ($21 yearly)</td><td>100 credits + 5 free per day; small edit 0.5, landing page 1.7–2</td><td>No cap documented</td><td><span class="chip y">Yes</span> + buy in app</td><td><span class="chip y">Yes</span></td><td>Unlimited members</td><td>Roll over 2 months</td></tr>
+      <tr><th>Bolt.new Pro</th><td class="num">$25/mo</td><td>10M tokens</td><td>No cap stated</td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td>1 (Teams $30/member)</td><td>Roll over 2 months</td></tr>
+      <tr><th>Replit Core</th><td class="num">$20/mo ($18 yearly)</td><td>$20 usage credits, also pays hosting</td><td><span class="chip y">Unlimited</span></td><td><span class="chip y">Yes, free</span></td><td><span class="chip y">Yes</span></td><td>5 collaborators</td><td>Expire monthly</td></tr>
+      <tr><th>Base44 Starter</th><td class="num">$20/mo ($16 yearly)</td><td>100 build + 2,000 app-runtime credits</td><td><span class="chip y">Unlimited</span></td><td><span class="chip y">Yes</span> + free domain 1st year</td><td><span class="chip p">Disputed</span></td><td>Multi-user</td><td>Not stated</td></tr>
+      <tr><th>v0 Plus</th><td class="num">$30/user</td><td>$30 credits + $2/day</td><td>Through Vercel</td><td>Through Vercel</td><td>n/a</td><td>Per user</td><td>Roll over 65 days</td></tr>
+      <tr><th>Framer Basic</th><td class="num">$10/site (yearly)</td><td>1,000 AI credits, 30 pages</td><td><span class="chip n">1 per plan</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td>Editors $20 each</td><td>Reset monthly</td></tr>
+      <tr><th>Webflow Basic</th><td class="num">$15/site + workspace</td><td>200–400 AI credits</td><td><span class="chip n">1 per plan</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td>$39 per full seat</td><td>Reset monthly</td></tr>
+      <tr><th>Durable Launch</th><td class="num">$25/mo ($22 yearly)</td><td>1,000 credits, CRM, bookings</td><td>No cap stated</td><td><span class="chip y">Yes</span> ($20 credit)</td><td><span class="chip y">Yes</span></td><td>1</td><td>Not stated</td></tr>
+      <tr><th>Gamma Plus</th><td class="num">≈$9/mo (third-party)</td><td>1,000 credits; decks, docs, sites</td><td>No page cap found</td><td><span class="chip n">Pro and up</span></td><td><span class="chip y">Yes</span></td><td>Per seat</td><td>Roll over to 2×</td></tr>
+      <tr><th>Canva Pro</th><td class="num">≈$15–18/mo (third-party)</td><td>2,000 standard AI uses</td><td><span class="chip y">Unlimited</span></td><td><span class="chip y">5 domains</span></td><td><span class="chip y">Yes</span></td><td>1</td><td>Reset monthly</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">The free tiers above (Lovable, Bolt, Replit, Base44, Gamma, Canva) all let people try before paying. Makeborne's free tier is switched off for launch.</p>
+</section>
+
+<section>
+  <h2>What a credit really buys</h2>
+  <p>Lovable's published examples: a small edit costs 0.5 credits, adding sign-in 1.2, a landing page with images about 2. On the $25 plan that is roughly 50 landing pages, at $0.25 per credit.</p>
+  <p>A Makeborne credit is smaller ($0.03 of AI cost, sold at about $0.097 on Create). A medium website build is capped at 50 credits and a light one at 20. We charge only what is measured, but we don't know a typical build's charge yet, because no paid production builds have run. If a typical medium build lands near its cap, $29 buys about 6 full builds, which would compare badly with Lovable. <b>Before launch, measure typical charges per action and publish a simple table</b>, the way Lovable does. Pricing that people can predict is the second most common thing users ask for, after not paying for failures.</p>
+</section>
+
+<section>
+  <h2>Capabilities side by side</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Capability</th><th>Makeborne</th><th>Lovable</th><th>Bolt</th><th>Replit</th><th>Base44</th><th>Framer / Webflow</th><th>Gamma</th></tr></thead>
+    <tbody>
+      <tr><th>Websites from a sentence</th><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Sites</span></td></tr>
+      <tr><th>Presentations</th><td><span class="chip y">Yes, PPTX/PDF</span></td><td><span class="chip p">Basic</span></td><td><span class="chip n">No</span></td><td><span class="chip p">Decks in Agent 4</span></td><td><span class="chip y">Yes, PPTX</span></td><td><span class="chip n">No</span></td><td><span class="chip y">Core product</span></td></tr>
+      <tr><th>Books (print-ready)</th><td><span class="chip y">Yes, KDP PDF + EPUB</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td></tr>
+      <tr><th>One style across formats</th><td><span class="chip y">Yes</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip p">Theme only</span></td></tr>
+      <tr><th>Client CRM and follow-ups</th><td><span class="chip y">Yes</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span> (Wix yes)</td><td><span class="chip n">No</span></td></tr>
+      <tr><th>Client review links and approval</th><td><span class="chip y">Yes</span></td><td><span class="chip p">Password previews (Business)</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip p">Reviewer seats</span></td><td><span class="chip p">Comments</span></td></tr>
+      <tr><th>Enquiry form inbox on sites</th><td><span class="chip y">Yes</span></td><td><span class="chip p">Build it yourself</span></td><td><span class="chip p">Build it</span></td><td><span class="chip p">Build it</span></td><td><span class="chip y">Built-in data</span></td><td><span class="chip p">Forms to email</span></td><td><span class="chip n">No</span></td></tr>
+      <tr><th>Custom domain</th><td><span class="chip n">Not yet</span></td><td><span class="chip y">Yes + buy in chat</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip p">Pro</span></td></tr>
+      <tr><th>Badge removal on paid plans</th><td><span class="chip n">No</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip p">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td></tr>
+      <tr><th>Site analytics</th><td><span class="chip n">No</span></td><td><span class="chip y">90 days built in</span></td><td><span class="chip p">Planned</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Deck views</span></td></tr>
+      <tr><th>SEO check and server rendering</th><td><span class="chip p">Prerendered snapshot</span></td><td><span class="chip y">SSR + SEO review</span></td><td><span class="chip p">"SEO boost"</span></td><td><span class="chip p">Depends</span></td><td><span class="chip p">Basic</span></td><td><span class="chip y">Strong</span></td><td><span class="chip p">Basic</span></td></tr>
+      <tr><th>Backend, logins, database for sites</th><td><span class="chip n">No</span></td><td><span class="chip y">Lovable Cloud</span></td><td><span class="chip y">Bolt Cloud</span></td><td><span class="chip y">Postgres</span></td><td><span class="chip y">Built-in</span></td><td><span class="chip p">CMS only</span></td><td><span class="chip n">No</span></td></tr>
+      <tr><th>Payments in built sites</th><td><span class="chip n">No</span></td><td><span class="chip y">Stripe, Paddle</span></td><td><span class="chip y">Stripe</span></td><td><span class="chip p">Via code</span></td><td><span class="chip y">Stripe</span></td><td><span class="chip p">Store plans</span></td><td><span class="chip n">No</span></td></tr>
+      <tr><th>Code export / Git</th><td><span class="chip y">Download + GitHub</span></td><td><span class="chip y">2-way Git</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip p">Builder plan</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td></tr>
+      <tr><th>AI images</th><td><span class="chip p">Blocked until key</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Edit</span></td><td><span class="chip y">Yes</span></td><td><span class="chip y">Yes</span></td><td><span class="chip p">Some</span></td><td><span class="chip y">Yes</span></td></tr>
+      <tr><th>Spending caps, no charge for unconfirmed AI use</th><td><span class="chip y">Yes</span></td><td><span class="chip p">Check-ins at 20 credits</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip n">No</span></td><td><span class="chip y">Errors free</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>What customers complain about elsewhere</h2>
+  <div class="grid2">
+    <div class="card"><h3>App builders</h3><ul><li>Credits burned in bug-fix loops, with "done" claims that weren't true (Lovable, Bolt, Base44, Replit, v0)</li><li>Bills they could not predict before prompting</li><li>No refunds for the AI's mistakes; slow support</li><li>Trustpilot: Bolt ≈1.4, Base44 ≈2.3–2.8, Lovable 4.2</li></ul></div>
+    <div class="card"><h3>Website builders</h3><ul><li>Per-site costs that stack (Framer, Webflow)</li><li>Renewal jumps of 300–400% (Wix, Hostinger)</li><li>Freelancers paying twice: a workspace plan plus a site plan</li><li>No CRM or lead inbox on design-led builders</li></ul></div>
+    <div class="card"><h3>Decks and books</h3><ul><li>Opaque credits and hard stops (Gamma, Canva)</li><li>Custom domains on sites but not decks (Gamma)</li><li>No tool makes a complete print package: illustrations, bleed, spine and cover together</li><li>Tome shut down and deleted users' decks</li></ul></div>
+  </div>
+</section>
+
+<section class="recs">
+  <h2>What to do, in order</h2>
+  <p>These are proposals. Pricing and policy are your decisions; the engineering cost is noted on each.</p>
+  <ol>
+    <li><span class="tag">Done</span><b>Unlimited websites</b> with a fair-use guard, on every plan.</li>
+    <li><span class="tag">Pricing</span><b>Remove the "Made with Makeborne" badge on every paid plan.</b> Every competitor does this at $20–25. Small change: the badge is one flag in the site Worker.</li>
+    <li><span class="tag">Pricing</span><b>Let unused credits roll over for 2 months</b>, as Lovable, Bolt and v0 do. The credit-lot system already tracks expiry per lot, so this is a parameter change plus copy.</li>
+    <li><span class="tag">Trust</span><b>Publish a "you never pay for failures" guarantee and a per-action credit table.</b> It directly answers the top complaint across all competitors, and the spending gate already behaves this way.</li>
+    <li><span class="tag">Build</span><b>Self-service custom domains on every paid plan</b>, ideally with domain purchase. The isolated hosting Worker is ready; this needs Cloudflare custom hostnames and a settings screen. Medium effort.</li>
+    <li><span class="tag">Pricing</span><b>Rethink seats.</b> Lovable has unlimited members sharing one credit pool; Framer and Webflow charge $20–39 per editor. A middle path: unlimited client reviewers and viewers on every plan, and paid seats only for builders.</li>
+    <li><span class="tag">Build</span><b>Site analytics</b> (visits, sources, top pages). Visits are already served by our own Worker, so we can count them without a third-party script. Medium effort.</li>
+    <li><span class="tag">Wedge</span><b>Agency tools nobody in AI building has.</b> White-label client portal, client billing with markup, one-click handoff to the client's account. Lovable has none; Wix and 10Web prove agencies pay for it. Builds on our CRM and review links.</li>
+    <li><span class="tag">Wedge</span><b>The complete print-ready book package.</b> Consistent illustrations, interior with bleed, spine width from page count, full-wrap cover and EPUB in one go. The research found no tool doing all of it. Needs AI images (blocked on the OpenAI key).</li>
+    <li><span class="tag">Later</span><b>Backend and payments in generated sites</b> (logins, database, Stripe). This is Lovable's and Base44's core strength. Large effort, and not our wedge; do it after the client and book features.</li>
+    <li><span class="tag">Growth</span><b>A free way in.</b> Every major competitor has one. Even 30 credits a month or 5 a day, with the badge on, would let people reach the "aha" before paying.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Corrections we found in our own product</h2>
+  <ul>
+    <li>The pricing page promised 1, 5 and 15 sites, but the database allowed 5 live and 20 total for everyone. Fixed by going unlimited.</li>
+    <li>"Expanded hosting" was listed as a Scale feature, but nothing on Scale is different for hosting. Plans now differ by credits, seats and storage, which is honest.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Sources</h2>
+  <div class="sources">
+    <p><a href="https://docs.lovable.dev/introduction/subscription-plans">Lovable plans</a> · <a href="https://docs.lovable.dev/introduction/credits-and-usage">Lovable credits</a> · <a href="https://docs.lovable.dev/features/custom-domain">Lovable domains</a> · <a href="https://docs.lovable.dev/features/hosting.md">Lovable hosting</a> · <a href="https://dealroom.co/news/144597-lovable-raises-400m-at-13-3b-valuation-eyes-600m-revenue-run-rate/">Lovable Series C</a></p>
+    <p><a href="https://bolt.new/pricing">Bolt pricing</a> · <a href="https://support.bolt.new/account-and-subscription/tokens">Bolt tokens</a> · <a href="https://support.bolt.new/cloud/hosting">Bolt hosting</a></p>
+    <p><a href="https://v0.app/docs/pricing">v0 pricing</a> · <a href="https://replit.com/pricing">Replit pricing</a> · <a href="https://docs.replit.com/billing/plans">Replit plans</a> · <a href="https://base44.com/pricing">Base44 pricing</a> · <a href="https://emergent.sh/pricing">Emergent pricing</a></p>
+    <p><a href="https://www.framer.com/pricing">Framer pricing</a> · <a href="https://www.framer.com/help/articles/how-ai-credits-and-agents-pricing-work/">Framer AI credits</a> · <a href="https://www.wix.com/blog/how-much-does-wix-harmony-cost">Wix pricing</a> · <a href="https://www.squarespace.com/pricing">Squarespace pricing</a> · <a href="https://www.flowninja.com/blog/webflow-pricing-demystified">Webflow pricing (third-party)</a></p>
+    <p><a href="https://durable.com/pricing">Durable pricing</a> · <a href="https://10web.io/pricing-platform/">10Web pricing</a> · <a href="https://www.hostinger.com/website-builder">Hostinger builder</a> · <a href="https://www.relume.ai/pricing">Relume pricing</a></p>
+    <p><a href="https://help.gamma.app/en/articles/7834324-how-do-ai-credits-work-in-gamma">Gamma credits</a> · <a href="https://www.eesel.ai/en/blog/gamma-pricing">Gamma pricing (third-party)</a> · <a href="https://www.beautiful.ai/pricing">Beautiful.ai pricing</a> · <a href="https://pitch.com/pricing">Pitch pricing</a> · <a href="https://www.canva.com/help/canva-websites/">Canva websites</a></p>
+    <p><a href="https://www.story.com/products/storybook-publisher">Story.com Storybook</a> · <a href="https://kdpbuilder.com/ai-childrens-book-creator">KDP Builder</a> · <a href="https://www.sudowrite.com/pricing">Sudowrite pricing</a> · <a href="https://reedsy.com/studio/pricing">Reedsy Studio</a></p>
+    <p><a href="https://www.trustpilot.com/review/lovable.dev">Lovable on Trustpilot</a> · <a href="https://www.trustpilot.com/review/bolt.new">Bolt on Trustpilot</a> · <a href="https://www.theregister.com/2025/09/18/replit_agent3_pricing/">Replit pricing backlash</a></p>
+  </div>
+</section>
+</div>

@@ -1,0 +1,57 @@
+{
+  "reviewedAt": "2026-10-13T04:31:01Z",
+  "status": "locally-qualified-not-launch-ready",
+  "productionTouched": false,
+  "deployed": false,
+  "committed": false,
+  "paidProviderCalls": 0,
+  "newRoundSpentUsd": 0,
+  "newRoundReservedUsd": 0,
+  "changes": [
+    "Project references propagate into website, book, presentation and plan requests without filtering or truncation.",
+    "Immutable local reference snapshots and protected server fingerprints preserve sources across interrupted build continuation.",
+    "Inline sources are bounded to 3000000 combined raw bytes; all build/plan/review requests are bounded to 4400000 serialized UTF-8 bytes.",
+    "Document style instructions use the real format and reject mismatched presets.",
+    "Optional authored book-cover and slide-cover/closing compositions compile to editable primitives with fit, contrast and geometry checks.",
+    "Wide-character and whitespace title overflow found by independent review was reproduced and corrected.",
+    "R2 retention accepts only the exact trusted publication receipt key grammar.",
+    "Creation offer verification handles explicit Whop unlimited stock correctly and preserves exact-price checks.",
+    "Removed six unused fixture variables/catch bindings; no cloud fixture was executed for that cleanup."
+  ],
+  "verification": {
+    "combinedOfflineHarnesses": { "passed": 93, "failed": 0, "explicitEnvironmentOrLiveExclusions": 5, "rerunAfterFinalFitCorrection": true },
+    "productionBuild": "passed including TypeScript",
+    "fullLint": { "errors": 0, "warnings": 0 },
+    "attachmentBrowserGroups": 13,
+    "attachmentContractRouteAndModelContextGroups": 8,
+    "existingBuilderBrowserGroups": 4,
+    "existingPlanClientGroups": 14,
+    "operationIntegrationGroups": 23,
+    "r2BindingGroups": 9,
+    "r2SignedHttpGroups": 9,
+    "authoredDocumentBrowser": "Three synthetic portrait preview/print cases and six cover/closing slides; correct PDF dimensions, no measured text overflow and matching center crop.",
+    "priorMigrationRehearsalHashes": { "inputsChecked": 4, "pendingMigrationsChecked": 54, "changed": [] },
+    "independentReview": "No outstanding concrete P1/P2 in the bounded attachment and authored-cover packages; one cover-fit P2 fixed. This is not a whole-app security certification."
+  },
+  "evidence": [
+    "docs/release-review/attachment-flow-20261013.md",
+    "docs/release-review/authored-cover-composition-20261013.json",
+    "docs/release-review/creation-checkout-ui-20261013.md",
+    "docs/release-review/whop-plan-shapes-20261013.json",
+    "docs/release-review/publication-cloud-options-20261013.md",
+    "docs/release-review/competitor-verification-20261013.json",
+    "outputs/authored-cover-qualification/report.json",
+    "docs/release-review/candidate-rehearsal.json"
+  ],
+  "limitations": [
+    "No refreshed cloud candidate, production rollout or application inventory freeze.",
+    "Browser generation APIs and provider boundaries were mocked; synthetic document fixtures are not fresh AI quality samples.",
+    "Large attachment direct upload, cross-device source recovery and full OAuth-to-generation qualification remain open.",
+    "Once authored compositions are saved, rollback must retain the new schema and renderer support. Old clients need refresh; drain generation/document writes for the coordinated cutover.",
+    "System font availability differs across machines. Desktop PowerPoint rendering and production Linux PDF font fidelity still require qualification.",
+    "Plan switching, signed payment/credit-pack lifecycle, live AI images and isolated cloud publication execution remain launch gates.",
+    "Existing sandbox annual test plan is $279; displayed annual Create is $278.40. No provider configuration was changed.",
+    "Staging customer Worker route isolation is researched but not configured. Do not deploy the current overlapping route files.",
+    "No comparative product-quality superiority is established by competitor feature documentation or these tests."
+  ]
+}

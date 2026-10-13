@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, ChevronDown, Coffee, LoaderCircle, ShieldCheck } from "lucide-react";
 import EffortControl from "./effort-control";
 import BillingTopups from "./billing-topups";
-import FoundingPlans from "./founding-plans";
+import CreationPlans from "./creation-plans";
 import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
 
 type SupportCheckout = { available: boolean; authenticated: boolean };
@@ -68,13 +68,13 @@ function SupportPlan() {
     <div className="billing-support-icon" aria-hidden="true"><Coffee size={25} strokeWidth={1.45} /></div>
     <div className="billing-support-copy">
       <div className="billing-support-kicker"><span>A LITTLE SUPPORT</span></div>
-      <h2 id="support-heading">Pay a coffee</h2>
+      <h2 id="support-heading">Buy us a coffee</h2>
       <p>Like what we’re building? Help keep it going.</p>
     </div>
     <div className="billing-support-action">
       <div className="billing-support-price"><strong><span>$</span>1</strong><span>USD / month</span></div>
       {checkout?.available ? <button className="billing-support-button" type="button" disabled={busy} onClick={() => void openCheckout()}>
-        {busy ? <><LoaderCircle className="billing-loading" size={16} />Continuing…</> : <>Pay a coffee<ArrowUpRight size={15} /></>}
+        {busy ? <><LoaderCircle className="billing-loading" size={16} />Continuing…</> : <>Buy us a coffee<ArrowUpRight size={15} /></>}
       </button> : checkout === null ? <span className="billing-support-status" role="status">Checking checkout…</span> : <><span className="billing-support-status" role="status">Checkout is unavailable right now</span><button className="billing-support-retry" type="button" onClick={() => { setCheckout(null); setAvailabilityAttempt(attempt => attempt + 1); }}>Try again</button></>}
       <span>{checkout?.authenticated ? "Via Whop · Cancel anytime" : "Sign in to continue · Cancel anytime"}</span>
       {error && <p className="billing-checkout-error" role="alert">{error}</p>}
@@ -85,7 +85,7 @@ function SupportPlan() {
 
 export default function BillingPlans({ unlimitedCredits = false }: { unlimitedCredits?: boolean }) {
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
-  return <><FoundingPlans />{unlimitedCredits ? <section className="billing-unlimited-topups" aria-label="Credit top-ups"><ShieldCheck size={19} aria-hidden="true" /><div><h2>You’re covered.</h2><p>Your unlimited administrator allowance means you do not need credit top-ups.</p></div></section> : <BillingTopups />}<SupportPlan />
+  return <><CreationPlans />{unlimitedCredits ? <section className="billing-unlimited-topups" aria-label="Credit top-ups"><ShieldCheck size={19} aria-hidden="true" /><div><h2>You’re covered.</h2><p>Your unlimited administrator allowance means you do not need credit top-ups.</p></div></section> : <BillingTopups />}<SupportPlan />
     <details className="billing-effort-details"><summary><span>How does thinking effort affect credits?</span><ChevronDown size={16} aria-hidden="true" /></summary><div className="billing-effort-preview"><div><h3>Set the pace for each project.</h3><p>Higher effort allows more planning and review, which can use more credits. Your estimate will depend on the work, including its length and artwork.</p><small>Try the slider. This preview changes no project settings.</small></div><EffortControl value={effort} onChange={setEffort} /></div></details>
   </>;
 }

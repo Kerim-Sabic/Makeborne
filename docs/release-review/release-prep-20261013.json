@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-12T23:50Z",
+  "agent": "Claude Opus 5.5 (claude-opus-5-5)",
+  "branch": "upgrade/live-builder",
+  "baseCommit": "0d8a8fb8edb2243349394f84b878142554de5947",
+  "candidate": "candidate-inventory.json (verify: node scripts/freeze-candidate-inventory.mjs --check)",
+  "launchReady": false,
+  "productionTouched": false,
+  "committedPushedMerged": false,
+  "paidAiCalls": 0,
+  "conservativeTestingTotalUsd": 23.865144,
+  "approvedCapUsd": 25,
+  "whopSandboxRefund": "pay_JVp4TjClPsS0Hs, $29 sandbox test money, no real money",
+  "gates": {
+    "hosting-forms-publishing-credits": { "status": "PASS",
+      "evidence": ["staging-migrations-20261013.json", "cloud-release-sql.json (45 hashes, 7 suites on staging)", "public-hosting-http.json (9 checks, real DNS/TLS/Worker/protected preview/SQL)", "cloud-address-changes.json", "staging-deployment-20261013.json (browser: 375px menu, layout, animations, attribution)"] },
+    "authentication-final-preview": { "status": "BLOCKED",
+      "passed": ["cloud-confirmation-results.json: confirmation, replay, external redirect, recovery, password change, sign-out", "cloud-app-results.json: password sign-in, unpaid creation denied, private uploads"],
+      "blockedBy": ["Branded signup email arrival in the owner mailbox on feavd3cd1", "Google and GitHub sign-in on feavd3cd1 (owner accounts)", "Signed-in owner UI: saved preview with generation disabled"] },
+    "whop-lifecycle": { "status": "BLOCKED", "evidence": "whop-evidence-matrix.json",
+      "blockedBy": ["Real scheduled charge and renewal (probe plan_ph23AtuxtNWzD needs an owner test-card purchase; renewal on day 8; sandbox key expires 2026-10-19)", "Failed renewal (probe plan_JWikpAgY1kqqI, card 4000 0000 0000 0341)", "Replacement and refund-credit policy D5/D7", "Dispute (no sandbox trigger documented)"] },
+    "founding-offer": { "status": "DISABLED", "evidence": "docs/FOUNDING_OFFER.md",
+      "note": "No founder checkout exists; Whop documents no delayed start. Narrow decision: option B (reservation + renewal consent at launch, documented) or A (one checkout, needs the founding-probe extend test)." },
+    "images": { "status": "DISABLED", "evidence": ["src/lib/builder/images.ts imageConfiguration", "check-live-spend.cjs (30 checks, also with clock at 2026-11-15)"],
+      "note": "Launch with images off. Owner target gpt-image-2.5-sunburst needs an OpenAI key plus an approved measured qualification (scripts/qualify-image-model.mjs)." },
+    "candidate-and-recovery": { "status": "PASS",
+      "evidence": ["candidate-inventory.json (183 files, 45 migrations, raw migration bytes equal to rehearsal)", "candidate-rehearsal.json 2026-10-12T23:38Z: full/fault/interrupt converge on 1fe043ede88d1bafc19ec3fea7803f4a; CRM contract/rollback; legacy hosting fallback", "tsc, eslint (0 errors), npm test 75/75, next build", "main local DB unchanged (61 migrations, 388/9/1/1)"] },
+    "release-decisions": { "status": "BLOCKED", "evidence": "docs/RELEASE_DECISIONS.md", "note": "D1-D8 need owner decisions; each can stay disabled at launch except D7 (support procedure before taking payments)." },
+    "release-checklist": { "status": "PASS", "evidence": "docs/RELEASE_CHECKLIST.md (target safety, reversibility, makeborne.site cutover consequences, webhook version pin)" }
+  },
+  "defectsFixed": [
+    "Images with OPENAI_API_KEY set defaulted to gpt-image-1; every website/document build would fail from 2026-10-23. Images are now opt-in with no default model; an unusable model turns images off and is logged.",
+    "Spend tests depended on gpt-image-1 and the real clock; they would have failed from 2026-10-23.",
+    "Staging check scripts hard-coded old previews; they now take STAGING_BASE and refuse non-staging hosts. The address check expected the default host, not staging's isolated domain."
+  ],
+  "findings": [
+    "Supabase CLI in this checkout is linked to production.",
+    "Whop API key defaults to the latest API version; the app pins 2025-01-01, and the webhook endpoint must be pinned too.",
+    "Whop full refund keeps payment status 'paid' (substatus 'refunded'); the parser handles it, and a regression test now covers it.",
+    "Cloudflare Web Analytics beacon is injected into customer sites on makeborne.site and blocked by CSP (console error). Disable automatic setup for the zone.",
+    "A staging Resend sending key was printed once in agent tool output; rotate it."
+  ]
+}

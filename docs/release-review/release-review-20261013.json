@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-13",
+  "reviewer": "Claude Opus 5.5 (claude-opus-5-5), high effort",
+  "branch": "upgrade/live-builder",
+  "baseCommit": "0d8a8fb8edb2243349394f84b878142554de5947",
+  "candidateInventory": "candidate-inventory.json (aggregate in file; verify with node scripts/freeze-candidate-inventory.mjs --check)",
+  "launchReady": false,
+  "productionTouched": false,
+  "committedPushedMerged": false,
+  "deployed": false,
+  "paidAiCallsThisReview": 0,
+  "conservativeTestingTotalUsd": 23.865144,
+  "approvedCapUsd": 25,
+  "gates": {
+    "1-review-hosting-forms-publication-credits": {
+      "status": "PASS",
+      "fixed": [
+        "Enquiries accepted for sites whose owner can no longer host -> migration 20261013090000, supabase/check-site-enquiries.sql",
+        "Retired-address squatting unbounded -> 10 addresses per website (MB429 -> PUBLISHING_LIMIT 429), supabase/check-site-address-changes.sql",
+        "Worker accepted any APP_ORIGIN string, including http -> validated, fail closed 503, src/lib/hosting/check-hosting.cjs",
+        "Abandoned checkout locked the account (PBC02) -> same-plan open checkout resumed, different plan explained, src/lib/billing/check-checkout-contract.cjs",
+        "CRM check counted pre-existing legacy clients -> supabase/check-crm-sales-delivery.sql uses a baseline"
+      ],
+      "notes": [
+        "The staging app (mcl7erewk), staging Worker (1d9a7b03) and staging database predate these fixes; staging must be refreshed to the frozen candidate.",
+        "Retired addresses are freed only when the hosted_sites row is deleted (policy)."
+      ]
+    },
+    "2-whop-lifecycle": {
+      "status": "BLOCKED",
+      "evidence": "whop-evidence-matrix.json (7 provider PASS rows, 8 simulation PASS rows)",
+      "blockedBy": ["actual subsequent renewal charge", "replacement subscription policy (D5)", "refund/dispute", "failed renewal / past_due"],
+      "seamlessSwitching": "disabled"
+    },
+    "3-copy-expiry-founding-renewal": {
+      "status": "FAIL",
+      "evidence": "docs/RELEASE_DECISIONS.md",
+      "reason": "D1: founding prelaunch reservation copy (terms line 9/14, founding-plans.tsx 24-25, billing-workspace.tsx 70) promises a launch-dated start; Whop and the allocation code start at purchase. Not customer-exposed: founding checkout disabled.",
+      "consistent": ["included-credit expiry", "annual monthly release", "trial credits non-expiring (trial off)", "credit packs closed"],
+      "pendingDecisions": ["D1 founding", "D2 margin floor", "D3 trial", "D4 founding discount", "D5 replacement", "D6 credit packs", "D7 refunds", "D8 image model"]
+    },
+    "4-image-model": {
+      "status": "BLOCKED",
+      "prepared": "gpt-image-2 price evidence and bounds from published per-image prices; gpt-image-1 refused from 2026-10-23T00:00:00Z; gpt-image-2.5 models refused as unbounded; mocked checks pass (check-live-spend.cjs)",
+      "blockedBy": "No OpenAI key in this environment for one live qualification; MAKEBORNE_IMAGE_MODEL still defaults to gpt-image-1"
+    },
+    "5-auth-final-preview": {
+      "status": "BLOCKED",
+      "staticEvidence": "16 auth files identical between the staged source and the candidate; redirects are origin-based with open-redirect guards",
+      "blockedBy": "The final candidate is not yet deployed to a staging preview; live sign-up/confirm/sign-in/recovery on that preview needs the preview origin on the staging Auth redirect allowlist and an owner-run session"
+    },
+    "6-inventory-and-rehearsals": {
+      "status": "PASS",
+      "evidence": ["candidate-inventory.json", "candidate-rehearsal.json"],
+      "summary": "45 migrations (1 out of order, needs --include-all); full/fault/interrupt scenarios converge on fingerprint 1fe043ede88d1bafc19ec3fea7803f4a; CRM contract -> rollback consistent; hosting fallback serves legacy reader; staging accounts and main local database untouched (61 migrations, row counts unchanged)"
+    },
+    "7-release-checklist": {
+      "status": "PASS",
+      "evidence": "docs/RELEASE_CHECKLIST.md",
+      "newFinding": "Staging and production Worker environments declare the same *.makeborne.site routes; staging must be removed before the production Worker deploys."
+    }
+  },
+  "verification": {
+    "typecheck": "tsc --noEmit exit 0",
+    "lint": "eslint exit 0 (0 errors, 6 pre-existing warnings in scripts/prepare-cloud-upload.mjs)",
+    "tests": "npm test: 75/75 harnesses passed, 4 skipped (need live server, browser fixture or pricing review)",
+    "build": "next build exit 0",
+    "mainLocalDbSql": "7 rolled-back suites on the main local DB: credit-lots-expiry 10, credit-wallets 11, live-ai-spend 8, plan-credit-allocations 13, generation-caps 8, hosting-modes 7, crm-sales-delivery 7; counts identical before/after",
+    "newMigrationSql": "site-enquiries 5 and address-changes 4 passed in the disposable rehearsal containers (they need 20261013090000)"
+  },
+  "disposableResources": {
+    "stoppedContainers": "makeborne_candidate_20261013 and makeborne_candidate_20261013_{full,fault,interrupt}_* (stopped, not removed; removal left to the owner)",
+    "stagingSecretToClean": "STAGING_VERCEL_OIDC_TOKEN on makeborne-site-host-staging (expires 2026-10-13T09:42:25Z; correction 2026-10-12T23:02Z: it had not yet expired when this report was written)"
+  }
+}

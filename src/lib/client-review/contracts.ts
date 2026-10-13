@@ -61,10 +61,10 @@ export type ActiveReview = Extract<ReviewPayload, { status: "active" }>;
 const name = z.string().trim().min(1, "Add your name.").max(80);
 const email = z.string().trim().max(254).refine(value => !value || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value), "Use a valid email or leave it empty.");
 export const ReviewCommentInputSchema = z.object({
-  name, email: email.default(""), body: z.string().trim().min(1, "Write a comment.").max(2000), anchor: ReviewAnchorSchema,
+  version: z.number().int().positive(), name, email: email.default(""), body: z.string().trim().min(1, "Write a comment.").max(2000), anchor: ReviewAnchorSchema,
 }).strict();
 export const ReviewDecisionInputSchema = z.object({
-  name, email: email.default(""), decision: z.enum(["approved", "changes_requested"]), note: z.string().trim().max(2000).default(""),
+  version: z.number().int().positive(), name, email: email.default(""), decision: z.enum(["approved", "changes_requested"]), note: z.string().trim().max(2000).default(""),
 }).strict();
 
 /** Freelancer-side link record (never includes the token or its hash). */

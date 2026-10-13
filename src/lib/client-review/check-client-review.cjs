@@ -30,13 +30,13 @@ check("anchors: general, section and bounded points only", () => {
   }
 });
 check("comment and decision inputs are bounded and require a name", () => {
-  assert.equal(ReviewCommentInputSchema.safeParse({ name: "", body: "Hi", anchor: { kind: "general" } }).success, false);
-  assert.equal(ReviewCommentInputSchema.safeParse({ name: "Jane", body: "x".repeat(2001), anchor: { kind: "general" } }).success, false);
-  assert.equal(ReviewCommentInputSchema.safeParse({ name: "Jane", email: "nope", body: "Hi", anchor: { kind: "general" } }).success, false);
-  assert.equal(ReviewCommentInputSchema.parse({ name: " Jane ", body: " Hi ", anchor: { kind: "general" } }).name, "Jane");
-  assert.equal(ReviewCommentInputSchema.safeParse({ name: "Jane", body: "Hi", anchor: { kind: "general" }, workspaceId: "x" }).success, false);
-  assert.equal(ReviewDecisionInputSchema.safeParse({ name: "Jane", decision: "maybe" }).success, false);
-  assert.equal(ReviewDecisionInputSchema.parse({ name: "Jane", decision: "approved" }).note, "");
+  assert.equal(ReviewCommentInputSchema.safeParse({ version: 1, name: "", body: "Hi", anchor: { kind: "general" } }).success, false);
+  assert.equal(ReviewCommentInputSchema.safeParse({ version: 1, name: "Jane", body: "x".repeat(2001), anchor: { kind: "general" } }).success, false);
+  assert.equal(ReviewCommentInputSchema.safeParse({ version: 1, name: "Jane", email: "nope", body: "Hi", anchor: { kind: "general" } }).success, false);
+  assert.equal(ReviewCommentInputSchema.parse({ version: 1, name: " Jane ", body: " Hi ", anchor: { kind: "general" } }).name, "Jane");
+  assert.equal(ReviewCommentInputSchema.safeParse({ version: 1, name: "Jane", body: "Hi", anchor: { kind: "general" }, workspaceId: "x" }).success, false);
+  assert.equal(ReviewDecisionInputSchema.safeParse({ version: 1, name: "Jane", decision: "maybe" }).success, false);
+  assert.equal(ReviewDecisionInputSchema.parse({ version: 1, name: "Jane", decision: "approved" }).note, "");
 });
 check("link creation is limited to 90 days and 4 MB snapshots", () => {
   assert.equal(ReviewCreateSchema.safeParse({ scope: "latest", version: 1, days: 91 }).success, false);
@@ -91,4 +91,13 @@ check("mappers never surface token hashes", () => {
   const comment = mapReviewComment({ id: "41111111-1111-4111-8111-111111111111", link_id: link.id, version_number: 2, kind: "comment", author_name: "Jane", author_email: "", body: "Hi", anchor: { kind: "bogus" }, resolved_at: null, created_at: "2026-10-11T00:00:00Z" });
   assert.deepEqual(comment.anchor, { kind: "general" });
 });
+
+
+check("review writes require the displayed immutable version", () => {
+ for(const version of [undefined, null, 0, -1, 1.5, "1"]) {
+  assert.equal(ReviewCommentInputSchema.safeParse({ version, name: "Jane", body: "Hi", anchor: { kind: "general" } }).success, false);
+  assert.equal(ReviewDecisionInputSchema.safeParse({ version, name: "Jane", decision: "approved" }).success, false);
+ }
+});
+
 console.log(`${count} client review checks passed.`);

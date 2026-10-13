@@ -1,0 +1,40 @@
+{
+  "domain": "makeborne.site",
+  "registrar": "Spaceship",
+  "purchaseConfirmed": true,
+  "cloudflarePlan": "Free",
+  "cloudflareZoneId": "130d7e58c955385e499d163d4b9f9e05",
+  "nameserversSaved": [
+    "elias.ns.cloudflare.com",
+    "tara.ns.cloudflare.com"
+  ],
+  "wildcardDns": {
+    "type": "AAAA",
+    "name": "*",
+    "content": "100::",
+    "proxied": true
+  },
+  "worker": "makeborne-site-host-staging",
+  "workerInitialVersion": "73f62d3a-1410-4340-9b3c-fa52af9077c8",
+  "workerDatabase": "xzwikrunwpurxnxgkznh",
+  "workerRoutes": [
+    "*.makeborne.site/*",
+    "makeborne.site/*"
+  ],
+  "publishableKeyConfigured": true,
+  "packagingDryRunPassed": true,
+  "activationStatus": "normal_public_dns_and_https_verified",
+  "publicDnsResult": "Cloudflare and Google return assigned Cloudflare nameservers; normal browser and HTTPS requests work",
+  "publicHttpsQualified": true,
+  "publicFormsQualified": true,
+  "formsSigningSecretConfigured": true,
+  "remaining": [
+    "Production hosting rollout still requires final release approval"
+  ],
+  "productionChanged": false,
+  "mergedOrPushed": false,
+  "paidAiCalls": 0,
+  "workerCurrentVersion": "1d9a7b03-7143-400b-acc4-6e885ff55a53",
+  "testWebsite": "https://relay-atelier-854b58da.makeborne.site/",
+  "temporaryStagingGatewayTokenExpiresAt": "2026-10-13T09:42:25.000Z"
+}

@@ -1,0 +1,15 @@
+{
+  "passed": [
+    "Browser signup and confirmation screen",
+    "Branded local email; scanner-safe GET; deliberate confirmation sets session",
+    "Confirmed unpaid account denied creation; no trial credits",
+    "Authenticated workspace/client/project creation; project delivery update preserves client sales stage",
+    "Signed-in studio renders",
+    "Real storage upload/download; anonymous read and foreign-workspace write denied",
+    "Saved live-document sources export through authenticated HTTP to book PDF and deck PDF/PPTX",
+    "Password sign-in in a fresh browser session"
+  ],
+  "failedStage": null,
+  "externalEmailSent": false,
+  "productionTouched": false
+}

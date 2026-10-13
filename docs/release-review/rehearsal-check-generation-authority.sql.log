@@ -1,0 +1,10 @@
+BEGIN
+UPDATE 7
+UPDATE 7
+NOTICE:  PASS invalid session and missing processing/external/rights confirmations roll back reservation, job and outbox
+NOTICE:  PASS immutable replay, scoped fenced source load and denied worker bind/dispatch bypass
+NOTICE:  PASS signed-out/expired session, revoked creation access and reviewer dispatch denied with caps enabled
+NOTICE:  PASS source content/approval/permission, proposal fingerprint and stale revision deny before dispatch/holds
+NOTICE:  PASS unchanged authorized job can dispatch through original exact cap/reservation authority
+DO
+ROLLBACK

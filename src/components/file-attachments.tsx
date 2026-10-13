@@ -8,24 +8,29 @@ export function useFileAttachments(owner: string | null, context: string) {
   const key = `${owner}/${context}`;
   const [state, setState] = useState<{ key: string; files: Attachment[]; ready: boolean; busy: boolean; error: string }>({ key: "", files: [], ready: false, busy: false, error: "" });
   const current = useRef(key);
+  const generation = useRef({ active: false });
   const locked = useRef(false);
   useEffect(() => {
+    const session = { active: true };
+    generation.current = session;
     current.current = key;
     locked.current = false;
     let active = true;
     if (owner) void readAttachments(owner, context).then(files => {
       if (active) setState({ key, files, ready: true, busy: false, error: "" });
     }).catch(error => { if (active) setState({ key, files: [], ready: false, busy: false, error: error instanceof Error ? error.message : "Could not load files." }); });
-    return () => { active = false; };
+    return () => { active = false; session.active = false; };
   }, [owner, context, key]);
   const ready = state.key === key && state.ready;
   async function mutate(run: () => Promise<Attachment[]>) {
     if (!owner || !ready || locked.current) return;
+    const startedGeneration = generation.current;
+    const active = () => current.current === key && generation.current === startedGeneration && startedGeneration.active;
     locked.current = true;
     setState(value => ({ ...value, busy: true, error: "" }));
-    try { const files = await run(); if (current.current === key) setState({ key, files, ready: true, busy: false, error: "" }); }
-    catch (error) { if (current.current === key) setState(value => ({ ...value, busy: false, error: error instanceof Error ? error.message : "Could not save these files." })); }
-    finally { if (current.current === key) locked.current = false; }
+    try { const files = await run(); if (active()) setState({ key, files, ready: true, busy: false, error: "" }); }
+    catch (error) { if (active()) setState(value => ({ ...value, busy: false, error: error instanceof Error ? error.message : "Could not save these files." })); }
+    finally { if (active()) locked.current = false; }
   }
   return {
     files: state.key === key ? state.files : [], ready, busy: state.key === key && state.busy, error: state.key === key ? state.error : "",
@@ -74,7 +79,7 @@ function FileChip({ file, onRemove, disabled }: { file: Attachment; onRemove?: (
     {onRemove && <button type="button" className="attachment-remove" onClick={() => onRemove(file.id)} disabled={disabled} aria-label={`Remove ${file.name}`} title={`Remove ${file.name}`}><X size={13} /></button>}
   </li>;
 }
-export function AttachmentList({ files, onRemove, disabled, compact = false }: { files: Attachment[]; onRemove?: (id: string) => void; disabled?: boolean; compact?: boolean }) {
+export function AttachmentList({ files, onRemove, disabled, compact = false, note = "Saved on this device · not yet read by AI" }: { files: Attachment[]; onRemove?: (id: string) => void; disabled?: boolean; compact?: boolean; note?: string }) {
   if (!files.length) return null;
-  return <div className={`attachment-section${compact ? " is-compact" : ""}`}><ul className="attachment-list" aria-label="Attached files">{files.map(file => <FileChip key={file.id} file={file} onRemove={onRemove} disabled={disabled} />)}</ul><p className="attachment-note">Saved on this device · not yet read by AI</p></div>;
+  return <div className={`attachment-section${compact ? " is-compact" : ""}`}><ul className="attachment-list" aria-label="Attached files">{files.map(file => <FileChip key={file.id} file={file} onRemove={onRemove} disabled={disabled} />)}</ul><p className="attachment-note">{note}</p></div>;
 }

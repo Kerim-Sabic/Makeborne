@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { WebsiteDesignSchema } from "./generation/website-contract";
 import { ClientOutreachSchema } from "./client-outreach";
+import { ProjectDeliveryStageSchema } from "./project-delivery";
 import { WebsiteProjectSourceSchema } from "./projects/website-source";
 import {SlideDesignSchema,slideDesignSourceIssues} from "./presentations/slide-design";
 import { DocumentSourceSchema } from "./documents/schema";
@@ -47,6 +48,8 @@ export const CreateProjectSchema = z.object({
 export const ProjectSchema = CreateProjectSchema.extend({
   styleId: z.string().min(1).max(100),
   effort: z.enum(["light", "medium", "high", "super_high", "ultra"]).default("medium"),
+  /** Delivery to the client (separate from the client's sales stage). */
+  deliveryStage: ProjectDeliveryStageSchema.default("active"),
   id,
   createdAt: timestamp,
   updatedAt: timestamp,

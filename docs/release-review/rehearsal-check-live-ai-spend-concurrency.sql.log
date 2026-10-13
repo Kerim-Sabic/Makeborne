@@ -1,0 +1,16 @@
+BEGIN
+CREATE EXTENSION
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  PASS 8 users on 8 concurrent sessions against a limit for 3: exactly 3 admitted, reservations exact
+NOTICE:  PASS finish racing the sweeper: the call is closed exactly once (settled)
+DO
+ROLLBACK

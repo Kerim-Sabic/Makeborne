@@ -1,0 +1,16 @@
+BEGIN
+NOTICE:  PASS A project delivery backfill: mapped, audited, idempotent, status preserved
+DO
+NOTICE:  PASS E delivery stage permissions
+ROLLBACK
+BEGIN
+NOTICE:  PASS B expand: previous-app writes accepted, new-app Conversation stored compatibly with provenance, audited, history intact
+NOTICE:  PASS C contract: requires freeze, freeze blocks writes, cutoff rejects out-of-date servers and legacy stages
+NOTICE:  PASS D rollback: requires freeze, exact provenance restored, later user changes kept, previous app writes again
+NOTICE:  PASS H repeated cycles: exact provenance, history intact, audit complete, inconsistent resume refused
+DO
+ROLLBACK
+BEGIN
+NOTICE:  PASS F decisions (during a CRM freeze): anonymous, plan-less and paid reviewers move only the linked project, atomically; dead links, foreign projects and marker abuse rejected
+DO
+ROLLBACK

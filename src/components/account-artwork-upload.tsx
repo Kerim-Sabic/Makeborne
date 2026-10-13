@@ -15,6 +15,7 @@ export default function AccountArtworkUpload({ accountId, workspaceId, artifactI
   useEffect(() => () => { const request = active.current; active.current = null; request?.abort(); }, []);
   async function upload(file?: File) {
     if (!file || disabled || active.current) return;
+    if (file.size > 4 * 1024 * 1024) { setError("Choose an image under 4 MB."); return; }
     const abort = new AbortController(); active.current = abort;
     setBusy(true); setError("");
     const timeout = setTimeout(() => abort.abort(), 60_000);

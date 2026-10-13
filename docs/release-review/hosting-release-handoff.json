@@ -1,0 +1,54 @@
+{
+  "releaseApproved": false,
+  "productionChanged": false,
+  "committedOrMerged": false,
+  "paidAiCallsThisWork": 0,
+  "conservativeTestingTotalUsd": 23.865144,
+  "approvedCapUsd": 25,
+  "appDeployment": "dpl_7fQtetguks3163S6qb1wW98i45MS",
+  "appPreview": "https://makeborne-release-staging-mcl7erewk-kerimsabic-6594s-projects.vercel.app",
+  "browserQualifiedPreview": "https://makeborne-release-staging-3filmtbqy-kerimsabic-6594s-projects.vercel.app",
+  "worker": "makeborne-site-host-staging",
+  "workerVersion": "1d9a7b03-7143-400b-acc4-6e885ff55a53",
+  "database": "xzwikrunwpurxnxgkznh",
+  "testWebsite": "https://relay-atelier-854b58da.makeborne.site/",
+  "temporaryFormGateway": "Short-lived staging-only OIDC token; expired tokens fail closed. Production must not use this credential.",
+  "qualified": [
+    "Normal public DNS and valid HTTPS",
+    "Bare makeborne.site permanently redirects to makeborne.com",
+    "HTTP customer-site URLs redirect to HTTPS",
+    "Published modules and styles load; board filters and FAQ interaction work",
+    "390px mobile menu opens, navigates, and closes; no horizontal overflow",
+    "Public browser form delivery before and after address change appears in owner inbox",
+    "Inbox mark-read persists",
+    "Owner UI republishes the saved React website with AI generation disabled",
+    "Rename updates canonical; former address 404; unknown address 404",
+    "Visible nofollow Makeborne attribution survives React rendering",
+    "Incomplete React snapshots rejected by cloud publication route",
+    "44 staging migration hashes match source; 6 rolled-back SQL checks pass",
+    "75 offline checks pass; typecheck passes; remote lint and build pass"
+  ],
+  "remainingReleaseGates": [
+    "Actual subsequent Whop renewal payment and replacement-subscription policy; seamless switching remains disabled",
+    "Live OpenAI image qualification needs key; current gpt-image-1 is deprecated and requires migration assessment",
+    "Exact final immutable candidate migration fault/recovery rehearsal and release review",
+    "Pricing margin-floor, founding-year discount and trial decisions",
+    "Production backup, provider limits, recurring billing reconciliation, alerts and explicitly approved release"
+  ],
+  "hostingHashes": {
+    "infra/customer-sites/_worker.js": "486c89ff8258bae83b22f4ba1399be993531586674f534203940c0e51165f881",
+    "infra/customer-sites/forms.js": "a027c77ce36023dbbe1bb8b178704c746a50a97a5f6b74dd58d6a9e146f24132",
+    "infra/customer-sites/site-policy.js": "8c3805a24d81254dfd633a5071d27b618c9964428a6972fd9958a85997ca12ab",
+    "infra/customer-sites/wrangler.jsonc": "5e599cc84c895dc0eb3878d04947ede3edfb7b0c35f784e9d4a004affd662fcc"
+  },
+  "evidence": [
+    "public-hosting-http.json",
+    "cloud-form-gateway.json",
+    "cloud-release-sql.json",
+    "hosting-final-offline.log",
+    "public-site-mobile.png",
+    "public-form-delivered.png",
+    "staging-enquiry-inbox.png"
+  ],
+  "checkedAt": "2026-10-12T22:07:02.915Z"
+}

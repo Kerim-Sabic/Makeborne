@@ -1,0 +1,21 @@
+{
+  "container": "makeborne_publication_20261013034802",
+  "startedAt": "2026-10-13T05:14:00.408Z",
+  "passed": true,
+  "cloudWrites": 0,
+  "providerCalls": 0,
+  "migration": "supabase/migrations/20261013200000_staging_site_address_namespace.sql",
+  "sha256": "9df32055e53e1bd19e257fd33880288515bfd124162c9c618d967f31f6a03972",
+  "checks": [
+    "migration aborts atomically for existing QA site, retired reservation, and preparation without seizing or changing ownership; clean apply succeeds",
+    "default production refuses both QA labels through raw/legacy publication, trusted request and reservation writes; existing ordinary site unchanged",
+    "actual service/worker LOGIN sessions cannot configure, directly mutate policy, or SET ROLE to database owner",
+    "real policy/write races in both orders: configuration waits then sees committed incompatible work; waiting publication sees newly committed staging policy and fails",
+    "owner configuration validates workspace and refuses incompatible in-flight preparations before staging opt-in",
+    "ordinary staging sites remain readable, metadata-editable, interactive-disableable, unpublishable and deletable; enable/hidden-content-change/republish/rename outside QA refused",
+    "only configured QA workspace can claim exact labels; legacy publish+rename retain both reservations; conflicting owner reconfiguration/direct policy update refused",
+    "trusted QA request/claim/completion/promotion succeeds; direct preparation/site identity mutation cannot bypass namespace",
+    "all new private helpers have zero browser/service/worker execute grants; policy has RLS and no caller table grants"
+  ],
+  "finishedAt": "2026-10-13T05:14:17.559Z"
+}

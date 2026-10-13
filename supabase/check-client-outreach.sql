@@ -23,7 +23,7 @@ begin
   get diagnostics affected=row_count;
   assert affected=0, 'stale save accepted';
   perform set_config('request.jwt.claim.sub',editor_id::text,true);
-  update public.clients set outreach=jsonb_set(value,'{stage}','"Replied"') where id=contact;
+  update public.clients set outreach=jsonb_set(value,'{stage}','"Conversation"') where id=contact;
   get diagnostics affected=row_count;
   assert affected=1, 'editor save failed';
   perform set_config('request.jwt.claim.sub',reviewer_id::text,true);

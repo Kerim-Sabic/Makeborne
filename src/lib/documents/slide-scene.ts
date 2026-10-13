@@ -1,5 +1,6 @@
 import type { Chart, Deck, Slide, Theme } from "./schema";
 import { FONTS, contrast, mix, readableOn } from "./theme";
+import { slideCoverScene } from "./cover-composition";
 
 /** Every deck slide is composed once into absolute primitives on a 1280×720
  * canvas. The HTML preview/PDF and the editable PPTX both draw these same
@@ -11,7 +12,7 @@ export type TextPrim = { k: "text"; x: number; y: number; w: number; h: number; 
 export type RectPrim = { k: "rect"; x: number; y: number; w: number; h: number; fill: string; opacity?: number; radius?: number; fade?: "up" };
 export type EllipsePrim = { k: "ellipse"; x: number; y: number; w: number; h: number; fill?: string; stroke?: string; strokeWidth?: number; opacity?: number };
 export type LinePrim = { k: "line"; x1: number; y1: number; x2: number; y2: number; color: string; width: number; arrow?: boolean; opacity?: number };
-export type ImagePrim = { k: "image"; x: number; y: number; w: number; h: number; name: string; alt: string };
+export type ImagePrim = { k: "image"; x: number; y: number; w: number; h: number; name: string; alt: string; crop?: "center" };
 export type ChartColors = { ink: string; muted: string; grid: string; series: string[]; highlight: string; dim: string; background: string };
 export type ChartPrim = { k: "chart"; x: number; y: number; w: number; h: number; chart: Chart; colors: ChartColors };
 export type Prim = TextPrim | RectPrim | EllipsePrim | LinePrim | ImagePrim | ChartPrim;
@@ -59,7 +60,8 @@ export function fitSize(text: string, width: number, height: number, max: number
 type Ctx = { theme: Theme; m: Metrics; c: Tone; prims: Prim[]; issues: string[]; index: number; total: number; deck: Pick<Deck, "title" | "assets"> };
 function text(ctx: Ctx, value: string, box: { x: number; y: number; w: number; h?: number }, style: { font?: "heading" | "body"; size: number; min?: number; maxH?: number; weight?: 400 | 600 | 700; color?: string; align?: TextPrim["align"]; valign?: TextPrim["valign"]; lh?: number; tracking?: number; upper?: boolean; italic?: boolean; role?: TextPrim["role"] }) {
   const font = style.font ?? "body", lh = style.lh ?? (font === "heading" ? 1.08 : 1.4);
-  const width = (font === "heading" ? ctx.m.heading : ctx.m.body) * (style.upper ? 1.18 : 1) * (style.weight && style.weight >= 600 ? 1.05 : 1);
+  // Letter-spacing widens every glyph by its tracking (in em).
+  const width = (font === "heading" ? ctx.m.heading : ctx.m.body) * (style.upper ? 1.18 : 1) * (style.weight && style.weight >= 600 ? 1.05 : 1) + (style.tracking ?? 0);
   const content = style.upper ? value.toUpperCase() : value;
   const size = style.maxH ? fitSize(content, box.w, style.maxH, style.size, style.min ?? Math.round(style.size * 0.6), lh, width) : style.size;
   const raw = textHeight(content, box.w, size, lh, width), needed = raw + Math.ceil(size * 0.15);
@@ -128,9 +130,10 @@ export function chartColors(theme: Theme, c: Tone): ChartColors {
 function diagram(ctx: Ctx, slide: Slide, top: number) {
   const d = slide.diagram!, n = d.items.length, c = ctx.c, bottom = SAFE_BOTTOM;
   const label = (value: string, box: { x: number; y: number; w: number }, align: TextPrim["align"] = "center", color = c.ink) => text(ctx, value, box, { size: 21, weight: 700, align, color });
-  const detail = (value: string | undefined, box: { x: number; y: number; w: number }, align: TextPrim["align"] = "center", color = c.muted) => value ? text(ctx, value, box, { size: 16, align, color, lh: 1.4 }) : 0;
+  const detail = (value: string | undefined, box: { x: number; y: number; w: number }, align: TextPrim["align"] = "center", color = c.muted) => value ? text(ctx, value, box, { size: 20, align, color, lh: 1.35 }) : 0;
   if (d.kind === "process" || d.kind === "timeline") {
     const col = CONTENT_W / n, mid = top + Math.max(90, (bottom - top) * 0.36);
+    let processLabelHeight = 0;
     ctx.prims.push({ k: "line", x1: MX + col / 2, y1: mid, x2: MX + col * (n - 0.5), y2: mid, color: d.kind === "timeline" ? c.accent : c.rule, width: d.kind === "timeline" ? 3 : 2 });
     d.items.forEach((item, i) => {
       const cx = MX + col * (i + 0.5);
@@ -138,12 +141,17 @@ function diagram(ctx: Ctx, slide: Slide, top: number) {
         ctx.prims.push({ k: "ellipse", x: cx - 34, y: mid - 34, w: 68, h: 68, fill: i === n - 1 ? c.accent : c.bg, stroke: c.accent, strokeWidth: 3 });
         text(ctx, String(i + 1), { x: cx - 34, y: mid - 34, w: 68, h: 68 }, { font: "heading", size: 28, align: "center", valign: "middle", color: i === n - 1 ? readableOn(c.accent, c.bg, c.ink) : c.accent, weight: 700 });
         const h = label(item.label, { x: cx - col / 2 + 12, y: mid + 58, w: col - 24 });
-        detail(item.detail, { x: cx - col / 2 + 12, y: mid + 58 + h + 8, w: col - 24 });
+        processLabelHeight = Math.max(processLabelHeight, h);
       } else {
         ctx.prims.push({ k: "ellipse", x: cx - 13, y: mid - 13, w: 26, h: 26, fill: c.bg, stroke: c.accent, strokeWidth: 4 });
         text(ctx, item.label, { x: cx - col / 2 + 8, y: mid - 74, w: col - 16, h: 52 }, { font: "heading", size: 26, align: "center", valign: "bottom", color: c.accent, weight: 700 });
         detail(item.detail, { x: cx - col / 2 + 12, y: mid + 34, w: col - 24 }, "center", c.ink);
       }
+    });
+    // Process labels share one row even when their wrapped heights differ.
+    // Keep sibling descriptions aligned in both HTML and native PPTX output.
+    if (d.kind === "process") d.items.forEach((item, i) => {
+      detail(item.detail, { x: MX + col * i + 12, y: mid + 58 + processLabelHeight + 8, w: col - 24 });
     });
     return;
   }
@@ -256,7 +264,7 @@ function compose(ctx: Ctx, slide: Slide) {
           text(ctx, String(i + 1).padStart(2, "0"), { x, y: py0, w: 56, h: 34 }, { font: "heading", size: 28, color: c.accent, lh: 1 });
           let py = py0;
           if (point.title) py += text(ctx, point.title, { x: x + 64, y: py, w: colW - 64 }, { size: 21, weight: 700, maxH: 56, min: 17 }) + 6;
-          text(ctx, point.text, { x: x + 64, y: py, w: colW - 64 }, { size: 18, color: point.title ? c.muted : c.ink, maxH: py0 + rowH - py - 12, min: 14 });
+          text(ctx, point.text, { x: x + 64, y: py, w: colW - 64 }, { size: 21, color: point.title ? c.muted : c.ink, maxH: py0 + rowH - py - 12, min: 18 });
         });
       }
       footer(ctx);
@@ -285,7 +293,7 @@ function compose(ctx: Ctx, slide: Slide) {
         if (i) ctx.prims.push({ k: "line", x1: MX + i * colW, y1: y0 + 8, x2: MX + i * colW, y2: y0 + blockH, color: c.rule, width: 1.5 });
         text(ctx, stat.value, { x, y: y0, w, h: valueSize * 1.05 }, { font: "heading", size: valueSize, color: c.accent, lh: 1, weight: FONTS[ctx.theme.fonts].headingWeight >= 600 ? 700 : 400 });
         const h = text(ctx, stat.label, { x, y: y0 + valueSize + 22, w }, { size: 21, weight: 700, maxH: 60, min: 16 });
-        if (stat.detail) text(ctx, stat.detail, { x, y: y0 + valueSize + 30 + h, w }, { size: 16, color: c.muted, maxH: 70, min: 13 });
+        if (stat.detail) text(ctx, stat.detail, { x, y: y0 + valueSize + 30 + h, w }, { size: 20, color: c.muted, maxH: 90, min: 18 });
       });
       if (slide.body) text(ctx, slide.body, { x: MX, y: 580, w: CONTENT_W, h: 56 }, { size: 20, color: c.ink, maxH: 56, min: 15, valign: "bottom" });
       footer(ctx);
@@ -346,11 +354,16 @@ function compose(ctx: Ctx, slide: Slide) {
     case "quote": {
       const q = slide.quote!;
       const size = fitSize(q.text, 1000, 330, 48, 26, 1.25, ctx.m.heading);
-      const h = textHeight(q.text, 1000, size, 1.25, ctx.m.heading) + 8, block = 120 + h + (q.attribution ? 56 : 0);
+      const h = textHeight(q.text, 1000, size, 1.25, ctx.m.heading) + 8;
+      // A long attribution shrinks to one line where it can, otherwise takes two; the block is centred with its real height.
+      const attribution = q.attribution ? `— ${q.attribution}` : "", attributionWidth = (ctx.m.body * 1.18 * 1.05 + 0.1) * 1.12; // serif capitals run wide
+      const attributionSize = attribution ? fitSize(attribution.toUpperCase(), 900, 26, 18, 15, 1.4, attributionWidth) : 18;
+      const attributionH = attribution ? textHeight(attribution.toUpperCase(), 900, attributionSize, 1.4, attributionWidth) : 0;
+      const block = 120 + h + (attribution ? 28 + attributionH : 0);
       const top = Math.max(40, (H - block) / 2 - 10), y = top + 120;
       text(ctx, "“", { x: MX + 60, y: top - 40, w: 200, h: 224 }, { font: "heading", size: 220, color: c.accent, lh: 1 });
       text(ctx, q.text, { x: MX + 72, y, w: 1000, h }, { font: "heading", size, lh: 1.25, italic: true, role: "title" });
-      if (q.attribution) text(ctx, `— ${q.attribution}`, { x: MX + 72, y: y + h + 28, w: 900, h: 26 }, { size: 18, weight: 700, color: c.accent, upper: true, tracking: 0.1 });
+      if (attribution) text(ctx, attribution, { x: MX + 72, y: y + h + 28, w: 900, h: attributionH }, { size: attributionSize, weight: 700, color: c.accent, upper: true, tracking: 0.1 });
       footer(ctx);
       return;
     }
@@ -371,7 +384,8 @@ function compose(ctx: Ctx, slide: Slide) {
   }
 }
 
-export function composeSlide(deck: Pick<Deck, "title" | "theme" | "assets">, slide: Slide, index: number, total: number): SlideScene {
+export function composeSlide(deck: Pick<Deck, "title" | "theme" | "assets" | "author">, slide: Slide, index: number, total: number): SlideScene {
+  if (slide.composition && (slide.layout === "cover" || slide.layout === "closing")) return slideCoverScene(deck.theme, slide, deck.assets, deck.author);
   const c = toneColors(deck.theme, slide.tone);
   const ctx: Ctx = { theme: deck.theme, m: metrics(deck.theme), c, prims: [], issues: [], index, total, deck };
   compose(ctx, slide);

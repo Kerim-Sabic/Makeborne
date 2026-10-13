@@ -1,10 +1,15 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import type { BetaContentBlockParam, BetaMessageParam, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, BetaRawMessageStreamEvent, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { EffortLevel } from "../routing/effort";
-import { builderModel } from "./agent";
+import { builderModel, isProviderOrSpendError } from "./agent";
 import { PROPOSE_PLAN_INPUT_SCHEMA, parsePlan, planToBrief, type SitePlan } from "./plan";
-import { creditsForUsd, usageCost, usdPerCredit } from "./pricing";
+import { aiCostUsdPerCredit } from "./pricing";
+import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
+import { SpendError, type RunSpend } from "../ai/run-spend";
+
+/** Smallest output allowance worth a planning call (a complete plan needs room). */
+export const MIN_PLAN_TOKENS = 4_096;
 
 export type PlannerEvent =
   | { type: "status"; message: string }
@@ -17,11 +22,14 @@ export type PlannerRun = {
   previousPlan?: SitePlan | null;
   attachments: BetaContentBlockParam[];
   effort: EffortLevel;
-  creditBudget: number;
+  /** Provider and customer limits for this run; every call is bounded against it. */
+  spend: RunSpend;
   emit: (event: PlannerEvent) => void;
   signal: AbortSignal;
+  anthropic?: AnthropicLike;
 };
 
+/** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds. */
 export type PlannerResult = { plan: SitePlan | null; note: string; credits: number; usd: number };
 
 /** Stable system prompt (cached). */
@@ -59,9 +67,15 @@ const MILESTONES: [string, string][] = [
 /** One streamed planning call with a single structured tool. Returns null
  * plan when the model did not produce a valid plan (the caller charges nothing). */
 export async function runPlanner(run: PlannerRun): Promise<PlannerResult> {
-  const anthropic = new Anthropic({ maxRetries: 2, timeout: 240_000 });
-  const budgetUsd = run.creditBudget * usdPerCredit();
-  let usd = 0, note = "";
+  const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 240_000 }) as unknown as AnthropicLike);
+  const model = builderModel();
+  const models = builderModels(model);
+  const rate = aiCostUsdPerCredit();
+  const spend = run.spend;
+  const system = [{ type: "text" as const, text: PLANNER_SYSTEM }];
+  const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: [TOOL], messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
+  const result = (plan: SitePlan | null): PlannerResult => ({ plan, note: note.trim(), credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6 });
+  let note = "";
   const previous = run.previousPlan ? `\n\n<previous_plan>\n${planToBrief(run.previousPlan)}\n</previous_plan>\n<previous_plan_json>${JSON.stringify(run.previousPlan)}</previous_plan_json>` : "";
   const messages: BetaMessageParam[] = [{ role: "user", content: [
     ...run.attachments,
@@ -70,22 +84,10 @@ export async function runPlanner(run: PlannerRun): Promise<PlannerResult> {
 
   for (let turn = 0; turn < 3; turn++) {
     if (run.signal.aborted) break;
-    if (turn > 0 && usd >= budgetUsd * 0.8) break;
-    const stream = anthropic.beta.messages.stream({
-      model: builderModel(), max_tokens: 16_000,
-      betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
-      fallbacks: "default",
-      thinking: { type: "adaptive", display: "updates" },
-      output_config: { effort: run.effort === "light" ? "low" : "medium" },
-      cache_control: { type: "ephemeral" },
-      system: [{ type: "text", text: PLANNER_SYSTEM }],
-      tools: [TOOL],
-      messages,
-    }, { signal: run.signal });
-
+    if (turn > 0 && spend.remainingMicrousd < spend.allowanceMicrousd * 0.2) break;
     const announced = new Set<string>();
     let json = "";
-    stream.on("streamEvent", event => {
+    const onEvent = (event: BetaRawMessageStreamEvent) => {
       if (event.type === "content_block_start" && event.content_block.type === "tool_use") run.emit({ type: "status", message: "Writing the plan…" });
       if (event.type !== "content_block_delta") return;
       if (event.delta.type === "text_delta") { note += event.delta.text; run.emit({ type: "text", delta: event.delta.text }); }
@@ -94,21 +96,27 @@ export async function runPlanner(run: PlannerRun): Promise<PlannerResult> {
         json += event.delta.partial_json;
         for (const [key, message] of MILESTONES) if (!announced.has(key) && json.includes(key)) { announced.add(key); run.emit({ type: "status", message }); }
       }
-    });
+    };
 
     let message;
-    try { message = await stream.finalMessage(); }
-    catch (error) {
-      // A tool input that could not be parsed: re-issue the turn once.
-      if (error instanceof Anthropic.APIError || run.signal.aborted || turn > 0) throw error;
+    try {
+      ({ message } = await budgetedStream({ client: anthropic, spend, meter, models, maxTokens: 16_000, minTokens: MIN_PLAN_TOKENS, signal: run.signal, onEvent,
+        params: { betas: ["thinking-display-updates-2026-08-18"], thinking: { type: "adaptive", display: "updates" },
+          output_config: { effort: run.effort === "light" ? "low" : "medium" }, cache_control: { type: "ephemeral" }, system, tools: [TOOL], messages } }));
+    } catch (error) {
+      run.emit({ type: "usage", credits: spend.customerCredits(rate) });
+      if (error instanceof SpendError && error.graceful) break;
+      // A tool input that could not be parsed: re-issue the turn once (same budget).
+      if (isProviderOrSpendError(error) || run.signal.aborted || turn > 0) throw error;
       continue;
     }
-    usd += usageCost(message.model, message.usage);
-    run.emit({ type: "usage", credits: creditsForUsd(usd) });
+    run.emit({ type: "usage", credits: spend.customerCredits(rate) });
     if (message.stop_reason === "refusal") throw Object.assign(new Error("The request was declined by the model's safety policy."), { code: "REFUSED" });
-    messages.push({ role: "assistant", content: message.content as BetaContentBlockParam[] });
+    const content = message.content as BetaContentBlock[];
+    messages.push({ role: "assistant", content: content as BetaContentBlockParam[] });
+    meter.afterReply(message.usage, messages);
 
-    const use = message.content.find((block): block is BetaToolUseBlock => block.type === "tool_use" && block.name === "propose_plan");
+    const use = content.find((block): block is BetaToolUseBlock => block.type === "tool_use" && block.name === "propose_plan");
     if (!use) {
       if (message.stop_reason === "max_tokens") break;
       messages.push({ role: "user", content: "Call propose_plan now with the complete plan." });
@@ -119,9 +127,9 @@ export async function runPlanner(run: PlannerRun): Promise<PlannerResult> {
       continue;
     }
     const parsed = parsePlan(use.input);
-    if (parsed.plan) return { plan: parsed.plan, note: note.trim(), credits: creditsForUsd(usd), usd };
+    if (parsed.plan) return result(parsed.plan);
     messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: use.id, is_error: true, content: `Invalid plan (${parsed.error}). Fix it and call propose_plan again with the complete plan.` }] });
     run.emit({ type: "status", message: "Tightening the plan…" });
   }
-  return { plan: null, note: note.trim(), credits: creditsForUsd(usd), usd };
+  return result(null);
 }

@@ -1,0 +1,25 @@
+{
+  "bundle": "passed",
+  "viewports": [
+    {
+      "width": 1440,
+      "errors": [],
+      "horizontalOverflow": false,
+      "headings": [
+        "Nothing gets lostat shift change."
+      ],
+      "formCount": 2,
+      "unlabeledFields": 0
+    },
+    {
+      "width": 390,
+      "errors": [],
+      "horizontalOverflow": false,
+      "headings": [
+        "Nothing gets lostat shift change."
+      ],
+      "formCount": 2,
+      "unlabeledFields": 0
+    }
+  ]
+}

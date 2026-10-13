@@ -3,8 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Loader2, Maximize2 } from "lucide-react";
 import type { DocumentSource } from "@/lib/documents/schema";
 import { deckHtml } from "@/lib/documents/render-deck";
-import { bookHtml } from "@/lib/documents/render-book";
+import { bookHtml, chapterLabel } from "@/lib/documents/render-book";
 import { wordCount } from "@/lib/documents/book-markup";
+
+/** About 230 words a minute, rounded for display. */
+const readingTime = (words: number) => {
+  const minutes = Math.max(1, Math.round(words / 230));
+  return minutes < 60 ? `${minutes} min read` : `${Math.floor(minutes / 60)} h ${minutes % 60 ? `${minutes % 60} min ` : ""}read`;
+};
 import { readCloudImage } from "./cloud-api";
 
 const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
@@ -63,17 +69,55 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
     return () => clearTimeout(timer);
   }, [doc, images, building]);
 
+  // Chapters or slides, in reading order, for the jump menu.
+  const outline = useMemo(() => doc.kind === "deck"
+    ? doc.slides.map((slide, index) => ({ anchor: `slide-${slide.id}`, label: `${index + 1}. ${slide.title}` }))
+    : doc.chapters.map((chapter, index) => ({ anchor: `chapter-${chapter.id}`, label: `${chapterLabel(doc, index)} · ${chapter.title}` })), [doc]);
+  const [current, setCurrent] = useState("");
+  const outlineRef = useRef(outline);
+  useEffect(() => { outlineRef.current = outline; }, [outline]);
+
+  // Track which chapter or slide is at the top of the frame as the reader scrolls.
+  const followScroll = (view: Window, page: Document) => {
+    let pending = 0;
+    view.addEventListener("scroll", () => {
+      if (pending) return;
+      pending = view.requestAnimationFrame(() => {
+        pending = 0;
+        let found = "";
+        for (const item of outlineRef.current) {
+          const element = page.getElementById(item.anchor);
+          if (element && element.getBoundingClientRect().top <= view.innerHeight * 0.35) found = item.anchor;
+        }
+        setCurrent(found);
+      });
+    }, { passive: true });
+  };
+
   const onLoad = () => {
     const view = frame.current?.contentWindow, page = frame.current?.contentDocument;
     if (!view || !page) return;
+    followScroll(view, page);
     const target = building && focus ? page.getElementById(doc.kind === "deck" ? `slide-${focus}` : `chapter-${focus}`) : null;
     if (target) target.scrollIntoView({ block: "start" });
     else view.scrollTo(0, scroll.current);
   };
 
-  const stats = useMemo(() => doc.kind === "deck"
-    ? `${doc.slides.length} slide${doc.slides.length === 1 ? "" : "s"} · 16:9`
-    : `${doc.chapters.length} chapter${doc.chapters.length === 1 ? "" : "s"} · ${doc.chapters.reduce((sum, chapter) => sum + wordCount(chapter.text), 0).toLocaleString()} words · 6 × 9 in`, [doc]);
+  const jump = (anchor: string) => {
+    setCurrent(anchor);
+    const view = frame.current?.contentWindow, page = frame.current?.contentDocument;
+    if (!view || !page) return;
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const target = anchor ? page.getElementById(anchor) : null;
+    if (target) target.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
+    else view.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+  };
+
+  const stats = useMemo(() => {
+    if (doc.kind === "deck") return `${doc.slides.length} slide${doc.slides.length === 1 ? "" : "s"} · 16:9`;
+    const words = doc.chapters.reduce((sum, chapter) => sum + wordCount(chapter.text), 0);
+    return `${doc.chapters.length} chapter${doc.chapters.length === 1 ? "" : "s"} · ${words.toLocaleString()} words${words ? ` · ${readingTime(words)}` : ""} · 6 × 9 in`;
+  }, [doc]);
 
   async function download(format: "pdf" | "pptx") {
     if (exporting) return;
@@ -96,6 +140,10 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
   return <section className="lp dp" aria-label={doc.kind === "deck" ? "Presentation preview" : "Book preview"}>
     <header className="lp-bar">
       <span className="dp-stats">{stats}</span>
+      {outline.length > 1 && <select className="dp-jump" aria-label={doc.kind === "deck" ? "Go to slide" : "Go to chapter"} value={outline.some(item => item.anchor === current) ? current : ""} onChange={event => jump(event.target.value)}>
+        <option value="">{doc.kind === "deck" ? "Start" : "Cover & contents"}</option>
+        {outline.map(item => <option key={item.anchor} value={item.anchor}>{item.label.length > 70 ? `${item.label.slice(0, 68)}…` : item.label}</option>)}
+      </select>}
       <span className="lp-status" role="status">{building ? "Writing live…" : message || "Live preview"}</span>
       <div className="dp-actions">
         <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pdf")} title={canExport ? "Download the saved version as PDF" : "Save the document first"}>

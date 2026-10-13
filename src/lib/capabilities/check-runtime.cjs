@@ -32,9 +32,10 @@ async function main() {
   const capabilities = await get("/api/capabilities?administrator=true");
   assert.equal(capabilities.response.status, 200);
   assert.equal(capabilities.response.headers.get("Cache-Control"), "no-store");
-  assert.equal(capabilities.body.schemaVersion, 1);
+  assert.equal(capabilities.body.schemaVersion, 2);
   assert.equal(capabilities.body.health, "unverified");
-  assert.equal(capabilities.body.aiGeneration.available, false);
+  assert.equal(capabilities.body.aiGeneration.available, capabilities.body.aiGeneration.enabledByConfiguration ? null : false);
+  assert.equal(capabilities.body.aiGeneration.health, "unverified");
   assert.equal(capabilities.body.manualExports.available, false, "This check expects the production build.");
   assert.equal(capabilities.body.payments.support.grantsCreationAccess, false);
   assert(!Object.hasOwn(capabilities.body, "operations"));

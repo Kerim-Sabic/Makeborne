@@ -9,7 +9,8 @@ Module._load = function(name, parent, main) {
 };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true}}).outputText, filename);
 const {ProjectFiles, FileToolError} = require("./files.ts");
-const {usageCost, creditsForUsd, BUILDER_EFFORT} = require("./pricing.ts");
+const {creditsForUsd, BUILDER_EFFORT} = require("./pricing.ts");
+const {textUsageMicrousd, UnpricedModelError} = require("../ai/prices.ts");
 const {renderHostedSnapshot} = require("../hosting/snapshot.ts");
 const {ReviewInputSchema, reviewRequest, reviewAttachments} = require("./review.ts");
 const {REVIEW_LIMITS, REVIEW_VIEWPORTS, autoReviewRounds, reviewCreditCeiling, REVIEW_MAX_TURNS} = require("./review-policy.ts");
@@ -64,12 +65,12 @@ check("file and folder names cannot collide", () => {
   assert.throws(() => files.write("SRC/app.tsx", "x"), FileToolError);
 });
 check("pricing converts usage to whole credits and respects effort ceilings", () => {
-  const usd = usageCost("claude-opus-5-5", {input_tokens: 100_000, output_tokens: 20_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0});
+  const usd = textUsageMicrousd("claude-opus-5-5", {input_tokens: 100_000, output_tokens: 20_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0}) / 1e6;
   assert.equal(Math.round(usd * 100) / 100, 0.8);
   assert.equal(creditsForUsd(0.8), 27); // $0.03 per credit, rounded up
   assert.equal(creditsForUsd(0.03), 1);
   assert.equal(creditsForUsd(0), 0);
-  assert.ok(usageCost("unknown-model", {input_tokens: 1_000_000, output_tokens: 0}) >= 4);
+  assert.throws(() => textUsageMicrousd("unknown-model", {input_tokens: 1_000_000, output_tokens: 0}), UnpricedModelError); // fails closed
   for (const level of Object.values(BUILDER_EFFORT)) assert.ok(level.ceilingCredits > 0 && level.maxTurns > 0);
   const ceilings = Object.values(BUILDER_EFFORT).map(level => level.ceilingCredits);
   assert.deepEqual([...ceilings].sort((a, b) => a - b), ceilings);
@@ -101,20 +102,23 @@ check("review requests validate screenshot counts, sizes and encoding", () => {
   const desktopMax = REVIEW_VIEWPORTS.find(v => v.id === "desktop").maxTiles;
   reject({...valid, screenshots: Array.from({length: desktopMax + 1}, (_, i) => shot("desktop", i, desktopMax + 1))}, "too many desktop tiles");
   reject({...valid, viewports: [report("mobile"), report("mobile")]}, "duplicate viewport report");
+  reject({...valid, viewports: [report("mobile")]}, "missing desktop capture cannot pass review");
+  reject({...valid, screenshots: [shot("desktop",0,1)]}, "missing mobile capture cannot pass review");
+  reject({...valid, screenshots: [shot("desktop",0,2),shot("desktop",0,2),shot("mobile",0,1)]}, "duplicate tiles cannot conceal missing content");
   reject({...valid, round: 3}, "at most two rounds");
   reject({...valid, errors: Array.from({length: REVIEW_LIMITS.maxErrors + 1}, () => "x")}, "too many errors");
   reject({...valid, extra: true}, "unknown fields");
 });
 check("review prompt carries diagnostics, errors and ordered screenshots", () => {
   const input = ReviewInputSchema.parse({round: 2, screenshots: [shot("mobile", 0, 1), shot("desktop", 1, 2), shot("desktop", 0, 2)],
-    viewports: [report("mobile", {overflowX: 37, wide: ['div.pricing "Plans"'], brokenImages: ["/images/missing.webp"], missingAlt: 2})], errors: ["Desktop: TypeError: x is undefined"]});
+    viewports: [report("desktop"), report("mobile", {overflowX: 37, wide: ['div.pricing "Plans"'], brokenImages: ["/images/missing.webp"], missingAlt: 2})], errors: ["Desktop: TypeError: x is undefined"]});
   const text = reviewRequest(input);
   assert.match(text, /37px wider than the viewport/);
   assert.match(text, /div\.pricing/);
   assert.match(text, /missing\.webp/);
   assert.match(text, /TypeError: x is undefined/);
   assert.match(text, /review round 2/);
-  assert.match(text, /No changes needed — the design passed review\./);
+  assert.match(text, /No changes needed in the captured views\./);
   const blocks = reviewAttachments(input);
   assert.equal(blocks.filter(block => block.type === "image").length, 3);
   assert.deepEqual(blocks.filter(block => block.type === "text").map(block => block.text), ["Desktop 1440px — screen 1 of 2", "Desktop 1440px — screen 2 of 2", "Mobile 390px — screen 1 of 1"]);

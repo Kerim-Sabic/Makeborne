@@ -6,7 +6,8 @@ import {NATIVE_SLIDE_CSS} from "@/lib/presentations/native-css";
 import type {previewSlides} from "@/lib/cloud/preview-content";
 
 type Slide = ReturnType<typeof previewSlides>[number];
-export default function AccountSlidePreview({slide, index, total, renderImage}: {slide: Slide; index: number; total: number; renderImage: (block: Slide["blocks"][number]) => ReactNode}) {
+/** `showNotes` is for the owner's own preview only; client review never receives speaker notes. */
+export default function AccountSlidePreview({slide, index, total, renderImage, showNotes = false}: {slide: Slide; index: number; total: number; renderImage: (block: Slide["blocks"][number]) => ReactNode; showNotes?: boolean}) {
   const body = slide.blocks.map(block => block.text).filter(Boolean).join("\n\n");
   const composition = presentationScene(slide, index, total);
   const canvas = useRef<HTMLElement>(null);
@@ -36,6 +37,7 @@ export default function AccountSlidePreview({slide, index, total, renderImage}: 
         return element.role === "title" ? <h3 className="ap-native-text ap-native-title" style={style} key={element.id}>{element.text}</h3> : <p className={`ap-native-text ap-native-${element.role}`} style={style} key={element.id}>{element.text}</p>;
       })}
     </article>
+    {showNotes && slide.notes && <details className="ap-slide-notes"><summary>Speaker notes</summary><p>{slide.notes}</p></details>}
     {(overflow || unsupported) && <div className="ap-slide-fit-warning" role="status"><strong>{unsupported ? "This slide includes content that needs a supported slide element." : "This slide has more text than fits."}</strong><p>{unsupported ? "Structured content is shown as text here; export will not silently discard it." : "Split or edit the content before exporting. Your full text is preserved below."}</p><details><summary>Read full slide text</summary><h4>{slide.title}</h4><p>{body}</p></details></div>}
   </>;
 }

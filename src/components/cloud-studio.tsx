@@ -76,6 +76,7 @@ import {
   storageKey,
   type Workspace as LocalWorkspace,
 } from "./studio-model";
+import { projectStateLabel } from "@/lib/project-delivery";
 type WorkspaceSummary = {
   id: string;
   name: string;
@@ -847,7 +848,7 @@ export default function CloudStudio() {
                                 {overview.clients.find(
                                   (c) => c.id === p.clientId,
                                 )?.name || "Personal project"}{" "}
-                                · {p.status.replace("_", " ")}
+                                · {projectStateLabel(p.status, p.deliveryStage)}
                               </p>
                             </div>
                             <div>
@@ -1513,7 +1514,12 @@ export function CloudEditor({
   }
   const previewBlocks = content?.sections.flatMap(section => section.blocks) ?? [];
   const useLiveBuilder = builderAvailable && role !== "reviewer";
+  // Saved source remains previewable and publishable while paid generation is off.
+  const useSourcePreview = artifact.kind === "website" && Boolean(content?.websiteSource);
   const liveDocument = artifact.kind !== "website";
+  // Reading a saved document does not require an enabled generation provider.
+  // Reviewers see saved content only; generation and editing retain their gates.
+  const previewDocument = liveDocument ? (useLiveBuilder ? live?.document ?? content?.document : content?.document) : undefined;
   const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
     .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content])), [content?.websiteSource]);
   // A project created from the home prompt starts building as soon as it opens.
@@ -1549,14 +1555,14 @@ export function CloudEditor({
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h2>{artifact.title}</h2>
+          <h1>{artifact.title}</h1>
           <p>
             Version {expectedVersion} ·{" "}
             {savePaused || conflict || uncertainSave ? "Saving paused — review required" : busy && dirty ? "Saving…" : dirty ? "Waiting to save…" : "Saved"}
           </p>
         </div>
         <button
-          className="button primary"
+          className={dirty || savePaused || uncertainSave ? "button primary" : "button secondary"}
           disabled={busy || !content || conflict || role === "reviewer"}
           onClick={save}
         >
@@ -1578,7 +1584,7 @@ export function CloudEditor({
               <button type="button" aria-pressed={view === "preview"} onClick={() => setView("preview")}><Eye size={15} />Preview</button>
               <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />{content?.website || content?.websiteSource ? "Code" : "Edit"}</button>
               <button type="button" aria-pressed={view === "history"} onClick={() => setView("history")}><History size={15} />History</button>
-              {useLiveBuilder && content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} onClick={() => setView("publish")}><Globe2 size={15} />Publish</button>}
+              {content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} onClick={() => setView("publish")}><Globe2 size={15} />Publish</button>}
               <button type="button" aria-pressed={view === "review"} onClick={() => setView("review")}><MessageSquareText size={15} />Client review</button>
             </div>
             {(content?.website || content?.websiteSource) && role !== "reviewer" ? <WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} /> : <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>}
@@ -1678,21 +1684,21 @@ export function CloudEditor({
           canStart={!dirty && !conflict && !uncertainSave && !recovery && !busy}
           onOutputVersionChange={setGeneratedVersionId}
           onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
-        {view === "preview" && useLiveBuilder && liveDocument && (live?.document ?? content.document) && <DocumentPreview document={(live?.document ?? content.document)!} focus={live?.focus}
-          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} />}
+        {view === "preview" && previewDocument && <DocumentPreview key={`${accountId}:${workspaceId}:${artifact.id}`} document={previewDocument} focus={useLiveBuilder ? live?.focus : undefined}
+          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={useLiveBuilder && Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} />}
         {view === "preview" && useLiveBuilder && liveDocument && !live?.document && !content.document && <div className="lp-empty dp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
-        {view === "preview" && useLiveBuilder && !liveDocument && (live || content.websiteSource) && <LivePreview
+        {view === "preview" && (useLiveBuilder || useSourcePreview) && !liveDocument && (live || content.websiteSource) && <LivePreview
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)} />}
         {view === "preview" && useLiveBuilder && !liveDocument && !live && !content.websiteSource && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
-        {view === "preview" && !useLiveBuilder && artifact.kind === "website" && (content.websiteSource || generatedVersionId) && (() => {
+        {view === "preview" && !useLiveBuilder && !useSourcePreview && artifact.kind === "website" && generatedVersionId && (() => {
           const generated=versions.find(version=>version.id===generatedVersionId);
           const saved=versions.find(version=>version.number===expectedVersion);
           const versionId=generated&&saved&&saved.number>generated.number?saved.id:generatedVersionId??saved?.id;
           return versionId?<SavedWebsitePreview key={`${accountId}:${workspaceId}:${artifact.id}:${versionId}`} accountId={accountId} workspaceId={workspaceId} projectId={artifact.projectId} artifactId={artifact.id} versionId={versionId}/>:<p className="small-note" role="status">Opening the saved website revision…</p>;
         })()}
-        {view === "preview" && style && !useLiveBuilder && !(artifact.kind === "website" && (content.websiteSource || generatedVersionId)) && <div className="cloud-workbench-preview">
+        {view === "preview" && style && !useLiveBuilder && !previewDocument && !(artifact.kind === "website" && (content.websiteSource || generatedVersionId)) && <div className="cloud-workbench-preview">
           {isStartingDraft ? <div className="cloud-workbench-empty">
             <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
             <h3>Your {artifact.kind} starts here</h3>
@@ -1700,7 +1706,7 @@ export function CloudEditor({
             <button type="button" onClick={() => setView("edit")} className="button secondary small"><PencilLine size={14} />Open editor</button>
           </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} /></>}
         </div>}
-        {view === "publish" && useLiveBuilder && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
+        {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
           capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} /></div>}
         {view === "review" && <div className="lb-publish cloud-client-review"><ClientReviewPanel key={`review:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id}
           version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || Boolean(live)} canEdit={role !== "reviewer"}
@@ -1751,7 +1757,7 @@ export function CloudEditor({
                 {s.slideDesign&&<p className="small-note">Custom slide composition. Editing text preserves its placement; new content needs a canvas element.</p>}
                 {role !== "reviewer" && !s.slideDesign && !uncertainSave && !conflict && !recovery && <div className="button-row" aria-label={`Add content to section ${sectionIndex + 1}`}>
                   {(["heading", "paragraph", "quote"] as const).map(type => <button key={type} type="button" className="button secondary small" aria-label={`Add ${type} to section ${sectionIndex + 1}`} onClick={() => add(type, s.id)}><Plus size={14} />{type}</button>)}
-                  {process.env.NODE_ENV !== "production" && <AccountArtworkUpload accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} sectionNumber={sectionIndex + 1} disabled={busy || lockChangePending} onUploaded={assetId => attachImage(s.id, assetId)} />}
+                  {(process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_MAKEBORNE_ARTWORK_UPLOADS_ENABLED === "true") && <AccountArtworkUpload accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} sectionNumber={sectionIndex + 1} disabled={busy || lockChangePending} onUploaded={assetId => attachImage(s.id, assetId)} />}
                 </div>}
               </section>
             ))}
@@ -1787,7 +1793,7 @@ export function CloudEditor({
             {content.document && <p className="small-note">This {artifact.kind} was made with the live builder. Download PDF{artifact.kind === "presentation" ? " or editable PPTX" : ""} from the Preview tab; the outline below is generated from it and is updated on every build.</p>}
             {style && !content.document && <AccountExport key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
             <p className="small-note">
-              {process.env.NODE_ENV !== "production" ? "Artwork uploads are available here for development: still PNG, JPEG, or WebP up to 8 MB and 20 megapixels. Save your website before publishing." : "Live AI generation and new artwork uploads are still being prepared. Saved websites can be published from this editor."}
+              {(process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_MAKEBORNE_ARTWORK_UPLOADS_ENABLED === "true") ? "Upload still PNG, JPEG, or WebP artwork up to 4 MB and 20 megapixels. Save your website before publishing." : "Live AI generation and new artwork uploads are still being prepared. Saved websites can be published from this editor."}
             </p>
           </aside>
         </div>}

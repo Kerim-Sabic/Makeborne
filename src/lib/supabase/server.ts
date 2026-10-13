@@ -2,11 +2,14 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { requireSupabaseConfig } from "./config";
+import { crmProtocolHeaders } from "../crm-protocol";
 
 export async function createClient() {
   const { url, key } = requireSupabaseConfig();
   const cookieStore = await cookies();
   return createServerClient(url, key, {
+    // The database refuses CRM writes from out-of-date app versions.
+    global: { headers: crmProtocolHeaders },
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll(values) {

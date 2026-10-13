@@ -1,0 +1,41 @@
+{
+  "observedAt": "2026-10-13T01:46:47.160Z",
+  "scope": "local disposable database only",
+  "migration": {
+    "file": "supabase/migrations/20261013110000_durable_topup_fulfillment.sql",
+    "sha256": "78509296e9a367bc19e9fc9ecb4e89b8c580410940464be35aba5ed27adbb3d6",
+    "appliedTo": "makeborne_topup_verify only"
+  },
+  "checks": {
+    "offline": "80/80 pass",
+    "billing": "13/13 pass",
+    "typecheck": "pass",
+    "focusedLint": "pass",
+    "rolledBackSql": "9 groups pass on fresh exact migration",
+    "serviceRoleAdapterToSql": "pass; Whop response mocked",
+    "concurrency": "8 checkout claims: 1 attempt; 8 payment deliveries: 1 grant",
+    "fixtureCleanup": "empty accounts and ledger; packs disabled",
+    "checkoutServiceRoleAdapterToSql": "pass; provider mocked; resume performs no provider POST",
+    "reconcileServiceRoleAdapterToSql": "pass: missed grant + missed refund recovered without browser; provider mocked"
+  },
+  "paidAiSpendNewRoundUsd": 0,
+  "notQualified": [
+    "live signed sandbox delivery and tax/refund fixtures",
+    "job scheduling and alerts",
+    "unbound/abandoned checkout provider recovery",
+    "reusable checkout duplicate-payment behavior",
+    "plan switching",
+    "image generation",
+    "product visual quality",
+    "combined cloud rehearsal"
+  ],
+  "productionChanged": false,
+  "merged": false,
+  "deployed": false,
+  "realSandboxProbe": "hidden one-time plan and repeated keyed checkout creation verified; no purchase submitted",
+  "realSandboxPaymentListProbe": "Merchant-scoped exact checkout filter returned one real matching sample; no purchase",
+  "fixedDefects": [
+    "Failed attempt binding blocked a differently identified paid retry",
+    "Missing merchant scope caused provider rejection of subscription payment lists"
+  ]
+}

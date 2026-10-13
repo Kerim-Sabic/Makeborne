@@ -1,0 +1,7 @@
+{"event":"ai_spend_stop","reference":"e2e-disabled","stop":"AI_PAUSED","cause":"PROVIDER_DISABLED","detail":"AI generation is paused right now. Nothing was charged. Please try again later."}
+{"event":"credit_settlement_anomaly","outcome":"released_hold","reference":"e2e-killed","measured":10}
+(node:43948) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"event":"ai_spend_stop","reference":"e2e-c2","stop":"AI_DAILY_LIMIT","cause":"PROVIDER_LIMIT","detail":"Today's AI capacity has been reached. Nothing was charged. Please try again later."}
+{"event":"ai_spend_stop","reference":"e2e-c3","stop":"AI_DAILY_LIMIT","cause":"PROVIDER_LIMIT","detail":"Today's AI capacity has been reached. Nothing was charged. Please try again later."}
+PASS end-to-end live spend: disabled gate fails closed; real hold + real gate settle full measured usage; killed run's hold and call recovered by the sweepers and a late settle is refused; a hold reclaimed mid-run saves and charges nothing; concurrent runs admitted only within the daily limit

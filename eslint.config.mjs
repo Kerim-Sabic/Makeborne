@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
     ".claude/**",
     ".env*/**",
     // Generated output.
+    "infra/publication-controller/dist/**",
     "infra/**/worker-configuration.d.ts",
     "**/.wrangler/**",
     "public/generated/**", "public/builder-runtime/**",

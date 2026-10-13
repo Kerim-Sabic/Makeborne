@@ -12,7 +12,12 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // PDF export runs Chromium; on Vercel it comes from @sparticuz/chromium's packed binary.
   serverExternalPackages: ["@sparticuz/chromium", "playwright", "playwright-core"],
-  outputFileTracingIncludes: { "/api/export": ["./node_modules/@sparticuz/chromium/bin/**"] },
+  outputFileTracingIncludes: {
+    // Playwright loads its registry and runtime resources dynamically. Include
+    // them explicitly for both export entry points in serverless deployments.
+    "/api/export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*"],
+    "/api/cloud/workspaces/*/artifacts/*/document-export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*"],
+  },
   async headers() {
     return [
       {

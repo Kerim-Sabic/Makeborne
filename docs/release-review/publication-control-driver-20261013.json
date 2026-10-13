@@ -1,0 +1,54 @@
+{
+  "fixture": "makeborne_publication_20261013034802",
+  "startedAt": "2026-10-13T05:44:23.074Z",
+  "passed": true,
+  "providerCalls": 0,
+  "cloudWrites": 0,
+  "productionTouched": false,
+  "stagingTouched": false,
+  "tlsQualified": false,
+  "inputHashes": [
+    {
+      "file": "infra/project-runtime/publication-control.mjs",
+      "sha256": "e0dcbbff1e1eab3bd3772d725554ef6ead5bfe9b1e3c99dfd2d69070ab36e376"
+    },
+    {
+      "file": "infra/project-runtime/publication-supervisor.mjs",
+      "sha256": "ba5159dd908abbbfa6fd1839911b8c3e860f0d7d292002f0c560098a1446c7b1"
+    },
+    {
+      "file": "src/lib/projects/publication-worker.ts",
+      "sha256": "d99a710c7113b9a56b78f177a1b166818e442be9fdaf9324096ae9b10e01ef53"
+    },
+    {
+      "file": "supabase/migrations/20261013190000_publication_worker_authority.sql",
+      "sha256": "254f1c9d2c2e20e6cd95e7d1b39a9e0aefc820563410559dd2c1db1e20a43e89"
+    },
+    {
+      "file": "supabase/migrations/20261013210000_publication_sandbox_journal.sql",
+      "sha256": "3431dbd248339da0114327f6214b148374e348144090b05abd44fd22c3631a39"
+    },
+    {
+      "file": "scripts/check-publication-control-driver.mjs",
+      "sha256": "a8895b2531394de78790100b828cc1275a508b73813af6dca99f0252284cd23e"
+    }
+  ],
+  "nodeImage": "sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20",
+  "checks": [
+    "real pg8.23.1 dedicated LOGIN, parameterized candidate RPC, transaction-local role and timeout reset",
+    "real restricted cleanup_claim wrapper mapping returns empty records and zero pending",
+    "real sandbox_event wrapper reaches SQL and rejects mutable image identity with22023",
+    "real cleanup_finish wrapper mapping refuses nonexistent journal withP0002",
+    "login without worker membership refused by PostgreSQL and rejected transaction connection destroyed",
+    "extra SQL argument refused before database dispatch",
+    "real max1 pool queued acquisition abort settles immediately and destroys late-acquired connection",
+    "real running query abort destroys connection and settles within1s; SELECT pg_sleep fault injected at allowlisted statement",
+    "lost response injected after actual COMMIT destroys ambiguous connection; next transaction recovers",
+    "abort at actual BEGIN acknowledgement rejects without reaching operation query; post-abort client calls=0"
+  ],
+  "driver": "8.23.1",
+  "node": "v24.21.0",
+  "changedInputs": [],
+  "cleanupPassed": true,
+  "finishedAt": "2026-10-13T05:44:25.256Z"
+}

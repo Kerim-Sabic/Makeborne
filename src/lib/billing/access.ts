@@ -3,7 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { accountsEnabled } from "@/lib/supabase/auth-server";
 import { createClient, getVerifiedUser } from "@/lib/supabase/server";
-import { ensureTrialCredits, grantPlanCredits } from "@/lib/credits/server";
+import { ensureTrialCredits, recordPlanObservation } from "@/lib/credits/server";
 import { authDestination } from "@/lib/supabase/auth-flow";
 import { RequestError } from "@/lib/server/http";
 import { billingConfig } from "./config";
@@ -44,11 +44,16 @@ export async function verifyCreationAccess(user: User, checkoutId?: string): Pro
     const verifiedUntil = active ? new Date(Math.min(Date.parse(membership.renewal_period_end!), Date.now() + 5 * 60_000)).toISOString() : new Date(0).toISOString();
     const { error: updateError } = await db.from("billing_memberships").update({ status: membership.status, verified_until: verifiedUntil, period_end: membership.renewal_period_end, checked_at: new Date().toISOString() }).eq("membership_id", stored.membership_id).eq("user_id", user.id);
     if (updateError) throw new RequestError("MEMBERSHIP_UNAVAILABLE", "Membership verification is temporarily unavailable.", 503);
+    // A verified membership that is no longer paid stops further allocations.
+    if (matches && !active) await recordPlanObservation(user.id, { membershipId: stored.membership_id, planId: membership.plan.id, status: membership.status,
+      paid: false, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "access_check" }).catch(() => undefined);
     if (active) {
       const { data: enabled, error: enabledError } = await db.rpc("makeborne_billing_creation_enabled", { p_plan_id: membership.plan.id });
       const allowed = !enabledError && enabled === true;
-      // Self-heal a missed webhook grant; idempotent per membership period.
-      if (allowed) await grantPlanCredits(user.id, membership.plan.id, stored.membership_id, membership.renewal_period_end!).catch(() => undefined);
+      // Record the verified state; the database grants allocations owed since the
+      // last observation (months 2-12 of a yearly plan have no payment event).
+      if (allowed) await recordPlanObservation(user.id, { membershipId: stored.membership_id, planId: membership.plan.id, status: membership.status,
+        paid: true, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "access_check" }).catch(() => undefined);
       return allowed;
     }
   }

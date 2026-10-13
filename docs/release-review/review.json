@@ -1,0 +1,214 @@
+{
+  "date": "2026-10-12",
+  "decision": "HOLD_MERGE_AND_DEPLOY",
+  "scope": "Read-only production inventory and isolated local staging database upgrade rehearsal; no production release approval",
+  "verified": {
+    "offlineHarnesses": "75/75 executed harnesses passed; 5 environment/qualification harnesses skipped",
+    "readOnlyBaseline": "Production application schema exported; 20 applied IDs verified; deployed commit 307881c2b2079545870a3c1e0e94b275def3072d verified",
+    "localWallet": {
+      "balance": 187,
+      "reserved": 0,
+      "openHolds": 0,
+      "ledgerRows": 48
+    },
+    "localSites": {
+      "total": 1,
+      "needsPortableRepublish": 1
+    },
+    "localMigrationCount": 61,
+    "paidCalls": 0,
+    "productionMutations": 0,
+    "staging": "41/41 migrations; 22/22 SQL checks; 5/5 concurrency checks; 2/2 real-SQL mocked-provider integration checks; CRM operator contract and rollback passed",
+    "extendedStaging": {
+      "httpNormal": "9 checks passed",
+      "httpMaintenance": "16 blocked requests; unsigned webhook verification retained",
+      "build": "Production build, typecheck and targeted lint passed",
+      "exports": "Real Chromium book PDF and slide PDF/PPTX passed",
+      "populatedUpgrade": "41/41 migrations with pre-upgrade synthetic clients, content, publication and spend",
+      "legacyPilotPause": "Admin denied without changing reserved spend",
+      "hosting": "Actual Worker with HTTP bridge and anonymous-role SQL passed",
+      "authStorage": "8 real browser/Auth/Storage and authenticated document-export checks passed in separate local Supabase stack; branded email delivered only to local Mailpit",
+      "billingDelivery": "Real sandbox monthly/annual purchase, signed events, 300-credit initial allocation each, concurrent duplicates, cancellations, stale activation replay, actual-provider reconcile; see whop-credit-delivery.json"
+    }
+  },
+  "findings": [
+    {
+      "id": "R1",
+      "priority": "P0",
+      "status": "Legacy pause rehearsed locally; candidate maintenance HTTP verified; production drain still requires approved window",
+      "issue": "Actual deployed commit uses the old pilot RPC. Its service-role execute permission is revoked by the pending migrations, interrupting old generation. Candidate/intermediate builders require their own drain and recovery qualification.",
+      "required": "Verify deployment-level generation ingress stop and worker pause before migrations, and rehearse drain. Never remove spending guard triggers."
+    },
+    {
+      "id": "R2",
+      "priority": "P0",
+      "status": "Populated CRM recovery and compatible candidate maintenance mode passed locally; immutable artifact and cloud cutover not performed",
+      "issue": "Whole-release rollback not qualified. CRM rollback alone cannot prove old credit, entitlement and publishing callers safe.",
+      "required": "Staging compatibility matrix for old and candidate app; prefer a forward fix or recovery build retaining new contracts."
+    },
+    {
+      "id": "R3",
+      "priority": "P0",
+      "status": "CLOSED for baseline identification; schema-only production DDL used directly in rehearsal",
+      "issue": "Production baseline confirmed: 20 migrations, 41 pending, PostgreSQL 17.11, deployed commit 307881c2.",
+      "required": "Refresh read-only baseline immediately before any eventual release; review any intervening drift."
+    },
+    {
+      "id": "R4",
+      "priority": "P1",
+      "status": "OPEN",
+      "issue": "Source portability tests do not prove the deployed legacy host serves the fallback; one local row needs republish.",
+      "required": "Production counts, synthetic staging publication through actual legacy host implementation, assets/CSP/status checks. No customer-site edits without review."
+    },
+    {
+      "id": "R5",
+      "priority": "P1",
+      "status": "OPEN",
+      "issue": "Portable HTML stores canonical and Open Graph URLs at publication time; switching hosting environment alone does not regenerate stored metadata.",
+      "required": "Rehearse mode reversal and decide whether isolated domain remains canonical or metadata must be safely rewritten; do not promise complete URL rollback without this."
+    },
+    {
+      "id": "R6",
+      "priority": "P1",
+      "status": "OPEN",
+      "issue": "GPT Image 1 official model page marks the model deprecated.",
+      "required": "Confirm availability/deprecation schedule before image activation; select and price a supported replacement if necessary. No silent model fallback."
+    },
+    {
+      "id": "R7",
+      "priority": "P1",
+      "status": "PARTIAL — real purchases, signed delivery, duplicates, cancellations and reconciliation passed",
+      "issue": "Actual subsequent renewal, true plan switching/replacements, proration and refund/dispute lifecycle remain unverified.",
+      "required": "Sanitized provider fixtures and end-to-end replacement, renewal, cancellation, refund/dispute and out-of-order notification checks."
+    }
+  ],
+  "migrationDependencies": [
+    {
+      "range": "foundation through 20261011160000",
+      "dependency": "All earlier source migrations in timestamp order; compare production inventory first.",
+      "compatibility": "Not independently qualified against deployed version. Existing migration 20261011090000 differs from HEAD; if already applied remotely, forward reconciliation is required."
+    },
+    {
+      "range": "20261011170000–20261011200000",
+      "dependency": "Wallet/free-tier tables and CRM/review foundation",
+      "compatibility": "Expand mode intended for mixed app versions. Contract separately after cutover; freeze/drain around contract and CRM rollback."
+    },
+    {
+      "range": "20261012090000–20261012110000",
+      "dependency": "Credit wallets, memberships, access and billing foundation",
+      "compatibility": "Entitlement-history and reconciliation APIs; old caller semantics require rehearsal. Scheduler disabled."
+    },
+    {
+      "range": "20261012120000–20261012130000",
+      "dependency": "Wallets, reservations and entitlement history",
+      "compatibility": "Credit lots, expiry and clock change. Reconcile every wallet/hold. No blind down migration; backup alone is not post-release payment reconciliation."
+    },
+    {
+      "range": "20261012140000–20261012150000",
+      "dependency": "Credit reservations and durable execution holds/settlements",
+      "compatibility": "Limits disabled by default. Candidate integrated calls stop; old ungated calls do not. Maintenance ingress required."
+    },
+    {
+      "range": "20261012160000–20261012170000",
+      "dependency": "Hosted sites and file bundles",
+      "compatibility": "Portable/isolated reader contracts and flagged older publications; actual host and canonical rollback unverified."
+    }
+  ],
+  "evidenceMap": [
+    {
+      "area": "Spending limits and holds",
+      "implementation": [
+        "src/lib/ai/run-spend.ts",
+        "src/lib/ai/prices.ts",
+        "src/lib/builder/website-run.ts",
+        "src/lib/builder/plan-run.ts",
+        "src/lib/builder/docs-run.ts"
+      ],
+      "tests": [
+        "src/lib/ai/check-live-spend.cjs",
+        "supabase/check-live-ai-spend.sql",
+        "supabase/check-live-ai-spend-concurrency.sql",
+        "supabase/check-live-spend-e2e.cjs"
+      ],
+      "evidence": "Offline, real SQL, real-session concurrency and mock-provider/real-SQL integration checks independently passed on upgraded production schema."
+    },
+    {
+      "area": "Entitlements and expiry",
+      "implementation": [
+        "src/lib/credits/server.ts",
+        "src/lib/billing/reconcile-job.ts",
+        "supabase/migrations/20261012120000_credit_lots_expiry.sql"
+      ],
+      "tests": [
+        "src/lib/billing/check-plan-credits.cjs",
+        "supabase/check-credit-lots-expiry.sql",
+        "supabase/check-credit-lots-concurrency.sql"
+      ],
+      "evidence": "Real SQL and concurrency checks plus mocked-Whop real reconciliation job passed; no real Whop sandbox qualification."
+    },
+    {
+      "area": "Hosting",
+      "implementation": [
+        "src/lib/hosting/config.ts",
+        "src/lib/hosting/snapshot.ts",
+        "infra/customer-sites/_worker.js"
+      ],
+      "tests": [
+        "src/lib/hosting/check-hosting.cjs",
+        "src/lib/hosting/check-publication-modes.cjs",
+        "supabase/check-hosting-modes.sql"
+      ],
+      "evidence": "Offline route checks independently passed. Deployed static host not verified."
+    }
+  ],
+  "pricingEvidence": [
+    {
+      "model": "claude-opus-5-5",
+      "status": "Official ID and standard input/output/cache price table matched source on review date",
+      "urls": [
+        "https://platform.claude.com/docs/en/models/overview",
+        "https://platform.claude.com/docs/en/about-claude/pricing"
+      ]
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "status": "Official ID and standard input/output/cache price table matched source on review date",
+      "urls": [
+        "https://platform.claude.com/docs/en/models/overview",
+        "https://platform.claude.com/docs/en/about-claude/pricing"
+      ]
+    },
+    {
+      "model": "gpt-image-1",
+      "status": "Core token/per-image prices matched; model marked deprecated. Availability and full request bounds not independently certified.",
+      "urls": [
+        "https://developers.openai.com/api/docs/models/gpt-image-1"
+      ]
+    }
+  ],
+  "stagingChecklist": [
+    "Identify environment and deployed baseline commit; prove preview credentials, DB, storage, webhooks and provider adapters are isolated.",
+    "Rebuild verified schema baseline with synthetic users, clients, wallets, open/settled/released holds, legacy grants and publications. Capture aggregate invariants.",
+    "Exercise old app against baseline; record actual routes and behavior.",
+    "Pause generation ingress and drain workers; prove no provider contact while paused.",
+    "Apply exact pending migrations once in order; check grants, policies, wallet/hold conservation, expiry and disabled limits.",
+    "Set staging-only limits with mocked providers; candidate signup/access flow, trial off, unknown/support plans denied.",
+    "Test spend, expiry boundaries, partial/late settlement, interruption/continuation, retry/fallback, overrun circuit break, midnight and durable dispatch sharing global cap.",
+    "Test reconciliation disabled/auth/overlap/pagination/crash recovery; historical evidence; sandbox payment lifecycle separately.",
+    "Publish synthetic static/isolated sites through actual host implementations; verify routes, embedded assets, CSP, canonical metadata and legacy fallback.",
+    "Rehearse CRM contract/rollback and whole-release recovery without dropping guards or discarding ledger changes.",
+    "Reconcile synthetic before/after balances, reservations, ledger, provider spend, entitlements and publications; attach evidence and failed cases.",
+    "Obtain release approval for exact artifacts/configuration; keep production activation, billing, cron and switching closed until corresponding gates pass."
+  ],
+  "nextInput": "No manual test purchase needed. Sandbox purchase and both cancellation modes passed. Continue app checkout/credit/webhook integration; no production deployment authorized.",
+  "notDone": [
+    "Real Whop sandbox lifecycle and connected endpoint qualification",
+    "Cloud hosting DNS/TLS and current legacy deployment verification",
+    "Vercel export/runtime qualification",
+    "Immutable release/recovery artifact approval",
+    "Production deployment",
+    "Cloud email delivery and Google/GitHub OAuth acceptance (local email/password flow passed)",
+    "Refresh time-boxed tariff qualification and repair-qualification before paid generation activation"
+  ],
+  "cleanup": "Disposable database retained; no deletion required for this review."
+}

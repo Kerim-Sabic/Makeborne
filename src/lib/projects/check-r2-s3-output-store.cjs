@@ -2,6 +2,7 @@
 require('../generation/check-website-worker.cjs');
 const assert=require('node:assert/strict'),{randomUUID}=require('node:crypto'),fs=require('node:fs/promises'),path=require('node:path'),{tmpdir}=require('node:os');
 const {createR2S3OutputStore}=require('./r2-s3-output-store.ts');
+const {fixture:publicationFixture}=require('./check-publication-compiler.cjs'),{canonicalSourceJson}=require('./canonical-json.ts');
 const signal=()=>new AbortController().signal,key=()=>`compiled-v1/${randomUUID()}/${randomUUID()}/${randomUUID()}/${'a'.repeat(64)}/files/index.html`;
 let checks=0;async function check(name,run){await run();checks++;console.log(`PASS ${name}`);}
 async function main(){
@@ -9,6 +10,16 @@ async function main(){
  const directory=await fs.mkdtemp(path.join(tmpdir(),'makeborne-s3-fixture-'));let runtime;
  try{
   runtime=await createLocalR2S3OutputRuntime(directory);const config=runtime.configuration,store=createR2S3OutputStore(config,runtime.transport);
+  let publicationMarker,publicationBytes;
+  await check('publication compiler retains its exact immutable marker through signed HTTP into R2',async()=>{
+   const fixture=publicationFixture();fixture.deps.store=store;const result=await fixture.run();
+   publicationMarker=`publication-v1/${fixture.input.binding.workspaceId}/${fixture.input.binding.preparationId}/${result.receipt.receiptHash}/receipt.json`;
+   publicationBytes=Buffer.from(canonicalSourceJson(result.receipt));
+   assert.deepEqual(Buffer.from(await store.get(publicationMarker,publicationBytes.length,signal())),publicationBytes);
+   await store.putIfAbsent(publicationMarker,Buffer.from('replacement'),signal());
+   assert.deepEqual(Buffer.from(await store.get(publicationMarker,publicationBytes.length,signal())),publicationBytes);
+   assert.equal(fixture.counts.disposed,1);
+  });
   await check('independently verified SigV4 HTTP requests retain exact bytes in actual private R2 and never overwrite',async()=>{
    const target=key();await store.putIfAbsent(target,Buffer.from('original'),signal());await store.putIfAbsent(target,Buffer.from('replacement'),signal());assert.equal(Buffer.from(await store.get(target,8,signal())).toString(),'original');
    const race=key(),values=Array.from({length:8},(_,i)=>Buffer.from(`value-${i}`));await Promise.all(values.map(bytes=>store.putIfAbsent(race,bytes,signal())));const winner=Buffer.from(await store.get(race,7,signal()));assert(values.some(bytes=>bytes.equals(winner))); 
@@ -32,6 +43,10 @@ async function main(){
    for(const patch of [{accountId:'other.example'},{bucket:'../other'},{bucket:'Bucket'},{accessKeyId:'public'},{secretAccessKey:'secret'}])assert.throws(()=>createR2S3OutputStore({...config,...patch}));
    const noTransport=createR2S3OutputStore(config,async()=>assert.fail('REJECTED_INPUT_FETCHED'));
    for(const invalid of ['../x',key()+'?x=y',key()+'/../x'])await assert.rejects(noTransport.get(invalid,10,signal()),e=>e.code==='OUTPUT_KEY_INVALID');
+   for(const invalid of [publicationMarker.replace('/receipt.json','/files/index.html'),publicationMarker+'/extra',publicationMarker.replace('/receipt.json','/other.json'),publicationMarker.replace('/receipt.json','/../receipt.json'),publicationMarker+'?x=y',publicationMarker.replace('publication-v1/','publication-v2/'),publicationMarker.replace('publication-v1/','publication-v1//'),publicationMarker.replace(/\/[a-f0-9]{64}\//,'/bad-hash/'),`publication-v1/${randomUUID()}/${randomUUID()}/${randomUUID()}/${'a'.repeat(64)}/receipt.json`]){
+    await assert.rejects(noTransport.get(invalid,100,signal()),e=>e.code==='OUTPUT_KEY_INVALID');
+    await assert.rejects(noTransport.putIfAbsent(invalid,Buffer.from('x'),signal()),e=>e.code==='OUTPUT_KEY_INVALID');
+   }
    for(const limit of [-1,50_000_001,NaN,Infinity,0.5])await assert.rejects(noTransport.get(key(),limit,signal()),e=>e.code==='OUTPUT_READ_LIMIT');
   });
   await check('required exact length, compression refusal and streaming overflow/truncation checks',async()=>{
@@ -52,7 +67,7 @@ async function main(){
   });
   const target=key();await store.putIfAbsent(target,Buffer.from('persistent'),signal());assert.equal(runtime.stats().denials,2);await runtime.dispose();runtime=null;
   runtime=await createLocalR2S3OutputRuntime(directory);
-  await check('actual signed HTTP reads survive workerd/R2 restart without the original client',async()=>{const reopened=createR2S3OutputStore(runtime.configuration,runtime.transport);assert.equal(Buffer.from(await reopened.get(target,10,signal())).toString(),'persistent');assert.equal(runtime.stats().denials,0);});
+  await check('actual signed HTTP reads survive workerd/R2 restart without the original client',async()=>{const reopened=createR2S3OutputStore(runtime.configuration,runtime.transport);assert.equal(Buffer.from(await reopened.get(target,10,signal())).toString(),'persistent');assert.deepEqual(Buffer.from(await reopened.get(publicationMarker,publicationBytes.length,signal())),publicationBytes);assert.equal(runtime.stats().denials,0);});
  }finally{await runtime?.dispose();await fs.rm(directory,{recursive:true,force:true});}
  console.log(`${checks} signed R2 groups passed; no cloud account or paid calls; owned HTTP/workerd persistence removed.`);
 }

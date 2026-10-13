@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "namespace": "staging",
+  "supabaseProjectRef": "xzwikrunwpurxnxgkznh",
+  "qaWorkspaceId": "<verified QA workspace UUID>",
+  "database": {
+    "host": "db.xzwikrunwpurxnxgkznh.supabase.co",
+    "port": 5432,
+    "database": "postgres",
+    "user": "makeborne_publication_controller_staging",
+    "caFile": "/run/config/staging-database-ca.pem"
+  },
+  "vercel": {
+    "teamId": "team_viiayqU1BnwJBdEqgHdgmtnA",
+    "projectId": "prj_c9h8fuyEmVAT8F3NHFMvzFR1BnLc"
+  },
+  "broker": {
+    "origin": "https://makeborne-release-staging-kerimsabic-6594s-projects.vercel.app",
+    "protectionBypassRequired": true
+  },
+  "output": {
+    "accountId": "<verified R2 account ID>",
+    "bucket": "makeborne-publication-staging"
+  },
+  "approvedFile": "/run/config/approved-images.json",
+  "approvedSha256": "<SHA256 of exact approved-images.json bytes>"
+}

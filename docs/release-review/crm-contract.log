@@ -1,0 +1,27 @@
+SET
+BEGIN
+                                                                          crm_freeze_writes                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mode": "expand", "frozen": true, "consistent": true, "frozenReason": "contract", "minClientProtocol": 0, "clientsLegacyStages": 0, "clientsCurrentOnlyStages": 0}
+(1 row)
+
+COMMIT
+BEGIN
+                                                                                       crm_contract_client_stages                                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mode": "contracted", "frozen": true, "clients": 0, "consistent": true, "historyFull": 0, "frozenReason": "contract", "minClientProtocol": 2, "clientsLegacyStages": 0, "clientsCurrentOnlyStages": 0}
+(1 row)
+
+COMMIT
+                                                                          crm_transition_report                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mode": "contracted", "frozen": true, "consistent": true, "frozenReason": "contract", "minClientProtocol": 2, "clientsLegacyStages": 0, "clientsCurrentOnlyStages": 0}
+(1 row)
+
+BEGIN
+                                                                        crm_resume_writes                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mode": "contracted", "frozen": false, "consistent": true, "frozenReason": "", "minClientProtocol": 2, "clientsLegacyStages": 0, "clientsCurrentOnlyStages": 0}
+(1 row)
+
+COMMIT

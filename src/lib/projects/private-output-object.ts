@@ -4,8 +4,11 @@ export const MAX_OUTPUT_BYTES=50_000_000;
 const fail=(code:string):never=>{throw Object.assign(Error(code),{code});};
 const uuid="[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
 const keyPattern=new RegExp(`^compiled-v1/${uuid}/${uuid}/${uuid}/[a-f0-9]{64}/(?:receipt\\.json|files/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)$`);
+// Publication retains one receipt marker after all compiled files and route
+// captures are verified. This namespace does not accept arbitrary files.
+const publicationMarkerPattern=new RegExp(`^publication-v1/${uuid}/${uuid}/[a-f0-9]{64}/receipt\\.json$`);
 export function validateOutputKey(key:string){
-  if(typeof key!=="string"||key.length>600||!keyPattern.test(key)||key.split("/").some(part=>part==="."||part===".."))fail("OUTPUT_KEY_INVALID");
+  if(typeof key!=="string"||key.length>600||(!keyPattern.test(key)&&!publicationMarkerPattern.test(key))||key.split("/").some(part=>part==="."||part===".."))fail("OUTPUT_KEY_INVALID");
 }
 export function validateOutputLimit(limit:number){if(!Number.isSafeInteger(limit)||limit<0||limit>MAX_OUTPUT_BYTES)fail("OUTPUT_READ_LIMIT");}
 

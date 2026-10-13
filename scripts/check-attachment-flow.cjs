@@ -1,0 +1,84 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Real IndexedDB and mounted builder; APIs mocked, no provider calls. */
+const assert = require('node:assert/strict'), path = require('node:path');
+const {build} = require('esbuild'), {chromium} = require('playwright'), {createServer} = require('node:http');
+const ids = {account:'11111111-1111-4111-8111-111111111111', other:'99999999-9999-4999-8999-999999999999', workspace:'22222222-2222-4222-8222-222222222222', artifact:'33333333-3333-4333-8333-333333333333', operation:'44444444-4444-4444-8444-444444444444'};
+const fixture = `import React,{useState}from'react';import{createRoot}from'react-dom/client';import LiveBuilder from'./src/components/live-builder';import * as storage from'./src/lib/attachments';import{prepareBuilderAttachments}from'./src/lib/builder/attachments';
+const ids=${JSON.stringify(ids)};window.sources=storage;window.prepare=prepareBuilderAttachments;window.ids=ids;window.context=storage.projectAttachmentKey(ids.account+':'+ids.workspace+':'+ids.artifact);
+window.seed=async function(unsupported=false){const requestId=crypto.randomUUID(),nonce=crypto.randomUUID();await storage.addAttachments('device','home',[new File([unsupported?'PK\\x03\\x04':'Use exactly 123 customers.'],'brief.'+(unsupported?'zip':'txt'),{type:unsupported?'application/zip':'text/plain'})]);await storage.saveCreationDraft('device',requestId,nonce,{brief:'Build from my source',requestId});const draft=await storage.claimCreationDraft(requestId,nonce,ids.account);await storage.copyAttachments(draft.attachmentOwner,'draft:'+requestId,window.context);await storage.finishAttachmentHandoff(draft.attachmentOwner,requestId);return draft;};
+window.mount=function(options={}){function App(){const[account,setAccount]=useState(ids.account);window.switchAccount=()=>setAccount(ids.other);return <LiveBuilder key={account} accountId={account} workspaceId={ids.workspace} artifactId={ids.artifact} version={1} history={[]} baseFiles={{}} baseAssets={[]} defaultEffort="light" autoStart={options.auto&&account===ids.account?'Build from my source':null} autoStartMode={options.plan?'plan':'create'} kind={options.kind??'book'} onLive={()=>{}} onSaved={()=>{}}/>}createRoot(document.getElementById('root')).render(<App/>);};`;
+const planner = `import{useMemo,useState}from'react';export function usePlanMode(){const[,render]=useState(0);return useMemo(()=>{const p={active:null,restored:null,operation:null,checking:false,recoveryNotice:'',ready:true,hasPrevious:false,recoverablePlan:null,edit:()=>{},markBuilt:()=>{},refreshOperation:async()=>null,recoverPlan:async()=>null,run:async(input,on)=>{await fetch('/api/build/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});p.active={turnId:input.turnId,stored:{plan:{title:'Source plan'},status:'draft',revision:1},estimate:{},recommended:'light',save:'saved'};render(v=>v+1);on.onPlan(p.active);on.onDone(0);}};return p},[])}`;
+async function main(){
+ const output=await build({stdin:{contents:fixture,loader:'jsx',resolveDir:process.cwd()},write:false,bundle:true,platform:'browser',jsx:'automatic',define:{'process.env':'{}'},plugins:[{name:'fixture',setup(b){
+  b.onResolve({filter:/use-plan-mode|plan-card|design-capture|cloud-api/},a=>({path:a.path,namespace:'mock'}));
+  b.onLoad({filter:/use-plan-mode/,namespace:'mock'},()=>({contents:planner,loader:'js',resolveDir:process.cwd()}));
+  b.onLoad({filter:/plan-card/,namespace:'mock'},()=>({contents:`import React from'react';export default function PlanCard(p){return <button disabled={p.busy} onClick={()=>p.onBuild(p.plan,'light')}>Build approved plan</button>}`,loader:'jsx',resolveDir:process.cwd()}));
+  b.onLoad({filter:/cloud-api/,namespace:'mock'},()=>({contents:'export async function readCloudImage(){throw new Error("Unexpected image request")}',loader:'js'}));
+  b.onLoad({filter:/design-capture/,namespace:'mock'},()=>({contents:'export async function captureDesign(){throw new Error("No visual review in attachment fixture")}',loader:'js'}));
+  b.onLoad({filter:/\.css$/},()=>({contents:'',loader:'js'}));
+  b.onResolve({filter:/^@\//},a=>({path:path.resolve('src',a.path.slice(2)+(a.path.endsWith('.css')?'':'.ts'))}));
+ }}]});
+ const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/fixture.js'?'text/javascript':'text/html');res.end(req.url==='/fixture.js'?output.outputFiles[0].contents:'<!doctype html><div id="root"></div><script src="/fixture.js"></script>')});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true});
+ try{
+  const base=`http://127.0.0.1:${server.address().port}`;
+  async function scenario(name,run){
+   const context=await browser.newContext(),page=await context.newPage(),requests=[],errors=[];page.on('pageerror',e=>errors.push(e.message));
+   let count=0,operation={id:ids.operation,revision:1,kind:'build',effort:'light',authorizedCredits:20,chargedCredits:0,reservedCredits:0,remainingCredits:20,maximumAdditionalCredits:20,status:'active',pendingKind:null,lastVersion:1,canContinue:false,recoverable:false,expiresAt:'2030-01-01T00:00:00Z'};
+   await page.route('**/api/credits',r=>r.fulfill({json:{available:500,unlimited:false}}));
+   await page.route('**/api/build/operations**',async r=>{const data=r.request().postDataJSON();requests.push({path:'operation',method:r.request().method(),data});if(r.request().method()==='PATCH')operation={...operation,remainingCredits:20,authorizedCredits:40,revision:2,status:'active'};await r.fulfill({json:{operation,result:null,recovery:null}})});
+   await page.route('**/api/build/plan',async r=>{requests.push({path:'plan',data:r.request().postDataJSON()});await r.fulfill({json:{ok:true}})});
+   await page.route('**/api/build',async r=>{const data=r.request().postDataJSON();requests.push({path:'build',data});count++;if(name==='retry'&&count===1){await r.fulfill({status:503,json:{error:{message:'Fixture unavailable'}}});return;}
+    const pending=(name==='chain'||name==='resume')&&count===1;
+    operation={...operation,lastVersion:count+1,chargedCredits:count,remainingCredits:name==='resume'&&pending?0:19,pendingKind:pending?'continuation':null,canContinue:pending,status:pending?'paused':'active'};
+    const events=[{type:'operation',operation},{type:'done',version:count+1,summary:'Saved source fixture',changed:pending,finished:!pending,charged:1,operation}];
+    await r.fulfill({headers:{'Content-Type':'text/event-stream'},body:events.map(e=>'data: '+JSON.stringify(e)+'\n\n').join('')});});
+   await page.goto(base);await page.waitForFunction(()=>window.seed);await run(page,requests);assert.deepEqual(errors,[]);await context.close();console.log('PASS attachment browser: '+name);
+  }
+  for(const kind of ['website','book','presentation'])await scenario('home-'+kind,async(page,requests)=>{
+   const draft=await page.evaluate(async kind=>{const draft=await window.seed();window.mount({auto:true,kind});return draft},kind);assert.equal(draft.attachmentOwner,'account:'+ids.account);
+   await page.waitForFunction(()=>document.querySelector('.lb-turn.lb-assistant[data-state="done"]'));
+   assert.equal(requests.filter(r=>r.path==='build').length,1);assert.equal(Buffer.from(requests.find(r=>r.path==='build').data.attachments[0].data,'base64').toString(),'Use exactly 123 customers.');
+   assert.equal(await page.evaluate(async()=> (await window.sources.readAttachments('device','home')).length),0);
+  });
+  await scenario('plan-to-build',async(page,requests)=>{await page.evaluate(async()=>{await window.seed();window.mount({auto:true,plan:true,kind:'website'})});await page.getByRole('button',{name:'Build approved plan'}).click();await page.waitForFunction(()=>document.querySelectorAll('.lb-turn.lb-assistant[data-state="done"]').length===2);assert.deepEqual(requests.find(r=>r.path==='plan').data.attachments,requests.find(r=>r.path==='build').data.attachments);});
+  await scenario('plan-changed-selection',async(page,requests)=>{
+   await page.evaluate(async()=>{await window.seed();window.mount({auto:true,plan:true,kind:'website'})});await page.getByRole('button',{name:'Build approved plan'}).waitFor();await page.getByText('Building the approved plan uses the source files currently listed here. Review this selection if you changed files after planning.').waitFor();
+   await page.getByRole('button',{name:'Remove brief.txt'}).click();await page.locator('.attachment-chip').waitFor({state:'detached'});await page.locator('input[type=file]').setInputFiles({name:'updated.txt',mimeType:'text/plain',buffer:Buffer.from('Now use 456 customers.')});await page.getByRole('button',{name:'Build approved plan'}).click();await page.waitForFunction(()=>document.querySelectorAll('.lb-turn.lb-assistant[data-state="done"]').length===2);assert.equal(requests.find(r=>r.path==='build').data.attachments[0].name,'updated.txt');assert.notDeepEqual(requests.find(r=>r.path==='plan').data.attachments,requests.find(r=>r.path==='build').data.attachments);
+  });
+  await scenario('oversized',async(page,requests)=>{
+   await page.evaluate(async()=>{const s=window.sources,owner='account:'+window.ids.account;await s.addAttachments(owner,window.context,[new File([new Uint8Array(3000001)],'large.pdf',{type:'application/pdf'})]);window.mount({auto:true})});await page.getByRole('button',{name:'Remove large.pdf'}).waitFor();await page.waitForFunction(()=>document.querySelector('textarea').value==='Build from my source');assert.equal(requests.filter(r=>r.path==='build').length,0);assert.equal(await page.evaluate(async()=> (await window.sources.readAttachments('account:'+window.ids.account,window.context)).length),1);
+  });
+  await scenario('chain',async(page,requests)=>{await page.evaluate(async()=>{await window.seed();window.mount({auto:true})});await page.waitForFunction(()=>document.querySelectorAll('.lb-turn.lb-assistant[data-state="done"]').length===2);const calls=requests.filter(r=>r.path==='build');assert.equal(calls.length,2);assert.deepEqual(calls[0].data.attachments,calls[1].data.attachments);});
+  await scenario('resume',async(page,requests)=>{
+   await page.evaluate(async()=>{await window.seed();window.mount({auto:true})});await page.getByRole('button',{name:'Approve allowance & continue'}).waitFor();const original=requests.find(r=>r.path==='build').data.attachments;
+   await page.getByRole('button',{name:'Remove brief.txt'}).click();await page.locator('.attachment-chip').waitFor({state:'detached'});
+   await page.reload();await page.waitForFunction(()=>window.mount);await page.evaluate(()=>window.mount());await page.getByRole('button',{name:'Approve allowance & continue'}).click();await page.waitForFunction(()=>document.querySelector('.lb-turn.lb-assistant[data-state="done"]'));
+   assert.deepEqual(requests.filter(r=>r.path==='build')[1].data.attachments,original,'Reload continuation keeps the removed original, not current empty selection');
+   await page.getByRole('textbox',{name:'Message the builder'}).fill('New action without the original');await page.getByRole('button',{name:'Send',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.lb-turn.lb-assistant[data-state="done"]').length===2);assert.deepEqual(requests.filter(r=>r.path==='build')[2].data.attachments,[]);
+  });
+  await scenario('unsupported',async(page,requests)=>{await page.evaluate(async()=>{await window.seed(true);window.mount({auto:true})});await page.getByText(/AI can read PNG/).waitFor();assert.equal(requests.filter(r=>r.path==='build').length,0);assert.equal(await page.getByRole('textbox',{name:'Message the builder'}).inputValue(),'Build from my source');assert(await page.getByRole('button',{name:'Remove brief.zip'}).isVisible());});
+  await scenario('retry',async(page,requests)=>{await page.evaluate(async()=>{await window.seed();window.mount({auto:true})});await page.getByText('Fixture unavailable',{exact:true}).waitFor();await page.getByRole('textbox',{name:'Message the builder'}).fill('Retry my build');await page.getByRole('button',{name:'Send',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.lb-turn.lb-assistant[data-state="done"]'));const calls=requests.filter(r=>r.path==='build');assert.deepEqual(calls[0].data.attachments,calls[1].data.attachments);});
+  await scenario('account-race',async(page,requests)=>{
+   await page.evaluate(async()=>{await window.seed();const original=Blob.prototype.arrayBuffer;Blob.prototype.arrayBuffer=function(){const read=original.bind(this);window.reading=true;return new Promise(resolve=>{window.release=async()=>resolve(await read())})};window.mount({auto:true});});
+   await page.waitForFunction(()=>window.reading);await page.evaluate(()=>window.switchAccount());await page.waitForFunction(()=>!document.querySelector('.attachment-chip'));await page.evaluate(()=>window.release());await page.waitForTimeout(100);assert.equal(requests.filter(r=>r.path==='build').length,0);
+  });
+  await scenario('account-upload-race',async(page,requests)=>{
+   await page.evaluate(()=>{const original=Blob.prototype.arrayBuffer;Blob.prototype.arrayBuffer=function(){const read=original.bind(this);window.reading=true;return new Promise(resolve=>{window.release=async()=>resolve(await read())})};window.mount()});
+   await page.locator('input[type=file]').setInputFiles({name:'late.txt',mimeType:'text/plain',buffer:Buffer.from('Original account only')});await page.waitForFunction(()=>window.reading);await page.evaluate(()=>window.switchAccount());await page.evaluate(()=>window.release());
+   await page.waitForFunction(async()=> (await window.sources.readAttachments('account:'+window.ids.account,window.context)).length===1);
+   assert.equal(await page.locator('.attachment-chip').count(),0);assert.equal(await page.evaluate(async()=> (await window.sources.readAttachments('account:'+window.ids.other,window.sources.projectAttachmentKey(window.ids.other+':'+window.ids.workspace+':'+window.ids.artifact))).length),0);assert.equal(requests.filter(r=>r.path==='build').length,0);
+  });
+  await scenario('retention-isolation-cleanup',async(page)=>{
+   const result=await page.evaluate(async()=>{
+    const s=window.sources,owner='account:'+window.ids.account,context=window.context;await window.seed();const files=await s.readAttachments(owner,context);
+    for(let i=0;i<10;i++){await s.retainBuilderAttachmentSnapshot(owner,context,'action-'+i,files);await s.bindBuilderAttachmentSnapshot(owner,context,'action-'+i,'operation-'+i);}
+    let oldRefused=false,crossRefused=false;try{await s.readBuilderAttachmentSnapshot(owner,context,'operation-0')}catch{oldRefused=true}try{await s.readBuilderAttachmentSnapshot('account:'+window.ids.other,context,'operation-9')}catch{crossRefused=true}
+    await s.removeAttachment(owner,context,files[0].id);const retained=await s.readBuilderAttachmentSnapshot(owner,context,'operation-9');
+    await s.clearBuilderAttachmentSnapshots(owner,context);let deletedRefused=false;try{await s.readBuilderAttachmentSnapshot(owner,context,'operation-9')}catch{deletedRefused=true}
+    const current=await s.addAttachments(owner,context,[new File(['new'],'current.txt',{type:'text/plain'})]);await s.retainBuilderAttachmentSnapshot(owner,context,'expires',current);await s.bindBuilderAttachmentSnapshot(owner,context,'expires','expires');const now=Date.now;Date.now=()=>now()+s.BUILDER_SNAPSHOT_RETENTION.lifetimeMs+1;let expiredRefused=false;try{await s.readBuilderAttachmentSnapshot(owner,context,'expires')}catch{expiredRefused=true}Date.now=now;
+    const db=await new Promise((resolve,reject)=>{const req=indexedDB.open('makeborne.attachments.v1',2);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)});const counts=await new Promise(resolve=>{const tx=db.transaction(['collections','files'],'readonly');const a=tx.objectStore('collections').getAll(),b=tx.objectStore('files').getAll();tx.oncomplete=()=>resolve({snapshots:a.result.filter(x=>x.builderRequest).length,files:b.result.length})});db.close();return{oldRefused,crossRefused,deletedRefused,expiredRefused,retained:await retained[0].blob.text(),current:(await s.readAttachments(owner,context))[0].name,...counts};
+   });assert.deepEqual(result,{oldRefused:true,crossRefused:true,deletedRefused:true,expiredRefused:true,retained:'Use exactly 123 customers.',current:'current.txt',snapshots:0,files:1});
+  });
+ }finally{await browser.close();await new Promise(r=>server.close(r));}
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});

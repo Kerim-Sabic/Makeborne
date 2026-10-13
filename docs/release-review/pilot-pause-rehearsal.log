@@ -1,0 +1,15 @@
+BEGIN
+SET
+ previous_limit_cents | retained_reserved_cents 
+----------------------+-------------------------
+                  400 |                      75
+(1 row)
+
+UPDATE 1
+COMMIT
+ unresolved_runs | uncertain_runs 
+-----------------+----------------
+               0 |              0
+(1 row)
+
+DO

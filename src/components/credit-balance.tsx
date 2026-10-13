@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export type CreditBalanceData = { balance: number; reserved: number; available: number; unlimited: boolean };
+export type CreditExpiryData = { at: string; credits: number };
+export type CreditBalanceData = { balance: number; reserved: number; available: number; unlimited: boolean; nextExpiry: CreditExpiryData | null };
 type State = { status: "loading" } | { status: "ready"; data: CreditBalanceData } | { status: "signed-out" } | { status: "error" };
 
 /** Dispatch after work that changes credits so every mounted balance refreshes. */
@@ -10,12 +11,27 @@ export const CREDITS_CHANGED_EVENT = "makeborne:credits-changed";
 
 const number = new Intl.NumberFormat("en", { maximumFractionDigits: 0 });
 
+/** "120 credits expire 31 Oct 2026, 10:00": the exact end instant in the viewer's own time zone. */
+export function creditExpiryLabel(expiry: CreditExpiryData, timeZone?: string) {
+  const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone }).format(new Date(expiry.at));
+  return `${number.format(expiry.credits)} ${expiry.credits === 1 ? "credit expires" : "credits expire"} ${when}`;
+}
+
+function expiryOf(value: unknown): CreditExpiryData | null {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  const credits = data.credits;
+  if (typeof data.at !== "string" || !Number.isFinite(Date.parse(data.at)) || typeof credits !== "number" || !Number.isSafeInteger(credits) || credits <= 0) return null;
+  return { at: data.at, credits };
+}
+
 function parse(value: unknown): CreditBalanceData | null {
   if (!value || typeof value !== "object") return null;
   const data = value as Record<string, unknown>;
   const whole = (item: unknown) => typeof item === "number" && Number.isSafeInteger(item) && item >= 0;
   if (!whole(data.balance) || !whole(data.reserved) || !whole(data.available) || typeof data.unlimited !== "boolean") return null;
-  return { balance: data.balance as number, reserved: data.reserved as number, available: data.available as number, unlimited: data.unlimited };
+  return { balance: data.balance as number, reserved: data.reserved as number, available: data.available as number, unlimited: data.unlimited,
+    nextExpiry: expiryOf(data.nextExpiry) };
 }
 
 /**
@@ -38,8 +54,10 @@ export default function CreditBalance({ variant = "inline", className, onLoad }:
     const controller = new AbortController();
     fetch("/api/credits", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
       .then(async response => {
+        if (controller.signal.aborted) return;
         if (response.status === 401) return setState({ status: "signed-out" });
         const data = response.ok ? parse(await response.json()) : null;
+        if (controller.signal.aborted) return;
         if (!data) return setState({ status: "error" });
         setState({ status: "ready", data });
         onLoadRef.current?.(data);

@@ -1,0 +1,83 @@
+{
+  "sandboxOnly": true,
+  "productionTouched": false,
+  "realProviderSignedEvents": [
+    {
+      "type": "membership.activated",
+      "status": 200
+    },
+    {
+      "type": "payment.succeeded",
+      "status": 200
+    }
+  ],
+  "concurrentDuplicateReplay": [
+    200,
+    200,
+    200,
+    200
+  ],
+  "grantCount": 1,
+  "credits": 300,
+  "cancelAtPeriodEnd": {
+    "providerStatus": "active",
+    "hasCreationAccess": true
+  },
+  "immediateCancellation": {
+    "providerStatus": "canceled",
+    "hasCreationAccess": false
+  },
+  "delayedActivationReplay": {
+    "kind": "provider body re-signed locally with fresh timestamp",
+    "status": 200,
+    "grantCount": 1,
+    "credits": 300
+  },
+  "annualPurchase": {
+    "providerPeriodStart": "2026-10-12T17:40:46.384Z",
+    "providerPeriodEnd": "2027-10-12T17:40:46.384Z",
+    "initialAllocation": 300,
+    "allocationCount": 1,
+    "newMembershipId": true
+  },
+  "realProviderReconcile": {
+    "status": "succeeded",
+    "runId": 1,
+    "stats": {
+      "processed": 2,
+      "failed": 0,
+      "bindingMismatch": 0,
+      "unknownPlan": 0,
+      "observationsGranted": 0,
+      "paymentsRecorded": 0,
+      "paymentsGranted": 0,
+      "paymentPagesIncomplete": 0,
+      "reconciledMemberships": 2,
+      "reconcileGranted": 0,
+      "expiryWallets": 0,
+      "expiredProviderCalls": 0,
+      "budgetExhausted": false
+    },
+    "errors": []
+  },
+  "unauthorizedCron": 401,
+  "notVerified": [
+    "Actual subsequent Whop renewal payment (no sandbox time-advance control found)",
+    "In-place upgrade/downgrade (not offered by customer portal)",
+    "Replacement allowance policy; separate new purchases still receive separate allowances"
+  ],
+  "invalidSignatureStatus": 400,
+  "wrongMerchantStatus": 403,
+  "sqlRenewalAndExpiryChecks": "Real isolated SQL allocation and expiry suites passed; time controlled in SQL, not a provider renewal",
+  "cleanup": {
+    "testMembershipsCanceled": true,
+    "tunnelStopped": true,
+    "relayStopped": true,
+    "localAppStopped": true,
+    "isolatedBillingSwitchRestored": true,
+    "sandboxPlansDisabledLocally": true,
+    "productionTouched": false,
+    "webhookDisabled": true,
+    "localPortsClosed": true
+  }
+}

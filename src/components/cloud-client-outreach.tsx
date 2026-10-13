@@ -5,16 +5,18 @@ import ClientOutreachPanel from "./client-outreach";
 import { api } from "./cloud-api";
 import "@/app/client-workspace.css";
 
-export default function CloudClientOutreach({ initialClient, workspaceId, canEdit, onSaved, close, onSaving }: {
+export default function CloudClientOutreach({ initialClient, workspaceId, canEdit, onSaved, close, onSaving, embedded = false }: {
   onSaving?: (value: boolean) => void;
+  /** Inside a client page that already shows the name and a way back. */
+  embedded?: boolean;
   initialClient: CloudClient; workspaceId: string; canEdit: boolean;
   onSaved: (client: CloudClient) => void; close: () => void;
 }) {
   const [client, setClient] = useState(initialClient);
   const [busy, setBusy] = useState(false);
   return <section className="import-review" aria-label={`Outreach for ${client.name}`}>
-    <div className="cw-section-heading"><div><span className="eyebrow">CLIENT OUTREACH</span><h2>{client.name}</h2></div>
-      <button type="button" className="button secondary small" disabled={busy} onClick={close}>Close outreach</button></div>
+    {!embedded && <div className="cw-section-heading"><div><span className="eyebrow">CLIENT OUTREACH</span><h2>{client.name}</h2></div>
+      <button type="button" className="button secondary small" disabled={busy} onClick={close}>Close outreach</button></div>}
     <ClientOutreachPanel client={client} storageLabel="to your account" readOnly={!canEdit}
       onSave={async updated => {
         setBusy(true); onSaving?.(true);

@@ -1,0 +1,1 @@
+PASS custom compositions rendered to actual two-slide PDF/PPTX; editable native text, independent artwork/caption, crop, arbitrary geometry, typography, colors and exact copy retained. Missing artwork/caption and foreign source rejected. No provider calls.

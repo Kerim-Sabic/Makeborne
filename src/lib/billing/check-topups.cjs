@@ -111,7 +111,7 @@ async function checkAvailability() {
   ]) {
     const route = load("../../app/api/billing/topups/route.ts", {
       "@/lib/billing/access": { requireBillingUser: async () => { if (!authenticated) throw new RequestError("AUTH_REQUIRED", "Sign in", 401); return { id: uuid }; }, requireCreationAccess: async () => { if (!eligible) throw new RequestError("MEMBERSHIP_REQUIRED", "Membership required", 402); } },
-      "@/lib/billing/topups": { CREDIT_TOPUPS_NOT_OPEN: "Not yet open", creditTopupAvailability: async () => result },
+      "@/lib/billing/topups": { createTopupCheckout: async () => { throw new RequestError("TOPUPS_NOT_OPEN", "Not yet open", 503); }, creditTopupAvailability: async () => result },
       "@/lib/server/http": { RequestError, sameOrigin: () => {}, boundedJson: async request => request.json(), apiError: error => Response.json({ code: error.code }, { status: error.status ?? 500 }) },
     });
     const response = await route.POST(new Request("https://makeborne.vercel.app/api/billing/topups", { method: "POST", body: JSON.stringify(payload) }));

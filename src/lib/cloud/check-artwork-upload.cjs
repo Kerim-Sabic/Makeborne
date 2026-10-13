@@ -15,6 +15,7 @@ vm.runInNewContext(code,{exports:moduleObject.exports,module:moduleObject,Respon
  record=null;registrationFail=true;response=await post();assert.equal(response.status,503);registrationFail=false;response=await post();assert.equal(response.status,201);assert.equal((await response.json()).asset.id,first.asset.id);console.log('PASS interrupted registration recovers original object');
  denied=true;response=await post();assert.equal(response.status,403);denied=false;console.log('PASS denied editor cannot upload');
  response=await post(Buffer.from('bad image'));assert.equal(response.status,415);console.log('PASS invalid image rejected');
- response=await post(Buffer.alloc(10001));assert.equal(response.status,413);console.log('PASS streamed size bound enforced');
+ response=await post(Buffer.alloc(4*1024*1024+1));assert.equal(response.status,413);console.log('PASS streamed 4 MB size bound enforced');
  env.NODE_ENV='production';response=await post();assert.equal(response.status,503);console.log('PASS production remains closed until quotas');
+ env.NEXT_PUBLIC_MAKEBORNE_ARTWORK_UPLOADS_ENABLED='true';response=await post();assert.equal(response.status,200);console.log('PASS explicitly enabled staging accepts artwork');
 })().catch(error=>{console.error(error);process.exitCode=1;});

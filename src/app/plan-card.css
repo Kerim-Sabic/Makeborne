@@ -65,7 +65,8 @@ li:hover > .pc-remove, .pc-section-head:hover .pc-remove, .pc-remove:focus-visib
 .pc-list li .pc-remove { position:absolute; right:-4px; top:0; }
 .pc-questions label { display:grid; gap:4px; margin:0 0 9px; color:#3d3448; font-size:12px; }
 .pc-questions input { width:100%; min-height:30px; padding:5px 9px; border:1px solid #e3dcea; border-radius:8px; font:inherit; font-size:11.5px; background:#fdfcfe; }
-.pc-questions input:focus { outline:none; border-color:#a68ab8; box-shadow:0 0 0 3px #9b74b512; }
+.pc-questions input:focus { outline:none; border-color:#a68ab8; box-shadow:0 0 0 3px #7c6cf040; }
+.pc-field:focus { border-color:#7c6cf0; box-shadow:0 0 0 3px #7c6cf040; }
 .pc-assumptions summary { cursor:pointer; color:#85798f; font-size:11px; }
 .pc-assumptions ul { margin-top:6px; color:#6d6276; }
 .pc-foot { padding:12px 15px 14px; background:#fbf9fc; }

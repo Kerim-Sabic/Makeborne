@@ -1,0 +1,101 @@
+{
+  "reviewedAt": "2026-10-13T06:55:33.344Z",
+  "packageId": "ac4b08bd-b91f-47bb-9956-c6d719505738",
+  "environment": "fresh isolated local API55465 / DB55468 / app3068; no production data",
+  "productionChanged": false,
+  "cloudDeployed": false,
+  "sourceSnapshot": "work/fresh-quality/app",
+  "automaticArtDirection": true,
+  "imagesQualified": false,
+  "providerCalls": 7,
+  "actualMicrousd": 653970,
+  "byActionMicrousd": {
+    "book": 316572,
+    "deck": 256007,
+    "edit": 81391
+  },
+  "usageBasis": "Provider usage in settled app ledger; invoice reconciliation pending",
+  "allCallsSettled": true,
+  "overruns": 0,
+  "shutdown": {
+    "limitsDisabled": true,
+    "originalProcessStopReport": false,
+    "followupEvidence": "outputs/fresh-product-quality-ac4b08bd-b91f-47bb-9956-c6d719505738/shutdown-followup.json"
+  },
+  "book": {
+    "saved": true,
+    "pdf": true,
+    "pages": 17,
+    "bodyWords": 1586,
+    "review": "docs/release-review/fresh-book-editorial-review-20261013.md",
+    "quality": "Readable and complete; numbering, fragmentation, navigation and continuity findings remain in original"
+  },
+  "deck": {
+    "saved": true,
+    "pdf": true,
+    "pptx": true,
+    "slides": 8,
+    "nativeCharts": 1,
+    "notes": 8,
+    "allPdfSlidesInspected": true,
+    "nativePowerPointCoverAndChartInspected": true,
+    "repairDialogObserved": false,
+    "editSaveQualified": false,
+    "editSaveLimitation": "Installed Office unlicensed; edit/save disabled",
+    "review": "docs/release-review/fresh-deck-editorial-review-20261013.md"
+  },
+  "targetedEdit": {
+    "changedSlideIds": [
+      "visits"
+    ],
+    "themeUnchanged": true,
+    "slideOrderUnchanged": true,
+    "chartValues": [
+      12,
+      21,
+      25,
+      30
+    ],
+    "chartXmlAndEmbeddedWorkbookVerified": true
+  },
+  "laterChanges": {
+    "prompt": "Removed bracketed-placeholder instruction; added consistency/audience checks. Not yet validated with new model output.",
+    "renderer": "Completed authoritative custom labels, optional inline openings, internal contents links, aligned process-description row. Original source/output preserved; derived book16pages with disclosed sparse final continuation. Independent review passed."
+  },
+  "release": "Not launch-ready; fresh tests do not clear billing, images or remote publication.",
+  "finalLocalVerification": {
+    "observedAt": "2026-10-13T07:05:59.872Z",
+    "offlineHarnesses": "101/101",
+    "explicitEnvironmentSkips": 5,
+    "productionBuildAndTypeScript": "pass",
+    "eslint": "0 errors / 0 warnings",
+    "shutdownHelperGroups": 13,
+    "independentBookReview": "7 opening +96 browser layout +8 body +10 composition; preview/PDF links verified",
+    "processDiagramBrowserCases": 32
+  },
+  "derivedOutputs": {
+    "book": "outputs/derived-book-openings-ac4b08bd-b91f-47bb-9956-c6d719505738",
+    "deck": "outputs/fresh-deck-process-rerender-20261013/deck-edit",
+    "provenance": "Book changes only two opening flags plus renderer; deck source unchanged from paid edit. These are postprocessed rerenders, not new model samples."
+  },
+  "finalSourceHashes": {
+    "src/lib/builder/docs-prompt.ts": "e0b94227b2fc5c327a88f5224c99e95991847bd8ba963eb4e089843e6144dcfa",
+    "src/lib/documents/render-book.ts": "7efc3a7f57461f07e7b8a0896e79b196aac12747a6669c509de0de7c432fa5ec",
+    "src/lib/documents/schema.ts": "e5e63b901d9e8beea1e8bb0d5bbe7c5bc113d57b6244f8f1bd9d729fd341d33a",
+    "src/lib/documents/editor.ts": "28ff049b8d9091c7a4d09b39c7e63a843dc8a7d815ecb00a530f11cbbc75ecd8",
+    "src/lib/documents/slide-scene.ts": "1f2bc1a3eaf28f4e20aa2ca286fb382e6b5275d4b0beaea57d0a04a5c7094b58",
+    "src/components/cloud-studio.tsx": "a61aa96c3ea6ff3608a4083f4aff32d48312b128eb37ca795579fa17863433a3",
+    "scripts/fresh-quality-server.mjs": "f85038b36513c099ccc7a2f20c9d7a90fa4f2af43198b9cff2f208083ac79323"
+  },
+  "releaseDocumentationReview": {
+    "closed": true,
+    "scope": [
+      "explicit database target",
+      "actual migration failure outcome",
+      "exact staging QA routes",
+      "compatible Worker rollback",
+      "saved document reader compatibility"
+    ],
+    "remaining": "Final cloud candidate and real recovery build qualification still required"
+  }
+}

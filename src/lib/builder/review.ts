@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import { REVIEW_LIMITS, REVIEW_VIEWPORTS } from "./review-policy";
+import { REVIEW_LIMITS, REVIEW_VIEWPORTS, reviewCoverageIssue } from "./review-policy";
 
 /** Visual self-review pass: request validation, the review rubric and the
  * screenshot content blocks sent to the builder. */
@@ -39,6 +39,8 @@ export const ReviewInputSchema = z.object({
   viewports: z.array(ViewportReport).max(REVIEW_VIEWPORTS.length),
   errors: z.array(z.string().trim().min(1).max(REVIEW_LIMITS.maxErrorChars)).max(REVIEW_LIMITS.maxErrors).default([]),
 }).strict().superRefine((input, context) => {
+  const coverage = reviewCoverageIssue(input);
+  if (coverage) context.addIssue({ code: "custom", message: coverage });
   if (!input.screenshots.length && !input.errors.length) context.addIssue({ code: "custom", message: "A review needs screenshots or runtime errors." });
   for (const id of ["desktop", "mobile"] as const) {
     const limit = REVIEW_VIEWPORTS.find(item => item.id === id)!.maxTiles;
@@ -64,7 +66,7 @@ Then fix what matters:
 - Use edit_file with old_string copied exactly from the current files. Rewrite a whole file only if it is broken.
 - Fix root causes in CSS (min-width: 0 on grid/flex children, overflow-wrap, max-width: 100% on media, clamp() type sizes, flex-wrap, correct breakpoints). Never hide overflow with overflow-x: hidden on html or body.
 - Images cannot be generated in a review. If an image is broken, fix the reference, reuse an existing image or replace it with CSS/SVG art.
-- Then call finish with the current site title. The summary must start with "Fixed:" and list the concrete visual fixes in plain language (for example "Fixed: the mobile menu overlapped the logo; the pricing cards now stack on phones."). If nothing material needs fixing, make no edits and finish with exactly "No changes needed — the design passed review."`;
+- Then call finish with the current site title. The summary must start with "Fixed:" and list the concrete visual fixes in plain language (for example "Fixed: the mobile menu overlapped the logo; the pricing cards now stack on phones."). If nothing material needs fixing, make no edits and finish with exactly "No changes needed in the captured views." Do not claim complete website, route, form or accessibility qualification from these captures. If only runtime errors were supplied, repair them but do not claim the design was visually reviewed.`;
 
 const describeViewport = (report: ReviewInput["viewports"][number]) => {
   const label = report.viewport === "desktop" ? "Desktop" : "Mobile";

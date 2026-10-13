@@ -78,7 +78,7 @@
 .auth-refined .login-card.auth-verification-card{max-width:442px;padding:36px;border:1px solid #e9e6f0;border-radius:24px;background:linear-gradient(145deg,#fff,#fefeff);box-shadow:0 8px 32px #34265306,0 26px 70px -42px #7662b933}
 .auth-verification-card .auth-heading{margin-bottom:26px}
 .auth-refined .auth-verification-card h1{font-size:28px;letter-spacing:-1px;line-height:1.2}
-.auth-step-label{display:block;margin:0 0 12px;font-size:9px;font-weight:600;letter-spacing:1.6px;color:#85799b}
+.auth-step-label{display:block;margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:1.6px;color:#85799b}
 .auth-verification-card .auth-mail-icon{width:64px;height:64px;margin-bottom:25px;border:1px solid #e4ddf6;border-radius:19px;background:linear-gradient(145deg,#faf8ff,#efeafa);box-shadow:0 5px 15px #7968b20b;color:#6851b0}
 .auth-verification-card .auth-mail-icon.is-complete{background:linear-gradient(145deg,#f3fcf8,#e9f5ef);color:#318661;border-color:#dbeee2}
 .auth-refined .login-card .button.primary{background:linear-gradient(110deg,#3154bd,#6651cd);border-color:#4e55c4;transition:background-color .16s,box-shadow .16s}
@@ -98,7 +98,7 @@
 .auth-resend-row{display:flex;justify-content:center;align-items:center;gap:7px;min-height:40px;margin-top:12px;color:#9a90a6;font-size:11px}
 .auth-resend-row button{padding:7px 0;background:none;border:0;border-radius:4px;color:#66538e;font-size:11px;font-weight:550;font-variant-numeric:tabular-nums;cursor:pointer}
 .auth-resend-row button:disabled{color:#a39aaf;cursor:not-allowed}
-.auth-refined .login-card .auth-verification-footnote{font-size:11px;line-height:1.7;margin:14px auto 0;color:#786c82;text-align:center;max-width:305px}
+.auth-refined .login-card .auth-verification-footnote{font-size:12px;line-height:1.7;margin:14px auto 0;color:#786c82;text-align:center;max-width:305px}
 .auth-refined .account-message{margin-top:22px;margin-bottom:0;background:#f4f5fc;border:1px solid #e7e9f4;color:#5b6380}
 .auth-refined .account-message.is-error{border-color:#f1ddd9;background:#fff8f6;color:#a15a4d}
 .auth-mode-switch a{color:#66528c;font-weight:500;font-size:12px}

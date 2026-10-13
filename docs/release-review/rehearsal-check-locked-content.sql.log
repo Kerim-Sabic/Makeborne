@@ -1,0 +1,10 @@
+BEGIN
+NOTICE:  PASS locked text edits denied
+NOTICE:  PASS edit bundled with unlock denied
+NOTICE:  PASS locked block removal denied
+NOTICE:  PASS locked section removal denied
+NOTICE:  PASS rejected changes leave revision unchanged
+NOTICE:  PASS separate unlock saved
+NOTICE:  PASS edits after saved unlock allowed
+DO
+ROLLBACK

@@ -20,7 +20,7 @@
   background: #fff;
 }
 .cloud-workbench-heading > div { flex: 1; min-width: 0; }
-.cloud-workbench .cloud-workbench-heading h2 {
+.cloud-workbench .cloud-workbench-heading :is(h1,h2) {
   font-family: var(--font-inter), Arial, sans-serif;
   font-size: 14px;
   font-weight: 550;
@@ -89,7 +89,7 @@
 
 @media (max-width: 720px) {
   .cloud-workbench .cloud-workbench-heading { padding: 10px 12px; }
-  .cloud-workbench .cloud-workbench-heading h2 { font-size: 12px; }
+  .cloud-workbench .cloud-workbench-heading :is(h1,h2) { font-size: 12px; }
   .cloud-workbench .cloud-workbench-tabs { padding: 9px; }
   .cloud-workbench-tabs > span { display: none; }
   .cloud-workbench-preview { padding: 10px; min-height: 420px; }

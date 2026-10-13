@@ -16,7 +16,7 @@ export async function POST(request: Request, context: Context) {
     const parsed = ReviewDecisionInputSchema.safeParse(await boundedJson(request, 8_000));
     if (!parsed.success) throw new RequestError("INVALID", parsed.error.issues[0]?.message ?? "Check the details and try again.");
     const { data, error } = await anonymousReviewDatabase().rpc("makeborne_decide_client_review", {
-      p_token: token, p_name: parsed.data.name, p_email: parsed.data.email, p_decision: parsed.data.decision, p_note: parsed.data.note,
+      p_token: token, p_version: parsed.data.version, p_name: parsed.data.name, p_email: parsed.data.email, p_decision: parsed.data.decision, p_note: parsed.data.note,
     });
     reviewDatabaseError(error);
     return Response.json(Result.parse(data), { headers });

@@ -1,4 +1,11 @@
 begin;
+-- Controlled fixture: these assertions expect exact cap counters, so they start
+-- from zeroed counters inside this transaction. Everything rolls back; spend
+-- recorded in the database (for example local pilot runs) is left untouched.
+update makeborne_private.generation_execution_caps set vendor_spent=0, vendor_reserved=0, active_dispatches=0;
+-- Durable dispatch also draws on the shared daily provider limits (disabled by
+-- default); open them generously for this transaction only.
+update makeborne_private.live_provider_limits set enabled=true, emergency_stop=false, daily_limit_microusd=1000000000;
 create function pg_temp.reject_capped_fixture_charge() returns trigger language plpgsql as $$
 begin if new.reason='accepted_work' then raise exception 'Injected debit failure' using errcode='PT503'; end if; return new; end $$;
 do $$
@@ -59,6 +66,22 @@ begin
  begin perform makeborne_private.claim_capped_generation_dispatch(jobs[3],worker,1,gen_random_uuid()); raise exception 'Provider disabled ignored'; exception when insufficient_privilege then null; end;
  update makeborne_private.generation_execution_caps set enabled=true where scope='openai';
  raise notice 'PASS missing draft, expired price, global stop and independently disabled provider deny before allocation';
+ -- Shared daily provider limits: durable dispatch cannot bypass them, and a refusal allocates nothing.
+ update makeborne_private.live_provider_limits set enabled=false where scope='global';
+ set local role service_role;
+ begin perform makeborne_private.claim_capped_generation_dispatch(jobs[1],worker,1,gen_random_uuid()); raise exception 'Durable dispatch bypassed disabled shared limits';
+ exception when sqlstate 'MB423' then null; end;
+ reset role;
+ update makeborne_private.live_provider_limits set enabled=true where scope='global';
+ update makeborne_private.live_provider_limits set daily_limit_microusd=11 where scope='anthropic';
+ set local role service_role;
+ begin perform makeborne_private.claim_capped_generation_dispatch(jobs[1],worker,1,gen_random_uuid()); raise exception 'Durable dispatch exceeded the shared daily limit';
+ exception when sqlstate 'MB402' then null; end;
+ reset role;
+ update makeborne_private.live_provider_limits set daily_limit_microusd=1000000000 where scope='anthropic';
+ if exists(select 1 from makeborne_private.generation_execution_caps where vendor_reserved>0 or active_dispatches>0) or exists(select 1 from makeborne_private.live_provider_calls where run_reference like 'job:%' and status='open')
+   then raise exception 'Refused durable dispatch allocated caps or a gate call'; end if;
+ raise notice 'PASS durable dispatch draws on the shared daily provider limits: disabled or exhausted limits refuse it atomically';
  set local role service_role;
  result:=makeborne_private.claim_capped_generation_dispatch(jobs[1],worker,1,gen_random_uuid());
  if result->>'claimed'<>'true' then raise exception 'First capped dispatch missing'; end if;
@@ -72,6 +95,8 @@ begin
  begin perform makeborne_private.claim_capped_generation_dispatch(jobs[2],worker,1,gen_random_uuid()); raise exception 'Provider concurrency ignored'; exception when sqlstate 'MB429' then null; end;
  reset role;
  if (select count(*) from makeborne_private.generation_execution_holds where workspace_id in (w1,w2))<>1 then raise exception 'Concurrency denial allocated hold'; end if;
+ if not exists(select 1 from makeborne_private.live_provider_calls where id=d1 and source='durable' and status='open' and bound_microusd=12 and run_reference='job:'||jobs[1]::text)
+   then raise exception 'Durable dispatch did not reserve in the shared gate'; end if;
  raise notice 'PASS global and independent provider concurrency are atomic; dispatch replay does not allocate twice';
 
  update makeborne_private.generation_execution_caps set vendor_limit=12,concurrency_limit=10 where scope in ('global','anthropic');
@@ -94,6 +119,7 @@ begin
  job:=makeborne_private.settle_generation_job(job.id,u,job.run_revision,false,repeat('f',64));
  if not exists(select 1 from makeborne_private.generation_execution_caps where scope='global' and vendor_spent=5 and vendor_reserved=12 and active_dispatches=1)
    or not exists(select 1 from makeborne_private.generation_execution_caps where scope='anthropic' and vendor_spent=5 and vendor_reserved=0 and active_dispatches=0) then raise exception 'Resolved cap release incorrect'; end if;
+ if not exists(select 1 from makeborne_private.live_provider_calls where id=d1 and status='settled' and charged_microusd=5) then raise exception 'Durable settlement did not close its gate call'; end if;
  raise notice 'PASS unknown outcomes retain both caps; operator reconciliation must match route and settles actual cost once';
 
  select * into job from public.generation_jobs where id=jobs[3];

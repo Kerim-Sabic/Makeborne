@@ -9,42 +9,60 @@
 .mbe-effort-heading output.is-ultra { color:#5c4bb4; }
 .mbe-effort-track { position:relative; height:44px; }
 .mbe-effort-rail { position:absolute; left:12px; right:12px; top:19px; height:6px; border-radius:99px; background:#ebebee; pointer-events:none; }
-.mbe-effort-fill { position:absolute; inset:0 auto 0 0; width:var(--effort-progress); border-radius:inherit; background:#34343a; transition:width 180ms cubic-bezier(.22,1,.36,1); }
+.mbe-effort-fill { position:absolute; inset:0 auto 0 0; width:var(--effort-progress); border-radius:inherit; background:#34343a; transition:width 520ms cubic-bezier(.22,1,.36,1); }
+/* Ultra: the bar widens slightly and becomes deep space. A slow nebula drift and two
+   layers of stars moving at different speeds give depth; everything stays inside the bar. */
+.mbe-effort-rail { transition:height 480ms cubic-bezier(.22,1,.36,1),top 480ms cubic-bezier(.22,1,.36,1); }
+.mbe-effort.is-ultra .mbe-effort-rail { height:10px; top:17px; }
 .mbe-effort.is-ultra .mbe-effort-fill {
-  overflow:hidden; isolation:isolate; background:#5c60dc;
-  box-shadow:0 0 0 1px #6976e51a,0 2px 10px #6965df24;
+  overflow:hidden; isolation:isolate;
+  background:
+    radial-gradient(90% 260% at 20% 50%,#3d2c94 0%,transparent 58%),
+    radial-gradient(90% 260% at 80% 50%,#1d3b8f 0%,transparent 60%),
+    linear-gradient(90deg,#0a0b1d,#16123a 45%,#211a55);
+  background-size:220% 100%,220% 100%,100% 100%;
+  box-shadow:0 0 0 1px #2b2463,0 3px 14px -3px #4a3db380;
+  animation:effort-nebula 16s ease-in-out infinite alternate;
 }
-/* Two identical colour cycles make the loop seamless. Only the layers move. */
+.mbe-effort.is-ultra .mbe-effort-fill::before,
+.mbe-effort.is-ultra .mbe-effort-fill::after {
+  content:""; position:absolute; top:0; bottom:0; left:0; width:calc(100% + 96px); pointer-events:none;
+}
 .mbe-effort.is-ultra .mbe-effort-fill::before {
-  content:""; position:absolute; inset:0 auto 0 0; width:200%;
-  background:linear-gradient(90deg,#476cf0 0%,#7954d9 12.5%,#6881f5 25%,#82b7ff 37.5%,#476cf0 50%,#7954d9 62.5%,#6881f5 75%,#82b7ff 87.5%,#476cf0 100%);
-  animation:effort-ultra-current 5.6s linear infinite;
+  background-image:
+    radial-gradient(1px 1px at 5px 3px,#ffffffb0 50%,transparent 51%),
+    radial-gradient(1px 1px at 17px 7px,#c7d2fe 50%,transparent 51%),
+    radial-gradient(1px 1px at 30px 2px,#ffffff90 50%,transparent 51%),
+    radial-gradient(1px 1px at 40px 6px,#ddd6fe 50%,transparent 51%);
+  background-size:48px 10px;
+  animation:effort-stars-far 9s linear infinite,effort-twinkle 2.6s ease-in-out infinite alternate;
 }
 .mbe-effort.is-ultra .mbe-effort-fill::after {
-  content:""; position:absolute; inset:0 auto 0 0; width:38%; border-radius:inherit;
-  background:linear-gradient(90deg,transparent 0%,#d7e5ff12 24%,#e8efff55 57%,#fffdf2 78%,#e7eaff80 88%,transparent 100%);
-  transform:translate3d(-105%,0,0); animation:effort-ultra-light 3.6s linear infinite;
+  background-image:
+    radial-gradient(1.6px 1.6px at 22px 5px,#fff 50%,transparent 52%),
+    radial-gradient(1.3px 1.3px at 61px 2px,#e0e7ff 50%,transparent 52%),
+    radial-gradient(1.5px 1.5px at 80px 8px,#fff 50%,transparent 52%);
+  background-size:96px 10px;
+  animation:effort-stars-near 6s linear infinite,effort-twinkle 1.9s ease-in-out .7s infinite alternate;
 }
+.mbe-effort.is-ultra .mbe-effort-rail i { opacity:0; transition:opacity 300ms ease; }
 .mbe-effort.is-ultra .mbe-effort-thumb {
-  border-color:#7776d528; box-shadow:0 0 0 4px #7568d90b,0 2px 8px #5d5bcb2b;
+  border-color:#cfc9ff99;
+  background:radial-gradient(circle at 50% 50%,#fff 0 38%,#eceeff 75%);
+  animation:effort-star-glow 3.4s ease-in-out infinite;
 }
-.mbe-effort.is-ultra .mbe-effort-thumb::before {
-  content:""; position:absolute; inset:-2px; border-radius:inherit;
-  background:conic-gradient(from 0deg,#bbc8f2,#f6f4ff 26%,#9278e5 51%,#78a9fb 72%,#bbc8f2);
-  animation:effort-ultra-orbit 5.6s linear infinite;
+@keyframes effort-nebula { to { background-position:100% 0,0 0,0 0; } }
+@keyframes effort-stars-far { to { transform:translate3d(-48px,0,0); } }
+@keyframes effort-stars-near { to { transform:translate3d(-96px,0,0); } }
+@keyframes effort-twinkle { from { opacity:.55; } to { opacity:1; } }
+@keyframes effort-star-glow {
+  0%,100% { box-shadow:0 0 0 3px #6d5cf01a,0 0 10px 1px #7c6cf04d,0 1px 3px #00000033; }
+  50% { box-shadow:0 0 0 5px #6d5cf024,0 0 18px 3px #8b7cf866,0 1px 3px #00000033; }
 }
-.mbe-effort.is-ultra .mbe-effort-thumb::after {
-  content:""; position:absolute; inset:1px; border-radius:inherit;
-  background:radial-gradient(circle at 50% 50%,#7665d9 0 2px,transparent 2.6px),linear-gradient(145deg,#fff 36%,#f0f1fd);
-  box-shadow:inset 0 0 0 1px #fff9;
-}
-@keyframes effort-ultra-current { to { transform:translate3d(-50%,0,0); } }
-@keyframes effort-ultra-light { to { transform:translate3d(365%,0,0); } }
-@keyframes effort-ultra-orbit { to { transform:rotate(1turn); } }
 .mbe-effort-rail i { position:absolute; top:50%; transform:translate(-50%,-50%); width:3px; height:3px; border-radius:50%; background:#c9c9ce; }
 .mbe-effort-rail i.is-filled { background:#ffffff70; }
 .mbe-effort-rail i:first-of-type,.mbe-effort-rail i:last-of-type { opacity:0; }
-.mbe-effort-thumb { position:absolute; top:50%; left:var(--effort-progress); transform:translate(-50%,-50%); box-sizing:border-box; width:22px; height:22px; border:1px solid #0000000b; border-radius:50%; background:#fff; box-shadow:0 1px 3px #00000020,0 2px 7px #0000000b; transition:left 180ms cubic-bezier(.22,1,.36,1),box-shadow 140ms ease; }
+.mbe-effort-thumb { position:absolute; top:50%; left:var(--effort-progress); transform:translate(-50%,-50%); box-sizing:border-box; width:22px; height:22px; border:1px solid #0000000b; border-radius:50%; background:#fff; box-shadow:0 1px 3px #00000020,0 2px 7px #0000000b; transition:left 520ms cubic-bezier(.22,1,.36,1),box-shadow 140ms ease; }
 .mbe-effort-track:hover .mbe-effort-thumb { box-shadow:0 1px 4px #00000025,0 3px 9px #00000012; }
 .mbe-effort.is-dragging .mbe-effort-thumb,.mbe-effort.is-dragging .mbe-effort-fill { transition:none; }
 .mbe-effort.is-dragging .mbe-effort-thumb { box-shadow:0 0 0 4px #34343a08,0 2px 7px #00000024; }
@@ -68,9 +86,9 @@
 .mbe-effort:disabled .mbe-effort-fill::before,.mbe-effort:disabled .mbe-effort-fill::after,.mbe-effort:disabled .mbe-effort-thumb::before { animation-play-state:paused; }
 @media(prefers-reduced-motion:reduce) {
   .mbe-effort-thumb,.mbe-effort-fill,.mbe-effort .mbe-effort-stops button { transition:none; }
-  .mbe-effort.is-ultra .mbe-effort-fill { animation:none; }
-  .mbe-effort.is-ultra .mbe-effort-fill::before,.mbe-effort.is-ultra .mbe-effort-thumb::before { animation:none; }
-  .mbe-effort.is-ultra .mbe-effort-fill::after { display:none; animation:none; }
+  .mbe-effort-rail { transition:none; }
+  .mbe-effort.is-ultra .mbe-effort-fill,.mbe-effort.is-ultra .mbe-effort-fill::before,.mbe-effort.is-ultra .mbe-effort-fill::after,.mbe-effort.is-ultra .mbe-effort-thumb { animation:none; }
+  .mbe-effort-output,.mbe-effort-description > span { animation:none; }
 }
 @media(forced-colors:active) {
   .mbe-effort-rail { background:GrayText; }
@@ -79,3 +97,8 @@
   .mbe-effort-rail i { background:CanvasText; }
   .mbe-effort-thumb { forced-color-adjust:none; border:2px solid Highlight; background:Canvas; }
 }
+
+/* The level name and description settle into place when the level changes. */
+.mbe-effort-output,.mbe-effort-description > span { display:inline-block; animation:effort-settle 320ms cubic-bezier(.22,1,.36,1) both; }
+@keyframes effort-settle { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+.mbe-effort:disabled .mbe-effort-fill,.mbe-effort:disabled .mbe-effort-thumb { animation-play-state:paused; }

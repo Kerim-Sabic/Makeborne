@@ -1,0 +1,74 @@
+{
+ "authorizedAt": "2026-10-13T00:54:44.005631+00:00",
+ "authorization": "Owner goal: $50 more of API calls",
+ "roundBudgetUsd": 50,
+ "previousRecordedSpendUsd": 23.865144,
+ "previousAuthorizedCapUsd": 25,
+ "allocations": {
+  "Codex": {
+   "capUsd": 20,
+   "spentUsd": 0.65397,
+   "reservedUsd": 0
+  },
+  "Claude": {
+   "capUsd": 20,
+   "spentUsd": 0.007106,
+   "reservedUsd": 0
+  },
+  "sharedReserve": {
+   "capUsd": 10,
+   "spentUsd": 0,
+   "reservedUsd": 0
+  }
+ },
+ "calls": [
+  {
+   "packageId": "ac4b08bd-b91f-47bb-9956-c6d719505738",
+   "owner": "Codex",
+   "status": "settled",
+   "reservedUsd": 6,
+   "reservedAt": "2026-10-13T06:37:21.150Z",
+   "purpose": "Fresh 3-chapter ebook, 8-slide deck, and targeted native-chart edit; no images",
+   "limits": {
+    "book": 2.7,
+    "deck": 2.7,
+    "edit": 0.6
+   },
+   "spentUsd": 0.65397,
+   "releasedReservationUsd": 5.34603,
+   "settledAt": "2026-10-13T06:50:35.364Z",
+   "actualByActionUsd": {
+    "book": 0.316572,
+    "deck": 0.256007,
+    "edit": 0.081391
+   },
+   "providerCalls": 7,
+   "usageBasis": "Provider-reported usage settled in isolated application ledger; provider invoice/dashboard reconciliation not performed for this batch",
+   "evidence": "outputs/fresh-product-quality-ac4b08bd-b91f-47bb-9956-c6d719505738/shutdown-ledger.json"
+  },
+  {
+   "packageId": "claude-personalize-smoke-20261013",
+   "owner": "Claude",
+   "status": "settled",
+   "reservedUsd": 0.5,
+   "reservedAt": "2026-10-13T11:31:36.159Z",
+   "purpose": "Live quality smoke of personalised outreach emails (claude-haiku-5-5) from real public Instagram research, plus one expert-chat field-boundary check. Local script, mocked billing, no app/staging/production.",
+   "limits": {
+    "haikuCalls": 12,
+    "maxUsdPerCall": 0.04
+   },
+   "spentUsd": 0.007106,
+   "releasedReservationUsd": 0.492894,
+   "settledAt": "2026-10-13T11:34:07.598Z",
+   "providerCalls": 8,
+   "usageBasis": "Provider-reported usage metered per call by RunSpend in a local script; billing mocked; no app/staging/production. Invoice reconciliation not performed.",
+   "evidence": "work/personalize-smoke-20261013/run-1.json, run-2.json"
+  }
+ ],
+ "rules": [
+  "Reserve the worst-case package cost before paid calls.",
+  "Log provider usage and uncertain/failed requests; never count missing usage as zero.",
+  "No independent full $50 allowance per agent.",
+  "Production calls remain unauthorized."
+ ]
+}

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Maximize2, Monitor, RotateCw, Smartphone, Tablet, Wand2 } from "lucide-react";
 import { bundleProject } from "@/lib/builder/browser-bundler";
+import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { readCloudImage } from "./cloud-api";
 
 type Asset = { id: string; path: string };
@@ -57,7 +58,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   }, [assetKey, scope.accountId, scope.workspaceId, scope.artifactId]);
 
   // Rebuild shortly after files settle; keep the last good render on errors.
-  const fileKey = useMemo(() => JSON.stringify(Object.keys(files).sort().map(path => [path, files[path].length, files[path].slice(-64)])), [files]);
+  const fileKey = useMemo(() => previewFileRevision(files), [files]);
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -67,7 +68,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
       else setBuildError(result.error);
     }, building ? 700 : 150);
     return () => { cancelled = true; clearTimeout(timer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fileKey summarises files
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fileKey captures every path and full file content
   }, [fileKey, images, building, reloadKey]);
 
   useEffect(() => {

@@ -32,6 +32,7 @@ export function anonymousReviewDatabase() {
 export function reviewDatabaseError(error: { code?: string; message?: string } | null) {
   if (!error) return;
   if (error.code === "P0002") throw new RequestError("REVIEW_UNAVAILABLE", "This review link has expired or was turned off. Ask for a new link.", 404);
+  if (error.code === "PT409") throw new RequestError("REVIEW_STALE", "This review changed since you opened it. Copy your comment, refresh the page and review the updated version before sending.", 409);
   if (error.code === "MB429") throw new RequestError("TOO_MANY", error.message || "Too many requests. Please wait a few minutes.", 429);
   if (error.code === "22023") throw new RequestError("INVALID", error.message || "Check the details and try again.", 400);
   throw new RequestError("REVIEW_FAILED", "We couldn’t save that. Please try again.", 503);

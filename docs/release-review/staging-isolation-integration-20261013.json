@@ -1,0 +1,100 @@
+{
+  "reviewedAt": "2026-10-13",
+  "status": "local-package-qualified; not launch-ready; not deployed",
+  "scope": "App/server, database and Worker namespace isolation plus publishing UI recovery",
+  "productionTouched": false,
+  "stagingTouched": false,
+  "paidCalls": 0,
+  "newRoundSpendUsd": 0,
+  "committed": false,
+  "candidateFrozen": false,
+  "checks": {
+    "offlineHarnesses": {
+      "passed": 95,
+      "total": 95,
+      "explicitExcluded": 5
+    },
+    "nextBuildAndTypeScript": "pass",
+    "fullLint": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "mountedNamespaceUi": {
+      "passed": 16,
+      "api": "mocked; actual component and browser"
+    },
+    "previousMountedPublicationFlow": {
+      "passed": 6,
+      "api": "mocked"
+    },
+    "publicationRouteGroups": 12,
+    "hostingGroups": 21,
+    "workerNamespace": {
+      "groups": 12,
+      "actualLocalWorkerdRequests": 192,
+      "externalTransports": "intercepted synthetic responses"
+    },
+    "sqlNamespace": {
+      "groups": 9,
+      "engine": "actual disposable PostgreSQL",
+      "concurrentPolicyWriteOrders": 2,
+      "realRestrictedLoginChecks": true
+    },
+    "migrationRehearsal": {
+      "pendingMigrations": 56,
+      "scenarios": [
+        "normal",
+        "injected failure with recovery",
+        "interrupted upgrade with resume"
+      ],
+      "passed": true,
+      "fingerprint": "f2d7903b680448e405f1374a2c0f9eb5",
+      "all56HashesMatch": true,
+      "all4InputsMatch": true,
+      "containers": "stopped and retained"
+    }
+  },
+  "correctedDuringReview": [
+    "Standalone legacy Pages redirect still accepted QA labels.",
+    "Failed or malformed status refresh retained prior UI permission.",
+    "Saved preparation metadata could lock an unavailable old address after namespace cutover.",
+    "Out-of-order refreshes could overwrite newer state; mutation start and settlement now invalidate older reads.",
+    "Uncertain writes retained preflight confidence; explicit status refresh now required before discarding the saved request."
+  ],
+  "implementation": {
+    "stagingLabels": [
+      "release-check",
+      "release-check-renamed"
+    ],
+    "serverGuard": "Server-only mode and QA workspace; exact staging DB required. Browser flags are not authority.",
+    "sqlGuard": "Private owner configuration plus triggers on sites, reservations and preparations; production default reserves QA labels; conflicting prior ownership aborts.",
+    "workerGuard": "Exact staging routes and pinned bindings; production QA exclusion before cache/forms/redirect/RPC; namespace cache partition.",
+    "compatibility": "Existing ordinary sites retain reads and reduction/cleanup operations. No sites or ownership rewritten. Hostname syntax remains independent."
+  },
+  "sourceHashes": {
+    "supabase/migrations/20261013200000_staging_site_address_namespace.sql": "9df32055e53e1bd19e257fd33880288515bfd124162c9c618d967f31f6a03972",
+    "src/components/trusted-website-publish.tsx": "caaf563baf815a7dea44243deb3f2e3521fcb73705e8fc8996e2ccb182258126",
+    "src/lib/hosting/namespace-server.ts": "378b966324d4296f1f191ea0462831af52337876539d1468dd7b29f4b52e1e9b",
+    "infra/customer-sites/_worker.js": "b8d1f428b70268a3abb38b322125e0eddf7e48271b1162409378299ee2811124",
+    "infra/customer-sites/namespace-policy.js": "9a65bd7a3758cf21a486a95f82067491477ee63640bcd36a4a49fb0f5b1f23ca",
+    "infra/customer-sites/wrangler.jsonc": "fce6ace73d0a437e41ca6443a83196af7e7e4b7bfb0bee111f991216554e33d3",
+    "infra/customer-sites/legacy-redirect/_worker.js": "eb8f7ca25b2c3262f481e95d1f7e31aa21128a52da583d436dc5318761b0fcd7",
+    "scripts/check-publication-namespace-ui.cjs": "4ab88dff6ca2c97cf97eaa0ff62f9dd6766ea73b298a62e7b86386b0fb96c72c"
+  },
+  "evidence": [
+    "docs/STAGING_HOSTING_ISOLATION.md",
+    "docs/release-review/site-address-namespace-20261013.json",
+    "docs/release-review/site-address-namespace-20261013.md",
+    "docs/release-review/worker-staging-isolation-20261013.md",
+    "docs/release-review/namespace-independent-review-20261013.md",
+    "docs/release-review/candidate-rehearsal.json"
+  ],
+  "limitations": [
+    "Live staging still uses the historical app/database/Worker; exact DNS/TLS/routes/bindings need coordinated cutover and observation.",
+    "A new staging cutover must stop if an unguarded production fallback is present; this package never authorizes production changes.",
+    "Actual remote publication executor, immutable images, lifecycle journal/host and scoped cloud credentials remain unqualified.",
+    "Required plan switching, real payment lifecycle/credit packs and fresh generated output quality remain open.",
+    "OpenAI key is absent; required live image qualification remains open.",
+    "Candidate inventory remains unfrozen until coordinated release review; local tests do not establish competitive superiority."
+  ]
+}

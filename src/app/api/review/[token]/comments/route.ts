@@ -14,7 +14,7 @@ export async function POST(request: Request, context: Context) {
     const parsed = ReviewCommentInputSchema.safeParse(await boundedJson(request, 8_000));
     if (!parsed.success) throw new RequestError("INVALID", parsed.error.issues[0]?.message ?? "Check your comment and try again.");
     const { data, error } = await anonymousReviewDatabase().rpc("makeborne_add_client_review_comment", {
-      p_token: token, p_name: parsed.data.name, p_email: parsed.data.email, p_body: parsed.data.body, p_anchor: parsed.data.anchor,
+      p_token: token, p_version: parsed.data.version, p_name: parsed.data.name, p_email: parsed.data.email, p_body: parsed.data.body, p_anchor: parsed.data.anchor,
     });
     reviewDatabaseError(error);
     return Response.json({ comment: ReviewCommentSchema.parse(data) }, { headers });

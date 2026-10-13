@@ -5,8 +5,9 @@ import { RequestError } from "@/lib/server/http";
 import { billingConfig } from "./config";
 import { billingDatabase } from "./database";
 import { activeMembership, retrieveMembership, retrievePaymentMembership } from "./whop";
-import { creditPlanFor } from "./plan-credits";
-import { grantPlanCredits } from "@/lib/credits/server";
+import { creditRuleFor } from "./plan-credits";
+import { recordPlanObservation } from "@/lib/credits/server";
+import { deliverTopupPayment, topupEventPaymentId } from "./topup-delivery";
 
 const eventSchema = z.object({ id: z.string().min(1).max(200), type: z.string().min(1).max(100), account_id: z.string().optional(), company_id: z.string().optional(), data: z.record(z.string(), z.unknown()) });
 
@@ -49,6 +50,12 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
   if (!config.apiKey || !config.secretKey || process.env.MAKEBORNE_BILLING_MIGRATIONS_VERIFIED !== "true") throw new RequestError("WEBHOOK_NOT_CONFIGURED", "Membership storage is not configured.", 503);
   const merchantIds = [event.account_id, event.company_id].filter(value => value !== undefined);
   if (!merchantIds.length || merchantIds.some(value => value !== config.companyId)) throw new RequestError("WRONG_MERCHANT", "This event belongs to a different merchant.", 403);
+  // One-time credit packs have no creation subscription. Deliver them before
+  // resolving a membership, using freshly retrieved provider evidence only.
+  if (process.env.MAKEBORNE_TOPUP_MIGRATIONS_VERIFIED === "true") {
+    const paymentId = topupEventPaymentId(event);
+    if (paymentId && await deliverTopupPayment(paymentId)) return;
+  }
   const db = billingDatabase();
   const { data: existing, error: eventError } = await db.from("billing_webhook_events").select("id").eq("id", event.id).maybeSingle();
   if (eventError) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Membership storage is unavailable.", 503);
@@ -61,10 +68,11 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
   // from Whop instead of treating the event's reported status as authority.
   const membership = await retrieveMembership(membershipId);
   if (membership.company.id !== config.companyId || !config.accessPlanIds.includes(membership.plan.id)) return;
-  if (!membership.checkout_configuration_id) return;
+  if (!membership.checkout_configuration_id) throw new RequestError("CHECKOUT_BINDING_PENDING", "The membership checkout is not available yet. Retry this delivery.", 503);
   const { data: checkout, error: checkoutError } = await db.from("billing_checkouts").select("user_id,plan_id").eq("checkout_id", membership.checkout_configuration_id).maybeSingle();
   if (checkoutError) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Checkout binding is unavailable.", 503);
-  if (!checkout || checkout.plan_id !== membership.plan.id || !membership.user) return;
+  if (!checkout || !membership.user) throw new RequestError("CHECKOUT_BINDING_PENDING", "The purchasing account could not be confirmed yet. Retry this delivery.", 503);
+  if (checkout.plan_id !== membership.plan.id) throw new RequestError("CHECKOUT_PLAN_MISMATCH", "The membership plan differs from its recorded checkout. Operator reconciliation is required.", 503);
   const active = activeMembership(membership);
   const verifiedUntil = active ? new Date(Math.min(Date.parse(membership.renewal_period_end!), Date.now() + 5 * 60_000)).toISOString() : new Date(0).toISOString();
   if (!alreadyRecorded) {
@@ -84,8 +92,10 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
     if (boundError) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Membership storage is unavailable.", 503);
     if (!bound) return;
   }
-  // Monthly plan credits, once per membership period. A failure returns 503 so
-  // the provider retries; the retry skips recording and repeats only this grant.
-  if (active && membership.renewal_period_end && creditPlanFor(membership.plan.id))
-    await grantPlanCredits(checkout.user_id, membership.plan.id, membership.id, membership.renewal_period_end);
+  // Record Whop's current state (paid or not) so plan credits follow billing
+  // history; the database grants owed allocations. A failure returns 503 so the
+  // provider retries; the retry skips recording and repeats only this call.
+  if (creditRuleFor(membership.plan.id))
+    await recordPlanObservation(checkout.user_id, { membershipId: membership.id, planId: membership.plan.id, status: membership.status,
+      paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "webhook" });
 }

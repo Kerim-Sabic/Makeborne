@@ -1,0 +1,71 @@
+{
+  "sandboxOnly": true,
+  "productionTouched": false,
+  "apiVersion": "2026-10-09-2",
+  "product": "prod_CDLOn3W9hruAI",
+  "probes": [
+    {
+      "name": "renewal-probe",
+      "purpose": "Real scheduled charges: day 1 (trial end) and day 8 (renewal). Buy with test card 4242 4242 4242 4242.",
+      "planId": "plan_ph23AtuxtNWzD",
+      "purchaseUrl": "https://sandbox.whop.com/checkout/plan_ph23AtuxtNWzD",
+      "requested": {
+        "plan_type": "renewal",
+        "billing_period": 7,
+        "initial_price": 0,
+        "renewal_price": 1,
+        "trial_period_days": 1
+      },
+      "returned": {
+        "billing_period": 7,
+        "initial_price": 0,
+        "renewal_price": 1,
+        "trial_period_days": 1,
+        "visibility": "hidden"
+      },
+      "createdAt": "2026-10-12T23:21:46.159Z"
+    },
+    {
+      "name": "failed-renewal-probe",
+      "purpose": "Failed scheduled charge and recovery. Buy with test card 4000 0000 0000 0341 (saves, later charges decline).",
+      "planId": "plan_JWikpAgY1kqqI",
+      "purchaseUrl": "https://sandbox.whop.com/checkout/plan_JWikpAgY1kqqI",
+      "requested": {
+        "plan_type": "renewal",
+        "billing_period": 7,
+        "initial_price": 0,
+        "renewal_price": 1,
+        "trial_period_days": 1
+      },
+      "returned": {
+        "billing_period": 7,
+        "initial_price": 0,
+        "renewal_price": 1,
+        "trial_period_days": 1,
+        "visibility": "hidden"
+      },
+      "createdAt": "2026-10-12T23:21:46.567Z"
+    },
+    {
+      "name": "founding-probe",
+      "purpose": "Founding design: initial charge with a trial, extend the trial via API, first renewal at the standard price.",
+      "planId": "plan_zv6H9bagoIYQV",
+      "purchaseUrl": "https://sandbox.whop.com/checkout/plan_zv6H9bagoIYQV",
+      "requested": {
+        "plan_type": "renewal",
+        "billing_period": 30,
+        "initial_price": 2,
+        "renewal_price": 3,
+        "trial_period_days": 1
+      },
+      "returned": {
+        "billing_period": 30,
+        "initial_price": 2,
+        "renewal_price": 3,
+        "trial_period_days": 1,
+        "visibility": "hidden"
+      },
+      "createdAt": "2026-10-12T23:21:46.955Z"
+    }
+  ]
+}

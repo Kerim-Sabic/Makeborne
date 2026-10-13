@@ -14,7 +14,7 @@ const AccountEditor = dynamic(() => import("./cloud-studio").then(module => modu
 type Snapshot = CloudWorkspaceSnapshot & { pagination: { artifacts: { nextOffset: number | null; total: number } } };
 
 /** Account records are read independently: device drafts are never uploaded implicitly. */
-export default function AccountProjects({ search, filter, target, navigate }: { search: string; filter: string; target: AccountProjectRoute | null; navigate: (route: AccountProjectRoute | null) => void }) {
+export default function AccountProjects({ search, filter, target, navigate, onCount }: { search: string; filter: string; target: AccountProjectRoute | null; /** Loaded account projects (null until known), so the studio can avoid an empty state that contradicts this list. */ onCount?: (count: number | null) => void; navigate: (route: AccountProjectRoute | null) => void }) {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [workspaces, setWorkspaces] = useState<CloudWorkspace[]>([]);
@@ -22,6 +22,7 @@ export default function AccountProjects({ search, filter, target, navigate }: { 
   const [selected, setSelected] = useState<CloudArtifact | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  useEffect(() => { onCount?.(snapshot ? snapshot.artifacts.length : null); }, [snapshot, onCount]);
   const requestVersion = useRef(0);
   const currentAccount = useRef<string | null>(null);
   useEffect(() => {

@@ -6,6 +6,7 @@ import {
 import { defaultTheme, themeIssues } from "./theme";
 import { composeSlide } from "./slide-scene";
 import { parseBookMarkup, wordCount } from "./book-markup";
+import { CoverCompositionSchema } from "./composition-schema";
 
 export class DocToolError extends Error {}
 
@@ -14,6 +15,7 @@ const DeckDetails = z.object({ title: z.string().trim().min(1).max(160), subtitl
 const BookDetails = z.object({
   title: z.string().trim().min(1).max(160), subtitle: z.string().trim().max(220).optional(), author: z.string().trim().max(120).optional(),
   dedication: z.string().trim().max(400).optional(), cover_image: ImageName.optional(), tagline: z.string().trim().max(160).optional(),
+  cover_composition: CoverCompositionSchema.nullable().optional().describe("Authored portrait cover geometry. Omit to preserve the current composition; null explicitly restores the legacy cover."),
 }).strict();
 
 /** Tool inputs validated before any change is applied. */
@@ -39,11 +41,11 @@ export const BOOK_TOOLS: DocToolName[] = ["set_theme", "set_book_details", "writ
 const DESCRIPTIONS: Record<DocToolName, string> = {
   set_theme: "Set the visual theme: a 7-color palette (contrast is checked), a font pairing, the mood, and one image style that every generated image will share. Call it first on a new document and whenever the user asks for a different look.",
   set_deck_details: "Set the presentation title (shown in slide footers), subtitle and presenter/author.",
-  set_book_details: "Set the book title, subtitle, author, dedication, the cover image name and an optional cover tagline.",
+  set_book_details: "Set the book title, subtitle, author, dedication, the cover image name and an optional cover tagline. Use cover_composition for an original editable portrait cover; omit it to preserve the existing composition, or null to explicitly restore the legacy cover.",
   write_slide: "Create a slide or replace an existing slide with the same id (send the complete slide). The slide appears in the live preview immediately. Use `after` to position it.",
   delete_slide: "Remove a slide.",
   move_slide: 'Move a slide after another slide id, or to "start".',
-  write_chapter: "Create a chapter or replace a whole chapter with the same id. Write the body in Makeborne book markup. It appears in the live preview immediately.",
+  write_chapter: "Create a chapter or replace a whole chapter with the same id. The chapter argument MUST be a JSON object with id, title and text fields; never a string containing JSON or prose. Write the body in the text field using Makeborne book markup. Optional opening:inline puts the heading with the body; opening:page or omission keeps a separate opener. A supplied label is authoritative and suppresses the automatic numeral. Preserve an existing opening choice on edits. It appears in the live preview immediately.",
   edit_chapter: "Replace an exact passage in a chapter's text (old_string must match exactly and be unique unless replace_all). Use for targeted edits, cuts and rewrites inside long chapters.",
   delete_chapter: "Remove a chapter.",
   move_chapter: 'Move a chapter after another chapter id, or to "start".',
@@ -55,8 +57,10 @@ export function docToolDefinitions(kind: "deck" | "book", images: boolean) {
   return (kind === "deck" ? DECK_TOOLS : BOOK_TOOLS).filter(name => images || name !== "generate_image").map(name => {
     const schema = z.toJSONSchema(DocToolInputs[name], { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
     delete schema.$schema;
-    return { name, description: DESCRIPTIONS[name], input_schema: schema as { type: "object"; [key: string]: unknown },
-      ...(["write_slide", "write_chapter", "edit_chapter"].includes(name) ? { eager_input_streaming: true } : {}) };
+    // Let the provider validate complete JSON arguments. Eager input streaming
+    // can emit malformed long chapter strings that the SDK cannot assemble.
+    // Completed tool calls still appear individually in the live preview.
+    return { name, description: DESCRIPTIONS[name], input_schema: schema as { type: "object"; [key: string]: unknown } };
   });
 }
 
@@ -124,7 +128,8 @@ export class DocumentEditor {
   setBookDetails(input: z.infer<typeof BookDetails>) {
     const book = this.book();
     this.commit({ ...book, title: input.title, subtitle: input.subtitle, author: input.author, dedication: input.dedication,
-      cover: { ...(input.cover_image ? { image: input.cover_image } : {}), ...(input.tagline ? { tagline: input.tagline } : {}) } });
+      cover: { ...(input.cover_image ? { image: input.cover_image } : {}), ...(input.tagline ? { tagline: input.tagline } : {}),
+        ...((input.cover_composition === undefined ? book.cover.composition : input.cover_composition) ? { composition: input.cover_composition ?? book.cover.composition } : {}) } });
     return `Book details saved.${input.cover_image && !this.hasImage(input.cover_image) ? ` Generate the image "${input.cover_image}" (portrait) before finishing.` : ""}`;
   }
   writeSlide(input: z.infer<typeof DocToolInputs.write_slide>) {

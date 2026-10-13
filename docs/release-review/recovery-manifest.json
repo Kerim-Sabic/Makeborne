@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-12",
+  "productionCommit": "307881c2b2079545870a3c1e0e94b275def3072d",
+  "candidateHead": "0d8a8fb8edb2243349394f84b878142554de5947",
+  "workingTree": "Uncommitted; not an immutable deployment artifact",
+  "localBuildId": "tQ7KKccqbb1tJ0sWeSnMG",
+  "recoverySetting": "MAKEBORNE_RELEASE_MAINTENANCE=on",
+  "files": [
+    {
+      "path": "src/proxy.ts",
+      "sha256": "1CE3BA68AD9A4A932B91AFE49460D1ADC0D4F3ACBC5EB890DBCC48E32A5EA760"
+    },
+    {
+      "path": "src/lib/release-maintenance.ts",
+      "sha256": "96DE93079EF62F4A2A30FB5295C206A3A555E3933FF8BC493DD28B1DD1164C16"
+    },
+    {
+      "path": "src/lib/check-release-maintenance.cjs",
+      "sha256": "5FF379C7EF48F361AD7AD2198729AA0F6B9BF00CE6C50E2E17017654272C59F7"
+    },
+    {
+      "path": "scripts/local-release-server.mjs",
+      "sha256": "6B4EE943CAA8C4A20A2B02AF522A5015747AC9C920980506067342054EBD87D3"
+    },
+    {
+      "path": "scripts/check-recovery-http.mjs",
+      "sha256": "F634193B79BF614377315F439740D7476BD6E6473D05A1D9FE44B6681435DE34"
+    },
+    {
+      "path": "scripts/check-hosting-staging.mjs",
+      "sha256": "E30D8CCB0B8CC65A964DEF30BB7513463CFD5CA9E376A93EE1BE96A79DEF89D9"
+    },
+    {
+      "path": "supabase/post-deploy/pause_legacy_pilot.sql",
+      "sha256": "D2906F0D02F6A3CB69D0C357A42A63668BB38170AB8A6A4FA584E75564EBCC8E"
+    },
+    {
+      "path": "supabase/release-review/populated-baseline-fixture.sql",
+      "sha256": "E30AB63813DBC25B437C650086702B535DE7213069C954571D166CF50C28D0F2"
+    },
+    {
+      "path": "supabase/release-review/check-populated-upgrade.sql",
+      "sha256": "D5550FF3B6D33DE6C7429745D213280177AC828EA3CFA7129992A55B8417DA95"
+    },
+    {
+      "path": "supabase/release-review/check-legacy-pause.sql",
+      "sha256": "483AD1E36016BDE2E1BE09E690D33928766FF122FB6F93395D7599B713783F3B"
+    }
+  ]
+}

@@ -4,8 +4,10 @@
 -- functions below. Browser roles may read only their own ledger and balance.
 begin;
 
+-- The free tier starts OFF: the operator enables it explicitly at launch
+-- (update makeborne_private.billing_settings set free_tier_enabled=true).
 alter table makeborne_private.billing_settings
-  add column free_tier_enabled boolean not null default true,
+  add column free_tier_enabled boolean not null default false,
   add column trial_credits integer not null default 50 check(trial_credits between 0 and 100000);
 
 -- balance: credits owned, including amounts held by open reservations.

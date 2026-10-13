@@ -35,6 +35,7 @@ export function projectDocument(doc: DocumentSource, newId: () => string = () =>
       else if (entry.type === "subheading") blocks.push(block("heading", plainText(entry.text)));
       else if (entry.type === "quote") blocks.push(block("quote", plainText(`${entry.text}${entry.attribution ? ` — ${entry.attribution}` : ""}`)));
       else if (entry.type === "list") blocks.push(block("list", entry.items.map(plainText).join("\n")));
+      else if (entry.type === "table") blocks.push(block("list", [...(entry.header ? [entry.header] : []), ...entry.rows].map(row => row.map(plainText).join(" | ")).join("\n")));
       else if (entry.type === "note") blocks.push(block("callout", plainText(`${entry.title ? `${entry.title}: ` : ""}${entry.text}`)));
       else if (entry.type === "figure" && assetId(entry.image)) blocks.push(block("image", plainText(entry.caption ?? ""), assetId(entry.image)));
     }

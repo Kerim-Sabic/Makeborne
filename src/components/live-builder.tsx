@@ -1,21 +1,29 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, Paperclip, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUp, Check, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, Paperclip, Sparkles } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
 import type { SitePlan } from "@/lib/builder/plan";
 import type { DocumentSource } from "@/lib/documents/schema";
 import { captureDesign } from "@/lib/builder/design-capture";
-import { autoReviewRounds } from "@/lib/builder/review-policy";
+import { autoReviewRounds, reviewCoverageIssue, reviewCreditCeiling } from "@/lib/builder/review-policy";
+import { BUILDER_EFFORT } from "@/lib/builder/pricing";
+import { PLAN_CEILING_CREDITS } from "@/lib/builder/plan";
 import { readCloudImage } from "./cloud-api";
 import PlanCard from "./plan-card";
 import { usePlanMode } from "./use-plan-mode";
+import { useBuilderOperation } from "./use-builder-operation";
+import type { OperationRequest, OperationSnapshot } from "@/lib/builder/operation-contract";
+import { recoveryPreview } from "@/lib/builder/recovery-preview";
+import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest, prepareBuilderAttachments, type BuilderAttachment } from "@/lib/builder/attachments";
+import { attachmentOwner, projectAttachmentKey, retainBuilderAttachmentSnapshot, bindBuilderAttachmentSnapshot, readBuilderAttachmentSnapshot, type Attachment as StoredAttachment } from "@/lib/attachments";
+import { AttachmentList, useFileAttachments } from "./file-attachments";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
 type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[] };
-type Attachment = { name: string; mediaType: string; data: string; size: number };
+type Attachment = BuilderAttachment;
 type Live = { files: Record<string, string>; assets: { id: string; path: string }[]; document?: DocumentSource; focus?: string };
-type RunResult = { version: number; changed: boolean; touched: number; finished: boolean };
+type RunResult = { version: number; changed: boolean; touched: number; finished: boolean; operation?: OperationSnapshot };
 export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean; document?: DocumentSource; focus?: string };
 const COPY = {
   website: { title: "What should we build?", intro: "Describe the website, its audience and the feeling you want. Attach a logo, screenshot or brief for reference. Then keep chatting to refine it.", start: "A premium website for a makeup brand selling three products…", edit: "Ask for a change — e.g. make the hero bolder and add an FAQ" },
@@ -23,14 +31,6 @@ const COPY = {
   book: { title: "What's the book?", intro: "Describe the story or topic, the reader, the tone and the length. Pages are typeset live at 6 × 9 in with illustrations; then refine by chat.", start: "A short illustrated children's book about a lighthouse cat…", edit: "Ask for a change — e.g. shorten chapter 2, or a warmer palette" },
 } as const;
 
-const ACCEPT = "image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.txt";
-const MAX_FILE = 6 * 1024 * 1024;
-const readBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ""));
-  reader.onerror = () => reject(reader.error);
-  reader.readAsDataURL(file);
-});
 const newId = () => crypto.randomUUID();
 /** Follow-up runs after a time-limited run saved partial progress. */
 const MAX_CONTINUATIONS = 2;
@@ -78,17 +78,32 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [effort, setEffort] = useState<EffortLevel>(defaultEffort ?? "medium");
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const sourceOwner = attachmentOwner(accountId);
+  const sourceContext = projectAttachmentKey(`${accountId}:${workspaceId}:${artifactId}`);
+  const sources = useFileAttachments(sourceOwner, sourceContext);
+  const [preparingSources, setPreparingSources] = useState(false);
+  const sourceLock = useRef(false);
+  const sourceSession = useMemo(() => ({ active: true, accountId, workspaceId, artifactId }), [accountId, workspaceId, artifactId]);
+  useEffect(() => { sourceSession.active = true; return () => { sourceSession.active = false; }; }, [sourceSession]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [balance, setBalance] = useState<{ available: number; unlimited: boolean } | null>(null);
   const log = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const started = useRef(false);
+  const authorizing = useRef(false);
+  const [previewingRecovery, setPreviewingRecovery] = useState<{ runId: string; version: number } | null>(null);
   const [chosenMode, setMode] = useState<"create" | "plan" | null>(null);
   const planner = usePlanMode({ accountId, workspaceId, artifactId });
+  const { actionKey: buildActionKey, operation: buildOperation, recovery: buildRecovery, checking: checkingBuildOperation, recoveryNotice: buildRecoveryNotice, ready: operationReady, hasPrevious: hasPreviousOperation,
+    begin: beginOperation, observe: observeOperation, refresh: refreshOperation, authorize: authorizeOperation, recover: recoverOperation } = useBuilderOperation({ accountId, workspaceId, artifactId });
   // An open draft plan from an earlier session keeps the composer in Plan mode.
   const mode = !website ? "create" : chosenMode ?? (planner.restored ? "plan" : "create");
+  const operation = mode === "plan" ? planner.operation : buildOperation;
+  const checkingOperation = mode === "plan" ? planner.checking : checkingBuildOperation;
+  const recoveryNotice = mode === "plan" ? planner.recoveryNotice : buildRecoveryNotice;
+  const checkCurrentOperation = mode === "plan" ? planner.refreshOperation : refreshOperation;
+  const operationRunning = buildOperation?.status === "running" || planner.operation?.status === "running";
   const draftPlan = planner.active && planner.active.stored.status === "draft" ? planner.active : null;
   const [prefilled, setPrefilled] = useState<string | null>(null);
   if (prefill && prefill.key !== prefilled) { setPrefilled(prefill.key); setDraft(prefill.text.slice(0, 8000)); }
@@ -103,6 +118,13 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   useEffect(() => { refreshBalance(); }, [refreshBalance]);
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" }); }, [turns]);
 
+  useEffect(() => {
+    if (!buildActionKey || !buildOperation) return;
+    void bindBuilderAttachmentSnapshot(sourceOwner, sourceContext, buildActionKey, buildOperation.id).catch(error => {
+      if (sourceSession.active) setNotice(error instanceof Error ? error.message : "The original source files could not be retained.");
+    });
+  }, [buildActionKey, buildOperation, sourceContext, sourceOwner, sourceSession]);
+
   const update = (id: string, change: (turn: Turn) => Turn) => setTurns(current => current.map(turn => turn.id === id ? change(turn) : turn));
 
   /** Stream one /api/build run into a reply turn, mirroring edits into the live
@@ -115,20 +137,32 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     });
     const touched = new Set<string>();
     let result: RunResult | null = null, finished = false;
+    let latestOperation: OperationSnapshot | null = null;
+    const envelope = payload.operation as OperationRequest | undefined;
+    let boundOperation: string | null = null;
+    const rememberSources = async (operation: OperationSnapshot) => {
+      if (!envelope || !("actionKey" in envelope) || boundOperation === operation.id) return;
+      try { await bindBuilderAttachmentSnapshot(sourceOwner, sourceContext, envelope.actionKey, operation.id); }
+      catch { if (sourceSession.active) setNotice("Your source files could not be linked to this request on this device. The build can finish; check the saved result before continuing."); }
+      boundOperation = operation.id;
+    };
     try {
       const response = await fetch("/api/build", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
-        body: JSON.stringify({ workspaceId, artifactId, ...payload }),
+        body: serializeBuilderRequest({ workspaceId, artifactId, ...payload }),
       });
+      if (!sourceSession.active) return null;
       if (!response.ok || !response.body) {
         const failure = await response.json().catch(() => null);
+        if (failure?.operation) { latestOperation = observeOperation(failure.operation); if (latestOperation) await rememberSources(latestOperation); }
         throw new Error(failure?.error?.message ?? "The builder couldn't start. Please try again.");
       }
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffer = "";
       for (;;) {
         const { value, done } = await reader.read();
+        if (!sourceSession.active) { await reader.cancel(); return null; }
         if (done) break;
         buffer += value;
         let boundary: number;
@@ -137,7 +171,9 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
           const line = chunk.split("\n").find(entry => entry.startsWith("data: "));
           if (!line) continue;
           const event = JSON.parse(line.slice(6));
+          if (event.operation) { latestOperation = observeOperation(event.operation); if (latestOperation) await rememberSources(latestOperation); }
           switch (event.type) {
+            case "operation": break;
             case "text": update(replyId, turn => ({ ...turn, text: turn.text + event.delta })); break;
             case "status": activity({ kind: "note", label: event.message, done: false }, "status"); break;
             case "file_start": activity({ kind: "file", label: `${event.op === "edit" ? "Editing" : "Writing"} ${event.path}`, done: false }, `file:${event.path}`); break;
@@ -170,7 +206,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
             case "usage": update(replyId, turn => ({ ...turn, credits: event.credits })); break;
             case "done":
               finished = true;
-              result = { version: Number(event.version), changed: event.changed !== false, touched: touched.size, finished: event.finished !== false };
+              result = { version: Number(event.version), changed: event.changed !== false, touched: touched.size, finished: event.finished !== false,
+                ...(latestOperation ? { operation: latestOperation } : {}) };
               update(replyId, turn => ({ ...turn, state: "done", text: turn.text.trim() ? `${turn.text.trim()}\n\n${event.summary}` : event.summary, credits: event.charged,
                 activity: turn.activity.filter(item => item.id !== "status") }));
               break;
@@ -181,16 +218,20 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
           }
         }
       }
-      if (!finished) update(replyId, turn => ({ ...turn, state: "error", text: `${turn.text}\n\nThe connection closed early. If the build finished, it has been saved — reload to see it.` }));
+      if (!finished) {
+        await refreshOperation().catch(() => null);
+        update(replyId, turn => ({ ...turn, state: "error", text: `${turn.text}\n\nThe connection closed early. Check the saved result and recorded charge below before sending the same request again.` }));
+      }
     } catch (error) {
+      if (!finished) await refreshOperation().catch(() => null);
       update(replyId, turn => ({ ...turn, state: "error", text: error instanceof Error ? error.message : "Something went wrong." }));
     }
     return result;
-  }, [accountId, artifactId, onLive, workspaceId]);
+  }, [accountId, artifactId, observeOperation, onLive, refreshOperation, sourceContext, sourceOwner, sourceSession, workspaceId]);
 
   /** One visual review round: render the saved version at desktop and mobile
    * sizes, show the screenshots, and let the builder fix what it sees. */
-  const reviewRound = useCallback(async (base: { version: number; round: number; effort: EffortLevel }, live: Live): Promise<RunResult | null> => {
+  const reviewRound = useCallback(async (base: { version: number; round: number; effort: EffortLevel; operation?: OperationSnapshot }, live: Live): Promise<RunResult | null> => {
     const reply: Turn = { id: newId(), role: "assistant", text: "", review: true, state: "streaming",
       activity: [{ id: "capture", kind: "note", label: "Capturing desktop and mobile screenshots…", done: false }] };
     setTurns(current => [...current, reply]);
@@ -203,9 +244,11 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       update(reply.id, turn => ({ ...turn, state: "error", activity: [], text: `The design review couldn't capture the page: ${error instanceof Error ? error.message : "unknown error"}. No credits were used.` }));
       return null;
     }
-    const { screenshots, viewports, errors, failures } = capture;
-    if (!screenshots.length && !errors.length) {
-      update(reply.id, turn => ({ ...turn, state: "error", activity: [], text: `The design review couldn't capture the page${failures.length ? ` (${failures.join("; ")})` : ""}. No credits were used.` }));
+    if (!sourceSession.active) return null;
+    const { screenshots, viewports, errors } = capture;
+    const coverageIssue = reviewCoverageIssue(capture);
+    if (coverageIssue) {
+      update(reply.id, turn => ({ ...turn, state: "error", activity: [], text: `${coverageIssue} No review credits were used.` }));
       return null;
     }
     update(reply.id, turn => ({ ...turn,
@@ -213,19 +256,20 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       activity: [{ id: "capture", kind: "note", done: true,
         label: `Captured ${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}${errors.length ? ` · ${errors.length} runtime error${errors.length === 1 ? "" : "s"}` : ""}` }] }));
     return stream({ expectedVersion: base.version, message: "Design review", effort: base.effort, mode: "review",
+      operation: base.operation ? { id: base.operation.id, stepKey: newId(), kind: "review" } : beginOperation(),
       review: { round: base.round, screenshots, viewports, errors } }, reply.id, live);
-  }, [accountId, artifactId, onLive, stream, workspaceId]);
+  }, [accountId, artifactId, beginOperation, onLive, sourceSession, stream, workspaceId]);
 
   const finishRun = useCallback(async () => {
     setBusy(false);
     refreshBalance();
-    await onSaved();
-    onLive(null);
+    try { await onSaved(); onLive(null); }
+    catch { setNotice("The project list could not refresh. Your recorded result and charge can be checked below; refreshing does not start another generation."); }
   }, [onLive, onSaved, refreshBalance]);
 
-  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { plan?: SitePlan; effort?: EffortLevel }) => {
-    if (!text.trim() || busy || disabled) return;
-    setBusy(true); setNotice(""); setDraft(""); setAttachments([]);
+  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { plan?: SitePlan; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[] }) => {
+    if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
+    setBusy(true); setNotice(""); setDraft("");
     const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done" };
     const reply: Turn = { id: newId(), role: "assistant", text: "", activity: [], state: "streaming" };
     setTurns(current => [...current, userTurn, reply]);
@@ -233,17 +277,23 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     onLive({ ...live, building: true });
     try {
       const level = options?.effort ?? effort;
+      const requestOperation: OperationRequest = options?.operation ? { id: options.operation.id, stepKey: newId(), kind: "continuation" } : beginOperation();
+      if ("actionKey" in requestOperation) await retainBuilderAttachmentSnapshot(sourceOwner, sourceContext, requestOperation.actionKey, options?.sourceFiles ?? []);
+      if (!sourceSession.active) return;
       let result = await stream({ expectedVersion: version, message: text.trim(), effort: level,
+        operation: requestOperation,
         attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan } : {}) }, reply.id, live);
       if (result && options?.plan) planner.markBuilt(options.plan);
       // A run cut off by the platform time limit saves its progress; pick up
       // where it stopped in a fresh request instead of asking the user to.
       let touched = result?.touched ?? 0;
-      for (let attempt = 0; attempt < MAX_CONTINUATIONS && result?.changed && !result.finished; attempt++) {
+      for (let attempt = 0; attempt < MAX_CONTINUATIONS && result?.changed && !result.finished && result.operation && result.operation.remainingCredits > 0; attempt++) {
         const next: Turn = { id: newId(), role: "assistant", text: "", activity: [{ id: "status", kind: "note", label: "Continuing where I left off…", done: false }], state: "streaming" };
         setTurns(current => [...current, next]);
         refreshBalance();
         const continued: RunResult | null = await stream({ expectedVersion: result.version, effort: level,
+          operation: { id: result.operation.id, stepKey: newId(), kind: "continuation" },
+          attachments: files,
           message: `Continue the previous request and complete everything that is still missing, then check the project and call finish. The previous request was:
 ${text.trim().slice(0, 6000)}` }, next.id, live);
         if (!continued) break;
@@ -252,29 +302,52 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
       }
       // First builds and large changes get an automatic look-and-fix pass.
       const rounds = result?.changed && website ? autoReviewRounds(level, { firstBuild: !Object.keys(baseFiles).length, filesTouched: touched }) : 0;
-      for (let round = 1; round <= rounds && result?.changed; round++) {
+      for (let round = 1; round <= rounds && result?.changed && result.operation && result.operation.remainingCredits > 0; round++) {
         refreshBalance();
-        result = await reviewRound({ version: result.version, round, effort: level }, live);
+        result = await reviewRound({ version: result.version, round, effort: level, operation: result.operation }, live);
       }
+      // The final repair invalidates earlier screenshots. Re-render its result
+      // without another model call rather than presenting pre-fix images as proof.
+      if (rounds > 0 && result?.changed) {
+        onLive({ ...live, building: false });
+        const check: Turn = { id: newId(), role: "assistant", text: "", review: true, state: "streaming",
+          activity: [{ id: "final-render", kind: "note", label: "Checking the final desktop and mobile render…", done: false }] };
+        setTurns(current => [...current, check]);
+        try {
+          const capture = await captureDesign(live.files, await assetDataUrls(live.assets, { accountId, workspaceId, artifactId }));
+          const issue = reviewCoverageIssue(capture);
+          const hasDiagnostics = capture.errors.length > 0 || capture.viewports.some(view => view.overflowX > 1 || view.brokenImages.length > 0 || view.missingAlt > 0);
+          const incomplete = issue || hasDiagnostics || !result.finished;
+          update(check.id, turn => ({ ...turn, state: incomplete ? "error" : "done", activity: [], credits: 0,
+            shots: capture.screenshots.map(shot => ({ label: `${shot.viewport === "desktop" ? "Desktop" : "Mobile"} ${shot.index + 1}/${shot.of}`, url: `data:${shot.mediaType};base64,${shot.data}`, viewport: shot.viewport })),
+            text: incomplete ? `Your changes are saved. ${issue || "The final check still needs attention."} No credits were used for this capture.`
+              : "Captured the updated desktop and mobile views. No runtime errors, broken images or horizontal overflow were detected. This capture used no credits." }));
+        } catch {
+          update(check.id, turn => ({ ...turn, state: "error", activity: [], credits: 0,
+            text: "Your changes are saved, but the final render could not be captured. No credits were used for this capture." }));
+        }
+      }
+    } catch (error) {
+      if (sourceSession.active) { setNotice(error instanceof Error ? error.message : "The sources could not be retained."); setDraft(text); }
     } finally {
-      await finishRun();
+      if (sourceSession.active) await finishRun();
     }
-  }, [baseAssets, baseDocument, baseFiles, busy, disabled, effort, finishRun, onLive, planner, refreshBalance, reviewRound, stream, version, website]);
+  }, [accountId, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, busy, disabled, effort, finishRun, onLive, operationRunning, planner, previewingRecovery, refreshBalance, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
 
   /** Manual "Review design" for the current saved version. */
   const review = useCallback(async () => {
-    if (busy || disabled || !Object.keys(baseFiles).length) return;
+    if (busy || disabled || operationRunning || previewingRecovery || !Object.keys(baseFiles).length) return;
     setBusy(true); setNotice("");
     setTurns(current => [...current, { id: newId(), role: "user", text: "Review the design", activity: [], state: "done" }]);
     try { await reviewRound({ version, round: 1, effort }, { files: { ...baseFiles }, assets: [...baseAssets] }); }
     finally { await finishRun(); }
-  }, [baseAssets, baseFiles, busy, disabled, effort, finishRun, reviewRound, version]);
+  }, [baseAssets, baseFiles, busy, disabled, effort, finishRun, operationRunning, previewingRecovery, reviewRound, version]);
 
   /** Plan mode: investigate and propose an editable plan; never writes code.
    * A message while a draft plan is open revises that plan. */
   const plan = useCallback(async (text: string, files: Attachment[] = []) => {
-    if (!text.trim() || busy || disabled) return;
-    setBusy(true); setNotice(""); setDraft(""); setAttachments([]);
+    if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
+    setBusy(true); setNotice(""); setDraft("");
     setMode("plan");
     const revise = draftPlan?.stored.plan ?? null;
     const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done" };
@@ -291,34 +364,92 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
     });
     setBusy(false);
     refreshBalance();
-  }, [busy, disabled, draftPlan, effort, planner, refreshBalance, version]);
-  const submit = (text: string, files: Attachment[] = []) => void (mode === "plan" ? plan(text, files) : send(text, files));
+  }, [busy, disabled, draftPlan, effort, operationRunning, planner, previewingRecovery, refreshBalance, version]);
+  const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { plan?: SitePlan; effort?: EffortLevel }) => {
+    if (!text.trim() || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
+    if (!sources.ready || sources.busy) { setNotice("Wait for your source files to finish loading or saving."); return; }
+    sourceLock.current = true; setPreparingSources(true); setNotice("");
+    const originals = sources.files;
+    try {
+      const files = await prepareBuilderAttachments(originals);
+      if (!sourceSession.active) return;
+      if (requestMode === "plan") await plan(text, files);
+      else await send(text, files, { ...options, sourceFiles: originals });
+    } catch (error) {
+      if (sourceSession.active) { setNotice(error instanceof Error ? error.message : "The source files could not be read."); setDraft(text); }
+    } finally {
+      sourceLock.current = false;
+      if (sourceSession.active) setPreparingSources(false);
+    }
+  }, [busy, disabled, operationRunning, plan, previewingRecovery, send, sourceSession, sources.busy, sources.files, sources.ready]);
+  const submit = (text: string) => void submitSources(text, mode);
   const buildPlan = (approved: SitePlan, level: EffortLevel) => {
     setMode("create"); setEffort(level);
-    void send(`Build the approved plan: ${approved.title}`, [], { plan: approved, effort: level });
+    void submitSources(`Build the approved plan: ${approved.title}`, "create", { plan: approved, effort: level });
   };
   const revisePlan = () => { setMode("plan"); composer.current?.focus(); };
+  const continueOperation = async () => {
+    if (!operation || busy || disabled || authorizing.current || !operation.canContinue || operation.kind !== "build") return;
+    authorizing.current = true; setBusy(true); setNotice("");
+    try {
+      // A continuation uses its retained original files, even after selection edits or reload.
+      if (buildActionKey) await bindBuilderAttachmentSnapshot(sourceOwner, sourceContext, buildActionKey, operation.id);
+      const files = operation.pendingKind === "review" ? [] : await prepareBuilderAttachments(await readBuilderAttachmentSnapshot(sourceOwner, sourceContext, operation.id));
+      if (!sourceSession.active) return;
+      const approved = await authorizeOperation(operation);
+      if (!sourceSession.active) return;
+      setBusy(false);
+      if (approved.pendingKind === "review") {
+        setBusy(true);
+        try { await reviewRound({ version, round: 1, effort: approved.effort, operation: approved }, { files: { ...baseFiles }, assets: [...baseAssets] }); }
+        finally { await finishRun(); }
+      } else await send("Continue the saved request and finish the remaining work.", files, { effort: approved.effort, operation: approved });
+    } catch (error) {
+      await refreshOperation().catch(() => null);
+      setNotice(error instanceof Error ? error.message : "The additional allowance could not be confirmed.");
+      setBusy(false);
+    } finally { authorizing.current = false; }
+  };
+  const previewRecovery = () => {
+    if (!buildRecovery || busy || disabled) return;
+    try {
+      onLive({ ...recoveryPreview(buildRecovery.candidate, kind), building: false });
+      setPreviewingRecovery({ runId: buildRecovery.runId, version });
+      setNotice("Previewing the retained draft. The current saved version is unchanged. Choose Save reviewed draft or Return to saved version.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "The retained draft could not be previewed."); }
+  };
+  const saveRecovery = async () => {
+    if (!buildOperation || !buildRecovery || previewingRecovery?.runId !== buildRecovery.runId || previewingRecovery.version !== version || busy || disabled || authorizing.current) return;
+    authorizing.current = true; setBusy(true);
+    try {
+      await recoverOperation(buildOperation, buildRecovery.runId, version);
+      await onSaved(); onLive(null); setPreviewingRecovery(null); refreshBalance();
+      setNotice("Saved the reviewed draft as a new version. No additional generation credits were used.");
+    } catch (error) {
+      await refreshOperation().catch(() => null);
+      setNotice(error instanceof Error ? error.message : "The recovery result needs to be checked before retrying.");
+    } finally { authorizing.current = false; setBusy(false); }
+  };
+  const saveRecoveredPlan = async () => {
+    if (busy || disabled || authorizing.current || !planner.recoverablePlan) return;
+    authorizing.current = true; setBusy(true);
+    try {
+      const saved = await planner.recoverPlan(version);
+      if (!saved?.result?.persisted) throw new Error("The retained plan was not confirmed as saved. Check its status before trying again.");
+      setNotice("Saved the retained plan. No additional generation credits were used."); refreshBalance();
+    } catch (error) { setNotice(error instanceof Error ? error.message : "The plan recovery needs to be checked."); }
+    finally { authorizing.current = false; setBusy(false); }
+  };
   const planCard = (active: NonNullable<typeof planner.active>) => <PlanCard key={`${active.turnId}:${active.stored.revision}`} plan={active.stored.plan} estimate={active.estimate} recommended={active.recommended}
-    revision={active.stored.revision} built={active.stored.status === "built"} save={active.save} busy={busy || disabled}
+    revision={active.stored.revision} built={active.stored.status === "built"} save={active.save} busy={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
     onChange={planner.edit} onBuild={buildPlan} onRevise={revisePlan} />;
 
   useEffect(() => {
-    if (!autoStart || started.current || disabled || turns.length) return;
+    if (!autoStart || started.current || disabled || !sources.ready || sources.busy || turns.length || version > 1 || !operationReady || !planner.ready || hasPreviousOperation || planner.hasPrevious) return;
     started.current = true;
-    void (autoStartMode === "plan" && website ? plan(autoStart) : send(autoStart));
-  }, [autoStart, autoStartMode, disabled, plan, send, turns.length, website]);
+    void submitSources(autoStart, autoStartMode === "plan" && website ? "plan" : "create");
+  }, [autoStart, autoStartMode, disabled, hasPreviousOperation, operationReady, planner.hasPrevious, planner.ready, sources.busy, sources.ready, submitSources, turns.length, version, website]);
 
-  async function attach(list: FileList | null) {
-    if (!list) return;
-    const next = [...attachments];
-    for (const file of Array.from(list)) {
-      if (next.length >= 5) { setNotice("Attach up to five files."); break; }
-      const mediaType = file.type || (file.name.endsWith(".md") ? "text/markdown" : "text/plain");
-      if (!ACCEPT.split(",").includes(mediaType) || file.size > MAX_FILE) { setNotice(`${file.name} isn't supported. Use images, PDFs or text files under 6 MB.`); continue; }
-      next.push({ name: file.name, mediaType, data: await readBase64(file), size: file.size });
-    }
-    setAttachments(next);
-  }
 
   const empty = !turns.length && !history.length && !planner.restored;
   const canReview = website && Object.keys(baseFiles).length > 0;
@@ -347,25 +478,58 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
         {turn.role === "assistant" && typeof turn.credits === "number" && turn.credits > 0 && <small className="lb-cost">{turn.state === "streaming" ? `${turn.credits} credits so far` : `${turn.credits} credits`}</small>}
       </div>)}
     </div>
-    <form className="lb-composer" data-mode={mode} onSubmit={event => { event.preventDefault(); submit(draft, attachments); }}>
+    {(operation || recoveryNotice || previewingRecovery) && <section className="lb-operation" aria-label="Request allowance">
+      {operation && <><div className="lb-operation-total"><strong>{operation.chargedCredits} / {operation.authorizedCredits} credits</strong><span>{operation.reservedCredits > 0 ? `${operation.reservedCredits} reserved` : "Total request maximum"}</span></div>
+        <p>This allowance covers the request and its automatic refinements.</p></>}
+      {recoveryNotice && <p role="status">{recoveryNotice}</p>}
+      {mode === "plan" && planner.recoverablePlan && <div className="lb-operation-consent">
+        <details className="lb-retained-plan"><summary>Review retained plan · {planner.recoverablePlan.stored.plan.title}</summary>
+          <p>{planner.recoverablePlan.stored.plan.summary}</p><dl><dt>Goal</dt><dd>{planner.recoverablePlan.stored.plan.goal}</dd><dt>Audience</dt><dd>{planner.recoverablePlan.stored.plan.audience}</dd><dt>Positioning</dt><dd>{planner.recoverablePlan.stored.plan.positioning}</dd></dl>
+          {planner.recoverablePlan.stored.plan.pages.map(page => <details key={page.path}><summary>{page.name} · {page.path}</summary><p>{page.purpose}</p>{page.sections.map((section, index) => <section key={index}><strong>{section.name}</strong><p>{section.purpose}</p><p>{section.content}</p></section>)}</details>)}
+          <p><strong>Design direction:</strong> {planner.recoverablePlan.stored.plan.design.concept}</p><p>{planner.recoverablePlan.stored.plan.design.typography.display} + {planner.recoverablePlan.stored.plan.design.typography.body}</p>
+          <ul>{planner.recoverablePlan.stored.plan.design.palette.map(color => <li key={color.name}>{color.name} · {color.hex} · {color.role}</li>)}</ul>
+          <p>{planner.recoverablePlan.stored.plan.design.layout.join(" · ")}</p><p>{planner.recoverablePlan.stored.plan.design.imagery}</p><p>{planner.recoverablePlan.stored.plan.design.signatureInteraction}</p>
+          {planner.recoverablePlan.stored.plan.changes.map((change, index) => <p key={index}>{change.change}</p>)}
+          <ul>{[...planner.recoverablePlan.stored.plan.questions, ...planner.recoverablePlan.stored.plan.assumptions].map((text, index) => <li key={index}>{text}</li>)}</ul>
+        </details>
+        <p>Saving preserves this plan without another AI call. It does not build the website or overwrite newer local edits.</p>
+        <button type="button" className="button small" disabled={busy || disabled || planner.checking} onClick={() => void saveRecoveredPlan()}>Save reviewed plan</button>
+      </div>}
+      {mode === "create" && buildRecovery && <div className="lb-operation-consent">
+        <p>A retained draft is available. Previewing and saving it does not make another AI call. Saving adds a new version after checking that version {version} is still current.</p>
+        {!previewingRecovery ? <button type="button" className="button small" disabled={busy || disabled} onClick={previewRecovery}>Preview retained draft</button>
+          : <button type="button" className="button small" disabled={busy || disabled || previewingRecovery.version !== version} onClick={() => void saveRecovery()}>Save reviewed draft</button>}
+      </div>}
+      {previewingRecovery && <button type="button" className="lb-operation-check" disabled={busy} onClick={() => { onLive(null); setPreviewingRecovery(null); setNotice(""); }}>Return to saved version</button>}
+      {operation?.kind === "build" && operation.canContinue && operation.status !== "running" && operation.maximumAdditionalCredits > 0 && <div className="lb-operation-consent">
+        <p>Add up to {operation.maximumAdditionalCredits} credits. The total maximum becomes {operation.authorizedCredits + operation.maximumAdditionalCredits} credits.</p>
+        <button type="button" className="button small" disabled={busy || disabled || checkingOperation || Boolean(previewingRecovery)} onClick={() => void continueOperation()}>Approve allowance & continue</button>
+      </div>}
+      <button type="button" className="lb-operation-check" disabled={busy || checkingOperation} onClick={() => void checkCurrentOperation().then(() => onSaved()).catch(() => setNotice("The saved result could not be refreshed. Try checking again."))}>{checkingOperation ? "Checking…" : "Check saved result & charge"}</button>
+    </section>}
+    <form className="lb-composer" data-mode={mode} onSubmit={event => { event.preventDefault(); submit(draft); }}>
       {mode === "plan" && <p className="lb-plan-note"><ListChecks size={12} />{draftPlan ? "Plan mode — your reply revises the plan above." : "Plan mode — I'll study your project and propose a plan. No code is written."}</p>}
-      {!!attachments.length && <ul className="lb-files">{attachments.map((file, index) => <li key={`${file.name}:${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setAttachments(attachments.filter((_, item) => item !== index))}><X size={12} /></button></li>)}</ul>}
-      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || disabled}
+      {draftPlan && <p className="lb-plan-note">Building the approved plan uses the source files currently listed here. Review this selection if you changed files after planning.</p>}
+      <AttachmentList files={sources.files} onRemove={id => void sources.remove(id)} disabled={busy || preparingSources || sources.busy || disabled || operationRunning} compact note="Saved on this device · sent to AI with each new request. Continuing uses the original request’s files." />
+      <p className="lb-plan-note">AI sources: PNG, JPEG, WebP, GIF, PDF, TXT or Markdown · up to 5 files, 3 MB combined. Text: up to 200,000 characters.</p>
+      {sources.error && <p className="lb-notice" role="alert">{sources.error}</p>}
+      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
         onChange={event => setDraft(event.target.value)}
-        onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(draft, attachments); } }} />
+        onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(draft); } }} />
       <div className="lb-controls">
         {website && <div className="lb-mode" role="group" aria-label="Mode">
-          <button type="button" aria-pressed={mode === "create"} disabled={busy} onClick={() => setMode("create")} title="Build: edit the website directly"><Hammer size={12} />Build</button>
-          <button type="button" aria-pressed={mode === "plan"} disabled={busy} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
+          <button type="button" aria-pressed={mode === "create"} disabled={busy || Boolean(previewingRecovery)} onClick={() => setMode("create")} title="Build: edit the website directly"><Hammer size={12} />Build</button>
+          <button type="button" aria-pressed={mode === "plan"} disabled={busy || Boolean(previewingRecovery)} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
         </div>}
-        <label className="lb-attach" aria-label="Attach files"><Paperclip size={15} /><input type="file" multiple accept={ACCEPT} disabled={busy || disabled} onChange={event => { void attach(event.target.files); event.target.value = ""; }} /></label>
-        <select aria-label="Effort" value={effort} disabled={busy} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
+        <label className="lb-attach" aria-label="Attach files"><Paperclip size={15} /><input type="file" multiple accept={BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
+        <select aria-label="Effort" value={effort} disabled={busy || operationRunning || Boolean(previewingRecovery)} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}
         </select>
-        {canReview && <button type="button" className="lb-review" aria-label="Review design" disabled={busy || disabled} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} />Review</button>}
+        {canReview && <button type="button" className="lb-review" aria-label={`Review design, up to ${reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} credits`} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} />Review · {reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} max</button>}
         <span className="lb-balance">{balance ? balance.unlimited ? "Unlimited credits" : `${balance.available} credits` : ""}</span>
-        <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || disabled || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>
+        <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>
       </div>
+      <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : BUILDER_EFFORT[effort].ceilingCredits} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
       {(notice || (disabled && disabledReason)) && <p className="lb-notice" role="status">{notice || disabledReason}</p>}
     </form>
   </aside>;

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, Check, Coins, LoaderCircle, Plus } from "lucide-react";
 import { CREDIT_TOPUP_PACKS, formatCreditTopupPrice, type CreditTopupAvailability } from "@/lib/billing/topups-catalog";
+import { topupNavigationUrl } from "@/lib/billing/checkout-navigation";
 
 const money = formatCreditTopupPrice;
 
@@ -59,10 +60,7 @@ export default function BillingTopups() {
       if (response.status === 402) { router.push("/billing?required=membership#plans"); return; }
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data?.error?.message === "string" ? data.error.message : "Checkout could not be opened. Please try again.");
-      if (typeof data?.url !== "string") throw new Error("The checkout link could not be verified.");
-      const url = new URL(data.url);
-      if (url.origin !== "https://whop.com" || url.username || url.password || !/^\/checkout\/ch_[A-Za-z0-9]+\/?$/.test(url.pathname)) throw new Error("The checkout link could not be verified.");
-      window.location.assign(url.href);
+      window.location.assign(topupNavigationUrl(data?.url, window.location.origin));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Checkout could not be opened. Please try again.");
     } finally {
@@ -94,10 +92,10 @@ export default function BillingTopups() {
         <div className="billing-topup-benefits"><span><Check size={13} aria-hidden="true" />Keep your subscription</span><span><Check size={13} aria-hidden="true" />No automatic refill</span></div>
       </div>
       <div className="billing-topup-summary">
-        <span className="billing-topup-total-label">{isPreview ? "Proposed one-time total" : "One-time total"}</span>
+        <span className="billing-topup-total-label">One-time total</span>
         <div className="billing-topup-total" aria-live="polite" aria-atomic="true"><strong>{money(pack.priceCents)}</strong><span>for {pack.credits.toLocaleString("en-US")} extra credits</span></div>
         <button className="billing-topup-button" type="button" disabled={busy || !availability?.available} onClick={() => void continueToCheckout()} aria-describedby="topup-availability">
-          {busy ? <><LoaderCircle size={15} className="billing-loading" />Continuing…</> : availability?.available ? <>Continue with {pack.credits.toLocaleString("en-US")} credits<ArrowUpRight size={14} /></> : <>Top-ups coming soon<ArrowUpRight size={14} /></>}
+          {busy ? <><LoaderCircle size={15} className="billing-loading" />Continuing…</> : availability?.available ? <>Continue with {pack.credits.toLocaleString("en-US")} credits<ArrowUpRight size={14} /></> : <>Credit packs coming soon</>}
         </button>
         <p id="topup-availability" className="billing-topup-availability" role="status">{loadError ? "Availability could not be loaded." : availability === null ? "Checking availability…" : availability.available ? "Requires an active creation membership. Secure checkout with Whop." : "Purchases open when credit delivery is ready. An active creation membership will be required."}</p>
         {loadError && <button className="billing-support-retry" type="button" onClick={() => { setLoadError(false); setAvailability(null); setRetry(value => value + 1); }}>Try again</button>}

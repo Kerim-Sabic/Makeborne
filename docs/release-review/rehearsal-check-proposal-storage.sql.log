@@ -1,0 +1,14 @@
+BEGIN
+NOTICE:  PASS service insert and read
+NOTICE:  PASS service update denied
+NOTICE:  PASS service delete denied
+NOTICE:  PASS authenticated read denied
+NOTICE:  PASS anonymous read denied
+NOTICE:  PASS duplicate proposal rejected
+NOTICE:  PASS snapshot price mismatch rejected
+NOTICE:  PASS missing snapshot fields rejected
+NOTICE:  PASS preapproved snapshot rejected
+NOTICE:  PASS changed scope rejected
+NOTICE:  PASS RLS enabled
+DO
+ROLLBACK

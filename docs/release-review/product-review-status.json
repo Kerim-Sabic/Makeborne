@@ -1,0 +1,22 @@
+{
+  "status": "HOLD \u2014 product examples available, not production approval",
+  "productionChanged": false,
+  "newPaidCallsUsd": 0.58539,
+  "conservativeTotalUsd": 23.865144,
+  "paidCallsPaused": true,
+  "productChecks": [
+    "3 responsive website previews, 6 viewport interaction runs",
+    "Book completed by real chat edit; 44 pages at 6x9 inches",
+    "Deck chat edit; 10-slide PDF and editable PPTX, native chart and notes",
+    "Local guest review, pinned comment, change request, approval and revoke",
+    "8 isolated local auth/email/storage/export checks",
+    "75 offline check harnesses; lint; typecheck"
+  ],
+  "remaining": [
+    "Claude dashboard not yet showing Oct12 calls; reconcile baseline discrepancy before further budget release",
+    "OpenAI API image qualification unavailable without key",
+    "Cloud application rehearsal and live customer hosting not qualified by local previews",
+    "Actual provider renewal and subscription replacement lifecycle still pending",
+    "Exact final release candidate migration failure/recovery rehearsal and production rollout approval"
+  ]
+}
