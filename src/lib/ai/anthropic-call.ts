@@ -1,4 +1,4 @@
-import { UnsupportedConfigurationError, assertSupportedTextRequest, maxInputTokenMicrousd, maxOutputTokenMicrousd, serverToolBoundMicrousd, textCallBoundMicrousd, textUsageMicrousd, utf8Bytes, type TextUsageLike } from "./prices";
+import { UnsupportedConfigurationError, assertSupportedTextRequest, maxInputTokenMicrousd, maxOutputTokenMicrousd, serverToolBoundMicrousd, textCallBoundMicrousd, textCallTierMultiplier, textUsageMicrousd, utf8Bytes, type TextUsageLike } from "./prices";
 import { SpendError, type RunSpend } from "./run-spend";
 
 /**
@@ -96,6 +96,8 @@ function retryDelay(error: unknown, attempt: number) {
 
 export async function budgetedStream(call: BudgetedStream): Promise<{ message: MessageLike; model: string; costMicrousd: number; attempts: number }> {
   if (!call.models.length) throw new Error("No model configured.");
+  // Unsupported tools/configuration must fail before even the free counting endpoint.
+  for (const model of call.models) assertSupportedTextRequest({ ...call.params, model, max_tokens: call.maxTokens });
   const retries = call.retries ?? 2, sleep = call.sleep ?? wait, now = call.now ?? Date.now;
   const inputBound = await call.meter.bound(call.params.messages);
   let lastError: unknown = null, attempts = 0;
@@ -104,8 +106,9 @@ export async function budgetedStream(call: BudgetedStream): Promise<{ message: M
       if (call.signal.aborted) throw lastError ?? new Error("The run was cancelled.");
       // Server tools (web search) add their fees and result tokens to the worst case before any output room.
       const toolBound = serverToolBoundMicrousd(model, call.params.tools);
-      const inputCost = Math.ceil(inputBound * maxInputTokenMicrousd(model)) + toolBound;
-      const room = Math.floor((call.spend.remainingMicrousd - inputCost) / maxOutputTokenMicrousd(model));
+      const tier = textCallTierMultiplier(model, inputBound);
+      const inputCost = Math.ceil(inputBound * maxInputTokenMicrousd(model) * tier) + toolBound + 2;
+      const room = Math.floor((call.spend.remainingMicrousd - inputCost) / (maxOutputTokenMicrousd(model) * tier));
       const maxTokens = Math.min(call.maxTokens, room);
       if (maxTokens < call.minTokens) throw new SpendError("RUN_BUDGET", "The run's remaining budget cannot pay for another step.");
       const request = { ...call.params, model, max_tokens: maxTokens };
@@ -115,20 +118,21 @@ export async function budgetedStream(call: BudgetedStream): Promise<{ message: M
       // Hard timeout: the call ends before the run's deadline (and so before the hold's settlement window).
       const timeout = Math.max(1, Math.min(call.timeoutMs ?? 600_000, call.spend.timeLeftMs()));
       const timer = AbortSignal.timeout(timeout);
-      const stream = call.client.beta.messages.stream(request, { signal: AbortSignal.any([call.signal, timer]), maxRetries: 0, timeout });
-      if (call.onEvent) stream.on("streamEvent", call.onEvent);
+      let stream: StreamLike | undefined;
       let message: MessageLike;
       try {
+        stream = call.client.beta.messages.stream(request, { signal: AbortSignal.any([call.signal, timer]), maxRetries: 0, timeout });
+        if (call.onEvent) stream.on("streamEvent", call.onEvent);
         message = await stream.finalMessage();
       } catch (error) {
-        const started = stream.currentMessage !== undefined;
+        const started = stream?.currentMessage !== undefined;
         const status = typeof (error as { status?: unknown }).status === "number" ? (error as { status: number }).status : undefined;
         if (!started && status !== undefined && REJECTED_BEFORE_PROCESSING.has(status)) {
           await call.spend.finish(ticket, { actualMicrousd: 0, detail: { status, attempt, model } });
         } else {
           // Started streams and transport failures: what was reported is confirmed, the rest stays at the bound.
           let partial = 0;
-          if (started) try { partial = textUsageMicrousd(stream.currentMessage!.model || model, stream.currentMessage!.usage); } catch { partial = 0; }
+          if (started) try { partial = textUsageMicrousd(stream!.currentMessage!.model || model, stream!.currentMessage!.usage); } catch { partial = 0; }
           await call.spend.finish(ticket, { actualMicrousd: null, partialMicrousd: partial, detail: { status: status ?? null, started, attempt, model } });
         }
         lastError = error;

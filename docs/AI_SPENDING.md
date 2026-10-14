@@ -206,3 +206,11 @@ No numeric launch ceiling was selected by this answer. It authorizes demand-base
 The Sunburst/Flare qualification script is disabled before reading credentials or contacting the provider. Sample counts multiplied by headroom cannot guarantee the approved spending cap. Another model's image counts cannot bound these models either (the provider explicitly says its GPT Image 2 calculator does not estimate 2.5 consumption). Do not populate measured output counts to enable production. Require a documented maximum or provider-enforced per-call limit before paid qualification. Images remain off.
 
 Source: https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst
+
+## Lead/search spending correction — 2026-10-14
+
+Anthropic web search remains priced for historical usage but new server-search calls are refused. The provider documents max_uses as a search-count cap, and bills search-result input tokens throughout internal iterations; no guaranteed result-token ceiling is documented. The former 20,000-token observed allowance was not a conservative maximum. Creator discovery and local look-alike discovery are unavailable; map and pasted-list finding remain available, with web fallback disabled.
+
+Lead settlement adds delivered leads at 0.2 credits each and exact confirmed provider microdollars at the ranking/search conversion rates, then rounds the entire total up once to a whole credit. No-lead runs release the hold and absorb provider spending. Unknown usage still consumes its full bound and is recorded as uncertain provider cost; only confirmed usage is chargeable. Results are emitted only after a successful settled/replayed/exempt outcome; missing or expired holds return a retryable failure. Ambiguous settlement failures withhold results and ask the user to check their balance before retrying, because a lost RPC response does not prove no charge. Haiku prompts over 100,000 input tokens reserve all token categories at the 5x tier, including output.
+
+Sources: https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool and https://platform.claude.com/docs/en/about-claude/pricing

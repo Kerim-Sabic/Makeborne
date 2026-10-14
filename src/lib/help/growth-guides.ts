@@ -13,12 +13,12 @@ export const GROWTH_GUIDES: HelpArticle[] = [
     title: "How to get clients as a freelance web designer",
     description: "A repeatable way to win web design clients: pick a niche, find businesses that need you, send a personal email, follow up and show the work.",
     keywords: ["get clients", "find clients", "freelance web designer", "web design clients", "more clients", "client acquisition", "freelance", "agency clients"],
-    answer: "Pick one niche you can speak to, find 25 businesses in it whose websites are holding them back, and send each a short, specific email about one thing you would improve. Follow up twice over two weeks, then share a quick mock-up with anyone who replies. In Makeborne, the lead finder, personal emails, sequences and review links cover each step.",
+    answer: "Pick one niche you can speak to, find 25 businesses in it whose websites are holding them back, and send each a short, specific email about one thing you would improve. Follow up twice over two weeks, then share a quick mock-up with anyone who replies. In Makeborne, use map or list lead finding, personal emails, manual CRM follow-up dates and review links. Automated sequence sending is disabled for launch; Gmail is currently send-only.",
     steps: [
       { name: "Choose a niche", text: "Dentists, restaurants, yoga studios: one group whose customers and problems you understand. Your emails get sharper and your portfolio more convincing." },
       { name: "Find 25 good leads", text: "Use Find leads with your niche and city. Look for businesses with an outdated site, no online booking or no clear call to action." },
       { name: "Write one specific email each", text: "Mention something real about their business and one improvement. Write personal emails drafts these from each lead’s public page for you to edit." },
-      { name: "Follow up twice", text: "Most replies come after the first email. A sequence sends polite follow-ups and stops the moment someone replies." },
+      { name: "Follow up twice", text: "Set manual follow-up dates and check your inbox before sending another message. Automated sequence sending is disabled for launch." },
       { name: "Show, don’t tell", text: "When someone is interested, make a quick draft of their new homepage and send a review link they can comment on." },
     ],
     sections: [
@@ -56,17 +56,18 @@ export const GROWTH_GUIDES: HelpArticle[] = [
   {
     slug: "find-instagram-influencers-in-your-niche", category: "grow", updated: UPDATED, demo: "find-leads",
     title: "How to find Instagram influencers in your niche",
-    description: "Find Instagram, TikTok and YouTube creators by what they post about and audience size, check they’re real and active, and reach out personally.",
+    description: "Plan relevant creator outreach and read profiles from your own list. Discovery by niche and More like this are temporarily unavailable.",
     keywords: ["find influencers", "instagram influencers", "micro influencers", "creators in my niche", "tiktok creators", "youtubers", "influencer outreach", "find creators"],
-    answer: "Decide what the creator should post about and the audience size you want (micro-creators with 10K–100K followers often reply more). In Makeborne, open Find leads, choose Creators, pick Instagram, TikTok or YouTube and describe the niche. Each profile is checked before it is shown, with follower counts on Instagram and any business email found in their bio or link-in-bio page.",
+    answer: "Creator discovery by niche and More like this are temporarily unavailable while search spending limits are verified. Find relevant Instagram, TikTok or YouTube profiles on the platform, then paste their links into Find leads → From your list. Makeborne reads the profiles, checks contact routes and ranks them for your offer. Discovery by niche remains on the roadmap.",
     steps: [
-      { name: "Describe the niche precisely", text: "“Easy vegan dinners for families” finds better matches than “vegan”." },
-      { name: "Choose an audience size", text: "1K–100K for micro-creators, 100K+ for larger accounts." },
-      { name: "Search and review", text: "Every result comes with a fit score, the reason, and an opening idea based on their profile." },
+      { name: "Describe the niche precisely", text: "Use a precise niche when searching directly on the platform, such as easy vegan dinners for families." },
+      { name: "Choose an audience size", text: "Review audience size on the platform and collect the profile links that fit." },
+      { name: "Read your list and review", text: "Paste the profile links into From your list. Verified results are ranked for your offer." },
       { name: "Check the contact route", text: "Business emails from bios and link-in-bio pages are shown; otherwise reach out by DM." },
-      { name: "Find more like the best one", text: "Use “More like this” on a creator you like to find look-alikes." },
+      { name: "Find more relevant profiles", text: "Search directly on the platform and paste another list. More like this is temporarily unavailable." },
     ],
     sections: [
+      { heading: "Current availability", paragraphs: ["Creator discovery by niche and More like this are temporarily unavailable. Map searches and reading your own list remain available; discovery remains on the roadmap after search spending limits are verified."] },
       { heading: "Signs of a good partner", list: ["Recent, consistent posts in your niche.", "Comments from real people, not just emojis.", "A clear way to contact them for business."] },
     ],
     faqs: [
@@ -133,14 +134,14 @@ export const GROWTH_GUIDES: HelpArticle[] = [
   {
     slug: "follow-up-with-clients-without-being-pushy", category: "grow", updated: UPDATED, demo: "connect-email",
     title: "How to follow up with clients without being pushy",
-    description: "When to follow up, what to say each time, and how to automate polite follow-ups that stop as soon as someone replies.",
+    description: "When to follow up and what to say each time. Use manual CRM reminders while automated sequence sending is disabled for the current launch.",
     keywords: ["follow up", "follow-up email", "no reply", "chase client", "polite reminder", "sales follow up", "email sequence", "drip", "not replying", "no response", "ghosted", "didn't reply", "hasn't replied"],
-    answer: "Follow up two or three times, a few days apart, and make every message add something new: an example, a useful tip, or a simple yes-or-no question. End with a friendly last note that says you will stop. In Makeborne, a sequence sends these from your own mailbox on schedule and stops automatically for anyone who replies.",
+    answer: "Follow up two or three times, a few days apart, and make every message add something new: an example, a useful tip, or a simple yes-or-no question. End with a friendly last note that says you will stop. In Makeborne, set CRM follow-up dates and send reviewed messages manually. Automated sequence sending is disabled for launch. Gmail is send-only, so check replies in Gmail before each follow-up.",
     steps: [
       { name: "Day 3: add an example", text: "Share a short before-and-after or a result for a similar client." },
       { name: "Day 7: give a useful tip", text: "Something they can do themselves, with no strings attached." },
       { name: "Day 14: close the loop", text: "“I’ll stop here. If it becomes a priority, just reply.”" },
-      { name: "Automate it", text: "Create a sequence once, add leads to it, and let replies stop it." },
+      { name: "Set a reminder", text: "Set a CRM follow-up date, check your inbox and send manually. Automated sequence sending is disabled for launch." },
     ],
     faqs: [
       { q: "How many follow-ups are too many?", a: "Two or three after the first email is plenty for cold outreach." },

@@ -83,4 +83,18 @@ check("comparisons are sourced, dated, consistent and honest about Makeborne's l
   }
 });
 
+check("current search and email availability is explicit in guides", () => {
+  const article = slug => HELP_ARTICLES.find(item => item.slug === slug);
+  for (const slug of ["find-new-leads", "find-instagram-influencers-in-your-niche"]) {
+    assert.match(article(slug).answer, /temporarily unavailable/);
+    assert.match(article(slug).answer, /list/i);
+  }
+  assert.match(JSON.stringify(article("find-new-leads")), /combined total.*rounded up once/);
+  for (const slug of ["connect-gmail-or-outlook", "follow-up-with-clients-without-being-pushy", "get-clients-as-a-freelance-web-designer"]) {
+    assert.match(article(slug).answer, /Gmail.*send-only/);
+    assert.match(article(slug).answer, /sequence sending is disabled/);
+    assert.doesNotMatch(JSON.stringify(article(slug)), /sequence sends|replies stop the sequence|stops automatically for anyone/i);
+  }
+});
+
 console.log(`\n${passed} help center checks passed.`);

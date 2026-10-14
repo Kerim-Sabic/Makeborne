@@ -65,9 +65,9 @@ export const SITE_FACTS = {
   crm: [
     "Client list, pipeline board and follow-up reminders (overdue, due today, upcoming).",
     "Lead profiles with tags, deal value, a transparent lead score and free research of a lead's public Instagram or website.",
-    "Email from your own Gmail or Outlook: one-to-one emails, multi-step sequences that stop on reply, and reply tracking. Sending is free.",
+    "One-to-one email from a connected Gmail account, subject to Google approval and account qualification. Gmail is sending-only; inbox reads and automatic sequences are disabled for launch. Outlook is deferred.",
     "AI-personalised outreach: a unique email for each selected lead, written from their record and public profile (uses credits).",
-    "Lead finder: local businesses by niche and city (OpenStreetMap listings, with web search when the map is thin), Instagram, TikTok and YouTube creators by niche (web search), or a pasted list; every lead verified, de-duplicated against the CRM and ranked for the user’s offer (about 1 credit per 5 leads delivered, plus web searches used).",
+    "Lead finder: local businesses by niche and city from OpenStreetMap, or public pages from a pasted list. Reachable leads are verified, de-duplicated against the CRM and ranked for the user’s offer. Delivered leads cost 0.2 credits each plus confirmed AI ranking; the combined charge rounds up once. Creator discovery, look-alikes and web-search fallback are unavailable pending spending qualification.",
     "Client review links for approvals and comments.",
   ],
   advisors: "Eight AI advisors, each limited to one field: positioning and brand, copywriting, sales and outreach, offers and pricing, growth and launches, research, product strategy, and client delivery.",

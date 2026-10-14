@@ -6,6 +6,8 @@ import { z } from "zod";
  * is charged when no leads come back. Adding leads to the CRM is free.
  */
 export const LEAD_FINDER = {
+  /** Server search lacks a guaranteed token bound; enable only after qualification. */
+  discoveryAvailable: false,
   creditsPerLead: 0.2,
   /** Credits the AI ranking may use at most (its share of the hold). */
   rankingCredits: 3,
@@ -22,10 +24,10 @@ export const LEAD_FINDER = {
 
 /** The most a search can cost: what the hold reserves and the UI quotes. Map searches may fall back to the web, so they reserve for it too. */
 export const leadFinderMaxCredits = (count: number, mode: "local" | "creators" | "list" = "local") =>
-  Math.ceil(count * LEAD_FINDER.creditsPerLead + LEAD_FINDER.rankingCredits + (mode === "list" ? 0 : LEAD_FINDER.searchCredits));
+  Math.ceil(count * LEAD_FINDER.creditsPerLead + LEAD_FINDER.rankingCredits + (mode === "list" || !LEAD_FINDER.discoveryAvailable ? 0 : LEAD_FINDER.searchCredits));
 /** What a typical search costs: delivered leads, a little for ranking, and about 4 credits when the web is searched. */
 export const leadFinderTypicalCredits = (count: number, mode: "local" | "creators" | "list" = "local") =>
-  Math.ceil(count * LEAD_FINDER.creditsPerLead + 0.5 + (mode === "creators" ? 3.5 : 0));
+  Math.ceil(count * LEAD_FINDER.creditsPerLead + 0.5 + (mode === "creators" && LEAD_FINDER.discoveryAvailable ? 3.5 : 0));
 export const AUDIENCES = { any: "Any size", micro: "1K–100K followers", large: "100K+ followers" } as const;
 
 export const PLATFORMS = ["Instagram", "TikTok", "YouTube"] as const;

@@ -130,10 +130,10 @@ function apply(container, file, { inject = false } = {}) {
   if (result.ok) psql(container, DB, `insert into supabase_migrations.schema_migrations(version,name) values('${file.slice(0, 14)}','${file.slice(15, -4)}');`);
   return result;
 }
-function check(container, file, replace = {}) {
+function check(container, file, replace = {}, options = {}) {
   let text = read(file);
   for (const [from, to] of Object.entries(replace)) text = text.split(from).join(to);
-  return psql(container, DB, text).output.split("\n").filter(line => /PASS/.test(line)).map(line => line.replace(/^.*?(PASS)/, "$1").trim());
+  return psql(container, DB, text, options).output.split("\n").filter(line => /PASS/.test(line)).map(line => line.replace(/^.*?(PASS)/, "$1").trim());
 }
 const pause = container => psql(container, DB, read("supabase/post-deploy/pause_legacy_pilot.sql"));
 const stop = container => docker(["stop", container]);
@@ -181,6 +181,10 @@ try {
   checks.mailBoundaries = check(full, "supabase/check-crm-mail-boundaries.sql");
   checks.billingLifecycle = check(full, "supabase/check-billing-lifecycle.sql");
   checks.mailGrantedScopes = check(full, "supabase/check-mail-granted-scopes.sql");
+  // The migration owner deliberately cannot SET the isolated worker role.
+  // Only this disposable fixture administrator switches roles for the negative
+  // privilege test; every migration still executes as postgres, like production.
+  checks.publicationControllerBoundary = check(full, "supabase/check-publication-controller-boundary.sql", {}, { user: "supabase_admin" });
   const post = new Set(psql(full, DB, PUBLIC_FUNCTIONS).output.trim().split("\n"));
   const dropped = preFunctions.filter(fn => !post.has(fn));
   const contract = psql(full, DB, read("supabase/post-deploy/crm_contract_client_stages.sql")).output;
@@ -201,7 +205,7 @@ const fault = `${prefix}_fault_${stamp}`;
 try {
   evidence.scenarios.fault = { container: fault, build: build(fault) };
   pause(fault);
-  const targets = new Set(["20261012120000_credit_lots_expiry.sql", "20261013240000_crm_email_automation.sql", "20261013250000_crm_lead_profile.sql", "20261013260000_crm_mail_security_boundaries.sql", "20261013270000_mail_granted_scopes.sql", "20261013280000_billing_lifecycle_boundaries.sql"]);
+  const targets = new Set(["20261012120000_credit_lots_expiry.sql", "20261013240000_crm_email_automation.sql", "20261013250000_crm_lead_profile.sql", "20261013260000_crm_mail_security_boundaries.sql", "20261013270000_mail_granted_scopes.sql", "20261013280000_billing_lifecycle_boundaries.sql", "20261014011643_publication_worker_function_boundary.sql"]);
   const failures = [];
   for (const file of migrations) {
     if (targets.has(file)) {

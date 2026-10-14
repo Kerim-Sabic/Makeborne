@@ -51,7 +51,7 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
     idSource: "https://platform.claude.com/docs/en/about-claude/models/overview (Claude API ID column)",
     priceSources: ["https://platform.claude.com/docs/en/about-claude/pricing (Model pricing table, \"Claude Haiku 5.5 (for prompts up to 100,000 tokens)\")"],
     components: { input: 0.1, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, output: 0.5 },
-    notes: ["Prices are the up-to-100,000-token tier. Prompts over 100,000 tokens cost 5x ($0.50/$2.50) and are refused before sending (expert chat caps prompts well below).",
+    notes: ["Prices are the up-to-100,000-token tier. Prompts over 100,000 tokens cost 5x ($0.50/$2.50); bounds and usage both apply that tier.",
       "US-only inference (inference_geo us) is 1.1x on every category; bounds assume it.",
       "Thinking tokens are billed as output.", "Used for standard expert chat replies."],
   },
@@ -165,15 +165,15 @@ export class UnsupportedConfigurationError extends Error {
  * Web search, the only server tool with a price card: the basic, directly-called
  * version (no dynamic filtering, so no code-execution sandbox), on models whose
  * Models API record says it is supported, with a mandatory small max_uses.
- * Each allowed search reserves its fee plus a result-token allowance in the call
- * bound; actual usage is priced from usage.server_tool_use.web_search_requests.
+ * Historical usage is priced, but new calls are refused: max_uses bounds fees,
+ * not result-token billing across the provider's internal search iterations.
  */
 export const WEB_SEARCH = Object.freeze({
   type: "web_search_20250305", name: "web_search",
   /** $10 per 1,000 searches. */
   microusdPerSearch: 10_000,
-  /** Result tokens reserved per allowed search (observed ~5k; results count as input tokens). */
-  resultTokensPerSearch: 20_000,
+  /** No documented maximum for billable result tokens across internal iterations. */
+  resultTokensPerSearch: null,
   maxUses: 5,
   models: Object.freeze(["claude-haiku-5-5"]),
   verifiedAt: "2026-10-14",
@@ -190,17 +190,15 @@ function assertWebSearchTool(model: string, tool: Record<string, unknown>) {
   const uses = tool.max_uses;
   if (!Number.isSafeInteger(uses) || (uses as number) < 1 || (uses as number) > WEB_SEARCH.maxUses) throw new UnsupportedConfigurationError(`web search without max_uses between 1 and ${WEB_SEARCH.maxUses}`);
   if (tool.allowed_callers !== undefined && JSON.stringify(tool.allowed_callers) !== JSON.stringify(["direct"])) throw new UnsupportedConfigurationError("web search callers other than direct");
+  throw new UnsupportedConfigurationError("web search has no documented or provider-enforced billable result-token ceiling");
 }
-/** Worst case the request's server tools can add to one call: fees plus reserved result tokens. */
+/** Refuse any server tool without a guaranteed bound before reserving a call. */
 export function serverToolBoundMicrousd(model: string, tools: unknown) {
-  let total = 0;
   for (const tool of (tools as Array<Record<string, unknown>> | undefined) ?? []) {
     if (tool?.type !== WEB_SEARCH.type) continue;
     assertWebSearchTool(model, tool);
-    const uses = tool.max_uses as number;
-    total += uses * (WEB_SEARCH.microusdPerSearch + WEB_SEARCH.resultTokensPerSearch * maxInputTokenMicrousd(model));
   }
-  return total ? roundBound(total) : 0;
+  return 0;
 }
 /** Models whose long prompts cost more: above the threshold, the whole call is billed at the multiple. */
 export const LONG_CONTEXT_PRICING: Readonly<Record<string, { thresholdTokens: number; multiplier: number }>> = Object.freeze({
@@ -257,11 +255,17 @@ export function maxOutputTokenMicrousd(model: string) {
   return textPrice(model).output * GEO_MULTIPLIER;
 }
 
+/** Apply the expensive tier to the complete reservation when its prompt can cross the threshold. */
+export function textCallTierMultiplier(model: string, inputTokens: number) {
+  const long = LONG_CONTEXT_PRICING[model];
+  return long && inputTokens > long.thresholdTokens ? long.multiplier : 1;
+}
+
 /** Conservative ceiling for one text call: every input token at its highest
  * rate plus the full output allowance (thinking is part of output). */
 export function textCallBoundMicrousd(model: string, inputTokens: number, maxOutputTokens: number) {
   if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1) throw new Error("Invalid call bound inputs.");
-  return roundBound(inputTokens * maxInputTokenMicrousd(model) + maxOutputTokens * maxOutputTokenMicrousd(model));
+  return roundBound((inputTokens * maxInputTokenMicrousd(model) + maxOutputTokens * maxOutputTokenMicrousd(model)) * textCallTierMultiplier(model, inputTokens));
 }
 
 type CacheCreation = { ephemeral_5m_input_tokens?: number | null; ephemeral_1h_input_tokens?: number | null } | null | undefined;
@@ -274,6 +278,12 @@ export type TextUsageLike = {
 };
 
 function attemptCost(model: string, usage: TextUsageLike) {
+  if (!usage || !Number.isSafeInteger(usage.input_tokens) || usage.input_tokens < 0 || !Number.isSafeInteger(usage.output_tokens) || usage.output_tokens < 0)
+    throw new UnsupportedConfigurationError("missing or invalid token usage");
+  for (const value of [usage.cache_read_input_tokens, usage.cache_creation_input_tokens, usage.cache_creation?.ephemeral_5m_input_tokens,
+    usage.cache_creation?.ephemeral_1h_input_tokens, ...Object.values(usage.server_tool_use ?? {})]) {
+    if (value != null && (!Number.isSafeInteger(value) || value < 0)) throw new UnsupportedConfigurationError("invalid usage count");
+  }
   if (usage.speed && usage.speed !== "standard") throw new UnpricedModelError(`${model} (speed ${usage.speed})`);
   const price = textPrice(model);
   const geo = usage.inference_geo && usage.inference_geo !== "global" ? GEO_MULTIPLIER : 1;

@@ -1,0 +1,3 @@
+# This generated trust manifest is verified byte-for-byte during prebuild.
+# Preserve its canonical serialization in Windows checkouts and Git archives.
+infra/project-runtime/font-licenses.json text eol=lf

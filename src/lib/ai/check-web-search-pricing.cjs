@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports -- Offline checks for the web search price card: what is allowed, how it is bounded, how usage is priced. */
+/* eslint-disable @typescript-eslint/no-require-imports -- Offline conservative search and long-context spending checks. */
 const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), Module = require("node:module"), assert = require("node:assert/strict");
 const src = path.join(__dirname, "..", "..");
 const load = Module._load;
@@ -8,73 +8,69 @@ Module._load = function(name, parent, main) {
   return load.call(this, name, parent, main);
 };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
+globalThis.fetch = async () => { throw new Error("Network forbidden"); };
 const prices = require("./prices.ts");
 const { budgetedStream, ContextMeter } = require("./anthropic-call.ts");
 const { RunSpend, memoryGate } = require("./run-spend.ts");
-
 const HAIKU = "claude-haiku-5-5";
 const search = (extra = {}) => ({ type: "web_search_20250305", name: "web_search", max_uses: 3, ...extra });
-const request = (tools, model = HAIKU) => ({ model, max_tokens: 2000, messages: [], system: [], tools, output_config: { effort: "low" } });
 let passed = 0;
 async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}`); }
-
+const makeSpend = (cap = 200_000) => new RunSpend({ run: "offline", providerCapMicrousd: cap, customerCapMicrousd: cap, gate: memoryGate(), deadline: Date.now() + 120_000 });
+const call = (spend, client, extra = {}) => budgetedStream({ client, spend, meter: new ContextMeter(async () => 1500), models: [HAIKU], maxTokens: 2000, minTokens: 500, signal: new AbortController().signal, params: { messages: [] }, ...extra });
 (async () => {
-  await check("only the basic, direct, capped web search on a verified model is allowed", () => {
-    prices.assertSupportedTextRequest(request([search()]));
-    prices.assertSupportedTextRequest(request([search({ allowed_domains: ["instagram.com"], allowed_callers: ["direct"], user_location: { type: "approximate", city: "Austin" } })]));
-    const refused = [
-      [search({ max_uses: undefined })], [search({ max_uses: 0 })], [search({ max_uses: 6 })], [search({ max_uses: 2.5 })],
-      [search({ allowed_callers: ["code_execution_20260120"] })], [search({ name: "search" })], [search({ cache_ttl: 1 })],
-      [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }], [{ type: "web_search_20260318", name: "web_search", max_uses: 3 }],
-      [{ type: "web_fetch_20250910", name: "web_fetch", max_uses: 1 }], [{ type: "code_execution_20250825", name: "code_execution" }],
-    ];
-    for (const tools of refused) assert.throws(() => prices.assertSupportedTextRequest(request(tools)), error => error.code === "UNSUPPORTED_AI_CONFIG", JSON.stringify(tools));
-    assert.throws(() => prices.assertSupportedTextRequest(request([search()], "claude-opus-5-5")), /web search on "claude-opus-5-5"/, "models not verified for search are refused");
-  });
-
-  await check("the bound reserves every allowed search's fee and result tokens", () => {
-    const perSearch = prices.WEB_SEARCH.microusdPerSearch + prices.WEB_SEARCH.resultTokensPerSearch * prices.maxInputTokenMicrousd(HAIKU);
-    assert.equal(prices.serverToolBoundMicrousd(HAIKU, [search({ max_uses: 4 })]), Math.ceil(4 * perSearch + 1e-6));
-    assert.equal(prices.serverToolBoundMicrousd(HAIKU, undefined), 0);
+  await check("search is refused without a guaranteed result-token bound, even with max_uses", () => {
+    assert.equal(prices.WEB_SEARCH.resultTokensPerSearch, null);
+    for (const max_uses of [1, 3, 5]) {
+      assert.throws(() => prices.assertSupportedTextRequest({ model: HAIKU, tools: [search({ max_uses })] }), /no documented or provider-enforced/);
+      assert.throws(() => prices.serverToolBoundMicrousd(HAIKU, [search({ max_uses })]), /no documented or provider-enforced/);
+    }
+    for (const type of ["web_search_20260209", "web_fetch_20250910", "code_execution_20250825"])
+      assert.throws(() => prices.assertSupportedTextRequest({ model: HAIKU, tools: [{ type, name: "web_search" }] }), error => error.code === "UNSUPPORTED_AI_CONFIG");
     assert.equal(prices.serverToolBoundMicrousd(HAIKU, [{ type: "custom", name: "x" }]), 0);
-    assert.throws(() => prices.serverToolBoundMicrousd(HAIKU, [search({ max_uses: 99 })]), error => error.code === "UNSUPPORTED_AI_CONFIG");
   });
-
-  await check("usage pricing adds $0.01 per search, refuses unknown server tools and applies Haiku's long-prompt tier", () => {
+  await check("search refusal occurs before provider stream and spending reservation", async () => {
+    const spend = makeSpend(); let contacted = false, counted = false;
+    const client = { beta: { messages: { stream() { contacted = true; throw new Error("not allowed"); } } } };
+    await assert.rejects(call(spend, client, { meter: new ContextMeter(async () => { counted = true; return 1500; }), params: { messages: [], tools: [search()] } }), /no documented or provider-enforced/);
+    assert.equal(contacted, false); assert.equal(counted, false); assert.equal(spend.pendingMicrousd, 0); assert.equal(spend.calls.length, 0);
+  });
+  await check("historical search usage stays priced; invalid usage fails closed", () => {
     const base = prices.textUsageMicrousd(HAIKU, { input_tokens: 6000, output_tokens: 900 });
     assert.equal(prices.textUsageMicrousd(HAIKU, { input_tokens: 6000, output_tokens: 900, server_tool_use: { web_search_requests: 2 } }), base + 20_000);
-    assert.equal(prices.textUsageMicrousd(HAIKU, { input_tokens: 6000, output_tokens: 900, server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 } }), base, "zero counts are free");
+    for (const usage of [{}, { input_tokens: -1, output_tokens: 0 }, { input_tokens: 10, output_tokens: NaN }, { input_tokens: 1, output_tokens: 1, server_tool_use: { web_search_requests: -1 } }])
+      assert.throws(() => prices.textUsageMicrousd(HAIKU, usage), /invalid.*usage|invalid usage/);
     assert.throws(() => prices.textUsageMicrousd(HAIKU, { input_tokens: 10, output_tokens: 10, server_tool_use: { web_fetch_requests: 1 } }), error => error.code === "UNPRICED_MODEL");
-    const short = prices.textUsageMicrousd(HAIKU, { input_tokens: 100_000, output_tokens: 1000 });
-    const long = prices.textUsageMicrousd(HAIKU, { input_tokens: 100_001, output_tokens: 1000 });
-    assert.ok(long > short * 4.9, "over 100k prompt tokens the whole call is 5x");
   });
-
-  await check("a searching call is bounded before it starts and its fees are recorded", async () => {
-    const gate = memoryGate();
-    const spend = new RunSpend({ run: "search-test", providerCapMicrousd: 200_000, customerCapMicrousd: 200_000, gate, deadline: Date.now() + 120_000 });
-    const message = { model: HAIKU, usage: { input_tokens: 9000, output_tokens: 700, server_tool_use: { web_search_requests: 3 } }, content: [{ type: "text", text: "{}" }], stop_reason: "end_turn" };
-    const client = { beta: { messages: {
-      async countTokens() { return { input_tokens: 1500 }; },
-      stream(params) { assert.equal(params.tools[0].max_uses, 3); return { currentMessage: message, on() { return this; }, async finalMessage() { return message; } }; },
-    } } };
-    const result = await budgetedStream({ client, spend, meter: new ContextMeter(async () => 1500), models: [HAIKU], maxTokens: 2000, minTokens: 500, signal: new AbortController().signal,
-      params: { system: [], messages: [{ role: "user", content: "find" }], tools: [search()] } });
-    const begun = gate.log.begin[0];
-    assert.ok(begun.boundMicrousd >= prices.serverToolBoundMicrousd(HAIKU, [search()]), "bound includes the search allowance");
-    assert.equal(result.costMicrousd, prices.textUsageMicrousd(HAIKU, message.usage));
-    assert.ok(result.costMicrousd >= 30_000, "three search fees recorded");
-    assert.ok(result.costMicrousd <= begun.boundMicrousd, "within the bound, so no overrun");
+  await check("Haiku reservation uses the full expensive tier above the threshold, including output", () => {
+    for (const input of [100_000, 100_001]) {
+      const tier = input > 100_000 ? 5 : 1;
+      const bound = prices.textCallBoundMicrousd(HAIKU, input, 1000);
+      assert.equal(bound, Math.ceil((input * prices.maxInputTokenMicrousd(HAIKU) + 1000 * prices.maxOutputTokenMicrousd(HAIKU)) * tier + 1e-6));
+      assert.ok(bound >= prices.textUsageMicrousd(HAIKU, { input_tokens: 0, cache_creation_input_tokens: input, cache_creation: { ephemeral_5m_input_tokens: input }, output_tokens: 1000, inference_geo: "us" }));
+    }
   });
-
-  await check("a run too small for its searches is refused before any provider contact", async () => {
-    const spend = new RunSpend({ run: "small", providerCapMicrousd: 20_000, customerCapMicrousd: 20_000, gate: memoryGate(), deadline: Date.now() + 120_000 });
-    let contacted = false;
-    const client = { beta: { messages: { async countTokens() { return { input_tokens: 100 }; }, stream() { contacted = true; throw new Error("should not be called"); } } } };
-    await assert.rejects(budgetedStream({ client, spend, meter: new ContextMeter(async () => 100), models: [HAIKU], maxTokens: 2000, minTokens: 500, signal: new AbortController().signal,
-      params: { messages: [], tools: [search({ max_uses: 5 })] } }), error => error.code === "RUN_BUDGET");
-    assert.equal(contacted, false);
+  await check("long-context output room shares the capped budget with earlier spend", async () => {
+    const spend = makeSpend(90_000);
+    const prior = await spend.begin("anthropic", HAIKU, 10_000); await spend.finish(prior, { actualMicrousd: 10_000 });
+    let max;
+    const client = { beta: { messages: { stream(params) { max = params.max_tokens; return { on() {}, async finalMessage() { return { model: HAIKU, usage: { input_tokens: 100_001, output_tokens: params.max_tokens }, content: [], stop_reason: "end_turn" }; } }; } } } };
+    await call(spend, client, { meter: new ContextMeter(async () => 100_001), maxTokens: 50_000 });
+    assert.ok(max < 6000, "5x output rate shrinks output room");
+    assert.ok(spend.providerMicrousd <= 90_000); assert.equal(spend.stopped, null);
   });
-
+  await check("malformed final usage is recorded at the full bound and not charged", async () => {
+    const spend = makeSpend();
+    const client = { beta: { messages: { stream() { return { on() {}, async finalMessage() { return { model: HAIKU, usage: {}, content: [], stop_reason: "end_turn" }; } }; } } } };
+    await assert.rejects(call(spend, client), /invalid token usage/);
+    assert.equal(spend.calls.length, 1); assert.equal(spend.calls[0].actualMicrousd, null);
+    assert.equal(spend.providerMicrousd, spend.calls[0].boundMicrousd); assert.equal(spend.confirmedMicrousd, 0); assert.equal(spend.pendingMicrousd, 0);
+  });
+  await check("synchronous stream failure resolves its ticket once at the full uncertain bound", async () => {
+    const spend = makeSpend();
+    const client = { beta: { messages: { stream() { throw new Error("transport failed"); } } } };
+    await assert.rejects(call(spend, client), /transport failed/);
+    assert.equal(spend.calls.length, 1); assert.equal(spend.calls[0].actualMicrousd, null); assert.equal(spend.pendingMicrousd, 0);
+  });
   console.log(`\n${passed} web search pricing checks passed.`);
 })().catch(error => { console.error(error); process.exit(1); });

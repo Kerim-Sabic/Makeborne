@@ -6,6 +6,7 @@ import { HOLD_LIFETIME_MS, releaseRun, reserveCredits, settleRun } from "@/lib/c
 import { CLOCK_SKEW_MS, databaseGate, requireProviderCapacity, SETTLEMENT_WINDOW_MS } from "@/lib/ai/live-run";
 import { RunSpend } from "@/lib/ai/run-spend";
 import { requirePricedModel } from "@/lib/ai/model-check";
+import { WEB_SEARCH } from "@/lib/ai/prices";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { logAiStop } from "@/lib/builder/website-run";
 import { existingIndex, gatherLeads, RANK_MODEL, rankLeads } from "@/lib/leads/finder";
@@ -32,6 +33,8 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const parsed = LeadFindRequestSchema.safeParse(await boundedJson(request, 20_000));
     if (!parsed.success) throw new RequestError("INVALID_SEARCH", "Describe the kind of business and a city, or paste up to 40 links or @handles.");
     const input = parsed.data;
+    if (input.mode === "creators" || (input.mode === "local" && input.like))
+      throw new RequestError("SEARCH_UNAVAILABLE", "Creator and similar-business discovery are temporarily unavailable while web search spending limits are verified. Paste links or search the map instead.", 503);
     const { client, user, workspace } = await cloudContext(workspaceId, true);
     if (workspace?.role === "reviewer") throw new RequestError("EDITOR_REQUIRED", "Only owners and editors can find leads.", 403);
     requirePricedModel(RANK_MODEL); requirePricedModel(DISCOVER_MODEL);
@@ -47,10 +50,11 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     // Two capped budgets inside one hold: ranking at the chat rate, web search at its lower rate.
     const deadline = Math.min(Date.now() + (maxDuration - 15) * 1000, hold.reservedAt + HOLD_LIFETIME_MS - SETTLEMENT_WINDOW_MS - CLOCK_SKEW_MS);
     const rate = aiCostUsdPerCredit() / LEAD_FINDER.priceMultiplier, searchRate = aiCostUsdPerCredit() / LEAD_FINDER.searchPriceMultiplier;
-    const cap = Math.floor(LEAD_FINDER.rankingCredits * rate * 1e6), searchCap = input.mode === "list" ? 0 : Math.floor(LEAD_FINDER.searchCredits * searchRate * 1e6);
+    const cap = Math.floor(LEAD_FINDER.rankingCredits * rate * 1e6), searchCap = input.mode === "list" || WEB_SEARCH.resultTokensPerSearch === null ? 0 : Math.floor(LEAD_FINDER.searchCredits * searchRate * 1e6);
     const spend = new RunSpend({ run: hold.reference, providerCapMicrousd: cap, customerCapMicrousd: hold.exempt ? null : cap, gate: databaseGate(hold.userId), deadline });
     const searchSpend = new RunSpend({ run: hold.reference, providerCapMicrousd: searchCap, customerCapMicrousd: hold.exempt ? null : searchCap, gate: databaseGate(hold.userId), deadline });
-    const charged = () => spend.customerCredits(rate) + searchSpend.customerCredits(searchRate);
+    const aiCredits = () => spend.confirmedMicrousd / 1e6 / rate + searchSpend.confirmedMicrousd / 1e6 / searchRate;
+    const charged = () => Math.max(0, Math.ceil(aiCredits() - 1e-9));
     const encoder = new TextEncoder(), controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), (maxDuration - 12) * 1000);
     request.signal.addEventListener("abort", () => controller.abort(), { once: true });
@@ -58,6 +62,7 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const stream = new ReadableStream<Uint8Array>({
       async start(output) {
         let open = true;
+        let settlementAttempted = false;
         const emit = (event: LeadFindEvent) => { if (open) try { output.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)); } catch { open = false; } };
         const heartbeat = setInterval(() => { if (open) try { output.enqueue(encoder.encode(": keep-alive\n\n")); } catch { open = false; } }, 15_000);
         const detail = (extra: Record<string, unknown> = {}) => ({ kind: "lead_finder", mode: input.mode, calls: spend.calls.length + searchSpend.calls.length,
@@ -83,15 +88,22 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
             logAiStop(finalHold.reference, cause);
             emit({ type: "status", message: "Ranking wasn't available, so leads are ordered by how reachable they are." });
           }
-          emit({ type: "results", leads: found.leads, skipped: found.skipped, duplicates: found.duplicates, attribution: found.attribution, place: found.place, category: found.category });
-          const measured = found.leads.length * LEAD_FINDER.creditsPerLead + charged();
+          // The wallet stores whole credits: round the complete lead + AI charge once.
+          const measured = Math.max(0, Math.ceil(found.leads.length * LEAD_FINDER.creditsPerLead + aiCredits() - 1e-9));
+          settlementAttempted = true;
           const settled = await settleRun(finalHold, measured, detail({ delivered: found.leads.length }));
+          if (settled.outcome !== "settled" && settled.outcome !== "replayed" && settled.outcome !== "exempt")
+            throw new RequestError("CREDIT_HOLD_EXPIRED", "The search's credit reservation expired. Nothing was charged; please try again.", 409);
+          emit({ type: "results", leads: found.leads, skipped: found.skipped, duplicates: found.duplicates, attribution: found.attribution, place: found.place, category: found.category });
           emit({ type: "done", charged: settled.charged, delivered: found.leads.length });
         } catch (cause) {
           await releaseRun(finalHold, charged(), "lead_find_failed", detail({ code: (cause as { code?: string })?.code ?? null })).catch(() => undefined);
-          const message = cause instanceof Error && /map service|business search|web search|Creator search|Couldn’t find|Couldn't find|too large|Describe the kind/.test(cause.message) ? cause.message
+          const expired = (cause as { code?: string })?.code === "CREDIT_HOLD_EXPIRED";
+          const message = expired && cause instanceof Error ? cause.message
+            : settlementAttempted ? "The search's credit settlement could not be confirmed. Check your credit balance before trying again."
+            : cause instanceof Error && /map service|business search|web search|Creator search|Couldn’t find|Couldn't find|too large|Describe the kind/.test(cause.message) ? cause.message
             : "The search couldn't finish. Nothing was charged; please try again.";
-          emit({ type: "error", code: "FIND_FAILED", message, retryable: true });
+          emit({ type: "error", code: settlementAttempted && !expired ? "SETTLEMENT_UNCONFIRMED" : "FIND_FAILED", message, retryable: !settlementAttempted || expired });
         } finally {
           clearTimeout(timeout); clearInterval(heartbeat); active.delete(user.id);
           if (open) try { output.close(); } catch { /* client already gone */ }

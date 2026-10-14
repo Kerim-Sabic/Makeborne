@@ -45,7 +45,8 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
   // Creators: 10 or 25 per search (each one is a web search and a profile read).
   const creatorCount = count === 10 ? 10 : 25;
   const size = mode === "list" ? Math.min(items.length || 1, LEAD_FINDER.maxListItems) : mode === "creators" ? creatorCount : count;
-  const ready = mode === "local" ? niche.trim().length >= 3 && place.trim().length >= 2 : mode === "creators" ? niche.trim().length >= 3 : items.length > 0 && items.length <= LEAD_FINDER.maxListItems;
+  const discoveryBlocked = !LEAD_FINDER.discoveryAvailable && (mode === "creators" || (mode === "local" && Boolean(like)));
+  const ready = !discoveryBlocked && (mode === "local" ? niche.trim().length >= 3 && place.trim().length >= 2 : mode === "creators" ? niche.trim().length >= 3 : items.length > 0 && items.length <= LEAD_FINDER.maxListItems);
   const busy = Boolean(run && run.stage !== "done") || Boolean(adding);
 
   async function find() {
@@ -88,7 +89,7 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
         }
       }
       setRun(current => current && { ...current, stage: "done" });
-      if (!found) throw new Error("The search ended early. Nothing was charged; please try again.");
+      if (!found) throw new Error("The search ended before its settlement could be confirmed. Check your credit balance before trying again.");
     } catch (cause) {
       setRun(null);
       if (!controller.current?.signal.aborted) setError(cause instanceof Error ? cause.message : "The search couldn't finish.");
@@ -143,7 +144,7 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
     <div className="lf">
       <header className="lf-head">
         <div><span className="lf-eyebrow"><Sparkles size={13} /> Lead finder</span><h2>Find new leads</h2>
-          <p>Real businesses and creators with public contact details, checked and ranked for what you offer.</p></div>
+          <p>Find local businesses or read the profile links and websites in your list, checked and ranked for what you offer.</p></div>
         <button type="button" className="lf-close" aria-label="Close" disabled={Boolean(adding)} onClick={() => { controller.current?.abort(); onClose(); }}><X size={18} /></button>
       </header>
 
@@ -153,9 +154,10 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
         {previous && !run && <button type="button" className="lf-back" onClick={() => { setResult(previous); setPrevious(null); setLike(null); setExclude([]); }}>← Back to the previous results</button>}
         <div className="lf-modes" role="radiogroup" aria-label="Where to find leads">
           <button type="button" role="radio" aria-checked={mode === "local"} onClick={() => setMode("local")} disabled={busy}><MapPin size={15} />Local businesses</button>
-          <button type="button" role="radio" aria-checked={mode === "creators"} onClick={() => setMode("creators")} disabled={busy}><Users size={15} />Creators</button>
+          <button type="button" role="radio" aria-checked={mode === "creators"} onClick={() => setMode("creators")} disabled={busy || !LEAD_FINDER.discoveryAvailable}><Users size={15} />Creators{!LEAD_FINDER.discoveryAvailable ? " · unavailable" : ""}</button>
           <button type="button" role="radio" aria-checked={mode === "list"} onClick={() => setMode("list")} disabled={busy}><List size={15} />From your list</button>
         </div>
+        {!LEAD_FINDER.discoveryAvailable && <p className="lf-price" role="status">Creator discovery and “More like this” are temporarily unavailable. Search the map or paste profile links in From your list.{like ? " Clear the example above to search local businesses." : ""}</p>}
         {mode === "local" ? <div className="lf-grid">
           <label>What kind of business?<input list="lf-categories" value={niche} onChange={event => setNiche(event.target.value)} placeholder="Dentists, yoga studios, restaurants…" maxLength={80} disabled={busy} autoFocus /></label>
           <datalist id="lf-categories">{CATEGORIES.map(category => <option key={category.label} value={category.label} />)}</datalist>
@@ -174,7 +176,7 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
         <div className="lf-foot">
           {mode !== "list" && <div className="lf-count" role="radiogroup" aria-label="How many leads">{LEAD_FINDER.counts.filter(value => mode === "local" || value < 40).map(value =>
             <button type="button" role="radio" key={value} aria-checked={size === value} disabled={busy} onClick={() => setCount(value)}>{value}</button>)}<span>leads</span></div>}
-          <p className="lf-price">About <strong>{leadFinderTypicalCredits(size, mode)} credits</strong>, at most {leadFinderMaxCredits(size, mode)}. You pay only for leads delivered{mode === "creators" ? " and the web searches used" : ""}; adding them to clients is free.</p>
+          {!discoveryBlocked && <p className="lf-price">About <strong>{leadFinderTypicalCredits(size, mode)} credits</strong>, at most {leadFinderMaxCredits(size, mode)}. Delivered leads cost 0.2 credits each, plus confirmed AI ranking. The combined total rounds up once to a whole credit. No new leads means no charge; adding them to clients is free.</p>}
           <button type="submit" className="button primary" disabled={!ready || busy}>{busy ? <Loader2 size={16} className="ac-spin" /> : <Search size={16} />}Find leads</button>
         </div>
         {run && <Progress run={run} mode={mode} onCancel={() => { controller.current?.abort(); setRun(null); }} />}
@@ -240,7 +242,7 @@ function LeadRow({ lead, picked, onToggle, onMoreLike, disabled }: { lead: Found
         {lead.linkHub && <a className="lf-chip" href={lead.linkHub} target="_blank" rel="noopener noreferrer"><Globe2 size={12} />Link in bio<ArrowUpRight size={11} /></a>}
         {lead.source === "Web search" && <span className="lf-chip is-quiet"><Search size={11} />Found on the web</span>}
         {lead.note && <span className="lf-chip is-quiet">{lead.note}</span>}
-        <button type="button" className="lf-more" disabled={disabled} onClick={onMoreLike}><Sparkles size={12} />More like this</button>
+        <button type="button" className="lf-more" disabled={disabled || !LEAD_FINDER.discoveryAvailable} title={!LEAD_FINDER.discoveryAvailable ? "Similar-lead discovery is temporarily unavailable. Search the map or paste another list." : undefined} onClick={onMoreLike}><Sparkles size={12} />More like this{!LEAD_FINDER.discoveryAvailable ? " · unavailable" : ""}</button>
       </div>
     </div>
   </li>;

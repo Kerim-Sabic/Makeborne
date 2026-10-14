@@ -143,7 +143,8 @@ const publicResolve = async () => [{ address: "93.184.216.34", family: 4 }];
 
   await check("pricing: pay per delivered lead, the hold covers the worst case, requests are validated", () => {
     assert.equal(leadFinderMaxCredits(25, "list"), Math.ceil(25 * LEAD_FINDER.creditsPerLead + LEAD_FINDER.rankingCredits));
-    assert.equal(leadFinderMaxCredits(25, "local"), leadFinderMaxCredits(25, "list") + LEAD_FINDER.searchCredits, "map searches reserve for the web fallback");
+    assert.equal(LEAD_FINDER.discoveryAvailable, false);
+    assert.equal(leadFinderMaxCredits(25, "local"), leadFinderMaxCredits(25, "list"), "disabled web fallback reserves no search credits");
     for (const mode of ["local", "creators", "list"]) assert.ok(leadFinderTypicalCredits(25, mode) <= leadFinderMaxCredits(25, mode), mode);
     assert.equal(leadFinderTypicalCredits(10, "local"), 3);
     assert.ok(LeadFindRequestSchema.safeParse({ mode: "creators", niche: "vegan recipes", platform: "TikTok", count: 25 }).success);
@@ -395,6 +396,92 @@ const publicResolve = async () => [{ address: "93.184.216.34", family: 4 }];
     assert.deepEqual(out, [2, 4, 6, 8, 10, 12, 14]);
     assert.equal(peak, 3);
     assert.deepEqual(done, [1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  await check("real finder route rounds once and withholds results until successful settlement", async () => {
+    const previousLoad = Module._load;
+    const routePath = path.join(src, "app/api/cloud/workspaces/[workspaceId]/leads/find/route.ts");
+    let scenario, reserved, settlement, releases;
+    class RequestError extends Error { constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; } }
+    const mocks = {
+      "@/lib/server/http": { RequestError, sameOrigin() {}, boundedJson: request => request.json(), apiError: error => json({ error: { code: error.code } }, error.status ?? 500) },
+      "@/lib/cloud/server": { databaseError() {}, async cloudContext() { return { user: { id: "offline-user" }, workspace: { role: "owner" }, client: { from: () => ({ select: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) } }; } },
+      "@/lib/experts/start": { chatEnabled: () => true },
+      "@/lib/ai/model-check": { requirePricedModel() {} },
+      "@/lib/ai/live-run": { CLOCK_SKEW_MS: 30_000, SETTLEMENT_WINDOW_MS: 60_000, requireProviderCapacity: async () => {}, databaseGate: () => ({ async begin() {}, async finish() {} }) },
+      "@/lib/builder/pricing": { aiCostUsdPerCredit: () => 0.03 },
+      "@/lib/builder/website-run": { logAiStop() {} },
+      "@/lib/credits/server": {
+        HOLD_LIFETIME_MS: 900_000,
+        async reserveCredits(userId, amount, reference) { reserved++; return { userId, amount, reference, exempt: false, reservedAt: Date.now() }; },
+        async settleRun(hold, measured, detail) { assert.ok(Number.isSafeInteger(measured)); settlement = { measured, detail }; if (scenario.settleError) throw new Error("database unavailable"); return { outcome: scenario.outcome ?? "settled", charged: measured }; },
+        async releaseRun(hold, measured, reason, detail) { assert.ok(Number.isSafeInteger(measured)); releases.push({ measured, reason, detail }); },
+      },
+      "@/lib/leads/finder": {
+        RANK_MODEL: "claude-haiku-5-5", existingIndex: () => ({}),
+        async gatherLeads() { return { leads: Array.from({ length: scenario.count }, (_, i) => ({ name: `Lead ${i}` })), skipped: 0, duplicates: 0, attribution: "", place: "", category: "" }; },
+        async rankLeads({ spend }) { if (scenario.cost || scenario.uncertain) { const ticket = await spend.begin("anthropic", "claude-haiku-5-5", 1000); await spend.finish(ticket, { actualMicrousd: scenario.uncertain ? null : scenario.cost }); } },
+      },
+      "@/lib/leads/discover": { DISCOVER_MODEL: "claude-haiku-5-5", async discover() { throw new Error("web search forbidden"); } },
+    };
+    Module._load = function(name, parent, main) { return Object.hasOwn(mocks, name) ? mocks[name] : previousLoad.call(this, name, parent, main); };
+    try {
+      delete require.cache[routePath]; const route = require(routePath);
+      const run = async config => {
+        scenario = config; reserved = 0; settlement = null; releases = [];
+        const body = config.body ?? { mode: "list", items: ["https://example.com"], offer: "", count: 10 };
+        const response = await route.POST(new Request("http://localhost/find", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), { params: Promise.resolve({ workspaceId: "offline-workspace" }) });
+        const text = await response.text();
+        return { response, events: text.split("\n").filter(line => line.startsWith("data: ")).map(line => JSON.parse(line.slice(6))) };
+      };
+      for (const count of [1, 4, 7, 9]) {
+        const result = await run({ count, cost: 500 });
+        assert.equal(settlement.measured, Math.ceil(count * 0.2 + 0.25 - 1e-9));
+        assert.equal(result.events.at(-1).type, "done"); assert.equal(result.events.at(-2).type, "results"); assert.equal(releases.length, 0);
+      }
+      for (const outcome of ["missing_hold", "released_hold"]) {
+        const result = await run({ count: 7, outcome });
+        assert.ok(!result.events.some(event => event.type === "results" || event.type === "done"));
+        assert.equal(result.events.at(-1).type, "error"); assert.equal(releases.length, 1);
+      }
+      for (const outcome of ["replayed", "exempt"]) {
+        const result = await run({ count: 1, outcome }); assert.equal(result.events.at(-1).type, "done"); assert.equal(releases.length, 0);
+      }
+      const failed = await run({ count: 7, settleError: true });
+      assert.ok(!failed.events.some(event => event.type === "results")); assert.equal(releases.length, 1);
+      assert.equal(failed.events.at(-1).code, "SETTLEMENT_UNCONFIRMED"); assert.doesNotMatch(failed.events.at(-1).message, /Nothing was charged/); assert.equal(failed.events.at(-1).retryable, false);
+      const empty = await run({ count: 0 });
+      assert.equal(settlement, null); assert.equal(releases[0].reason, "lead_find_empty"); assert.equal(empty.events.at(-1).charged, 0);
+      const uncertain = await run({ count: 1, uncertain: true });
+      assert.equal(settlement.measured, 1); assert.equal(settlement.detail.providerMicrousd, 1000); assert.equal(settlement.detail.uncertainMicrousd, 1000); assert.equal(uncertain.events.at(-1).charged, 1);
+      for (const body of [{ mode: "creators", niche: "vegan food", platform: "Instagram", count: 10 }, { mode: "local", niche: "dentists", place: "Austin", count: 10, like: { name: "Smile Co" } }]) {
+        const result = await run({ count: 0, body }); assert.equal(result.response.status, 503); assert.equal(reserved, 0);
+      }
+    } finally { Module._load = previousLoad; delete require.cache[routePath]; }
+  });
+
+  await check("finder UI disables discovery and seeded look-alikes while explaining available modes and integral pricing", () => {
+    const React = require("react"), { renderToStaticMarkup } = require("react-dom/server");
+    const previousLoad = Module._load, previousTsx = require.extensions[".tsx"];
+    const uiPath = path.join(src, "components/leads/lead-finder.tsx");
+    require.extensions[".tsx"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
+    Module._load = function(name, parent, main) {
+      if (parent?.filename === uiPath && name === "../mail/modal") return { __esModule: true, default: ({ children }) => React.createElement("div", null, children) };
+      if (parent?.filename === uiPath && name === "../cloud-api") return {};
+      if (parent?.filename === uiPath && name === "./lead-api") return {};
+      return previousLoad.call(this, name, parent, main);
+    };
+    try {
+      delete require.cache[uiPath]; const LeadFinder = require(uiPath).default;
+      const render = seed => renderToStaticMarkup(React.createElement(LeadFinder, { accountId: "offline", workspaceId: "offline", seed, onClose() {}, onAdded() {} }));
+      const plain = render(null);
+      assert.match(plain, /Creators.*unavailable/); assert.match(plain, /combined total rounds up once/); assert.match(plain, /confirmed AI ranking/);
+      assert.match(plain, /disabled=""[^>]*>.*Creators/s);
+      for (const seed of [{ name: "Dental", url: "https://dentist.example", about: "dentists" }, { name: "Creator", url: "https://www.instagram.com/real.creator/", about: "vegan food" }]) {
+        const seeded = render(seed); assert.match(seeded, /temporarily unavailable/); assert.match(seeded, /type="submit"[^>]*disabled=""/); assert.doesNotMatch(seeded, /About <strong>/);
+      }
+      assert.match(render({ name: "Dental", url: "https://dentist.example", about: "dentists" }), /Clear the example above/);
+    } finally { Module._load = previousLoad; require.extensions[".tsx"] = previousTsx; delete require.cache[uiPath]; }
   });
 
   console.log(`\n${passed} lead finder checks passed.`);
