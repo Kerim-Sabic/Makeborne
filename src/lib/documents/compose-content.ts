@@ -65,7 +65,7 @@ export function pointsRows(ctx: Ctx, slide: Slide) {
 }
 
 export function pointsCards(ctx: Ctx, slide: Slide) {
-  const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
+  const a = area(ctx), points = slide.points!, n = points.length;
   const top = header(ctx, slide, { standfirst: slide.body }) + 36;
   const cols = n <= 4 ? n : 3, rows = Math.ceil(n / cols), gap = 20, cw = (a.w - gap * (cols - 1)) / cols, band = a.b - top, ch = (band - gap * (rows - 1)) / rows, pad = cols >= 4 ? 24 : 30;
   const iw = cw - pad * 2, glyphS = rows > 1 ? 30 : 40;
@@ -143,7 +143,7 @@ export function pointsGrid(ctx: Ctx, slide: Slide) {
 }
 
 export function agendaList(ctx: Ctx, slide: Slide) {
-  const a = area(ctx), c = ctx.c, items = slide.points!, n = items.length;
+  const a = area(ctx), items = slide.points!, n = items.length;
   const lw = Math.round(a.w * 0.34), rx = a.x + lw + 64, rw = a.r - rx;
   stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.headline, min: 32, sub: slide.body, subStyle: { size: 22 } }, { x: a.x, y: a.y, w: lw, h: a.b - a.y }, "top");
   const rowH = (a.b - a.y) / n, numW = 96, size = Math.min(40, Math.max(22, rowH * 0.36));
@@ -614,7 +614,7 @@ function pricingLayout(ctx: Ctx, slide: Slide, top: number, cards: boolean) {
   return { result, colW, limit };
 }
 export function pricingCards(ctx: Ctx, slide: Slide) {
-  const a = area(ctx), c = ctx.c, top = header(ctx, slide, { size: ctx.dir.sizes.headline * 0.88 }) + 36;
+  const a = area(ctx), top = header(ctx, slide, { size: ctx.dir.sizes.headline * 0.88, maxLines: 1 }) + 36;
   const { result, colW, limit } = pricingLayout(ctx, slide, top, true);
   const ph = Math.min(limit, result.height);
   placed(ctx, top, a.b, sub => {
@@ -626,7 +626,7 @@ export function pricingCards(ctx: Ctx, slide: Slide) {
   footer(ctx);
 }
 export function pricingColumns(ctx: Ctx, slide: Slide) {
-  const a = area(ctx), c = ctx.c, top = header(ctx, slide, { size: ctx.dir.sizes.headline * 0.88 }) + 32;
+  const a = area(ctx), c = ctx.c, top = header(ctx, slide, { size: ctx.dir.sizes.headline * 0.88, maxLines: 1 }) + 32;
   const { result, colW } = pricingLayout(ctx, slide, top, false);
   for (const p of result.panels) {
     hline(ctx, p.x, p.x + colW, top, p.strong ? c.accent : ruleColor(ctx), p.strong ? 6 : 1.5);

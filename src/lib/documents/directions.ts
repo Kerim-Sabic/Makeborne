@@ -87,7 +87,7 @@ export const DIRECTION_SPECS: Record<Direction, DirectionSpec> = {
     compositions: {
       cover: all("cover-masthead", "cover-split", "cover-poster"), closing: all("closing-centered", "closing-ask", "closing-split"),
       section: all("section-numeral", "section-split", "section-centered"), statement: all("statement-split", "statement-hero", "statement-hanging"),
-      points: all("points-feature", "points-rows", "points-columns", "points-grid"), stats: all("stats-row", "stats-ledger", "stats-hero"),
+      points: all("points-rows", "points-columns", "points-feature", "points-grid"), stats: all("stats-row", "stats-ledger", "stats-hero"),
       chart: all("chart-annotated", "chart-hero", "chart-full"), diagram: all("diagram-steps", "diagram-rail", "diagram-classic"),
       compare: all("compare-columns", "compare-panels", "compare-versus"), quote: all("quote-giant", "quote-centered", "quote-field"),
       team: all("team-row", "team-list", "team-grid"), image: all("image-framed", "image-band", "image-full"), split: all("split-inset", "split-half"), ...common,
@@ -209,7 +209,7 @@ export const DIRECTION_SPECS: Record<Direction, DirectionSpec> = {
   },
   architect: {
     id: "architect", name: "Architectural mono", voice: "Monochrome drawing-board precision: construction lines, plan-like geometry, outlined modules, dimension ticks, light large numerals and one restrained accent. Architecture, property, engineering, industrial design, hardware.",
-    pairings: ["geist", "instrument", "space-grotesk", "condensed"],
+    pairings: ["instrument", "geist", "space-grotesk", "condensed"],
     mx: 64, top: 64, bottom: 640, axis: "left",
     display: { upper: false, lh: 1.0, weight: 400 },
     sizes: { cover: 116, statement: 80, headline: 54, section: 72, number: 190, body: 21, lead: 24 },

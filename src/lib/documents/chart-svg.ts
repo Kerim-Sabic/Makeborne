@@ -32,10 +32,14 @@ export function chartSvg(chart: Chart, width: number, height: number, colors: Ch
   }
   const n = chart.categories.length;
   const all = chart.series.flatMap(series => series.values);
-  let max = Math.max(0, ...all), min = Math.min(0, ...all);
+  let max = Math.max(0, ...all), min = Math.min(0, ...all), tick = 0;
   if (chart.type === "line") {
     const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo || Math.abs(hi) || 1) * 0.18;
     min = lo >= 0 && lo - pad < 0 ? 0 : lo - pad; max = hi + pad;
+    // Round axis ticks (1, 2 or 5 × a power of ten) instead of arbitrary quarter values.
+    const raw = (max - min) / 4, power = 10 ** Math.floor(Math.log10(raw || 1)), unit = raw / power;
+    tick = (unit <= 1 ? 1 : unit <= 2 ? 2 : unit <= 5 ? 5 : 10) * power;
+    min = Math.floor(min / tick) * tick; max = Math.ceil(max / tick) * tick;
   }
   const span = max - min || 1;
   const barColor = (series: number, index: number) => multi ? colors.series[series] : chart.highlight === undefined ? colors.series[0] : index === chart.highlight ? colors.highlight : colors.dim;
@@ -73,8 +77,9 @@ export function chartSvg(chart: Chart, width: number, height: number, colors: Ch
   } else if (chart.type === "line") {
     const left = 56, top = legendH + 24, bottom = height - 44, right = width - 24, plotH = bottom - top;
     const x = (i: number) => left + (n === 1 ? 0 : i * (right - left) / (n - 1)), y = (v: number) => bottom - (v - min) / span * plotH;
-    for (let g = 0; g <= 4; g++) {
-      const value = min + span * g / 4, gy = y(value);
+    const ticks = Math.max(1, Math.round(span / (tick || span / 4)));
+    for (let g = 0; g <= ticks; g++) {
+      const value = min + span * g / ticks, gy = y(value);
       parts.push(`<line x1="${left}" x2="${right}" y1="${gy.toFixed(1)}" y2="${gy.toFixed(1)}" stroke="${colors.grid}" stroke-width="1" ${g ? 'stroke-dasharray="3 5"' : ""}/>`);
       t(left - 10, gy + 5, formatValue(chart, value), 13, colors.muted, "end");
     }

@@ -86,7 +86,8 @@ const attr = (xml, name) => { const m = new RegExp(`\\b${name}="([^"]*)"`).exec(
 const unxml = (value) => value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 const escHtml = (value) => value.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 function fillOf(xml) {
-  if (!xml || /<a:noFill\/>/.test(xml.split("<a:ln")[0])) return null;
+  // "<a:ln" also prefixes custom-geometry <a:lnTo> points; only the outline element ends the fill.
+  if (!xml || /<a:noFill\/>/.test(xml.split(/<a:ln[ >\/]/)[0])) return null;
   const m = /<a:solidFill><a:srgbClr val="([0-9A-Fa-f]{6})"(?:\/>|>([\s\S]*?)<\/a:srgbClr>)/.exec(xml);
   if (!m) return null;
   const alpha = m[2] && /<a:alpha val="(\d+)"/.exec(m[2]);
@@ -123,7 +124,7 @@ async function pptxSlides(bytes) {
         if (target) { const file = zip.file(path.posix.normalize(path.posix.join("ppt/slides", target))); if (file) shape.src = `data:image/${/\.png$/i.test(target) ? "png" : "jpeg"};base64,${await file.async("base64")}`; }
       } else if (type === "p:graphicFrame") shape.chart = /c:chart/.test(body);
       const spPr = /<p:spPr>([\s\S]*?)<\/p:spPr>/.exec(body)?.[1] ?? "";
-      shape.fill = fillOf(spPr.replace(/<a:ln[\s\S]*?<\/a:ln>/, ""));
+      shape.fill = fillOf(spPr.replace(/<a:ln(?: [^>]*)?>[\s\S]*?<\/a:ln>|<a:ln(?: [^>]*)?\/>/, ""));
       const ln = /<a:ln(?: [^>]*)?>([\s\S]*?)<\/a:ln>/.exec(spPr) ?? /<a:ln(?: [^>]*)?\/>/.exec(spPr);
       if (ln && ln[1] && !/<a:noFill\/>/.test(ln[1])) shape.line = { ...fillOf(ln[1]), width: Number(attr(ln[0], "w") ?? 12700) / EMU };
       const radius = /<a:gd name="adj" fmla="val (\d+)"\/>/.exec(spPr);

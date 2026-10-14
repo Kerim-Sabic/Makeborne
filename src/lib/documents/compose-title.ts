@@ -8,11 +8,15 @@ import type { GraphicKind } from "./directions";
 
 /** Cover, closing, section, statement and quote compositions. */
 
-export function useTone(ctx: Ctx, tone: Slide["tone"]) { ctx.c = toneColors(ctx.theme, tone, ctx.dir.ground); }
+export function applyTone(ctx: Ctx, tone: Slide["tone"]) { ctx.c = toneColors(ctx.theme, tone, ctx.dir.ground); }
 /** A colour field that differs from the slide's own tone. */
 /** A colour field for a light slide; a slide the author already set dark or accent keeps its tone. */
 export const fieldTone = (ctx: Ctx): Slide["tone"] => ctx.tone === "light" ? "accent" : ctx.tone;
-export const pickGraphic = (ctx: Ctx, offset = 0): GraphicKind => ctx.dir.graphics[(ctx.seed + offset) % ctx.dir.graphics.length];
+/** A graphic from the direction's language, varied per slide. Illustrative plates are kept for covers. */
+export const pickGraphic = (ctx: Ctx, offset = 0): GraphicKind => {
+  const pool = ctx.dir.graphics.filter(kind => kind !== "plate" || ctx.index === 0);
+  return pool[(ctx.seed + offset) % pool.length];
+};
 export const subOf = (slide: Slide) => slide.subtitle ?? slide.body;
 const deckLabel = (ctx: Ctx, slide: Slide) => ctx.deck.title && slide.title !== ctx.deck.title ? ctx.deck.title : "";
 
@@ -98,14 +102,14 @@ export function coverModules(ctx: Ctx, slide: Slide) {
   const cells = [slide.eyebrow, ctx.deck.author, deckLabel(ctx, slide)].filter((value): value is string => !!value).slice(0, 3);
   cells.forEach((value, i) => label(ctx, value, { x: a.x + i * (a.w / 3), y: a.y, w: a.w / 3 - 24 }, i ? { color: c.muted } : {}));
   hline(ctx, a.x, a.r, a.y + 40, c.ink, 1.5);
-  const gx = a.x + a.w * 0.5 + 24, gTop = a.y + 72, gh = 260;
+  const gx = a.x + a.w * 0.5 + 24, gTop = a.y + 72, gh = 220;
   graphic(ctx, ctx.dir.id === "architect" ? "plan" : "modules", { x: gx, y: gTop, w: a.r - gx, h: gh });
   const subStyle = leadStyle(ctx), subW = Math.min(640, a.w * 0.55), subH = sub ? measure(ctx, sub, subW, subStyle) : 0;
   const bottom = H - 56, titleBottom = sub ? bottom - subH - 30 : bottom;
   // Full width below the graphic when the title stays big there; otherwise the left column beside it.
   const wide = fitDisplay(ctx, slide.title, a.w * 0.92, titleBottom - (gTop + gh + 28), ctx.dir.sizes.cover, 40);
   const narrow = fitDisplay(ctx, slide.title, a.w * 0.5 - 8, titleBottom - gTop, ctx.dir.sizes.cover, 40);
-  const useWide = wide.size >= Math.min(narrow.size * 0.98, ctx.dir.sizes.cover * 0.7);
+  const useWide = wide.size >= Math.min(narrow.size * 0.98, ctx.dir.sizes.cover * 0.6);
   const fit = useWide ? wide : narrow, w = useWide ? a.w * 0.92 : a.w * 0.5 - 8;
   display(ctx, slide.title, { x: a.x, y: titleBottom - fit.h, w, h: fit.h }, ctx.dir.sizes.cover, { min: 40 });
   if (sub) text(ctx, sub, { x: a.x, y: bottom - subH, w: subW, h: subH }, subStyle);
@@ -190,7 +194,7 @@ export function closingAsk(ctx: Ctx, slide: Slide) {
 }
 
 export function closingField(ctx: Ctx, slide: Slide) {
-  useTone(ctx, fieldTone(ctx));
+  applyTone(ctx, fieldTone(ctx));
   coverPoster(ctx, { ...slide, eyebrow: slide.eyebrow }, true);
 }
 
@@ -228,7 +232,7 @@ export function sectionNumeral(ctx: Ctx, slide: Slide) {
 }
 
 export function sectionField(ctx: Ctx, slide: Slide) {
-  useTone(ctx, ctx.tone === "light" ? "accent" : ctx.tone);
+  applyTone(ctx, ctx.tone === "light" ? "accent" : ctx.tone);
   const a = area(ctx), c = ctx.c, num = sectionNumber(ctx, slide), sub = subOf(slide);
   const ghost = mix(c.ink, c.bg, 0.78);
   text(ctx, num, { x: W - 40 - 700, y: 30, w: 700, h: 400 }, { ...numeralStyle(ctx, 380, { color: ghost }), align: "right", maxH: 400, min: 80 });
@@ -310,13 +314,13 @@ export function statementHanging(ctx: Ctx, slide: Slide) {
 }
 
 export function statementCentered(ctx: Ctx, slide: Slide) {
-  const a = area(ctx), c = ctx.c, body = slide.body ?? slide.subtitle;
+  const a = area(ctx), body = slide.body ?? slide.subtitle;
   stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.86, min: 38, sub: body, subW: 760, align: "center", rule: ctx.dir.id !== "luxury" }, { x: a.x + 30, y: a.y + 70, w: a.w - 60, h: a.b - a.y - 90 }, "middle");
   footer(ctx);
 }
 
 export function statementField(ctx: Ctx, slide: Slide) {
-  useTone(ctx, fieldTone(ctx));
+  applyTone(ctx, fieldTone(ctx));
   const a = area(ctx), body = slide.body ?? slide.subtitle, gw = Math.round(a.w * 0.3), kind = pickGraphic(ctx, 3);
   graphic(ctx, kind === "glow" ? "rings" : kind, { x: a.r - gw, y: a.y + 20, w: gw, h: a.b - a.y - 40 });
   stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.9, min: 40, sub: body, subW: 680 }, { x: a.x, y: a.y, w: a.w - gw - 56, h: a.b - a.y }, "middle");
@@ -351,7 +355,7 @@ export function quoteGiant(ctx: Ctx, slide: Slide) {
 }
 
 export function quoteField(ctx: Ctx, slide: Slide) {
-  useTone(ctx, fieldTone(ctx));
+  applyTone(ctx, fieldTone(ctx));
   const a = area(ctx), c = ctx.c, q = slide.quote!;
   const attribution = q.attribution ? `— ${q.attribution}` : "";
   text(ctx, "“", { x: a.r - 340, y: 40, w: 340, h: 390 }, { font: "heading", size: 360, lh: 1, color: mix(c.ink, c.bg, 0.7), align: "right" });

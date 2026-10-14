@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS check fixture. */
 /* Synthetic, illustrative fixtures for the art-direction checks: every layout and diagram kind at the
  * copy lengths the agent prompt recommends, plus a legacy (pre-direction) deck as it was saved. */
 const { deckSlides, palette } = require("./design-quality.cjs");
