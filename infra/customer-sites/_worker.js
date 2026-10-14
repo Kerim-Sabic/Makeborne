@@ -1,3 +1,4 @@
+import { scheduleSiteView } from "./analytics.js";
 import { submitEnquiry } from "./forms.js";
 import { siteNamespacePolicy, classifySiteNamespaceRequest, STAGING_SITE_LABELS } from "./namespace-policy.js";
 import {
@@ -15,7 +16,8 @@ import {
  * served exactly like that slug's address. Site reads use the publishable
  * Supabase key against read-only RPCs. Enquiries use a separately signed app
  * gateway; visitor cookies are never forwarded and raw visitor IP addresses are
- * never stored. */
+ * never stored. Successful document views are counted after the response with
+ * signed, cookieless analytics (analytics.js, docs/SITE_ANALYTICS.md). */
 const WORKER_VERSION = "mb4";
 const ALLOWED_TYPES = new Set(Object.values(SITE_CONTENT_TYPES));
 export const CUSTOM_HOST_CACHE_SECONDS = Object.freeze({ found: 60, missing: 30 });
@@ -183,7 +185,12 @@ async function serveSite(request, env, context, config, url, slug, secure, head,
   }
   try {
     if (siteFilePath(url.pathname)) return await serveFile(request, context, config, slug, url, secure, custom);
-    if (siteDocumentPath(url.pathname)) return await serveDocument(request, config, slug, url.pathname, secure);
+    if (siteDocumentPath(url.pathname)) {
+      const response = await serveDocument(request, config, slug, url.pathname, secure);
+      // Counted after the response (waitUntil); a failure there never changes it.
+      scheduleSiteView(request, response, env, context, config, slug, url);
+      return response;
+    }
     return failure(404, secure, head);
   } catch (error) {
     console.error(JSON.stringify({ event: "hosted_site_read_error", type: error instanceof Error ? error.message.slice(0, 40) : "unknown" }));

@@ -68,7 +68,7 @@ npx wrangler secret delete STAGING_VERCEL_OIDC_TOKEN --env staging
 
 Never put this secret in `--env production`. Before production, run
 `npx wrangler secret list --env production` and confirm it lists only
-`SUPABASE_PUBLISHABLE_KEY` and `FORMS_SIGNING_SECRET`. The production app is
+`SUPABASE_PUBLISHABLE_KEY`, `FORMS_SIGNING_SECRET` and, once visitor analytics are enabled, `ANALYTICS_SIGNING_SECRET` (docs/SITE_ANALYTICS.md). The production app is
 public, so its Worker needs no Vercel token. Even if the token were copied,
 the code guard refuses it for the production Supabase URL and the
 `makeborne.com` origin.

@@ -82,6 +82,10 @@ NEXT_PUBLIC_MAKEBORNE_SITE_URL_TEMPLATE='http://{slug}.localhost:8787/' node C:/
 ```
 The Worker refuses any non-`*.supabase.co` upstream unless `ALLOW_LOCAL_SUPABASE=true`, and the local config never contains the production URL. Offline checks: `node src/lib/hosting/check-hosting.cjs` (CSP/header generation, host/path routing, bundle validation, digest verification, snapshot sanitising, migration grants) runs in `npm test`.
 
+## Visitor analytics
+
+After a successful page response the Worker can count the view, without cookies or scripts on the site, through a signed call to `makeborne_record_site_view`. It is off until the optional Worker secret `ANALYTICS_SIGNING_SECRET` and the matching database row are set. See [SITE_ANALYTICS.md](SITE_ANALYTICS.md).
+
 ## Not included yet
 
 Enabled custom domains (the `custom_domains` table, host resolver and Worker support exist but are not deployed or configured; see [CUSTOM_DOMAINS.md](CUSTOM_DOMAINS.md)), form/checkout back-ends, server code, per-route prerendering (client routes other than `/` get the home snapshot until React renders them, and are marked `noindex`), and automatic edge-cache purge on takedown (immutable bundles may stay in the edge cache, but without the HTML they are inert).

@@ -79,7 +79,7 @@ Publishing the Makeborne app does not host sites made by customers. Before enabl
 - [ ] Enforce per-tenant storage/build/request limits, handle failures and abuse, and record auditable publication history.
 - [ ] Verify a complete first publish, update, rollback, custom-domain connection and removal without affecting another tenant.
 
-Cloudflare for SaaS is a candidate for custom hostname management; Workers for Platforms is a candidate if Makeborne executes customer-supplied application code. These are separate integrations, not features activated by selecting Cloudflare for the editor. Custom-domain database and Worker support, and the owner's enablement steps, are in [CUSTOM_DOMAINS.md](CUSTOM_DOMAINS.md). [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/), [Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/)
+Cloudflare for SaaS is a candidate for custom hostname management; Workers for Platforms is a candidate if Makeborne executes customer-supplied application code. These are separate integrations, not features activated by selecting Cloudflare for the editor. Custom-domain database and Worker support, and the owner's enablement steps, are in [CUSTOM_DOMAINS.md](CUSTOM_DOMAINS.md). Cookieless visitor analytics for published sites (what is counted, privacy, the signing secret, rollout and retention) is in [SITE_ANALYTICS.md](SITE_ANALYTICS.md). [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/), [Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/)
 
 ## Deployment record
 
