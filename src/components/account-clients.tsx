@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, Check, Columns3, Download, List, Mail, Plus, RefreshCw, Search, Sparkles, Upload, Users } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Columns3, Download, List, Mail, Plus, RefreshCw, Search, Sparkles, Upload, Users, Wand2 } from "lucide-react";
 import MailCenter from "./mail/mail-center";
 import ClientEmail from "./mail/client-email";
 import BulkEnroll from "./mail/bulk-enroll";
@@ -14,6 +14,7 @@ import ClientBoard from "./client-board";
 import { CLIENTS_ACTION_EVENT, refreshOnboarding, takeClientsAction, type ClientsRequest, type LeadFinderSeed } from "./onboarding/signals";
 import EnquiryLeads from "./enquiry-leads";
 import BrandKits from "./brand-kits";
+import LeadRedesign from "./lead-redesign";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -42,7 +43,7 @@ const readDevicePreference = () => { try { return typeof window !== "undefined" 
 const writeDevicePreference = (value: boolean) => { try { window.sessionStorage.setItem(DEVICE_PREFERENCE, value ? "1" : "0"); } catch { /* private mode */ } };
 
 /** Account changes unmount every client draft and invalidate outstanding reads. */
-type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient) => void };
+type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient, prefill?: { brief: string; title: string }) => void };
 type ClientNavigation = { target: AccountClientRoute | null; navigate: (route: AccountClientRoute | null) => void };
 export default function AccountClients({ deviceClients, target, navigate, onCreate, onOpenProject, initialDevice = false }: ClientNavigation & ClientCreation & { deviceClients: ReactNode; initialDevice?: boolean }) {
   const [account, setAccount] = useState<string | null>(null);
@@ -256,6 +257,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const listed = clientId ? directory.data?.clients.find(item => item.id === clientId) : undefined;
   const full = clientId ? loaded[clientId] : undefined;
   const opened = full ?? listed ?? null;
+  const [redesigning, setRedesigning] = useState(false);
   const openError = clientId && detailError?.id === clientId ? detailError.message : "";
 
   async function refresh() {
@@ -405,7 +407,11 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   if (clientId) return <section className="ac-workspace" aria-label="Account client" ref={root}>
     <button className="button ghost small ac-back" disabled={saving} onClick={backToList}><ArrowLeft size={15} /> All clients</button>
     <header className="ac-heading"><div><span className="eyebrow">CLIENT</span><h1>{opened?.name ?? "Client"}</h1><p>{opened ? [opened.company, opened.email].filter(Boolean).join(" · ") || "Contact details, conversations, and the work you create together." : "Opening client…"}</p></div>
-      {opened && snapshot && canEdit && <button className="button primary" disabled={saving} onClick={() => onCreate(snapshot.workspace.id, opened)}><Plus size={16} /> Create for this client</button>}</header>
+      {opened && snapshot && canEdit && <div className="ac-heading-actions">
+        {opened.website && <button className="button" disabled={saving} onClick={() => setRedesigning(true)}><Wand2 size={16} /> Redesign their website</button>}
+        <button className="button primary" disabled={saving} onClick={() => onCreate(snapshot.workspace.id, opened)}><Plus size={16} /> Create for this client</button></div>}</header>
+    {redesigning && opened && snapshot && <LeadRedesign accountId={accountId} workspaceId={snapshot.workspace.id} client={{ id: opened.id, name: opened.company || opened.name, website: opened.website }}
+      onClose={() => setRedesigning(false)} onCreate={(brief, title) => { setRedesigning(false); onCreate(snapshot.workspace.id, opened, { brief, title }); }} />}
     {message && <p role="status">{message}</p>}
     {openError && <div className="ac-notice" role="alert"><p>{openError}</p><button className="button secondary small" onClick={backToList}>Back to clients</button></div>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />

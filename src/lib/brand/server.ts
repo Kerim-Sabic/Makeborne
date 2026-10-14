@@ -68,7 +68,11 @@ export type ImportResult = { kit: BrandKitInput; notes: string[] };
 export async function importBrandFromWebsite(raw: string, deps: Deps = {}): Promise<ImportResult> {
   const address = /^https?:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`;
   const { facts, html } = await readWithHtml(address, deps);
-  const base = new URL(facts.url || address);
+  return brandFromPage(html, new URL(facts.url || address), deps);
+}
+
+/** The draft kit for an already-fetched page (its same-site stylesheets and logo are fetched through the guard). */
+export async function brandFromPage(html: string, base: URL, deps: Deps = {}): Promise<ImportResult> {
   const sheets = await Promise.all(stylesheetLinks(html, base).map(href => fetchPublic(href, "text/css,*/*;q=0.1", /^text\/css$|^text\/plain$/, deps).then(result => result.bytes.toString("utf8").slice(0, 600_000), () => "")));
   const brand = extractBrand(html, sheets.join("\n"), base);
   const notes: string[] = [];

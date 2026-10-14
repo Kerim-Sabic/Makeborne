@@ -13,6 +13,7 @@ const MAX = 25;
 const CAMPAIGN_CHOICES: { id: NonNullable<DraftOptions["campaign"]>; label: string; detail: string }[] = [
   { id: "audience_value", label: "Creators: what your audience is worth", detail: "Offer a breakdown of their audience's value plus product ideas. Reply YES to get it." },
   { id: "website", label: "Businesses: a website that wins customers", detail: "Offer a specific idea or mock-up for their site. Reply YES to see it." },
+  { id: "redesign", label: "Businesses: I redesigned your website", detail: "Point out real problems found on their current site and offer the new version. Reply YES to see it." },
   { id: "custom", label: "My own angle", detail: "Describe the offer and ask yourself." },
 ];
 

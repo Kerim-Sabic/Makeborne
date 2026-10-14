@@ -1550,7 +1550,8 @@ export function CloudEditor({
       const reference = readGenerationReference(localStorage, accountId, scope);
       if (!reference?.autoStart || reference.jobId) return;
       saveGenerationReference(localStorage, { ...reference, autoStart: false });
-      const brief = project.brief.trim();
+      // The builder's first message is capped at 8,000 characters; the full brief is always in the project context.
+      const full = project.brief.trim(), brief = full.length > 8000 ? `${full.slice(0, 7400).replace(/\s+\S*$/, "")}…\n\n(The full brief is in the project details.)` : full;
       queueMicrotask(() => { setAutoStartMode(reference.planFirst ? "plan" : "create"); setAutoStart(brief); });
     } catch { /* storage unavailable: the user can send the brief manually */ }
   }, [useLiveBuilder, liveDocument, content, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
