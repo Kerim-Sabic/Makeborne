@@ -978,3 +978,43 @@ October14 root pack completion: owner approved adding only payment:dispute:read 
 ### Second local checkpoint — October 14
 
 Owner explicitly requested a second local checkpoint on upgrade/live-builder after30b147feca8ff69e5dc6411a0db49a6f29d94365. Includes the current help/demos/lead finder/web-search pricing/walkthrough fixes and accumulated mail, billing, publication code/migrations/review evidence. Generated outputs/, ignored work/ configuration and docs/release-review/hosting-staging.log remain outside the commit, matching the first checkpoint. Source and staged contents receive a local credential-pattern and known-local-credential equality scan; only exact reviewed synthetic rejection-test values are exempted. This is a local recovery checkpoint, not a qualified/frozen release candidate. No push, tag, merge, main change, deployment or production operation.
+
+### Claude claims: onboarding, lead finder upgrades, more guides (2026-10-14)
+The owner asked for a first-run experience, link-in-bio and "more like this" for the lead finder, and 10–15 more how-to and comparison guides.
+
+**Claimed:**
+- New `src/components/onboarding/**` and `src/app/api/cloud/workspaces/[workspaceId]/onboarding/route.ts` (read-only counts).
+- Small injection points in `src/components/studio.tsx` and `src/components/account-clients.tsx`.
+- `src/lib/leads/**`, the `leads/find` route, `src/components/leads/**`.
+- `src/lib/help/**`, `src/app/help/**`, `src/components/help-demo/**`.
+
+**Constraints:** comparison guides use only `docs/release-review/competitor-verification-20261013.json` (official docs) and respect its `makeborneCorrections`. No schema change. Any paid smoke will be reserved in the ledger first, at most $0.30.
+
+### Claude handback: onboarding, lead finder upgrades, 14 more guides (2026-10-14)
+**First-run experience:**
+- New `src/components/onboarding/{getting-started.tsx,checklist.ts,signals.ts,onboarding.css,check-onboarding.cjs}`.
+- New `GET /api/cloud/workspaces/[id]/onboarding`: read-only RLS counts; a table that can't be read reports null and its step is hidden.
+- **Welcome:** shown once, only for an empty account. It offers three paths: website, first 10 leads, book or deck.
+- **Checklist:** six self-ticking steps (project, leads, connect email, first email, review link, advisor), each with an action and a guide link. It can be hidden.
+- **Integration:** `studio.tsx` renders it next to `creationView` and hides it while creating or editing. `account-clients.tsx` listens for "open lead finder" and "show Email" requests (session storage plus an event).
+- Checks: 4 groups.
+
+**Lead finder:**
+- **Link in bio** (`src/lib/leads/link-in-bio.ts`):
+  - links written in the bio, then guessed `linktr.ee` and `stan.store` pages for the handle (and the handle without dots or underscores);
+  - a guessed page is trusted only if it links back or its username matches;
+  - the creator's own site is picked by domain or by a "my website / store / blog" title, never an affiliate or brand link;
+  - capped at 30 leads, 8 in parallel, 12 seconds each, and nothing new after 60 seconds.
+  - Live (free): 2 of 14 real creators matched, with both sites correct and 1 email.
+- **More like this:** in results and as "Find more like this" on a client's lead profile. The `like` and `exclude` fields go through the schema, the prompt wraps the example in `<example>` as data, earlier results are excluded, and look-alike business searches skip the map. The user confirms the search and price first.
+- Checks: 20 groups.
+
+**Guides:**
+- 9 "Grow your business" guides (`src/lib/help/growth-guides.ts`) and 5 comparisons (`src/lib/help/comparisons.ts`: agencies, vs Lovable, vs Bolt, vs Gamma, vs Framer).
+- Comparisons use only `competitor-verification-20261013.json`: dated, with sources rendered and cited in structured data, "—" defined as "not covered in the pages we checked", and Makeborne's gaps stated. A check refuses exclusivity or superiority wording.
+- Tables are rendered with a pinned feature column. Search scoring favours specific phrases.
+- 29 guides in total, all in the sitemap and `llms.txt`. Help checks: 5 groups, 31 question mappings.
+
+**Status:** `npm test` 111/111, full ESLint and TypeScript clean. Browser checks on desktop and phone: the welcome opens the finder, the checklist shows real progress (3/6), the welcome doesn't return, "more like this" sends the right request, and the tables don't overflow.
+
+No paid calls, schema, commit, deploy or production change.

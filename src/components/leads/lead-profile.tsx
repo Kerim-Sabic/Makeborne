@@ -1,12 +1,13 @@
 "use client";
+import { requestClientsAction } from "../onboarding/signals";
 import { useState } from "react";
 import { AtSign, Flame, Plus, Search, Sparkles, Tag, Users, X } from "lucide-react";
 import { compactCount, countValue, CURRENCIES, LEAD_SOURCES, normalizeTag, scoreLead, type Lead } from "@/lib/leads";
 import { leadApi } from "./lead-api";
 
 /** Lead profile on a client page: score, tags, deal value, source, and what research and the AI found. */
-export default function LeadProfileCard({ accountId, workspaceId, clientId, lead, stage, hasEmail, overdue, canEdit, onChange }: {
-  accountId: string; workspaceId: string; clientId: string; lead: Lead | undefined; stage: string; hasEmail: boolean; overdue: boolean; canEdit: boolean; onChange: (lead: Lead) => void;
+export default function LeadProfileCard({ accountId, workspaceId, clientId, clientName = "", clientWebsite = "", lead, stage, hasEmail, overdue, canEdit, onChange }: {
+  accountId: string; workspaceId: string; clientId: string; clientName?: string; clientWebsite?: string; lead: Lead | undefined; stage: string; hasEmail: boolean; overdue: boolean; canEdit: boolean; onChange: (lead: Lead) => void;
 }) {
   const [tagDraft, setTagDraft] = useState("");
   const [deal, setDeal] = useState<string | null>(null);
@@ -56,6 +57,8 @@ export default function LeadProfileCard({ accountId, workspaceId, clientId, lead
 
     <div className="lp-research">
       <div className="lp-research-head"><span><Search size={13} />What we know about them</span>
+        {canEdit && clientName && <button type="button" className="button ghost small" title="Find new leads similar to this client" onClick={() => requestClientsAction("find-leads", {
+          name: clientName, url: research?.url || clientWebsite, about: (lead?.profile.insight?.niche || research?.bio || "").slice(0, 400) })}><Sparkles size={13} />Find more like this</button>}
         {canEdit && <button type="button" className="button secondary small" disabled={!!busy} onClick={() => void runResearch()}>{busy === "research" ? "Reading…" : research ? "Refresh research" : "Research (free)"}</button>}</div>
       {research ? <div className="lp-facts">
         <a href={research.url} target="_blank" rel="noopener noreferrer nofollow">{research.platform}{research.handle ? <> · <AtSign size={11} />{research.handle}</> : ""}</a>

@@ -58,10 +58,29 @@ check("people's questions land on the right guide", () => {
     "import contacts from excel": "import-clients-from-csv", "what is genius mode": "ask-an-ai-advisor", "upload my logo": "attach-files-to-your-brief",
     "automate follow ups": "connect-gmail-or-outlook", "lead score": "manage-clients-and-follow-ups", "build a website for my bakery": "create-a-website-with-ai",
     "what should I write in the prompt": "write-a-great-brief", "difference between plan and create": "plan-create-and-effort",
+    "makeborne vs lovable": "makeborne-vs-lovable", "is makeborne better than bolt": "makeborne-vs-bolt", "gamma alternative": "makeborne-vs-gamma", "framer alternative": "makeborne-vs-framer",
+    "best ai website builder for agencies": "best-ai-website-builder-for-agencies", "how do I get more clients": "get-clients-as-a-freelance-web-designer",
+    "cold email template": "write-a-cold-email-that-gets-replies", "find instagram influencers": "find-instagram-influencers-in-your-niche", "lead magnet ebook": "create-a-lead-magnet-ebook",
+    "pitch deck for investors": "make-a-pitch-deck-with-ai", "website for my salon": "build-a-website-for-a-local-business", "client is not replying": "follow-up-with-clients-without-being-pushy",
+    "how much should I charge for a website": "price-a-website-project", "client sign off on design": "get-client-approval-on-designs",
   };
   const misses = Object.entries(expect).filter(([query, slug]) => searchHelp(query)[0]?.slug !== slug).map(([query, slug]) => `${query} → ${searchHelp(query)[0]?.slug ?? "(none)"} (want ${slug})`);
   assert.deepEqual(misses, []);
   assert.deepEqual(searchHelp("the of and"), [], "stop words alone match nothing");
+});
+
+check("comparisons are sourced, dated, consistent and honest about Makeborne's limits", () => {
+  const comparisons = HELP_ARTICLES.filter(article => article.category === "compare");
+  assert.ok(comparisons.length >= 4);
+  for (const article of comparisons) {
+    assert.ok(article.sources?.length, `${article.slug}: sources`);
+    for (const source of article.sources) assert.match(source.url, /^https:\/\//);
+    const text = JSON.stringify(article);
+    assert.doesNotMatch(text, /nobody else|the only (tool|builder|platform)|unlike any|best in class|guaranteed/i, `${article.slug}: no exclusivity or superiority claims`);
+    assert.match(text, /13 October 2026/, `${article.slug}: dated`);
+    for (const section of article.sections ?? []) if (section.table) for (const row of section.table.rows) assert.equal(row.length, section.table.columns.length, `${article.slug}: ${row[0]}`);
+    assert.match(text, /Not yet|No: |not the right fit/, `${article.slug}: states where Makeborne falls short`);
+  }
 });
 
 console.log(`\n${passed} help center checks passed.`);

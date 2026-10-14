@@ -1,0 +1,58 @@
+/* First-run welcome and the getting-started checklist. */
+.gs-welcome { position: relative; display: grid; justify-items: center; text-align: center; gap: 10px; padding: 10px 6px 4px; }
+.gs-welcome h2 { margin: 6px 0 0; font-size: 26px; font-weight: 550; letter-spacing: -.8px; color: #201a2e; }
+.gs-welcome > p { margin: 0 0 10px; max-width: 420px; font-size: 14px; line-height: 1.6; color: #6f6879; }
+.gs-x { position: absolute; right: 0; top: 0; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #ebe6f2; border-radius: 10px; background: #fff; color: #5d5568; cursor: pointer; }
+.gs-paths { display: grid; gap: 10px; width: 100%; text-align: left; }
+.gs-paths button { display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; column-gap: 14px; row-gap: 2px; align-items: center; padding: 14px 16px; border: 1px solid #ebe6f2; border-radius: 16px; background: #fff; font: inherit; color: #2a2338; cursor: pointer; text-align: left; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.gs-paths button:hover { border-color: #cdbfe6; box-shadow: 0 12px 26px -16px #4b3a8a59; transform: translateY(-1px); }
+.gs-paths button:focus-visible { outline: 2px solid #7c5cf0; outline-offset: 2px; }
+.gs-paths strong { grid-column: 2; font-size: 15px; font-weight: 600; }
+.gs-paths small { grid-column: 2; font-size: 13px; color: #7a7386; }
+.gs-paths button > svg { grid-column: 3; grid-row: 1 / 3; color: #9b93ac; }
+.gs-path-icon { grid-row: 1 / 3; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; }
+.gs-path-icon.is-site { background: #eef1ff; color: #3f55d6; }
+.gs-path-icon.is-leads { background: #f4eefe; color: #6a48d8; }
+.gs-path-icon.is-book { background: #fff3ea; color: #c26a2c; }
+.gs-skip { margin-top: 4px; border: 0; background: none; font: inherit; font-size: 13px; color: #7a7386; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+.gs { position: fixed; right: 20px; bottom: 20px; z-index: 60; display: grid; justify-items: end; gap: 10px; font-family: var(--font-inter), system-ui, sans-serif; }
+.gs-pill { display: inline-flex; align-items: center; gap: 10px; padding: 7px 16px 7px 8px; border: 1px solid #e6e0ef; border-radius: 999px; background: #ffffffee; backdrop-filter: blur(12px); box-shadow: 0 14px 32px -18px #2b1f5c80; font: inherit; color: #2a2338; cursor: pointer; text-align: left; }
+.gs-pill:hover { border-color: #cdbfe6; }
+.gs-pill:focus-visible { outline: 2px solid #7c5cf0; outline-offset: 2px; }
+.gs-pill span { display: grid; line-height: 1.25; }
+.gs-pill strong { font-size: 13px; font-weight: 600; }
+.gs-pill small { font-size: 11.5px; color: #7a7386; }
+.gs-ring { width: 32px; height: 32px; transform: rotate(-90deg); }
+.gs-ring circle { fill: none; stroke: #ece7f5; stroke-width: 4; }
+.gs-ring circle.is-fill { stroke: #6a48d8; stroke-linecap: round; transition: stroke-dasharray .5s cubic-bezier(.22, 1, .36, 1); }
+.gs-panel { width: min(380px, calc(100vw - 32px)); max-height: min(560px, calc(100dvh - 110px)); overflow: auto; padding: 18px; border-radius: 20px; background: #fff; border: 1px solid #ebe6f2; box-shadow: 0 30px 60px -28px #2b1f5c80; animation: gs-in .22s cubic-bezier(.22, 1, .36, 1); }
+@keyframes gs-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.gs-panel header { position: relative; display: flex; justify-content: space-between; gap: 10px; }
+.gs-panel h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.3px; color: #201a2e; }
+.gs-panel header p { margin: 3px 0 0; font-size: 12.5px; color: #7a7386; }
+.gs-panel .gs-x { position: static; width: 30px; height: 30px; }
+.gs-bar { height: 6px; margin: 14px 0 12px; border-radius: 6px; background: #f0ecf7; overflow: hidden; }
+.gs-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5b6cf0, #8a5cf2); transition: width .5s cubic-bezier(.22, 1, .36, 1); }
+.gs-panel ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.gs-panel li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 8px; border-radius: 12px; }
+.gs-panel li:hover { background: #faf8fd; }
+.gs-check { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid #d6cfe3; color: #fff; }
+.gs-panel li.is-done .gs-check { background: #3b7a53; border-color: #3b7a53; }
+.gs-panel li div { display: grid; gap: 2px; }
+.gs-panel li strong { font-size: 13.5px; font-weight: 600; color: #2a2338; }
+.gs-panel li.is-done strong { color: #8a8396; text-decoration: line-through; text-decoration-color: #c9c2d6; }
+.gs-panel li small { font-size: 12px; line-height: 1.45; color: #7a7386; }
+.gs-panel li small a { color: #5e50b0; white-space: nowrap; }
+.gs-panel li > button { padding: 7px 11px; border: 0; border-radius: 10px; background: #2b2140; color: #fff; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.gs-panel li > button:hover { background: #42335f; }
+.gs-panel footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1eef5; }
+.gs-link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; padding: 4px 0; font: inherit; font-size: 12.5px; color: #6f6879; cursor: pointer; text-decoration: none; }
+.gs-link:hover { color: #2a2338; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 650px) {
+  .gs { right: 12px; bottom: 12px; left: 12px; justify-items: end; }
+  .gs-panel { width: 100%; }
+  .gs-paths button { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .gs-panel, .gs-bar span, .gs-ring circle.is-fill, .gs-paths button { animation: none; transition: none; } }

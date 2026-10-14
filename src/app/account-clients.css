@@ -532,3 +532,17 @@ a.lf-chip:hover { border-color: #cfc3e3; color: #2c2240; }
 .lf .lf-audience { grid-template-columns: auto minmax(0, 220px); align-items: center; column-gap: 12px; justify-self: start; }
 .lf .lf-audience select { border: 1px solid #e3deeb; border-radius: 10px; background: #fff; padding: 9px 11px; font: inherit; font-size: 13px; color: #2a2335; }
 .lf-modes { flex-wrap: wrap; }
+
+/* Lead finder: "more like this" and link in bio */
+.lf-like { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: linear-gradient(135deg, #f6f2ff, #fbf8ff); border: 1px solid #e3d9f7; color: #4b3a86; font-size: 13px; }
+.lf-like > svg { flex: none; color: #8a5cf2; }
+.lf-like span { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.lf-like small { color: #7a7386; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lf-like button { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: #fff; color: #5d5568; cursor: pointer; }
+.lf-back { justify-self: start; border: 0; background: none; padding: 0; font: inherit; font-size: 13px; color: #5e50b0; cursor: pointer; }
+.lf-more { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 4px 10px; border: 1px solid #e3d9f7; border-radius: 20px; background: #fff; font: inherit; font-size: 12px; font-weight: 500; color: #5b4783; cursor: pointer; }
+.lf-more:hover:not(:disabled) { background: #f6f2ff; border-color: #cbbbe8; }
+.lf-more svg { color: #8a5cf2; }
+
+/* The dialog sheet takes focus on open (for screen readers and Escape); it needs no visible ring itself. */
+.mc-sheet:focus { outline: none; }

@@ -8,7 +8,7 @@ import { emptyOutreach } from "@/lib/client-outreach";
 import { localCalendarDay } from "@/lib/client-followups";
 import { normalizeTag } from "@/lib/leads";
 import { CATEGORIES } from "@/lib/leads/osm";
-import { AUDIENCES, LEAD_FINDER, leadFinderMaxCredits, leadFinderTypicalCredits, PLATFORMS, type FoundLead, type LeadFindEvent } from "@/lib/leads/finder-types";
+import { AUDIENCES, LEAD_FINDER, leadFinderMaxCredits, leadFinderTypicalCredits, PLATFORMS, type FoundLead, type LeadFindEvent, type LeadSeed } from "@/lib/leads/finder-types";
 import type { CloudClient } from "@/lib/cloud/contracts";
 
 type Mode = "local" | "creators" | "list";
@@ -18,14 +18,20 @@ type Run = { stage: "search" | "read" | "rank" | "done"; status: string; done: n
 type Result = { leads: FoundLead[]; skipped: number; duplicates: number; attribution: string; place: string; category: string; charged: number | null };
 const OFFER_STORE = "makeborne.lead-finder.offer";
 const tier = (score: number) => score >= 70 ? "hot" : score >= 45 ? "warm" : "cold";
+/** The platform a profile link belongs to (for "more like this"). */
+const platformOf = (url: string): Platform | null => /instagram\.com/i.test(url) ? "Instagram" : /tiktok\.com/i.test(url) ? "TikTok" : /youtube\.com/i.test(url) ? "YouTube" : null;
 
 /** Find new leads (local businesses, creators by niche, or a pasted list), verify and rank them, then add the chosen ones to the CRM. */
-export default function LeadFinder({ accountId, workspaceId, onClose, onAdded }: { accountId: string; workspaceId: string; onClose: () => void; onAdded: (count: number, tag: string) => void }) {
-  const [mode, setMode] = useState<Mode>("local");
-  const [niche, setNiche] = useState(""), [place, setPlace] = useState(""), [list, setList] = useState("");
+export default function LeadFinder({ accountId, workspaceId, seed = null, onClose, onAdded }: { accountId: string; workspaceId: string; seed?: LeadSeed | null; onClose: () => void; onAdded: (count: number, tag: string) => void }) {
+  // "More like this": an example lead to find look-alikes of (from results, or from a client's profile).
+  const [like, setLike] = useState<LeadSeed | null>(seed);
+  const [exclude, setExclude] = useState<string[]>([]);
+  const [previous, setPrevious] = useState<Result | null>(null);
+  const [mode, setMode] = useState<Mode>(() => seed && platformOf(seed.url) ? "creators" : "local");
+  const [niche, setNiche] = useState(() => seed?.about.slice(0, 80) ?? ""), [place, setPlace] = useState(""), [list, setList] = useState("");
   const [offer, setOffer] = useState(() => { try { return localStorage.getItem(OFFER_STORE) ?? ""; } catch { return ""; } });
   const [count, setCount] = useState<10 | 25 | 40>(25);
-  const [platform, setPlatform] = useState<Platform>("Instagram"), [audience, setAudience] = useState<Audience>("any");
+  const [platform, setPlatform] = useState<Platform>(() => (seed && platformOf(seed.url)) || "Instagram"), [audience, setAudience] = useState<Audience>("any");
   const [run, setRun] = useState<Run | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
@@ -48,8 +54,9 @@ export default function LeadFinder({ accountId, workspaceId, onClose, onAdded }:
     setError(""); setResult(null); setPicked(new Set());
     setRun({ stage: "search", status: mode === "local" ? `Searching for ${niche.trim()} in ${place.trim()}…` : mode === "creators" ? `Searching ${platform} for ${niche.trim()} creators…` : "Reading your list…", done: 0, total: 0 });
     controller.current = new AbortController();
-    const body = mode === "local" ? { mode, niche: niche.trim(), place: place.trim(), offer: offer.trim(), count }
-      : mode === "creators" ? { mode, niche: niche.trim(), platform, place: place.trim(), audience, offer: offer.trim(), count: creatorCount }
+    const similar = like ? { like, exclude } : {};
+    const body = mode === "local" ? { mode, niche: niche.trim(), place: place.trim(), offer: offer.trim(), count, ...similar }
+      : mode === "creators" ? { mode, niche: niche.trim(), platform, place: place.trim(), audience, offer: offer.trim(), count: creatorCount, ...similar }
       : { mode, items: items.slice(0, LEAD_FINDER.maxListItems), offer: offer.trim(), count: 40 };
     let found: Result | null = null;
     try {
@@ -97,7 +104,8 @@ export default function LeadFinder({ accountId, workspaceId, onClose, onAdded }:
     for (const lead of chosen) {
       try {
         const notes = [`Found with Lead finder (${lead.source}) on ${new Date().toISOString().slice(0, 10)}.`, lead.address && `Address: ${lead.address}`, lead.phone && `Phone: ${lead.phone}`,
-          lead.email && lead.emailSource && `Email published on their ${lead.emailSource === "listing" ? "map listing" : lead.emailSource === "profile" ? "profile" : "website"}.`,
+          lead.email && lead.emailSource && `Email published on their ${lead.emailSource === "listing" ? "map listing" : lead.emailSource === "profile" ? "profile" : lead.emailSource === "link" ? "link-in-bio page" : "website"}.`,
+          lead.linkHub && `Link in bio: ${lead.linkHub}`,
           lead.ai?.why && `Why: ${lead.ai.why}`, lead.ai?.angle && `Opening idea: ${lead.ai.angle}`].filter(Boolean).join("\n");
         const created = await api<{ client: CloudClient }>(`/api/cloud/workspaces/${workspaceId}/clients`, { name: lead.name.slice(0, 120), company: "", email: lead.email, website: lead.website, notes });
         const id = created.client.id;
@@ -118,6 +126,16 @@ export default function LeadFinder({ accountId, workspaceId, onClose, onAdded }:
     if (added) onAdded(added, label);
   }
 
+  /** Back to the form with this lead as the example; the user confirms the search (and its price). */
+  function moreLike(lead: FoundLead) {
+    const url = lead.profileUrl || lead.website, social = platformOf(lead.profileUrl);
+    setLike({ name: lead.name.slice(0, 120), url: url.slice(0, 300), about: (lead.ai?.niche || lead.summary).slice(0, 400) });
+    setExclude(result ? result.leads.map(item => item.profileUrl || item.website).filter(Boolean).slice(0, 60) : []);
+    setPrevious(result);
+    if (social) { setMode("creators"); setPlatform(social); } else setMode("local");
+    if (lead.ai?.niche) setNiche(lead.ai.niche.slice(0, 80));
+    setResult(null); setRun(null); setError("");
+  }
   const toggle = (id: string) => setPicked(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const allPicked = Boolean(result?.leads.length) && result!.leads.every(lead => picked.has(lead.id));
 
@@ -130,6 +148,9 @@ export default function LeadFinder({ accountId, workspaceId, onClose, onAdded }:
       </header>
 
       {!result && <form className="lf-form" onSubmit={event => { event.preventDefault(); void find(); }}>
+        {like && <div className="lf-like"><Sparkles size={14} /><span>Finding leads like <strong>{like.name}</strong>{like.about ? <small>{like.about}</small> : null}</span>
+          <button type="button" aria-label="Stop finding look-alikes" disabled={busy} onClick={() => { setLike(null); setExclude([]); }}><X size={14} /></button></div>}
+        {previous && !run && <button type="button" className="lf-back" onClick={() => { setResult(previous); setPrevious(null); setLike(null); setExclude([]); }}>← Back to the previous results</button>}
         <div className="lf-modes" role="radiogroup" aria-label="Where to find leads">
           <button type="button" role="radio" aria-checked={mode === "local"} onClick={() => setMode("local")} disabled={busy}><MapPin size={15} />Local businesses</button>
           <button type="button" role="radio" aria-checked={mode === "creators"} onClick={() => setMode("creators")} disabled={busy}><Users size={15} />Creators</button>
@@ -173,7 +194,7 @@ export default function LeadFinder({ accountId, workspaceId, onClose, onAdded }:
             <button type="button" className="button primary" disabled={!picked.size || Boolean(adding)} onClick={() => void addPicked()}>
               {adding ? <><Loader2 size={16} className="ac-spin" />Adding {adding.done}/{adding.total}…</> : <><UserPlus size={16} />Add {picked.size} to clients</>}</button>
           </div>
-          <ol className="lf-list-results">{result.leads.map(lead => <LeadRow key={lead.id} lead={lead} picked={picked.has(lead.id)} onToggle={() => toggle(lead.id)} disabled={Boolean(adding)} />)}</ol>
+          <ol className="lf-list-results">{result.leads.map(lead => <LeadRow key={lead.id} lead={lead} picked={picked.has(lead.id)} onToggle={() => toggle(lead.id)} onMoreLike={() => moreLike(lead)} disabled={Boolean(adding)} />)}</ol>
         </> : <p className="lf-empty">Everyone we found is already in your clients, or had no public way to contact them. Try a nearby city or a related niche.</p>}
         {error && <p className="lf-error" role="alert">{error}</p>}
         <div className="lf-after">
@@ -199,7 +220,7 @@ function Progress({ run, mode, onCancel }: { run: Run; mode: Mode; onCancel: () 
   </div>;
 }
 
-function LeadRow({ lead, picked, onToggle, disabled }: { lead: FoundLead; picked: boolean; onToggle: () => void; disabled: boolean }) {
+function LeadRow({ lead, picked, onToggle, onMoreLike, disabled }: { lead: FoundLead; picked: boolean; onToggle: () => void; onMoreLike: () => void; disabled: boolean }) {
   const level = tier(lead.score);
   return <li className={`lf-row${picked ? " is-picked" : ""}`}>
     <input type="checkbox" checked={picked} onChange={onToggle} disabled={disabled} aria-label={`Select ${lead.name}`} />
@@ -216,8 +237,10 @@ function LeadRow({ lead, picked, onToggle, disabled }: { lead: FoundLead; picked
         {lead.phone && <span className="lf-chip"><Phone size={12} />{lead.phone}</span>}
         {lead.address && <span className="lf-chip is-quiet"><MapPin size={12} />{lead.address}</span>}
         {lead.ai && <span className={`lf-chip is-quiet is-${lead.ai.confidence}`}>{lead.ai.confidence} confidence</span>}
+        {lead.linkHub && <a className="lf-chip" href={lead.linkHub} target="_blank" rel="noopener noreferrer"><Globe2 size={12} />Link in bio<ArrowUpRight size={11} /></a>}
         {lead.source === "Web search" && <span className="lf-chip is-quiet"><Search size={11} />Found on the web</span>}
         {lead.note && <span className="lf-chip is-quiet">{lead.note}</span>}
+        <button type="button" className="lf-more" disabled={disabled} onClick={onMoreLike}><Sparkles size={12} />More like this</button>
       </div>
     </div>
   </li>;

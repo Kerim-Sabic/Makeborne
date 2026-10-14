@@ -15,6 +15,7 @@ import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
 import AccountClients from "./account-clients";
 import { useCreationAccount, type CreationAccount } from "./use-creation-account";
+import GettingStarted from "./onboarding/getting-started";
 import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import SiteBadgeSetting from "./site-badge-setting";
 import { createClient } from "@/lib/supabase/client";
@@ -1010,6 +1011,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         )}
       </div>
       {creationView}
+      {/* First-run welcome and getting-started checklist (signed-in accounts only; out of the way while creating or editing). */}
+      {composerAccount.accountId && composerAccount.workspace && <GettingStarted key={composerAccount.accountId} accountId={composerAccount.accountId} workspaceId={composerAccount.workspace.id} tab={tab}
+        hidden={Boolean(creating) || Boolean(project) || Boolean(accountRoute?.artifactId)}
+        onCreate={kind => { setHomeHandoff(false); setCreating(kind); }} onNavigate={next => openRoute({ tab: next, projectId: null, clientId: null })} />}
       {clientModal && (
         <ClientModal
           existing={clientModal === "new" ? null : clientModal}

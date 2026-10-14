@@ -29,6 +29,11 @@ export const leadFinderTypicalCredits = (count: number, mode: "local" | "creator
 export const AUDIENCES = { any: "Any size", micro: "1K–100K followers", large: "100K+ followers" } as const;
 
 export const PLATFORMS = ["Instagram", "TikTok", "YouTube"] as const;
+/** "More like this": the lead to find look-alikes of. */
+export const LeadSeedSchema = z.object({ name: z.string().trim().min(1).max(120), url: z.string().trim().max(300).default(""), about: z.string().trim().max(400).default("") }).strict();
+export type LeadSeed = z.infer<typeof LeadSeedSchema>;
+/** Profiles or websites already shown, so a follow-up search brings new ones. */
+const Exclude = z.array(z.string().trim().max(300)).max(60).default([]);
 export const LeadFindRequestSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("local"),
@@ -36,6 +41,8 @@ export const LeadFindRequestSchema = z.discriminatedUnion("mode", [
     place: z.string().trim().min(2).max(120),
     offer: z.string().trim().max(600).default(""),
     count: z.union([z.literal(10), z.literal(25), z.literal(40)]).default(25),
+    like: LeadSeedSchema.optional(),
+    exclude: Exclude,
   }).strict(),
   z.object({
     mode: z.literal("creators"),
@@ -45,6 +52,8 @@ export const LeadFindRequestSchema = z.discriminatedUnion("mode", [
     audience: z.enum(["any", "micro", "large"]).default("any"),
     offer: z.string().trim().max(600).default(""),
     count: z.union([z.literal(10), z.literal(25)]).default(10),
+    like: LeadSeedSchema.optional(),
+    exclude: Exclude,
   }).strict(),
   z.object({
     mode: z.literal("list"),
@@ -63,8 +72,10 @@ export type FoundLead = {
   website: string;
   profileUrl: string;
   email: string;
-  /** Where the email was published: the map listing, the business's own site, or the creator's profile bio. */
-  emailSource: "" | "listing" | "website" | "profile";
+  /** Where the email was published: the map listing, the business's own site, the creator's profile bio, or their link-in-bio page or site. */
+  emailSource: "" | "listing" | "website" | "profile" | "link";
+  /** The creator's link-in-bio page, when one was found. */
+  linkHub?: string;
   phone: string;
   address: string;
   platform: string;

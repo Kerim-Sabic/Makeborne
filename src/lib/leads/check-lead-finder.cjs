@@ -336,6 +336,59 @@ const publicResolve = async () => [{ address: "93.184.216.34", family: 4 }];
     assert.equal(youtubeSubscribers("<p>no count</p>"), null);
   });
 
+  await check("link in bio: written links, verified guesses only, emails from the hub or the creator's own site", async () => {
+    const { bioUrls, ownSite, hubUsername, linksBack, followLinkInBio } = require("./link-in-bio.ts");
+    assert.deepEqual(bioUrls("Easy recipes 🌱 linktr.ee/mia.cooks • www.miacooks.com · email: hi@mia.com"), ["https://linktr.ee/mia.cooks", "https://www.miacooks.com"], "an email's domain is not a link");
+    const hubJson = '{"title":"Daily Harvest 20% off","url":"https://dailyharvest.pxf.io/c/1"} {"title":"Armra","url":"https://armra.com"} {"title":"Go to my recipe website","url":"https://exceedinglyvegan.com/recipes"}';
+    assert.equal(ownSite(hubJson, { handle: "exceedinglyvegan", name: "" }), "https://exceedinglyvegan.com/", "the domain matching the handle wins; brand and affiliate links never do");
+    assert.equal(ownSite('{"title":"My website","url":"https://lenaclay.studio/"} {"title":"Armra","url":"https://armra.com"}', { handle: "studio.lena", name: "" }), "https://lenaclay.studio/", "or the link they titled as their website");
+    assert.equal(ownSite('{"title":"Armra","url":"https://armra.com"}', { handle: "mia", name: "" }), "", "a brand link alone is not their site");
+    assert.equal(hubUsername('{"username":"veggie_nerd","pageTitle":"@veggie_nerd"}'), "veggie_nerd");
+    assert.equal(linksBack('<a href="https://www.instagram.com/Mia.Cooks/">', "https://www.instagram.com/mia.cooks/"), true);
+    assert.equal(linksBack('<a href="https://www.instagram.com/someone.else/">', "https://www.instagram.com/mia.cooks/"), false);
+    const pages = {
+      "https://linktr.ee/mia.cooks": html('<title>Mia | Linktree</title><a href="https://www.instagram.com/mia.cooks/">IG</a> {"url":"mailto:collabs@miacooks.com"}'),
+      "https://linktr.ee/stranger": html('<title>Someone | Linktree</title><a href="https://www.instagram.com/not.stranger/">IG</a> {"username":"someone_else"} {"url":"mailto:wrong@person.com"}'),
+      "https://linktr.ee/veganmadeeasy": html('<title>Vegan Made Easy | Linktree</title>{"username":"veganmadeeasy"} {"title":"My recipes","url":"https://veganmadeeasy.net/"} {"url":"mailto:hello@veganmadeeasy.net"}'),
+      "https://veganmadeeasy.net/": html("<title>Vegan Made Easy</title>"),
+      "https://beacons.ai/bea": html('<title>Bea</title><a href="https://beasbakes.com/">My shop</a>'),
+      "https://beasbakes.com/": html('<title>Bea Bakes</title><a href="/contact">Contact</a>'),
+      "https://beasbakes.com/contact": html("<title>Contact</title><p>orders@beasbakes.com</p>"),
+    };
+    const deps = { fetcher: async url => pages[url] ? pages[url].clone() : html("", 404), resolve: publicResolve };
+    const mia = await followLinkInBio({ profileUrl: "https://www.instagram.com/mia.cooks/", handle: "mia.cooks", bio: "Easy vegan recipes" }, deps);
+    assert.deepEqual([mia.email, mia.emailFrom, mia.hub], ["collabs@miacooks.com", "link", "https://linktr.ee/mia.cooks"], "a guessed hub that links back is trusted");
+    assert.equal(await followLinkInBio({ profileUrl: "https://www.instagram.com/stranger/", handle: "stranger", bio: "" }, deps), null, "a same-name hub that doesn't link back is ignored");
+    const easy = await followLinkInBio({ profileUrl: "https://www.instagram.com/vegan.made.easy/", handle: "vegan.made.easy", bio: "" }, deps);
+    assert.deepEqual([easy.email, easy.hub, easy.website], ["hello@veganmadeeasy.net", "https://linktr.ee/veganmadeeasy", "https://veganmadeeasy.net/"], "a hub registered to the same username (dots dropped) is trusted");
+    const bea = await followLinkInBio({ profileUrl: "https://www.instagram.com/bea/", handle: "bea", bio: "Cakes to order → beacons.ai/bea" }, deps);
+    assert.deepEqual([bea.email, bea.website], ["orders@beasbakes.com", "https://beasbakes.com/"], "the hub the creator linked leads to their site's contact email");
+  });
+
+  await check("more like this: the example guides the search, earlier results are excluded, look-alike businesses skip the map", async () => {
+    const requests = [];
+    const pages = { "https://www.instagram.com/new.one/": html('<title>New (@new.one) • Instagram</title><meta name="description" content="20K Followers, 1 Following, 9 Posts - New (@new.one) on Instagram: &quot;Vegan bakes&quot;">') };
+    const page = { fetcher: async url => pages[url] ? pages[url].clone() : html("", 404), resolve: publicResolve };
+    const search = async request => { requests.push(request); return { searches: 1, candidates: [
+      { url: "https://www.instagram.com/shown.before/", title: "", why: "", seen: true },
+      { url: "https://www.instagram.com/new.one/", title: "New (@new.one)", why: "Similar bakes", seen: true },
+    ] }; };
+    const like = { name: "@veggie_nerd", url: "https://www.instagram.com/veggie_nerd/", about: "Family-friendly vegan recipes" };
+    const found = await gatherLeads({ mode: "creators", niche: "vegan recipes", platform: "Instagram", place: "", audience: "any", offer: "", count: 10, like, exclude: ["https://www.instagram.com/shown.before/"] },
+      () => {}, new AbortController().signal, existingIndex([]), { page, search });
+    assert.deepEqual(requests[0].like, like);
+    assert.ok(requests[0].skip.includes("instagram.com/shown.before"), "earlier results are told to the search");
+    assert.deepEqual(found.leads.map(lead => lead.name), ["@new.one"], "and filtered out again");
+    const { discoverPrompt } = require("./discover.ts");
+    assert.match(discoverPrompt({ ...requests[0], skip: [] }), /similar to this example.*<example>@veggie_nerd \(https:\/\/www\.instagram\.com\/veggie_nerd\/\) — Family-friendly vegan recipes<\/example>/s);
+    const map = async () => { throw new Error("the map must not be used for look-alikes"); };
+    const businessSearch = async request => { requests.push(request); return { searches: 1, candidates: [{ url: "https://similar-dental.com/", title: "Similar Dental", why: "", seen: true }] }; };
+    const local = await gatherLeads({ mode: "local", niche: "dentists", place: "Austin", offer: "", count: 10, like: { name: "Smile Co", url: "https://smile.co/", about: "" }, exclude: [] },
+      () => {}, new AbortController().signal, existingIndex([]), { mapFetch: map, page: { fetcher: async () => html('<title>Similar Dental</title>'), resolve: publicResolve }, search: businessSearch });
+    assert.equal(requests.at(-1).kind, "businesses");
+    assert.equal(local.leads[0].name, "Similar Dental");
+  });
+
   await check("the pool keeps a fixed number in flight and reports every completion", async () => {
     let live = 0, peak = 0; const done = [];
     const out = await pool([1, 2, 3, 4, 5, 6, 7], 3, async n => { live++; peak = Math.max(peak, live); await new Promise(r => setTimeout(r, 5)); live--; return n * 2; }, d => done.push(d));

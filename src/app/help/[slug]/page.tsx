@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
@@ -36,7 +37,8 @@ export default async function HelpArticlePage({ params }: { params: Promise<{ sl
   const graph: Record<string, unknown>[] = [
     { "@type": "TechArticle", "@id": `${url}#article`, headline: article.title, description: article.description, url, inLanguage: "en", dateModified: article.updated,
       mainEntityOfPage: url, articleSection: category.label, keywords: article.keywords.join(", "), abstract: article.answer,
-      author: { "@id": `${SITE.url}/#organization` }, publisher: { "@id": `${SITE.url}/#organization` }, isPartOf: { "@id": `${SITE.url}/help#page` }, about: { "@id": `${SITE.url}/#app` } },
+      author: { "@id": `${SITE.url}/#organization` }, publisher: { "@id": `${SITE.url}/#organization` }, isPartOf: { "@id": `${SITE.url}/help#page` }, about: { "@id": `${SITE.url}/#app` },
+      ...(article.sources?.length ? { citation: article.sources.map(source => source.url) } : {}) },
     { "@type": "BreadcrumbList", "@id": `${url}#breadcrumb`, itemListElement: [
       { "@type": "ListItem", position: 1, name: "Makeborne", item: `${SITE.url}/` },
       { "@type": "ListItem", position: 2, name: "Help center", item: `${SITE.url}/help` },
@@ -65,9 +67,16 @@ export default async function HelpArticlePage({ params }: { params: Promise<{ sl
             <ol className={styles.steps}>{article.steps.map((step, index) => <li key={step.name} id={`step-${index + 1}`}><h3>{step.name}</h3><p>{step.text}</p></li>)}</ol></section> : null}
           {article.sections?.map(section => <section key={section.heading} className={styles.block}><h2>{section.heading}</h2>
             {section.paragraphs?.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
-            {section.list && <ul>{section.list.map(item => <li key={item}>{item}</li>)}</ul>}</section>)}
+            {section.list && <ul>{section.list.map(item => <li key={item}>{item}</li>)}</ul>}
+            {section.table && <div className={styles.tableWrap} role="region" aria-label={section.heading} tabIndex={0}><table className={styles.table} style={{ "--cols": section.table.columns.length } as CSSProperties}>
+              <caption>{section.table.caption}</caption>
+              <thead><tr>{section.table.columns.map((column, index) => <th key={column || index} scope="col">{column || <span className={styles.srOnly}>Feature</span>}</th>)}</tr></thead>
+              <tbody>{section.table.rows.map(row => <tr key={row[0]}>{row.map((cell, index) => index === 0 ? <th key={index} scope="row">{cell}</th> : <td key={index} className={index === 1 ? styles.ours : undefined}>{cell}</td>)}</tr>)}</tbody>
+            </table></div>}</section>)}
           {article.faqs?.length ? <section className={styles.block} aria-labelledby="faq-title"><h2 id="faq-title">Questions</h2>
             <div className={styles.faq}>{article.faqs.map(faq => <div key={faq.q}><h3>{faq.q}</h3><p>{faq.a}</p></div>)}</div></section> : null}
+          {article.sources?.length ? <section className={styles.block} aria-labelledby="sources-title"><h2 id="sources-title">Sources</h2>
+            <ul className={styles.sources}>{article.sources.map(source => <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a></li>)}</ul></section> : null}
         </article>
         <aside className={styles.aside}>
           {related.length > 0 && <nav aria-labelledby="related-title"><h2 id="related-title">Related guides</h2><ul>{related.map(item => <li key={item.slug}><Link href={`/help/${item.slug}`}>{item.title}</Link></li>)}</ul></nav>}

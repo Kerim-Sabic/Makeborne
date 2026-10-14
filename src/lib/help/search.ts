@@ -26,12 +26,15 @@ function score(article: HelpArticle, query: string, words: string[]) {
   const lower = query.toLowerCase();
   let total = 0;
   const title = new Set(tokens(article.title)), keys = new Set(article.keywords.flatMap(tokens)), body = new Set(tokens(`${article.answer} ${article.description}`));
-  for (const keyword of article.keywords) if (keyword.length > 3 && lower.includes(keyword)) total += 6;
+  // Exact phrases people use; longer phrases are more specific, so they count for more.
+  for (const keyword of article.keywords) if (keyword.length > 3 && lower.includes(keyword)) total += 4 + keyword.split(/\s+/).length * 2;
   for (const word of words) {
     if (title.has(word)) total += 3;
     if (keys.has(word)) total += 3;
     if (body.has(word)) total += 1;
   }
+  // A title that covers the whole question beats one that shares a single word with it.
+  total += Math.round(5 * words.filter(word => title.has(word)).length / words.length);
   return total;
 }
 

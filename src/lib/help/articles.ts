@@ -1,11 +1,13 @@
 import type { DemoId } from "@/components/help-demo/scripts";
+import { GROWTH_GUIDES } from "./growth-guides";
+import { COMPARISONS } from "./comparisons";
 
 /**
  * Help center articles. Written answer-first (the opening answer is what
  * search and answer engines quote), with numbered steps, short sections and
  * real questions. Keep every claim true to what ships; update `updated`.
  */
-export type HelpCategory = "create" | "clients" | "advisors" | "account";
+export type HelpCategory = "create" | "clients" | "grow" | "compare" | "advisors" | "account";
 export type HelpArticle = {
   slug: string;
   title: string;
@@ -19,7 +21,9 @@ export type HelpArticle = {
   answer: string;
   demo?: DemoId;
   steps?: { name: string; text: string }[];
-  sections?: { heading: string; paragraphs?: string[]; list?: string[] }[];
+  sections?: { heading: string; paragraphs?: string[]; list?: string[]; table?: { caption: string; columns: string[]; rows: string[][] } }[];
+  /** Official sources for statements about other products (comparison guides). */
+  sources?: { label: string; url: string }[];
   faqs?: { q: string; a: string }[];
   related?: string[];
 };
@@ -27,13 +31,15 @@ export type HelpArticle = {
 export const HELP_CATEGORIES: { id: HelpCategory; label: string; blurb: string }[] = [
   { id: "create", label: "Create", blurb: "Websites, books and presentations from a short brief." },
   { id: "clients", label: "Clients & outreach", blurb: "Your CRM, new leads, personal emails and follow-ups." },
+  { id: "grow", label: "Grow your business", blurb: "Win clients: prospecting, outreach, follow-ups, pricing and approvals." },
+  { id: "compare", label: "Comparisons", blurb: "How Makeborne compares with other AI builders, checked against their official docs." },
   { id: "advisors", label: "AI advisors", blurb: "Specialist advice on brand, copy, sales, pricing and more." },
   { id: "account", label: "Plans & credits", blurb: "What things cost and how credits work." },
 ];
 
 const UPDATED = "2026-10-14";
 
-export const HELP_ARTICLES: HelpArticle[] = [
+const CORE_ARTICLES: HelpArticle[] = [
   {
     slug: "create-a-website-with-ai", category: "create", updated: UPDATED, demo: "create-website",
     title: "How to create a website with AI in Makeborne",
@@ -327,5 +333,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     related: ["plan-create-and-effort", "find-new-leads", "ask-an-ai-advisor"],
   },
 ];
+
+export const HELP_ARTICLES: HelpArticle[] = [...CORE_ARTICLES, ...GROWTH_GUIDES, ...COMPARISONS];
 
 export const helpArticle = (slug: string) => HELP_ARTICLES.find(article => article.slug === slug) ?? null;

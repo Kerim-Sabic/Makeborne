@@ -11,6 +11,7 @@ import { leadApi, useLeadMeta } from "./leads/lead-api";
 import { compactCount, countValue, formatMoney, scoreLead, type Lead } from "@/lib/leads";
 import { mapImport, parseCsv, toCsv, type ImportedClient } from "@/lib/client-csv";
 import ClientBoard from "./client-board";
+import { CLIENTS_ACTION_EVENT, refreshOnboarding, takeClientsAction, type ClientsRequest, type LeadFinderSeed } from "./onboarding/signals";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -193,6 +194,18 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const togglePick = (client: CloudClient) => setPicked(current => { const next = new Map(current); if (next.has(client.id)) next.delete(client.id); else next.set(client.id, { id: client.id, name: client.name, email: client.email, company: client.company }); return next; });
   const [palette, setPalette] = useState(false);
   const [finding, setFinding] = useState(false);
+  const [finderSeed, setFinderSeed] = useState<LeadFinderSeed | null>(null);
+  // Requests from the getting-started checklist: open the lead finder, or show Email.
+  useEffect(() => {
+    const apply = (request: ClientsRequest | null) => {
+      if (request?.action === "find-leads") { setLayout("list"); setFinderSeed(request.seed ?? null); setFinding(true); }
+      else if (request?.action === "email") { setLayout("email"); try { window.localStorage.setItem(LAYOUT_KEY, "email"); } catch { /* storage unavailable */ } }
+    };
+    const timer = window.setTimeout(() => apply(takeClientsAction()), 0);
+    const listener = () => apply(takeClientsAction());
+    window.addEventListener(CLIENTS_ACTION_EVENT, listener);
+    return () => { window.clearTimeout(timer); window.removeEventListener(CLIENTS_ACTION_EVENT, listener); };
+  }, []);
   const [pendingRows, setPendingRows] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState<{ file: string; clients: ImportedClient[]; skipped: { row: number; reason: string }[]; columns: Partial<Record<keyof ImportedClient, string>>; progress: number | null } | null>(null);
@@ -381,6 +394,12 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   }
   const tabs: { id: ClientView; label: string }[] = [{ id: "outreach", label: "Outreach & activity" }, { id: "email", label: "Email" }, { id: "details", label: "Contact details" }, { id: "projects", label: "Projects" }, { id: "reviews", label: "Client reviews" }];
 
+  // The lead finder opens from the list header, the command palette, the checklist, or "Find more like this" on a client.
+  const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }} onAdded={(count, tag) => {
+    setFinding(false); setFinderSeed(null); if (clientId) backToList(); chooseLayout("list"); if (tag) setTagFilter(tag); setRefreshKey(key => key + 1); refreshOnboarding();
+    setMessage(`Added ${count} new lead${count === 1 ? "" : "s"} to your clients${tag ? `, tagged “${tag}”` : ""}. Select them and choose “Write personal emails” to reach out.`);
+  }} /> : null;
+
   if (clientId) return <section className="ac-workspace" aria-label="Account client" ref={root}>
     <button className="button ghost small ac-back" disabled={saving} onClick={backToList}><ArrowLeft size={15} /> All clients</button>
     <header className="ac-heading"><div><span className="eyebrow">CLIENT</span><h1>{opened?.name ?? "Client"}</h1><p>{opened ? [opened.company, opened.email].filter(Boolean).join(" · ") || "Contact details, conversations, and the work you create together." : "Opening client…"}</p></div>
@@ -391,7 +410,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     <nav className="ac-source ac-tabs" aria-label="Client sections">{tabs.map(item => <button key={item.id} disabled={saving} aria-pressed={view === item.id} onClick={() => setView(item.id)}>{item.label}</button>)}</nav>
     <div className="ac-detail">
       {!full || !snapshot || fresh !== full.id ? !openError && <DetailSkeleton /> : <>
-        {view === "outreach" && <LeadProfileCard key={`lead:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} lead={leadMeta.leads[full.id]}
+        {view === "outreach" && <LeadProfileCard key={`lead:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} clientWebsite={full.website} lead={leadMeta.leads[full.id]}
           stage={String(full.outreach?.stage ?? "Lead")} hasEmail={!!full.email} overdue={followUpBucket(full.outreach, today) === "overdue"} canEdit={canEdit} onChange={lead => leadMeta.update(full.id, lead)} />}
         {view === "outreach" && canEdit && <ClientFollowUpDraft accountId={accountId} workspaceId={snapshot.workspace.id} client={full} onLogged={client => { saved(client); setOutreachRevision(value => value + 1); setMessage("Logged as sent. The next follow-up is scheduled."); }} />}
         {view === "outreach" && <CloudClientOutreach embedded key={`${full.id}:${outreachRevision}`} initialClient={full} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={backToList} onSaved={saved} />}
@@ -406,6 +425,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
         {view === "projects" && <ClientProjectDirectory key={`${snapshot.workspace.id}:${full.id}`} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} onOpenProject={onOpenProject} />}
       </>}
     </div>
+    {finderView}
   </section>;
 
   const paletteActions: PaletteAction[] = [
@@ -489,10 +509,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
       {!tagFilter && directory.data?.pagination.nextOffset != null && !directory.stale && <button className="button secondary small" disabled={directory.busy} onClick={() => void directory.more()}>Load more clients</button>}
       {!tagFilter && directory.data && <p className="small-note" aria-live="polite">{directory.stale ? "Updating…" : `Showing ${clients.length} of ${directory.data.pagination.total} matching clients · Search and filters cover the whole workspace.`}</p>}
     </>}
-    {finding && snapshot && <LeadFinder accountId={accountId} workspaceId={snapshot.workspace.id} onClose={() => setFinding(false)} onAdded={(count, tag) => {
-      setFinding(false); chooseLayout("list"); if (tag) setTagFilter(tag); setRefreshKey(key => key + 1);
-      setMessage(`Added ${count} new lead${count === 1 ? "" : "s"} to your clients${tag ? `, tagged “${tag}”` : ""}. Select them and choose “Write personal emails” to reach out.`);
-    }} />}
+    {finderView}
     {palette && snapshot && <ClientCommandPalette workspaceId={snapshot.workspace.id} today={today} actions={paletteActions} onOpenClient={open} onAction={runAction} onClose={() => setPalette(false)} />}
   </section>;
 }

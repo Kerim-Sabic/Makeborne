@@ -6,6 +6,7 @@ import { enrichPage, pool, type Enriched } from "./enrich";
 import type { Fetcher, Lookup } from "../mail/research";
 import { OSM_ATTRIBUTION, resolveCategory, searchBusinesses, type OsmBusiness } from "./osm";
 import type { Candidate, DiscoverRequest } from "./discover";
+import { followLinkInBio } from "./link-in-bio";
 import { countValue } from "../leads";
 import { handleOf, listItemUrl, reachScore, type FoundLead, type LeadFindEvent, type LeadFindRequest } from "./finder-types";
 
@@ -84,6 +85,28 @@ function fromPage(page: Enriched, id: string, source: FoundLead["source"] = "You
 /** Injectable network for offline checks: the map services, the page reader, and web search (paid, so the route supplies it). */
 export type FinderDeps = { mapFetch?: typeof fetch; page?: { fetcher?: Fetcher; resolve?: Lookup; oembed?: typeof fetch }; search?: (request: DiscoverRequest) => Promise<{ candidates: Candidate[]; searches: number }> };
 
+/**
+ * Creators' link-in-bio pages (and the sites they link to) for an email and a
+ * website. Bounded: eight at a time, twelve seconds each, and nothing new
+ * starts after the deadline, so a slow hub never holds up the results.
+ */
+async function addLinkInBio(leads: FoundLead[], emit: (event: LeadFindEvent) => void, signal: AbortSignal, deadline: number, deps: FinderDeps) {
+  if (!leads.length) return;
+  emit({ type: "status", message: "Checking link-in-bio pages for contact details…" });
+  await pool(leads.slice(0, 30), 8, async lead => {
+    if (Date.now() > deadline || signal.aborted) return;
+    const found = await Promise.race([
+      followLinkInBio({ profileUrl: lead.profileUrl, handle: lead.handle, bio: `${lead.bio} ${lead.summary}`, name: lead.name.replace(/^@/, "") }, deps.page).catch(() => null),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 12_000)),
+    ]);
+    if (!found) return;
+    if (found.email) { lead.email = found.email; lead.emailSource = "link"; }
+    if (found.website && !lead.website) lead.website = found.website;
+    if (found.hub) lead.linkHub = found.hub;
+    lead.score = reachScore(lead) - (lead.note === "Follower count not visible" ? 10 : 0);
+  }, done => emit({ type: "progress", stage: "read", done, total: Math.min(30, leads.length) }), signal);
+}
+
 /** Follower range for the creators filter (unknown counts are kept, ranked after known ones). */
 const AUDIENCE_RANGE = { any: [0, Infinity], micro: [1_000, 100_000], large: [100_000, Infinity] } as const;
 
@@ -94,11 +117,24 @@ const AUDIENCE_RANGE = { any: [0, Infinity], micro: [1_000, 100_000], large: [10
  */
 export async function gatherLeads(input: LeadFindRequest, emit: (event: LeadFindEvent) => void, signal: AbortSignal, existing: Existing, deps: FinderDeps = {}) {
   let leads: FoundLead[] = [], place = "", category = "", skipped = 0, duplicates = 0, attribution = "", searched = false;
+  const started = Date.now();
+  // Shown in an earlier search ("more like this" asks for new ones), by profile identity or website host.
+  const shown = new Set(input.mode === "list" ? [] : (input.exclude ?? []).map(url => handleOf(url) || host(url)).filter(Boolean));
   const readCandidates = async (candidates: Candidate[], label: string, offset: number) => {
     const pages = await pool(candidates, 6, candidate => enrichPage(candidate.url, deps.page), done => emit({ type: "progress", stage: "read", done, total: candidates.length }), signal);
     return candidates.map((candidate, index) => fromCandidate(candidate, pages[index], `L${offset + index + 1}`, label));
   };
-  if (input.mode === "local") {
+  if (input.mode === "local" && input.like) {
+    if (!deps.search) throw new Error("Similar-business search isn't available right now. Nothing was charged.");
+    place = input.place; try { category = resolveCategory(input.niche).label; } catch { category = input.niche; }
+    emit({ type: "status", message: `Searching the web for businesses like ${input.like.name} in ${input.place}…` });
+    emit({ type: "progress", stage: "search", done: 0, total: 1 });
+    const web = await deps.search({ kind: "businesses", niche: category, place, offer: input.offer, want: input.count + 5, skip: [...existing.hosts, ...shown], like: input.like });
+    searched = true;
+    const fresh = web.candidates.filter(candidate => !shown.has(host(candidate.url))).slice(0, input.count + 5);
+    emit({ type: "status", message: fresh.length ? `Found ${fresh.length} similar businesses. Reading their websites…` : "No similar businesses came up. Try a nearby city." });
+    leads = await readCandidates(fresh, category, 0);
+  } else if (input.mode === "local") {
     emit({ type: "status", message: `Searching the map for ${input.niche} in ${input.place}…` });
     let mapError: unknown = null, businesses: OsmBusiness[] = [];
     try {
@@ -146,9 +182,10 @@ export async function gatherLeads(input: LeadFindRequest, emit: (event: LeadFind
     place = input.place; category = `${input.platform} creators`;
     emit({ type: "status", message: `Searching ${input.platform} for ${input.niche} creators${input.place ? ` in ${input.place}` : ""}…` });
     emit({ type: "progress", stage: "search", done: 0, total: 1 });
-    const found = await deps.search({ kind: "creators", niche: input.niche, platform: input.platform, place: input.place, offer: input.offer, want: input.count + 8, skip: [...existing.handles] });
+    if (input.like) emit({ type: "status", message: `Searching ${input.platform} for creators like ${input.like.name}…` });
+    const found = await deps.search({ kind: "creators", niche: input.niche, platform: input.platform, place: input.place, offer: input.offer, want: input.count + 8, skip: [...existing.handles, ...shown], like: input.like });
     searched = true;
-    const candidates = found.candidates.slice(0, Math.ceil(input.count * 1.8));
+    const candidates = found.candidates.filter(candidate => !shown.has(handleOf(candidate.url))).slice(0, Math.ceil(input.count * 1.8));
     emit({ type: "status", message: candidates.length ? `Found ${candidates.length} profiles. Reading them…` : "No matching public profiles came up. Try broader words." });
     leads = await readCandidates(candidates, category, 0);
     // A profile we only heard about inside a result page must verify, or it isn't shown.
@@ -167,8 +204,10 @@ export async function gatherLeads(input: LeadFindRequest, emit: (event: LeadFind
     leads = pages.map((page, index) => fromPage(page, `L${index + 1}`));
     category = "Your list";
   }
+  await addLinkInBio(leads.filter(lead => lead.profileUrl && !lead.email && !shown.has(handleOf(lead.profileUrl))), emit, signal, started + 60_000, deps);
   const fresh: FoundLead[] = [], seen = new Set<string>();
   for (const lead of leads) {
+    if (shown.has(handleOf(lead.profileUrl) || host(lead.website))) continue;
     if (isExisting(lead, existing)) { duplicates++; continue; }
     // The same business or profile from two sources is one lead.
     const key = handleOf(lead.profileUrl) || host(lead.website) || lead.name.toLowerCase();

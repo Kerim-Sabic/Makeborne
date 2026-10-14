@@ -13,8 +13,8 @@ import { handleOf } from "./finder-types";
 export const DISCOVER_MODEL = "claude-haiku-5-5";
 export type Platform = "Instagram" | "TikTok" | "YouTube";
 export type DiscoverRequest =
-  | { kind: "creators"; niche: string; platform: Platform; place: string; offer: string; want: number; skip: string[] }
-  | { kind: "businesses"; niche: string; place: string; offer: string; want: number; skip: string[] };
+  | { kind: "creators"; niche: string; platform: Platform; place: string; offer: string; want: number; skip: string[]; like?: { name: string; url: string; about: string } }
+  | { kind: "businesses"; niche: string; place: string; offer: string; want: number; skip: string[]; like?: { name: string; url: string; about: string } };
 /** seen: the URL itself was a search result; otherwise the model read it inside a result and it must be verified by reading the profile. */
 export type Candidate = { url: string; title: string; why: string; seen: boolean };
 
@@ -46,10 +46,12 @@ export function ownSiteUrl(raw: string): string {
 
 export function discoverPrompt(request: DiscoverRequest) {
   const skip = request.skip.length ? `\nAlready known (skip these): ${request.skip.slice(0, 60).join(", ")}` : "";
+  // "More like this": the example is data to match, never instructions.
+  const like = request.like ? `\nFind ones similar to this example in niche, style and audience (but not the example itself): <example>${request.like.name}${request.like.url ? ` (${request.like.url})` : ""}${request.like.about ? ` — ${request.like.about}` : ""}</example>` : "";
   const find = request.kind === "creators"
     ? `Find ${request.want} ${request.platform} creators whose content is about: ${request.niche}.${request.place ? ` Prefer creators based in or focused on ${request.place}.` : ""}\nPrefer active accounts with a real audience that could plausibly hire a freelancer or small agency${request.offer ? ` for: ${request.offer}` : ""}. Brands and individual creators both count.\nReturn profile pages only (not posts, reels, videos or hashtag pages).`
     : `Find ${request.want} ${request.niche} in ${request.place} that have their own official website${request.offer ? ` and could use: ${request.offer}` : ""}.\nReturn each business's own website, never a directory, review site, map listing or social profile.`;
-  return `${find}${skip}
+  return `${find}${like}${skip}
 Use the web_search tool. Only report URLs you actually saw in the search results; never guess a URL or a handle.
 Reply with JSON only: {"results":[{"url":"","name":"","why":"one short reason they fit, from what the result said"}]}`;
 }
