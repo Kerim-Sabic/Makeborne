@@ -12,6 +12,7 @@ import { compactCount, countValue, formatMoney, scoreLead, type Lead } from "@/l
 import { mapImport, parseCsv, toCsv, type ImportedClient } from "@/lib/client-csv";
 import ClientBoard from "./client-board";
 import { CLIENTS_ACTION_EVENT, refreshOnboarding, takeClientsAction, type ClientsRequest, type LeadFinderSeed } from "./onboarding/signals";
+import EnquiryLeads from "./enquiry-leads";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -474,6 +475,8 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     {message && <p role="status" className="ac-message">{message}</p>}
     {directory.error && <p role="alert">{directory.error}</p>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />
+    {snapshot && snapshot.workspace.role === "owner" && layout !== "email" && !adding && !importing && <EnquiryLeads key={`${accountId}:${snapshot.workspace.id}:${refreshKey}`} accountId={accountId} workspaceId={snapshot.workspace.id}
+      onAdded={text => { setMessage(text); setRefreshKey(key => key + 1); refreshOnboarding(); }} />}
     {importing && <section className="ac-import" aria-labelledby="ac-import-title">
       <h2 id="ac-import-title">Import {importing.clients.length} client{importing.clients.length === 1 ? "" : "s"}</h2>
       <p>From <strong>{importing.file}</strong>. Columns found: {Object.entries(importing.columns).map(([field, column]) => `${field} ← “${column}”`).join(", ") || "none"}.</p>
