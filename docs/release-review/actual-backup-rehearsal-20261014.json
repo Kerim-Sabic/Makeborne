@@ -1,0 +1,846 @@
+{
+  "candidateCommit": "63192facd2f4c946556b03fd3b328ffccf53f4fc",
+  "aggregateSha256": "aa191628acb09f07cbda178a5db136ad65d986f7440ca84b5be8dd5460b8c3a1",
+  "sourceSha256": "d31feeef67696e2a5f9c89a081a4db69a9269cf5b8801a6d5091f6f31ce35840",
+  "archiveSha256": "9b68f8a6ed0bca05681092bf003bc554fb579a4b4059adf4b1c563ba552448a8",
+  "archiveBytes": 691115,
+  "archiveEntries": 1019,
+  "archiveOwnersAclPreserved": true,
+  "authority": {
+    "allRoleAttributesMatch": true,
+    "roleCount": 31,
+    "allMembershipGrantorsAndOptionsMatch": true,
+    "membershipCount": 25,
+    "metadataFileShaBound": true,
+    "metadataSha256": "038bd0bb3cb3f517d11b7f3983e51f4a6d4b9c07656c5cfd5965212b8cd68b5d"
+  },
+  "restore": {
+    "totalEntries": 1019,
+    "adminEntries": 1018,
+    "postgresEntries": 1,
+    "allEntryIdsCoveredOnce": true,
+    "excludedEntries": 0,
+    "postgresEventTriggerTocId": 3798,
+    "backupUnchanged": true,
+    "originalOwnersAndAclPreserved": true,
+    "bothPartitionsExitZero": true
+  },
+  "baselineMigrations": 20,
+  "appliedMigrations": [
+    {
+      "file": "20261005113330_founder_waitlist.sql",
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "20261008130542_canonical_website_source_revisions.sql",
+      "rawSha256": "697f3dccb31d85d6e1b87ed5b591c9556aee982a5f830d03e6a49c3d670ef415"
+    },
+    {
+      "file": "20261008133918_durable_generation_job_leases.sql",
+      "rawSha256": "1ed54d6c9cf2a7f9ff8475f4943e7425b96e05450e1ec3d329db48a320f58adb"
+    },
+    {
+      "file": "20261008135727_generation_outcome_settlement.sql",
+      "rawSha256": "c3e40c4e4b78efa07ed94a2f787c7a6c195fe82d2275b68b59be73e0b3d970de"
+    },
+    {
+      "file": "20261008141212_generation_execution_caps.sql",
+      "rawSha256": "7718d0da59329a5410d6dbc88df8edd4c8275643af507725775f8217eef3d5a2"
+    },
+    {
+      "file": "20261008143555_generation_worker_lifecycle.sql",
+      "rawSha256": "63828043c59aedc7b5602cc8ce9426f0ed6df2b8e0ae1dc1c294b06310353f33"
+    },
+    {
+      "file": "20261008151657_generation_approved_input_authority.sql",
+      "rawSha256": "462851f01294687f2d2aeedb9123e2bef2aec7664e09a8b4c94a0c9ec8991137"
+    },
+    {
+      "file": "20261008154453_generation_atomic_worker_result.sql",
+      "rawSha256": "e8b84088ac43f37f008cd7923722a752839de2bcc792c1acda83494a7cdf92a0"
+    },
+    {
+      "file": "20261008155402_generation_worker_result_readback.sql",
+      "rawSha256": "98fb4538ce6914cd966a57ec5184c190e16c06feba4f00b452741c18e931575d"
+    },
+    {
+      "file": "20261008161434_project_build_handoff.sql",
+      "rawSha256": "ea042283e7465f66c3f0268faf11322a1e2c042ffc132d992dffbdaa8e623eab"
+    },
+    {
+      "file": "20261008163228_generation_submission_boundary.sql",
+      "rawSha256": "1f7079ae808d79eb940b341e6d65a605536f103dfde43e48277b21b4fe2169a6"
+    },
+    {
+      "file": "20261008170101_generation_preparation_boundary.sql",
+      "rawSha256": "1ed3029ee70b91bb774b6f65a7b237b6a63b652cf33129817e14bac2826dd7de"
+    },
+    {
+      "file": "20261008171229_generation_request_recovery.sql",
+      "rawSha256": "c4d3d8cafa8a45852cfd986a4548d016eeed149147a2826fcfe55412bdea04a4"
+    },
+    {
+      "file": "20261008181217_generation_preview_read_authority.sql",
+      "rawSha256": "9b62b08302950da969dd64f7d6620f898d19c79454e0c18f48697576ca69991a"
+    },
+    {
+      "file": "20261008181817_workspace_membership_policy_deduplication.sql",
+      "rawSha256": "b750767eb8ef06e2b4129ba8f9ac9f210397d6747e3215feb3ff18f3de839965"
+    },
+    {
+      "file": "20261008182736_private_preview_sessions.sql",
+      "rawSha256": "e38ebfa0c837674755c0b3f8de133454fecc186d6c2b66a9a40d80cc44a12dba"
+    },
+    {
+      "file": "20261008190859_saved_website_preview_discovery.sql",
+      "rawSha256": "cab0599542825541551e3f177f90da046ebaf44f9c10e2f925f2256bd1d71fc7"
+    },
+    {
+      "file": "20261008200855_operator_website_qualification_proposal.sql",
+      "rawSha256": "c00382d3fa7aabcf9ebcec7931db0045cf57d5300fb3c056bb55be0208d48114"
+    },
+    {
+      "file": "20261008210222_operator_website_repair_review.sql",
+      "rawSha256": "41c2bb90a07baa3acd9e2bc9c16a48681c18772cf33cec7b41f3e4f39743e565"
+    },
+    {
+      "file": "20261009005809_saved_native_slide_designs.sql",
+      "rawSha256": "5558eede2dcac072ae12c16bc43a6aef633cfc568c2c27795141f6af14f486cc"
+    },
+    {
+      "file": "20261009014243_saved_presentation_preparation.sql",
+      "rawSha256": "eb1b9d1e0409693ec2d1e76ebee88af8bcdbfac2c038dedc0c82bc83ac191b5c"
+    },
+    {
+      "file": "20261009015516_native_presentation_progress.sql",
+      "rawSha256": "e7a242336965754f12c2c4a46f3477c3ea1884208abbb60b19813b1d1e6543bb"
+    },
+    {
+      "file": "20261009021050_operator_native_composition_qualification.sql",
+      "rawSha256": "40e353860f013144e6b3e799daeb5f76977de187ab812732aa0901a3cb5651f6"
+    },
+    {
+      "file": "20261011090000_credit_wallets_free_tier.sql",
+      "rawSha256": "6133a51807ba009754da2f74f3ea80a5997d9bac317b3d40b06f82b46b3148fc"
+    },
+    {
+      "file": "20261011120000_artifact_plans.sql",
+      "rawSha256": "bb6423cdb3c07acc0ad3bbc20a108e455b15a952937c02c589909b46469fb19d"
+    },
+    {
+      "file": "20261011130000_client_review_links.sql",
+      "rawSha256": "2b7cbf794a90e7a501b0026805b158478c964cad1c43dab03991df8762188e4d"
+    },
+    {
+      "file": "20261011140000_hosted_site_bundles.sql",
+      "rawSha256": "2a789e5ee4fa7ad4ead3ca4330f37a8b9898857eca14202285500d81e3b131d1"
+    },
+    {
+      "file": "20261011160000_credit_reservation_expiry.sql",
+      "rawSha256": "0362e2698a9ad83d5c2125fa3203a8c1d40e4dea6661e6f1b2d536d1641bbd9a"
+    },
+    {
+      "file": "20261011170000_free_tier_off_by_default.sql",
+      "rawSha256": "027bd374c42e6dbbc86a81f76bec1c908b336eb3851ba6707eb8d17a648e12be"
+    },
+    {
+      "file": "20261011180000_crm_sales_delivery_split.sql",
+      "rawSha256": "89200d07ffa4b6670952158b4b9f842c8178fa4c77666c0a347d6efe82cdba62"
+    },
+    {
+      "file": "20261011190000_crm_transition.sql",
+      "rawSha256": "193145c49046c4bdf263443f6ce43df9b1b6c3ddeed85359e0fe2b32d327f409"
+    },
+    {
+      "file": "20261011200000_crm_write_freeze.sql",
+      "rawSha256": "7f554045e2eae90cb1ac42a47490213147909847f450d8e1f4031137e32632eb"
+    },
+    {
+      "file": "20261012090000_plan_credit_allocations.sql",
+      "rawSha256": "58a5bd2cd5e1b27761583151ada1a55f856ffd5bca91ede78ce2232a5d061e90"
+    },
+    {
+      "file": "20261012100000_plan_entitlement_history.sql",
+      "rawSha256": "7986d536218ae15102a22e09839547b25cca519fc9ee8425fdcf8f2b72c2367b"
+    },
+    {
+      "file": "20261012110000_plan_evidence_and_jobs.sql",
+      "rawSha256": "4310832c0ea2e11f886112d15d85251b54a06491811c9850377bcade18e37175"
+    },
+    {
+      "file": "20261012120000_credit_lots_expiry.sql",
+      "rawSha256": "82babd6c70803f31525c437adffd92910238263f4581a88aa3739d27dff153fc"
+    },
+    {
+      "file": "20261012130000_credit_lock_clock.sql",
+      "rawSha256": "ac029d6d946d350527bc629d0e6dc532da05edc9f8df3acd6a695ca8d5b2c13b"
+    },
+    {
+      "file": "20261012140000_live_ai_spend.sql",
+      "rawSha256": "0fc50c718cf2392a5e86468e15a2fa02e3fb5bf71a3d28b608e8686a8a71b4ad"
+    },
+    {
+      "file": "20261012150000_shared_provider_limits.sql",
+      "rawSha256": "d81ee66cda60e4b09223e5ef40a3f9dc07ea3caed20240e216f74e634184ee65"
+    },
+    {
+      "file": "20261012160000_portable_site_html.sql",
+      "rawSha256": "40d26ae7f93064aedb481f3c43fa4bf3c07068e7c89117474703ac12af707ae2"
+    },
+    {
+      "file": "20261012170000_preserve_isolated_sites.sql",
+      "rawSha256": "fb144cd5a8b3239a2d1a23979e2ae19e3b493bd71a9112555c23aa3f0e69e18d"
+    },
+    {
+      "file": "20261012175901_prevent_duplicate_creation_checkouts.sql",
+      "rawSha256": "ed01311c075909189edf7c5ed203e997aa0ce0425b385b5c8d464fc65e931377"
+    },
+    {
+      "file": "20261012184407_hosted_site_enquiries.sql",
+      "rawSha256": "8d961d819a23f3ac395666945c1754eb80a382e30e18b408b5eea56aa019e1ba"
+    },
+    {
+      "file": "20261012210033_hosted_site_address_changes.sql",
+      "rawSha256": "a301a2c6fffca07ea6897828da6077c0338b45111dec2756555d3243cbd5eb6c"
+    },
+    {
+      "file": "20261013090000_hosting_review_fixes.sql",
+      "rawSha256": "bba270d3b9fd308ecda9fca150e6d5bf46e13633cd543ca029fd370ac8db6c15"
+    },
+    {
+      "file": "20261013100000_admin_console.sql",
+      "rawSha256": "5aa26bfaabd676da7c060a1fec6267f51ce97b871234ff4c18c75a795f2be343"
+    },
+    {
+      "file": "20261013110000_durable_topup_fulfillment.sql",
+      "rawSha256": "78509296e9a367bc19e9fc9ecb4e89b8c580410940464be35aba5ed27adbb3d6"
+    },
+    {
+      "file": "20261013120000_unlimited_sites.sql",
+      "rawSha256": "77d1d7aaf7ef514a0ecf33c935d083d3fa96cb87d804be9a986bb6e812ad0999"
+    },
+    {
+      "file": "20261013130000_plan_credit_rollover.sql",
+      "rawSha256": "c3c48b450e40465ac0ded53fd0a3cee3395d325dfc845cfb7a87ab4ba53e6de5"
+    },
+    {
+      "file": "20261013140000_site_badge_setting.sql",
+      "rawSha256": "c260d8ff30b53b93c325592d19390aca93f18da98f6e8fad07bdb936f211f53c"
+    },
+    {
+      "file": "20261013150000_cumulative_ai_operations.sql",
+      "rawSha256": "f9be6fbe282b638da002921ec3c345dff2a780d13798c2d28a55666d406a6dd5"
+    },
+    {
+      "file": "20261013160000_client_review_view_integrity.sql",
+      "rawSha256": "251f9175ab359e091103c8bfed637e91131eee5d6f20929fe768475b73cdeaa4"
+    },
+    {
+      "file": "20261013170000_client_review_document_assets.sql",
+      "rawSha256": "c017fcd4adf4cae2a8e5da84e76bbd10c4c93930d1265dfb8c48e8d319c5efbf"
+    },
+    {
+      "file": "20261013180000_trusted_publication_preparations.sql",
+      "rawSha256": "f75525de190b1926e7755de45e049e88900e7a02566753cbd0ed933d1549282a"
+    },
+    {
+      "file": "20261013190000_publication_worker_authority.sql",
+      "rawSha256": "254f1c9d2c2e20e6cd95e7d1b39a9e0aefc820563410559dd2c1db1e20a43e89"
+    },
+    {
+      "file": "20261013200000_staging_site_address_namespace.sql",
+      "rawSha256": "9df32055e53e1bd19e257fd33880288515bfd124162c9c618d967f31f6a03972"
+    },
+    {
+      "file": "20261013210000_publication_sandbox_journal.sql",
+      "rawSha256": "3431dbd248339da0114327f6214b148374e348144090b05abd44fd22c3631a39"
+    },
+    {
+      "file": "20261013220000_publication_worker_attestation.sql",
+      "rawSha256": "67b2e1d46bdace0364b3446fa1627796fd6d242941b2c29467859c574b94c0e6"
+    },
+    {
+      "file": "20261013230000_read_topup_order_status.sql",
+      "rawSha256": "abd3b029cc50fc56f27898d99e1ba3f1d2912ab0e27afbb50308fd7bd82d3393"
+    },
+    {
+      "file": "20261013240000_crm_email_automation.sql",
+      "rawSha256": "0d4699ab49455a5a6c2ada39a0b020ad0450eea27255368fc68c46f3b54c5bf5"
+    },
+    {
+      "file": "20261013250000_crm_lead_profile.sql",
+      "rawSha256": "7ad522a6ecc411f731680df1c6af78ca60d488243bec4007f97337127498a460"
+    },
+    {
+      "file": "20261013260000_crm_mail_security_boundaries.sql",
+      "rawSha256": "6aa140086087f531f27366997b9e485e72a274b354f9a43e7985f062e24fa0cd"
+    },
+    {
+      "file": "20261013270000_mail_granted_scopes.sql",
+      "rawSha256": "215a7b386beb6a4714f329ac9f9572cee366a2ce8aff4636a96f87221c2800a8"
+    },
+    {
+      "file": "20261013280000_billing_lifecycle_boundaries.sql",
+      "rawSha256": "2153aa84628f53109643ac60fa571592b6b4b7b50259c20c9cfe21021218cef8"
+    },
+    {
+      "file": "20261014011643_publication_worker_function_boundary.sql",
+      "rawSha256": "79162cb1aaeddb4b743008825ffec30f6db35377ac87b145091b4cf73257c214"
+    }
+  ],
+  "finalMigrationCount": 85,
+  "checks": {
+    "crmExpanded": true,
+    "crmConsistent": true,
+    "walletLotMigrationBalanced": true,
+    "lotTotalsBalanced": true,
+    "namespaceProduction": true,
+    "qaExclusionsUnoccupied": true,
+    "legacyLotCount": 0,
+    "walletMigrationCount": 0,
+    "expectedNewWalletLotLedgerRowsMatchEmptyBaseline": true
+  },
+  "qaAddressesActivelyRefused": true,
+  "walletBalanceAndReservedUnchanged": true,
+  "walletCount": 0,
+  "originalWalletRelationPresent": false,
+  "creditConservationExistingRowCoverage": 0,
+  "originalTables": [
+    {
+      "schema": "auth",
+      "table": "audit_log_entries",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "custom_oauth_providers",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "flow_state",
+      "beforeCount": 4,
+      "afterCount": 4,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "identities",
+      "beforeCount": 22,
+      "afterCount": 22,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "instances",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "mfa_amr_claims",
+      "beforeCount": 32,
+      "afterCount": 32,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "mfa_challenges",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "mfa_factors",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "mfa_recovery_code_sets",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "mfa_recovery_codes",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "oauth_authorizations",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "oauth_client_states",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "oauth_clients",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "oauth_consents",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "one_time_tokens",
+      "beforeCount": 1,
+      "afterCount": 1,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "refresh_tokens",
+      "beforeCount": 89,
+      "afterCount": 89,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "saml_providers",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "saml_relay_states",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "schema_migrations",
+      "beforeCount": 82,
+      "afterCount": 82,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "scim_tokens",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "scim_users",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "sessions",
+      "beforeCount": 32,
+      "afterCount": 32,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "sso_domains",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "sso_providers",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "users",
+      "beforeCount": 22,
+      "afterCount": 22,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "webauthn_challenges",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "auth",
+      "table": "webauthn_credentials",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "account_privilege_events",
+      "beforeCount": 1,
+      "afterCount": 1,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "account_privileges",
+      "beforeCount": 1,
+      "afterCount": 1,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "billing_access_plans",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "billing_settings",
+      "beforeCount": 1,
+      "afterCount": 1,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "claude_pilot_budget",
+      "beforeCount": 1,
+      "afterCount": 1,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "cloud_mutation_receipts",
+      "beforeCount": 90,
+      "afterCount": 90,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "generation_budgets",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "generation_dispatches",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "generation_proposals",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "generation_reservations",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "makeborne_private",
+      "table": "workspace_creation_receipts",
+      "beforeCount": 13,
+      "afterCount": 13,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "artifact_versions",
+      "beforeCount": 49,
+      "afterCount": 49,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "artifacts",
+      "beforeCount": 17,
+      "afterCount": 17,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "assets",
+      "beforeCount": 1,
+      "afterCount": 1,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "audit_events",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "billing_checkouts",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "billing_memberships",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "billing_webhook_events",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "budget_reservations",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "claude_pilot_runs",
+      "beforeCount": 7,
+      "afterCount": 7,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "clients",
+      "beforeCount": 1,
+      "afterCount": 1,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "contacts",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "generation_jobs",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "github_connections",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "github_website_links",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "hosted_sites",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "projects",
+      "beforeCount": 23,
+      "afterCount": 23,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "published_releases",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "reviews",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "sources",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "style_profiles",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "tasks",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "usage_ledger",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "workspace_members",
+      "beforeCount": 3,
+      "afterCount": 3,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "public",
+      "table": "workspaces",
+      "beforeCount": 13,
+      "afterCount": 13,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "storage",
+      "table": "buckets",
+      "beforeCount": 1,
+      "afterCount": 1,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "storage",
+      "table": "buckets_analytics",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "storage",
+      "table": "buckets_vectors",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "storage",
+      "table": "migrations",
+      "beforeCount": 73,
+      "afterCount": 73,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "beforeCount": 3,
+      "afterCount": 3,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "storage",
+      "table": "s3_multipart_uploads",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "storage",
+      "table": "s3_multipart_uploads_parts",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    },
+    {
+      "schema": "storage",
+      "table": "vector_indexes",
+      "beforeCount": 0,
+      "afterCount": 0,
+      "originalIdentitiesPreserved": true
+    }
+  ],
+  "newTableCount": 47,
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "paidCalls": 0,
+  "passed": true,
+  "cleanup": {
+    "complete": true,
+    "verifiedExactOwnedContainer": "makeborne_actual_backup_20261014_9bede59a2efc49d88944affc796851f4",
+    "network": "none",
+    "ports": [],
+    "volumes": [],
+    "stopped": true,
+    "emptyExactContainerReadback": true,
+    "anonymousVolumes": [],
+    "at": "2026-10-14T03:24:33.511Z"
+  },
+  "restoreProof": {
+    "totalEntries": 1019,
+    "adminEntries": 1018,
+    "postgresEntries": 1,
+    "allEntryIdsCoveredOnce": true,
+    "excludedEntries": 0,
+    "postgresEventTriggerTocId": 3798,
+    "backupUnchanged": true,
+    "originalOwnersAndAclPreserved": true,
+    "bothPartitionsExitZero": true,
+    "originalSchemaRelationAndEventOwnersChecked": 95,
+    "originalRoleAttrsStillMatch": true,
+    "originalMembershipsGrantorsOptionsStillMatch": true,
+    "originalAclEntriesExecuted": 243,
+    "backupShaStillMatches": true,
+    "ownerOrAclExclusionFlagsUsed": false
+  },
+  "syntheticNonzeroWalletEvidence": "docs/release-review/candidate-rehearsal-verification-20261014-r4.json",
+  "originalNonemptyTableCount": 25,
+  "newCreditRowCounts": {
+    "makeborne_private.credit_hold_lots": 0,
+    "makeborne_private.credit_lot_migration": 0,
+    "makeborne_private.credit_lots": 0,
+    "makeborne_private.credit_wallets": 0,
+    "public.credit_ledger": 0
+  },
+  "exactSourceBeforeAndAfterPassed": true,
+  "finishedAt": "2026-10-14T03:24:32.260Z",
+  "externalStorageObjectsIncluded": false,
+  "scope": "Database archive restore and forward migration data/authority proof only; external Storage object binaries are outside this archive."
+}

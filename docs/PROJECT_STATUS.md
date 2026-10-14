@@ -1,6 +1,14 @@
 # Makeborne — current release status
 
-Updated 2026-10-13 by Codex. **Not launch-ready. Candidate is not frozen.**
+Updated 2026-10-14 by Codex. **Scoped live update approved; commercial launch remains blocked.**
+
+## Current scoped release (supersedes historical holds below)
+
+The owner explicitly authorized merging tested features into main and deploying to makeborne.com, with unqualified features disabled. Source candidate63192fa is frozen by candidate-inventory-20261014-r4.json and has passed complete synthetic failure/recovery rehearsals plus an upgrade rehearsal against the actual private production backup. Production has now received65 migrations after a verified backup and actual-data rehearsal; exact85-version history and paused provider/payment gates were read back. The source branch63192fa passed both CI runs and the Vercel preview build. Main is not merged yet.
+
+Staging has all65 pending migrations and final preview dpl_F8VqkmgNxKPHcnctLVD3qY2Zcx97. Actual cloud compiler/renderer qualification, HTTPS, menus, forms and rename checks passed using a supervised local trusted controller; a permanent production controller is not qualified. Eleven real provider calls produced a short website, book, deck, chat edit, advisor reply and list ranking for0.814950 dollars, with no overrun. Provider limits are paused after testing.
+
+No ongoing public AI budget is approved. The separate release-testing package is capped at5 dollars, including the0.814950 already spent. Checkout, packs, plan switching, founder offer, free trial, images, server web search, creator discovery, automatic mail and trusted production publishing remain disabled. Existing hosting addresses remain the legacy default. General final-preview Google/GitHub sign-in and full billing lifecycle are not claimed passed. See scoped-live-release-20261014.json and actual-backup-rehearsal-20261014.json in docs/release-review.
 
 ## October14 final-candidate review (current; supersedes historical controls below)
 

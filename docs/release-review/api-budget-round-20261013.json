@@ -7,7 +7,7 @@
   "allocations": {
     "Codex": {
       "capUsd": 20,
-      "spentUsd": 0.65397,
+      "spentUsd": 1.46892,
       "reservedUsd": 0
     },
     "Claude": {
@@ -113,12 +113,54 @@
       "overruns": 0,
       "usageBasis": "Provider-reported usage (tokens plus server_tool_use.web_search_requests at $0.01) metered per call by RunSpend in local scripts with the app per-call bounds; no overrun; billing mocked; no app/staging/production. Invoice reconciliation not performed.",
       "evidence": "work/lead-finder-smoke-20261014/web-result-run1.json, web-result-video-run1.json, web-result-video.json (debug call logged to console)"
+    },
+    {
+      "packageId": "5a39ba5e-1570-498d-9fbe-5110c0a9534d",
+      "owner": "Codex",
+      "status": "settled",
+      "reservedUsd": 3.312,
+      "reservedAt": "2026-10-14T02:08:02.745Z",
+      "purpose": "Exact frozen staging website/book/deck/edit/advisor/list functional qualification; images/search off",
+      "ownerPackageCapUsd": 5,
+      "limits": {
+        "build-book": {
+          "reserved": true,
+          "capMicrousd": 600000
+        },
+        "build-deck": {
+          "reserved": true,
+          "capMicrousd": 600000
+        },
+        "build-website": {
+          "reserved": true,
+          "capMicrousd": 1500000
+        },
+        "edit-book": {
+          "reserved": true,
+          "capMicrousd": 600000
+        },
+        "expert-chat": {
+          "reserved": true,
+          "capMicrousd": 6000
+        },
+        "lead-list": {
+          "reserved": true,
+          "capMicrousd": 6000
+        }
+      },
+      "candidateCommit": "6dcd19a647338f2518efef02ff559722a23d10be",
+      "spentUsd": 0.81495,
+      "providerCalls": 11,
+      "settledAt": "2026-10-14T02:32:25.361Z",
+      "releasedReservationUsd": 2.49705,
+      "usageBasis": "Actual staging atomic provider-spending ledger, all settled, no overrun; provider invoice not independently reconciled.",
+      "evidence": "work/publication-cloud-e2e-20261014/smoke-provider-ledger.json"
     }
   ],
   "rules": [
     "Reserve the worst-case package cost before paid calls.",
     "Log provider usage and uncertain/failed requests; never count missing usage as zero.",
     "No independent full $50 allowance per agent.",
-    "Production calls remain unauthorized."
+    "Production release smoke calls are authorized only within the same5 dollar package, with advance reservation; no ongoing public generation budget."
   ]
 }

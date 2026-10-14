@@ -1,6 +1,6 @@
 {
   "prefix": "makeborne_candidate_20261014",
-  "startedAt": "2026-10-14T02:03:40.998Z",
+  "startedAt": "2026-10-14T02:20:43.770Z",
   "productionLast": "20261007110318",
   "productionTouched": false,
   "providerCalls": 0,
@@ -290,7 +290,7 @@
   ],
   "scenarios": {
     "full": {
-      "container": "makeborne_candidate_20261014_full_20261014020340",
+      "container": "makeborne_candidate_20261014_full_20261014022043",
       "build": {
         "platformErrorsExpected": 2
       },
@@ -526,7 +526,7 @@
       }
     },
     "fault": {
-      "container": "makeborne_candidate_20261014_fault_20261014020340",
+      "container": "makeborne_candidate_20261014_fault_20261014022043",
       "build": {
         "platformErrorsExpected": 2
       },
@@ -579,7 +579,7 @@
       "recoveredFingerprintMatchesFull": true
     },
     "interrupt": {
-      "container": "makeborne_candidate_20261014_interrupt_20261014020340",
+      "container": "makeborne_candidate_20261014_interrupt_20261014022043",
       "build": {
         "platformErrorsExpected": 2
       },
@@ -624,7 +624,7 @@
     },
     "publicFunctions": 14
   },
-  "finishedAt": "2026-10-14T02:06:21.916Z",
+  "finishedAt": "2026-10-14T02:23:21.213Z",
   "consumedInputs": [
     {
       "file": "supabase/migrations/20261005113330_founder_waitlist.sql",

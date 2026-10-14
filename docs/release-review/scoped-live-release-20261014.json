@@ -1,0 +1,97 @@
+{
+  "status": "database_applied_awaiting_merge",
+  "ownerAuthorization": {
+    "mergeAndDeployTestedFeatures": true,
+    "unqualifiedFeaturesRemainDisabled": true,
+    "ongoingPublicAiBudgetApproved": false,
+    "releaseTestingPackageCapMicrousd": 5000000
+  },
+  "sourceCandidate": "63192facd2f4c946556b03fd3b328ffccf53f4fc",
+  "sourceSha256": "d31feeef67696e2a5f9c89a081a4db69a9269cf5b8801a6d5091f6f31ce35840",
+  "inventory": "candidate-inventory-20261014-r4.json",
+  "productionBaseline": {
+    "main": "307881c2b2079545870a3c1e0e94b275def3072d",
+    "appliedMigrations": 20,
+    "pendingMigrations": 65,
+    "backupArchiveEntries": 1019,
+    "backupDecoded": true,
+    "backupSha256": "9b68f8a6ed0bca05681092bf003bc554fb579a4b4059adf4b1c563ba552448a8",
+    "externalStorageObjectBytesIncluded": false
+  },
+  "qualification": {
+    "syntheticExactCandidateRehearsal": "passed",
+    "sqlGroups": 144,
+    "injectedFailures": 7,
+    "interruptions": 2,
+    "actualBackupUpgradeRehearsal": "passed",
+    "productionDryRun": "passed_65_exact_files_no_writes",
+    "stagingDeployment": "dpl_F8VqkmgNxKPHcnctLVD3qY2Zcx97",
+    "stagingWebsiteBookDeckAndChatEdit": "passed_short_functional_samples",
+    "bookPdf": "6_pages_432x648_points",
+    "deckExports": "3_widescreen_slides_pdf_and_editable_pptx",
+    "cloudPublishing": "passed_supervised_local_controller_with_actual_cloud_vms",
+    "permanentProductionPublicationController": "not_qualified",
+    "publicHttpsMenusFormsRename": "passed_staging_only",
+    "emailPasswordSignInAndUpload": "passed_staging",
+    "confirmationEmail": "received_callback_not_completed_in_this_round",
+    "googleGithubSignInOnFinalPreview": "not_completed",
+    "paidBillingLifecycle": "incomplete_not_enabled"
+  },
+  "testingSpend": {
+    "newPackageActualMicrousd": 814950,
+    "calls": 11,
+    "overruns": 0,
+    "remainingMicrousd": 4185050,
+    "providerInvoiceReconciled": false,
+    "cloudTestCapUsd": 2,
+    "allNineCloudVmsStopped": true,
+    "privateTestImageRepositoriesRemoved": true,
+    "cloudInvoiceReconciled": false
+  },
+  "releasePolicy": {
+    "creationCheckout": false,
+    "founderCheckout": false,
+    "creditPacks": false,
+    "planSwitching": false,
+    "freeTrial": false,
+    "aiImages": false,
+    "serverWebSearchAndCreatorDiscovery": false,
+    "automaticMailAndReplyTracking": false,
+    "trustedProductionPublishing": false,
+    "hostingAddresses": "preserve_existing_legacy_default",
+    "providerLimits": "paused_except_explicit_bounded_release_smoke_then_paused_again",
+    "crmContract": "expand_only_no_manual_contract"
+  },
+  "rollout": [
+    "Complete actual-backup upgrade rehearsal and verify preserved data.",
+    "Record exact frozen source and sanitized evidence; scan staged files for secrets.",
+    "Push upgrade/live-builder and require checks on the exact release head; main preview maintenance stays on.",
+    "Pause legacy pilot without clearing reservations; verify no reserved legacy runs.",
+    "Apply explicit production db URL migrations with include-all and skip-vault; verify exact85 history and paused limits.",
+    "Set production configuration for the scoped release; preserve existing secrets and authentication.",
+    "Merge PR1 normally, verify the resulting main SHA and Vercel production source, and perform smoke checks."
+  ],
+  "recovery": {
+    "oldProductionBundleAfterMigrations": "incompatible_do_not_promote",
+    "preferred": "qualified_candidate_with_maintenance_on_and_forward_repair",
+    "databaseRestore": "separate_incident_requires_reconciliation_not_automatic",
+    "creditAndPaymentCorrection": "append_ledger_entries_never_delete"
+  },
+  "productionRollout": {
+    "appliedMigrations": 65,
+    "totalMigrations": 85,
+    "providerLimitsPaused": true,
+    "creationClosed": true,
+    "trialOff": true,
+    "crm": {
+      "mode": "expand",
+      "frozen": false,
+      "consistent": true,
+      "frozenReason": "",
+      "minClientProtocol": 0,
+      "clientsLegacyStages": 0,
+      "clientsCurrentOnlyStages": 0
+    },
+    "completedAt": "2026-10-14T03:26:19.954Z"
+  }
+}
