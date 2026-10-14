@@ -34,7 +34,7 @@ export function publicAddress(address: string) {
   return false;
 }
 
-async function publicTarget(raw: string, resolve: Lookup = host => lookup(host, { all: true })) {
+export async function publicTarget(raw: string, resolve: Lookup = host => lookup(host, { all: true })) {
   let url: URL;
   try { url = new URL(raw); } catch { throw new Error("Not a valid link."); }
   if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only web links can be read.");

@@ -13,6 +13,7 @@ import { mapImport, parseCsv, toCsv, type ImportedClient } from "@/lib/client-cs
 import ClientBoard from "./client-board";
 import { CLIENTS_ACTION_EVENT, refreshOnboarding, takeClientsAction, type ClientsRequest, type LeadFinderSeed } from "./onboarding/signals";
 import EnquiryLeads from "./enquiry-leads";
+import BrandKits from "./brand-kits";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -419,6 +420,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
           try { const detail = await api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`); saved(detail.client); setMessage("Client details saved to your account."); }
           catch { setMessage("Client details saved. Refresh to see the latest version."); }
         }} />}
+        {view === "details" && <BrandKits key={`brand:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} />}
         {view === "reviews" && <ClientReviewFeed key={`${snapshot.workspace.id}:${full.id}:reviews`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} canEdit={canEdit} onOpenProject={onOpenProject} />}
         {view === "email" && <ClientEmail key={full.id} accountId={accountId} workspaceId={snapshot.workspace.id} client={{ id: full.id, name: full.name, email: full.email }} canEdit={canEdit}
           onSent={() => void api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`).then(result => { saved(result.client); setOutreachRevision(value => value + 1); }).catch(() => undefined)}

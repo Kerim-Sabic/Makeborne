@@ -19,6 +19,8 @@ import { websiteBuildResponse } from "@/lib/builder/website-run";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
 import { requirePricedModel } from "@/lib/ai/model-check";
 import { SitePlanSchema, planToBrief } from "@/lib/builder/plan";
+import { websiteBrandBlock } from "@/lib/brand/kit";
+import { ensureBrandLogo, projectBrandKit } from "@/lib/brand/server";
 
 export const runtime = "nodejs";
 // Vercel Hobby allows 300s; raise to 800 on Pro for long Ultra runs.
@@ -94,6 +96,9 @@ export async function POST(request: Request) {
     reserved = operation;
 
     const files = new ProjectFiles(current.content.websiteSource);
+    // The project's brand kit (the client's, or the workspace's own for projects without a client).
+    const brand = await projectBrandKit(client, body.workspaceId, project);
+    const logo = brand && artifact.kind === "website" ? await ensureBrandLogo(client, { workspaceId: body.workspaceId, projectId: artifact.project_id }, brand, files) : null;
     const outline = current.content.websiteSource ? "" : current.content.sections.map(section => [section.title, ...section.blocks.map(block => block.text)].filter(Boolean).join("\n")).join("\n\n").slice(0, 20_000);
     const history = versions.filter(version => version.number <= artifact.current_version).slice(0, 6).reverse()
       .map(version => `v${version.number}: ${version.changeSummary}`).join("\n");
@@ -103,6 +108,7 @@ export async function POST(request: Request) {
       `Brief: ${project.brief || "(none)"}`,
       project.audience ? `Audience: ${project.audience}` : "", project.purpose ? `Purpose: ${project.purpose}` : "",
       `Visual direction: ${styleDirection(project.styleId, current.style) || "No preset — choose the best direction for this business."}`,
+      brand ? websiteBrandBlock(brand, logo) : "",
       outline ? `Existing outline content to use:\n${outline}` : "",
       current.content.website ? `Existing static design to convert into the React project (keep its look and copy unless asked otherwise):\n<html>${current.content.website.html.slice(0, 40_000)}</html>\n<css>${current.content.website.css.slice(0, 30_000)}</css>` : "",
       history ? `Recent revisions:\n${history}` : "",
@@ -120,7 +126,7 @@ export async function POST(request: Request) {
 
     // Books and presentations: structured document builder (same credits, versions and SSE contract).
     if (artifact.kind === "book" || artifact.kind === "presentation") {
-      const response = documentBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, project, current, versions,
+      const response = documentBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, project, current, versions, brand,
         message: body.message, effort: body.effort, attachments, maxDuration });
       reserved = null;
       return response;

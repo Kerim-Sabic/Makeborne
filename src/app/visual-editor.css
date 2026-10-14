@@ -40,6 +40,10 @@
 .ve-control input[type="color"][data-empty="true"]::-webkit-color-swatch { background:linear-gradient(135deg, transparent 46%, #c9463d 46%, #c9463d 54%, transparent 54%), #fff !important; }
 .ve-control input[type="color"][data-empty="true"]::-moz-color-swatch { background:linear-gradient(135deg, transparent 46%, #c9463d 46%, #c9463d 54%, transparent 54%), #fff !important; }
 .ve-control input[type="number"] { width:76px; flex:none; }
+.ve-swatches { grid-column:2; display:flex; flex-wrap:wrap; gap:5px; margin-top:4px; }
+.ve-swatches button { width:20px; height:20px; padding:0; border:1px solid rgba(20,16,30,.18); border-radius:50%; cursor:pointer; box-shadow:inset 0 0 0 2px #fff; }
+.ve-swatches button[aria-pressed="true"] { outline:2px solid #4b3a59; outline-offset:1px; }
+.ve-swatches button:focus-visible { outline:2px solid #4b3a59; outline-offset:2px; }
 .ve-value { flex:1; min-width:0; color:#5b4d67; font:11.5px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .ve-unit { color:#8a7f93; font-size:11.5px; flex:1; }
 .ve-segment { display:inline-flex; padding:2px; border:1px solid #e3dde9; border-radius:8px; background:#faf9fb; }

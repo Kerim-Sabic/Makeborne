@@ -25,8 +25,10 @@ function toHex(value: string | undefined): { hex: string; clear: boolean } {
 }
 const px = (value: string | undefined) => { const number = parseFloat(value ?? ""); return Number.isFinite(number) ? String(Math.round(number * 10) / 10) : ""; };
 
-export default function VisualEditorPanel({ picked, description, images, note, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
-  picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; note: string; canUndo: boolean;
+export type Swatch = { label: string; value: string };
+
+export default function VisualEditorPanel({ picked, description, images, swatches = [], note, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
+  picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; swatches?: Swatch[]; note: string; canUndo: boolean;
   onEdit: (edit: VisualEdit) => void; onParent: () => void; onClose: () => void; onUndo: () => void; onAsk?: (text: string) => void;
 }) {
   return <aside className="ve" aria-label="Edit selected element">
@@ -39,12 +41,12 @@ export default function VisualEditorPanel({ picked, description, images, note, c
     {!picked || !description
       ? <div className="ve-empty"><p>Click any text, image, link or section in the preview to change it.</p><p className="ve-muted">Edits save automatically as a new version and don&apos;t use credits.</p></div>
       : <Inspector key={`${picked.loc.path}@${picked.loc.offset}:${picked.index}:${"value" in description.text ? description.text.value : "parts" in description.text ? description.text.parts.join("|") : ""}`}
-        picked={picked} description={description} images={images} onEdit={onEdit} onParent={onParent} onAsk={onAsk} />}
+        picked={picked} description={description} images={images} swatches={swatches} onEdit={onEdit} onParent={onParent} onAsk={onAsk} />}
   </aside>;
 }
 
-function Inspector({ picked, description, images, onEdit, onParent, onAsk }: {
-  picked: PickedElement; description: ElementDescription; images: ProjectImage[];
+function Inspector({ picked, description, images, swatches, onEdit, onParent, onAsk }: {
+  picked: PickedElement; description: ElementDescription; images: ProjectImage[]; swatches: Swatch[];
   onEdit: (edit: VisualEdit) => void; onParent: () => void; onAsk?: (text: string) => void;
 }) {
   const loc = picked.loc;
@@ -106,8 +108,8 @@ function Inspector({ picked, description, images, onEdit, onParent, onAsk }: {
     <section className="ve-section" aria-label="Style">
       <h4>Style</h4>
       {description.styleReason ? <p className="ve-muted">{description.styleReason}</p> : <div className="ve-style">
-        <ColorField id="ve-color" label="Text colour" inline={description.style.color} computed={picked.style.color} onChange={value => style("color", value)} />
-        <ColorField id="ve-background" label="Background" inline={description.style.backgroundColor} computed={picked.style.backgroundColor} onChange={value => style("backgroundColor", value)} />
+        <ColorField id="ve-color" label="Text colour" inline={description.style.color} computed={picked.style.color} swatches={swatches} onChange={value => style("color", value)} />
+        <ColorField id="ve-background" label="Background" inline={description.style.backgroundColor} computed={picked.style.backgroundColor} swatches={swatches} onChange={value => style("backgroundColor", value)} />
         <NumberField id="ve-size" label="Text size" unit="px" inline={description.style.fontSize} computed={picked.style.fontSize} min={8} max={200} onChange={value => style("fontSize", value)} />
         <div className="ve-field">
           <label htmlFor="ve-weight">Weight</label>
@@ -162,7 +164,7 @@ function Reset({ shown, label, onReset }: { shown: boolean; label: string; onRes
   return shown ? <button type="button" className="ve-icon" onClick={onReset} aria-label={`Reset ${label}`} title={`Reset ${label}`}><RotateCcw size={13} /></button> : null;
 }
 
-function ColorField({ id, label, inline, computed, onChange }: { id: string; label: string; inline?: string; computed?: string; onChange: (value: string) => void }) {
+function ColorField({ id, label, inline, computed, swatches, onChange }: { id: string; label: string; inline?: string; computed?: string; swatches: Swatch[]; onChange: (value: string) => void }) {
   const current = toHex(inline ?? computed);
   const [value, setValue] = useState(current.hex);
   const timer = useRef<number | undefined>(undefined);
@@ -177,6 +179,11 @@ function ColorField({ id, label, inline, computed, onChange }: { id: string; lab
       <code className="ve-value">{current.clear && !inline ? "None" : value}</code>
       <Reset shown={Boolean(inline)} label={label.toLowerCase()} onReset={() => onChange("")} />
     </div>
+    {swatches.length > 0 && <div className="ve-swatches" role="group" aria-label={`Brand colours for ${label.toLowerCase()}`}>
+      {swatches.map(swatch => <button key={swatch.label} type="button" title={`${swatch.label} ${swatch.value}`} aria-label={`Use ${swatch.label} (${swatch.value})`}
+        aria-pressed={value === swatch.value} style={{ background: swatch.value }}
+        onClick={() => { window.clearTimeout(timer.current); setValue(swatch.value); onChange(swatch.value); }} />)}
+    </div>}
   </div>;
 }
 

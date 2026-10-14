@@ -16,6 +16,8 @@ import VersionCompare from "./version-compare";
 import WebsiteDomains from "./website-domains";
 import WebsiteAnalytics from "./website-analytics";
 import WebsiteSeo from "./website-seo";
+import { brandSwatches as kitSwatches, parseBrandKit } from "@/lib/brand/kit";
+import { brandRequest } from "./brand-kit-api";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
@@ -1120,12 +1122,24 @@ export function CloudEditor({
   accountId: string;
   workspaceId: string;
   artifact: CloudArtifact;
-  project?: Pick<Project, "brief" | "effort">;
+  project?: Pick<Project, "brief" | "effort" | "clientId">;
   role: WorkspaceSummary["role"];
   back: () => void;
   notify: (s: string) => void;
 }) {
   const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
+  // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
+  const [brandColors, setBrandColors] = useState<{ label: string; value: string }[]>([]);
+  const brandClient = project?.clientId ?? null;
+  useEffect(() => {
+    if (artifact.kind !== "website" || role === "reviewer") return;
+    let active = true;
+    brandRequest<{ kits: { clientId: string | null; kit: unknown }[] }>(accountId, `/api/cloud/workspaces/${workspaceId}/brand-kits`).then(value => {
+      const kit = parseBrandKit(value.kits.find(entry => entry.clientId === brandClient)?.kit);
+      if (active) setBrandColors(kit ? kitSwatches(kit) : []);
+    }, () => undefined);
+    return () => { active = false; };
+  }, [accountId, workspaceId, brandClient, artifact.kind, role]);
   // Client feedback placed in the builder composer for review. Never auto-sent.
   const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string } | null>(null);
   useEffect(() => {
@@ -1705,6 +1719,7 @@ export function CloudEditor({
               editRevision.current++; setContent(current => current ? { ...current, websiteSource: next } : current); setDirty(true); setNote(summary);
             },
             onAsk: useLiveBuilder ? text => setBuilderPrefill({ key: crypto.randomUUID(), text }) : undefined,
+            swatches: brandColors,
           } : undefined} />}
         {view === "preview" && useLiveBuilder && !liveDocument && !live && !content.websiteSource && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
         {view === "preview" && !useLiveBuilder && !useSourcePreview && artifact.kind === "website" && generatedVersionId && (() => {

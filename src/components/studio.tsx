@@ -14,6 +14,7 @@ import GenerationPermissions, {useGenerationConsent} from "./generation-permissi
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
 import AccountClients from "./account-clients";
+import BrandKits from "./brand-kits";
 import { useCreationAccount, type CreationAccount } from "./use-creation-account";
 import GettingStarted from "./onboarding/getting-started";
 import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
@@ -871,6 +872,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     <Plus size={17} /> Custom style
                   </button>
                 </div>
+                {composerAccount.accountId && composerAccount.workspace && <BrandKits key={`${composerAccount.accountId}:${composerAccount.workspace.id}`} accountId={composerAccount.accountId} workspaceId={composerAccount.workspace.id} />}
                 <TemplateGallery onChoose={chooseDirection} />
                 {workspace.styles.some(
                   (style) =>
