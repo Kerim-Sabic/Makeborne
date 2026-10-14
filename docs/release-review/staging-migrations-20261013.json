@@ -1,184 +1,22 @@
 {
   "target": "xzwikrunwpurxnxgkznh",
   "productionTouched": false,
-  "startedAt": "2026-10-14T00:47:15.901Z",
+  "startedAt": "2026-10-14T01:32:59.363Z",
   "dryRun": false,
-  "verifiedApplied": 45,
+  "verifiedApplied": 64,
   "pending": [
     {
-      "file": "20261013100000_admin_console.sql",
-      "sha256": "5aa26bfaabd676da7c060a1fec6267f51ce97b871234ff4c18c75a795f2be343"
-    },
-    {
-      "file": "20261013110000_durable_topup_fulfillment.sql",
-      "sha256": "78509296e9a367bc19e9fc9ecb4e89b8c580410940464be35aba5ed27adbb3d6"
-    },
-    {
-      "file": "20261013120000_unlimited_sites.sql",
-      "sha256": "77d1d7aaf7ef514a0ecf33c935d083d3fa96cb87d804be9a986bb6e812ad0999"
-    },
-    {
-      "file": "20261013130000_plan_credit_rollover.sql",
-      "sha256": "c3c48b450e40465ac0ded53fd0a3cee3395d325dfc845cfb7a87ab4ba53e6de5"
-    },
-    {
-      "file": "20261013140000_site_badge_setting.sql",
-      "sha256": "c260d8ff30b53b93c325592d19390aca93f18da98f6e8fad07bdb936f211f53c"
-    },
-    {
-      "file": "20261013150000_cumulative_ai_operations.sql",
-      "sha256": "f9be6fbe282b638da002921ec3c345dff2a780d13798c2d28a55666d406a6dd5"
-    },
-    {
-      "file": "20261013160000_client_review_view_integrity.sql",
-      "sha256": "251f9175ab359e091103c8bfed637e91131eee5d6f20929fe768475b73cdeaa4"
-    },
-    {
-      "file": "20261013170000_client_review_document_assets.sql",
-      "sha256": "c017fcd4adf4cae2a8e5da84e76bbd10c4c93930d1265dfb8c48e8d319c5efbf"
-    },
-    {
-      "file": "20261013180000_trusted_publication_preparations.sql",
-      "sha256": "f75525de190b1926e7755de45e049e88900e7a02566753cbd0ed933d1549282a"
-    },
-    {
-      "file": "20261013190000_publication_worker_authority.sql",
-      "sha256": "254f1c9d2c2e20e6cd95e7d1b39a9e0aefc820563410559dd2c1db1e20a43e89"
-    },
-    {
-      "file": "20261013200000_staging_site_address_namespace.sql",
-      "sha256": "9df32055e53e1bd19e257fd33880288515bfd124162c9c618d967f31f6a03972"
-    },
-    {
-      "file": "20261013210000_publication_sandbox_journal.sql",
-      "sha256": "3431dbd248339da0114327f6214b148374e348144090b05abd44fd22c3631a39"
-    },
-    {
-      "file": "20261013220000_publication_worker_attestation.sql",
-      "sha256": "67b2e1d46bdace0364b3446fa1627796fd6d242941b2c29467859c574b94c0e6"
-    },
-    {
-      "file": "20261013230000_read_topup_order_status.sql",
-      "sha256": "abd3b029cc50fc56f27898d99e1ba3f1d2912ab0e27afbb50308fd7bd82d3393"
-    },
-    {
-      "file": "20261013240000_crm_email_automation.sql",
-      "sha256": "0d4699ab49455a5a6c2ada39a0b020ad0450eea27255368fc68c46f3b54c5bf5"
-    },
-    {
-      "file": "20261013250000_crm_lead_profile.sql",
-      "sha256": "7ad522a6ecc411f731680df1c6af78ca60d488243bec4007f97337127498a460"
-    },
-    {
-      "file": "20261013260000_crm_mail_security_boundaries.sql",
-      "sha256": "6aa140086087f531f27366997b9e485e72a274b354f9a43e7985f062e24fa0cd"
-    },
-    {
-      "file": "20261013270000_mail_granted_scopes.sql",
-      "sha256": "215a7b386beb6a4714f329ac9f9572cee366a2ce8aff4636a96f87221c2800a8"
-    },
-    {
-      "file": "20261013280000_billing_lifecycle_boundaries.sql",
-      "sha256": "2153aa84628f53109643ac60fa571592b6b4b7b50259c20c9cfe21021218cef8"
+      "file": "20261014011643_publication_worker_function_boundary.sql",
+      "sha256": "79162cb1aaeddb4b743008825ffec30f6db35377ac87b145091b4cf73257c214"
     }
   ],
   "applied": [
     {
-      "file": "20261013100000_admin_console.sql",
-      "sha256": "5aa26bfaabd676da7c060a1fec6267f51ce97b871234ff4c18c75a795f2be343",
-      "at": "2026-10-14T00:47:16.049Z"
-    },
-    {
-      "file": "20261013110000_durable_topup_fulfillment.sql",
-      "sha256": "78509296e9a367bc19e9fc9ecb4e89b8c580410940464be35aba5ed27adbb3d6",
-      "at": "2026-10-14T00:47:16.199Z"
-    },
-    {
-      "file": "20261013120000_unlimited_sites.sql",
-      "sha256": "77d1d7aaf7ef514a0ecf33c935d083d3fa96cb87d804be9a986bb6e812ad0999",
-      "at": "2026-10-14T00:47:16.267Z"
-    },
-    {
-      "file": "20261013130000_plan_credit_rollover.sql",
-      "sha256": "c3c48b450e40465ac0ded53fd0a3cee3395d325dfc845cfb7a87ab4ba53e6de5",
-      "at": "2026-10-14T00:47:16.328Z"
-    },
-    {
-      "file": "20261013140000_site_badge_setting.sql",
-      "sha256": "c260d8ff30b53b93c325592d19390aca93f18da98f6e8fad07bdb936f211f53c",
-      "at": "2026-10-14T00:47:16.391Z"
-    },
-    {
-      "file": "20261013150000_cumulative_ai_operations.sql",
-      "sha256": "f9be6fbe282b638da002921ec3c345dff2a780d13798c2d28a55666d406a6dd5",
-      "at": "2026-10-14T00:47:16.492Z"
-    },
-    {
-      "file": "20261013160000_client_review_view_integrity.sql",
-      "sha256": "251f9175ab359e091103c8bfed637e91131eee5d6f20929fe768475b73cdeaa4",
-      "at": "2026-10-14T00:47:16.553Z"
-    },
-    {
-      "file": "20261013170000_client_review_document_assets.sql",
-      "sha256": "c017fcd4adf4cae2a8e5da84e76bbd10c4c93930d1265dfb8c48e8d319c5efbf",
-      "at": "2026-10-14T00:47:16.609Z"
-    },
-    {
-      "file": "20261013180000_trusted_publication_preparations.sql",
-      "sha256": "f75525de190b1926e7755de45e049e88900e7a02566753cbd0ed933d1549282a",
-      "at": "2026-10-14T00:47:16.714Z"
-    },
-    {
-      "file": "20261013190000_publication_worker_authority.sql",
-      "sha256": "254f1c9d2c2e20e6cd95e7d1b39a9e0aefc820563410559dd2c1db1e20a43e89",
-      "at": "2026-10-14T00:47:16.789Z"
-    },
-    {
-      "file": "20261013200000_staging_site_address_namespace.sql",
-      "sha256": "9df32055e53e1bd19e257fd33880288515bfd124162c9c618d967f31f6a03972",
-      "at": "2026-10-14T00:47:16.856Z"
-    },
-    {
-      "file": "20261013210000_publication_sandbox_journal.sql",
-      "sha256": "3431dbd248339da0114327f6214b148374e348144090b05abd44fd22c3631a39",
-      "at": "2026-10-14T00:47:16.926Z"
-    },
-    {
-      "file": "20261013220000_publication_worker_attestation.sql",
-      "sha256": "67b2e1d46bdace0364b3446fa1627796fd6d242941b2c29467859c574b94c0e6",
-      "at": "2026-10-14T00:47:16.984Z"
-    },
-    {
-      "file": "20261013230000_read_topup_order_status.sql",
-      "sha256": "abd3b029cc50fc56f27898d99e1ba3f1d2912ab0e27afbb50308fd7bd82d3393",
-      "at": "2026-10-14T00:47:17.041Z"
-    },
-    {
-      "file": "20261013240000_crm_email_automation.sql",
-      "sha256": "0d4699ab49455a5a6c2ada39a0b020ad0450eea27255368fc68c46f3b54c5bf5",
-      "at": "2026-10-14T00:47:17.146Z"
-    },
-    {
-      "file": "20261013250000_crm_lead_profile.sql",
-      "sha256": "7ad522a6ecc411f731680df1c6af78ca60d488243bec4007f97337127498a460",
-      "at": "2026-10-14T00:47:17.211Z"
-    },
-    {
-      "file": "20261013260000_crm_mail_security_boundaries.sql",
-      "sha256": "6aa140086087f531f27366997b9e485e72a274b354f9a43e7985f062e24fa0cd",
-      "at": "2026-10-14T00:47:17.283Z"
-    },
-    {
-      "file": "20261013270000_mail_granted_scopes.sql",
-      "sha256": "215a7b386beb6a4714f329ac9f9572cee366a2ce8aff4636a96f87221c2800a8",
-      "at": "2026-10-14T00:47:17.344Z"
-    },
-    {
-      "file": "20261013280000_billing_lifecycle_boundaries.sql",
-      "sha256": "2153aa84628f53109643ac60fa571592b6b4b7b50259c20c9cfe21021218cef8",
-      "at": "2026-10-14T00:47:17.411Z"
+      "file": "20261014011643_publication_worker_function_boundary.sql",
+      "sha256": "79162cb1aaeddb4b743008825ffec30f6db35377ac87b145091b4cf73257c214",
+      "at": "2026-10-14T01:32:59.502Z"
     }
   ],
-  "totalApplied": 64,
-  "finishedAt": "2026-10-14T00:47:17.492Z"
+  "totalApplied": 65,
+  "finishedAt": "2026-10-14T01:32:59.584Z"
 }

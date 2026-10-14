@@ -32,7 +32,7 @@
         "ALLOW_LOCAL_SUPABASE": "false",
         "SITES_DOMAIN": "makeborne.site",
         "SITE_INDEXING_ENABLED": "false",
-        "APP_ORIGIN": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+        "APP_ORIGIN": "https://makeborne-release-staging-qa2026101-kerimsabic-6594s-projects.vercel.app",
         "LEGACY_SITES_HOST": "legacy-disabled.makeborne.site"
       },
       "observability": { "enabled": true, "head_sampling_rate": 0.1, "logs": { "enabled": true, "invocation_logs": false } }

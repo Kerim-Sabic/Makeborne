@@ -4,7 +4,7 @@ import {siteSlugFromHost,validSiteLabel} from './site-policy.js';
 export const STAGING_SITE_LABELS=Object.freeze(['release-check','release-check-renamed']);
 export const STAGING_SUPABASE_URL='https://xzwikrunwpurxnxgkznh.supabase.co';
 export const PRODUCTION_SUPABASE_URL='https://rklojnmmsmhwnkbzuidp.supabase.co';
-export const STAGING_APP_ORIGIN='https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app';
+export const STAGING_APP_ORIGIN='https://makeborne-release-staging-qa2026101-kerimsabic-6594s-projects.vercel.app';
 
 function localOrigin(value) {
   if(typeof value!=='string')return false;
