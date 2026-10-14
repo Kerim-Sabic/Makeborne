@@ -37,6 +37,12 @@ function documentAttributes(snapshot: string, cleanStyle: (value: string) => str
 }
 
 export type SnapshotOptions = {
+  /** Site name for og:site_name. */
+  siteName?: string;
+  /** Absolute https URL of the share image (og:image). */
+  image?: string;
+  /** schema.org JSON from seo.structuredData (already safe for a data script). */
+  jsonLd?: string | null;
   /** Published project images (`/images/hero.webp`) that the snapshot may reference. */
   assetPaths?: ReadonlySet<string>;
   /** Same-origin compiled stylesheet that replaces the captured bundle <style>. */
@@ -120,5 +126,10 @@ export function renderHostedSnapshot(snapshot: string, title: string, descriptio
   const links = [...new Set([...(stylesheet ? [stylesheet] : []), ...(options.stylesheets ?? [])])];
   if ((options.stylesheets ?? []).some(path => !assets.has(path) || !/^\/[A-Za-z0-9_./-]+\.css$/.test(path))) throw new Error("The compiled website stylesheet is unavailable.");
   const link = links.map(path => `<link rel="stylesheet" href="${e(path)}">`).join("");
-  return `<!doctype html><html${roots.html}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)}</title><meta name="description" content="${e(description)}"><link rel="canonical" href="${e(url)}"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:url" content="${e(url)}"><meta property="og:type" content="website">${link}<style>${styles}</style></head><body${roots.body}>${clean}</body></html>`;
+  const image = options.image && /^https:\/\/[^\s"'<>]+$/.test(options.image) ? options.image : null;
+  // A data block, never executed; it must not be able to close its own element.
+  if (options.jsonLd && (!options.jsonLd.startsWith("{") || /[<>]/.test(options.jsonLd))) throw new Error("Invalid structured data.");
+  const share = `${options.siteName ? `<meta property="og:site_name" content="${e(options.siteName)}">` : ""}${image ? `<meta property="og:image" content="${e(image)}"><meta name="twitter:card" content="summary_large_image">` : `<meta name="twitter:card" content="summary">`}`;
+  const data = options.jsonLd ? `<script type="application/ld+json">${options.jsonLd}</script>` : "";
+  return `<!doctype html><html${roots.html}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)}</title><meta name="description" content="${e(description)}"><link rel="canonical" href="${e(url)}"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:url" content="${e(url)}"><meta property="og:type" content="website">${share}${data}${link}<style>${styles}</style></head><body${roots.body}>${clean}</body></html>`;
 }

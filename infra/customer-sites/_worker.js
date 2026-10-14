@@ -1,3 +1,4 @@
+import { robotsDocument, sitemapDocument, sitePaths } from "./sitemap.js";
 import { scheduleSiteView } from "./analytics.js";
 import { submitEnquiry } from "./forms.js";
 import { siteNamespacePolicy, classifySiteNamespaceRequest, STAGING_SITE_LABELS } from "./namespace-policy.js";
@@ -181,7 +182,19 @@ async function serveSite(request, env, context, config, url, slug, secure, head,
   if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
   if (url.pathname.length > 240) return failure(404, secure, head);
   if (url.pathname === "/robots.txt") {
-    return new Response(head ? null : `User-agent: *\n${config.indexable ? "Allow" : "Disallow"}: /\n`, { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+    return new Response(head ? null : robotsDocument(url.origin, config.indexable), { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+  }
+  // Pages of the live site for search engines; not offered where indexing is off (staging, local).
+  if (url.pathname === "/sitemap.xml") {
+    if (!config.indexable) return failure(404, secure, head);
+    try {
+      const site = sitePaths(await rpc(config, "makeborne_read_site_paths", { p_slug: slug }, 20_000));
+      if (!site) return failure(404, secure, head);
+      return new Response(head ? null : sitemapDocument(url.origin, site.paths, site.updated), { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+    } catch (error) {
+      console.error(JSON.stringify({ event: "sitemap_read_error", type: error instanceof Error ? error.message.slice(0, 40) : "unknown" }));
+      return failure(503, secure, head);
+    }
   }
   try {
     if (siteFilePath(url.pathname)) return await serveFile(request, context, config, slug, url, secure, custom);

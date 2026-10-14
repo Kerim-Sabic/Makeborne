@@ -311,7 +311,7 @@ check("worker routes hosts, unknown paths and failures safely", () => withRpc(()
   const legacy = await worker.fetch(new Request("https://sites.makeborne.com/good-dog"), ENV);
   assert.equal(legacy.headers.get("Location"), "https://good-dog.makeborne.site/");
   const robots = await worker.fetch(new Request("https://good-dog.makeborne.site/robots.txt"), ENV);
-  assert.equal(await robots.text(), "User-agent: *\nAllow: /\n");
+  assert.equal(await robots.text(), "User-agent: *\nAllow: /\nSitemap: https://good-dog.makeborne.site/sitemap.xml\n", "robots points search engines to the site's own sitemap");
   assert.equal((await worker.fetch(new Request("https://good-dog.makeborne.site/", {method: "PUT"}), ENV)).status, 405);
   assert.equal(calls.length, 1, "only the unpublished site lookup reached the database");
 }));

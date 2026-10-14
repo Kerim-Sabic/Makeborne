@@ -23,6 +23,8 @@ export type PublicationWorkerDependencies = {
   resolveArtwork(scope: {preparationId: string; workerId: string; fence: string; workspaceId: string; projectId: string},
     version: ReturnType<typeof mapVersion>, signal: AbortSignal): Promise<Awaited<ReturnType<typeof resolveWebsiteSourceAssets>>>;
   address(slug: string): string;
+  /** Optional: the site's live custom domain as an https origin, used as the canonical address. */
+  primaryAddress?(scope: {workspaceId: string; artifactId: string}, signal: AbortSignal): Promise<string | null>;
 };
 
 /** Durable worker entry point, not a request-handler background task. A supervisor
@@ -51,9 +53,11 @@ export async function runPublicationPreparation(preparationId: string, workerId:
     execution.throwIfAborted();
     const compiled = await compileTrustedPublication({binding, version, artwork}, executor, execution);
     const content = version.content;
-    const composed = composePublicationOutput(compiled, {title: content.title,
-      description: content.websiteSource?.designDirection?.positioning.slice(0, 160) ?? content.title,
-      address: deps.address(claim.slug), interactive: claim.interactive});
+    // Pages describe themselves from their own copy (or the owner's search settings), never from internal design notes.
+    // A live custom domain becomes the canonical address when the controller can look it up.
+    const primary = deps.primaryAddress ? await deps.primaryAddress(claim.scope, execution) : null;
+    const composed = composePublicationOutput(compiled, {title: content.title, description: content.title,
+      address: primary ?? deps.address(claim.slug), interactive: claim.interactive, seo: content.seo, routes: content.websiteSource?.routes});
     execution.throwIfAborted();
     const result = await deps.rpc("makeborne_complete_publication_preparation", {p_preparation: preparationId, p_worker: workerId,
       p_fence: fence, p_receipt: composed.receipt, p_output: composed.serializedOutput}, execution);

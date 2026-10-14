@@ -3,6 +3,7 @@ import {createHash} from "node:crypto";
 import type {compileTrustedPublication} from "./publication-compiler";
 import {renderHostedSnapshot} from "../hosting/snapshot";
 import {serializeSiteFiles} from "../hosting/bundle";
+import {pageMeta, structuredData, type SiteSeo} from "../hosting/seo";
 
 type Compiled = Awaited<ReturnType<typeof compileTrustedPublication>>;
 const digest = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
@@ -10,9 +11,13 @@ const escapedPattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "
 
 /** Compose from independently verified compiler/render output only. The portable
  * fallback is self-contained; the isolated page loads exact manifest CSS. */
-export function composePublicationOutput(compiled: Compiled, presentation: {title: string; description: string; address: string; interactive: boolean}) {
+export function composePublicationOutput(compiled: Compiled, presentation: {title: string; description: string; address: string; interactive: boolean; seo?: SiteSeo; routes?: readonly {path: string; title: string}[]}) {
   if (compiled.scripts.length !== 1) throw new Error("PUBLICATION_ENTRY_INVALID");
   const files = new Map(compiled.files.map(file => [file.path, file]));
+  // Search and sharing: each page gets its own title and description; the home page carries the business data.
+  const origin = presentation.address.replace(/\/$/, "");
+  const shareImage = presentation.seo?.shareImage && compiled.assetPaths.has(presentation.seo.shareImage) ? `${origin}${presentation.seo.shareImage}` : undefined;
+  const siteName = presentation.seo?.siteName || presentation.title;
   function composePage(snapshot:string, path:string, stylesheets:readonly string[]) {
   let css = "";
   for (const path of stylesheets) {
@@ -35,10 +40,12 @@ export function composePublicationOutput(compiled: Compiled, presentation: {titl
     portableSnapshot = portableSnapshot.replace(reference, (_match, lead: string) => `${lead}data:${file.contentType};base64,${file.body.toString("base64")}`);
     if (Buffer.byteLength(portableSnapshot) > 3_900_000) throw new Error("PUBLICATION_PORTABLE_LIMIT");
   }
-  const address = path === "/" ? presentation.address : `${presentation.address.replace(/\/$/, "")}${path}`;
-  const html = renderHostedSnapshot(portableSnapshot, presentation.title, presentation.description, address, {requireReactRoot: true});
-  const isolatedHtml = renderHostedSnapshot(snapshot, presentation.title, presentation.description, address,
-    {assetPaths: compiled.assetPaths, stylesheets, requireReactRoot: true});
+  const address = path === "/" ? presentation.address : `${origin}${path}`;
+  const meta = pageMeta({path, routeTitle: presentation.routes?.find(route => route.path === path)?.title, siteTitle: presentation.title, html: snapshot, seo: presentation.seo});
+  const head = {siteName, image: shareImage, jsonLd: path === "/" ? structuredData(presentation.seo, presentation.address, shareImage) : null};
+  const html = renderHostedSnapshot(portableSnapshot, meta.title, meta.description || presentation.description, address, {requireReactRoot: true, ...head});
+  const isolatedHtml = renderHostedSnapshot(snapshot, meta.title, meta.description || presentation.description, address,
+    {assetPaths: compiled.assetPaths, stylesheets, requireReactRoot: true, ...head});
   return {path, html, isolatedHtml};
   }
   const routes = compiled.routeSnapshots.map(route => composePage(route.html, route.path, route.stylesheets));

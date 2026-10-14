@@ -15,6 +15,7 @@ import WebsiteSourceDownload from "./website-source-download";
 import VersionCompare from "./version-compare";
 import WebsiteDomains from "./website-domains";
 import WebsiteAnalytics from "./website-analytics";
+import WebsiteSeo from "./website-seo";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
@@ -1722,6 +1723,9 @@ export function CloudEditor({
         </div>}
         {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
           capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} />
+          {role === "owner" && <WebsiteSeo key={`seo:${accountId}:${workspaceId}:${artifact.id}`} source={content.websiteSource!} siteTitle={content.title} seo={content.seo}
+            disabled={uncertainSave || conflict || !!recovery || Boolean(live)} scope={{ accountId, workspaceId, artifactId: artifact.id }}
+            onChange={seo => { if (uncertainSave || conflict || recovery) return; editRevision.current++; setContent(current => current ? { ...current, seo } : current); setDirty(true); setNote("Updated search and sharing details"); }} />}
           {role === "owner" && <WebsiteAnalytics key={`analytics:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} />}
           <WebsiteGithub key={`github:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"} source />
           {role === "owner" && <WebsiteDomains key={`domains:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} />}</div>}
