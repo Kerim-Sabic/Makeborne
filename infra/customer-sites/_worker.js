@@ -1,8 +1,8 @@
 import { submitEnquiry } from "./forms.js";
-import { siteNamespacePolicy, classifySiteNamespaceRequest } from "./namespace-policy.js";
+import { siteNamespacePolicy, classifySiteNamespaceRequest, STAGING_SITE_LABELS } from "./namespace-policy.js";
 import {
   composeSiteDocument, siteDocumentHeaders, siteDocumentPath, siteErrorHeaders, siteErrorPage, siteFileHeaders, siteFilePath,
-  siteOrigin, SITE_CONTENT_TYPES, SITE_LIMITS, siteScriptPath, siteFileContentType,
+  siteOrigin, SITE_CONTENT_TYPES, SITE_LIMITS, siteScriptPath, siteFileContentType, validSiteLabel,
 } from "./site-policy.js";
 
 /** Cloudflare Worker for published customer websites.
@@ -10,11 +10,15 @@ import {
  * `<slug>.<SITES_DOMAIN>` serves one site per origin: its prerendered snapshot
  * plus (when the owner keeps JavaScript on) its same-origin module bundle and
  * project images. The legacy path host (`sites.makeborne.com/<slug>`) redirects
- * there. Site reads use the publishable Supabase key against read-only RPCs.
- * Enquiries use a separately signed app gateway; visitor cookies are never
- * forwarded and raw visitor IP addresses are never stored. */
+ * there. A customer's own hostname (Cloudflare for SaaS, see
+ * docs/CUSTOM_DOMAINS.md) resolves to a slug through the database and is then
+ * served exactly like that slug's address. Site reads use the publishable
+ * Supabase key against read-only RPCs. Enquiries use a separately signed app
+ * gateway; visitor cookies are never forwarded and raw visitor IP addresses are
+ * never stored. */
 const WORKER_VERSION = "mb4";
 const ALLOWED_TYPES = new Set(Object.values(SITE_CONTENT_TYPES));
+export const CUSTOM_HOST_CACHE_SECONDS = Object.freeze({ found: 60, missing: 30 });
 
 function configuration(env) {
   const policy = siteNamespacePolicy(env);
@@ -85,11 +89,57 @@ async function serveDocument(request, config, slug, pathname, secure) {
   return new Response(request.method === "HEAD" ? null : html, { headers });
 }
 
-async function serveFile(request, context, config, slug, url, secure) {
+/** Custom hostname → slug, cached at the edge under a synthetic internal key on
+ * the sites apex (which only ever redirects, so no visitor URL can address or
+ * collide with it). Positive answers live 60 s, negative 30 s; upstream errors
+ * are never cached. */
+function customHostCacheKey(config, host) {
+  return new Request(`https://${config.domain}/_mb/custom-host?__mb_namespace=${config.namespace}-v1&host=${encodeURIComponent(host)}`, { method: "GET" });
+}
+const acceptedSlug = (config, value) => typeof value === "string" && validSiteLabel(value)
+  && !(config.namespace === "production" && STAGING_SITE_LABELS.includes(value));
+
+async function resolveCustomHost(context, config, host) {
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const key = customHostCacheKey(config, host);
+  const hit = cache ? await cache.match(key) : null;
+  if (hit) {
+    try {
+      const entry = await boundedJson(hit, 512);
+      if (entry && typeof entry === "object" && entry.host === host && (entry.slug === null || acceptedSlug(config, entry.slug))) return entry.slug;
+    } catch { /* A malformed entry is a miss. */ }
+  }
+  const value = await rpc(config, "makeborne_resolve_site_host", { p_host: host }, 512);
+  if (value !== null && typeof value !== "string") throw new Error("invalid_host_resolution");
+  // An unexpected slug shape is refused like an unknown host, not served.
+  const slug = value !== null && acceptedSlug(config, value) ? value : null;
+  if (value !== null && slug === null) console.error(JSON.stringify({ event: "custom_host_slug_refused" }));
+  if (cache && context?.waitUntil) {
+    const seconds = slug ? CUSTOM_HOST_CACHE_SECONDS.found : CUSTOM_HOST_CACHE_SECONDS.missing;
+    context.waitUntil(cache.put(key, new Response(JSON.stringify({ host, slug }), {
+      headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${seconds}` },
+    })));
+  }
+  return slug;
+}
+
+/** A customer's hostname may be their registrable apex. Never extend HSTS to
+ * the customer's other subdomains; otherwise the response is unchanged. */
+function forCustomHost(response) {
+  const hsts = response.headers.get("Strict-Transport-Security");
+  if (!hsts || !/includeSubDomains/i.test(hsts)) return response;
+  const headers = new Headers(response.headers);
+  headers.set("Strict-Transport-Security", "max-age=31536000");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+async function serveFile(request, context, config, slug, url, secure, custom = false) {
   const cache = typeof caches === "undefined" ? null : caches.default;
   // Namespace-partitioned keys cannot reuse old production bytes on a QA URL
   // when exact staging routes take over. Request query flags do not select it.
-  const key = new Request(`${url.origin}${url.pathname}?__mb_namespace=${config.namespace}-v1`, { method: "GET" });
+  // Custom hosts also bind the resolved slug, so a hostname moved to another
+  // site never serves the previous site's cached files.
+  const key = new Request(`${url.origin}${url.pathname}?__mb_namespace=${config.namespace}-v1${custom ? `&__mb_site=${slug}` : ""}`, { method: "GET" });
   const hit = cache ? await cache.match(key) : null;
   if (hit) {
     if (request.headers.get("If-None-Match") === hit.headers.get("ETag")) return new Response(null, { status: 304, headers: hit.headers });
@@ -112,8 +162,38 @@ async function serveFile(request, context, config, slug, url, secure) {
   return request.method === "HEAD" ? new Response(null, { headers }) : response;
 }
 
+async function serveCustomHost(request, env, context, config, url, host, secure, head) {
+  let slug;
+  try {
+    slug = await resolveCustomHost(context, config, host);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "custom_host_resolve_error", type: error instanceof Error ? error.message.slice(0, 40) : "unknown" }));
+    return failure(503, secure, head);
+  }
+  if (!slug) return failure(404, secure, head);
+  return serveSite(request, env, context, config, url, slug, secure, head, true);
+}
+
+async function serveSite(request, env, context, config, url, slug, secure, head, custom = false) {
+  if (url.pathname === "/_mb/enquiries") return submitEnquiry(request, env, config, slug);
+  if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
+  if (url.pathname.length > 240) return failure(404, secure, head);
+  if (url.pathname === "/robots.txt") {
+    return new Response(head ? null : `User-agent: *\n${config.indexable ? "Allow" : "Disallow"}: /\n`, { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+  }
+  try {
+    if (siteFilePath(url.pathname)) return await serveFile(request, context, config, slug, url, secure, custom);
+    if (siteDocumentPath(url.pathname)) return await serveDocument(request, config, slug, url.pathname, secure);
+    return failure(404, secure, head);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "hosted_site_read_error", type: error instanceof Error ? error.message.slice(0, 40) : "unknown" }));
+    return failure(503, secure, head);
+  }
+}
+
 const customerSites = {
   async fetch(request, env, context) {
+    // Authority is the URL the runtime routed; Host/Forwarded headers are never read.
     const url = new URL(request.url);
     const secure = url.protocol === "https:";
     const head = request.method === "HEAD";
@@ -124,10 +204,10 @@ const customerSites = {
     if (!secure && !config.local) {
       return Response.redirect(`https://${url.host}${url.pathname}${url.search}`, 308);
     }
-    if (url.pathname === "/_mb/enquiries") {
-      if(address.kind!=="site")return failure(404,secure,head);
-      return submitEnquiry(request,env,config,address.slug);
-    }
+    // A custom hostname resolves to a slug, then follows the exact site path below.
+    if (address.kind === "custom") return forCustomHost(await serveCustomHost(request, env, context, config, url, address.host, secure, head));
+    if (address.kind === "site") return serveSite(request, env, context, config, url, address.slug, secure, head);
+    if (url.pathname === "/_mb/enquiries") return failure(404, secure, head);
     if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
     // Legacy path-based addresses move to the site's own origin.
     if (address.kind === "legacy") {
@@ -136,19 +216,7 @@ const customerSites = {
       return Response.redirect(`${siteOrigin(slug, config.domain, secure)}${url.port ? `:${url.port}` : ""}/`, 301);
     }
     if (address.kind === "apex") return Response.redirect(`${config.appOrigin}/`, 308);
-    const slug = address.slug;
-    if (url.pathname.length > 240) return failure(404, secure, head);
-    if (url.pathname === "/robots.txt") {
-      return new Response(head ? null : `User-agent: *\n${config.indexable ? "Allow" : "Disallow"}: /\n`, { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
-    }
-    try {
-      if (siteFilePath(url.pathname)) return await serveFile(request, context, config, slug, url, secure);
-      if (siteDocumentPath(url.pathname)) return await serveDocument(request, config, slug, url.pathname, secure);
-      return failure(404, secure, head);
-    } catch (error) {
-      console.error(JSON.stringify({ event: "hosted_site_read_error", type: error instanceof Error ? error.message.slice(0, 40) : "unknown" }));
-      return failure(503, secure, head);
-    }
+    return failure(404, secure, head);
   },
 };
 

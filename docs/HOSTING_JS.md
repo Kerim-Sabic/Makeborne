@@ -84,4 +84,4 @@ The Worker refuses any non-`*.supabase.co` upstream unless `ALLOW_LOCAL_SUPABASE
 
 ## Not included yet
 
-Custom domains (the Worker keys sites by host label; a later `custom_domains` table can map hosts to slugs and attach via Cloudflare for SaaS), form/checkout back-ends, server code, per-route prerendering (client routes other than `/` get the home snapshot until React renders them, and are marked `noindex`), and automatic edge-cache purge on takedown (immutable bundles may stay in the edge cache, but without the HTML they are inert).
+Enabled custom domains (the `custom_domains` table, host resolver and Worker support exist but are not deployed or configured; see [CUSTOM_DOMAINS.md](CUSTOM_DOMAINS.md)), form/checkout back-ends, server code, per-route prerendering (client routes other than `/` get the home snapshot until React renders them, and are marked `noindex`), and automatic edge-cache purge on takedown (immutable bundles may stay in the edge cache, but without the HTML they are inert).
