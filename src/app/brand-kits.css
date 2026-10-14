@@ -78,3 +78,11 @@
   .bk-actions .bk-spacer { display: none; }
   .bk-actions { justify-content: flex-end; }
 }
+.bk-usage { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; }
+.bk-usage legend { font-size: 13px; font-weight: 600; margin-bottom: 6px; padding: 0; }
+.bk-usage label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 13px; line-height: 1.45; cursor: pointer; }
+.bk-usage label:has(input:checked) { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
+.bk-usage input { margin-top: 3px; }
+.bk-usage strong { display: block; font-weight: 600; }
+.bk-usage span { color: var(--muted); }
+.bk-usage strong { color: var(--ink); }

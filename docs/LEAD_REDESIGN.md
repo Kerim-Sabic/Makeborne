@@ -54,3 +54,20 @@ A project brief longer than 8,000 characters used to fail on its automatic first
 - `work/click-to-edit-20261014/redesign-ui.cjs`: a local browser test with the APIs faked.
 
 There is no migration and no new secret.
+
+## Quality pass (2026-10-15, after owner feedback that a redesign looked worse than the original)
+
+The causes were constraints that kept the new design too close to the old site, and missing imagery. What changed:
+
+- **Brand as a starting point.** Kits read from an old site are saved with `usage: "guide"`. The builder must keep the logo and main colour recognisable, but builds a modern palette around them and picks the strongest font pairing. Old fonts and neutrals are only hints. Owner kits stay `exact` by default, and the kit editor has a "How should designs use this kit?" choice.
+- **Logo placement.** A logo with a solid background, or a small one, is placed only on a matching surface or kept small; otherwise the builder uses a typographic wordmark. The old logo is never pasted onto photos.
+- **Their real photos.** The reader collects their photographs:
+  - the share image first, then `<img>` tags (largest `srcset` version) and inline background images;
+  - logos, icons and payment badges are skipped;
+  - each photo is downloaded through the guard (8 MB cap) and kept only if it is at least 640×360.
+  
+  The brief lists up to 6 in a delimited `<their_photos>` block. On the build, they are downloaded once, resized to at most 2000 px and stored as `/images/photo-N.webp`. The builder is told to use them instead of generating images of the same subjects.
+- **Focus and ambition.**
+  - The brief now asks for a site dramatically better than the original, a fresh concept, an art-directed first screen, rewritten copy and no reuse of the old layout.
+  - It builds one outstanding home page, plus one list page (menu, prices, treatments) only when their content needs it.
+  - Site text is labelled as "facts and wording, not a model".

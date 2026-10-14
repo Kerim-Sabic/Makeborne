@@ -33,12 +33,12 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     }
     const existingKit = await readBrandKit(client, workspaceId, clientId).catch(() => null);
     const name = String(found.data.company || found.data.name).slice(0, 120);
-    const brief = redesignBrief({ name, site: site.url, home: site.home, pages: site.pages, audit: site.audit, hasBrandKit: Boolean(existingKit || site.brand) });
+    const brief = redesignBrief({ name, site: site.url, home: site.home, pages: site.pages, audit: site.audit, hasBrandKit: Boolean(existingKit || site.brand), photos: site.photos });
     return cloudJson({
       name, url: site.url, title: `${name} website redesign`.slice(0, 160), brief, audit: site.audit,
       pagesRead: [{ label: "Home", url: site.url }, ...site.pages.map(page => ({ label: page.label, url: page.url }))],
       facts: { phones: site.home.phones, emails: site.home.emails, address: site.home.address, hours: site.home.hours.length, words: site.home.words + site.pages.reduce((sum, page) => sum + page.content.words, 0) },
-      brand: site.brand, hasBrandKit: Boolean(existingKit),
+      brand: site.brand, hasBrandKit: Boolean(existingKit), photos: site.photos,
     });
   } catch (error) { return cloudError(error); }
 }

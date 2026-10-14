@@ -50,3 +50,6 @@
   .lr { padding: 26px 18px; }
   .lr-address div { flex-direction: column; }
 }
+.lr-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; }
+.lr-photos li { aspect-ratio: 4 / 3; border-radius: 8px; overflow: hidden; background: #ececef; }
+.lr-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }

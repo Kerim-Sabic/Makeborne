@@ -1,7 +1,7 @@
 import "server-only";
 import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pinnedPageFetch, publicTarget, type Fetcher, type Lookup } from "../mail/research";
+import { pinnedFetcher, pinnedPageFetch, publicTarget, type Fetcher, type Lookup } from "../mail/research";
 import { readWithHtml } from "../leads/enrich";
 import { storeProjectImage } from "../builder/images";
 import type { ProjectFiles } from "../builder/files";
@@ -14,8 +14,8 @@ const MISSING_TABLE = ["42P01", "PGRST205"];
 
 /** GET one public resource under the research guard rails (public addresses
  * only, pinned DNS, re-checked redirects, size and time limits). */
-export async function fetchPublic(raw: string, accept: string, type: RegExp, deps: Deps = {}) {
-  const fetcher = deps.fetcher ?? pinnedPageFetch;
+export async function fetchPublic(raw: string, accept: string, type: RegExp, deps: Deps = {}, maxBytes?: number) {
+  const fetcher = deps.fetcher ?? (maxBytes ? pinnedFetcher(maxBytes) : pinnedPageFetch);
   let target = await publicTarget(raw, deps.resolve);
   for (let hop = 0; hop < 4; hop++) {
     const response = await fetcher(target.url.toString(), { redirect: "manual", signal: AbortSignal.timeout(6000),
@@ -30,7 +30,10 @@ export async function fetchPublic(raw: string, accept: string, type: RegExp, dep
     if (!response.ok) { await response.body?.cancel(); throw new Error(`The resource answered ${response.status}.`); }
     const contentType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     if (!type.test(contentType)) { await response.body?.cancel(); throw new Error("Unexpected content type."); }
-    return { bytes: Buffer.from(await response.arrayBuffer()), contentType, url: target.url };
+    const bytes = Buffer.from(await response.arrayBuffer());
+    // A body that reached the cap was cut off.
+    if (maxBytes && bytes.length >= maxBytes) throw new Error("Too large.");
+    return { bytes, contentType, url: target.url };
   }
   throw new Error("Too many redirects.");
 }
@@ -127,6 +130,10 @@ export async function ensureBrandLogo(client: SupabaseClient, scope: { workspace
     const stored = await storeProjectImage(client, scope, bytes, { kind: "brand-logo", brand: kit.name.slice(0, 80) });
     const existing = files.assets.get(BRAND_LOGO_PATH);
     if (existing?.sha256 !== stored.sha256) files.addAsset({ id: stored.id, path: BRAND_LOGO_PATH, sha256: stored.sha256, bytes: stored.bytes, mediaType: "image/webp" });
-    return { url: BRAND_LOGO_URL, width: stored.width, height: stored.height };
+    // A logo whose corners are solid sits in a box; the builder places it only on a matching surface.
+    const { isOpaque } = await sharp(bytes).stats();
+    const corner = isOpaque ? null : await sharp(bytes).extract({ left: 0, top: 0, width: Math.min(4, stored.width), height: Math.min(4, stored.height) }).stats().catch(() => null);
+    const opaque = isOpaque || (corner?.channels[3]?.min ?? 0) > 250;
+    return { url: BRAND_LOGO_URL, width: stored.width, height: stored.height, opaque };
   } catch { return null; }
 }

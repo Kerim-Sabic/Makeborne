@@ -261,6 +261,14 @@ function KitEditor({ accountId, path, target, title, initial, saved, onClose, on
           </label>)}
         </div>
 
+        <fieldset className="bk-usage">
+          <legend>How should designs use this kit?</legend>
+          <label><input type="radio" name="bk-usage" checked={(kit.usage ?? "exact") === "exact"} onChange={() => setKit({ ...kit, usage: "exact" })} />
+            <span><strong>Exactly</strong> Official brand: these colours and fonts, nothing else.</span></label>
+          <label><input type="radio" name="bk-usage" checked={kit.usage === "guide"} onChange={() => setKit({ ...kit, usage: "guide" })} />
+            <span><strong>As a starting point</strong> Keep the logo and main colour recognisable; the designer refines the rest. Best for dated brands.</span></label>
+        </fieldset>
+
         <label className="bk-field"><span>Tone of voice <em>optional</em></span>
           <textarea rows={2} maxLength={400} value={kit.tone ?? ""} onChange={event => setKit({ ...kit, tone: event.target.value })} placeholder="Warm and plain-spoken. Short sentences, no jargon, a little dry humour." /></label>
         <div className="bk-two">

@@ -39,7 +39,7 @@ check("the kit schema normalises colours and refuses anything that could break o
 check("the website block gives exact colours, library fonts, the logo file and the voice", () => {
   const kit = BrandKitSchema.parse(KIT);
   const block = websiteBrandBlock(kit, { url: "/images/brand-logo.webp", width: 512, height: 128 });
-  assert.match(block, /^<brand_kit name="Saffron Table">/);
+  assert.match(block, /^<brand_kit name="Saffron Table" use="exact">/);
   assert.match(block, /primary #b4532a, secondary #2f4b3a, background #fbf7f0, text #1d1a17/);
   assert.match(block, /Heading font: "Fraunces" \(fallback Georgia/); assert.match(block, /Body font: "DM Sans"/);
   assert.match(block, /Logo: \/images\/brand-logo\.webp \(512×128\)\. Use this exact file/);
@@ -49,6 +49,20 @@ check("the website block gives exact colours, library fonts, the logo file and t
   const pale = websiteBrandBlock(BrandKitSchema.parse({ ...KIT, colors: { ...KIT.colors, primary: "#f3c969" } }), null);
   assert.match(pale, /below 4\.5:1 contrast on the background: use it for fills \(with dark text on top\)/);
   assert.doesNotMatch(websiteBrandBlock(kit, { url: "/images/brand-logo.webp", width: 0, height: 0 }), /\(0×0\)/, "the planner has no size yet");
+  const boxed = websiteBrandBlock(kit, { url: "/images/brand-logo.webp", width: 150, height: 60, opaque: true });
+  assert.match(boxed, /solid background: place it only on a matching surface/); assert.match(boxed, /small file: keep it small/);
+});
+
+check("a kit read from an old website guides the design instead of locking it", () => {
+  const guide = BrandKitSchema.parse({ ...KIT, usage: "guide" });
+  assert.equal(BrandKitSchema.parse(KIT).usage, "exact", "owner kits are exact by default");
+  const block = websiteBrandBlock(guide, null);
+  assert.match(block, /^<brand_kit name="Saffron Table" use="starting point">/);
+  assert.match(block, /Treat it as a starting point, not a rulebook/); assert.match(block, /Build a modern, refined palette around the main colour/);
+  assert.match(block, /only a hint\. Choose the strongest pairing/);
+  assert.doesNotMatch(block, /no new hues|exact hex|Heading font:/);
+  assert.match(documentBrandBlock(guide, "presentation"), /A starting palette for set_theme \(refine it freely/);
+  assert.doesNotMatch(documentBrandBlock(guide, "presentation"), /font pairing/);
 });
 
 check("decks and books get a valid palette and the nearest font pairing", () => {
@@ -171,7 +185,8 @@ check("builders, planner, outreach and click-to-edit use the kit; browsers canno
   const read = file => fs.readFileSync(path.join(root, file), "utf8");
   const build = read("src/app/api/build/route.ts");
   assert.match(build, /const brand = await projectBrandKit\(client, body\.workspaceId, project\)/);
-  assert.match(build, /ensureBrandLogo\(client, \{ workspaceId: body\.workspaceId, projectId: artifact\.project_id \}, brand, files\)/);
+  assert.match(build, /const scope = \{ workspaceId: body\.workspaceId, projectId: artifact\.project_id \};/);
+  assert.match(build, /ensureBrandLogo\(client, scope, brand, files\)/);
   assert.match(build, /brand \? websiteBrandBlock\(brand, logo\) : ""/); assert.match(build, /documentBuildResponse\(\{[^}]*brand,/);
   assert.match(read("src/app/api/build/plan/route.ts"), /websiteBrandBlock\(brand, brand\.logo \?/);
   assert.match(read("src/lib/builder/docs-run.ts"), /input\.brand \? documentBrandBlock\(input\.brand/);

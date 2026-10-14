@@ -54,7 +54,10 @@ export async function assertPublicUrl(raw: string, resolve?: Lookup) {
 /** Pin the socket lookup to the addresses already checked, retaining the URL host
  * for HTTP Host, TLS SNI and certificate verification. No second DNS lookup or
  * pooled socket is allowed, including on redirects. */
-export const pinnedPageFetch: Fetcher = async (raw, init, addresses) => {
+export const pinnedPageFetch: Fetcher = (raw, init, addresses) => pinnedFetcher(MAX_PAGE_BYTES)(raw, init, addresses);
+
+/** The same pinned fetch with a different body cap (bodies past the cap are cut off). */
+export const pinnedFetcher = (maxBytes: number): Fetcher => async (raw, init, addresses) => {
   const url = new URL(raw);
   if (!addresses.length || !addresses.every(item => publicAddress(item.address))) throw new Error("Private addresses are refused.");
   return new Promise<Response>((resolve, reject) => {
@@ -82,9 +85,9 @@ export const pinnedPageFetch: Fetcher = async (raw, init, addresses) => {
       let size = 0;
       const finish = () => resolve(new Response(Buffer.concat(chunks), { status, headers }));
       response.on("data", (chunk: Buffer) => {
-        const part = chunk.subarray(0, MAX_PAGE_BYTES - size);
+        const part = chunk.subarray(0, maxBytes - size);
         chunks.push(part); size += part.length;
-        if (size === MAX_PAGE_BYTES) { finish(); response.destroy(); }
+        if (size === maxBytes) { finish(); response.destroy(); }
       });
       response.on("end", finish);
       response.on("error", reject);

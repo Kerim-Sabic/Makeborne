@@ -11,6 +11,7 @@ type Reading = {
   pagesRead: { label: string; url: string }[];
   facts: { phones: string[]; emails: string[]; address: string; hours: number; words: number };
   brand: { kit: BrandKitInput; notes: string[] } | null; hasBrandKit: boolean;
+  photos: { url: string; alt: string; width: number; height: number }[];
 };
 const LEVEL = { high: "Big problem", medium: "Problem", low: "Worth fixing" } as const;
 const host = (url: string) => { try { return new URL(/^https?:/i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, ""); } catch { return url; } };
@@ -102,6 +103,16 @@ export default function LeadRedesign({ accountId, workspaceId, client, onClose, 
           <p className="lr-muted">You can mention these in your email: choose the “I redesigned your website” angle when writing to them.</p>
         </section>
 
+        <section className="lr-section" aria-labelledby="lr-photos">
+          <h3 id="lr-photos">Their photos</h3>
+          {reading.photos.length ? <>
+            <ul className="lr-photos">{reading.photos.map(photo => <li key={photo.url}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- thumbnail of a photo on their public site */}
+              <img src={photo.url} alt={photo.alt || "Photo from their site"} loading="lazy" referrerPolicy="no-referrer" /></li>)}</ul>
+            <p className="lr-muted">The redesign uses these as its main images, so it looks like their real business. They&apos;re copied into the project when it&apos;s built.</p>
+          </> : <p className="lr-muted">No large photos found on their site. The builder will create imagery or a strong typographic design.</p>}
+        </section>
+
         <section className="lr-section" aria-labelledby="lr-brand">
           <h3 id="lr-brand">Their brand</h3>
           {reading.hasBrandKit ? <p className="lr-muted"><Check size={14} /> The redesign uses their saved brand kit.</p>
@@ -112,7 +123,7 @@ export default function LeadRedesign({ accountId, workspaceId, client, onClose, 
                 <span className="lr-swatches" aria-label="Their colours">{BRAND_COLOR_ROLES.map(role => kit.colors[role] && <span key={role} title={kit.colors[role]!} style={{ background: kit.colors[role]! }} />)}</span>
                 <span className="lr-muted">{[brandFont(kit.fonts?.heading)?.family, brandFont(kit.fonts?.body)?.family].filter(Boolean).join(" / ")}</span>
               </div>
-              <label className="lr-check"><input type="checkbox" checked={saveKit} onChange={event => setSaveKit(event.target.checked)} /> Save their brand as {client.name}&apos;s brand kit, so the redesign and future work use it. You can edit it on their Details tab.</label>
+              <label className="lr-check"><input type="checkbox" checked={saveKit} onChange={event => setSaveKit(event.target.checked)} /> Save their logo and colours as {client.name}&apos;s brand kit, as a starting point the redesign can refine. You can edit it on their Details tab.</label>
             </> : <p className="lr-muted">Their colours and logo couldn&apos;t be read. The builder will choose a fitting direction.</p>}
         </section>
 
