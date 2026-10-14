@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, Check, Columns3, Download, List, Mail, Plus, RefreshCw, Search, Upload, Users } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Columns3, Download, List, Mail, Plus, RefreshCw, Search, Sparkles, Upload, Users } from "lucide-react";
 import MailCenter from "./mail/mail-center";
 import ClientEmail from "./mail/client-email";
 import BulkEnroll from "./mail/bulk-enroll";
@@ -11,6 +11,7 @@ import { leadApi, useLeadMeta } from "./leads/lead-api";
 import { compactCount, countValue, formatMoney, scoreLead, type Lead } from "@/lib/leads";
 import { mapImport, parseCsv, toCsv, type ImportedClient } from "@/lib/client-csv";
 import ClientBoard from "./client-board";
+const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
 import { createClient } from "@/lib/supabase/client";
@@ -191,6 +192,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const [picked, setPicked] = useState<Map<string, { id: string; name: string; email: string; company: string }>>(new Map());
   const togglePick = (client: CloudClient) => setPicked(current => { const next = new Map(current); if (next.has(client.id)) next.delete(client.id); else next.set(client.id, { id: client.id, name: client.name, email: client.email, company: client.company }); return next; });
   const [palette, setPalette] = useState(false);
+  const [finding, setFinding] = useState(false);
   const [pendingRows, setPendingRows] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState<{ file: string; clients: ImportedClient[]; skipped: { row: number; reason: string }[]; columns: Partial<Record<keyof ImportedClient, string>>; progress: number | null } | null>(null);
@@ -407,7 +409,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   </section>;
 
   const paletteActions: PaletteAction[] = [
-    ...(canEdit ? [{ id: "add", label: "Add a client", icon: "add" as const }] : []),
+    ...(canEdit ? [{ id: "add", label: "Add a client", icon: "add" as const }, { id: "find", label: "Find new leads", hint: "Map search or your list", icon: "add" as const }] : []),
     { id: "overdue", label: "Show overdue follow-ups", hint: directory.data ? `${directory.data.counts.overdue} overdue` : undefined, icon: "overdue" },
     layout === "list" ? { id: "board", label: "Switch to pipeline board", icon: "board" } : { id: "list", label: "Switch to list", icon: "list" },
     ...(layout !== "email" ? [{ id: "email", label: "Open Email: mailboxes, sequences, replies", icon: "email" as const }] : []),
@@ -416,6 +418,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   ];
   function runAction(id: string) {
     if (id === "add") { chooseLayout("list"); setAdding(true); }
+    else if (id === "find") setFinding(true);
     else if (id === "overdue") { chooseLayout("list"); setFollowUp("overdue"); }
     else if (id === "board" || id === "list" || id === "email") chooseLayout(id);
     else if (id === "export") void exportCsv();
@@ -426,6 +429,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     <header className="ac-heading"><div><span className="eyebrow">YOUR CLIENT RELATIONSHIPS</span><h1>Good work starts with people.</h1><p>Keep every conversation, next step, and project together.</p></div>
       <div className="ac-heading-actions">
         {snapshot && <button type="button" className="ac-palette-hint" onClick={() => setPalette(true)} aria-label="Find a client or action (Ctrl+K)"><Search size={14} />Find<kbd>{shortcutKey}K</kbd></button>}
+        {snapshot && canEdit && <button type="button" className="button secondary ac-find-leads" disabled={busy} onClick={() => setFinding(true)}><Sparkles size={15} />Find leads</button>}
         {snapshot && canEdit && <button className="button primary" disabled={busy || adding} onClick={() => setAdding(true)}><Plus size={16} /> Add client</button>}
       </div></header>
     {snapshot && layout === "list" && <><div className="ac-followup-tabs" aria-label="Follow-up views">{followUps.map(item => <button type="button" key={item.id} aria-pressed={followUp === item.id} onClick={() => setFollowUp(item.id)}><span>{item.label}</span><strong>{item.count ?? "—"}</strong></button>)}</div><p className="small-note">Follow-ups across this workspace · Dates use your local calendar. Won, delivered and lost clients are excluded from follow-up views.</p>
@@ -485,6 +489,10 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
       {!tagFilter && directory.data?.pagination.nextOffset != null && !directory.stale && <button className="button secondary small" disabled={directory.busy} onClick={() => void directory.more()}>Load more clients</button>}
       {!tagFilter && directory.data && <p className="small-note" aria-live="polite">{directory.stale ? "Updating…" : `Showing ${clients.length} of ${directory.data.pagination.total} matching clients · Search and filters cover the whole workspace.`}</p>}
     </>}
+    {finding && snapshot && <LeadFinder accountId={accountId} workspaceId={snapshot.workspace.id} onClose={() => setFinding(false)} onAdded={(count, tag) => {
+      setFinding(false); chooseLayout("list"); if (tag) setTagFilter(tag); setRefreshKey(key => key + 1);
+      setMessage(`Added ${count} new lead${count === 1 ? "" : "s"} to your clients${tag ? `, tagged “${tag}”` : ""}. Select them and choose “Write personal emails” to reach out.`);
+    }} />}
     {palette && snapshot && <ClientCommandPalette workspaceId={snapshot.workspace.id} today={today} actions={paletteActions} onOpenClient={open} onAction={runAction} onClose={() => setPalette(false)} />}
   </section>;
 }

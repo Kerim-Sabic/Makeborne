@@ -7,6 +7,9 @@ import {SDK_VERSION,LIMITS,sha,fail,exactKeys,encodeWorkload,validateReceipt,enc
 export {SDK_VERSION};
 const HASH=/^[a-f0-9]{64}$/;
 const IMAGE=/^(?:vcr\.vercel\.com\/)?[a-z0-9][a-z0-9_/-]*@sha256:[a-f0-9]{64}$/;
+// The SDK returns VCR references without the optional registry hostname.
+// Only that exact prefix is equivalent; project/repository/digest stay exact.
+const imageIdentity=value=>typeof value==='string'?value.replace(/^vcr\.vercel\.com\//,''):null;
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const RESERVE=5000, CREATE_BUDGET=10000, CLEANUP_BUDGET=4000;
 const READY_SCRIPT="const fs=require('node:fs');const end=Date.now()+Number(process.argv[1]);const check=()=>{if(fs.existsSync('/tmp/build-complete'))process.exit(0);if(Date.now()>end)process.exit(124);setTimeout(check,100)};check()";
@@ -139,7 +142,7 @@ export function vercelPublicationExecutor({transport,approved,context,onLifecycl
       const session=sandbox.currentSession();
       const expires=sandbox.expiresAt?.getTime();
       const sessionExpires=(session.startedAt??session.createdAt)?.getTime()+session.timeout;
-      if(sandbox.name!==name||sandbox.image!==selected.image||sandbox.persistent!==false
+      if(sandbox.name!==name||imageIdentity(sandbox.image)!==imageIdentity(selected.image)||sandbox.persistent!==false
         ||session.status!=='running'||!Number.isInteger(session.timeout)||session.timeout<=0||session.timeout>createTtl
         ||!Number.isFinite(expires)||expires!==sessionExpires||expires>leaseEnd-RESERVE||expires<=now())fail('SANDBOX_IDENTITY_INVALID');
       record.sessionId=session.sessionId;

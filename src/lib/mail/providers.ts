@@ -1,10 +1,11 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { buildMime, replySubject } from "./compose";
-import type { MailProvider } from "./config";
+import { GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE, googleMailMode, parseGrantedScopes, type MailProvider } from "./config";
 
 /** Network access is injected so the engine can be tested without real mailboxes. */
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
-export type TokenSet = { accessToken: string; refreshToken?: string; expiresAt: Date };
+export type TokenSet = { accessToken: string; refreshToken?: string; expiresAt: Date; grantedScopes?: string[] };
 export type SentMessage = { providerMessageId: string; threadId: string; rfcMessageId: string | null };
 export type InboundMessage = { providerMessageId: string; threadId: string; from: string; subject: string; snippet: string; receivedAt: Date };
 export type OutgoingEmail = { from: string; fromName: string; to: string; toName: string; subject: string; text: string;
@@ -46,48 +47,47 @@ export type ProviderClient = {
   replies(accessToken: string, threadId: string, self: string): Promise<InboundMessage[]>;
 };
 
-const GOOGLE_SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"];
+const googleScopes = () => ["openid", "email", "profile", GMAIL_SEND_SCOPE, ...(googleMailMode() === "full" ? [GMAIL_READ_SCOPE] : [])];
 const MICROSOFT_SCOPES = ["openid", "email", "profile", "offline_access", "User.Read", "Mail.Send", "Mail.ReadWrite"];
 const sameAddress = (header: string, self: string) => header.toLowerCase().includes(self.toLowerCase());
 const addressIn = (header: string) => /<([^>]+)>/.exec(header)?.[1] ?? header.trim();
 
-export function googleClient(fetcher: Fetch = fetch): ProviderClient {
+export function googleClient(fetcher: Fetch = fetch, options: { allowRead?: boolean } = {}): ProviderClient {
   const token = async (values: Record<string, string>) => {
-    const result = await json<{ access_token: string; refresh_token?: string; expires_in: number }>(await guarded(fetcher, "https://oauth2.googleapis.com/token",
+    const result = await json<{ access_token: string; refresh_token?: string; expires_in: number; scope?: string }>(await guarded(fetcher, "https://oauth2.googleapis.com/token",
       { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form(values) }, "other"), "other");
-    return { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + (result.expires_in - 60) * 1000) };
+    if (result.scope !== undefined && typeof result.scope !== "string") throw new Error("The provider returned invalid mailbox permissions.");
+    return { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + (result.expires_in - 60) * 1000),
+      ...(result.scope === undefined ? {} : { grantedScopes: parseGrantedScopes(result.scope) }) };
   };
   const api = (accessToken: string) => ({ Authorization: `Bearer ${accessToken}` });
   return {
     authUrl: ({ clientId, redirectUri, state, loginHint }) => `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: "code",
-      scope: GOOGLE_SCOPES.join(" "), access_type: "offline", prompt: "consent", include_granted_scopes: "true", state, ...(loginHint ? { login_hint: loginHint } : {}) })}`,
+      scope: googleScopes().join(" "), access_type: "offline", prompt: "consent", include_granted_scopes: "false", state, ...(loginHint ? { login_hint: loginHint } : {}) })}`,
     async exchange({ clientId, clientSecret, redirectUri, code }) {
       const result = await token({ client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, code, grant_type: "authorization_code" });
       if (!result.refreshToken) throw new MailAuthError("Google did not grant offline access. Remove Makeborne from your Google account permissions and connect again.");
+      if (!result.grantedScopes?.includes(GMAIL_SEND_SCOPE)) throw new MailAuthError("Google did not confirm permission to send email. Connect again and allow sending.");
       return { ...result, refreshToken: result.refreshToken };
     },
     refresh: ({ clientId, clientSecret, refreshToken }) => token({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: "refresh_token" })
       .catch(error => { throw error instanceof MailAuthError || /invalid_grant|400/.test(String(error)) ? new MailAuthError("Google access expired or was revoked. Reconnect the mailbox.") : error; }),
     async profile(accessToken) {
-      const gmail = await json<{ emailAddress: string }>(await guarded(fetcher, "https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: api(accessToken) }, "other"), "other");
-      const user = await json<{ name?: string }>(await guarded(fetcher, "https://openidconnect.googleapis.com/v1/userinfo", { headers: api(accessToken) }, "other"), "other").catch(() => ({ name: "" }));
-      return { email: gmail.emailAddress, name: user.name ?? "" };
+      const user = await json<{ email?: string; email_verified?: boolean; name?: string }>(await guarded(fetcher, "https://openidconnect.googleapis.com/v1/userinfo", { headers: api(accessToken) }, "other"), "other");
+      if (user.email_verified !== true || typeof user.email !== "string" || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(user.email)) throw new MailAuthError("Google did not provide a verified email address. Connect again.");
+      return { email: user.email, name: typeof user.name === "string" ? user.name : "" };
     },
     async send(accessToken, email) {
+      const rfcMessageId = `<${randomUUID()}@makeborne.com>`;
       const raw = buildMime({ from: email.from, fromName: email.fromName, to: email.to, toName: email.toName,
-        subject: email.replyTo ? replySubject(email.replyTo.subject) : email.subject, text: email.text, inReplyTo: email.replyTo?.rfcMessageId ?? null, references: null });
+        subject: email.replyTo ? replySubject(email.replyTo.subject) : email.subject, text: email.text, messageId: rfcMessageId, inReplyTo: email.replyTo?.rfcMessageId ?? null, references: null });
       const sent = await json<{ id: string; threadId: string }>(await guarded(fetcher, "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
         { method: "POST", headers: { ...api(accessToken), "Content-Type": "application/json" }, body: JSON.stringify({ raw, ...(email.replyTo ? { threadId: email.replyTo.threadId } : {}) }) }, "send"), "send");
-      // The Message-ID lets later steps thread correctly; losing it only weakens threading.
-      let rfcMessageId: string | null = null;
-      try {
-        const meta = await json<{ payload?: { headers?: { name: string; value: string }[] } }>(await guarded(fetcher,
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(sent.id)}?format=metadata&metadataHeaders=Message-ID`, { headers: api(accessToken) }, "other"), "other");
-        rfcMessageId = meta.payload?.headers?.find(item => item.name.toLowerCase() === "message-id")?.value ?? null;
-      } catch { rfcMessageId = null; }
+      // Store our RFC Message-ID; reading sent-message metadata would require inbox permissions.
       return { providerMessageId: sent.id, threadId: sent.threadId, rfcMessageId };
     },
     async replies(accessToken, threadId, self) {
+      if (googleMailMode() !== "full" || !options.allowRead) throw new Error("Reply tracking is unavailable for this Gmail connection.");
       const thread = await json<{ messages?: { id: string; internalDate: string; snippet?: string; payload?: { headers?: { name: string; value: string }[] } }[] }>(await guarded(fetcher,
         `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`, { headers: api(accessToken) }, "other"), "other");
       return (thread.messages ?? []).flatMap(message => {
@@ -155,4 +155,4 @@ export function microsoftClient(fetcher: Fetch = fetch): ProviderClient {
   };
 }
 
-export const providerClient = (provider: MailProvider, fetcher?: Fetch) => provider === "google" ? googleClient(fetcher) : microsoftClient(fetcher);
+export const providerClient = (provider: MailProvider, fetcher?: Fetch, options?: { allowRead?: boolean }) => provider === "google" ? googleClient(fetcher, options) : microsoftClient(fetcher);

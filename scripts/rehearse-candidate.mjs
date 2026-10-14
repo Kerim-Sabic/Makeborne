@@ -158,6 +158,10 @@ try {
       const correction = migrationText(file).replace(/^begin;\s*$/m, "").replace(/\ncommit;\s*$/, "");
       checks.mailUpgrade = check(full, "supabase/check-crm-mail-upgrade.sql", { "__CRM_SECURITY_MIGRATION__": correction });
     }
+    if (file === "20261013270000_mail_granted_scopes.sql") {
+      const scopeMigration = migrationText(file).replace(/^begin;\s*$/m, "").replace(/\ncommit;\s*$/, "");
+      checks.mailScopeUpgrade = check(full, "supabase/check-mail-granted-scopes-upgrade.sql", { "__MAIL_SCOPE_MIGRATION__": scopeMigration });
+    }
     apply(full, file);
   }
   const fingerprint = scalar(full, FINGERPRINT);
@@ -175,6 +179,8 @@ try {
   checks.mailSecurity = check(full, "supabase/check-crm-mail-security.sql");
   checks.leadProfile = check(full, "supabase/check-crm-lead-profile.sql");
   checks.mailBoundaries = check(full, "supabase/check-crm-mail-boundaries.sql");
+  checks.billingLifecycle = check(full, "supabase/check-billing-lifecycle.sql");
+  checks.mailGrantedScopes = check(full, "supabase/check-mail-granted-scopes.sql");
   const post = new Set(psql(full, DB, PUBLIC_FUNCTIONS).output.trim().split("\n"));
   const dropped = preFunctions.filter(fn => !post.has(fn));
   const contract = psql(full, DB, read("supabase/post-deploy/crm_contract_client_stages.sql")).output;
@@ -195,7 +201,7 @@ const fault = `${prefix}_fault_${stamp}`;
 try {
   evidence.scenarios.fault = { container: fault, build: build(fault) };
   pause(fault);
-  const targets = new Set(["20261012120000_credit_lots_expiry.sql", "20261013240000_crm_email_automation.sql", "20261013250000_crm_lead_profile.sql", "20261013260000_crm_mail_security_boundaries.sql"]);
+  const targets = new Set(["20261012120000_credit_lots_expiry.sql", "20261013240000_crm_email_automation.sql", "20261013250000_crm_lead_profile.sql", "20261013260000_crm_mail_security_boundaries.sql", "20261013270000_mail_granted_scopes.sql", "20261013280000_billing_lifecycle_boundaries.sql"]);
   const failures = [];
   for (const file of migrations) {
     if (targets.has(file)) {

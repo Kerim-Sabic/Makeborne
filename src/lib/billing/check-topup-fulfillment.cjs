@@ -42,7 +42,7 @@ assert.equal(reconcile(purchase,first.state,normalized).effects.length,0);
 for(const patch of [{company:{id:'biz_other'}},{plan:{id:'plan_other'}},{user:{id:'user_other'}},{checkout_configuration_id:'ch_other'},
  {currency:'eur'},{billing_reason:'subscription_cycle'},{subtotal:1,total:1},{total:12.01},{tax_amount:1,total:13},{tax_refunded_amount:1},
  {refunded_amount:12.01},{substatus:'refunded',refunded_amount:0},{substatus:'pending'},{substatus:'failed'},
- {promo_code:{id:'promo_test'}},{disputes:[{status:'unknown'}]},{substatus:'unexpected'},{user:null},{updated_at:'bad'},
+ {promo_code:{id:'promo_test'}},{disputes:null},{disputes:undefined},{disputes:[{status:'unknown'}]},{substatus:'unexpected'},{user:null},{updated_at:'bad'},
  {status:'failed',substatus:'succeeded'},{status:'pending',substatus:'refunded'},
  {substatus:'unknown',disputes:[{status:'won'}]}]) assert.throws(()=>normalize(purchase,{...payment,...patch}));
 const refund = normalize(purchase,{...payment,substatus:'refunded',refunded_amount:12,updated_at:'2026-10-13T00:02:00Z'});

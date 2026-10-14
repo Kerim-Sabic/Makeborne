@@ -13,7 +13,7 @@ export const LeadInsightSchema = z.object({
 export const LeadProfileSchema = z.object({ research: LeadResearchSchema.optional(), insight: LeadInsightSchema.optional() }).passthrough();
 export type LeadProfile = z.infer<typeof LeadProfileSchema>;
 
-export const LEAD_SOURCES = ["", "Instagram", "TikTok", "YouTube", "LinkedIn", "Referral", "Website", "Cold email", "Event", "Import", "Other"] as const;
+export const LEAD_SOURCES = ["", "Instagram", "TikTok", "YouTube", "LinkedIn", "Referral", "Website", "Cold email", "Event", "Import", "Lead finder", "Other"] as const;
 export const CURRENCIES = ["EUR", "USD", "GBP", "BAM", "CHF"] as const;
 export type Lead = { tags: string[]; dealValue: number | null; dealCurrency: string; source: string; profile: LeadProfile };
 export const emptyLead = (): Lead => ({ tags: [], dealValue: null, dealCurrency: "EUR", source: "", profile: {} });

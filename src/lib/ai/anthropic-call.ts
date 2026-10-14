@@ -1,4 +1,4 @@
-import { UnsupportedConfigurationError, assertSupportedTextRequest, maxInputTokenMicrousd, maxOutputTokenMicrousd, textCallBoundMicrousd, textUsageMicrousd, utf8Bytes, type TextUsageLike } from "./prices";
+import { UnsupportedConfigurationError, assertSupportedTextRequest, maxInputTokenMicrousd, maxOutputTokenMicrousd, serverToolBoundMicrousd, textCallBoundMicrousd, textUsageMicrousd, utf8Bytes, type TextUsageLike } from "./prices";
 import { SpendError, type RunSpend } from "./run-spend";
 
 /**
@@ -102,13 +102,15 @@ export async function budgetedStream(call: BudgetedStream): Promise<{ message: M
   for (const model of call.models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       if (call.signal.aborted) throw lastError ?? new Error("The run was cancelled.");
-      const inputCost = Math.ceil(inputBound * maxInputTokenMicrousd(model));
+      // Server tools (web search) add their fees and result tokens to the worst case before any output room.
+      const toolBound = serverToolBoundMicrousd(model, call.params.tools);
+      const inputCost = Math.ceil(inputBound * maxInputTokenMicrousd(model)) + toolBound;
       const room = Math.floor((call.spend.remainingMicrousd - inputCost) / maxOutputTokenMicrousd(model));
       const maxTokens = Math.min(call.maxTokens, room);
       if (maxTokens < call.minTokens) throw new SpendError("RUN_BUDGET", "The run's remaining budget cannot pay for another step.");
       const request = { ...call.params, model, max_tokens: maxTokens };
       assertSupportedTextRequest(request);
-      const ticket = await call.spend.begin("anthropic", model, textCallBoundMicrousd(model, inputBound, maxTokens));
+      const ticket = await call.spend.begin("anthropic", model, textCallBoundMicrousd(model, inputBound, maxTokens) + toolBound);
       attempts++;
       // Hard timeout: the call ends before the run's deadline (and so before the hold's settlement window).
       const timeout = Math.max(1, Math.min(call.timeoutMs ?? 600_000, call.spend.timeLeftMs()));

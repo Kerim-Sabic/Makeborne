@@ -29,7 +29,7 @@ module.exports = async function engineChecks(check) {
   };
   try {
     const { data: account, error: accountError } = await db.from("mail_accounts").insert({ workspace_id: workspace.id, user_id: workspace.owner_id, provider: "google",
-      email: `engine-${Date.now()}@studio.test`, display_name: "Kerim Test", warmup_started_at: new Date(Date.now() - 40 * 86_400_000).toISOString() }).select("*").single();
+      email: `engine-${Date.now()}@studio.test`, display_name: "Kerim Test", granted_scopes: ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"], warmup_started_at: new Date(Date.now() - 40 * 86_400_000).toISOString() }).select("*").single();
     if (accountError) throw accountError;
     created.accounts.push(account.id);
 

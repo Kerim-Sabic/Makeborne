@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Inbox, Mail, Pause, Play, Plus, RefreshCw, Square, Trash2, Workflow, FileText } from "lucide-react";
 import Modal from "./modal";
-import { mailApi, providerLabel, TOKEN_HELP, type Enrollment, type MailOverview, type MailSequence, type MailTemplate, type SequenceStep } from "./mail-api";
+import { mailApi, MANUAL_MAIL_NOTICE, providerLabel, TOKEN_HELP, type Enrollment, type MailOverview, type MailSequence, type MailTemplate, type SequenceStep } from "./mail-api";
 
 /** A proven starting point: every touch adds something; replies stop the sequence automatically. */
 const STARTER_STEPS: SequenceStep[] = [
@@ -18,11 +18,12 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
   const [overview, setOverview] = useState<MailOverview | null>(null);
   const [message, setMessage] = useState(connectResult?.result === "connected" ? `Connected ${connectResult.detail}. You can now send and automate emails from it.` : connectResult?.result === "error" ? connectResult.detail : connectResult?.result === "cancelled" ? "Connection cancelled." : "");
   const [running, setRunning] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [editing, setEditing] = useState<{ kind: "sequence"; value: Partial<MailSequence> } | { kind: "template"; value: Partial<MailTemplate> } | null>(null);
   const [openSequence, setOpenSequence] = useState<string | null>(null);
   const base = `/api/cloud/workspaces/${workspaceId}/mail`;
   const load = useCallback(async () => {
-    try { setOverview(await mailApi<MailOverview>(accountId, base)); } catch (error) { setMessage(error instanceof Error ? error.message : "Email is unavailable."); }
+    try { setOverview(await mailApi<MailOverview>(accountId, base)); setLoadFailed(false); } catch (error) { setLoadFailed(true); setMessage(error instanceof Error ? error.message : "Email is unavailable."); }
   }, [accountId, base]);
   // Load after mount (from a callback, so the effect itself never sets state).
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
@@ -30,8 +31,8 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
   async function run() {
     setRunning(true); setMessage("");
     try {
-      const result = await mailApi<{ replies: number; sent: number; waiting?: number; note?: string }>(accountId, `${base}/run`, "POST", {});
-      setMessage(result.note ?? `Checked: ${result.replies} new repl${result.replies === 1 ? "y" : "ies"}, ${result.sent} email${result.sent === 1 ? "" : "s"} sent${result.waiting ? `, ${result.waiting} waiting for the sending pace` : ""}.`);
+      const result = await mailApi<{ replies: number; sent: number; waiting?: number; note?: string; replyCheckErrors?: number }>(accountId, `${base}/run`, "POST", {});
+      setMessage(result.note ?? `Checked: ${result.replies} new repl${result.replies === 1 ? "y" : "ies"}, ${result.sent} email${result.sent === 1 ? "" : "s"} sent${result.waiting ? `, ${result.waiting} waiting` : ""}.${result.replyCheckErrors ? " Some reply checks could not finish; those mailboxes' follow-ups are waiting." : ""}`);
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Couldn't check now."); }
     finally { setRunning(false); }
@@ -41,24 +42,29 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
     try { await action(); setMessage(done); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "That didn't work. Try again."); }
   }
 
+  // A failed first load gets a clear, retryable state instead of an endless placeholder.
+  if (!overview && loadFailed) return <div className="mc-unavailable" role="alert"><Mail size={22} /><div><strong>Email isn’t available right now</strong><p>We couldn’t load your mailboxes and sequences. Your clients and notes are unaffected; try again in a moment.</p></div><button type="button" className="button secondary" onClick={() => { setLoadFailed(false); void load(); }}><RefreshCw size={15} />Try again</button></div>;
   if (!overview) return <div className="ac-skeleton ac-skeleton-detail" role="status" aria-label="Loading email"><span /><span /><span /></div>;
   const mine = overview.accounts.filter(account => account.mine && account.status !== "disconnected");
+  const canCheck = mine.some(account => account.canTrackReplies);
   return <section className="mc" aria-label="Email automation">
     <header className="mc-head">
-      <div><h2>Email</h2><p>Send from your own Gmail or Outlook, run follow-up sequences that stop when someone replies, and see replies here. <strong className="mc-free">Sending is free.</strong> Only AI writing uses credits.</p></div>
-      {mine.length > 0 && <button type="button" className="button secondary" disabled={running} onClick={() => void run()}><RefreshCw size={15} className={running ? "ac-spin" : undefined} />Check now</button>}
+      <div><h2>Email</h2><p>Send reviewed emails from your own Gmail or Outlook. Mailboxes with reply tracking can also run follow-up sequences. <strong className="mc-free">Sending is free.</strong> Only AI writing uses credits.</p></div>
+      {canCheck && <button type="button" className="button secondary" disabled={running} onClick={() => void run()}><RefreshCw size={15} className={running ? "ac-spin" : undefined} />Check now</button>}
     </header>
     {message && <p className="mc-message" role="status">{message}</p>}
-    {!overview.automation && mine.length > 0 && <p className="mc-note"><AlertTriangle size={14} /> Automatic sending runs on a schedule once email automation is switched on for this server. Until then, use <strong>Check now</strong> to send due emails and pick up replies.</p>}
+    {overview.googleMode === "send_only" && <p className="mc-note">Gmail sends only: read replies in Gmail and update client stages yourself. Gmail reply tracking and automatic sequences are unavailable.</p>}
+    {!overview.automation && canCheck && <p className="mc-note"><AlertTriangle size={14} /> For mailboxes with reply tracking, automatic sending runs once the schedule is enabled. Until then, <strong>Check now</strong> sends due emails and checks replies.</p>}
 
     <div className="mc-grid">
       <section className="mc-card" aria-labelledby="mc-boxes"><h3 id="mc-boxes"><Mail size={16} />Mailboxes</h3>
         {overview.accounts.length === 0 && <p className="mc-empty">Connect the mailbox you already use, so emails come from you and replies land in your inbox.</p>}
         <ul className="mc-list">{overview.accounts.map(account => <li key={account.id}>
           <div><strong>{account.email}</strong><small>{providerLabel(account.provider)} · {account.status === "active" ? `${account.sentToday}/${account.todayQuota} sent today${account.todayQuota < account.dailyLimit ? " (warming up)" : ""}` : account.status === "error" ? "Needs reconnecting" : "Disconnected"}{account.mine ? "" : " · connected by a teammate"}</small>
+            {!account.canSend ? <small className="mc-error">Reconnect to confirm sending permission.</small> : !account.canTrackReplies ? <small>{MANUAL_MAIL_NOTICE}</small> : <small>Reply tracking and sequences available.</small>}
             {account.lastError && account.status !== "active" && <small className="mc-error">{account.lastError}</small>}</div>
           {account.mine && canEdit && <div className="mc-row-actions">
-            {account.status !== "active" && <a className="button secondary small" href={`/api/mail/connect?provider=${account.provider}&workspace=${workspaceId}`}>Reconnect</a>}
+            {(account.status !== "active" || !account.canSend) && <a className="button secondary small" href={`/api/mail/connect?provider=${account.provider}&workspace=${workspaceId}`}>Reconnect</a>}
             {account.status === "active" && <select aria-label={`Daily limit for ${account.email}`} value={account.dailyLimit} onChange={event => void act(() => mailApi(accountId, `${base}/accounts`, "PATCH", { id: account.id, dailyLimit: Number(event.target.value) }), "Daily limit updated.")}>
               {[10, 20, 30, 50, 80, 120].map(limit => <option key={limit} value={limit}>{limit}/day max</option>)}</select>}
             {account.status !== "disconnected" && <button type="button" className="button ghost small" onClick={() => { if (window.confirm(`Disconnect ${account.email}? Running sequences on it will pause.`)) void act(() => mailApi(accountId, `${base}/accounts`, "DELETE", { id: account.id }), "Mailbox disconnected. Sent history is kept."); }}>Disconnect</button>}
@@ -74,7 +80,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
       </section>
 
       <section className="mc-card" aria-labelledby="mc-replies"><h3 id="mc-replies"><Inbox size={16} />Recent replies</h3>
-        {overview.replies.length === 0 ? <p className="mc-empty">Replies to emails sent from Makeborne appear here. A reply stops that client&apos;s sequence and moves them to Conversation.</p>
+        {overview.replies.length === 0 ? <p className="mc-empty">Replies appear here only for mailboxes with reply tracking. For sending-only mailboxes, read your inbox and update the client&apos;s stage yourself.</p>
           : <ul className="mc-list">{overview.replies.map(reply => <li key={reply.id}><button type="button" className="mc-reply" disabled={!reply.clientId} onClick={() => reply.clientId && onOpenClient(reply.clientId)}>
             <strong>{reply.clientName}</strong><small>{new Date(reply.at).toLocaleString()} · {reply.from}</small><span>{reply.snippet || reply.subject}</span></button></li>)}</ul>}
       </section>
@@ -92,7 +98,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
             {canEdit && <button type="button" className="button ghost small" onClick={() => setEditing({ kind: "sequence", value: sequence })}>Edit</button>}
             {canEdit && <button type="button" className="button ghost small" aria-label={`Archive ${sequence.name}`} onClick={() => { if (window.confirm(`Archive "${sequence.name}"? Clients in it will stop receiving its emails.`)) void act(() => mailApi(accountId, `${base}/sequences`, "PATCH", { id: sequence.id, archived: true }), "Sequence archived."); }}><Trash2 size={14} /></button>}
           </div>
-          {openSequence === sequence.id && <SequenceEnrollments accountId={accountId} workspaceId={workspaceId} sequenceId={sequence.id} canEdit={canEdit} onOpenClient={onOpenClient} />}
+          {openSequence === sequence.id && <SequenceEnrollments accountId={accountId} workspaceId={workspaceId} sequenceId={sequence.id} canEdit={canEdit} automaticAccountIds={overview.accounts.filter(account => account.canAutomate).map(account => account.id)} onOpenClient={onOpenClient} />}
         </li>)}</ul>}
     </section>
 
@@ -114,7 +120,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
   </section>;
 }
 
-function SequenceEnrollments({ accountId, workspaceId, sequenceId, canEdit, onOpenClient }: { accountId: string; workspaceId: string; sequenceId: string; canEdit: boolean; onOpenClient: (id: string) => void }) {
+function SequenceEnrollments({ accountId, workspaceId, sequenceId, canEdit, automaticAccountIds, onOpenClient }: { accountId: string; workspaceId: string; sequenceId: string; canEdit: boolean; automaticAccountIds: string[]; onOpenClient: (id: string) => void }) {
   const [rows, setRows] = useState<Enrollment[] | null>(null);
   const [error, setError] = useState("");
   const path = `/api/cloud/workspaces/${workspaceId}/mail/enrollments`;
@@ -136,7 +142,7 @@ function SequenceEnrollments({ accountId, workspaceId, sequenceId, canEdit, onOp
         <td>{row.status === "active" && row.nextSendAt ? `Email ${row.nextStep + 1} · ${new Date(row.nextSendAt).toLocaleString()}` : "—"}</td>
         <td>{canEdit && <div className="mc-row-actions">
           {row.status === "active" && <button type="button" className="button ghost small" aria-label={`Pause for ${row.clientName}`} onClick={() => void change(row.id, "pause")}><Pause size={13} /></button>}
-          {row.status === "paused" && <button type="button" className="button ghost small" aria-label={`Resume for ${row.clientName}`} onClick={() => void change(row.id, "resume")}><Play size={13} /></button>}
+          {row.status === "paused" && automaticAccountIds.includes(row.accountId) && <button type="button" className="button ghost small" aria-label={`Resume for ${row.clientName}`} onClick={() => void change(row.id, "resume")}><Play size={13} /></button>}
           {(row.status === "active" || row.status === "paused") && <button type="button" className="button ghost small" aria-label={`Stop for ${row.clientName}`} onClick={() => void change(row.id, "stop")}><Square size={13} /></button>}
         </div>}</td>
       </tr>)}</tbody></table>}

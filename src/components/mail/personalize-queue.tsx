@@ -32,10 +32,10 @@ export default function PersonalizeQueue({ accountId, workspaceId, clients, onCl
   const abort = useRef<AbortController | null>(null);
   useEffect(() => {
     let live = true;
-    void mailApi<MailOverview>(accountId, `/api/cloud/workspaces/${workspaceId}/mail`).then(data => { if (live) { setOverview(data); setMailbox(data.accounts.find(item => item.mine && item.status === "active")?.id ?? ""); } }).catch(() => undefined);
+    void mailApi<MailOverview>(accountId, `/api/cloud/workspaces/${workspaceId}/mail`).then(data => { if (live) { setOverview(data); setMailbox(data.accounts.find(item => item.mine && item.status === "active" && item.canSend)?.id ?? ""); } }).catch(() => undefined);
     return () => { live = false; abort.current?.abort(); };
   }, [accountId, workspaceId]);
-  const mine = overview?.accounts.filter(item => item.mine && item.status === "active") ?? [];
+  const mine = overview?.accounts.filter(item => item.mine && item.status === "active" && item.canSend) ?? [];
   const sender = mine.find(item => item.id === mailbox);
   const senderName = (sender?.displayName || sender?.email.split("@")[0] || "").split(/\s+/)[0] ?? "";
   const patch = (id: string, fields: Partial<Item>) => setItems(current => current.map(item => item.id === id ? { ...item, ...fields } : item));
@@ -104,7 +104,8 @@ export default function PersonalizeQueue({ accountId, workspaceId, clients, onCl
           <label>Tone<select value={tone} onChange={event => setTone(event.target.value as DraftOptions["tone"])}><option value="warm">Warm</option><option value="direct">Direct</option><option value="formal">Formal</option></select></label>
           {mine.length > 0 && <label>Send from<select value={mailbox} onChange={event => setMailbox(event.target.value)}>{mine.map(item => <option key={item.id} value={item.id}>{item.email} ({providerLabel(item.provider)}) · {item.todayQuota - item.sentToday} left today</option>)}</select></label>}
         </div>
-        {!mine.length && overview && <p className="mc-note"><AlertTriangle size={14} /> No mailbox connected: you can still write the emails and copy them, or connect Gmail/Outlook in Email to send from here.</p>}
+        {!mine.length && overview && <p className="mc-note"><AlertTriangle size={14} /> Connect or reconnect a mailbox in Email to confirm sending permission. You can still write emails and copy them.</p>}
+        {sender && !sender.canTrackReplies && <p className="mc-note">Sending only: read replies in your inbox and update client stages yourself. These emails have no automatic follow-ups or reply tracking.</p>}
         {items.some(item => !item.email) && <p className="mc-fine">{items.filter(item => !item.email).length} selected client(s) have no email address; their message is written for you to copy.</p>}
         <div className="button-row"><button type="button" className="button primary" disabled={campaign === "custom" && !goal.trim()} onClick={() => void write(items)}><Sparkles size={15} />Write {items.length} email{items.length === 1 ? "" : "s"}</button>
           <button type="button" className="button secondary" onClick={onClose}>Cancel</button></div>

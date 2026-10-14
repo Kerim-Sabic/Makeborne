@@ -68,6 +68,7 @@ import {
   BookOpen as BookOpenIcon,
   Check,
   CreditCard,
+  LifeBuoy,
   Download,
   FileText,
   FolderOpen,
@@ -542,6 +543,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
             <Settings size={18} /> Settings
           </button>
           <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> {unlimitedCredits ? "Unlimited credits" : "Plan & credits"} <ArrowUpRight size={14} /></Link>
+          <Link className="sidebar-home" href="/help"><LifeBuoy size={16} /> Help & guides <ArrowUpRight size={14} /></Link>
           {isAdmin && <Link className="sidebar-home" href="/admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
           <div className="sidebar-device">
             <span className="sidebar-device-label"><span className="status-dot" /> Device backup & recovery</span>

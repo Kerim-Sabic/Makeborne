@@ -4,6 +4,7 @@ import { RequestError } from "@/lib/server/http";
 import { SequenceStepsSchema } from "@/lib/mail/compose";
 import { normalizeOutreachStage } from "@/lib/client-outreach";
 import { mailContext, ownMailbox } from "@/lib/mail/server";
+import { mailCapabilities, MANUAL_MAIL_NOTICE } from "@/lib/mail/config";
 
 type Context = { params: Promise<{ workspaceId: string }> };
 const Enroll = z.object({ sequenceId: z.string().uuid(), accountId: z.string().uuid(), clientIds: z.array(z.string().uuid()).min(1).max(200),
@@ -40,6 +41,7 @@ export async function POST(request: Request, context: Context) {
     const { db, user } = await mailContext(workspaceId, true);
     const account = await ownMailbox(db, workspaceId, body.accountId, user.id);
     if (account.status !== "active") throw new RequestError("MAILBOX_NEEDS_RECONNECT", "Reconnect this mailbox before starting a sequence.", 409);
+    if (!mailCapabilities(account).canAutomate) throw new RequestError("MAIL_AUTOMATION_UNAVAILABLE", MANUAL_MAIL_NOTICE, 409);
     const { data: sequence, error: sequenceError } = await db.from("mail_sequences").select("id,steps,archived").eq("id", body.sequenceId).eq("workspace_id", workspaceId).maybeSingle();
     databaseError(sequenceError);
     if (!sequence || sequence.archived || !SequenceStepsSchema.safeParse(sequence.steps).success) throw new RequestError("NOT_FOUND", "This sequence isn't available.", 404);
@@ -72,7 +74,8 @@ export async function PATCH(request: Request, context: Context) {
     const { data: enrollment, error } = await db.from("mail_enrollments").select("id,account_id,status").eq("id", body.id).eq("workspace_id", workspaceId).maybeSingle();
     databaseError(error);
     if (!enrollment) throw new RequestError("NOT_FOUND", "This sequence enrollment no longer exists.", 404);
-    await ownMailbox(db, workspaceId, enrollment.account_id, user.id);
+    const account = await ownMailbox(db, workspaceId, enrollment.account_id, user.id);
+    if (body.action === "resume" && !mailCapabilities(account).canAutomate) throw new RequestError("MAIL_AUTOMATION_UNAVAILABLE", MANUAL_MAIL_NOTICE, 409);
     const allowed = { pause: ["active"], resume: ["paused"], stop: ["active", "paused"] }[body.action];
     if (!allowed.includes(enrollment.status)) throw new RequestError("INVALID_STATE", `This sequence is ${enrollment.status}.`, 409);
     const fields = body.action === "pause" ? { status: "paused" } : body.action === "resume" ? { status: "active", last_error: null, next_send_at: new Date().toISOString() } : { status: "stopped", next_send_at: null };

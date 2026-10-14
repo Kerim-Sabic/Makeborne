@@ -49,6 +49,7 @@ begin
   assert pg_temp.month_total(u,'mem_up','2027-02-28T10:00:00Z') = 300, 'February must stay at 300 (no retroactive top-up)';
   raise notice 'PASS upgrade in month 6: months 1-5 unchanged, month 6 topped up, month 7 at the new tier (incl. delayed catch-up)';
 
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   -- 2. Downgrade in month 6: month 6 keeps Studio (no clawback, no extra), month 7 is Create.
   perform pg_temp.period('mem_down',u,s,e);
   perform pg_temp.obs('mem_down',u,s + interval '5 seconds','studio',850,true);
@@ -58,6 +59,7 @@ begin
   assert pg_temp.months(u,'mem_down') = '{850,850,850,850,850,850,300}', 'Downgrade: '||pg_temp.months(u,'mem_down')::text;
   raise notice 'PASS downgrade in month 6: month 6 unchanged, month 7 at the lower tier, no clawback';
 
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   -- 3. Repeated changes: up and down inside one month, then up again.
   perform pg_temp.period('mem_flip',u,s,e);
   perform pg_temp.obs('mem_flip',u,s + interval '5 seconds','create',300,true);
@@ -72,6 +74,7 @@ begin
   assert pg_temp.months(u,'mem_flip') = '{300,850,2200,850}', 'Repeats changed grants';
   raise notice 'PASS repeated upgrades/downgrades: each month gets its historical tier plus in-month upgrades only; repeats idempotent';
 
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   -- 4. Monthly -> yearly at renewal, then yearly -> monthly at the next renewal.
   perform pg_temp.period('mem_iv',u,'2027-01-15T00:00:00Z','2027-02-15T00:00:00Z','monthly');
   perform pg_temp.obs('mem_iv',u,'2027-01-15T00:00:05Z','create',300,true,'monthly');
@@ -84,12 +87,14 @@ begin
   assert pg_temp.months(u,'mem_iv') = array_fill(300::bigint, array[13]) || array[850::bigint], 'Interval transitions: '||pg_temp.months(u,'mem_iv')::text;
   raise notice 'PASS monthly->yearly->monthly transitions at renewal boundaries: 14 allocations, no gap or duplicate';
 
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   -- 5. Month ends and leap years: allocation starts follow the anchor, clamped, never drifting.
   perform pg_temp.period('mem_leap',u,'2028-02-29T09:30:00Z','2029-02-28T09:30:00Z');
   perform pg_temp.obs('mem_leap',u,'2028-02-29T09:30:05Z','create',300,true);
   r := makeborne_private.reconcile_plan_membership('mem_leap','2029-02-01T00:00:00Z');
   assert pg_temp.month_total(u,'mem_leap','2028-02-29T09:30:00Z')=300 and pg_temp.month_total(u,'mem_leap','2028-03-29T09:30:00Z')=300
     and pg_temp.month_total(u,'mem_leap','2029-01-29T09:30:00Z')=300 and array_length(pg_temp.months(u,'mem_leap'),1)=12, 'Leap-day anchor: '||pg_temp.months(u,'mem_leap')::text;
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   perform pg_temp.period('mem_end',u,s,e);
   perform pg_temp.obs('mem_end',u,s + interval '5 seconds','create',300,true);
   r := makeborne_private.reconcile_plan_membership('mem_end','2027-05-01T00:00:00Z');
@@ -97,10 +102,12 @@ begin
     and pg_temp.month_total(u,'mem_end','2027-04-30T10:00:00Z')=300 and array_length(pg_temp.months(u,'mem_end'),1)=4, 'Month-end anchor: '||pg_temp.months(u,'mem_end')::text;
   -- Renewal boundary: month 12 of one year and month 1 of the next are separate, each once.
   perform pg_temp.period('mem_end',u,e,'2029-01-31T10:00:00Z');
+  perform pg_temp.obs('mem_end',u,e + interval '5 seconds','create',300,true); -- evidence for the new paid year
   r := makeborne_private.reconcile_plan_membership('mem_end','2028-02-15T00:00:00Z');
   assert pg_temp.month_total(u,'mem_end','2027-12-31T10:00:00Z')=300 and pg_temp.month_total(u,'mem_end',e)=300 and array_length(pg_temp.months(u,'mem_end'),1)=13, 'Renewal boundary (12 + first month of year 2): '||pg_temp.months(u,'mem_end')::text;
   raise notice 'PASS month ends (Jan 31 anchor), leap years (Feb 29 anchor) and renewal boundaries';
 
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   -- 6. Cancellation: canceling keeps paid months; an immediate cancel stops later months; reactivation resumes.
   perform pg_temp.period('mem_cancel',u,s,e);
   perform pg_temp.obs('mem_cancel',u,s + interval '5 seconds','create',300,true);
@@ -113,6 +120,7 @@ begin
     and pg_temp.month_total(u,'mem_cancel','2027-08-31T10:00:00Z')=300, 'Cancellation: '||pg_temp.months(u,'mem_cancel')::text;
   raise notice 'PASS cancellation: canceling keeps months, cancelled months not granted, reactivation resumes';
 
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   -- 7. A grant from the previous release (one reference per period) counts for allocation 1.
   perform public.makeborne_credit_grant(u,300,'plan_grant','plan:mem_legacy:2028-01-31T10:00:00.000Z','{"expiresAt":"2027-02-28T10:00:00Z"}');
   perform pg_temp.period('mem_legacy',u,s,e);
@@ -122,6 +130,7 @@ begin
     and pg_temp.month_total(u,'mem_legacy','2027-02-28T10:00:00Z')=300, 'Legacy grant must cover allocation 1 only';
   raise notice 'PASS earlier single-reference grants honoured';
 
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   -- 8. First seen in month 6 (missed webhooks): no evidence for months 1-5, so they become open issues;
   --    nothing borrows the later tier. Months 6-8 follow the evidence.
   perform pg_temp.period('mem_late',u,s,e);
@@ -140,6 +149,7 @@ begin
   assert r->>'outcome'='duplicate' and (r->>'granted')::int=0, 'Duplicate payment: '||r::text;
   raise notice 'PASS no inferred history: months before evidence open issues; paid initial payment resolves them; duplicates ignored';
 
+  u:=gen_random_uuid(); insert into auth.users(id,email,email_confirmed_at) values(u,u||'@independent-history.example.invalid',now());
   -- 9. Payments that are not entitlement evidence (plan-change proration, refunds) are kept but never used.
   perform pg_temp.period('mem_pay',u,s,e);
   perform public.makeborne_record_plan_payment(u,'mem_pay','pay_upd1','plan_fixture','scale','yearly',2200,'subscription_update',s + interval '1 minute',false);

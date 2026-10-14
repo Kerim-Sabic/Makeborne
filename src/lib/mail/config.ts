@@ -2,6 +2,24 @@ import "server-only";
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export type MailProvider = "google" | "microsoft";
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+/** Matches the granted_scopes database contract; only provider-returned grants belong here. */
+export function parseGrantedScopes(raw: string) {
+  const scopes = [...new Set(raw.split(/\s+/).filter(Boolean))];
+  if (scopes.length > 32 || scopes.some(scope => !/^[A-Za-z0-9][A-Za-z0-9:/._-]{0,199}$/.test(scope))) throw new Error("The provider returned invalid mailbox permissions.");
+  return scopes;
+}
+export type GoogleMailMode = "full" | "send_only";
+/** Unset preserves the existing requested scopes. Unknown settings fail closed to send-only. */
+export const googleMailMode = (): GoogleMailMode => !process.env.MAKEBORNE_GOOGLE_MAIL_MODE || process.env.MAKEBORNE_GOOGLE_MAIL_MODE === "full" ? "full" : "send_only";
+export function mailCapabilities(account: { provider: MailProvider; granted_scopes?: readonly string[] | null }) {
+  if (account.provider === "microsoft") return { canSend: true, canTrackReplies: true, canAutomate: true };
+  const canSend = account.granted_scopes?.includes(GMAIL_SEND_SCOPE) === true;
+  const canTrackReplies = canSend && googleMailMode() === "full" && account.granted_scopes?.includes(GMAIL_READ_SCOPE) === true;
+  return { canSend, canTrackReplies, canAutomate: canTrackReplies };
+}
+export const MANUAL_MAIL_NOTICE = "This mailbox supports manual sending only. Read replies in your inbox and update the client's stage yourself. Reply tracking and automatic sequences are unavailable.";
 
 /**
  * Owner setup (env only, never in the repo):

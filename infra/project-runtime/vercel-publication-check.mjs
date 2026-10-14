@@ -23,7 +23,7 @@ function mock(overrides={}) {
     async create(params) {
       calls.push(['create',params]);
       const box={
-        name:params.name,image:params.image,persistent:params.persistent,expiresAt:new Date(Date.now()+params.timeout),
+        name:params.name,image:overrides.canonicalImage?params.image.replace(/^vcr\.vercel\.com\//,''):params.image,persistent:params.persistent,expiresAt:new Date(Date.now()+params.timeout),
         async writeFiles(files,opts){calls.push(['write',files,opts]);if(overrides.writeError)throw Error('write failed');},
         async runCommand(params) {calls.push(['command',params]);return {wait:async()=>({exitCode:overrides.exitCode??0})};},
         async readFile({path},opts) {
@@ -57,6 +57,16 @@ function mock(overrides={}) {
 }
 let passed=0;
 async function test(name,fn){await fn();console.log('PASS '+name);passed++;}
+await test('VCR hostname normalization preserves exact project/repository/digest',async()=>{
+  const m=mock({canonicalImage:true}),approved=config();
+  approved.compiler.image='vcr.vercel.com/'+approved.compiler.image;
+  const executor=vercelPublicationExecutor({transport:m.transport,approved,context:context(),onLifecycle:m.journal});
+  await (await executor.compile(workload(),signal())).dispose();
+  assert.equal(m.calls.filter(c=>c[0]==='stop').length,1);
+  const wrong=mock({canonicalImage:true,wrongIdentity:true});
+  const reject=vercelPublicationExecutor({transport:wrong.transport,approved,context:context(),onLifecycle:wrong.journal});
+  await assert.rejects(reject.compile(workload(),signal()));
+});
 await test('SDK 3.7.0 wrapper preserves exact create/get and keeps credentials outside env',async()=>{
   assert.equal(SDK_VERSION,'3.7.0');const calls=[];
   const fake={create:async p=>{calls.push(p);},get:async p=>{calls.push(p);}};

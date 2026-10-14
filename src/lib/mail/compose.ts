@@ -51,11 +51,13 @@ const address = (email: string, name?: string) => {
 };
 
 /** A plain-text email as RFC 5322 bytes, base64url-encoded for the Gmail API. Plain text reads as a personal message. */
-export function buildMime(message: { from: string; fromName?: string; to: string; toName?: string; subject: string; text: string; inReplyTo?: string | null; references?: string | null }) {
+export function buildMime(message: { from: string; fromName?: string; to: string; toName?: string; subject: string; text: string; messageId?: string; inReplyTo?: string | null; references?: string | null }) {
+  if (message.messageId && !/^<[A-Za-z0-9._-]+@[A-Za-z0-9.-]+>$/.test(message.messageId)) throw new Error("Invalid Message-ID.");
   const lines = [
     `From: ${address(message.from, message.fromName)}`,
     `To: ${address(message.to, message.toName)}`,
     `Subject: ${header(message.subject)}`,
+    ...(message.messageId ? [`Message-ID: ${message.messageId}`] : []),
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=UTF-8",
     "Content-Transfer-Encoding: base64",

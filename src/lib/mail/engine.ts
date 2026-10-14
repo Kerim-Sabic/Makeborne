@@ -2,16 +2,16 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ClientOutreachSchema, closedOutreachStages, emptyOutreach, normalizeOutreachStage, saveOutreach, type ClientOutreach } from "../client-outreach";
 import { mailVariables, renderTemplate, SequenceStepsSchema } from "./compose";
-import { openSecret, providerConfig, sealSecret, type MailProvider } from "./config";
+import { mailCapabilities, MANUAL_MAIL_NOTICE, openSecret, providerConfig, sealSecret, type MailProvider } from "./config";
 import { MailAuthError, MailRejectedError, MailUncertainError, providerClient, type Fetch, type ProviderClient, type SentMessage } from "./providers";
 import { dailyQuota, dueAfter, sendAllowed, utcDayStart } from "./throttle";
 
-export type MailAccountRow = { id: string; workspace_id: string; user_id: string; provider: MailProvider; email: string; display_name: string; status: string;
+export type MailAccountRow = { id: string; workspace_id: string; user_id: string; provider: MailProvider; granted_scopes?: string[]; email: string; display_name: string; status: string;
   daily_limit: number; warmup_started_at: string; last_sent_at: string | null; last_synced_at: string | null };
 type ClientRow = { id: string; workspace_id: string; name: string; company: string; email: string; website: string; outreach: unknown; updated_at: string };
 export type EngineDeps = { db: SupabaseClient; fetcher?: Fetch; now?: () => Date; clients?: Partial<Record<MailProvider, ProviderClient>> };
 
-const providerFor = (deps: EngineDeps, provider: MailProvider) => deps.clients?.[provider] ?? providerClient(provider, deps.fetcher);
+const providerFor = (deps: EngineDeps, account: MailAccountRow) => deps.clients?.[account.provider] ?? providerClient(account.provider, deps.fetcher, { allowRead: mailCapabilities(account).canTrackReplies });
 const nowOf = (deps: EngineDeps) => deps.now?.() ?? new Date();
 const failure = (error: { message?: string; code?: string } | null) => { if (error) throw Object.assign(new Error(error.message ?? "Database error"), { code: error.code }); };
 const clip = (value: string, length: number) => value.length > length ? `${value.slice(0, length - 1)}…` : value;
@@ -36,7 +36,11 @@ export async function accessToken(deps: EngineDeps, account: MailAccountRow): Pr
   if (!data?.refresh_token) throw new MailAuthError("Mailbox tokens are missing. Reconnect the mailbox.");
   if (data.access_token && data.access_expires_at && new Date(data.access_expires_at).getTime() > nowOf(deps).getTime() + 60_000) return openSecret(data.access_token, account.id);
   try {
-    const refreshed = await providerFor(deps, account.provider).refresh({ ...config, refreshToken: openSecret(data.refresh_token, account.id) });
+    const refreshed = await providerFor(deps, account).refresh({ ...config, refreshToken: openSecret(data.refresh_token, account.id) });
+    if (account.provider === "google" && refreshed.grantedScopes !== undefined) {
+      failure((await deps.db.from("mail_accounts").update({ granted_scopes: refreshed.grantedScopes }).eq("id", account.id)).error);
+      account.granted_scopes = refreshed.grantedScopes;
+    }
     await storeTokens(deps, account.id, refreshed.refreshToken ?? null, refreshed.accessToken, refreshed.expiresAt);
     return refreshed.accessToken;
   } catch (error) {
@@ -78,6 +82,8 @@ export type SendOutcome = { status: "sent"; messageId: string } | { status: "ski
 export async function sendEmail(deps: EngineDeps, request: SendRequest): Promise<SendOutcome> {
   const now = nowOf(deps), { account, client } = request;
   if (account.status !== "active") return { status: "auth", error: "Reconnect this mailbox before sending." };
+  if (!mailCapabilities(account).canSend) return { status: "auth", error: "Reconnect this mailbox to confirm its sending permission." };
+  if (request.automated && !mailCapabilities(account).canAutomate) return { status: "failed", error: MANUAL_MAIL_NOTICE };
   if (!client.email) return { status: "failed", error: `${client.name} has no email address.` };
   const allowed = sendAllowed({ sentToday: await sentToday(deps, account), quota: dailyQuota(new Date(account.warmup_started_at), account.daily_limit, now),
     lastSentAt: account.last_sent_at ? new Date(account.last_sent_at) : null, now, automated: request.automated });
@@ -91,7 +97,9 @@ export async function sendEmail(deps: EngineDeps, request: SendRequest): Promise
   let sent: SentMessage | null = null;
   try {
     const token = await accessToken(deps, account);
-    sent = await providerFor(deps, account.provider).send(token, { from: account.email, fromName: account.display_name, to: client.email, toName: client.name,
+    if (!mailCapabilities(account).canSend) throw new MailAuthError("Reconnect this mailbox to confirm its sending permission.");
+    if (request.automated && !mailCapabilities(account).canAutomate) throw new MailRejectedError(MANUAL_MAIL_NOTICE);
+    sent = await providerFor(deps, account).send(token, { from: account.email, fromName: account.display_name, to: client.email, toName: client.name,
       subject: request.subject, text: request.text, replyTo: request.replyTo ?? null });
     failure((await deps.db.from("mail_messages").update({ status: "sent", provider_message_id: sent.providerMessageId, thread_id: sent.threadId, rfc_message_id: sent.rfcMessageId, sent_at: now.toISOString() }).eq("id", messageId)).error);
     failure((await deps.db.from("mail_accounts").update({ last_sent_at: now.toISOString(), updated_at: now.toISOString() }).eq("id", account.id)).error);
@@ -138,6 +146,7 @@ export async function processDueEnrollments(deps: EngineDeps, options: { limit?:
       deps.db.from("mail_accounts").select("*").eq("id", enrollment.account_id).maybeSingle(),
     ]);
     if (!sequence || !client || !account) { await set({ status: "stopped", last_error: "The sequence, client or mailbox was removed." }); summary.stopped++; continue; }
+    if (!mailCapabilities(account as MailAccountRow).canAutomate) { await set({ status: "paused", last_error: MANUAL_MAIL_NOTICE }); blockedAccounts.add(account.id); summary.paused++; continue; }
     const steps = SequenceStepsSchema.safeParse(sequence.steps);
     if (!steps.success || sequence.archived) { await set({ status: "stopped", last_error: "The sequence was archived or is invalid." }); summary.stopped++; continue; }
     // Stored stages may use the previous vocabulary during the CRM transition (e.g. Delivered = Won).
@@ -189,11 +198,13 @@ export async function syncReplies(deps: EngineDeps, options: { accountIds?: stri
   if (options.accountIds) accountsQuery = accountsQuery.in("id", options.accountIds);
   const { data: accounts, error } = await accountsQuery;
   failure(error);
-  const summary = { accounts: 0, replies: 0, errors: 0, failedAccountIds: [] as string[] };
+  const summary = { accounts: 0, replies: 0, errors: 0, failedAccountIds: [] as string[], unavailableAccountIds: [] as string[] };
   for (const account of (accounts ?? []) as MailAccountRow[]) {
     summary.accounts++;
+    if (!mailCapabilities(account).canTrackReplies) { summary.unavailableAccountIds.push(account.id); continue; }
     try {
       const token = await accessToken(deps, account);
+      if (!mailCapabilities(account).canTrackReplies) { summary.unavailableAccountIds.push(account.id); continue; }
       const { data: threads, error: threadError } = await deps.db.from("mail_messages").select("thread_id,client_id,workspace_id").eq("account_id", account.id).eq("direction", "out")
         .eq("status", "sent").not("thread_id", "is", null).order("sent_at", { ascending: false }).limit(201);
       failure(threadError);
@@ -201,7 +212,7 @@ export async function syncReplies(deps: EngineDeps, options: { accountIds?: stri
       for (const row of (threads ?? []).slice(0, 200)) if (row.thread_id && row.client_id && !seen.has(row.thread_id)) seen.set(row.thread_id, row);
       const incomplete = (threads?.length ?? 0) > 200 || seen.size > 60;
       for (const [threadId, owner] of [...seen].slice(0, 60)) {
-        const inbound = await providerFor(deps, account.provider).replies(token, threadId, account.email);
+        const inbound = await providerFor(deps, account).replies(token, threadId, account.email);
         for (const reply of inbound) {
           const inserted = await deps.db.from("mail_messages").insert({ workspace_id: owner.workspace_id, client_id: owner.client_id, account_id: account.id, direction: "in", status: "received",
             provider_message_id: reply.providerMessageId, thread_id: threadId, subject: clip(reply.subject, 300), body: clip(reply.snippet, 20000), from_address: clip(reply.from, 320),

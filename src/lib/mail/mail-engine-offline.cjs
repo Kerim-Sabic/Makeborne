@@ -6,7 +6,7 @@ const { apiError } = require("../server/http.ts");
 const at = new Date("2026-10-13T12:00:00Z");
 
 function fixture(fault = () => null) {
-  const accounts = ["blocked", "healthy"].map(id => ({ id, workspace_id: "workspace", user_id: "owner", provider: "google", email: `${id}@sender.test`, display_name: "Owner",
+  const accounts = ["blocked", "healthy"].map(id => ({ id, workspace_id: "workspace", user_id: "owner", provider: "google", granted_scopes: [config.GMAIL_SEND_SCOPE, config.GMAIL_READ_SCOPE], email: `${id}@sender.test`, display_name: "Owner",
     status: "active", daily_limit: 50, warmup_started_at: "2026-01-01T00:00:00Z", last_sent_at: null, last_synced_at: null }));
   const clients = accounts.map(account => ({ id: `client-${account.id}`, workspace_id: "workspace", name: account.id, email: `${account.id}@client.test`, company: "", website: "", outreach: null, updated_at: at.toISOString() }));
   const tables = { mail_accounts: accounts, clients, mail_messages: [], mail_sequences: [{ id: "sequence", stop_on_reply: true, archived: false, steps: [{ delayDays: 0, subject: "Hello", body: "Hi {{first_name}}" }] }],
@@ -86,7 +86,7 @@ async function routeWithMocks(relative, f, extra, run) {
 }
 
 module.exports = async function offlineEngineChecks(check) {
-  const keys = ["MAKEBORNE_GOOGLE_MAIL_CLIENT_ID", "MAKEBORNE_GOOGLE_MAIL_CLIENT_SECRET"], saved = keys.map(key => process.env[key]);
+  const keys = ["MAKEBORNE_GOOGLE_MAIL_CLIENT_ID", "MAKEBORNE_GOOGLE_MAIL_CLIENT_SECRET", "MAKEBORNE_MICROSOFT_MAIL_CLIENT_ID", "MAKEBORNE_MICROSOFT_MAIL_CLIENT_SECRET"], saved = keys.map(key => process.env[key]);
   keys.forEach(key => { process.env[key] = "offline-fixture"; });
   try {
     await check("engine offline: provider success then receipt/history failure stays unknown, retains IDs, never resends the claimed step", async () => {
@@ -197,6 +197,79 @@ module.exports = async function offlineEngineChecks(check) {
       assert.equal(f.tables.mail_enrollments[0].status, "replied");
       const sends = await engine.processDueEnrollments(f.deps, { failedReplySyncSet: new Set(replies.failedAccountIds) });
       assert.equal(sends.sent, 1); assert.deepEqual(f.sent.map(email => email.from), ["healthy@sender.test"]);
+    });
+    await check("send-only engine permits manual Gmail sends, skips reads without auth errors, pauses Gmail sequences and preserves Outlook automation", async () => {
+      process.env.MAKEBORNE_GOOGLE_MAIL_MODE = "send_only";
+      try {
+        const f = fixture();
+        f.tables.mail_accounts[1].provider = "microsoft";
+        f.deps.clients.microsoft = f.provider;
+        f.tables.mail_messages.push({ id: "prior", account_id: "blocked", client_id: "client-blocked", workspace_id: "workspace", direction: "out", status: "sent", sent_at: at.toISOString(), created_at: at.toISOString(), thread_id: "private-thread" });
+        let replyCalls = 0;
+        f.provider.replies = async () => { replyCalls++; throw new Error("Gmail read is forbidden"); };
+        const replies = await engine.syncReplies(f.deps);
+        assert.equal(replyCalls, 0); assert.equal(replies.errors, 0); assert.deepEqual(replies.unavailableAccountIds, ["blocked"]);
+        assert.equal(f.tables.mail_accounts[0].status, "active", "lack of read capability is not an expired connection");
+        const manual = await engine.sendEmail(f.deps, { ...f.request, enrollmentId: undefined, step: undefined });
+        assert.equal(manual.status, "sent"); assert.equal(f.sent.length, 1);
+        const directAuto = await engine.sendEmail(f.deps, { ...f.request, automated: true });
+        assert.equal(directAuto.status, "failed"); assert.match(directAuto.error, /manual sending only/); assert.equal(f.sent.length, 1);
+        const automatic = await engine.processDueEnrollments(f.deps);
+        assert.equal(automatic.paused, 1); assert.equal(automatic.sent, 1);
+        assert.equal(f.tables.mail_enrollments[0].status, "paused"); assert.equal(f.tables.mail_enrollments[1].status, "completed");
+        assert.deepEqual(f.sent.map(item => item.from), ["blocked@sender.test", "healthy@sender.test"]);
+      } finally { process.env.MAKEBORNE_GOOGLE_MAIL_MODE = "full"; }
+    });
+    await check("enrollment and resume routes refuse send-only or unconfirmed Gmail while pause/stop remain available", async () => {
+      for (const variant of ["send_only", "missing_read", "legacy"]) {
+        const f = fixture();
+        process.env.MAKEBORNE_GOOGLE_MAIL_MODE = variant === "send_only" ? "send_only" : "full";
+        if (variant === "missing_read") f.tables.mail_accounts[0].granted_scopes = [config.GMAIL_SEND_SCOPE];
+        if (variant === "legacy") f.tables.mail_accounts[0].granted_scopes = [];
+        try {
+          await routeWithMocks("api/cloud/workspaces/[workspaceId]/mail/enrollments/route.ts", f, {}, async route => {
+            const context = { params: Promise.resolve({ workspaceId: "workspace" }) };
+            const post = await route.POST(new Request("https://app.test/enroll", { method: "POST", body: JSON.stringify({ accountId: "blocked", sequenceId: "sequence", clientIds: ["client-blocked"] }) }), context);
+            assert.equal(post.status, 409); assert.equal((await post.json()).error.code, "MAIL_AUTOMATION_UNAVAILABLE");
+            f.tables.mail_enrollments[0].status = "paused";
+            const resume = await route.PATCH(new Request("https://app.test/enroll", { method: "PATCH", body: JSON.stringify({ id: "enrollment-blocked", action: "resume" }) }), context);
+            assert.equal(resume.status, 409); assert.equal(f.tables.mail_enrollments[0].status, "paused");
+            const stop = await route.PATCH(new Request("https://app.test/enroll", { method: "PATCH", body: JSON.stringify({ id: "enrollment-blocked", action: "stop" }) }), context);
+            assert.equal(stop.status, 200); assert.equal(f.tables.mail_enrollments[0].status, "stopped");
+          });
+          if (variant === "legacy") { assert.equal((await engine.sendEmail(f.deps, f.request)).status, "auth"); assert.equal(f.sent.length, 0); }
+        } finally { process.env.MAKEBORNE_GOOGLE_MAIL_MODE = "full"; }
+      }
+    });
+    await check("send-only Check-now returns a manual notice and makes no read or send provider calls", async () => {
+      process.env.MAKEBORNE_GOOGLE_MAIL_MODE = "send_only";
+      try {
+        const f = fixture();
+        f.provider.replies = f.provider.send = async () => { throw new Error("No provider call is allowed from send-only Check-now"); };
+        await routeWithMocks("api/cloud/workspaces/[workspaceId]/mail/run/route.ts", f, {}, async route => {
+          const response = await route.POST(new Request("https://app.test/run", { method: "POST", body: "{}" }), { params: Promise.resolve({ workspaceId: "workspace" }) });
+          const result = await response.json();
+          assert.equal(response.status, 200); assert.equal(result.sent, 0); assert.equal(result.replyCheckErrors, 0); assert.equal(result.paused, 2); assert.match(result.note, /manual sending only/);
+        });
+      } finally { process.env.MAKEBORNE_GOOGLE_MAIL_MODE = "full"; }
+    });
+    await check("Google refresh retains omitted grants and persists reduced grants before deciding whether to send", async () => {
+      for (const grantedScopes of [undefined, [config.GMAIL_SEND_SCOPE], []]) {
+        const f = fixture(), writes = [];
+        f.db.rpc = async (name, args) => {
+          if (name === "makeborne_mail_token_write") { writes.push(args); return { error: null }; }
+          assert.equal(name, "makeborne_mail_token_read");
+          return { data: { refresh_token: config.sealSecret("refresh", args.p_account), access_token: null, access_expires_at: null }, error: null };
+        };
+        f.provider.refresh = async () => ({ accessToken: "refreshed", expiresAt: new Date(at.getTime() + 3600_000), ...(grantedScopes === undefined ? {} : { grantedScopes }) });
+        const result = await engine.sendEmail(f.deps, { ...f.request, automated: true });
+        assert.equal(writes.length, 1);
+        if (grantedScopes === undefined) {
+          assert.equal(result.status, "sent"); assert.deepEqual(f.tables.mail_accounts[0].granted_scopes, [config.GMAIL_SEND_SCOPE, config.GMAIL_READ_SCOPE]);
+        } else {
+          assert.notEqual(result.status, "sent"); assert.equal(f.sent.length, 0); assert.deepEqual(f.tables.mail_accounts[0].granted_scopes, grantedScopes);
+        }
+      }
     });
   } finally { keys.forEach((key, index) => { if (saved[index] === undefined) delete process.env[key]; else process.env[key] = saved[index]; }); }
 };

@@ -139,7 +139,7 @@ export default function ExpertChat() {
   return (
     <div className="advisor-page">
       <aside className="advisor-sidebar" aria-label="Advisors">
-        <Link href="/" className="advisor-brand"><BrandMark size={25} /><span>makeborne</span></Link>
+        <Link href="/" className="advisor-brand"><BrandMark size={25} /><span>Makeborne</span></Link>
         <Link href="/studio" className="advisor-back"><ArrowLeft size={15} />Back to studio</Link>
         <div className="advisor-sidebar-label">Your advisors</div>
         <div className="advisor-picker" role="group" aria-label="Choose an advisor">

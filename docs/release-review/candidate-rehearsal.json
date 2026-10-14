@@ -1,6 +1,6 @@
 {
-  "prefix": "makeborne_candidate_20261013",
-  "startedAt": "2026-10-13T12:38:25.234Z",
+  "prefix": "makeborne_candidate_20261014",
+  "startedAt": "2026-10-13T23:57:25.068Z",
   "productionLast": "20261007110318",
   "productionTouched": false,
   "providerCalls": 0,
@@ -274,15 +274,23 @@
     {
       "file": "20261013260000_crm_mail_security_boundaries.sql",
       "sha256": "6aa140086087f531f27366997b9e485e72a274b354f9a43e7985f062e24fa0cd"
+    },
+    {
+      "file": "20261013270000_mail_granted_scopes.sql",
+      "sha256": "215a7b386beb6a4714f329ac9f9572cee366a2ce8aff4636a96f87221c2800a8"
+    },
+    {
+      "file": "20261013280000_billing_lifecycle_boundaries.sql",
+      "sha256": "2153aa84628f53109643ac60fa571592b6b4b7b50259c20c9cfe21021218cef8"
     }
   ],
   "scenarios": {
     "full": {
-      "container": "makeborne_candidate_20261013_full_20261013123825",
+      "container": "makeborne_candidate_20261014_full_20261013235725",
       "build": {
         "platformErrorsExpected": 2
       },
-      "fingerprint": "74de18e2f74a5f086956fe27e87ee3c5",
+      "fingerprint": "bcc6592533084037d18cf932e215490b",
       "data": {
         "users": 1,
         "clients": 1,
@@ -290,13 +298,16 @@
         "versions": 1,
         "sites": 1,
         "pilotReserved": 75,
-        "migrations": 82
+        "migrations": 84
       },
       "checks": {
         "mailUpgrade": [
           "PASS mail upgrade: invalid existing workspace binding rejected and earlier DDL/ACL changes rolled back",
           "PASS mail upgrade: invalid existing tag matrix rejected and function/constraints/ACL changes rolled back",
           "PASS mail upgrade: populated fixture retained byte-identical values; existing token RPC signatures and refresh behavior work"
+        ],
+        "mailScopeUpgrade": [
+          "PASS scope upgrade: existing Google/Microsoft rows receive empty grants only; other data unchanged; existing token refresh remains compatible"
         ],
         "legacyPause": [
           "PASS old pilot pause: admin denied, no new dispatch, existing reserved cost unchanged"
@@ -469,6 +480,20 @@
           "PASS mail boundaries: server cross-tenant/wrong-client/wrong-account/null-client bindings rejected; linked sequence cannot move even with both workspace permissions",
           "PASS mail boundaries: enrollment/sequence deletion retains message tenant/client/account fields; mailbox deletion still cascades",
           "PASS mail boundaries: multidimensional and shifted tag arrays rejected; empty and bounded flat arrays remain compatible"
+        ],
+        "billingLifecycle": [
+          "PASS lifecycle: renewal requires period-local evidence; stale older and invalid anchors cannot increase renewal credits",
+          "PASS lifecycle: reversed renewal/initial evidence order and repeated reconciliation preserve exactly one grant per paid month",
+          "PASS lifecycle: account overlap refused durably; same-membership difference-only grants, adjacent time and other accounts allowed; top-ups unchanged",
+          "PASS lifecycle: twelve annual monthly lots; late catch-up never resurrects expired months; every lot uses allocation end plus two months",
+          "PASS lifecycle: active subscription blocks checkout; completed checkout cannot bind another membership; stale reactivation cannot duplicate account subscription",
+          "PASS lifecycle: private helpers unavailable to browser and service roles; original service-only observation entry point retained"
+        ],
+        "mailGrantedScopes": [
+          "PASS scopes SQL: RLS/ACLs retained, no browser scope writes, service validation callable, immutable private invoker",
+          "PASS scopes SQL: service insert default empty, recorded Google/Microsoft scope formats valid, unrelated edits preserve grants",
+          "PASS scopes SQL: owner/editor/reviewer read own workspace evidence, outsider/anonymous denied, all browsers unable to fabricate grants",
+          "PASS scopes SQL: invalid content/null/duplicate/matrix/lower-bound/count/length rejected without mutation; 32 by 200 boundary and empty list valid"
         ]
       },
       "droppedPublicFunctions": [],
@@ -493,7 +518,7 @@
       }
     },
     "fault": {
-      "container": "makeborne_candidate_20261013_fault_20261013123825",
+      "container": "makeborne_candidate_20261014_fault_20261013235725",
       "build": {
         "platformErrorsExpected": 2
       },
@@ -521,6 +546,18 @@
           "failed": true,
           "error": "ERROR:  division by zero",
           "unchangedAfterFailure": true
+        },
+        {
+          "migration": "20261013270000_mail_granted_scopes.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
+        },
+        {
+          "migration": "20261013280000_billing_lifecycle_boundaries.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
         }
       ],
       "failed": true,
@@ -528,7 +565,7 @@
       "recoveredFingerprintMatchesFull": true
     },
     "interrupt": {
-      "container": "makeborne_candidate_20261013_interrupt_20261013123825",
+      "container": "makeborne_candidate_20261014_interrupt_20261013235725",
       "build": {
         "platformErrorsExpected": 2
       },
@@ -573,7 +610,7 @@
     },
     "publicFunctions": 14
   },
-  "finishedAt": "2026-10-13T12:41:22.309Z",
+  "finishedAt": "2026-10-13T23:59:56.954Z",
   "consumedInputs": [
     {
       "file": "supabase/migrations/20261005113330_founder_waitlist.sql",
@@ -824,6 +861,14 @@
       "sha256": "6aa140086087f531f27366997b9e485e72a274b354f9a43e7985f062e24fa0cd"
     },
     {
+      "file": "supabase/migrations/20261013270000_mail_granted_scopes.sql",
+      "sha256": "215a7b386beb6a4714f329ac9f9572cee366a2ce8aff4636a96f87221c2800a8"
+    },
+    {
+      "file": "supabase/migrations/20261013280000_billing_lifecycle_boundaries.sql",
+      "sha256": "2153aa84628f53109643ac60fa571592b6b4b7b50259c20c9cfe21021218cef8"
+    },
+    {
       "file": "docs/release-review/staging-platform-schema.sql",
       "sha256": "802747a6d4670dd6cd9b3990a43f7b1c70e60bdeae4c0bfb27e1b60849bff06a"
     },
@@ -846,6 +891,10 @@
     {
       "file": "supabase/check-crm-mail-upgrade.sql",
       "sha256": "2163b8389d022bfcccb4ec422979b9642b20c21eec6f65487a260613da310ef8"
+    },
+    {
+      "file": "supabase/check-mail-granted-scopes-upgrade.sql",
+      "sha256": "d44bd20742b730ab5172d6c1dd08f18686273147d9698980ac7998979ed285ed"
     },
     {
       "file": "supabase/release-review/check-legacy-pause.sql",
@@ -881,7 +930,7 @@
     },
     {
       "file": "supabase/check-plan-credit-allocations.sql",
-      "sha256": "7aeec0489ef22762f8f964877e25640ef2ad817daa9b0ab32bbb1b828cf6c8b7"
+      "sha256": "ea67376a95db3584ba634b048694b4f31d4732f0f5bf908b949e83b8fbb1491e"
     },
     {
       "file": "supabase/check-crm-sales-delivery.sql",
@@ -934,6 +983,14 @@
     {
       "file": "supabase/check-crm-mail-boundaries.sql",
       "sha256": "0989322daca9017191f79d9ed2b53a508e4b18ba000312266225c32ff15c3871"
+    },
+    {
+      "file": "supabase/check-billing-lifecycle.sql",
+      "sha256": "0f0bcf968998d5af038476a04ce6fa8492a1c3889914e81add8afc0d0e1f77db"
+    },
+    {
+      "file": "supabase/check-mail-granted-scopes.sql",
+      "sha256": "395c7e3675e6990b2b53853b61944c3e5e1eb6cfb17d745ccb56f662ec3e4dbc"
     },
     {
       "file": "supabase/post-deploy/crm_contract_client_stages.sql",

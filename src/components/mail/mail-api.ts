@@ -1,12 +1,12 @@
 "use client";
 
 export type MailAccount = { id: string; provider: "google" | "microsoft"; email: string; displayName: string; status: "active" | "error" | "disconnected"; lastError: string | null;
-  mine: boolean; dailyLimit: number; lastSyncedAt: string | null; todayQuota: number; sentToday: number };
+  mine: boolean; dailyLimit: number; lastSyncedAt: string | null; todayQuota: number; sentToday: number; canSend: boolean; canTrackReplies: boolean; canAutomate: boolean };
 export type MailTemplate = { id: string; name: string; subject: string; body: string; updatedAt: string };
 export type SequenceStep = { delayDays: number; subject: string; body: string };
 export type MailSequence = { id: string; name: string; steps: SequenceStep[]; stopOnReply: boolean; updatedAt: string; counts: Record<string, number> };
 export type MailReply = { id: string; clientId: string | null; clientName: string; subject: string; snippet: string; from: string; at: string };
-export type MailOverview = { availability: { google: boolean; microsoft: boolean }; automation: boolean; accounts: MailAccount[]; templates: MailTemplate[]; sequences: MailSequence[]; replies: MailReply[] };
+export type MailOverview = { availability: { google: boolean; microsoft: boolean }; automation: boolean; googleMode: "full" | "send_only"; accounts: MailAccount[]; templates: MailTemplate[]; sequences: MailSequence[]; replies: MailReply[] };
 export type MailMessage = { id: string; direction: "in" | "out"; status: "sending" | "sent" | "failed" | "unknown" | "received"; subject: string; body: string; from: string; to: string; at: string;
   error: string | null; automated: boolean; step: number | null; accountId: string };
 export type Enrollment = { id: string; sequenceId: string; clientId: string; clientName: string; clientEmail: string; accountId: string; status: string; nextStep: number; nextSendAt: string | null; lastError: string | null };
@@ -24,3 +24,4 @@ export async function mailApi<T>(accountId: string, path: string, method: "GET" 
 
 export const TOKEN_HELP = "{{first_name}} {{name}} {{company}} {{website}} {{sender_name}} {{sender_first_name}} · add a fallback like {{first_name|there}}";
 export const providerLabel = (provider: MailAccount["provider"]) => provider === "google" ? "Gmail" : "Outlook";
+export const MANUAL_MAIL_NOTICE = "Manual sending only. Read replies in your inbox and update the client's stage yourself. Reply tracking and automatic sequences are unavailable for this mailbox.";

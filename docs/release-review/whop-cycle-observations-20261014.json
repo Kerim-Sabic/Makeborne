@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-14T00:12:19.808Z",
+  "sandboxOnly": true,
+  "readOnly": true,
+  "apiVersion": "2025-01-01",
+  "events": [
+    {
+      "outcome": "successful",
+      "paymentId": "pay_LArC4xU5Lo77Gl",
+      "membershipId": "mem_FkPEG6rdisMols",
+      "companyId": "biz_e4w3EGe3izP67k",
+      "paymentStatus": "paid",
+      "paymentSubstatus": "succeeded",
+      "billingReason": "subscription_cycle",
+      "total": 1,
+      "currency": "usd",
+      "membershipStatus": "active",
+      "periodStart": "2026-10-14T00:08:59.341Z",
+      "periodEnd": "2026-10-21T00:08:59.341Z",
+      "paymentFixtureSha256": "7aefd00a40867af66c2d5a882d1c5bc92394a59078633cf42062a5fda0aa290e",
+      "membershipFixtureSha256": "1191f3770c6dd54fb1a26a873e36145f51af616df72ddc1dff270d82392134d5"
+    },
+    {
+      "outcome": "failed",
+      "paymentId": "pay_JnbLe8Z82phJsy",
+      "membershipId": "mem_Vl3ZSgCqlLCAlb",
+      "companyId": "biz_e4w3EGe3izP67k",
+      "paymentStatus": "open",
+      "paymentSubstatus": "past_due",
+      "billingReason": "subscription_cycle",
+      "total": 1,
+      "currency": "usd",
+      "membershipStatus": "past_due",
+      "periodStart": "2026-10-14T00:10:27.345Z",
+      "periodEnd": "2026-10-21T00:10:27.345Z",
+      "paymentFixtureSha256": "0abaa0b00d3e8f3dc15d2e96f26aef71edd520585e67e94421551ca51c03eaba",
+      "membershipFixtureSha256": "8c9b254e935d5b0ec8a32110bf4badde132fa75c160e6e3b21c4fbe62d93c41b"
+    }
+  ],
+  "proof": "Actual provider first post-trial scheduled cycle; not subsequent weekly renewal, app credit settlement or signed-webhook proof",
+  "limitations": [
+    "Weekly probes do not authorize a monthly or annual allocation by themselves.",
+    "Failed payment includes paid_at; status and validated paid entitlement must control credit delivery."
+  ],
+  "productionTouched": false,
+  "realCharges": 0,
+  "aiCalls": 0
+}

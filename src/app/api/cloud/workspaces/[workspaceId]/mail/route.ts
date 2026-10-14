@@ -1,5 +1,5 @@
 import { cloudError, cloudJson, databaseError } from "@/lib/cloud/server";
-import { automationEnabled, mailAvailability } from "@/lib/mail/config";
+import { automationEnabled, googleMailMode, mailAvailability, mailCapabilities } from "@/lib/mail/config";
 import { dailyQuota, utcDayStart } from "@/lib/mail/throttle";
 import { mailContext } from "@/lib/mail/server";
 
@@ -11,7 +11,7 @@ export async function GET(_request: Request, context: Context) {
     const { workspaceId } = await context.params;
     const { client, user } = await mailContext(workspaceId, false);
     const [accounts, templates, sequences, enrollments, replies, sentToday] = await Promise.all([
-      client.from("mail_accounts").select("id,user_id,provider,email,display_name,status,last_error,daily_limit,warmup_started_at,last_sent_at,last_synced_at").eq("workspace_id", workspaceId).order("created_at"),
+      client.from("mail_accounts").select("id,user_id,provider,granted_scopes,email,display_name,status,last_error,daily_limit,warmup_started_at,last_sent_at,last_synced_at").eq("workspace_id", workspaceId).order("created_at"),
       client.from("mail_templates").select("id,name,subject,body,updated_at").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(200),
       client.from("mail_sequences").select("id,name,steps,stop_on_reply,archived,updated_at").eq("workspace_id", workspaceId).eq("archived", false).order("updated_at", { ascending: false }).limit(100),
       client.from("mail_enrollments").select("sequence_id,status").eq("workspace_id", workspaceId).limit(5000),
@@ -28,9 +28,9 @@ export async function GET(_request: Request, context: Context) {
     databaseError(names.error);
     const nameOf = new Map((names.data ?? []).map(row => [row.id, row.name]));
     return cloudJson({
-      availability: mailAvailability(), automation: automationEnabled(),
+      availability: mailAvailability(), automation: automationEnabled(), googleMode: googleMailMode(),
       accounts: (accounts.data ?? []).map(account => ({ id: account.id, provider: account.provider, email: account.email, displayName: account.display_name, status: account.status,
-        lastError: account.last_error, mine: account.user_id === user.id, dailyLimit: account.daily_limit, lastSyncedAt: account.last_synced_at,
+        lastError: account.last_error, mine: account.user_id === user.id, dailyLimit: account.daily_limit, lastSyncedAt: account.last_synced_at, ...mailCapabilities(account),
         todayQuota: dailyQuota(new Date(account.warmup_started_at), account.daily_limit, new Date()), sentToday: sends.get(account.id) ?? 0 })),
       templates: (templates.data ?? []).map(row => ({ id: row.id, name: row.name, subject: row.subject, body: row.body, updatedAt: row.updated_at })),
       sequences: (sequences.data ?? []).map(row => ({ id: row.id, name: row.name, steps: row.steps, stopOnReply: row.stop_on_reply, updatedAt: row.updated_at, counts: counts.get(row.id) ?? {} })),

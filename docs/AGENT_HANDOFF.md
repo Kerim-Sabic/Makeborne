@@ -817,3 +817,164 @@ The owner asked for a safety checkpoint, and Codex's last handback released all 
 - `docs/release-review/hosting-staging.log` (local machine paths).
 
 **Scan before committing:** no real keys, tokens or passwords. `sb_secret_do_not_leak` is a test fixture. Evidence files contain only makeborne.com addresses. The working tree is unchanged by the commit.
+
+### Claude claims: lead finder, help center with animated demos, launch walkthrough (2026-10-14)
+The owner asked for three things: a paid lead finder, a help center written for search with pre-scripted animated demos (no AI at runtime), and a full desktop and phone walkthrough with fixes and a before/after report.
+
+**Claimed:**
+- New: `src/lib/leads/finder*.ts`, `src/app/api/cloud/workspaces/[workspaceId]/leads/find/route.ts`, `src/components/leads/lead-finder.tsx`, `src/lib/leads/check-lead-finder.cjs`.
+- `src/components/account-clients.tsx`, and appends to `src/app/account-clients.css` (entry point only).
+- `src/app/help/**`, `src/lib/help/**`, `src/components/help-demo/**`.
+- `src/lib/site-metadata.ts`, `src/app/sitemap.ts`, `src/app/llms.txt/route.ts`.
+- `work/launch-walkthrough-20261014/` (report and screenshots).
+- Further walkthrough fixes will be claimed file by file here before editing.
+
+**Not touching:** the mail libraries, components and routes (Codex's live scope work), the `270000` migration, `src/app/billing/terms/page.tsx`, billing SQL and the publication controller.
+
+**Lead finder design:** Haiku with web search finds public business or creator pages for a niche. Each page is verified with the existing SSRF-safe reader and scored. It charges credits through the spend system with a hold. There is no schema change: results are added through the existing client and lead routes.
+
+**Paid calls:** at most $0.60 for smoke tests, reserved in `api-budget-round-20261013.json` before any call.
+
+### Codex sending-only/account setup handback — October14
+
+All mail agent claims released. Root owns only `.env.example`, OWNER_SETUP_CHECKLIST, EMAIL_AUTOMATION, PROJECT_STATUS and this handoff update; Claude's new lead/help/UI claims remain separate. Current checkout HEAD is `30b147feca8ff69e5dc6411a0db49a6f29d94365` (Claude's existing local checkpoint); root created no commit/push/merge/deploy.
+
+- Gmail send-only is implemented in mail config/providers/engine/compose/callback/UI. Exact scopes: openid, email, profile, gmail.send; include_granted_scopes=false. Identity comes from verified OpenID userinfo. Actual initial grants are required/recorded; missing refresh scopes preserve them. No inbox/metadata/thread read or automatic Gmail sequence can bypass send_only, including old broader tokens. Old empty grants need reconnecting. Manual sends and replies to stored outgoing threads require live qualification.
+- Additive270000 granted_scopes migration hash `215a7b386beb6a4714f329ac9f9572cee366a2ce8aff4636a96f87221c2800a8`. Complete63-migration disposable rehearsal:136 SQL groups, five faults, two interruptions, fingerprint `1e004b8cd9960d765c7f2d343c1af425`;94 consumed inputs unchanged; owned containers removed. Historical62 report preserved. Main local/cloud databases unchanged.
+- Mail-package checks26+callback12, changed-file lint0/0, root suite107/107 and production build passed. Logs: work/gmail-send-only-{checks,build}-20261014.log. This predates Claude's concurrent lead/help completion and does not freeze that combined candidate.
+- User deferred Outlook. No Microsoft registration/secret. Keep credentials unset.
+- Cloud project Makeborne CRM Mail `gold-vault-511623-f4`, owner69 account, with approved primary account Editor. Separate production/staging OAuth clients; prod callback makeborne.com/api/mail/callback/google, staging current feavd3cd1 preview with same path. Current branding/logo and Gmail API enabled; only identity+gmail.send declared. Google still Testing, main account nominated tester. Verification not submitted; needs real OAuth/send demo, accurate live privacy and final staging address ownership. Staging Vercel hostname is currently auto-added to authorized domains; before public review, either verify that exact URL-prefix property using the reviewed staging build, adopt a verified stable staging hostname, or isolate staging into its own OAuth project. Never invent domain ownership or a demo URL.
+- Explicit owner approvals permitted preparing credentials/settings in Vercel: makeborne Production and makeborne-release-staging Preview only. Independent mail encryption keys, CRON_SECRET, Google client ID/secret are Secret variables; mode=send_only and automation=false are Config. No environment secret saved in repo/chat/local files; no old secret rotated. No app deploy or mail send. Ensure key backup/rotation recovery before real mailbox tokens are stored; Vercel secrets are non-readable after creation.
+- Search Console makeborne.com domain verified under kerim.sabic@gmail.com via TXT; Bing https://makeborne.com/ same account via CNAME. Both sitemaps submitted. Keep ownership records; existing hosting/mail DNS unchanged. No account-wide Google Search Console import granted to Bing. Proofs in work/owner-cloud-setup-20261014.
+- Current Vercel team Hobby cannot run ten-minute cron. No invalid cron added. Gmail manual launch needs no automation cron; no Pro purchase approved. Global/Anthropic caps remain off, numeric launch cap unspecified. OpenAI key remains absent. This root account-setup package made no paid calls; shared ledger may change from Claude's separately approved tests—read it, don't overwrite it.
+- Production database/deploy/activation/merge/push and cloud publishing qualification remain held. New mail migration/implementation must join the exact combined candidate and be rehearsed on staging before launch approval.
+
+Follow-up approval/outcome: owner explicitly approved publishing the new Google consent configuration to open review. It is now **In production, unverified** (Google status only). Automatic branding verification returned two issues: homepage ownership not recognized yet, with instruction to wait24h after verification; standalone M judged not distinctive. Prepared/saved a consent-only mark+Makeborne-wordmark PNG from the current vector. Sensitive-scope Prepare for verification remains disabled until branding passes. Do not claim Google review submitted/approved, do not retry before propagation, and do not fabricate the required real-flow video. Production's live privacy page is still October5 and omits CRM mail; updated local privacy must be published through the approved release path before review attestation. Proof screenshots include google-branding-issues.png and google-consent-published-unverified.png. Both production and staging mode/send-off Config values were explicitly read back in Vercel UI; credentials remained hidden.
+
+### Codex billing lifecycle local qualification claims — October 14
+
+`local_topup_status_backend` owns `supabase/check-billing-lifecycle.sql`, `supabase/check-plan-credit-allocations.sql`, `supabase/check-plan-credit-concurrency.sql`, `scripts/rehearse-candidate.mjs`, a new additive billing lifecycle migration (CLI-generated name to follow), and its disposable-only evidence under `docs/release-review/`. Scope: conservative account overlap prevention, renewal evidence isolation, annual allocation/expiry and local billing regressions. Existing migrations remain unchanged. No provider calls, main local database writes, cloud/staging changes, paid calls, commits or deployment. Claude lead/help/UI and mail-package changes remain preserved. Root owns remaining documentation and provider observations.
+`local_topup_status_backend` additive migration claim: `supabase/migrations/20261013280000_billing_lifecycle_boundaries.sql` (local CLI generated at235516 then resequenced after270000; existing migration files untouched).
+`local_topup_status_backend` additionally claims `supabase/check-billing-lifecycle-concurrency.sql` for disposable-only account grant and checkout race coverage.
+
+### Claude handback: lead finder, help center with demos, launch walkthrough (2026-10-14)
+**New files:**
+- `src/lib/leads/{osm,enrich,finder,finder-types}.ts`, `check-lead-finder.cjs` (14 groups).
+- `src/app/api/cloud/workspaces/[workspaceId]/leads/find/route.ts`: SSE, credit hold, Haiku ranking via `budgetedStream` with no server tools. It settles leads × 0.2 plus AI usage at the 15× rate, and releases with no charge when nothing is found.
+- `src/components/leads/lead-finder.tsx`.
+- `src/components/help-demo/{engine,scripts,scenes,player,help-ask}.ts(x)` and `demo.css`.
+- `src/lib/help/{articles,search}.ts`, `check-help.cjs`.
+- `src/app/help/[slug]/page.tsx`, `src/app/help/help-chrome.tsx`.
+
+**Edited:**
+- `account-clients.tsx` and `.css`: Find leads entry, palette action, phone rows, pipeline and header.
+- `leads.ts`: the "Lead finder" source.
+- Lead PATCH route: accepts `research`.
+- `lead-api.ts`.
+- `help/page.tsx` and `page.module.css`: full rewrite.
+- `site-metadata.ts`: `PublicPath` includes `/help/*`, plus the lead finder fact.
+- `sitemap.ts`: help articles with their updated dates.
+- `llms.txt`: guides listed.
+- `studio.tsx`: one "Help & guides" sidebar link.
+- `creation-home.tsx`: a Help nav link.
+- `template-gallery.tsx`: missing space.
+- `account-projects.tsx`: no duplicate empty state for a brand-new account.
+- `mail-center.tsx`: a first-load failure shows a retryable message instead of an endless skeleton. This is the only mail file touched, and only in that branch.
+- `expert-chat.tsx` and `.css`: wordmark and spacing.
+- `billing.css`: the fair-use line wraps.
+- `OWNER_SETUP_CHECKLIST.md`: section 4b and the status table.
+
+**Paid calls:** reserved $0.20, spent $0.002752 (2 Haiku calls) and settled in the ledger. Claude's total is $0.009858.
+
+**Checks:** `npm test` 109/109, full ESLint clean, TypeScript clean. All 10 demos are replayed in Chromium with every target present, and cursor drift during a click is ≤0.1px. The lead finder UI was checked end to end on the local release with a replayed stream; the add-to-clients step wrote to the isolated local DB, so the test account now has 20 extra local test leads. Report: `work/launch-walkthrough-20261014/report.html`.
+
+**Safety note:** a `.next` built at 14:43 carried the production Supabase URL. One local-script sign-in attempt for `crm-audit@makeborne.test` reached production auth and was rejected (the account doesn't exist there); nothing was created. Rebuilt with the local runner; the capture script now blocks any non-local Supabase, Whop or Vercel request.
+
+**Proposal for Codex:**
+- Pricing support for the Anthropic `web_search` server tool, so `max_uses × $0.01` plus result tokens fit the bound. That would enable Instagram creator discovery by niche. Until then it's deliberately refused.
+- A dedicated Overpass endpoint before volume (`MAKEBORNE_OVERPASS_URL`).
+
+**No** commit, push, deploy, production or schema change in this package.
+
+### Claude claims: web search pricing, creator discovery, map resilience (2026-10-14)
+The owner asked for Instagram creator discovery by niche and for lead finding that keeps working at scale.
+
+**Claimed** (Codex's current billing SQL claims are untouched):
+- `src/lib/ai/prices.ts`: a narrow web search price card, usage pricing and the Haiku long-context tier.
+- `src/lib/ai/anthropic-call.ts`: server-tool allowance in the call bound.
+- New `src/lib/ai/check-web-search-pricing.cjs`.
+- `src/lib/leads/**`, the `leads/find` route, `src/components/leads/lead-finder.tsx`.
+- `scripts/local-release-server.mjs`: an additive start guard that refuses a `.next` built for a non-local Supabase.
+- Work capture scripts.
+
+**Paid calls:** a reservation of at most $0.50 will be logged before any call.
+
+### Codex isolated top-up qualification harness claims — October 14
+
+`local_topup_status_backend` owns new `scripts/qualify-topup-local.cjs`, optional focused harness check, and ignored `work/topup-qualification/` state/evidence. This harness may create only its own labelled, network-none, unpublished-port Docker database from the cached image and local schema/migrations. It reads no provider credentials, makes no network/provider calls, and adapts frozen root-supplied responses through real TypeScript and service-role SQL. Root alone performs separately authorized sandbox API/browser actions. Synthetic fixtures, captured provider responses and signed webhook proof remain explicitly distinct. No protected stack or existing fixture writes.
+
+### Codex cloud publication runtime handback — October 14
+
+Root changed only infra/project-runtime/vercel-publication-executor.mjs and vercel-publication-check.mjs for VCR canonical-reference equivalence, and added scripts/check-publication-cloud-smoke.mjs. SDK 3.7 returns the same scoped digest without the optional vcr.vercel.com hostname; only that exact equivalence is accepted, mismatches still refuse. Local executor20, controller startup8 and actual SDK session3 checks pass; controller bundle rebuild passes.
+
+Owner approved three short staging-only VMs total under the same separate $2 cap after the first identity-check failure. Compiler React/font/artwork build and Chromium153 sandbox-enabled capture both passed on Vercel. All three VMs are confirmed stopped. Both temporary private VCR repositories were deleted and a scoped readback is empty; ignored temporary Docker registry credential removed. Original local images retained. Actual invoice is pending, not asserted zero. Evidence: docs/release-review/publication-cloud-runtime-20261014.json. No paid AI, database change, app deployment, production, commit/push/merge.
+
+This qualifies image/runtime smoke only, not full publishing, network-denial/timeout fault cases, HTTPS/forms/rename or recovery. Temporary image references in the report are historical proof, not live production configuration. Full controller staging qualification and combined-candidate freeze remain required. Root claims above released; root continues Whop sandbox observations and separate local top-up harness coordination. Claude lead/search/help claims preserved.
+
+Root follow-up: current combined offline suite110/110 passed, five live/config-dependent checks were skipped (runtime, HTTP PDF, preview forms, generation/repair tariff qualification). Real Whop sandbox first post-trial scheduled cycle observed paid/active and second probe open/past_due; see whop-cycle-observations-20261014.json. These are provider observations, not app signed-webhook/credit delivery proof. Actual adapter-bound one-time $12 sandbox pack checkout ch_Jvs82zypdUgZcKG created exactly once and saved to disposable SQL with0 credits. Browser is prepared with fake4242; owner action-time terms approval pending. Fixture sandbox-20261014 paused and volume preserved; do not recreate checkout or call provider POST again. No root paid AI or production/deployment activity.
+
+### Codex isolated top-up qualification handback — October 14
+
+All `local_topup_status_backend` claims released. New `scripts/qualify-topup-local.cjs` creates and checks only its exact UUID-named, labelled, cached-image, network-none container with no published ports; no provider credentials or HTTP client calls. Uses the reviewed production schema plus the exact 64 pending migrations, a synthetic app account, real sandbox merchant/plan/user binding supplied by root, the actual checkout/delivery TypeScript validators, and real service-role RPCs. It deliberately does not qualify HTTP/PostgREST authentication, actual signed webhooks or public sales eligibility. Source hashes are pinned per run. Syntax/ESLint passed; synthetic real-SQL checks passed: wrong purchaser refused at zero credits, paid/replayed payment creates one non-expiring 100-credit lot, refunded/replayed payment returns zero. Synthetic containers removed. A protected-stack target name was refused before Docker/SQL access. The initial disposable boot readiness race was fixed to wait for final TCP readiness before loading the schema; that failed owned container was removed.
+
+Actual sandbox run: `work/topup-qualification/sandbox-20261014/state.json`. Root made exactly one external POST using `checkout-request.json`; the original adapter invocation validated its captured response and saved the checkout with service_role. Receipt: `checkout-result.json`. It remains `awaiting_payment`, granted=false, one checkout attempt, no payment/ledger/lots/credits. Root paused the exact owned container while action-time terms approval is pending; its anonymous volume and order are preserved. Do not create another checkout or repeat the external POST.
+
+Resume only after owner-approved purchase and actual raw payment GET are available:
+- `node scripts/qualify-topup-local.cjs resume sandbox-20261014`
+- Root saves raw pinned-version GET `/payments/<actual id>` to ignored `work/billing-lifecycle-probe-20261014/topup-payment.json` (no invented/missing fields, no credentials).
+- `node scripts/qualify-topup-local.cjs deliver sandbox-20261014 work/billing-lifecycle-probe-20261014/topup-payment.json` validates the captured response, applies service-role SQL, repeats delivery and records before/after under the ignored run directory. Unsupported actual provider states/tax/identity refuse credits. This is captured-response adapter proof, not signature or live HTTP proof.
+- `node scripts/qualify-topup-local.cjs pause sandbox-20261014` safely preserves the fixture; `cleanup sandbox-20261014` removes only that verified container and its anonymous volume after evidence is retained.
+
+Sanitized actual-cycle classification evidence: `docs/release-review/provider-cycle-classification-20261014.json`. Actual `listMembershipPayments` with local transport excludes the captured open/past_due payment despite its `paid_at`; captured paid subscription_cycle becomes payment evidence only. No weekly-to-monthly/yearly mapping or credits were created. Root owns actual provider observations; signed-webhook, real subsequent monthly/yearly allowance and failure-recovery qualification remain separate.
+
+Billing negative evidence now uses separate ignored rolled-back probes with explicit `r::text` diagnostics: prior renewal grants2 instead of1 and prior replacement mints an extra300. Rehearsed source inputs remain unchanged; current six lifecycle SQL groups reran successfully. `billing-lifecycle-local-20261014.json` records corrected diagnostics. No main/protected database, cloud settings, paid AI, production, commit/push/merge/deploy changes by this subagent.
+
+October14 root sandbox pack follow-up: owner approved terms/fake4242 submission. Exactly one $12 one-time sandbox payment pay_3rTyDloatTh944 succeeded for bound checkout ch_Jvs82zypdUgZcKG. Exact company/plan/Whop user/checkout checked against real GET. Actual delivery adapter/service-role SQL refused with0 credits because disputes:null means key lacks payment:dispute:read (official retrieve-payment schema). Never coerce null into no disputes. Root prepared only that permission in existing sandbox key; owner approval pending, no save. Fixture paused again with original checkout/order/volume intact. Null client_secret:false-positive in harness corrected (accept null only;4 non-null credential cases refuse); raw provider fixture unchanged. Added explicit null/missing-disputes rejection regression and release permission gate, focused tests/lint pass. Evidence topup-provider-qualification-20261014.json; no production, paid AI, commit/deploy. Resume and refetch actual payment after approved scope change; never purchase or POST checkout again.
+
+October14 root pack completion: owner approved adding only payment:dispute:read to existing sandbox key, saved and read back13 selected versus12 prior; expiry/API default unchanged, production key untouched. Fresh exact GET now reports disputes:[]; actual normalization/delivery adapter and service-role SQL granted100 credits. Two delivery attempts yield balance100, exactly one ledger grant and one non-expiring lot, held0. Initial safe refusal preserved in topup-provider-qualification-20261014.json. Only captured provider→adapter→SQL is qualified; fresh signed webhook and authenticated customer checkout, taxed/promotional/refund provider fixtures remain open. Owned sandbox-20261014 database container+anonymous volumes removed, exact empty-container readback confirmed. No additional purchase/checkout POST, real charges, paid AI, production, commit, merge or deployment. Root null-credential harness fix and explicit null/missing-disputes refusal regression pass focused tests/lint.
+
+### Claude handback: web search pricing, creator discovery, map resilience, local guard (2026-10-14)
+**Spend core** (please review; the changes are additive):
+- `prices.ts`:
+  - `WEB_SEARCH` price card: only `web_search_20250305`, direct calls, Haiku 5.5 only (verified through the Models API), mandatory `max_uses` 1–5.
+  - `serverToolBoundMicrousd()` reserves the $0.01 fee plus 20k result tokens per allowed search.
+  - Usage pricing adds `server_tool_use.web_search_requests × $0.01` and refuses any other server-tool usage.
+  - The Haiku long-prompt tier (5× above 100k prompt tokens) is now priced.
+- `anthropic-call.ts`: the tool bound goes into both the output-room calculation and the call bound.
+- Your existing refusal of `web_search_20260209` still passes.
+- New check `src/lib/ai/check-web-search-pricing.cjs` (5 groups).
+
+**Lead finder:**
+- **Creators mode** (Instagram, TikTok, YouTube) via `src/lib/leads/discover.ts`:
+  - result URLs are kept; handles the model read inside topic pages are kept only when they verify;
+  - TikTok is verified through oEmbed, YouTube through a channel reader (fixed host, validated handle, consent cookie, 2.2 MB cap);
+  - business emails are read from creator bios.
+- **Map:** 6-hour cache, one query at a time per instance, a 60-second cool-down after a "busy" reply, and automatic web-search fallback or top-up (map leads survive a failed top-up).
+- **Pricing:** search spend runs at 3× provider cost inside its own capped `RunSpend` (6-credit hold share); ranking stays at 15×; leads cost 0.2 each. Nothing is charged when no leads are found.
+- **Checks:** 18 lead-finder groups.
+
+**Live (settled):**
+- Spent $0.241777 of the $0.50 reservation, 12 calls, 0 overruns.
+- Results: Instagram 9/9 verified; TikTok 10/10 after the fix (0 before it); YouTube 7/7 after channel-ID support; Austin dentists via map fallback 10/10.
+- Claude total for the round: $0.251635.
+
+**Other:**
+- `scripts/local-release-server.mjs` now refuses to start from a `.next` that contains a cloud Supabase URL, and flags it after build. Verified both ways.
+- The 20 local test leads (`lead_source = 'Lead finder'`) are deleted from the isolated stack; the workspace is back to 22 clients.
+- Docs: owner checklist 4b and the status table, the help guide, and `SITE_FACTS`.
+- `npm test` 110/110, full ESLint and TypeScript clean.
+- No commit, deploy, production or schema change.
+
+### Second local checkpoint — October 14
+
+Owner explicitly requested a second local checkpoint on upgrade/live-builder after30b147feca8ff69e5dc6411a0db49a6f29d94365. Includes the current help/demos/lead finder/web-search pricing/walkthrough fixes and accumulated mail, billing, publication code/migrations/review evidence. Generated outputs/, ignored work/ configuration and docs/release-review/hosting-staging.log remain outside the commit, matching the first checkpoint. Source and staged contents receive a local credential-pattern and known-local-credential equality scan; only exact reviewed synthetic rejection-test values are exempted. This is a local recovery checkpoint, not a qualified/frozen release candidate. No push, tag, merge, main change, deployment or production operation.

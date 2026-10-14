@@ -9,6 +9,8 @@ Module._load = function(name, parent, main) {
 };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
 process.env.MAKEBORNE_MAIL_ENCRYPTION_KEY = "ab".repeat(32);
+process.env.MAKEBORNE_GOOGLE_MAIL_MODE = "full";
+if (process.env.MAKEBORNE_VERIFY_MAIL_LOCAL !== "1") globalThis.fetch = async () => { throw new Error("Network access is forbidden in offline mail checks."); };
 
 const { renderTemplate, mailVariables, buildMime, SequenceStepsSchema, replySubject } = require("./compose.ts");
 const { dailyQuota, sendAllowed, MIN_GAP_MS } = require("./throttle.ts");
@@ -78,21 +80,23 @@ function fakeFetch(routes) {
     assert.equal(verifyState(state, Date.now() + 11 * 60_000), null, "expires after 10 minutes");
   });
 
-  await check("Gmail: send (new and threaded reply), Message-ID lookup, replies exclude our own messages, errors classified", async () => {
+  await check("Gmail: send and thread with local Message-ID, no metadata reads, full-capability reply checks, errors classified", async () => {
     const { fetcher, calls } = fakeFetch([
       { method: "POST", match: /messages\/send$/, reply: () => json(200, { id: "m1", threadId: "t1" }) },
-      { match: /messages\/m1\?format=metadata/, reply: json(200, { payload: { headers: [{ name: "Message-ID", value: "<m1@mail.gmail.com>" }] } }) },
       { match: /threads\/t1\?format=metadata/, reply: json(200, { messages: [
         { id: "m1", internalDate: "1760000000000", snippet: "our email", payload: { headers: [{ name: "From", value: "Me <me@studio.test>" }] } },
         { id: "m2", internalDate: "1760000100000", snippet: "Yes, let's talk", payload: { headers: [{ name: "From", value: "Ana <ana@client.test>" }, { name: "Subject", value: "Re: Idea" }] } }] }) },
     ]);
-    const gmail = googleClient(fetcher);
+    const gmail = googleClient(fetcher, { allowRead: true });
     const sent = await gmail.send("token", { from: "me@studio.test", fromName: "Me", to: "ana@client.test", toName: "Ana", subject: "Idea", text: "Hello", replyTo: null });
-    assert.deepEqual(sent, { providerMessageId: "m1", threadId: "t1", rfcMessageId: "<m1@mail.gmail.com>" });
-    await gmail.send("token", { from: "me@studio.test", fromName: "Me", to: "ana@client.test", toName: "Ana", subject: "", text: "Following up", replyTo: { threadId: "t1", rfcMessageId: "<m1@mail.gmail.com>", subject: "Idea" } });
+    assert.equal(sent.providerMessageId, "m1"); assert.equal(sent.threadId, "t1"); assert.match(sent.rfcMessageId, /^<[0-9a-f-]{36}@makeborne\.com>$/);
+    const firstRaw = Buffer.from(JSON.parse(calls[0].body).raw, "base64url").toString();
+    assert.ok(firstRaw.includes(`Message-ID: ${sent.rfcMessageId}\r\n`));
+    await gmail.send("token", { from: "me@studio.test", fromName: "Me", to: "ana@client.test", toName: "Ana", subject: "", text: "Following up", replyTo: { threadId: "t1", rfcMessageId: sent.rfcMessageId, subject: "Idea" } });
     const second = JSON.parse(calls.filter(call => /send$/.test(call.url))[1].body);
     assert.equal(second.threadId, "t1");
-    assert.match(Buffer.from(second.raw, "base64url").toString(), /Subject: Re: Idea[\s\S]*In-Reply-To: <m1@mail\.gmail\.com>/);
+    assert.ok(Buffer.from(second.raw, "base64url").toString().includes(`In-Reply-To: ${sent.rfcMessageId}`));
+    assert.equal(calls.length, 2, "sending requires no metadata/profile/thread read");
     const replies = await gmail.replies("token", "t1", "me@studio.test");
     assert.deepEqual(replies.map(item => [item.providerMessageId, item.from, item.snippet]), [["m2", "ana@client.test", "Yes, let's talk"]]);
     const fail = status => googleClient(async () => json(status, { error: "x" })).send("t", { from: "me@studio.test", fromName: "", to: "a@b.co", toName: "", subject: "S", text: "x", replyTo: null });
@@ -118,6 +122,52 @@ function fakeFetch(routes) {
     assert.equal(reply.threadId, "c1");
     assert.deepEqual(JSON.parse(calls.find(call => call.method === "PATCH").body), { body: { contentType: "Text", content: "Following up" } });
     assert.deepEqual((await outlook.replies("token", "c1", "me@studio.test")).map(item => [item.providerMessageId, item.from]), [["x2", "ana@client.test"]]);
+  });
+
+  await check("Gmail send-only: minimal scopes, verified OpenID identity, local Message-ID and zero inbox-read requests", async () => {
+    const { GMAIL_SEND_SCOPE, GMAIL_READ_SCOPE, mailCapabilities } = require("./config.ts");
+    process.env.MAKEBORNE_GOOGLE_MAIL_MODE = "send_only";
+    try {
+      const { fetcher, calls } = fakeFetch([
+        { method: "POST", match: /oauth2\.googleapis\.com\/token$/, reply: () => json(200, { access_token: "access", refresh_token: "refresh", expires_in: 3600, scope: `openid email profile ${GMAIL_SEND_SCOPE} ${GMAIL_SEND_SCOPE}` }) },
+        { match: /openidconnect\.googleapis\.com\/v1\/userinfo$/, reply: () => json(200, { email: "owner@example.test", email_verified: true, name: "Owner" }) },
+        { method: "POST", match: /messages\/send$/, reply: () => json(200, { id: "sent", threadId: "thread" }) },
+      ]);
+      const gmail = googleClient(fetcher, { allowRead: true }); // Even a stale read-capable client must respect the server mode.
+      const auth = new URL(gmail.authUrl({ clientId: "id", redirectUri: "https://app.test/callback", state: "state" }));
+      assert.deepEqual(auth.searchParams.get("scope").split(" "), ["openid", "email", "profile", GMAIL_SEND_SCOPE]);
+      assert.equal(auth.searchParams.get("include_granted_scopes"), "false");
+      const tokens = await gmail.exchange({ clientId: "id", clientSecret: "secret", redirectUri: "https://app.test/callback", code: "code" });
+      assert.deepEqual(tokens.grantedScopes, ["openid", "email", "profile", GMAIL_SEND_SCOPE]);
+      assert.deepEqual(await gmail.profile(tokens.accessToken), { email: "owner@example.test", name: "Owner" });
+      const sent = await gmail.send(tokens.accessToken, { from: "owner@example.test", fromName: "Owner", to: "client@example.test", toName: "Client", subject: "Hello", text: "Hi" });
+      assert.ok(Buffer.from(JSON.parse(calls.at(-1).body).raw, "base64url").toString().includes(`Message-ID: ${sent.rfcMessageId}`));
+      const before = calls.length;
+      await assert.rejects(gmail.replies(tokens.accessToken, "thread", "owner@example.test"), /unavailable/);
+      assert.equal(calls.length, before, "no thread request even when allowRead was true");
+      assert.ok(calls.every(call => /\/token$|\/userinfo$|\/messages\/send$/.test(call.url)), "no Gmail profile, sent metadata or inbox reads");
+      assert.deepEqual(mailCapabilities({ provider: "google", granted_scopes: [GMAIL_SEND_SCOPE, GMAIL_READ_SCOPE] }), { canSend: true, canTrackReplies: false, canAutomate: false });
+    } finally { process.env.MAKEBORNE_GOOGLE_MAIL_MODE = "full"; }
+  });
+
+  await check("Gmail grants and verified identity fail closed; omitted refresh scope preserves the caller's recorded grant", async () => {
+    const { GMAIL_SEND_SCOPE, GMAIL_READ_SCOPE, parseGrantedScopes, mailCapabilities } = require("./config.ts");
+    const input = { clientId: "id", clientSecret: "secret", redirectUri: "https://app.test/callback", code: "code" };
+    for (const scope of [undefined, GMAIL_READ_SCOPE, "openid", "bad+scope", Array(33).fill(0).map((_, index) => `scope${index}`).join(" ")]) {
+      const gmail = googleClient(async () => json(200, { access_token: "access", refresh_token: "refresh", expires_in: 3600, scope }));
+      await assert.rejects(gmail.exchange(input));
+    }
+    for (const profile of [{ email: "owner@example.test" }, { email: "owner@example.test", email_verified: false }, { email: "owner@example.test", email_verified: "true" }, { email: "invalid", email_verified: true }])
+      await assert.rejects(googleClient(async () => json(200, profile)).profile("token"), /verified email/);
+    const refreshed = await googleClient(async () => json(200, { access_token: "new", expires_in: 3600 })).refresh({ clientId: "id", clientSecret: "secret", refreshToken: "refresh" });
+    assert.equal(refreshed.grantedScopes, undefined);
+    assert.deepEqual(parseGrantedScopes(`openid\t${GMAIL_SEND_SCOPE} openid`), ["openid", GMAIL_SEND_SCOPE]);
+    assert.throws(() => parseGrantedScopes("a".repeat(201)));
+    assert.deepEqual(mailCapabilities({ provider: "google", granted_scopes: [] }), { canSend: false, canTrackReplies: false, canAutomate: false });
+    assert.deepEqual(mailCapabilities({ provider: "google", granted_scopes: [GMAIL_SEND_SCOPE] }), { canSend: true, canTrackReplies: false, canAutomate: false });
+    assert.equal(mailCapabilities({ provider: "microsoft" }).canAutomate, true);
+    const auth = new URL(googleClient().authUrl({ clientId: "id", redirectUri: "https://app.test/callback", state: "state" }));
+    assert.ok(auth.searchParams.get("scope").split(" ").includes(GMAIL_READ_SCOPE), "full mode still requests read scope");
   });
 
   await check("AI email drafts parse into subject, body and research notes (also with markdown or no blank line)", () => {

@@ -210,7 +210,7 @@
 @media(prefers-reduced-motion:reduce){.plans-interval button,.billing-signin-button{transition:none}}
 /* Cards: keep every action on one baseline regardless of content length. */
 .billing-plan ul{margin-bottom:24px}.billing-plan .founding-cta{margin-top:auto}
-.plans-allowance span{white-space:nowrap}
+.plans-allowance span{display:inline-block;font-size:12px;line-height:1.5;color:#8b8195;white-space:normal;text-wrap:pretty}
 .billing-section-heading p{font-size:14px}
 .billing-topups-heading p,.billing-support-copy p,.billing-effort-preview p{font-size:14px}
 .billing-pack-caption,.billing-topup-benefits,.billing-topup-availability,.billing-support-note,.billing-support-action>span,.billing-support-price,.billing-support-retry{font-size:12px}

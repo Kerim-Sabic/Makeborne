@@ -67,7 +67,7 @@ const { GET } = load("../../app/api/mail/callback/[provider]/route.ts", {
           assert.equal(input.code, "fixture-code");
           assert.equal(input.redirectUri, `https://app.test/api/mail/callback/${provider}`);
           if (current.exchangeFailure) throw new Error(syntheticSecret);
-          return { refreshToken: `refresh-${current.userId}`, accessToken: `access-${current.userId}`, expiresAt: new Date("2026-10-14T00:00:00Z") };
+          return { refreshToken: `refresh-${current.userId}`, accessToken: `access-${current.userId}`, expiresAt: new Date("2026-10-14T00:00:00Z"), grantedScopes: current.grantedScopes };
         },
         async profile() {
           if (current.profileFailure) throw new Error(syntheticSecret);
@@ -134,7 +134,7 @@ function connected(provider, userId = "owner") {
 async function callback(db, overrides = {}) {
   const current = {
     database: db, provider: "google", userId: "owner", stateUser: "owner", stateWorkspace: "workspace", allowedWorkspace: "workspace", role: "editor",
-    name: "Updated name", email: "Shared@Mail.test", exchangeCalls: 0, authCalls: 0, ...overrides,
+    name: "Updated name", email: "Shared@Mail.test", exchangeCalls: 0, authCalls: 0, grantedScopes: [config.GMAIL_SEND_SCOPE, config.GMAIL_READ_SCOPE], ...overrides,
   };
   return scope.run(current, async () => {
     const signed = config.signState({ userId: current.stateUser, workspaceId: current.stateWorkspace, provider: current.provider, nonce: "fixture-nonce" });
@@ -194,6 +194,18 @@ async function check(name, run) { await run(); passed++; console.log(`PASS ${nam
       assert.equal(result.exchangeCalls, 0);
       assert.equal(db.requests.length, 0);
       assert.equal(db.tokens.length, 0);
+    }
+  });
+  await check("Google persists only returned permissions and requires confirmed send grant on first connection and reconnect", async () => {
+    const db = database();
+    assert.equal((await callback(db, { grantedScopes: [config.GMAIL_SEND_SCOPE] })).result, "connected");
+    assert.deepEqual(db.rows[0].granted_scopes, [config.GMAIL_SEND_SCOPE]);
+    assert.equal((await callback(db, { grantedScopes: [config.GMAIL_SEND_SCOPE, config.GMAIL_READ_SCOPE] })).result, "connected");
+    assert.deepEqual(db.rows[0].granted_scopes, [config.GMAIL_SEND_SCOPE, config.GMAIL_READ_SCOPE]);
+    for (const grantedScopes of [undefined, [], [config.GMAIL_READ_SCOPE]]) {
+      const refused = database();
+      assert.equal((await callback(refused, { grantedScopes })).result, "error");
+      assert.equal(refused.requests.length, 0); assert.equal(refused.tokens.length, 0);
     }
   });
   await check("database failures and missing insert result stop token persistence", async () => {

@@ -161,6 +161,52 @@ export class UnsupportedConfigurationError extends Error {
   constructor(detail: string) { super(`Unsupported AI request configuration: ${detail}. Refusing to call it.`); }
 }
 
+/**
+ * Web search, the only server tool with a price card: the basic, directly-called
+ * version (no dynamic filtering, so no code-execution sandbox), on models whose
+ * Models API record says it is supported, with a mandatory small max_uses.
+ * Each allowed search reserves its fee plus a result-token allowance in the call
+ * bound; actual usage is priced from usage.server_tool_use.web_search_requests.
+ */
+export const WEB_SEARCH = Object.freeze({
+  type: "web_search_20250305", name: "web_search",
+  /** $10 per 1,000 searches. */
+  microusdPerSearch: 10_000,
+  /** Result tokens reserved per allowed search (observed ~5k; results count as input tokens). */
+  resultTokensPerSearch: 20_000,
+  maxUses: 5,
+  models: Object.freeze(["claude-haiku-5-5"]),
+  verifiedAt: "2026-10-14",
+  sources: Object.freeze([
+    "https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool (Usage and pricing: $10 per 1,000 searches plus token costs; max_uses; web_search_20250305 basic version)",
+    "Models API GET /v1/models/claude-haiku-5-5: capabilities.server_tools.web_search.supported = true (checked 2026-10-14)",
+  ]),
+});
+const WEB_SEARCH_KEYS = new Set(["type", "name", "max_uses", "allowed_domains", "blocked_domains", "user_location", "allowed_callers"]);
+function assertWebSearchTool(model: string, tool: Record<string, unknown>) {
+  if (!WEB_SEARCH.models.includes(model)) throw new UnsupportedConfigurationError(`web search on "${model}"`);
+  for (const key of Object.keys(tool)) if (!WEB_SEARCH_KEYS.has(key)) throw new UnsupportedConfigurationError(`web search option "${key}"`);
+  if (tool.name !== WEB_SEARCH.name) throw new UnsupportedConfigurationError("web search tool name");
+  const uses = tool.max_uses;
+  if (!Number.isSafeInteger(uses) || (uses as number) < 1 || (uses as number) > WEB_SEARCH.maxUses) throw new UnsupportedConfigurationError(`web search without max_uses between 1 and ${WEB_SEARCH.maxUses}`);
+  if (tool.allowed_callers !== undefined && JSON.stringify(tool.allowed_callers) !== JSON.stringify(["direct"])) throw new UnsupportedConfigurationError("web search callers other than direct");
+}
+/** Worst case the request's server tools can add to one call: fees plus reserved result tokens. */
+export function serverToolBoundMicrousd(model: string, tools: unknown) {
+  let total = 0;
+  for (const tool of (tools as Array<Record<string, unknown>> | undefined) ?? []) {
+    if (tool?.type !== WEB_SEARCH.type) continue;
+    assertWebSearchTool(model, tool);
+    const uses = tool.max_uses as number;
+    total += uses * (WEB_SEARCH.microusdPerSearch + WEB_SEARCH.resultTokensPerSearch * maxInputTokenMicrousd(model));
+  }
+  return total ? roundBound(total) : 0;
+}
+/** Models whose long prompts cost more: above the threshold, the whole call is billed at the multiple. */
+export const LONG_CONTEXT_PRICING: Readonly<Record<string, { thresholdTokens: number; multiplier: number }>> = Object.freeze({
+  "claude-haiku-5-5": { thresholdTokens: 100_000, multiplier: 5 },
+});
+
 /** Text request parameters the price card covers. Anything else is refused. */
 const TEXT_PARAMS = new Set(["model", "max_tokens", "messages", "system", "tools", "thinking", "output_config", "cache_control", "betas"]);
 const TEXT_BETAS = new Set(["thinking-display-updates-2026-08-18"]);
@@ -169,8 +215,9 @@ export function assertSupportedTextRequest(params: Record<string, unknown>) {
   textPrice(String(params.model));
   for (const beta of (params.betas as unknown[] | undefined) ?? []) if (!TEXT_BETAS.has(String(beta))) throw new UnsupportedConfigurationError(`beta "${String(beta)}"`);
   for (const tool of (params.tools as Array<Record<string, unknown>> | undefined) ?? []) {
-    // Client tools only: server tools (web search, code execution, ...) bill separately.
-    if (tool.type !== undefined && tool.type !== "custom") throw new UnsupportedConfigurationError(`tool type "${String(tool.type)}"`);
+    // Client tools, plus the one priced server tool (basic web search, capped). Everything else bills in ways we don't bound.
+    if (tool.type === WEB_SEARCH.type) assertWebSearchTool(String(params.model), tool);
+    else if (tool.type !== undefined && tool.type !== "custom") throw new UnsupportedConfigurationError(`tool type "${String(tool.type)}"`);
   }
   const cache = params.cache_control as { type?: string; ttl?: string } | undefined;
   if (cache && (cache.type !== "ephemeral" || (cache.ttl !== undefined && cache.ttl !== "5m"))) throw new UnsupportedConfigurationError("cache TTL other than 5 minutes");
@@ -222,6 +269,7 @@ export type TextUsageLike = {
   input_tokens: number; output_tokens: number;
   cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null; cache_creation?: CacheCreation;
   inference_geo?: string | null; speed?: string | null;
+  server_tool_use?: Record<string, number | null | undefined> | null;
   iterations?: Array<TextUsageLike & { model?: string | null; type?: string }> | null;
 };
 
@@ -235,7 +283,15 @@ function attemptCost(model: string, usage: TextUsageLike) {
   const writes = split && (split.ephemeral_5m_input_tokens != null || split.ephemeral_1h_input_tokens != null)
     ? (split.ephemeral_5m_input_tokens ?? 0) * price.cacheWrite5m + (split.ephemeral_1h_input_tokens ?? 0) * price.cacheWrite1h
     : created * price.cacheWrite1h;
-  return (usage.input_tokens * price.input + (usage.cache_read_input_tokens ?? 0) * price.cacheRead + writes + usage.output_tokens * price.output) * geo;
+  const prompt = usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + created;
+  const long = LONG_CONTEXT_PRICING[model], tier = long && prompt > long.thresholdTokens ? long.multiplier : 1;
+  let tools = 0;
+  for (const [key, count] of Object.entries(usage.server_tool_use ?? {})) {
+    if (!count) continue;
+    if (key !== "web_search_requests") throw new UnpricedModelError(`${model} (server tool ${key})`);
+    tools += count * WEB_SEARCH.microusdPerSearch;
+  }
+  return (usage.input_tokens * price.input + (usage.cache_read_input_tokens ?? 0) * price.cacheRead + writes + usage.output_tokens * price.output) * geo * tier + tools;
 }
 
 /** Billed cost of one response. When `usage.iterations` is present it is the

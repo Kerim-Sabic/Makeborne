@@ -1,4 +1,4 @@
-import { providerConfig, verifyState, type MailProvider } from "@/lib/mail/config";
+import { GMAIL_SEND_SCOPE, providerConfig, verifyState, type MailProvider } from "@/lib/mail/config";
 import { providerClient } from "@/lib/mail/providers";
 import { storeTokens } from "@/lib/mail/engine";
 import { mailContext } from "@/lib/mail/server";
@@ -24,11 +24,13 @@ export async function GET(request: Request, context: { params: Promise<{ provide
     if (user.id !== state.userId) return back("error", "You were signed in as someone else. Sign in as the right account and connect again.");
     const client = providerClient(provider as MailProvider);
     const tokens = await client.exchange({ ...config, redirectUri: `${url.origin}/api/mail/callback/${provider}`, code });
+    if (provider === "google" && !tokens.grantedScopes?.includes(GMAIL_SEND_SCOPE)) return back("error", "Google did not confirm sending permission. Connect again and allow sending.");
     const profile = await client.profile(tokens.accessToken);
     if (!profile.email) return back("error", "The mailbox didn't share its address.");
     const now = new Date().toISOString();
     const email = profile.email.toLowerCase();
-    const changes = { display_name: profile.name.slice(0, 160), status: "active", last_error: null, updated_at: now };
+    const changes = { display_name: profile.name.slice(0, 160), status: "active", last_error: null, updated_at: now,
+      ...(provider === "google" ? { granted_scopes: tokens.grantedScopes } : {}) };
     // Let the unique constraint choose the first owner, including concurrent connects.
     // Reconnects may change metadata only on a row already owned by this user.
     // Never upsert user_id: a prior ownership read cannot protect a later write.

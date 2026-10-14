@@ -1,6 +1,6 @@
 // Local-only build/server runner. Never inherits saved provider keys.
 // The explicit sandbox mode loads only the guarded, ignored sandbox config.
-import {readFileSync, existsSync} from 'node:fs';
+import {readFileSync, existsSync, readdirSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 const mode=process.argv[2];
 if(!['build','start','maintenance','sandbox'].includes(mode)) throw new Error('Choose build, start, maintenance, or sandbox');
@@ -27,6 +27,25 @@ if(mode==='sandbox') {
 // Optional port (third argument) so several local servers can run side by side.
 const port=process.argv[3]??(mode==='maintenance'?'3049':'3048');if(!/^\d{4,5}$/.test(port))throw new Error('Port must be numeric');
 const args=mode==='build'?['build']:['start','--hostname','127.0.0.1','--port',port];
+// Browser bundles carry the Supabase URL they were built with. A build made with cloud settings
+// (for example a plain `next build` reading .env.local) must never be served by this local runner.
+function cloudSupabaseInBuild() {
+  const dir='.next/static/chunks';
+  if(!existsSync(dir)) return null;
+  for(const name of readdirSync(dir,{recursive:true})) {
+    if(!String(name).endsWith('.js')) continue;
+    const match=/https:\/\/[a-z0-9]{20}\.supabase\.(co|in)/.exec(readFileSync(`${dir}/${name}`,'utf8'));
+    if(match) return match[0];
+  }
+  return null;
+}
+if(mode!=='build') {
+  const cloud=cloudSupabaseInBuild();
+  if(cloud) throw new Error(`The .next build points at a cloud Supabase project (${cloud.replace(/https:\/\/(.{4}).*/,'https://$1…')}). Run "node scripts/local-release-server.mjs build" first.`);
+}
 const child=spawn(process.execPath,['node_modules/next/dist/bin/next',...args],{env,stdio:'inherit'});
-child.on('exit',code=>{process.exitCode=code??1});
+child.on('exit',code=>{
+  process.exitCode=code??1;
+  if(mode==='build'&&code===0&&cloudSupabaseInBuild()) { console.error('Build finished but contains a cloud Supabase URL; refusing to treat it as a local build.'); process.exitCode=1; }
+});
 for(const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>child.kill(signal));

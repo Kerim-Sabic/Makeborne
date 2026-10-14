@@ -30,6 +30,7 @@ chat, a file or a log.
 - [ ] Single user-action cumulative credit authorization is qualified across builds, continuations, reviews and recovery; displayed maxima match server enforcement.
 - [ ] Anonymous client review rejects stale displayed versions and exposes no presenter notes, generation prompts or source provenance. Canonical documents and authorized artwork match the version the client approves.
 - [ ] Paid entitlements and fair-use limits match enforcement and checkout copy. The current candidate has more migrations than the historical 45-file staging baseline; use a newly verified inventory.
+- [ ] Credit-pack payment verification has `payment:dispute:read` on the matching company key. Whop returns `disputes: null` without that permission; do not convert it to an empty list or grant credits from it. Verify a real retrieved payment, bound checkout/account, single credit grant and replay before enabling packs. Sandbox permission proof does not authorize changing the production key.
 - [ ] The recovery application reads every document format the candidate can save, including authored compositions and optional chapter `opening`. Test existing and newly written books/decks against that exact recovery build. Earlier strict schemas can reject these fields: retaining the database alone does not establish application rollback compatibility. Never strip saved fields to force an old build to accept them.
 
 ## B. Backups

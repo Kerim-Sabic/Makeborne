@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-14T00:20:52.952Z",
+  "sandboxOnly": true,
+  "checkoutId": "ch_Jvs82zypdUgZcKG",
+  "paymentId": "pay_3rTyDloatTh944",
+  "paymentStatus": "paid",
+  "paymentSubstatus": "succeeded",
+  "currency": "usd",
+  "total": 12,
+  "purchaseSubmittedOnce": true,
+  "providerIdentityAndCheckoutVerified": true,
+  "providerDisputesIsNull": false,
+  "requiredPermission": "payment:dispute:read",
+  "permissionChangeApproved": true,
+  "localDelivery": {
+    "mode": "captured",
+    "proof": "Captured response through real adapter and service-role SQL; no HTTP or signed-webhook proof",
+    "paymentFixtureSha256": "9accada2d3bcba865b901ca407ce4fece221b0e9543c75c483c7a38d491302a8",
+    "paymentId": "pay_3rTyDloatTh944",
+    "adapterSources": [
+      {
+        "file": "topup-checkout.ts",
+        "sha256": "cdb39e979973aed67d4baf9f2baa0b860a591de323dd67c0a2965d26266ede12"
+      },
+      {
+        "file": "topup-delivery.ts",
+        "sha256": "762dddf3330d3397f8eb6890a8756908e9b635b4834c83b10b386f9f83c024f2"
+      },
+      {
+        "file": "topup-fulfillment.ts",
+        "sha256": "5c1c0b90d8be4d3ea84807751b8337f5ae2078beecf8740000c70bb2bc8337ce"
+      },
+      {
+        "file": "topups-contracts.ts",
+        "sha256": "1f45d84a1c5516f3bab0ba88e864209a0fb450116e00dc9a716b5a0eb1766a05"
+      },
+      {
+        "file": "topups-reconcile.ts",
+        "sha256": "7a0fed7a1638d07712e1d0bcae44c0f21e0990db4d99fdb08c0175aff9dbc2ac"
+      },
+      {
+        "file": "topups-catalog.ts",
+        "sha256": "63063ab7c32217af38644676fd40637ef7eda796b5362fb049f2d084e4a10553"
+      },
+      {
+        "file": "whop.ts",
+        "sha256": "89c2c226d3b109dc91ab70123b3d3245f65b57525a3d8ac01774c218a611e8e1"
+      },
+      {
+        "file": "plans.ts",
+        "sha256": "c1af12c0820f2f6c279fd4f19b550565fc03c8681131d73aa7c91fc980963cc7"
+      }
+    ],
+    "before": {
+      "lots": [],
+      "order": {
+        "id": "5ca2a432-4d8d-4f19-97f5-91458cda0cad",
+        "state": "awaiting_payment",
+        "granted": false,
+        "paymentId": null,
+        "checkoutId": "ch_Jvs82zypdUgZcKG",
+        "checkoutAttempts": 1
+      },
+      "ledger": [],
+      "available": 0
+    },
+    "after": {
+      "lots": [
+        {
+          "held": 0,
+          "spent": 0,
+          "amount": 100,
+          "lapsed": 0,
+          "source": "topup",
+          "expiresAt": null
+        }
+      ],
+      "order": {
+        "id": "5ca2a432-4d8d-4f19-97f5-91458cda0cad",
+        "state": "funded",
+        "granted": true,
+        "paymentId": "pay_3rTyDloatTh944",
+        "checkoutId": "ch_Jvs82zypdUgZcKG",
+        "checkoutAttempts": 1
+      },
+      "ledger": [
+        {
+          "kind": "topup",
+          "delta": 100,
+          "reference": "credit_topup:pay_3rTyDloatTh944:grant"
+        }
+      ],
+      "available": 100
+    },
+    "result": true,
+    "error": null,
+    "repeatedDelivery": true,
+    "fixtureReads": 2,
+    "providerCalls": 0,
+    "signedWebhookProof": false
+  },
+  "fixtureSecretNullRegressionPassed": true,
+  "nonNullSecretsStillRejected": true,
+  "providerContractUrl": "https://docs.whop.com/api-reference/payments/retrieve-payment",
+  "providerSchemaSha256": "525fc65598875215d2bdd1f441a88651fe56d676548bc4dfab300460f678fb4b",
+  "status": "PASS_CAPTURED_PROVIDER_ADAPTER_SQL",
+  "signedWebhookProof": false,
+  "protectedDatabasesTouched": false,
+  "productionTouched": false,
+  "aiCalls": 0,
+  "realCharges": 0,
+  "limitations": [
+    "Captured real GET through actual adapters and service-role SQL; not a fresh signed webhook through full authenticated app.",
+    "Synthetic admin test fixture bypassed subscription eligibility; customer checkout access still needs full app qualification.",
+    "Only the tax-free USD one-time pack is qualified; taxed/promotional/refund cases need separate real provider evidence.",
+    "Production key and checkout activation remain unchanged."
+  ],
+  "blockedAttempt": {
+    "mode": "captured",
+    "proof": "Captured response through real adapter and service-role SQL; no HTTP or signed-webhook proof",
+    "paymentFixtureSha256": "59e72909fc3f9ade32bc82270405196cb754459cb25a3950d037b9ef8b4b4302",
+    "paymentId": "pay_3rTyDloatTh944",
+    "adapterSources": [
+      {
+        "file": "topup-checkout.ts",
+        "sha256": "cdb39e979973aed67d4baf9f2baa0b860a591de323dd67c0a2965d26266ede12"
+      },
+      {
+        "file": "topup-delivery.ts",
+        "sha256": "762dddf3330d3397f8eb6890a8756908e9b635b4834c83b10b386f9f83c024f2"
+      },
+      {
+        "file": "topup-fulfillment.ts",
+        "sha256": "5c1c0b90d8be4d3ea84807751b8337f5ae2078beecf8740000c70bb2bc8337ce"
+      },
+      {
+        "file": "topups-contracts.ts",
+        "sha256": "1f45d84a1c5516f3bab0ba88e864209a0fb450116e00dc9a716b5a0eb1766a05"
+      },
+      {
+        "file": "topups-reconcile.ts",
+        "sha256": "7a0fed7a1638d07712e1d0bcae44c0f21e0990db4d99fdb08c0175aff9dbc2ac"
+      },
+      {
+        "file": "topups-catalog.ts",
+        "sha256": "63063ab7c32217af38644676fd40637ef7eda796b5362fb049f2d084e4a10553"
+      },
+      {
+        "file": "whop.ts",
+        "sha256": "89c2c226d3b109dc91ab70123b3d3245f65b57525a3d8ac01774c218a611e8e1"
+      },
+      {
+        "file": "plans.ts",
+        "sha256": "c1af12c0820f2f6c279fd4f19b550565fc03c8681131d73aa7c91fc980963cc7"
+      }
+    ],
+    "before": {
+      "lots": [],
+      "order": {
+        "id": "5ca2a432-4d8d-4f19-97f5-91458cda0cad",
+        "state": "awaiting_payment",
+        "granted": false,
+        "paymentId": null,
+        "checkoutId": "ch_Jvs82zypdUgZcKG",
+        "checkoutAttempts": 1
+      },
+      "ledger": [],
+      "available": 0
+    },
+    "after": {
+      "lots": [],
+      "order": {
+        "id": "5ca2a432-4d8d-4f19-97f5-91458cda0cad",
+        "state": "awaiting_payment",
+        "granted": false,
+        "paymentId": null,
+        "checkoutId": "ch_Jvs82zypdUgZcKG",
+        "checkoutAttempts": 1
+      },
+      "ledger": [],
+      "available": 0
+    },
+    "error": {
+      "code": "TOPUP_DELIVERY_UNVERIFIED",
+      "message": "Credit delivery requires verification. Retry delivery or contact support."
+    },
+    "repeatedDelivery": false,
+    "fixtureReads": 1,
+    "providerCalls": 0,
+    "signedWebhookProof": false
+  },
+  "permissionSavedAndReadBack": true,
+  "permissionScope": "Existing sandbox key only; payment:dispute:read; selected permission count12 to13",
+  "verifiedAt": "2026-10-14T00:22:43.447Z",
+  "realRetrievedDisputesCount": 0,
+  "adapterAndSqlAssertions": {
+    "onePurchase": true,
+    "twoDeliveryAttempts": true,
+    "credits": 100,
+    "ledgerGrants": 1,
+    "nonExpiringLots": 1,
+    "heldCredits": 0
+  },
+  "harnessInputs": [
+    {
+      "file": "scripts/qualify-topup-local.cjs",
+      "sha256": "162d25ddfd81468997ab5312b40177f196610b99364bd48c9855be0a7b4ddb1a"
+    },
+    {
+      "file": "src/lib/billing/check-topup-fulfillment.cjs",
+      "sha256": "550699afe6835663e24a95c64b1354e6c753e033bd5c85fdfca55ccec630b679"
+    }
+  ],
+  "cleanup": {
+    "verifiedAt": "2026-10-14T00:23:05.923Z",
+    "ownedContainerRemoved": true,
+    "anonymousVolumesRemovedByDocker": true,
+    "retainedEvidence": true
+  }
+}

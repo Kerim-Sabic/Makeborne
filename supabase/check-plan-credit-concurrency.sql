@@ -44,8 +44,8 @@ begin
               (select count(*) from makeborne_private.plan_observations where membership_id=''mem_conc''),
               (select sum(lapsed) from makeborne_private.credit_lots where user_id=%L and source=''plan'')',u,u,u,u))
       as r(grants bigint, total bigint, balance bigint, periods bigint, observations bigint, lapsed bigint);
-    -- Months 1-3 have ended: recorded once and lapsed; only month 4 is spendable.
-    assert w.grants=4 and w.total=4*850 and w.balance=850 and w.lapsed=3*850 and w.periods=1 and w.observations=5,
+    -- Month 1 has passed its two-month rollover; months 2-3 plus current month 4 remain spendable.
+    assert w.grants=4 and w.total=4*850 and w.balance=3*850 and w.lapsed=850 and w.periods=1 and w.observations=5,
       format('Concurrent grants wrong: %s', row_to_json(w));
   exception when others or assert_failure then   -- assert failures are not caught by OTHERS
     perform extensions.dblink_disconnect(x) from unnest(extensions.dblink_get_connections()) x where x<>'admin';
@@ -55,6 +55,6 @@ begin
   end;
   perform extensions.dblink_exec('admin',format('delete from auth.users where id=%L',u));
   perform extensions.dblink_disconnect('admin');
-  raise notice 'PASS concurrency: 4 duplicate observations + 4 duplicate payment deliveries + a racing reconcile -> 4 started allocations granted exactly once (4 x 850; 3 ended and lapsed), 1 period, 4 observations + 1 payment kept';
+  raise notice 'PASS concurrency: 4 duplicate observations + 4 duplicate payment deliveries + a racing reconcile -> 4 started allocations granted exactly once (4 x 850; 1 expired, 2 rolled over and 1 current), 1 period, 4 observations + 1 payment kept';
 end $$;
 rollback;

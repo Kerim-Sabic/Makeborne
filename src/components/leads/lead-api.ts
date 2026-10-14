@@ -19,7 +19,8 @@ export function useLeadMeta(accountId: string, workspaceId: string | undefined, 
 
 export const leadApi = {
   update: (accountId: string, workspaceId: string, clientId: string, change: Partial<{ tags: string[]; dealValue: number | null; dealCurrency: string; source: string;
-    insight: { niche: string; audience: string; angle: string; confidence: "high" | "medium" | "low" | "" } }>) =>
+    insight: { niche: string; audience: string; angle: string; confidence: "high" | "medium" | "low" | "" };
+    research: { url: string; platform: string; handle: string | null; followers: string | null; following: string | null; posts: string | null; bio: string } }>) =>
     mailApi<{ lead: Lead }>(accountId, `/api/cloud/workspaces/${workspaceId}/clients/${clientId}/lead`, "PATCH", change),
   research: (accountId: string, workspaceId: string, clientId: string) =>
     mailApi<{ lead: Lead | null; read: number; skipped: { url: string; reason: string }[] }>(accountId, `/api/cloud/workspaces/${workspaceId}/clients/${clientId}/lead/research`, "POST", {}),

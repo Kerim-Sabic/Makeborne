@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Pause, Play, Send, Sparkles, Square, Workflow } from "lucide-react";
 import { generateEmailDraft } from "./ai-draft";
-import { mailApi, providerLabel, TOKEN_HELP, type Enrollment, type MailMessage, type MailOverview } from "./mail-api";
+import { mailApi, MANUAL_MAIL_NOTICE, providerLabel, TOKEN_HELP, type Enrollment, type MailMessage, type MailOverview } from "./mail-api";
 
 /** One client's email: the full thread, a composer that sends from your own mailbox, and their sequence. */
 export default function ClientEmail({ accountId, workspaceId, client, canEdit, onSent, onOpenEmailCenter }: {
@@ -24,14 +24,15 @@ export default function ClientEmail({ accountId, workspaceId, client, canEdit, o
         mailApi<{ enrollments: Enrollment[] }>(accountId, `${base}/mail/enrollments?client=${client.id}`),
       ]);
       setMessages(thread.messages); setOverview(info); setEnrollments(enrolled.enrollments);
-      setMailbox(current => current || info.accounts.find(account => account.mine && account.status === "active")?.id || "");
+      setMailbox(current => info.accounts.some(account => account.id === current && account.mine && account.status === "active" && account.canSend) ? current : info.accounts.find(account => account.mine && account.status === "active" && account.canSend)?.id || "");
       setReply(current => current || thread.messages.some(item => item.direction === "out" && item.status === "sent"));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Email is unavailable."); }
   }, [accountId, base, client.id]);
   // Load after mount (from a callback, so the effect itself never sets state).
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
-  const mine = overview?.accounts.filter(account => account.mine && account.status === "active") ?? [];
+  const mine = overview?.accounts.filter(account => account.mine && account.status === "active" && account.canSend) ?? [];
+  const sender = mine.find(account => account.id === mailbox);
   const running = enrollments.find(item => item.status === "active" || item.status === "paused");
   async function send() {
     if (busy) return;
@@ -71,11 +72,12 @@ export default function ClientEmail({ accountId, workspaceId, client, canEdit, o
   if (!messages || !overview) return error ? <p className="mc-error" role="alert">{error}</p> : <div className="ac-skeleton ac-skeleton-detail" role="status" aria-label="Loading email"><span /><span /></div>;
   return <section className="ce" aria-label={`Email with ${client.name}`}>
     {!client.email && <p className="mc-note"><AlertTriangle size={14} /> Add an email address in Contact details to email {client.name}.</p>}
-    {mine.length === 0 && <p className="mc-note"><AlertTriangle size={14} /> Connect your Gmail or Outlook to email clients from Makeborne. <button type="button" className="mc-link" onClick={onOpenEmailCenter}>Open Email</button></p>}
+    {mine.length === 0 && <p className="mc-note"><AlertTriangle size={14} /> Connect or reconnect your Gmail or Outlook to confirm sending permission. <button type="button" className="mc-link" onClick={onOpenEmailCenter}>Open Email</button></p>}
+    {sender && !sender.canTrackReplies && <p className="mc-note">{MANUAL_MAIL_NOTICE}</p>}
 
     {running && <div className="ce-sequence"><Workflow size={15} /><span>In sequence <strong>{overview.sequences.find(item => item.id === running.sequenceId)?.name ?? "(archived)"}</strong> · {running.status === "active" && running.nextSendAt ? `email ${running.nextStep + 1} on ${new Date(running.nextSendAt).toLocaleString()}` : running.status}{running.lastError ? ` · ${running.lastError}` : ""}</span>
       {canEdit && <div className="mc-row-actions">
-        {running.status === "active" ? <button type="button" className="button ghost small" onClick={() => void change(running.id, "pause")}><Pause size={13} />Pause</button> : <button type="button" className="button ghost small" onClick={() => void change(running.id, "resume")}><Play size={13} />Resume</button>}
+        {running.status === "active" ? <button type="button" className="button ghost small" onClick={() => void change(running.id, "pause")}><Pause size={13} />Pause</button> : overview.accounts.some(account => account.id === running.accountId && account.canAutomate) && <button type="button" className="button ghost small" onClick={() => void change(running.id, "resume")}><Play size={13} />Resume</button>}
         <button type="button" className="button ghost small" onClick={() => void change(running.id, "stop")}><Square size={13} />Stop</button></div>}</div>}
 
     <ol className="ce-thread">{messages.length === 0 ? <li className="mc-empty">No emails with {client.name} yet.</li> : messages.map(item => <li key={item.id} className={`ce-message is-${item.direction}${item.status === "failed" || item.status === "unknown" ? " is-problem" : ""}`}>
@@ -97,11 +99,11 @@ export default function ClientEmail({ accountId, workspaceId, client, canEdit, o
       <input aria-label="Subject" value={subject} maxLength={300} placeholder={reply ? "Subject (Re: is added when replying in the thread)" : "Subject"} onChange={event => setSubject(event.target.value)} />
       <textarea aria-label="Email" value={body} rows={7} maxLength={20000} placeholder={`Write to ${client.name}…`} onChange={event => setBody(event.target.value)} />
       <div className="ce-compose-foot">
-        {messages.some(item => item.direction === "out" && item.status === "sent") && <label className="mc-check"><input type="checkbox" checked={reply} onChange={event => setReply(event.target.checked)} />Reply in the last thread</label>}
+        {messages.some(item => item.direction === "out" && item.status === "sent") && <label className="mc-check"><input type="checkbox" checked={reply} onChange={event => setReply(event.target.checked)} />Follow up in the last sent thread</label>}
         <small>Sending is free. {TOKEN_HELP}</small>
         <button type="button" className="button primary" disabled={busy || !mailbox || !subject.trim() || !body.trim()} onClick={() => void send()}><Send size={15} />{busy ? "Sending…" : "Send"}</button>
       </div>
-      {!running && overview.sequences.length > 0 && <div className="ce-compose-row ce-enroll"><label>Or start a sequence<select value={sequence} onChange={event => setSequence(event.target.value)}><option value="">Choose a sequence…</option>{overview.sequences.map(item => <option key={item.id} value={item.id}>{item.name} ({item.steps.length} emails)</option>)}</select></label>
+      {!running && sender?.canAutomate && overview.sequences.length > 0 && <div className="ce-compose-row ce-enroll"><label>Or start a sequence<select value={sequence} onChange={event => setSequence(event.target.value)}><option value="">Choose a sequence…</option>{overview.sequences.map(item => <option key={item.id} value={item.id}>{item.name} ({item.steps.length} emails)</option>)}</select></label>
         <button type="button" className="button secondary" disabled={busy || !sequence || !mailbox} onClick={() => void enroll()}><Workflow size={15} />Start sequence</button></div>}
     </div>}
     {message && <p className="mc-message" role="status">{message}</p>}

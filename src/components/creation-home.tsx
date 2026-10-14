@@ -108,9 +108,9 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
     <main className="mk-home">
       <header className="mk-nav">
         <Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={30} /><span>Makeborne</span></Link>
-        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
+        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
         <div className="mk-nav-actions"><StudioAccount variant="home" initialEmail={initialEmail} enabled={accountsEnabled} /><Link className="mk-nav-cta" href="/studio">Open studio <ArrowUpRight size={14} /></Link><button className="mk-menu-toggle" aria-label={menu ? "Close navigation" : "Open navigation"} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X size={20} /> : <Menu size={20} />}</button></div>
-        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
+        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
       </header>
       <section className="mk-hero" aria-labelledby="creation-heading">
         <div className="mk-atmosphere" aria-hidden="true"><span /><span /><span /></div>

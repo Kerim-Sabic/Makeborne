@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { cloudBody, cloudContext, cloudError, cloudJson, databaseError, validId } from "@/lib/cloud/server";
 import { RequestError } from "@/lib/server/http";
-import { CURRENCIES, LEAD_SOURCES, LeadInsightSchema, leadFromRow, normalizeTag } from "@/lib/leads";
+import { CURRENCIES, LEAD_SOURCES, LeadInsightSchema, LeadResearchSchema, leadFromRow, normalizeTag } from "@/lib/leads";
 
 type Context = { params: Promise<{ workspaceId: string; clientId: string }> };
 const Change = z.object({
@@ -10,6 +10,8 @@ const Change = z.object({
   dealCurrency: z.enum(CURRENCIES).optional(),
   source: z.enum(LEAD_SOURCES).optional(),
   insight: LeadInsightSchema.omit({ at: true }).optional(),
+  /** What the lead finder read on their public page (saved when the lead is added). */
+  research: LeadResearchSchema.omit({ at: true }).optional(),
 }).strict();
 
 /** Edit a client's lead details (tags, deal, source) or store what the AI concluded about them. */
@@ -25,11 +27,12 @@ export async function PATCH(request: Request, context: Context) {
     if (body.dealValue !== undefined) fields.deal_value = body.dealValue === null ? null : Math.round(body.dealValue * 100) / 100;
     if (body.dealCurrency) fields.deal_currency = body.dealCurrency;
     if (body.source !== undefined) fields.lead_source = body.source;
-    if (body.insight) {
+    if (body.insight || body.research) {
       const { data: current, error } = await client.from("clients").select("lead_profile").eq("id", clientId).eq("workspace_id", workspaceId).maybeSingle();
       databaseError(error);
       if (!current) throw new RequestError("NOT_FOUND", "This client is unavailable in this workspace.", 404);
-      fields.lead_profile = { ...(current.lead_profile as object), insight: { ...body.insight, at: new Date().toISOString() } };
+      const at = new Date().toISOString();
+      fields.lead_profile = { ...(current.lead_profile as object), ...(body.insight ? { insight: { ...body.insight, at } } : {}), ...(body.research ? { research: { ...body.research, at } } : {}) };
     }
     if (!Object.keys(fields).length) throw new RequestError("EMPTY_CHANGE", "Choose something to change.");
     const { data, error } = await client.from("clients").update(fields).eq("id", clientId).eq("workspace_id", workspaceId).select("id,tags,deal_value,deal_currency,lead_source,lead_profile,updated_at").maybeSingle();

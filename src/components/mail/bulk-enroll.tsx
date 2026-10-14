@@ -18,11 +18,11 @@ export default function BulkEnroll({ accountId, workspaceId, clients, onDone, on
     void mailApi<MailOverview>(accountId, `/api/cloud/workspaces/${workspaceId}/mail`).then(data => {
       if (!live) return;
       setOverview(data);
-      setMailbox(data.accounts.find(account => account.mine && account.status === "active")?.id ?? "");
+      setMailbox(data.accounts.find(account => account.mine && account.status === "active" && account.canAutomate)?.id ?? "");
     }).catch(() => undefined);
     return () => { live = false; };
   }, [accountId, workspaceId]);
-  const mine = overview?.accounts.filter(account => account.mine && account.status === "active") ?? [];
+  const mine = overview?.accounts.filter(account => account.mine && account.status === "active" && account.canAutomate) ?? [];
   async function add() {
     setBusy(true);
     try {
@@ -38,7 +38,7 @@ export default function BulkEnroll({ accountId, workspaceId, clients, onDone, on
     <button type="button" className="button primary small bulk-ai" onClick={() => setPersonalizing(true)}><Sparkles size={14} />Write personal emails</button>
     {personalizing && <PersonalizeQueue accountId={accountId} workspaceId={workspaceId} clients={clients} onClose={() => setPersonalizing(false)} onDone={onDone} />}
     {!overview ? <span className="mc-fine">Loading sequences…</span>
-      : !mine.length || !overview.sequences.length ? <span className="mc-fine">{!mine.length ? "Connect a mailbox" : "Create a sequence"} in <button type="button" className="mc-link" onClick={onOpenEmailCenter}>Email</button> to automate follow-ups.</span>
+      : !mine.length || !overview.sequences.length ? <span className="mc-fine">{!mine.length ? "Automatic follow-ups need a mailbox with reply tracking." : "Create a sequence to automate follow-ups."} See <button type="button" className="mc-link" onClick={onOpenEmailCenter}>Email</button>.</span>
       : <>
         <span className="bulk-or">or</span><select aria-label="Sequence" value={sequence} onChange={event => setSequence(event.target.value)}><option value="">Add to sequence…</option>{overview.sequences.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
         {mine.length > 1 && <select aria-label="Send from" value={mailbox} onChange={event => setMailbox(event.target.value)}>{mine.map(account => <option key={account.id} value={account.id}>{account.email}</option>)}</select>}
