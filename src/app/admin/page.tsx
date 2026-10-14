@@ -1,56 +1,79 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, Check, ChevronRight, CircleDashed, CreditCard, Database, Globe2, LockKeyhole, RefreshCw, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-react";
 import BrandMark from "@/components/brand-mark";
 import { getAccountPrivileges } from "@/lib/account/privileges";
+import { adminCustomer, adminCustomers, adminOverview, CUSTOMER_FILTERS, type CustomerFilter } from "@/lib/admin/console";
 import { billingUser } from "@/lib/billing/access";
-import { getCloudStatus } from "@/lib/cloud/config";
-import { PLANNED_ROUTES } from "@/lib/routing/registry";
+import { getCapabilities } from "@/lib/capabilities/server";
+import CustomersTab from "./customers";
+import { CreditsTab, SubscriptionsTab } from "./money";
+import OverviewTab, { overviewAlerts } from "./overview";
+import SystemTab from "./system";
+import { exactTime, requestTime } from "./format";
 import "./admin.css";
 
-export const metadata: Metadata = { title: "Studio operations", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "customers", label: "Customers" },
+  { id: "subscriptions", label: "Subscriptions" },
+  { id: "credits", label: "Credits & AI" },
+  { id: "system", label: "System" },
+] as const;
+type TabId = typeof TABS[number]["id"];
+const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
+
+export default async function AdminPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await billingUser();
   if (!user) redirect("/login?next=%2Fadmin");
-  const accountPrivileges = await getAccountPrivileges(user.id);
-  if (!accountPrivileges.isAdmin) notFound();
-  const cloud = getCloudStatus();
-  const configuredRoutes = PLANNED_ROUTES.filter(route => route.status !== "unconfigured").length;
-  const checks = [
-    { label: "Supabase configuration", set: cloud.configured, detail: "Project URL and publishable key are accepted by the app configuration reader." },
-    { label: "Migration verification flag", set: cloud.migrationsVerified, detail: "Operator acknowledgement only. This page does not run database or permission checks." },
-    { label: "Cloud workspace enabled", set: cloud.enabled, detail: "The app requires configuration, migration acknowledgement, and its cloud feature flag." },
-  ];
+  const privileges = await getAccountPrivileges(user.id);
+  if (!privileges.isAdmin) notFound();
 
+  const params = await searchParams;
+  const tab: TabId = TABS.some(item => item.id === one(params.tab)) ? one(params.tab) as TabId : "overview";
+  const filter: CustomerFilter = CUSTOMER_FILTERS.includes(one(params.filter) as CustomerFilter) ? one(params.filter) as CustomerFilter : "all";
+  const state = { q: (one(params.q) ?? "").trim().slice(0, 200), filter, page: Math.min(40_000, Math.max(1, Number.parseInt(one(params.page) ?? "1", 10) || 1)), customer: one(params.customer) ?? null };
+  const now = requestTime();
+
+  type Loaded =
+    | { kind: "system" }
+    | { kind: "customers"; page: Awaited<ReturnType<typeof adminCustomers>>; detail: Awaited<ReturnType<typeof adminCustomer>> }
+    | { kind: "overview"; data: Awaited<ReturnType<typeof adminOverview>> }
+    | { kind: "error" };
+  let loaded: Loaded;
+  try {
+    if (tab === "system") loaded = { kind: "system" };
+    else if (tab === "customers") {
+      const [page, detail] = await Promise.all([adminCustomers(user.id, { search: state.q, filter: state.filter, page: state.page }), state.customer ? adminCustomer(user.id, state.customer) : Promise.resolve(null)]);
+      loaded = { kind: "customers", page, detail };
+    } else loaded = { kind: "overview", data: await adminOverview(user.id) };
+  } catch {
+    loaded = { kind: "error" };
+  }
+  const alertCount = loaded.kind === "overview" ? overviewAlerts(loaded.data).length : 0;
+  const generatedAt = loaded.kind === "overview" ? loaded.data.generatedAt : null;
+  const content = loaded.kind === "system" ? <SystemTab operations={getCapabilities({ administrator: true }).operations} />
+    : loaded.kind === "customers" ? <CustomersTab page={loaded.page} detail={loaded.detail} state={state} now={now} />
+    : loaded.kind === "overview" ? (tab === "overview" ? <OverviewTab data={loaded.data} now={now} /> : tab === "subscriptions" ? <SubscriptionsTab data={loaded.data} now={now} /> : <CreditsTab data={loaded.data} />)
+    : <section className="mbo-panel mbo-error" role="alert"><AlertTriangle size={18} aria-hidden="true" /><div><h2>Admin data could not be loaded</h2><p>The database did not answer, or this deployment has not been migrated yet (<code>20261013100000_admin_console.sql</code>). Nothing was changed. Try again in a moment.</p></div></section>;
+
+  const refresh = new URLSearchParams(Object.entries({ tab, q: state.q, filter: state.filter === "all" ? "" : state.filter, page: state.page > 1 ? String(state.page) : "", customer: state.customer ?? "" }).filter(([, value]) => value));
   return <div className="mbo-shell">
-    <a className="mbo-skip" href="#operations-main">Skip to operations</a>
+    <a className="mbo-skip" href="#admin-main">Skip to content</a>
     <header className="mbo-topbar">
-      <Link className="mbo-brand" href="/studio"><BrandMark /><span>Makeborne<span className="mbo-brand-divider">/</span><small>Operations</small></span></Link>
-      <div className="mbo-top-actions"><span className="mbo-environment"><span />Administrator</span><Link href="/studio"><ArrowLeft size={15} />Back to studio</Link></div>
+      <Link className="mbo-brand" href="/studio"><BrandMark /><span>Makeborne<span className="mbo-brand-divider" aria-hidden="true">/</span><small>Admin</small></span></Link>
+      <div className="mbo-top-actions"><span className="mbo-environment" title={user.email ?? undefined}><span aria-hidden="true" />{user.email}</span><Link href="/studio"><ArrowLeft size={15} aria-hidden="true" /><span>Back to studio</span></Link></div>
     </header>
-    <main id="operations-main" className="mbo-main">
-      <section className="mbo-heading"><div><span className="mbo-eyebrow">YOUR STUDIO, BEHIND THE SCENES</span><h1>A clear view of what’s next.</h1><p>Configuration, connected services, and the path to launch.</p></div><form action="/admin" method="get"><button className="mbo-refresh" type="submit"><RefreshCw size={15} />Refresh status</button></form></section>
-
-      <section className="mbo-overview" aria-labelledby="launch-heading">
-        <div className="mbo-overview-copy"><span className="mbo-pill"><ShieldCheck size={13} />Administrator access</span><h2 id="launch-heading">Your studio.<br />A clear view ahead.</h2><p>{accountPrivileges.unlimitedCredits ? "Your account has an unlimited administrator credit allowance. No creation subscription or top-up is required. Generation remains disabled while the creation services are being prepared." : "Your account can view studio operations. Generation remains disabled while the creation services are being prepared."}</p><Link href="/billing#credits">View your allowance<ChevronRight size={16} /></Link></div>
-        <div className="mbo-overview-stats"><div><span className="mbo-stat-icon"><ShieldCheck size={20} /></span><strong>{accountPrivileges.unlimitedCredits ? "Unlimited credits" : "Administrator account"}</strong><span>{accountPrivileges.unlimitedCredits ? "Administrator allowance" : "Operations access enabled"}</span></div><div><span className="mbo-stat-icon"><Sparkles size={20} /></span><strong>{configuredRoutes} / {PLANNED_ROUTES.length} routes</strong><span>Configured in the model registry</span></div><div><span className="mbo-stat-icon"><LockKeyhole size={20} /></span><strong>Generation off</strong><span>Paid creation remains disabled</span></div></div>
-      </section>
-
-      <div className="mbo-content-grid">
-        <section id="setup" className="mbo-panel" aria-labelledby="setup-heading"><div className="mbo-section-heading"><div><span className="mbo-eyebrow">FOUNDATION</span><h2 id="setup-heading">Cloud setup</h2></div><Database size={20} /></div><p className="mbo-section-description">A configuration snapshot, not a live health check. No credentials are displayed.</p><div className="mbo-checks">{checks.map(check => <div className="mbo-check" key={check.label}><span className={`mbo-check-icon${check.set ? " is-set" : ""}`}>{check.set ? <Check size={15} /> : <CircleDashed size={15} />}</span><div><h3>{check.label}</h3><p>{check.detail}</p></div><span className={`mbo-status${check.set ? " is-set" : ""}`}>{check.set ? "Set" : "Not set"}</span></div>)}</div><div className="mbo-panel-footer"><span>{cloud.enabled ? "Cloud is enabled by configuration; availability is unverified." : cloud.reason}</span><Link href="/studio/cloud">Open cloud studio<ArrowUpRight size={14} /></Link></div></section>
-
-        <section className="mbo-panel mbo-next" aria-labelledby="next-heading"><div className="mbo-section-heading"><div><span className="mbo-eyebrow">LAUNCH SEQUENCE</span><h2 id="next-heading">The next milestones</h2></div></div><ol><li><span>01</span><div><h3>Review the foundation</h3><p>Review migrations, account isolation, access controls, and workspace recovery.</p></div></li><li><span>02</span><div><h3>Prove the creation flow</h3><p>Connect approved models and workers. Verify outputs, usage, retries, and cost limits.</p></div></li><li><span>03</span><div><h3>Activate commerce & hosting</h3><p>Verify checkout events, credit accounting, publishing, and recovery before launch.</p></div></li></ol></section>
-      </div>
-
-      <section aria-labelledby="services-heading" className="mbo-services"><div className="mbo-section-heading"><div><span className="mbo-eyebrow">CONNECTED SERVICES</span><h2 id="services-heading">The engines behind the studio</h2></div><span className="mbo-muted">No live service checks performed</span></div><div className="mbo-service-grid">
-        <article><Sparkles size={21} /><span className="mbo-status">Disabled</span><h3>Generation & media</h3><p>Generation remains disabled, including for administrators. An unlimited allowance does not activate paid models or media processing.</p><details><summary>View generation capabilities</summary><ul>{["Content & website creation", "Image & slide design", "Media transcription", "Clip selection & rendering"].map(capability => <li key={capability}><span>{capability}</span><small>Disabled</small></li>)}</ul></details></article>
-        <article><CreditCard size={21} /><span className="mbo-status">Creation plans closed</span><h3>Payments & credits</h3><p>{accountPrivileges.unlimitedCredits ? "Your administrator allowance requires no purchase. Public creation memberships and credit packs remain closed while credit delivery is prepared." : "Public creation memberships and credit packs remain closed while credit delivery is prepared."}</p><Link href="/billing">View plans & credits<ArrowUpRight size={15} /></Link></article>
-        <article><Globe2 size={21} /><span className="mbo-status">Not connected</span><h3>Website hosting</h3><p>Client websites can have delivery links. Automatic deployment and domain management are not connected.</p><Link href="/studio?tab=clients">Open client workspace<ArrowUpRight size={15} /></Link></article>
-      </div></section>
-      <footer className="mbo-note"><ShieldCheck size={19} /><div><strong>Protected administrator workspace</strong><p>Access is checked against your authenticated account and its administrator role on the server, including in production. This page shows configuration and your allowance; it does not certify service availability or launch readiness.</p></div></footer>
+    <nav className="mbo-tabs" aria-label="Admin sections"><div>{TABS.map(item => <Link key={item.id} href={`?tab=${item.id}`} aria-current={tab === item.id ? "page" : undefined}>{item.label}{item.id === "overview" && alertCount > 0 && <span className="mbo-tab-count" aria-label={`${alertCount} alert${alertCount === 1 ? "" : "s"}`}>{alertCount}</span>}</Link>)}</div></nav>
+    <main id="admin-main" className="mbo-main">
+      <div className="mbo-heading"><h1>{TABS.find(item => item.id === tab)?.label}</h1>
+        <div className="mbo-heading-actions">{generatedAt && <span className="mbo-muted">Updated {exactTime(generatedAt)}</span>}<Link className="mbo-refresh" href={`?${refresh}`} prefetch={false}><RefreshCw size={14} aria-hidden="true" />Refresh</Link></div></div>
+      {content}
+      <footer className="mbo-note">Read-only. Access is checked on the server against your administrator role for every request. Customer data shown here is for support; do not copy it elsewhere.</footer>
     </main>
   </div>;
 }

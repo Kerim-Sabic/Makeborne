@@ -1,0 +1,20 @@
+{
+  "$schema":"../../node_modules/wrangler/config-schema.json",
+  "name":"makeborne-private-preview",
+  "main":"index.ts",
+  "compatibility_date":"2026-10-08",
+  "compatibility_flags":["nodejs_compat"],
+  "workers_dev":true,
+  "preview_urls":false,
+  "alias":{"server-only":"./server-only.mjs"},
+  "r2_buckets":[{"binding":"COMPILED_OUTPUT","bucket_name":"makeborne-compiled-private"}],
+  "vars":{
+    "MAKEBORNE_PRIVATE_PREVIEWS_ENABLED":"false",
+    "MAKEBORNE_PREVIEW_APPLICATION_ORIGIN":"https://makeborne.com",
+    "MAKEBORNE_PREVIEW_BASE_ORIGIN":"https://preview.makeborne.com",
+    "MAKEBORNE_PREVIEW_ALLOW_LOCALHOST":"false",
+    "SUPABASE_URL":"https://rklojnmmsmhwnkbzuidp.supabase.co"
+  },
+  "secrets":{"required":["SUPABASE_SECRET_KEY"]},
+  "observability":{"enabled":true,"head_sampling_rate":0.1,"logs":{"enabled":true,"invocation_logs":false}}
+}

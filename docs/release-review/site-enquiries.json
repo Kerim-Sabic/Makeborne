@@ -1,0 +1,13 @@
+{
+  "passed": [
+    "Actual publish API stores interactive bundle; retry idempotent",
+    "Actual Worker serves saved site and JS; filter works on hosted origin",
+    "Disabled gate, real browser→Worker→signed API→SQL→owner inbox; duplicate and changed retry protected",
+    "Per-site visitor submission rate limit enforced",
+    "Unsigned/cross-origin denied; anonymous and unrelated accounts denied; 8 concurrent submissions admit exactly 5",
+    "Taking the site offline also closes its form"
+  ],
+  "complete": true,
+  "productionTouched": false,
+  "externalEmailSent": false
+}

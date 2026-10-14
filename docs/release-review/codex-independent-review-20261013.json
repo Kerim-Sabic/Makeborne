@@ -1,0 +1,77 @@
+{
+  "reviewedAt": "2026-10-13T00:16:27.632812+00:00",
+  "productionTouched": false,
+  "committed": false,
+  "paidAiCalls": 0,
+  "cumulativeAiSpendUsd": 23.865144,
+  "stagingPreview": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+  "verified": {
+    "candidateOriginalInventory": true,
+    "offlineHarnesses": 76,
+    "typecheck": true,
+    "lintErrors": 0,
+    "lintExistingWarnings": 6,
+    "productionBuild": true,
+    "stagingSqlSuites": 7,
+    "cloudAuthApiChecks": 6,
+    "cloudAppChecks": 10,
+    "publicHostingChecks": 9,
+    "googleBrowserSignin": true,
+    "githubBrowserSignin": true,
+    "brandedEmailDelivered": true,
+    "emailConfirmed": true,
+    "browserRepublish": true,
+    "cloudflareInjectedBeaconRemoved": true,
+    "runtimeFilesMatchSnapshot": 71
+  },
+  "fixes": [
+    "Disabled unsafe image qualification before credential access/network calls; measured samples are not enforceable spending bounds.",
+    "Rotated staging SMTP to final sending-only makeborne.com key; all three superseded keys revoked.",
+    "Disabled Cloudflare RUM on makeborne.site; public HTML contains no injected beacon."
+  ],
+  "sandboxProbes": {
+    "renewal": {
+      "membership": "mem_FkPEG6rdisMols",
+      "status": "trialing",
+      "firstChargeDue": "2026-10-14T00:08:59.341Z",
+      "expectedRenewalApproximately": "2026-10-21T00:08:59Z"
+    },
+    "failure": {
+      "membership": "mem_Vl3ZSgCqlLCAlb",
+      "status": "trialing",
+      "firstAttemptDue": "2026-10-14T00:10:27.345Z"
+    },
+    "testCardsOnly": true,
+    "realMoneySpent": 0,
+    "subsequentRenewalObserved": false,
+    "failedChargeObserved": false,
+    "keyExpiry": "2026-10-19"
+  },
+  "ownerScope": {
+    "trial": false,
+    "founderCheckout": false,
+    "planSwitchingRequired": true,
+    "creditPacksRequired": true,
+    "aiImagesRequired": true,
+    "openaiKeyExpectedLater": true,
+    "refunds": "Support only; statutory/provider exceptions preserved"
+  },
+  "stillBlocked": [
+    "Actual scheduled renewal/failure observations; sandbox key renewal before Oct 19.",
+    "Plan switching policy and implementation, with duplicate/replacement-credit tests.",
+    "Credit packs checkout, expiry/support policy, verified delivery and replay/refund handling.",
+    "AI images: no OpenAI key or enforceable 2.5 output bound/live qualification.",
+    "AI margin floor remains undecided; current code enforces 40%, 50% is still proposed."
+  ],
+  "temporaryInfrastructure": {
+    "stagingFormTokenExpiresAt": "2026-10-13T11:29:31Z",
+    "note": "Token is currently valid at review time, not expired. Public forms pass now; future staging refresh remains necessary. Production does not use this preview-token path."
+  },
+  "limitations": [
+    "Rehearsal result file and all 45 migration bytes checked; no new full container rehearsal rerun because this turn changed no migrations or application runtime.",
+    "Fresh production migration-history query was rejected; previous baseline not independently refreshed. Production deployment identity and aliases were read-only verified.",
+    "Existing disposable hosting fixture and staging admin@makeborne.com verification account retained."
+  ],
+  "rehearsedMigrationHashesMatch": true,
+  "migrationCount": 45
+}

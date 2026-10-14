@@ -1,0 +1,23 @@
+{
+  "observedAt": "2026-10-13T06:06:35.0990365Z",
+  "application": "Microsoft PowerPoint for Windows",
+  "method": "Native Windows UI through the bundled computer-use skill",
+  "file": "outputs/authored-cover-qualification/grid-deck.pptx",
+  "sha256": "089f1905567c5119c5b90d6edfad72a10a3dedcb774fec865e70f1d6fde1849b",
+  "syntheticFixture": true,
+  "slidesInspected": [
+    1,
+    2
+  ],
+  "opensWithoutRepairWarning": true,
+  "observedNativeObjects": "Accessibility tree exposes separate shapes and text objects",
+  "layout": "Both slides preserve visible title, line geometry, supporting text, margins and closing text without observed clipping",
+  "comparison": "Compared first slide against grid-cover.png; geometry retained. PowerPoint title appears heavier than browser preview; cross-font visual equivalence is not claimed.",
+  "limitations": [
+    "PowerPoint reports Unlicensed Product; editing and saving are disabled. No sign-in or license changes attempted.",
+    "No fresh generated deck, chart body, or chat edit was inspected in this check.",
+    "Windows rendering does not qualify production Linux fonts or exports."
+  ],
+  "providerCalls": 0,
+  "sourceModified": false
+}

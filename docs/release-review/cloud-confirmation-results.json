@@ -1,0 +1,15 @@
+{
+  "deployment": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+  "passed": [
+    "Cloud confirmation GET leaves account unconfirmed",
+    "Explicit cloud confirmation succeeds and rejects external redirect",
+    "Consumed confirmation link cannot be replayed",
+    "Newly confirmed account signs in",
+    "Recovery link opens the password form and cannot be replayed",
+    "Password change takes effect; sign-out revokes the session refresh token"
+  ],
+  "failedStage": null,
+  "emailDeliveryTested": false,
+  "productionTouched": false,
+  "paidCalls": 0
+}

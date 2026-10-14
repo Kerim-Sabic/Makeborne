@@ -1,0 +1,18 @@
+BEGIN
+NOTICE:  PASS free-tier access gate
+NOTICE:  PASS trial idempotency and eligibility
+NOTICE:  PASS grant idempotency and validation
+NOTICE:  PASS reserve, insufficient credits (MB402) and replay
+NOTICE:  PASS settle partial, over-hold and replay
+NOTICE:  PASS release and replay
+NOTICE:  PASS ledger invariants
+NOTICE:  PASS admin bypass
+NOTICE:  PASS RLS and privileges
+NOTICE:  PASS stale hold expiry
+DO
+                                                                   result                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------
+ PASS: free tier gate, trial/grant idempotency, reserve MB402, settle partial/capped at hold, release, ledger invariants, admin bypass, RLS
+(1 row)
+
+ROLLBACK

@@ -1,0 +1,65 @@
+{
+  "observedAt": "2026-10-13T06:34:46.022Z",
+  "scope": "Local controller packaging and document-readability integration; not a launch approval",
+  "productionTouched": false,
+  "cloudDeployed": false,
+  "committed": false,
+  "newRoundProviderSpendUsd": 0,
+  "candidateFrozen": false,
+  "checks": {
+    "offlineHarnesses": 99,
+    "offlinePassed": 99,
+    "explicitEnvironmentSkips": 5,
+    "nextBuild": true,
+    "typecheck": true,
+    "lintErrors": 0,
+    "lintWarnings": 0,
+    "pendingMigrations": 58,
+    "rehearsalPassed": true,
+    "rehearsalFingerprint": "5afb9de35419c5b9b292dfdb91ef9fe9",
+    "rehearsalInputsStillMatch": true,
+    "controllerStartupGroups": 8,
+    "executorGroups": 19,
+    "actualInstalledSdkGroups": 3,
+    "localGuardGroups": 14,
+    "syntheticApiExportSmokeChecks": 9,
+    "bookBrowserCases": 96,
+    "independentBookPdfRegressionCases": 2
+  },
+  "fixes": [
+    "Pin actual Sandbox Session methods to prevent SDK implicit resume",
+    "Contents pagination based on wrapped height",
+    "Long book table cells wrap without losing adjacent content",
+    "Saved books and decks remain visible when generation is disabled",
+    "Ignore generated controller bundle in repository lint while retaining source lint"
+  ],
+  "sourceSha256": {
+    "src/components/cloud-studio.tsx": "a61aa96c3ea6ff3608a4083f4aff32d48312b128eb37ca795579fa17863433a3",
+    "src/components/document-preview.tsx": "51020ca9a7def0e5d983ed975a3370295892fbc2ebe553f1baa4291ab234c8a6",
+    "src/lib/documents/render-book.ts": "d3c10c5cf72e20a68533e85deebdf6f3510293674e8c03504430a8c76251bb15",
+    "src/lib/documents/slide-scene.ts": "141d9fb565753d1bfd7bd8ab586c2afa0719d06d7feeb358403251ab31f334d4",
+    "src/lib/documents/check-book-layout-browser.cjs": "656a6d09686cdf2c51729529eeccb8f8c152bbd952561699d5deb55b4a0a81be",
+    "infra/project-runtime/vercel-publication-executor.mjs": "1f1aa7a36258369fa0fabe03cd0e6df0e60a53ede103ea49fbd86255dee2d1fc",
+    "infra/publication-controller/entry.mjs": "2ff7b6ed8351e75ced7e1bb78cd971c8e98a5dd0eb2688eb10b388b35355fd30",
+    "scripts/fresh-quality-common.mjs": "f11ae4208b6a7a0daa4c1271aa3789acf856f1c8968236fae73947f7e719e8b8",
+    "scripts/fresh-quality-server.mjs": "e13e3b11318ae1225e68879d095cdd62b3c4d31548885a0f46dd1b06ef85661f",
+    "scripts/fresh-quality-guard.sql": "1039d8ce6d136df9326ea3f69b9c3eec48b09ee6114c97222162210decf9042d",
+    "eslint.config.mjs": "15f21fbb750f6919177d16dfa3519bf254745a32a2e0e4c309be8102662f719e"
+  },
+  "limitations": [
+    "Fresh model output has not yet been generated",
+    "Saved document navigation real UI follow-up pending",
+    "Controller cloud activation, credentials and image qualification still required",
+    "Current cloud staging predates candidate",
+    "Owner-required plan switching/payment lifecycle and AI images remain open",
+    "Installed PowerPoint is unlicensed; rendering only verified"
+  ],
+  "evidence": [
+    "docs/release-review/candidate-rehearsal.json",
+    "docs/release-review/publication-controller-bootstrap-20261013.json",
+    "docs/release-review/controller-quality-independent-review-20261013.md",
+    "docs/release-review/book-overflow-independent-review-20261013.md",
+    "docs/release-review/fresh-quality-stack-20261013.json",
+    "outputs/fresh-quality-smoke-9eb8f8b8-c34f-4434-8cdc-fff8508e56e5/smoke-report.json"
+  ]
+}

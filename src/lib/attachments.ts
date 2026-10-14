@@ -1,7 +1,7 @@
-/** Device-only source files. Blob bytes never enter web storage or a cloud request. */
+/** Device-only source files. The live builder explicitly sends selected sources to AI. */
 export const ATTACHMENT_LIMITS = { count: 10, fileBytes: 25 * 1024 * 1024, totalBytes: 100 * 1024 * 1024 };
 export type Attachment = { id: string; name: string; type: string; size: number; owner: string; blob: Blob; previewType: string | null };
-type Collection = { key: string; owner: string; ids: string[] };
+type Collection = { key: string; owner: string; ids: string[]; builderRequest?: { context: string; actionKey: string; operationId?: string; createdAt: number; expiresAt: number } };
 type PendingCreation = { requestId: string; nonce: string; owner: string; draft: Record<string, unknown> };
 export const attachmentOwner = (accountId: string | null) => accountId ? `account:${accountId}` : "device";
 export const projectAttachmentKey = (projectKey: string) => `project:${projectKey}`;
@@ -140,4 +140,70 @@ export function finishAttachmentHandoff(owner: string, requestId: string) {
     tx.objectStore("collections").delete(collectionKey(owner, `draft:${requestId}`));
     tx.objectStore("drafts").delete(requestId);
   });
+}
+
+export const BUILDER_SNAPSHOT_RETENTION = { count: 8, lifetimeMs: 24 * 60 * 60 * 1000 };
+const requestContext = (context: string, actionKey: string) => `builder-request:${context}:${actionKey}`;
+const missingSources = () => new Error("The original request's source files are unavailable or expired on this device. Start a new request with your sources attached; continuing cannot replace the original files.");
+
+async function pruneBuilderSnapshots(tx: IDBTransaction, owner: string, now: number, clearContext?: string | true) {
+  const store = tx.objectStore("collections");
+  const collections = await requestValue<Collection[]>(store.getAll());
+  const snapshots = collections.filter(item => item.owner === owner && item.builderRequest)
+    .sort((a, b) => b.builderRequest!.createdAt - a.builderRequest!.createdAt);
+  const deleted = new Set(snapshots.filter((item, index) => index >= BUILDER_SNAPSHOT_RETENTION.count || item.builderRequest!.expiresAt <= now
+    || clearContext === true || item.builderRequest!.context === clearContext).map(item => item.key));
+  deleted.forEach(key => store.delete(key));
+  const referenced = new Set(collections.filter(item => !deleted.has(item.key)).flatMap(item => item.ids));
+  // Only inspect IDs from evicted snapshots, preserving ordinary project storage.
+  snapshots.filter(item => deleted.has(item.key)).forEach(item => item.ids.forEach(id => { if (!referenced.has(id)) tx.objectStore("files").delete(id); }));
+}
+
+/** Retain exact source references before sending. Removing a project selection
+ * cannot mutate an authorized request; the bounded snapshot owns those blobs. */
+export function retainBuilderAttachmentSnapshot(owner: string, context: string, actionKey: string, files: readonly Attachment[]) {
+  return transaction("readwrite", async tx => {
+    if (files.some(file => file.owner !== owner)) throw new Error("These sources belong to another account.");
+    const key = collectionKey(owner, requestContext(context, actionKey));
+    const store = tx.objectStore("collections");
+    const existing = await requestValue<Collection | undefined>(store.get(key));
+    const ids = files.map(file => file.id);
+    if (existing && JSON.stringify(existing.ids) !== JSON.stringify(ids)) throw new Error("This request already has different source files. Start a new request.");
+    if (!existing) {
+      const now = Date.now();
+      const collections = await requestValue<Collection[]>(store.getAll());
+      const createdAt = Math.max(now, ...collections.filter(item => item.owner === owner && item.builderRequest).map(item => item.builderRequest!.createdAt + 1));
+      files.forEach(file => tx.objectStore("files").put(file));
+      store.put({ key, owner, ids, builderRequest: { context, actionKey, createdAt, expiresAt: now + BUILDER_SNAPSHOT_RETENTION.lifetimeMs } } satisfies Collection);
+    }
+    await pruneBuilderSnapshots(tx, owner, Date.now());
+  });
+}
+
+/** Binding follows a server-observed operation identity; it never changes bytes. */
+export function bindBuilderAttachmentSnapshot(owner: string, context: string, actionKey: string, operationId: string) {
+  return transaction("readwrite", async tx => {
+    await pruneBuilderSnapshots(tx, owner, Date.now());
+    const key = collectionKey(owner, requestContext(context, actionKey));
+    const store = tx.objectStore("collections");
+    const snapshot = await requestValue<Collection | undefined>(store.get(key));
+    if (!snapshot?.builderRequest || snapshot.owner !== owner || snapshot.builderRequest.context !== context) return;
+    if (snapshot.builderRequest.operationId && snapshot.builderRequest.operationId !== operationId) throw new Error("The original source request does not match this operation.");
+    store.put({ ...snapshot, builderRequest: { ...snapshot.builderRequest, operationId } } satisfies Collection);
+  });
+}
+
+export function readBuilderAttachmentSnapshot(owner: string, context: string, operationId: string) {
+  return transaction("readwrite", async tx => {
+    await pruneBuilderSnapshots(tx, owner, Date.now());
+    const collections = await requestValue<Collection[]>(tx.objectStore("collections").getAll());
+    const snapshot = collections.find(item => item.owner === owner && item.builderRequest?.context === context && item.builderRequest.operationId === operationId);
+    if (!snapshot?.builderRequest) return null;
+    return collectionFiles(tx, owner, requestContext(context, snapshot.builderRequest.actionKey));
+  }).then(files => { if (!files) throw missingSources(); return files; });
+}
+
+/** Call after deleting a project (context) or the account (omit context). */
+export function clearBuilderAttachmentSnapshots(owner: string, context?: string) {
+  return transaction("readwrite", tx => pruneBuilderSnapshots(tx, owner, Date.now(), context ?? true));
 }

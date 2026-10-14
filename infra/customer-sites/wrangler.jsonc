@@ -1,0 +1,61 @@
+// Published customer websites: one Worker serving every site on its own origin
+// under the isolated site domain (see docs/HOSTING_JS.md).
+// The top-level environment is LOCAL ONLY (wrangler dev against the local
+// Supabase stack) and is never routed. Use an explicit staging/production environment.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "makeborne-sites-local",
+  "main": "_worker.js",
+  "compatibility_date": "2026-10-05",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "SITE_NAMESPACE": "local",
+    "SUPABASE_URL": "http://127.0.0.1:55321",
+    "ALLOW_LOCAL_SUPABASE": "true",
+    "SITES_DOMAIN": "localhost",
+    "APP_ORIGIN": "http://localhost:3205",
+    "LEGACY_SITES_HOST": "sites.localhost"
+  },
+  "env": {
+    "staging": {
+      "name": "makeborne-site-host-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [
+        { "pattern": "release-check.makeborne.site/*", "zone_name": "makeborne.site" },
+        { "pattern": "release-check-renamed.makeborne.site/*", "zone_name": "makeborne.site" }
+      ],
+      "vars": {
+        "SITE_NAMESPACE": "staging",
+        "SUPABASE_URL": "https://xzwikrunwpurxnxgkznh.supabase.co",
+        "ALLOW_LOCAL_SUPABASE": "false",
+        "SITES_DOMAIN": "makeborne.site",
+        "SITE_INDEXING_ENABLED": "false",
+        "APP_ORIGIN": "https://makeborne-release-staging-qa2026101-kerimsabic-6594s-projects.vercel.app",
+        "LEGACY_SITES_HOST": "legacy-disabled.makeborne.site"
+      },
+      "observability": { "enabled": true, "head_sampling_rate": 0.1, "logs": { "enabled": true, "invocation_logs": false } }
+    },
+    "production": {
+      // Distinct from the legacy Pages project `makeborne-sites` (see legacy-redirect/).
+      "name": "makeborne-site-host",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [
+        { "pattern": "*.makeborne.site/*", "zone_name": "makeborne.site" },
+        { "pattern": "makeborne.site/*", "zone_name": "makeborne.site" }
+      ],
+      "vars": {
+        "SITE_NAMESPACE": "production",
+        "SUPABASE_URL": "https://rklojnmmsmhwnkbzuidp.supabase.co",
+        "ALLOW_LOCAL_SUPABASE": "false",
+        "SITES_DOMAIN": "makeborne.site",
+        "APP_ORIGIN": "https://makeborne.com",
+        "LEGACY_SITES_HOST": "sites.makeborne.com"
+      },
+      // SUPABASE_PUBLISHABLE_KEY: `wrangler secret put SUPABASE_PUBLISHABLE_KEY --env production`
+      "observability": { "enabled": true, "head_sampling_rate": 0.1, "logs": { "enabled": true, "invocation_logs": false } }
+    }
+  }
+}

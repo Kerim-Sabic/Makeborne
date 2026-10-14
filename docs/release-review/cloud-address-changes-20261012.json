@@ -1,0 +1,11 @@
+{
+  "deployment": "https://makeborne-release-staging-jex4zjcir-kerimsabic-6594s-projects.vercel.app",
+  "passed": [
+    "Real cloud publish and address change with updated canonical URL",
+    "Stale address change rejected"
+  ],
+  "failed": false,
+  "publicHostingTested": false,
+  "paidCalls": 0,
+  "productionTouched": false
+}

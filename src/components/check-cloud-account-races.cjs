@@ -81,5 +81,25 @@ function deferredTransport() {
   transport.respond({});
   await assert.rejects(request, error => error.code === "ACCOUNT_CHANGED" && error.uncertain);
   pass("in-flight updates are not reported as saved to the new account");
+  setCloudAccount(a); records.clear();
+  const stableKey = "33333333-3333-4333-8333-333333333333";
+  let writes = 0;
+  global.fetch = async (_path, options) => {
+    writes++; assert.equal(options.headers["Idempotency-Key"], stableKey);
+    return Response.json({ workspace: { id: a, name: "Durable intent", role: "owner" }, mutation: { idempotencyKey: stableKey, replayed: writes > 1 } });
+  };
+  for (let i = 0; i < 2; i++) {
+    await api("/api/workspaces", { name: "Durable intent" }, "POST", { idempotencyKey: stableKey });
+    assert.equal(getPendingCloudWrites(a).length, 0);
+  }
+  assert.equal(writes, 2); pass("supplied original key survives confirmed-response transport cleanup");
+  global.fetch = async () => { throw Error("Lost response"); };
+  await assert.rejects(api("/api/workspaces", { name: "Durable intent" }, "POST", { idempotencyKey: stableKey }), e => e.uncertain);
+  const preserved = getPendingCloudWrites(a)[0]; assert.equal(preserved.key, stableKey);
+  global.fetch = async () => { throw Error("Must not send a replacement key"); };
+  await assert.rejects(api("/api/workspaces", { name: "Durable intent" }, "POST", { idempotencyKey: b }), e => e.code === "PENDING_STORAGE_UNAVAILABLE");
+  assert.equal(getPendingCloudWrites(a)[0].key, stableKey); pass("conflicting supplied key cannot rotate an unresolved transport request");
+  await assert.rejects(api("/api/workspaces", undefined, "GET", { idempotencyKey: stableKey }), e => e.code === "UNSUPPORTED_REQUEST_KEY");
+  pass("unsupported operations reject creation key options before network");
   console.log(`${count} account race checks passed.`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

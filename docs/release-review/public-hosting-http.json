@@ -1,0 +1,19 @@
+{
+  "hostname": "relay-atelier-854b58da.makeborne.site",
+  "productionTouched": false,
+  "paidCalls": 0,
+  "tlsVerification": true,
+  "systemDnsPending": false,
+  "resolution": "Public Google DNS answer used for connection; HTTPS certificate validation remained enabled",
+  "passed": [
+    "Normal public DNS and HTTPS resolve without connection overrides",
+    "Bare domain permanently redirects to makeborne.com",
+    "Public Cloudflare website: valid HTTPS, correct canonical address, attribution, staging noindex",
+    "Published JavaScript and stylesheet load through real Cloudflare host",
+    "Unknown website address returns 404",
+    "Retired website address returns 404 after rename",
+    "Real public Cloudflare Worker → protected staging Vercel → SQL accepts form once and rejects changed retry",
+    "Invalid email and malformed body refused (400); cross-origin submission refused (403); GET refused (405)",
+    "Direct call to the protected staging enquiry gateway without Worker credentials is refused (401)"
+  ]
+}

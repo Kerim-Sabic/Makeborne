@@ -1,0 +1,34 @@
+{
+  "deployment": "https://makeborne-release-staging-poymmdz0z-kerimsabic-6594s-projects.vercel.app",
+  "deploymentId": "dpl_8erkRDkv6E9QyDe8L9cQVUnPtXXc",
+  "artworkUploadSetting": "NEXT_PUBLIC_MAKEBORNE_ARTWORK_UPLOADS_ENABLED=true (staging only)",
+  "passed": [
+    "Invalid raster upload refused",
+    "Valid PNG uploaded through browser file chooser",
+    "Asset added to saved version 2",
+    "Reload retained artwork",
+    "Preview decoded image at 480x320",
+    "PDF prompt attachment added and removed on this device"
+  ],
+  "limits": "Cloud artwork accepts still PNG/JPEG/WebP up to 4 MiB and 20MP. Prompt attachments are device-local; their ingestion by AI was not tested. Production upload default stays off pending quota qualification.",
+  "paidCalls": 0,
+  "productionAppChanged": false,
+  "fixtureCleanup": true,
+  "mailbox": {
+    "address": "admin@makeborne.com",
+    "service": "Spacemail Pro",
+    "trialDays": 30,
+    "approvedRenewalUsdPerMonth": 0.98,
+    "userCreatedPassword": true,
+    "receivingMx": [
+      "mx1.spacemail.com",
+      "mx2.spacemail.com"
+    ],
+    "deliveryTested": false
+  },
+  "remaining": [
+    "Staging SMTP credential and OAuth configuration require approval; user response asked about mailbox instead",
+    "Separate customer-hosting domain not purchased",
+    "Interactive public forms not qualified; legacy HTTPS host verified by read-only requests"
+  ]
+}

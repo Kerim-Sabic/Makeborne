@@ -51,10 +51,12 @@ begin
  if exists(select 1 from makeborne_private.generation_dispatches where reservation_id=r) then raise exception 'rejected dispatch persisted'; end if;
  raise notice 'PASS rejected dispatches leave no records';
  set local role service_role;
+ begin perform makeborne_private.claim_generation_dispatch(r,k,u,repeat('b',64),repeat('a',64)); raise exception 'Legacy worker bypass'; exception when insufficient_privilege then raise notice 'PASS runtime worker cannot use legacy dispatch'; end;
+ reset role;
  result:=makeborne_private.claim_generation_dispatch(r,k,u,repeat('b',64),repeat('a',64));
  if (result->>'claimed')::boolean is distinct from true then raise exception 'first claim missing'; end if;
  first_dispatch:=(result->>'dispatchId')::uuid;
- raise notice 'PASS service worker gets first claim';
+ raise notice 'PASS operator-only legacy regression gets first claim';
  result:=makeborne_private.claim_generation_dispatch(r,k,u,repeat('b',64),repeat('a',64));
  if (result->>'claimed')::boolean is distinct from false or (result->>'dispatchId')::uuid<>first_dispatch then raise exception 'retry can redispatch'; end if;
  raise notice 'PASS same-key retry never redispatches';

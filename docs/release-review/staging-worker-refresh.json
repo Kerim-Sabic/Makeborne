@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-10-12T23:29:28.992Z",
+  "worker": "makeborne-site-host-staging",
+  "appOrigin": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+  "productionTouched": false,
+  "version": "9668eef6-9754-4632-aeae-aef7613fb67c",
+  "tokenExpiresAt": "2026-10-13T11:29:31.000Z",
+  "deployedAt": "2026-10-12T23:29:57.190Z",
+  "secretNames": [
+    "FORMS_SIGNING_SECRET",
+    "STAGING_VERCEL_OIDC_TOKEN",
+    "SUPABASE_PUBLISHABLE_KEY"
+  ]
+}

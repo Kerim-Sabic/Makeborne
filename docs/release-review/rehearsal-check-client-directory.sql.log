@@ -1,0 +1,14 @@
+BEGIN
+NOTICE:  PASS bounded first page with full total
+NOTICE:  PASS workspace counts exclude closed followups
+NOTICE:  PASS search finds client beyond first page
+NOTICE:  PASS overdue queue finds client beyond first page
+NOTICE:  PASS directory omits history and notes
+NOTICE:  PASS wildcard punctuation searched literally
+NOTICE:  PASS last page bounded
+NOTICE:  PASS stage and followup intersect
+DO
+NOTICE:  PASS other workspace denied
+NOTICE:  PASS invalid page denied
+NOTICE:  PASS anonymous directory denied
+ROLLBACK

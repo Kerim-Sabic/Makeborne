@@ -1,0 +1,22 @@
+{
+  "target": "xzwikrunwpurxnxgkznh",
+  "productionTouched": false,
+  "startedAt": "2026-10-14T01:32:59.363Z",
+  "dryRun": false,
+  "verifiedApplied": 64,
+  "pending": [
+    {
+      "file": "20261014011643_publication_worker_function_boundary.sql",
+      "sha256": "79162cb1aaeddb4b743008825ffec30f6db35377ac87b145091b4cf73257c214"
+    }
+  ],
+  "applied": [
+    {
+      "file": "20261014011643_publication_worker_function_boundary.sql",
+      "sha256": "79162cb1aaeddb4b743008825ffec30f6db35377ac87b145091b4cf73257c214",
+      "at": "2026-10-14T01:32:59.502Z"
+    }
+  ],
+  "totalApplied": 65,
+  "finishedAt": "2026-10-14T01:32:59.584Z"
+}

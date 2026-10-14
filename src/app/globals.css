@@ -1452,7 +1452,7 @@ label input[type="color"] {
   line-height: 1.8;
 }
 .small-note {
-  font-size: 10px !important;
+  font-size: 12px !important;
   margin-top: 25px;
 }
 .editor-heading {
@@ -2739,7 +2739,7 @@ label input[type="color"] {
   border: 1px solid var(--line);
   border-radius: 10px 10px 0 0;
 }
-.cloud-editor .editor-heading h2 {
+.cloud-editor .editor-heading :is(h1,h2) {
   font-size: 23px;
   margin: 0;
 }
@@ -2948,3 +2948,6 @@ label input[type="color"] {
 }
 
 .auth-social-providers{display:grid;gap:10px}.auth-social-providers .auth-google{margin:0}
+
+/* Fields that drop their own outline show focus on their container instead. */
+.search-field:focus-within { border-radius: 6px; box-shadow: 0 0 0 3px #7c6cf040; }

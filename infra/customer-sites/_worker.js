@@ -1,0 +1,155 @@
+import { submitEnquiry } from "./forms.js";
+import { siteNamespacePolicy, classifySiteNamespaceRequest } from "./namespace-policy.js";
+import {
+  composeSiteDocument, siteDocumentHeaders, siteDocumentPath, siteErrorHeaders, siteErrorPage, siteFileHeaders, siteFilePath,
+  siteOrigin, SITE_CONTENT_TYPES, SITE_LIMITS, siteScriptPath, siteFileContentType,
+} from "./site-policy.js";
+
+/** Cloudflare Worker for published customer websites.
+ *
+ * `<slug>.<SITES_DOMAIN>` serves one site per origin: its prerendered snapshot
+ * plus (when the owner keeps JavaScript on) its same-origin module bundle and
+ * project images. The legacy path host (`sites.makeborne.com/<slug>`) redirects
+ * there. Site reads use the publishable Supabase key against read-only RPCs.
+ * Enquiries use a separately signed app gateway; visitor cookies are never
+ * forwarded and raw visitor IP addresses are never stored. */
+const WORKER_VERSION = "mb4";
+const ALLOWED_TYPES = new Set(Object.values(SITE_CONTENT_TYPES));
+
+function configuration(env) {
+  const policy = siteNamespacePolicy(env);
+  if (!policy) return null;
+  const key = env.SUPABASE_PUBLISHABLE_KEY, url = env.SUPABASE_URL;
+  if (typeof key !== "string" || !key.startsWith("sb_publishable_")) return null;
+  return { key, url, ...policy };
+}
+
+function failure(status, secure, head) {
+  return new Response(head ? null : siteErrorPage(status), { status, headers: siteErrorHeaders({ secure, status }) });
+}
+
+async function boundedJson(response, limit) {
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0, text = "";
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > limit) { await reader.cancel(); throw new Error("size_limit"); }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    return JSON.parse(text + decoder.decode());
+  } finally { reader.releaseLock(); }
+}
+
+async function rpc(config, name, args, limit) {
+  // The key is deliberately publishable. No admin/service key, cookies or identity are forwarded.
+  const response = await fetch(`${config.url}/rest/v1/rpc/${name}`, {
+    method: "POST", headers: { apikey: config.key, "Content-Type": "application/json" },
+    body: JSON.stringify(args), signal: AbortSignal.timeout(10_000), redirect: "manual",
+  });
+  if (!response.ok) {
+    console.error(JSON.stringify({ event: "hosted_site_upstream_error", rpc: name, status: response.status }));
+    await response.body?.cancel();
+    throw new Error("upstream");
+  }
+  return boundedJson(response, limit);
+}
+
+function decodeBase64(text) {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+const hex = buffer => [...new Uint8Array(buffer)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+const notModified = (request, headers) => request.headers.get("If-None-Match") === headers.ETag ? new Response(null, { status: 304, headers }) : null;
+
+async function serveDocument(request, config, slug, pathname, secure) {
+  const site = await rpc(config, "makeborne_read_hosted_site_v3", { p_slug: slug, p_path: pathname }, 24_000_100);
+  if (site === null) return failure(404, secure, request.method === "HEAD");
+  if (typeof site !== "object" || typeof site.html !== "string" || typeof site.interactive !== "boolean" || !Number.isInteger(site.revision)
+    || (site.script !== null && (typeof site.script !== "string" || !siteScriptPath(site.script)))
+    || (site.branding !== undefined && typeof site.branding !== "boolean")
+    || new TextEncoder().encode(site.html).byteLength > SITE_LIMITS.html) throw new Error("invalid_site");
+  const interactive = site.interactive && site.script !== null;
+  // The owner can remove the badge in Settings; older readers omit the flag, so it stays on.
+  const branding = site.branding !== false;
+  const headers = siteDocumentHeaders({ interactive, secure, indexable: config.indexable && pathname === "/", etag: `"${WORKER_VERSION}-${site.revision}-${interactive ? 1 : 0}${branding ? "" : "-u"}"` });
+  const cached = notModified(request, headers);
+  if (cached) return cached;
+  const html = composeSiteDocument(site.html, { script: site.script, interactive, branding });
+  return new Response(request.method === "HEAD" ? null : html, { headers });
+}
+
+async function serveFile(request, context, config, slug, url, secure) {
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  // Namespace-partitioned keys cannot reuse old production bytes on a QA URL
+  // when exact staging routes take over. Request query flags do not select it.
+  const key = new Request(`${url.origin}${url.pathname}?__mb_namespace=${config.namespace}-v1`, { method: "GET" });
+  const hit = cache ? await cache.match(key) : null;
+  if (hit) {
+    if (request.headers.get("If-None-Match") === hit.headers.get("ETag")) return new Response(null, { status: 304, headers: hit.headers });
+    return request.method === "HEAD" ? new Response(null, { headers: hit.headers }) : hit;
+  }
+  const file = await rpc(config, "makeborne_read_hosted_site_file", { p_slug: slug, p_path: url.pathname }, 3_000_000);
+  if (file === null) return failure(404, secure, request.method === "HEAD");
+  if (typeof file !== "object" || !ALLOWED_TYPES.has(file.content_type) || typeof file.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(file.sha256)
+    || typeof file.body !== "string" || file.body.length > Math.ceil(SITE_LIMITS.image * 4 / 3) + 4) throw new Error("invalid_file");
+  // Legacy publishers normalized all raster bytes to WebP while retaining paths.
+  if (file.content_type !== siteFileContentType(url.pathname)
+    && !(file.content_type === SITE_CONTENT_TYPES.image && /\.(?:png|jpe?g)$/i.test(url.pathname))) throw new Error("invalid_file_type");
+  const bytes = decodeBase64(file.body);
+  if (hex(await crypto.subtle.digest("SHA-256", bytes)) !== file.sha256) throw new Error("digest_mismatch");
+  const headers = siteFileHeaders({ pathname: url.pathname, contentType: file.content_type, secure, etag: `"${file.sha256}"` });
+  const cached = notModified(request, headers);
+  if (cached) return cached;
+  const response = new Response(bytes, { headers });
+  if (cache && context?.waitUntil) context.waitUntil(cache.put(key, response.clone()));
+  return request.method === "HEAD" ? new Response(null, { headers }) : response;
+}
+
+const customerSites = {
+  async fetch(request, env, context) {
+    const url = new URL(request.url);
+    const secure = url.protocol === "https:";
+    const head = request.method === "HEAD";
+    const config = configuration(env);
+    if (!config) return failure(503, secure, head);
+    const address = classifySiteNamespaceRequest(url, config);
+    if (!address) return failure(404, secure, head);
+    if (!secure && !config.local) {
+      return Response.redirect(`https://${url.host}${url.pathname}${url.search}`, 308);
+    }
+    if (url.pathname === "/_mb/enquiries") {
+      if(address.kind!=="site")return failure(404,secure,head);
+      return submitEnquiry(request,env,config,address.slug);
+    }
+    if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
+    // Legacy path-based addresses move to the site's own origin.
+    if (address.kind === "legacy") {
+      const slug = address.slug;
+      if (!slug) return Response.redirect(config.appOrigin, 302);
+      return Response.redirect(`${siteOrigin(slug, config.domain, secure)}${url.port ? `:${url.port}` : ""}/`, 301);
+    }
+    if (address.kind === "apex") return Response.redirect(`${config.appOrigin}/`, 308);
+    const slug = address.slug;
+    if (url.pathname.length > 240) return failure(404, secure, head);
+    if (url.pathname === "/robots.txt") {
+      return new Response(head ? null : `User-agent: *\n${config.indexable ? "Allow" : "Disallow"}: /\n`, { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+    }
+    try {
+      if (siteFilePath(url.pathname)) return await serveFile(request, context, config, slug, url, secure);
+      if (siteDocumentPath(url.pathname)) return await serveDocument(request, config, slug, url.pathname, secure);
+      return failure(404, secure, head);
+    } catch (error) {
+      console.error(JSON.stringify({ event: "hosted_site_read_error", type: error instanceof Error ? error.message.slice(0, 40) : "unknown" }));
+      return failure(503, secure, head);
+    }
+  },
+};
+
+export default customerSites;

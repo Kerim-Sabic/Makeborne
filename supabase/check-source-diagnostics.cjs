@@ -1,0 +1,13 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Offline editor parser qualification, no code execution. */
+const assert=require('node:assert/strict'),vm=require('node:vm'),{buildSync}=require('esbuild');
+const entry=`import {EditorState} from '@codemirror/state'; import {ensureSyntaxTree} from '@codemirror/language'; import {javascript} from '@codemirror/lang-javascript'; import {css} from '@codemirror/lang-css'; import {html} from '@codemirror/lang-html'; import {json} from '@codemirror/lang-json'; import {sourceSyntaxDiagnostics} from './src/lib/projects/source-diagnostics'; export function check(text,kind){const language=kind==='tsx'?javascript({typescript:true,jsx:true}):kind==='css'?css():kind==='html'?html():json();const state=EditorState.create({doc:text,extensions:[language]});ensureSyntaxTree(state,state.doc.length,100);return sourceSyntaxDiagnostics(state);}`;
+const built=buildSync({stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',write:false});
+const sandbox={module:{exports:{}},require,TextEncoder,setTimeout,clearTimeout};sandbox.exports=sandbox.module.exports;vm.runInNewContext(built.outputFiles[0].text,sandbox);const {check}=sandbox.module.exports;
+let groups=0;function test(name,fn){fn();groups++;console.log('PASS '+name);}
+test('valid TSX receives parser-only complete report',()=>{const report=check('const Hero = (props: {title: string}) => <h1>{props.title}</h1>;','tsx');assert(report.complete);assert.equal(report.issues.length,0);});
+test('invalid TSX receives bounded positioned errors',()=>{const report=check('export function {\nreturn <h1>\n','tsx');assert(report.issues.length>0);for(const issue of report.issues){assert(issue.from>=0&&issue.to<=30);assert(issue.line>=1&&issue.column>=1);}});
+test('JSON syntax errors and corrected JSON',()=>{assert(check('{"name": }','json').issues.length>0);assert.equal(check('{"name":"Studio"}','json').issues.length,0);});
+test('valid CSS/HTML and malformed CSS',()=>{assert.equal(check('body { color: red; }','css').issues.length,0);assert.equal(check('<main><h1>Hello</h1></main>','html').issues.length,0);assert(check('body { color: ; ??? }','css').issues.length>0);});
+test('diagnostics never establish type or runtime correctness',()=>{const report=check('const total: number = "not a number"; missingGlobal();','tsx');assert.equal(report.issues.length,0);assert(report.complete);});
+test('many malformed tokens bound diagnostic count',()=>{const report=check('const = ;\n'.repeat(1000),'tsx');assert(report.issues.length<=20);assert(!report.complete);});
+console.log(`SOURCE DIAGNOSTICS PASSED: ${groups} groups; no network or customer-code evaluation.`);

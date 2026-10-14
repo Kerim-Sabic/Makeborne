@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-14T00:03:03.190965+00:00",
+  "containers": [
+    "makeborne_candidate_20261014_full_20261013235725",
+    "makeborne_candidate_20261014_fault_20261013235725",
+    "makeborne_candidate_20261014_interrupt_20261013235725"
+  ],
+  "targetVerification": {
+    "exactNames": true,
+    "image": "public.ecr.aws/supabase/postgres:17.11.0.002",
+    "network": "none"
+  },
+  "removedWithAnonymousVolumes": true,
+  "remainingOwnedContainers": [],
+  "protectedMainStacksTouched": false
+}

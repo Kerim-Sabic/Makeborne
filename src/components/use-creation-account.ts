@@ -12,7 +12,7 @@ export type CreationAccount = {
 const initial: CreationAccount = { ready: false, error: "", accountId: null, workspace: null, clients: [] };
 
 /** Resolve the save destination before offering account clients or accepting a write. */
-export function useCreationAccount(requestedWorkspaceId?: string | null) {
+export function useCreationAccount(requestedWorkspaceId?: string | null, {includeClients=true}:{includeClients?:boolean}={}) {
   const [state, setState] = useState<CreationAccount>(initial);
   useEffect(() => {
     let active = true;
@@ -29,7 +29,7 @@ export function useCreationAccount(requestedWorkspaceId?: string | null) {
         const { workspaces } = await api<{ workspaces: CloudWorkspace[] }>("/api/workspaces");
         const workspace = creationWorkspace(workspaces, requestedWorkspaceId);
         const clients: CloudWorkspaceSnapshot["clients"] = [];
-        if (workspace) {
+        if (workspace && includeClients) {
           let offset: number | null = 0;
           do {
             const snapshot: CloudWorkspaceSnapshot & { pagination: { clients: { nextOffset: number | null } } } = await api(`/api/cloud/workspaces/${workspace.id}?clientsOffset=${offset}`);
@@ -61,6 +61,6 @@ export function useCreationAccount(requestedWorkspaceId?: string | null) {
       } catch (error) { if (active) setState({ ...initial, error: error instanceof Error ? error.message : "Account connection unavailable." }); }
     })();
     return () => { active = false; generation++; unsubscribe?.(); };
-  }, [requestedWorkspaceId]);
+  }, [requestedWorkspaceId, includeClients]);
   return state;
 }

@@ -1,0 +1,91 @@
+[
+  {
+    "check": "check-account-privileges.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-budget-reservations.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-client-directory.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-client-outreach.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-client-projects.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-client-review-links.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-credit-lots-expiry.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-credit-wallets.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-crm-sales-delivery.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-durable-jobs.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-generation-authority.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-generation-caps.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-generation-dispatch.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-generation-result.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-generation-settlement.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-hosting-modes.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-live-ai-spend.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-locked-content.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-plan-credit-allocations.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-proposal-storage.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-unified-creation.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-local-pilot-lock.sql",
+    "exit": 0,
+    "fixture": "Locked pilot and synthetic user inside rolled-back transaction"
+  }
+]

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, BookOpen, Globe, Presentation } from "lucide-react";
 import type { ClientProjectItem } from "@/lib/cloud/contracts";
+import { deliveryStageLabels, projectDeliveryStages, type ProjectDeliveryStage } from "@/lib/project-delivery";
 import { studioHref, type AccountProjectRoute } from "@/lib/studio-navigation";
 import { api } from "./cloud-api";
 
@@ -19,6 +20,7 @@ export default function ClientProjectDirectory({ workspaceId, clientId, clientNa
   const [retry, setRetry] = useState(0);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     void api<Result>(`/api/cloud/workspaces/${workspaceId}/clients/${clientId}/projects?offset=${offset}`)
@@ -31,21 +33,43 @@ export default function ClientProjectDirectory({ workspaceId, clientId, clientNa
     return () => { active = false; };
   }, [workspaceId, clientId, offset, retry]);
 
+  /** Delivery is per project: every listed item of the project updates together. */
+  async function changeStage(item: ClientProjectItem, stage: ProjectDeliveryStage) {
+    if (!item.projectUpdatedAt || stage === item.deliveryStage) return;
+    const update = (deliveryStage: ProjectDeliveryStage, projectUpdatedAt = item.projectUpdatedAt) => setResult(previous => previous && { ...previous, items: previous.items.map(entry => entry.projectId === item.projectId
+      ? { ...entry, deliveryStage, projectUpdatedAt } : entry) });
+    // Show the new stage at once; roll back if the save is refused.
+    update(stage); setSaving(item.projectId); setError("");
+    try {
+      const { project } = await api<{ project: { deliveryStage: ProjectDeliveryStage; updatedAt: string } }>(`/api/cloud/workspaces/${workspaceId}/projects/${item.projectId}`,
+        { expectedUpdatedAt: item.projectUpdatedAt, deliveryStage: stage }, "PATCH");
+      update(project.deliveryStage, project.updatedAt);
+    } catch (cause) {
+      update(item.deliveryStage);
+      setError(cause instanceof Error ? cause.message : "Could not change the delivery stage.");
+    } finally { setSaving(null); }
+  }
+
   return <section className="ac-project-directory" aria-label={`Projects for ${clientName}`}>
-    <header><div><h2>Work for {clientName}</h2><p>Every linked website, book, and presentation.</p></div>{result && <span>{result.pagination.total} items</span>}</header>
+    <header><div><h2>Work for {clientName}</h2><p>Every linked website, book, and presentation, with its delivery stage.</p></div>{result && <span>{result.pagination.total} items</span>}</header>
     {error && <div role="alert"><p>{error}</p><button className="button secondary small" disabled={busy} onClick={() => { setError(""); setBusy(true); setRetry(value => value + 1); }}>Try again</button></div>}
     <div className="ac-project-directory-grid">{result?.items.map(item => {
       const Icon = icons[item.kind];
       const route = item.artifactId ? { workspaceId, artifactId: item.artifactId } : null;
       return <article key={itemKey(item)}>
-        <div className="ac-project-meta"><Icon size={19} /><span>{item.kind}</span><small>{item.projectStatus.replaceAll("_", " ")}</small></div>
+        <div className="ac-project-meta"><Icon size={19} /><span>{item.kind}</span>
+          {item.projectUpdatedAt
+            ? <select className="ac-delivery-stage" data-stage={item.deliveryStage} aria-label={`Delivery stage for ${item.projectTitle}`} value={item.deliveryStage} disabled={saving === item.projectId}
+              onChange={event => void changeStage(item, event.target.value as ProjectDeliveryStage)}>{projectDeliveryStages.map(stage => <option key={stage} value={stage}>{deliveryStageLabels[stage]}</option>)}</select>
+            : <small>{deliveryStageLabels[item.deliveryStage]}</small>}</div>
         <h3>{item.title}</h3>
         {item.title !== item.projectTitle && <p>{item.projectTitle}</p>}
         <div className="ac-project-foot"><span>{item.version === null ? "No document yet" : `Version ${item.version}`}</span><time dateTime={item.updatedAt}>{new Date(item.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</time></div>
         {route ? <Link href={studioHref({ tab: "projects", projectId: null, clientId: null, account: route })} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpenProject(route); }}>Open {item.kind}<ArrowUpRight size={15} /></Link> : <p className="small-note">This project is linked to the client but has no editable document yet.</p>}
       </article>;
     })}</div>
-    {busy && <p role="status">Loading client projects…</p>}
+    {busy && !result && <div className="ac-skeleton ac-skeleton-detail" role="status" aria-label="Loading client projects"><span /><span /></div>}
+    {busy && result && <p role="status" className="small-note">Loading more work…</p>}
     {!busy && !error && result?.items.length === 0 && <div className="ac-empty"><h3>No linked projects yet</h3><p>Create a project for this client to keep their work together here.</p></div>}
     {result && result.items.length > 0 && <p className="small-note">Showing {result.items.length} of {result.pagination.total} items for this client.</p>}
     {result?.pagination.nextOffset != null && !error && <button className="button secondary small" disabled={busy} onClick={() => { setBusy(true); setOffset(result.pagination.nextOffset!); }}>Load more work</button>}

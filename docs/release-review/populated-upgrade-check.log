@@ -1,0 +1,4 @@
+BEGIN
+DO
+NOTICE:  PASS populated production-schema upgrade: client/history/content/site preserved, trial and spend off, pilot cost retained, contract and recovery preserve provenance
+ROLLBACK

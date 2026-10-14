@@ -1,0 +1,39 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Local no-provider qualification. */
+require('../generation/check-website-worker.cjs'); // Existing TypeScript/server-only fixture loader.
+const {retainCompiledOutput,readCompiledOutputFile}=require('./compiled-output.ts');
+const {parseBuildReceipt}=require('./build-receipt.ts');
+const {canonicalSourceJson}=require('./canonical-json.ts');
+const {randomUUID,createHash}=require('node:crypto'),assert=require('node:assert/strict');
+const fs=require('node:fs/promises'),path=require('node:path'),{tmpdir}=require('node:os');
+const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+const signal=()=>new AbortController().signal;
+let checks=0;
+async function check(name,fn){await fn();checks++;console.log(`PASS ${name}`);}
+function fixture(){
+ const contents=new Map([['index.html',Buffer.from('<main>Original site</main>')],['assets/site.js',Buffer.from('console.log("site")')],['empty.txt',Buffer.alloc(0)]]);
+ const identity={schemaVersion:1,artifactId:randomUUID(),revisionId:randomUUID(),version:2,sourceHash:'a'.repeat(64),toolchainId:'react-vite-v1',toolchainHash:'b'.repeat(64),runtimeImageId:`sha256:${'c'.repeat(64)}`,routes:[{path:'/',title:'Site'}],files:[...contents].map(([path,bytes])=>({path,bytes:bytes.length,sha256:hash(bytes)}))};
+ const receipt={...identity,buildHash:hash(canonicalSourceJson(identity))},objects=new Map(),workspace=randomUUID();
+ const store={async putIfAbsent(key,bytes){if(!objects.has(key))objects.set(key,Buffer.from(bytes));},async get(key,max){const bytes=objects.get(key);if(bytes&&bytes.length>max)throw Error('READ_LIMIT');return bytes??null;}};
+ return {receipt,objects,workspace,store,read:async path=>contents.get(path),contents};
+}
+const marker=f=>[...f.objects.keys()].find(key=>key.endsWith('/receipt.json'));
+async function main(){
+ await check('exact manifest files and zero-byte assets round trip; duplicate retention is immutable',async()=>{const f=fixture();await retainCompiledOutput(f.store,f.workspace,f.receipt,f.read,signal());const size=f.objects.size;await retainCompiledOutput(f.store,f.workspace,f.receipt,f.read,signal());assert.equal(f.objects.size,size);for(const [path,bytes]of f.contents)assert.deepEqual(await readCompiledOutputFile(f.store,f.workspace,f.receipt,path,signal()),bytes);});
+ await check('file hash mismatch never publishes receipt marker',async()=>{const f=fixture();await assert.rejects(retainCompiledOutput(f.store,f.workspace,f.receipt,async()=>Buffer.from('changed'),signal()),e=>e.code==='OUTPUT_BYTES_CHANGED');assert.equal(marker(f),undefined);});
+ await check('failed upload leaves partial files inaccessible',async()=>{const f=fixture();let writes=0;const broken={...f.store,putIfAbsent:async(...args)=>{if(++writes===2)throw Error('INTERRUPTED');return f.store.putIfAbsent(...args);}};await assert.rejects(retainCompiledOutput(broken,f.workspace,f.receipt,f.read,signal()));assert.equal(marker(f),undefined);await assert.rejects(readCompiledOutputFile(f.store,f.workspace,f.receipt,'index.html',signal()),e=>e.code==='OUTPUT_NOT_RETAINED');await retainCompiledOutput(f.store,f.workspace,f.receipt,f.read,signal());});
+ await check('silent storage corruption and preexisting conflict fail readback',async()=>{const f=fixture();const corrupt={...f.store,putIfAbsent:async(key)=>f.objects.set(key,Buffer.from('wrong'))};await assert.rejects(retainCompiledOutput(corrupt,f.workspace,f.receipt,f.read,signal()));assert.equal(marker(f),undefined);});
+ await check('cancellation during file upload prevents marker publication',async()=>{const f=fixture(),controller=new AbortController();const interrupted={...f.store,putIfAbsent:async(...args)=>{await f.store.putIfAbsent(...args);controller.abort();}};await assert.rejects(retainCompiledOutput(interrupted,f.workspace,f.receipt,f.read,controller.signal));assert.equal(marker(f),undefined);});
+ await check('read cancellation is checked after storage returns',async()=>{const f=fixture();await retainCompiledOutput(f.store,f.workspace,f.receipt,f.read,signal());const controller=new AbortController(),interrupted={...f.store,get:async(...args)=>{const result=await f.store.get(...args);controller.abort();return result;}};await assert.rejects(readCompiledOutputFile(interrupted,f.workspace,f.receipt,'index.html',controller.signal));});
+ await check('cross-workspace and changed build identities cannot reuse stored bytes',async()=>{const f=fixture();await retainCompiledOutput(f.store,f.workspace,f.receipt,f.read,signal());await assert.rejects(readCompiledOutputFile(f.store,randomUUID(),f.receipt,'index.html',signal()),e=>e.code==='OUTPUT_NOT_RETAINED');await assert.rejects(readCompiledOutputFile(f.store,f.workspace,{...f.receipt,revisionId:randomUUID()},'index.html',signal()));});
+ await check('unlisted and traversal requests never reach storage',async()=>{const f=fixture(),store={...f.store,get:async()=>assert.fail('UNLISTED_READ')};for(const name of ['../index.html','/index.html','assets/../index.html','absent.txt'])assert.equal(await readCompiledOutputFile(store,f.workspace,f.receipt,name,signal()),null);});
+ await check('receipt corruption and later file corruption are detected',async()=>{const f=fixture();await retainCompiledOutput(f.store,f.workspace,f.receipt,f.read,signal());const key=marker(f),saved=f.objects.get(key);f.objects.set(key,Buffer.from('{}'));await assert.rejects(readCompiledOutputFile(f.store,f.workspace,f.receipt,'index.html',signal()),e=>e.code==='OUTPUT_NOT_RETAINED');f.objects.set(key,saved);f.objects.set([...f.objects.keys()].find(key=>key.endsWith('/files/index.html')),Buffer.from('wrong'));await assert.rejects(readCompiledOutputFile(f.store,f.workspace,f.receipt,'index.html',signal()),e=>e.code==='OUTPUT_BYTES_CHANGED');});
+ await check('one shared receipt validator rejects collisions, traversal, oversized total and missing entry',async()=>{for(const files of [[{path:'../index.html',bytes:0,sha256:hash('')}],[{path:'index.html',bytes:0,sha256:hash('')},{path:'INDEX.HTML',bytes:0,sha256:hash('')}],[{path:'index.html',bytes:50_000_000,sha256:hash('')},{path:'extra',bytes:1,sha256:hash('')}],[{path:'CON.txt',bytes:0,sha256:hash('')}],[{path:'other',bytes:0,sha256:hash('')}]]){const f=fixture(),identity={...f.receipt,files};delete identity.buildHash;assert.throws(()=>parseBuildReceipt({...identity,buildHash:hash(canonicalSourceJson(identity))}));}});
+ await check('private disk store survives reopening, refuses replacement and bounds allocations',async()=>{
+  const root=await fs.mkdtemp(path.join(tmpdir(),'makeborne-build-'));
+  try{const {createLocalOutputStore}=await import('../../../infra/project-runtime/local-output-store.mjs');const store=await createLocalOutputStore(root),f=fixture();await retainCompiledOutput(store,f.workspace,f.receipt,f.read,signal());const reopened=await createLocalOutputStore(root);assert.deepEqual(await readCompiledOutputFile(reopened,f.workspace,f.receipt,'index.html',signal()),f.contents.get('index.html'));const key='compiled-v1/local/immutable';await Promise.all([store.putIfAbsent(key,Buffer.from('first'),signal()),store.putIfAbsent(key,Buffer.from('first'),signal())]);await store.putIfAbsent(key,Buffer.from('second'),signal());assert.equal(Buffer.from(await reopened.get(key,5,signal())).toString(),'first');await assert.rejects(store.get(key,4,signal()));await assert.rejects(store.get('../escape',5,signal()));assert.equal((await fs.readdir(root)).some(name=>name.startsWith('pending-')),false);
+  }finally{const {removeLocalTemporary}=await import('../../../infra/project-runtime/local-adapter.mjs');await removeLocalTemporary(root);}
+ });
+ console.log(`${checks} compiled-output groups passed; no provider/network/cloud calls.`);
+}
+module.exports={fixture};
+if(require.main===module)main().catch(error=>{console.error(`COMPILED OUTPUT CHECK FAILED: ${error.code||error.message}`);process.exitCode=1;});

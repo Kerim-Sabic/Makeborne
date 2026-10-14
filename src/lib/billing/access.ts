@@ -2,7 +2,8 @@ import "server-only";
 import type { User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { accountsEnabled } from "@/lib/supabase/auth-server";
-import { getVerifiedUser } from "@/lib/supabase/server";
+import { createClient, getVerifiedUser } from "@/lib/supabase/server";
+import { ensureTrialCredits, recordPlanObservation } from "@/lib/credits/server";
 import { authDestination } from "@/lib/supabase/auth-flow";
 import { RequestError } from "@/lib/server/http";
 import { billingConfig } from "./config";
@@ -43,18 +44,52 @@ export async function verifyCreationAccess(user: User, checkoutId?: string): Pro
     const verifiedUntil = active ? new Date(Math.min(Date.parse(membership.renewal_period_end!), Date.now() + 5 * 60_000)).toISOString() : new Date(0).toISOString();
     const { error: updateError } = await db.from("billing_memberships").update({ status: membership.status, verified_until: verifiedUntil, period_end: membership.renewal_period_end, checked_at: new Date().toISOString() }).eq("membership_id", stored.membership_id).eq("user_id", user.id);
     if (updateError) throw new RequestError("MEMBERSHIP_UNAVAILABLE", "Membership verification is temporarily unavailable.", 503);
+    // A verified membership that is no longer paid stops further allocations.
+    if (matches && !active) await recordPlanObservation(user.id, { membershipId: stored.membership_id, planId: membership.plan.id, status: membership.status,
+      paid: false, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "access_check" }).catch(() => undefined);
     if (active) {
       const { data: enabled, error: enabledError } = await db.rpc("makeborne_billing_creation_enabled", { p_plan_id: membership.plan.id });
-      return !enabledError && enabled === true;
+      const allowed = !enabledError && enabled === true;
+      // Record the verified state; the database grants allocations owed since the
+      // last observation (months 2-12 of a yearly plan have no payment event).
+      if (allowed) await recordPlanObservation(user.id, { membershipId: stored.membership_id, planId: membership.plan.id, status: membership.status,
+        paid: true, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "access_check" }).catch(() => undefined);
+      return allowed;
     }
   }
   return false;
 }
 
+/**
+ * The database decides first: admins, the free tier for confirmed accounts and
+ * recently verified memberships. It runs as the signed-in user, so it can only
+ * answer for the session that matches `user`. Failures fall back to Whop.
+ */
+async function databaseCreationAccess(user: User): Promise<boolean> {
+  try {
+    const client = await createClient();
+    const { data: claims, error: claimsError } = await client.auth.getClaims();
+    if (claimsError || claims?.claims?.sub !== user.id) return false;
+    const { data, error } = await client.rpc("makeborne_creation_access");
+    return !error && data === true;
+  } catch { return false; }
+}
+
+async function grantTrialCredits(user: User) {
+  // Idempotent and cheap after the first grant; never blocks access on failure.
+  try { await ensureTrialCredits(user.id); } catch { /* Retried on the next access. */ }
+}
+
+/** Database access (free tier, admins, recorded memberships) or live Whop verification. */
+export async function hasCreationAccess(user: User): Promise<boolean> {
+  if (await databaseCreationAccess(user)) { await grantTrialCredits(user); return true; }
+  return verifyCreationAccess(user);
+}
+
 export async function requireCreationAccess(user?: User) {
   const verified = user ?? await requireBillingUser();
   if (verified.is_anonymous || !verified.email || !verified.email_confirmed_at) throw new RequestError("AUTH_REQUIRED", "Confirm your account email before creating a project.", 401);
-  if (!await verifyCreationAccess(verified)) throw new RequestError("MEMBERSHIP_REQUIRED", "A creation membership is required. Plans are being prepared; support purchases do not unlock creation.", 402);
+  if (!await hasCreationAccess(verified)) throw new RequestError("MEMBERSHIP_REQUIRED", "Creation access is not available for this account right now. Choose a plan to continue; support purchases do not unlock creation.", 402);
   return verified;
 }
 
@@ -63,7 +98,7 @@ export async function requireCreationPage(next: string) {
   const user = await billingUser();
   if (!user) redirect(`/login?next=${encodeURIComponent(destination)}`);
   let allowed = false;
-  try { allowed = await verifyCreationAccess(user); } catch { /* Keep the gate closed during provider outages. */ }
+  try { allowed = await hasCreationAccess(user); } catch { /* Keep the gate closed during provider outages. */ }
   if (!allowed) redirect(`/billing?required=membership&next=${encodeURIComponent(destination)}`);
   return user;
 }

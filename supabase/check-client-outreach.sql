@@ -5,7 +5,10 @@ declare owner_id uuid:=gen_random_uuid(); editor_id uuid:=gen_random_uuid(); rev
   value jsonb:='{"stage":"Contacted","channel":"Instagram","profileUrl":"https://example.com/profile","lastContact":"2026-10-01","nextFollowUp":"2026-10-05","notes":"Fixture","activity":[]}'::jsonb;
 begin
   begin
-  insert into auth.users(id) values(owner_id),(editor_id),(reviewer_id),(outsider_id);
+  -- Confirmed accounts with free-tier creation access (writes require creation access).
+  update makeborne_private.billing_settings set free_tier_enabled=true where singleton;
+  insert into auth.users(id,email,email_confirmed_at)
+  select id, id::text||'@outreach.example.invalid', now() from unnest(array[owner_id,editor_id,reviewer_id,outsider_id]) id;
   insert into public.workspaces(id,name,owner_id) values(workspace,'Outreach transaction fixture',owner_id);
   insert into public.workspace_members(workspace_id,user_id,role) values(workspace,editor_id,'editor'),(workspace,reviewer_id,'reviewer');
   insert into public.clients(id,workspace_id,name) values(contact,workspace,'Outreach fixture');
@@ -20,7 +23,7 @@ begin
   get diagnostics affected=row_count;
   assert affected=0, 'stale save accepted';
   perform set_config('request.jwt.claim.sub',editor_id::text,true);
-  update public.clients set outreach=jsonb_set(value,'{stage}','"Replied"') where id=contact;
+  update public.clients set outreach=jsonb_set(value,'{stage}','"Conversation"') where id=contact;
   get diagnostics affected=row_count;
   assert affected=1, 'editor save failed';
   perform set_config('request.jwt.claim.sub',reviewer_id::text,true);

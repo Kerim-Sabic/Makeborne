@@ -1,22 +1,21 @@
 import { getAccountPrivileges } from "@/lib/account/privileges";
-import { apiError, boundedJson, sameOrigin, RequestError } from "@/lib/server/http";
-import { billingUser, requireCreationAccess } from "@/lib/billing/access";
-import { PilotBriefSchema } from "@/lib/generation/pilot-contract";
-import { generatePilotDraft } from "@/lib/generation/claude-pilot";
+import { cloudError, cloudJson } from "@/lib/cloud/server";
+import { billingUser } from "@/lib/billing/access";
+import { getCapabilities } from "@/lib/capabilities/server";
+import { submitGeneration } from "@/lib/generation/submission-server";
+import { privatePreviewsConfigured } from "@/lib/projects/preview-session-server";
 export const runtime = "nodejs";
 export const maxDuration = 180;
 export async function POST(request: Request) {
  try {
-  sameOrigin(request);
-  const user=await requireCreationAccess();
-  const parsed=PilotBriefSchema.safeParse(await boundedJson(request,50000));
-  if(!parsed.success)throw new RequestError('INVALID_BRIEF','Add a brief and choose a supported format. Testing supports up to 12,000 characters of instructions.',400);
-  return Response.json(await generatePilotDraft(user.id,parsed.data,request.signal),{headers:{'Cache-Control':'no-store'}});
- } catch(error){return apiError(error);}
+  return cloudJson({job:await submitGeneration(request)},202);
+ } catch(error){return cloudError(error);}
 }
 
 export async function GET() {
  const user=await billingUser();
- const available=Boolean(user && process.env.ANTHROPIC_API_KEY && (await getAccountPrivileges(user.id)).isAdmin);
- return Response.json({available},{headers:{"Cache-Control":"no-store"}});
+ const administrator=Boolean(user && (await getAccountPrivileges(user.id)).isAdmin);
+ const {available,scope,health,budget,reason}=getCapabilities({administrator}).operations.pilot;
+ const operatorSubmissionEnabled=administrator && process.env.MAKEBORNE_DURABLE_SUBMISSIONS_ENABLED==="true";
+ return Response.json({available,scope,health,budget,reason,operatorSubmissionEnabled,privatePreviewsEnabled:Boolean(user)&&privatePreviewsConfigured()},{headers:{"Cache-Control":"private, no-store",Vary:"Cookie"}});
 }

@@ -1,0 +1,12 @@
+BEGIN
+NOTICE:  PASS first page and full client total
+NOTICE:  PASS final page
+NOTICE:  PASS stable non-overlapping pages
+NOTICE:  PASS projects without documents remain visible
+NOTICE:  PASS client isolation and minimal payload
+NOTICE:  PASS workspace denied
+NOTICE:  PASS unavailable client denied
+NOTICE:  PASS invalid page denied
+DO
+NOTICE:  PASS anonymous denied
+ROLLBACK

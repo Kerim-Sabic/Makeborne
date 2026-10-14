@@ -1,0 +1,25 @@
+BEGIN
+NOTICE:  PASS browser dispatch denied
+NOTICE:  PASS nonmember dispatch denied
+NOTICE:  PASS another editor cannot dispatch approval
+NOTICE:  PASS request key required
+NOTICE:  PASS changed approval denied
+NOTICE:  PASS changed input denied
+NOTICE:  PASS spending rechecked at dispatch
+NOTICE:  PASS emergency stop rechecked at dispatch
+NOTICE:  PASS edited project cannot dispatch old approval
+NOTICE:  PASS expiry rechecked at dispatch
+NOTICE:  PASS inconsistent counters denied
+NOTICE:  PASS cancelled reservation cannot dispatch
+NOTICE:  PASS access revoked after reservation blocks dispatch
+NOTICE:  PASS rejected dispatches leave no records
+NOTICE:  PASS runtime worker cannot use legacy dispatch
+NOTICE:  PASS operator-only legacy regression gets first claim
+NOTICE:  PASS same-key retry never redispatches
+NOTICE:  PASS new-key retry never redispatches
+NOTICE:  PASS dispatched reservation cannot be released as unused
+NOTICE:  PASS dispatch retains both holds without inventing charges
+NOTICE:  PASS one immutable dispatch audit record
+NOTICE:  PASS worker cannot rewrite dispatch audit
+DO
+ROLLBACK

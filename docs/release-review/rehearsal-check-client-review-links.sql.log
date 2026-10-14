@@ -1,0 +1,9 @@
+BEGIN
+UPDATE 1
+NOTICE:  PASS creation, hashing, roles and project delivery move
+NOTICE:  PASS anonymous read, comment validation, sanitising and rate limits
+NOTICE:  PASS tenant isolation and column privileges
+NOTICE:  PASS decisions move only the reviewed project
+NOTICE:  PASS revocation, expiry, latest vs pinned, website snapshots
+DO
+ROLLBACK

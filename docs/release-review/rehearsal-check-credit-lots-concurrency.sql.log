@@ -1,0 +1,19 @@
+BEGIN
+CREATE EXTENSION
+CREATE FUNCTION
+CREATE FUNCTION
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  PASS concurrent reservations: 3 of 6 fit, each hold funded exactly (expiring plan credits first), ledger = available
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=40
+NOTICE:  PASS spend vs expiry: requests started before the end but locked after it cannot spend the allocation; lapse recorded once
+NOTICE:  Reservation already released
+NOTICE:  PASS timeout vs late settle: the hold is reclaimed exactly once and can never also be spent
+NOTICE:  PASS settle vs release: exactly one resolution (settled), ledger = available
+DO
+ROLLBACK

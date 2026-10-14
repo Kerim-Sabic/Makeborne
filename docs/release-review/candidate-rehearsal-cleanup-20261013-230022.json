@@ -1,0 +1,31 @@
+{
+  "at": "2026-10-13T23:03:57.7137717Z",
+  "rehearsalReport": "candidate-rehearsal.json",
+  "scenarios": [
+    {
+      "container": "makeborne_candidate_20261014_full_20261013230022",
+      "image": "sha256:0450166354dc9c1d25f0322ac8b580774d4fb0184d2b087f6e4fe9499c66cf53",
+      "network": "none",
+      "stateBeforeCleanup": "exited",
+      "publishedPorts": {}
+    },
+    {
+      "container": "makeborne_candidate_20261014_fault_20261013230022",
+      "image": "sha256:0450166354dc9c1d25f0322ac8b580774d4fb0184d2b087f6e4fe9499c66cf53",
+      "network": "none",
+      "stateBeforeCleanup": "exited",
+      "publishedPorts": {}
+    },
+    {
+      "container": "makeborne_candidate_20261014_interrupt_20261013230022",
+      "image": "sha256:0450166354dc9c1d25f0322ac8b580774d4fb0184d2b087f6e4fe9499c66cf53",
+      "network": "none",
+      "stateBeforeCleanup": "exited",
+      "publishedPorts": {}
+    }
+  ],
+  "imagePullsDisabled": true,
+  "containersRemaining": [],
+  "mainDatabasesTouched": false,
+  "cloudTouched": false
+}

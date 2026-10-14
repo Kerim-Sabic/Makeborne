@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "node": "v22.18.0",
+  "cloudWrites": 0,
+  "providerCalls": 0,
+  "checks": [
+    "strict staging config and locked mapping keep explicit TLS and all host credentials out of runtime data",
+    "ambient connection, proxy, TLS, admin and SDK credentials refused before any transport",
+    "database attestation rejects admin, inherited/unrelated grants, wrong namespace and unverifiedTLS",
+    "real startup composition attests and commits before constructing provider/store/broker or discovering work",
+    "startup cancellation destroys late acquisition and never falls through into controller",
+    "requested shutdown settles, uncooperative work/pool is bounded, idle database error remains failure",
+    "structured logging never includes configuration, raw SQL errors, credentials or arbitrary text",
+    "package exact versions and generated bundle excludes Supabase/admin/Next dependencies"
+  ],
+  "finishedAt": "2026-10-14T00:08:39.283Z"
+}

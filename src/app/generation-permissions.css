@@ -1,0 +1,4 @@
+.generation-permissions{width:min(100%,716px);margin:13px auto 0;padding:0 16px;text-align:left;color:#716a7f;font-size:11px;line-height:1.6}
+.generation-permissions .generation-permission{display:flex;align-items:flex-start;gap:8px;margin:7px 0;font:inherit;cursor:pointer}
+.generation-permissions .generation-permission input[type="checkbox"]{width:14px;height:14px;min-height:0;min-width:0;padding:0;flex:0 0 14px;margin:2px 0 0;accent-color:#6354c9}
+.generation-permissions p{margin:8px 0 0 22px;color:#81788c;font-size:10px}

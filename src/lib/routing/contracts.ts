@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ExactAmountSchema, QuoteSchema } from "../jobs/contracts";
 
-export const CapabilitySchema = z.enum(["text", "website_code", "book_content", "slide_content", "image", "visual_slide", "research_sources", "transcription", "clip_selection", "clip_render"]);
+export const CapabilitySchema = z.enum(["text", "website_code", "book_content", "slide_content", "image_input", "image", "visual_slide", "research_sources", "transcription", "clip_selection", "clip_render"]);
 export type Capability = z.infer<typeof CapabilitySchema>;
 const key = z.string().min(1).max(200);
 const units = z.enum(["input_tokens", "output_tokens", "images", "audio_seconds", "video_seconds", "searches", "compute_seconds"]);

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import CreationHome from "@/components/creation-home";
-import { publicPageMetadata, SITE } from "@/lib/site-metadata";
+import { publicPageMetadata, SITE, siteStructuredData } from "@/lib/site-metadata";
+import { CREATION_PLANS } from "@/lib/billing/plans";
 import { billingUser } from "@/lib/billing/access";
 import { accountsEnabled } from "@/lib/supabase/auth-server";
+import { getFreeTierOffer } from "@/lib/credits/server";
 
 export const dynamic = "force-dynamic";
 
@@ -12,22 +14,14 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const user = await billingUser();
-  const website = {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    "@id": `${SITE.url}/#website`,
-    name: SITE.name,
-    url: SITE.url,
-    description: SITE.description,
-    inLanguage: "en",
-  };
+  const [user, freeTier] = await Promise.all([billingUser(), getFreeTierOffer()]);
+  const website = siteStructuredData(CREATION_PLANS);
 
   return <>
     <script
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: JSON.stringify(website).replace(/</g, "\\u003c") }}
     />
-    <CreationHome initialEmail={user?.email ?? null} accountsEnabled={accountsEnabled()} />
+    <CreationHome initialEmail={user?.email ?? null} accountsEnabled={accountsEnabled()} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} />
   </>;
 }

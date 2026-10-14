@@ -1,0 +1,127 @@
+{
+  "recordedAt": "2026-10-13T05:50:50.1105281Z",
+  "status": "local_package_passed_cloud_unqualified",
+  "productionTouched": false,
+  "stagingTouched": false,
+  "deployed": false,
+  "committed": false,
+  "providerCalls": 0,
+  "newRoundSpendUsd": 0,
+  "newRoundReservedUsd": 0,
+  "applicationInventoryFrozen": false,
+  "checks": {
+    "brokerMockedGroups": 15,
+    "realSqlJournalGroups": 10,
+    "priorPublicationSqlGroups": 8,
+    "originalArtworkGroups": 14,
+    "realWorkerAuthorityGroups": 10,
+    "remoteAdapterInjectedGroups": 18,
+    "addressSqlGroups": 4,
+    "journalMockedGroups": 14,
+    "offlineHarnesses": {
+      "total": 97,
+      "explicitLiveEnvironmentSkips": 5,
+      "passed": 97
+    },
+    "lint": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "realPgDriverGroups": 10,
+    "build": "pass_including_TypeScript"
+  },
+  "rehearsal": {
+    "scenarios": [
+      "full",
+      "fault",
+      "interrupt"
+    ],
+    "inputHashesStillMatch": true,
+    "fingerprint": "e6d456a5c9bc54554bde3c72e53ff817",
+    "migrations": 57,
+    "containers": "stopped_retained",
+    "passed": true
+  },
+  "fixes": [
+    "Persistent create intent and immutable lifecycle acknowledgement before provider call",
+    "Cleanup independent of deleted source and process restart, with separate leases and pending backoff",
+    "Known-session identity checked before stop acknowledgement",
+    "Same-preparation replacement cannot create while previous fence has unresolved resources",
+    "Mandatory recovery before discovery and every candidate",
+    "Private staging artwork broker with fixed configured origin, signed bounded requests, active fence and post-read reauthorization",
+    "No Supabase administrator credential in publication controller",
+    "Historical immutable-preview origin replaced with required bounded runtime origin"
+  ],
+  "limitations": [
+    "No live remote Sandbox image, OS/network boundary, cloud TLS or controller host qualification",
+    "Controller composition exists; packaging, credential bootstrap, approved compute and deployment remain pending",
+    "Broker disabled; stable alias ownership, deployment protection, live Storage and real20MB streaming unqualified",
+    "Cloud staging remains older than candidate",
+    "Required plan switching and signed payment lifecycle remain open",
+    "OpenAI credential absent; live images unqualified",
+    "Fresh book/deck/edit quality preflight only; proposed6USD package unreserved and unexecuted",
+    "No fresh Claude acknowledgement inferred"
+  ],
+  "evidence": [
+    "publication-sandbox-journal-20261013.json",
+    "publication-control-driver-20261013.json",
+    "publication-asset-broker-20261013.md",
+    "publication-artwork-independent-review-20261013.md",
+    "candidate-rehearsal.json",
+    "fresh-product-quality-plan-20261013.md"
+  ],
+  "sourceHashes": [
+    {
+      "file": "infra/project-runtime/publication-control.mjs",
+      "sha256": "e0dcbbff1e1eab3bd3772d725554ef6ead5bfe9b1e3c99dfd2d69070ab36e376"
+    },
+    {
+      "file": "infra/project-runtime/publication-supervisor.mjs",
+      "sha256": "ba5159dd908abbbfa6fd1839911b8c3e860f0d7d292002f0c560098a1446c7b1"
+    },
+    {
+      "file": "infra/project-runtime/publication-journal.mjs",
+      "sha256": "dee2f9368c1b2a2b7a688506eb517e6695eca9fa7ad5ba5ab1791421c0508b3c"
+    },
+    {
+      "file": "infra/project-runtime/publication-controller.mjs",
+      "sha256": "0c22df937383882bd4a3fcb0e541058832d1de7b3db24597f0140829be1bd266"
+    },
+    {
+      "file": "infra/project-runtime/vercel-publication-executor.mjs",
+      "sha256": "79ce1d6c83e2439a5eb1ae56fdc68ba9324fc384e2edff7aac9333ee37b803cd"
+    },
+    {
+      "file": "src/lib/projects/publication-download-contract.ts",
+      "sha256": "2e45475f213cff82ccc0e23b64267720286b55e173908d0e15b5309eb05ae1ac"
+    },
+    {
+      "file": "src/lib/projects/publication-download.ts",
+      "sha256": "1b408b731cfe325eb13f89fdb11ca05e2eaa8855230c56141b3c2e04387c96ca"
+    },
+    {
+      "file": "src/lib/projects/publication-asset-broker.ts",
+      "sha256": "5aeb52dc811a602a18763d7c243d7cd795209ef176202decbd97db8533b51bb0"
+    },
+    {
+      "file": "src/lib/projects/publication-assets.ts",
+      "sha256": "96b921d5ea5805a19ba76817aca596b7d170088d11e457be4232f884c46da9e0"
+    },
+    {
+      "file": "src/app/api/hosting/publication-assets/route.ts",
+      "sha256": "9ce88671fcbf4786f137b430d2f9915a9a285967889c5d7af324aedbc58048af"
+    },
+    {
+      "file": "src/lib/projects/check-publication-journal.cjs",
+      "sha256": "15ba015366132d3a4656faf58134863370379a25f34eb32e15da4b0e23a3fa39"
+    },
+    {
+      "file": "src/lib/projects/check-publication-download.cjs",
+      "sha256": "62cd79eae83f3d8d9dc86544b4661619dad3fc40945492379eb8c4b8052f2937"
+    },
+    {
+      "file": "supabase/migrations/20261013210000_publication_sandbox_journal.sql",
+      "sha256": "3431dbd248339da0114327f6214b148374e348144090b05abd44fd22c3631a39"
+    }
+  ]
+}

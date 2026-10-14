@@ -1,0 +1,44 @@
+{
+  "authProject": "xzwikrunwpurxnxgkznh",
+  "authPreview": "https://makeborne-release-staging-poymmdz0z-kerimsabic-6594s-projects.vercel.app",
+  "latestPublicationPreview": "https://makeborne-release-staging-jex4zjcir-kerimsabic-6594s-projects.vercel.app",
+  "latestDeployment": "dpl_BkXTCdaWtVUVABBNvP18QD4SYfa4",
+  "email": {
+    "provider": "Resend",
+    "keyName": "makeborne_staging_smtp",
+    "permission": "Sending only, makeborne.com",
+    "sender": "Makeborne \u00b7 Staging <noreply@makeborne.com>",
+    "recipient": "admin@makeborne.com",
+    "inboxArrival": true,
+    "finalBrandedTemplateOnly": true,
+    "explicitConfirmationPassed": true,
+    "temporarySignupUserRemoved": true
+  },
+  "google": {
+    "clientId": "790202271108-l4dj4f7gn68q2ksu80i604sb3op239k1.apps.googleusercontent.com",
+    "configured": true,
+    "realOwnerSignInPassed": true,
+    "creationMembershipGateRetained": true
+  },
+  "github": {
+    "appId": "3927066",
+    "configured": true,
+    "scope": "read-only email; no repository access",
+    "realOwnerSignInPassed": true,
+    "creationMembershipGateRetained": true
+  },
+  "databaseProof": "Owner staging Auth identity includes google and github. Owner test account retained; it is not a production clone.",
+  "publishing": {
+    "default": "title plus random artifact ID suffix; one address per artifact",
+    "rename": "Republish at a new validated address; retired slug reserved to same artifact until artifact deletion",
+    "sqlChecks": "Isolated local and cloud staging passed; previous hosting-mode checks passed",
+    "httpChecks": "Real cloud publication, changed canonical URL, stale update rejected; fixture cleanup passed",
+    "migration": "20261012210033_hosted_site_address_changes.sql",
+    "pendingMigrationsOnStaging": 44,
+    "publicCustomerHostingQualified": false
+  },
+  "remaining": "Buy separate customer domain; DNS/TLS and forms qualification. Final rollout/recovery rehearsal still open.",
+  "productionAppChanged": false,
+  "committed": false,
+  "paidAICalls": 0
+}

@@ -1,0 +1,88 @@
+{
+  "rendererId": "chromium-153.0.8010.12-controller-f5d57fc57ac22f85a3105e887b9b1600a45db9ada7d94f9c997988047ad857f3",
+  "status": "passed-local-only",
+  "offlineCompilerGroups": 6,
+  "receiptHash": "7ab733e1f8c9ea41a52844cb5ca3afc73223ff0c13243e815a0f6839f0848199",
+  "limitations": [
+    "Operator-only local executor; no production isolation qualification",
+    "No production or staging changes; no paid provider calls",
+    "Docker image rebuilt from existing pinned Dockerfile using cached layers",
+    "Final combined SQL/API/browser qualification remains root responsibility"
+  ],
+  "runtimeImageId": "sha256:505d5483990e8892fd3b70e11120c68f470587ba28fe445d4fab4c6974c92697",
+  "publicFiles": 12,
+  "createdAt": "2026-10-13T03:49:11.1762126Z",
+  "runtimeChecks": [
+    "actual pinned Docker Vite build",
+    "retained output browser capture",
+    "two distinct routes",
+    "lazy imported route CSS preserved",
+    "original PNG bytes",
+    "real WOFF2 fonts loaded",
+    "forged postMessage ignored",
+    "wrong version and assets refused",
+    "cancelled compilation refused",
+    "390 and 1440 desktop/mobile widths",
+    "JavaScript enabled and disabled parity",
+    "interactive count button",
+    "no runtime errors or horizontal overflow"
+  ],
+  "files": [
+    {
+      "path": "src/lib/projects/publication-compiler.ts",
+      "sha256": "1ca39677cbc2a018d6f5f4dbffadfc63c584abbddbbc2267fb5175172f31563b"
+    },
+    {
+      "path": "src/lib/projects/publication-output.ts",
+      "sha256": "506522b55e30d0d6cf02ddb68640bec04bf30bcb19bb6b04b10a563e0623d0c6"
+    },
+    {
+      "path": "src/lib/hosting/snapshot.ts",
+      "sha256": "72dae4e4435c07048077a9b8554ad1487d083abe4addba6212e4c1de991c8d50"
+    },
+    {
+      "path": "src/lib/hosting/bundle.ts",
+      "sha256": "3452ec6875a10279dc3d841340f9bb4f6cf29806d432cf83d6245e9011747188"
+    },
+    {
+      "path": "infra/project-runtime/publication-renderer.mjs",
+      "sha256": "20375efeeaac6f60fcdc3becbbea13bd48904872021139907a0ed2de0a38c90a"
+    },
+    {
+      "path": "infra/project-runtime/publication-adapter.mjs",
+      "sha256": "7308b95103c47b253098e5932eb8d592f0fc16b5834ccaeaf890f0bf0fc51782"
+    },
+    {
+      "path": "infra/project-runtime/local-adapter.mjs",
+      "sha256": "d37be041e8440524b43b8cd872ab429c10426c1face2c5f7f3b11b2760561bf1"
+    },
+    {
+      "path": "infra/customer-sites/site-policy.js",
+      "sha256": "ded278fbc00c51be95492c397bce13774ea8e5144f2cc996a5ff5ce4c9820643"
+    },
+    {
+      "path": "infra/customer-sites/_worker.js",
+      "sha256": "51ceb1ddf4b2226a184416ba3f8f574455e9d595b8bb41b4f5da9012fe034bb2"
+    },
+    {
+      "path": "scripts/check-publication-runtime.cjs",
+      "sha256": "a280f983d65761ac7d694a7a3680b18d4e4f56824b133e85f823b2ebc6b3c0f2"
+    },
+    {
+      "path": "scripts/check-publication-browser.cjs",
+      "sha256": "683d2d3922ee95532f67fc14c0d687f0525cfde372be028772cddbaa14459f5f"
+    },
+    {
+      "path": "src/lib/projects/check-publication-compiler.cjs",
+      "sha256": "4e532cbc20419fdce52769628493b87761fe5b5b85813781bb4677eaff4726ea"
+    },
+    {
+      "path": "src/lib/hosting/check-hosting.cjs",
+      "sha256": "de5c077d5c6af916e1905a11cb3c4c0e59037edc7b96b7542a60cb3fb209fa2b"
+    }
+  ],
+  "buildHash": "96060ebea09a8949c6b6a23d735cb2c1726ba67598240d02f23d6369f0cd022e",
+  "browserBoundaryGroups": 6,
+  "hostingGroups": 20,
+  "fontFiles": 7
+}

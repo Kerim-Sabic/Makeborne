@@ -1,0 +1,8 @@
+BEGIN
+SET
+UPDATE 1
+INSERT 0 1
+DO
+NOTICE:  PASS locked budget denies administrator claim without creating a run or reservation
+NOTICE:  PASS browser roles cannot administer pilot or read GitHub credentials
+ROLLBACK

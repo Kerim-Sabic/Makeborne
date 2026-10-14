@@ -1,0 +1,41 @@
+{
+  "observedAt": "2026-10-13T04:15:42.831Z",
+  "apiVersion": "2025-01-01",
+  "sandboxOnly": true,
+  "readOnly": true,
+  "realMoneySpent": 0,
+  "observations": [
+    {
+      "id": "plan_00mHHGVMtYzRL",
+      "companyId": "biz_e4w3EGe3izP67k",
+      "currency": "usd",
+      "planType": "renewal",
+      "billingPeriod": 30,
+      "initialPrice": 0,
+      "renewalPrice": 29,
+      "trialPeriodDays": null,
+      "releaseMethod": "buy_now",
+      "stock": 0,
+      "unlimitedStock": true,
+      "requiredFieldsPresent": true
+    },
+    {
+      "id": "plan_9B9KMOqqdJXv4",
+      "companyId": "biz_e4w3EGe3izP67k",
+      "currency": "usd",
+      "planType": "renewal",
+      "billingPeriod": 365,
+      "initialPrice": 0,
+      "renewalPrice": 279,
+      "trialPeriodDays": null,
+      "releaseMethod": "buy_now",
+      "stock": 0,
+      "unlimitedStock": true,
+      "requiredFieldsPresent": true
+    }
+  ],
+  "limitations": [
+    "These existing test plans do not establish production catalogue prices or purchasability.",
+    "No checkout, signed notification, credit delivery, renewal or plan replacement is exercised."
+  ]
+}

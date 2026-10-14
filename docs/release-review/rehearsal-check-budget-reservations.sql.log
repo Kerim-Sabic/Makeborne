@@ -1,0 +1,30 @@
+BEGIN
+NOTICE:  PASS default spending denied
+NOTICE:  PASS nonmember denied
+NOTICE:  PASS reviewer denied
+NOTICE:  PASS changed approval denied
+NOTICE:  PASS changed input denied
+NOTICE:  PASS emergency stop denied
+NOTICE:  PASS browser function call denied
+NOTICE:  PASS service reserve and idempotent replay
+NOTICE:  PASS exact counters increment once
+NOTICE:  PASS duplicate proposal denied
+NOTICE:  PASS changed request key denied
+NOTICE:  PASS concurrency bound
+NOTICE:  PASS insufficient budgets denied
+NOTICE:  PASS failed operations leave no allocations
+NOTICE:  PASS customer credit bound independently enforced
+NOTICE:  PASS vendor bound independently enforced
+NOTICE:  PASS stale artifact version denied
+NOTICE:  PASS expired proposal denied
+NOTICE:  PASS reviewer release denied
+NOTICE:  PASS browser release denied
+NOTICE:  PASS dispatched release denied
+NOTICE:  PASS uncertain release denied
+NOTICE:  PASS inconsistent counters denied
+NOTICE:  PASS cancellation permitted while spending stopped
+NOTICE:  PASS both balances released exactly once without charges
+NOTICE:  PASS release replay retains original audit
+NOTICE:  PASS cancellation reason required
+DO
+ROLLBACK

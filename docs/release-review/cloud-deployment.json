@@ -1,0 +1,33 @@
+{
+  "project": "makeborne-release-staging",
+  "projectId": "prj_c9h8fuyEmVAT8F3NHFMvzFR1BnLc",
+  "team": "kerimsabic-6594s-projects",
+  "database": "xzwikrunwpurxnxgkznh",
+  "previewDeployment": "dpl_BNSsYnER7N2CCRgyhVsxdihbiiF8",
+  "previewUrl": "https://makeborne-release-staging-a8xmk8pqq-kerimsabic-6594s-projects.vercel.app",
+  "bootstrapDeployment": "dpl_4Ds7dyk8F2sLRYL1Dq8mqQ55MPN2",
+  "bootstrapNote": "Vercel assigned first deployment to new staging project default environment despite preview flag; no environment secrets were configured for that target.",
+  "productionAppChanged": false,
+  "providerKeysConfigured": false,
+  "checkoutEnabled": false,
+  "sourceManifest": "staging-source-manifest.json",
+  "failedPackagingDeployment": "dpl_EqkRaeZkNWmu2huonNZQfdA2LR36",
+  "storageBootstrap": "Private project-assets bucket and repository storage policies installed on staging only",
+  "exportFailureDeployment": "dpl_J2BaHsMZeojnZZjyv3C2NAcm6uSF",
+  "exportFix": "Explicit serverless tracing for Playwright runtime files and Chromium in both export routes",
+  "passedExportDeployment": "dpl_7Aw3S3n2ZyFgab83foqTNRgUWpUj",
+  "supportCheckoutDisabled": true,
+  "status": "READY",
+  "cloudHttpChecksPassed": 8,
+  "offlineHarnessesPassed": 75,
+  "productionDeploymentRechecked": "dpl_8NUAKFQ6orzUHcb7sAEPziGHhK9T",
+  "latestPublicationDeployment": "dpl_BkXTCdaWtVUVABBNvP18QD4SYfa4",
+  "latestPublicationUrl": "https://makeborne-release-staging-jex4zjcir-kerimsabic-6594s-projects.vercel.app",
+  "authenticationQualifiedUrl": "https://makeborne-release-staging-poymmdz0z-kerimsabic-6594s-projects.vercel.app",
+  "emailDeliveryTested": true,
+  "oauthRealSignInTested": [
+    "google",
+    "github"
+  ],
+  "addressChangesTested": true
+}

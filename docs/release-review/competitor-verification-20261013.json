@@ -1,0 +1,32 @@
+{
+  "reviewedAt": "2026-10-13",
+  "method": "Delegated read-only research against official product documentation. Published capability is not proof of output quality; Makeborne capability is based on candidate implementation, not deployment.",
+  "competitors": [
+    {"name":"Lovable","verified":["Websites and full-stack apps","GitHub sync","Code editing and source download","Document/data attachments","Browser presentations and PPTX/PDF download"],"sources":["https://docs.lovable.dev/introduction/subscription-plans","https://docs.lovable.dev/features/generate-files","https://docs.lovable.dev/introduction/credits-and-usage"],"uncertain":["Native PowerPoint element editability and print book fidelity were not proven by these sources."]},
+    {"name":"Bolt","verified":["Publishing and hosting","Visitor and page analytics","Dedicated slides editor with notes","Plan mode","Attachments"],"sources":["https://support.bolt.new/cloud/hosting","https://support.bolt.new/cloud/hosting/analytics","https://support.bolt.new/use-cases/slides","https://support.bolt.new/best-practices/plan-mode","https://support.bolt.new/building/upload-files"],"uncertain":["Editable PPTX export was not established."]},
+    {"name":"Base44","verified":["App backend, authentication and database","Analytics and collaboration","Credit top-ups subject to paid-owner eligibility"],"sources":["https://base44.com/pricing","https://docs.base44.com/Account-and-billing/Credits","https://docs.base44.com/Account-and-billing/credit-top-ups"],"uncertain":["Official pages conflict on the plan required for custom domains; avoid an unsupported comparison."]},
+    {"name":"v0","verified":["Full-stack app generation","Git imports, branches, previews, PRs and checks"],"sources":["https://v0.app/docs/pricing","https://v0.app/docs/full-stack-apps","https://v0.app/docs/github"],"uncertain":["A report's $2/day free allowance was not supported by the reviewed current pricing page."]},
+    {"name":"Framer","verified":["Paid editor/content-editor seats and free viewers","Hosting and analytics with plan-specific limits"],"sources":["https://www.framer.com/pricing"],"uncertain":[]},
+    {"name":"Gamma","verified":["PDF, PPTX and PNG export","Paid brand removal and analytics","Editable shapes and tables","Credit top-ups and bounded rollover"],"sources":["https://gamma.app/pricing","https://help.gamma.app/en/articles/7834324-how-do-credits-work-in-gamma","https://help.gamma.app/en/articles/8022861-what-s-the-easiest-way-to-export-my-gamma","https://help.gamma.app/en/articles/16951068-what-are-shapes-and-how-do-i-use-them"],"uncertain":["Its published failed-generation credit policy must not be attributed to Makeborne without matching implementation."]}
+  ],
+  "makeborneCorrections": [
+    "Do not claim that nobody else combines website and presentation generation.",
+    "Do not describe Bolt analytics or slides as merely planned.",
+    "Makeborne GitHub snapshot export is not repository import or two-way sync.",
+    "The real live website builder has AI Plan mode, but the generic home attachment/outline flow is not equivalent.",
+    "Tier seat, storage and parallel-work promises need actual enforcement or copy removal.",
+    "Custom-domain ownership is not the same as a verified customer-domain connection flow.",
+    "Unlimited published sites require disclosure of actual fair-use and safety limits.",
+    "Do not promise zero charges for every failed or unchanged request; use durable recorded outcome and charging policy."
+  ],
+  "priority": [
+    "Single user-authorized cumulative operation budget with durable recovery",
+    "Review version integrity and server-side private-note redaction",
+    "Preview, export and hosting fidelity with trusted source identity",
+    "Real website, ebook and editable presentation quality qualification",
+    "Qualified billing lifecycle, uploads, auth and hosting on the exact staging candidate",
+    "Customer custom domains, analytics and consistent attachment consumption",
+    "Repository import and two-way code sync, generated application backend services"
+  ],
+  "release": "Not launch-ready. Comparative superiority is not established by feature lists or passing unit tests."
+}

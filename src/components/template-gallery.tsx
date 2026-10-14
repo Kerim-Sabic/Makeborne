@@ -119,7 +119,7 @@ export default function TemplateGallery({
           <h2 id="mbg-title">Start with a little inspiration.</h2>
         </div>
         <p>
-          Choose a look. Bring your own idea.
+          Choose a look. Bring your own idea.{" "}
           <br />
           Make it your own in the studio.
         </p>

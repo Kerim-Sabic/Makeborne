@@ -1,0 +1,13 @@
+{
+  "project": "xzwikrunwpurxnxgkznh",
+  "productionTouched": false,
+  "changedAt": "2026-10-14T02:06:02.088Z",
+  "before": {
+    "site_url": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+    "uri_allow_list": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app/auth/callback"
+  },
+  "after": {
+    "site_url": "https://makeborne-release-staging-qa2026101-kerimsabic-6594s-projects.vercel.app",
+    "uri_allow_list": "https://makeborne-release-staging-qa2026101-kerimsabic-6594s-projects.vercel.app/auth/callback"
+  }
+}

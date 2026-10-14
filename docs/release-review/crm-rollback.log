@@ -1,0 +1,20 @@
+                                                                                     crm_freeze_writes                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mode": "contracted", "frozen": true, "consistent": true, "frozenReason": "staging rollback rehearsal", "minClientProtocol": 2, "clientsLegacyStages": 0, "clientsCurrentOnlyStages": 0}
+(1 row)
+
+                                                                                     crm_rollback_client_stages                                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mode": "expand", "frozen": true, "clients": 0, "consistent": true, "frozenReason": "staging rollback rehearsal", "minClientProtocol": 0, "clientsLegacyStages": 0, "clientsCurrentOnlyStages": 0}
+(1 row)
+
+                                                                      crm_resume_writes                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mode": "expand", "frozen": false, "consistent": true, "frozenReason": "", "minClientProtocol": 0, "clientsLegacyStages": 0, "clientsCurrentOnlyStages": 0}
+(1 row)
+
+                                                                    crm_transition_report                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mode": "expand", "frozen": false, "consistent": true, "frozenReason": "", "minClientProtocol": 0, "clientsLegacyStages": 0, "clientsCurrentOnlyStages": 0}
+(1 row)
+

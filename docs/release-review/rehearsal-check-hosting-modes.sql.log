@@ -1,0 +1,14 @@
+BEGIN
+NOTICE:  PASS existing published link is served unchanged by both readers
+NOTICE:  PASS legacy republish: same address, portable document on the existing host, no script stored or enabled
+NOTICE:  PASS isolated publish: existing host keeps the portable copy; isolated host serves its copy and script; replays are exact
+NOTICE:  PASS rollback: republishing in the default mode removes the isolated copy and script; both hosts serve the portable copy
+NOTICE:  PASS new project publishes portable by default; offline hides it everywhere
+NOTICE:  PASS privileges: only the service role publishes; visitors read only published documents
+DO
+                                                   result                                                   
+------------------------------------------------------------------------------------------------------------
+ PASS: hosting modes (existing links, republish, isolated copy, rollback, new projects, guards, privileges)
+(1 row)
+
+ROLLBACK

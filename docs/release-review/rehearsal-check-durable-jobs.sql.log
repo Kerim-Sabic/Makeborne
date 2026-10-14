@@ -1,0 +1,10 @@
+BEGIN
+NOTICE:  PASS rejected enqueue rolls back budget and reservation together
+NOTICE:  PASS job, existing reservation and outbox enqueue are atomic and idempotent
+NOTICE:  PASS browser dispatch and direct worker state/audit/core mutation denied
+NOTICE:  PASS lease recovery increments fence; stale workers and legacy paths cannot bypass it
+NOTICE:  PASS one dispatch intent; lost worker and cancellation retain uncertain holds without redispatch
+NOTICE:  PASS pre-dispatch cancellation releases once and invalidates active workers
+NOTICE:  PASS deadline releases unused work; unresolved provider hold remains exact and uncharged
+DO
+ROLLBACK

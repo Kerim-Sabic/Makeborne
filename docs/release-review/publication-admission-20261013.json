@@ -1,0 +1,29 @@
+{
+  "container": "makeborne_publication_20261013034802",
+  "hypothesis": "Distinct request IDs in different owned workspaces bypass the actor admission cap",
+  "conclusion": "Falsified by existing one-owned-workspace invariant and workspace lock; no migration required",
+  "startedAt": "2026-10-13T04:59:20.756Z",
+  "passed": true,
+  "providerCalls": 0,
+  "cloudWrites": 0,
+  "checks": [
+    "second owned workspace is rejected by production one_owned_workspace_per_user unique index; hypothesized cross-workspace race is unreachable",
+    "a valid session for another actor cannot admit a preparation in the existing owned workspace",
+    "existing public and private request paths lock the unique owned workspace: exactlyone of two distinct-artifact requests succeeds at29; other failsMB429 at30",
+    "original request replay remains valid above/at cap without a new preparation",
+    "same actor waits on existing workspace lock; unrelated actor admits while lock held; replay resumes after release"
+  ],
+  "race": {
+    "startingCount": 29,
+    "workspaces": 1,
+    "distinctArtifacts": 2,
+    "distinctRequestIds": true,
+    "accepted": 1,
+    "finalCount": 30,
+    "errors": [
+      "ERROR:  MB429: Preparation limit reached\nCONTEXT:  PL/pgSQL function makeborne_private.request_publication_preparation(uuid,uuid,timestamp with time zone,uuid,uuid,integer,integer,text,boolean,uuid) line 25 at RAISE\nLOCATION:  exec_stmt_raise, pl_exec.c:3897\n"
+    ]
+  },
+  "finishedAt": "2026-10-13T04:59:26.716Z",
+  "harnessSha256": "1a38de3d2a62666f55a36849daeb30678ff421b35b0abe2b582a10b3bd4f22c5"
+}

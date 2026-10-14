@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-14T00:12:23.535Z",
+  "proof": "Captured provider responses through actual listMembershipPayments with local transport; no HTTP, SQL grants or webhook signature proof",
+  "failedStatus": "open",
+  "failedSubstatus": "past_due",
+  "failedHasPaidAt": true,
+  "failedEvidenceCount": 0,
+  "paidEvidenceCount": 1,
+  "providerCalls": 0,
+  "entitlementMappingsAdded": false,
+  "weeklyPlansGrantedMonthlyCredits": false,
+  "sourceSha256": "89c2c226d3b109dc91ab70123b3d3245f65b57525a3d8ac01774c218a611e8e1"
+}

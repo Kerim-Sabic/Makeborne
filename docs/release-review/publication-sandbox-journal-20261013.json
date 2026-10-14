@@ -1,0 +1,22 @@
+{
+  "container": "makeborne_publication_20261013034802",
+  "startedAt": "2026-10-13T05:41:29.806Z",
+  "passed": true,
+  "cloudWrites": 0,
+  "providerCalls": 0,
+  "migration": "supabase/migrations/20261013210000_publication_sandbox_journal.sql",
+  "sha256": "3431dbd248339da0114327f6214b148374e348144090b05abd44fd22c3631a39",
+  "checks": [
+    "real LOGIN role boundary: explicit SET ROLE required, browser/service cannot escalate or call, worker has no journal table access, exact RPC catalog passes",
+    "strict bounded event schema rejects unknown/secret fields, wrong scalar types, mutable images, invalid identities/timestamps and unmatched claim/worker/fence/lease",
+    "concurrent per-attempt creation admits one intent, replay is stable, equivalent timestamp formats accepted, active peer is excluded from cleanup/pending",
+    "running binds provider session/expiry once; immutable image/evidence/runtime preserved, monotonic terminal stop and exact stopped replay, compiler capped at one",
+    "renderer intents capped at20 per claim and unresolved resources prevent parallel create admission",
+    "expired execution cannot run but original cleanup persists; concurrent cleaners grant one separate fence, no source/resume state, exact finish replay and hidden-backoff pending retained",
+    "deleted preparation retains cleanup obligation; old backoff record does not starve newer orphan; expired cleanup lease increments fence, stale cleaner denied and terminal replay stable",
+    "reclaimed preparation cannot create across an unresolved earlier fence; admission-before-recovery and recovery-before-concurrent-admission fail closed, cleanup permits new intent",
+    "workspace/account/source cascades cannot erase unresolved sandbox journal",
+    "cleanup batch bounds enforced; stopped retention prunes at most100 older30day rows per poll; unresolved survives age/retention and remains pending"
+  ],
+  "finishedAt": "2026-10-13T05:42:07.621Z"
+}

@@ -1,0 +1,25 @@
+{
+  "approvedUsd": 25,
+  "conservativePriorUsd": 12.58,
+  "isolatedAccountedUsd": 11.285144,
+  "reservedUsd": 0,
+  "conservativeTotalUsd": 23.865144,
+  "remainingUsd": 1.1348559999999992,
+  "newCallsThisTurnAccountedUsd": 0.58539,
+  "providerLimitsEnabled": false,
+  "grouped": [
+    {
+      "status": "uncertain",
+      "calls": "6",
+      "measured": "165508",
+      "accounted": "7270483"
+    },
+    {
+      "status": "settled",
+      "calls": "29",
+      "measured": "4014661",
+      "accounted": "4014661"
+    }
+  ],
+  "updatedAt": "2026-10-12T18:39:48.553Z"
+}

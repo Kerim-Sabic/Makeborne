@@ -12,6 +12,7 @@ const StudioAccount = load("src/components/studio-account.tsx", {
   "next/link": ({ children, ...props }) => React.createElement("a", props, children),
   "next/navigation": { useRouter: () => ({ refresh() {} }) },
   "@/lib/supabase/client": { createClient: () => { throw new Error("No live auth calls allowed"); } },
+  "@/lib/account-local-data": { clearAccountLocalData: () => {} },
 }).default;
 for (const variant of ["home", "home-mobile"]) {
   const html = renderToStaticMarkup(React.createElement(StudioAccount, { initialEmail: "fixture@example.invalid", enabled: true, variant }));

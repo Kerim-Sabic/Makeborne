@@ -1,0 +1,11 @@
+BEGIN
+UPDATE 7
+UPDATE 7
+NOTICE:  PASS null/stale worker, outline and wrong output rejected without a saved revision or outcome
+NOTICE:  PASS failed evidence atomically rolls back canonical revision, pointer, receipt and usage; auth context restored
+NOTICE:  PASS signout, editor revocation and changed source after dispatch block result save
+NOTICE:  PASS rollback after build insertion leaves no source, build, outcome, ledger or replay receipt
+NOTICE:  PASS exact replay creates one canonical version, receipt, outcome and provider ledger entry; actor restored and no customer charge
+NOTICE:  PASS changed evidence/content replay and subsequent customer revision rejected
+DO
+ROLLBACK

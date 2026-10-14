@@ -1,0 +1,18 @@
+{
+  "fixture": "makeborne_publication_20261013034802",
+  "migration": "supabase/migrations/20261013220000_publication_worker_attestation.sql",
+  "sha256": "67b2e1d46bdace0364b3446fa1627796fd6d242941b2c29467859c574b94c0e6",
+  "startedAt": "2026-10-13T06:10:50.903Z",
+  "providerCalls": 0,
+  "cloudWrites": 0,
+  "passed": true,
+  "checks": [
+    "actual dedicated-login catalog has exact worker-only membership, no admin/inherited/raw/function/schema/database privileges; local TLS not claimed",
+    "actual restricted LOGIN requires SET ROLE and returns exact actual production policy with explicit verified contract",
+    "extra worker RPC/table access, executable allowed-name overload, missing required grant, wrong definer boundary and disabled journal RLS each refuse attestation, then restore cleanly",
+    "configured synthetic staging namespace and exact QA workspace are reported from private policy without raw read grant",
+    "browser and service roles cannot execute either startup authority or read policy",
+    "full worker catalog remains explicit ten RPCs, no table or unrelated authority"
+  ],
+  "finishedAt": "2026-10-13T06:10:58.490Z"
+}

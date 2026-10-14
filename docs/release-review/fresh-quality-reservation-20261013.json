@@ -1,0 +1,13 @@
+{
+  "packageId": "ac4b08bd-b91f-47bb-9956-c6d719505738",
+  "allocation": "Codex",
+  "capMicrousd": 6000000,
+  "model": "claude-opus-5-5",
+  "port": 3068,
+  "status": "settled",
+  "roundAuthorizedAt": "2026-10-13T00:54:44.005631+00:00",
+  "actionsSha256": "7074719ce2ef2b9a4ce4ac97121de8f076ba801886c879fb790a6cbec28927f4",
+  "expiresAt": "2026-10-13T07:32:21.148Z",
+  "spentMicrousd": 653970,
+  "settledAt": "2026-10-13T06:50:35.364Z"
+}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProjectDeliveryStageSchema } from "../project-delivery";
 import { ClientOutreachSchema } from "../client-outreach";
 import { ArtifactContentSchema, ArtifactKindSchema, CreateClientSchema, CreateProjectSchema, StyleProfileSchema, type Client, type Project, type Artifact, type ArtifactVersion } from "../domain";
 
@@ -11,6 +12,7 @@ export type CloudArtifact = Artifact;
 export type CloudVersion = ArtifactVersion;
 export const ClientProjectItemSchema = z.object({
   projectId: z.string().uuid(), projectTitle: z.string(), projectStatus: z.string(),
+  deliveryStage: ProjectDeliveryStageSchema.default("active"), projectUpdatedAt: z.string().datetime().optional(),
   kind: ArtifactKindSchema, artifactId: z.string().uuid().nullable(), title: z.string(),
   version: z.number().int().nonnegative().nullable(), updatedAt: z.string().datetime(),
 });
@@ -26,7 +28,7 @@ export const ClientUpdateSchema = z.object({
   notes: CreateClientSchema.shape.notes.removeDefault().optional(), expectedUpdatedAt: z.string().datetime(),
 }).strict();
 export const CloudProjectCreateSchema = CreateProjectSchema.extend({
-  styleId: z.string().min(1).max(100).default("editorial"),
+  styleId: z.string().min(1).max(100).default("automatic"),
   audience: z.string().max(1000).default(""), purpose: z.string().max(2000).default(""), wording: z.enum(["preserve", "improve", "summarise"]).default("preserve"),
 }).strict();
 export const StudioProjectCreateSchema = z.object({
@@ -38,6 +40,7 @@ export const ProjectUpdateSchema = z.object({
   status: CreateProjectSchema.shape.status.removeDefault().optional(), styleId: CreateProjectSchema.shape.styleId.removeDefault().optional(),
   brief: CreateProjectSchema.shape.brief.removeDefault().optional(), audience: z.string().max(1000).optional(),
   purpose: z.string().max(2000).optional(), wording: z.enum(["preserve", "improve", "summarise"]).optional(),
+  deliveryStage: ProjectDeliveryStageSchema.optional(),
   expectedUpdatedAt: z.string().datetime(),
 }).strict();
 export const ArtifactCreateSchema = z.object({ title: z.string().trim().min(1).max(200), kind: ArtifactKindSchema }).strict();

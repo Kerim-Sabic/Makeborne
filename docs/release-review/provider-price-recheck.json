@@ -1,0 +1,14 @@
+{
+  "sources": [
+    "https://platform.claude.com/docs/en/about-claude/pricing",
+    "https://developers.openai.com/api/docs/models/gpt-image-1"
+  ],
+  "anthropicRatesMatchExistingCard": true,
+  "opus55PerMillionUsd": {"input":4,"output":20,"cacheWrite5m":5,"cacheWrite1h":8,"cacheRead":0.2},
+  "sonnet55PerMillionUsd": {"input":2,"output":10,"cacheWrite5m":2.5,"cacheWrite1h":4,"cacheRead":0.1},
+  "gptImage1RatesMatchExistingCard": true,
+  "gptImage1Deprecated": true,
+  "imageQualification": "BLOCKED: no API key; assess migration to a supported image model and qualify its cost bounds before launch",
+  "providerCalls": 0,
+  "productionChanged": false
+}

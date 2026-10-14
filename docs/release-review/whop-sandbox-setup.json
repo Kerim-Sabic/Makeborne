@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-12",
+  "environment": "sandbox",
+  "companyId": "biz_e4w3EGe3izP67k",
+  "apiBase": "https://sandbox-api.whop.com/api/v1",
+  "keyExpires": "2026-10-19",
+  "keyStored": "Ignored local test configuration only; no secret in this report",
+  "authentication": "GET memberships returned 200",
+  "productId": "prod_CDLOn3W9hruAI",
+  "planId": "plan_00mHHGVMtYzRL",
+  "price": 29,
+  "billingPeriodDays": 30,
+  "checkout": "https://sandbox.whop.com/checkout/plan_00mHHGVMtYzRL",
+  "paymentCompleted": true,
+  "appCreditDeliveryVerified": false,
+  "productionTouched": false,
+  "observedCompatibility": "Explicit Api-Version-Date: 2025-01-01 restores the expected schema on the new sandbox key; both app request paths now pin it.",
+  "fix": "Invalid explicit API base now throws instead of falling back to production.",
+  "next": "Connect app-generated sandbox checkout and signed webhook before credit delivery qualification; renewals/replacement/refund remain open.",
+  "membershipStatus": "canceled"
+}

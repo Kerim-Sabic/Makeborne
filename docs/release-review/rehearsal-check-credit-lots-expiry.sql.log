@@ -1,0 +1,24 @@
+BEGIN
+SET
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+NOTICE:  PASS spend order: soonest-expiring plan credits, then trial, top-up, adjustment, refund; every hold records its lots
+NOTICE:  PASS expiry boundary: expired at the end instant, exact on reads, recorded once
+NOTICE:  PASS held allocation expiring mid-run: usage charged within the hold, unspent expired credits lapse, retries idempotent, never above the hold
+NOTICE:  PASS returns: valid credits go back to their own lot and expiry; expired credits lapse, never re-issued
+NOTICE:  PASS hold timeout: reclaimed after 15 minutes (valid parts back, expired parts lapse); a reclaimed hold can never be settled
+NOTICE:  PASS insufficient funds (MB402) counts only valid credits
+NOTICE:  PASS plan allocations: late catch-up recorded and lapsed atomically, top-ups expire with their month, retries idempotent
+NOTICE:  PASS legacy migration: audited non-expiring lot funds existing holds, reconciles exactly, refuses mismatches and repeats, spent last
+NOTICE:  PASS reads and privileges: own balance with next expiry; lots private; expiry job service-only
+DO
+                                                                  result                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------
+ PASS: credit lots lifecycle (order, boundary, held expiry, returns, timeout, MB402, plan top-ups/catch-up, legacy migration, privileges)
+(1 row)
+
+ROLLBACK

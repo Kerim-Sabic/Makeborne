@@ -1,0 +1,8 @@
+{
+  "deployment": "dpl_7Aw3S3n2ZyFgab83foqTNRgUWpUj",
+  "browserPasswordLogin": true,
+  "unpaidRedirect": "billing?required=membership",
+  "fixtureDeleted": true,
+  "emailDeliveryTested": false,
+  "productionTouched": false
+}

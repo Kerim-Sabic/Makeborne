@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { OutreachSummarySchema, ClientProjectItemSchema } from "@/lib/cloud/contracts";
+import { crmProtocolHeaders } from "@/lib/crm-protocol";
 import {
   ArtifactSchema,
   ArtifactVersionSchema,
@@ -73,6 +74,7 @@ function schemaFor(path: string, method: string) {
     counts: z.object({ all: z.number().int().nonnegative(), overdue: z.number().int().nonnegative(), today: z.number().int().nonnegative(), upcoming: z.number().int().nonnegative(), unscheduled: z.number().int().nonnegative() }),
   }) : z.object({ client, mutation });
   if (/\/clients\/[a-f0-9-]+\/projects$/.test(base) && method === "GET") return z.object({ items: z.array(ClientProjectItemSchema).max(50), pagination: page.omit({ offset: true }) });
+  if (/\/projects\/[a-f0-9-]+$/.test(base) && method === "PATCH") return z.object({ project });
   if (/\/projects$/.test(base)) return z.object({ project, mutation });
   if (/\/workspaces\/[a-f0-9-]+$/.test(base))
     return z.object({
@@ -89,6 +91,7 @@ export async function api<T>(
   path: string,
   body?: unknown,
   method = "POST",
+  options?: { idempotencyKey: string },
 ): Promise<T> {
   const verb = body ? method : method === "POST" ? "GET" : method;
   const bodyText = body ? JSON.stringify(body) : undefined;
@@ -114,13 +117,15 @@ export async function api<T>(
   let requestKey: string | undefined;
   try {
     const schema = schemaFor(path, verb);
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...crmProtocolHeaders };
     if (requestAccount) headers["X-Makeborne-Account"] = requestAccount;
     if (bodyText) headers["Content-Type"] = "application/json";
     const needsKey =
       verb === "POST" &&
       (path.startsWith("/api/cloud/") || path === "/api/workspaces");
+    if (options && !needsKey) throw new CloudError(400, "This operation does not accept a creation request key.", "UNSUPPORTED_REQUEST_KEY");
     if (needsKey) {
+      const suppliedKey = options ? z.string().uuid().parse(options.idempotencyKey) : undefined;
       if (!requestAccount)
         throw new CloudError(
           401,
@@ -150,12 +155,13 @@ export async function api<T>(
             pending.accountId !== requestAccount ||
             pending.path !== path ||
             pending.method !== verb ||
-            pending.body !== bodyText
+            pending.body !== bodyText ||
+            (suppliedKey !== undefined && pending.key !== suppliedKey)
           )
             throw new Error("Pending request does not match");
           requestKey = pending.key;
         } else {
-          requestKey = crypto.randomUUID();
+          requestKey = suppliedKey ?? crypto.randomUUID();
           localStorage.setItem(
             storageId,
             JSON.stringify({

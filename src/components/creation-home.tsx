@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { type CSSProperties, useRef, useState } from "react";
 import { ArrowUp, ArrowUpRight, BookOpen, Check, Globe2, Menu, Presentation, X } from "lucide-react";
 import ComposerControls from "./composer-controls";
+import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import StudioAccount from "./studio-account";
 import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
 import BrandMark from "./brand-mark";
 import TemplateGallery from "./template-gallery";
 import type { Style } from "./studio-model";
 import { templateDirections } from "@/lib/template-directions";
+import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
 import { useCreationAccount } from "./use-creation-account";
 import { attachmentOwner, saveCreationDraft } from "@/lib/attachments";
 import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop } from "./file-attachments";
@@ -40,7 +42,7 @@ const ideas: Record<Kind, { label: string; text: string }[]> = {
   ],
 };
 
-export default function CreationHome({ initialEmail, accountsEnabled }: { initialEmail: string | null; accountsEnabled: boolean }) {
+export default function CreationHome({ initialEmail, accountsEnabled, trialCredits = null }: { initialEmail: string | null; accountsEnabled: boolean; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>("website");
   const [mode, setMode] = useState<"create" | "plan">("create");
@@ -50,10 +52,21 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
   const selectedStyle = selectedStyles[kind];
   const selectedConcept = templateDirections.find(direction => direction.style.id === selectedStyle?.id);
   const [error, setError] = useState("");
+  // Which way the format pill last travelled: its leading edge moves first, so it stretches like liquid.
+  const [slide, setSlide] = useState<"left" | "right">("right");
+  const formatIndex = formats.findIndex(item => item.id === kind);
+  function pickKind(next: Kind) {
+    const to = formats.findIndex(item => item.id === next);
+    if (to !== formatIndex) setSlide(to > formatIndex ? "right" : "left");
+    setKind(next);
+  }
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
-  const account = useCreationAccount();
+  const account = useCreationAccount(undefined,{includeClients:false});
+  const permissions=useGenerationConsent(account.accountId);
+  const accessReady=permissions.ready;
+  const immediateWebsite=kind==="website"&&mode==="create"&&permissions.enabled;
   const owner = account.ready ? attachmentOwner(account.accountId) : null;
   const attachments = useFileAttachments(owner, "home");
   const drop = useFileDrop(attachments.add, !attachments.ready || attachments.busy || busy);
@@ -62,12 +75,15 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
     if (starting.current || attachments.busy) return;
     if (!owner || !attachments.ready) { setError(account.error || attachments.error || "Checking your account and file storage. Try again in a moment."); return; }
     if (!brief.trim()) { promptRef.current?.focus(); return; }
+    if (!accessReady) { setError("Checking creation availability. Your brief is preserved."); return; }
+    if (immediateWebsite && !permissions.consent) { setError("Confirm processing and source permissions beside your prompt before creating."); return; }
     if (brief.trim().length > 20000) { setError("Keep your brief under 20,000 characters."); return; }
     starting.current = true; setBusy(true);
     try {
       const requestId = crypto.randomUUID();
       const nonce = crypto.randomUUID();
-      const draft = { kind, brief: brief.trim(), styleId: selectedStyle?.id ?? "editorial", style: selectedStyle, mode, effort, requestId, attachmentOwner: owner };
+      const generationConsent=immediateWebsite?permissions.consent??undefined:undefined;
+      const draft = { kind, brief: brief.trim(), styleId: selectedStyle?.id ?? AUTOMATIC_STYLE.id, style: selectedStyle, mode, effort, requestId, attachmentOwner: owner, generationConsent };
       await saveCreationDraft(owner, requestId, nonce, draft);
       sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify(draft));
       router.push(`/studio?create=${kind}&from=home&draft=${requestId}&claim=${nonce}`);
@@ -75,7 +91,7 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
   }
   function chooseStyle(selectedKind: Kind, styleId: string, style: Style) {
     if (starting.current || style.id !== styleId) return;
-    setKind(selectedKind);
+    pickKind(selectedKind);
     setSelectedStyles(previous => ({ ...previous, [selectedKind]: style }));
     setError("");
     requestAnimationFrame(() => {
@@ -92,16 +108,16 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
     <main className="mk-home">
       <header className="mk-nav">
         <Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={30} /><span>Makeborne</span></Link>
-        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
+        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
         <div className="mk-nav-actions"><StudioAccount variant="home" initialEmail={initialEmail} enabled={accountsEnabled} /><Link className="mk-nav-cta" href="/studio">Open studio <ArrowUpRight size={14} /></Link><button className="mk-menu-toggle" aria-label={menu ? "Close navigation" : "Open navigation"} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X size={20} /> : <Menu size={20} />}</button></div>
-        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
+        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
       </header>
       <section className="mk-hero" aria-labelledby="creation-heading">
         <div className="mk-atmosphere" aria-hidden="true"><span /><span /><span /></div>
         <div className="mk-hero-content">
           <h1 id="creation-heading">What will you<br className="mk-mobile-break" /> make next?</h1>
           <p className="mk-hero-subtitle">Beautiful websites. Books worth opening. Slides that stay with you.</p>
-          <div className="mk-format-switch" style={{ "--format-index": formats.findIndex(item => item.id === kind) } as CSSProperties} role="group" aria-label="What would you like to create?"><span className="mk-format-indicator" aria-hidden="true" />{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { setKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
+          <div className="mk-format-switch" data-slide={slide} style={{ "--format-index": formatIndex } as CSSProperties} role="group" aria-label="What would you like to create?"><span className="mk-format-indicator" aria-hidden="true" />{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { pickKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
           <form className={`mk-composer${drop.dragging ? " is-file-dragging" : ""}`} {...drop.handlers} onSubmit={event => { event.preventDefault(); void start(); }}>
             {drop.dragging && <p className="attachment-drop-hint">Drop files to attach</p>}
             <AttachmentList files={attachments.files} onRemove={id => void attachments.remove(id)} disabled={attachments.busy || busy} />
@@ -115,13 +131,14 @@ export default function CreationHome({ initialEmail, accountsEnabled }: { initia
             <div className="mk-composer-bottom">
               <AttachFilesButton onFiles={attachments.add} disabled={!attachments.ready || busy} busy={attachments.busy} />
               <ComposerControls mode={mode} onMode={setMode} effort={effort} onEffort={setEffort} />
-              <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim()} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
+              <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim() || !accessReady || immediateWebsite&&!permissions.consent} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
             </div>
           </form>
+          {immediateWebsite&&<GenerationPermissions value={permissions} disabled={busy}/>}
           {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
           <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>
-          <p className="mk-availability">An account and creation plan are required. Live AI generation is coming next.</p>
+          <p className="mk-availability">{immediateWebsite ? "Your website starts building as soon as your project opens." : trialCredits ? `Start free — confirmed accounts get ${trialCredits} trial credits to build their first website.` : "Every creation plan includes monthly credits to build with."}</p>
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>

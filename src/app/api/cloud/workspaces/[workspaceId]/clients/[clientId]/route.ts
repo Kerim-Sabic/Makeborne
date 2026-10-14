@@ -2,6 +2,7 @@ import { ClientUpdateSchema } from "@/lib/cloud/contracts";
 import { cloudBody, cloudContext, cloudError, cloudJson, databaseError, validId } from "@/lib/cloud/server";
 import { mapClient } from "@/lib/cloud/mappers";
 import { RequestError } from "@/lib/server/http";
+import { speaksCurrentCrmProtocol } from "@/lib/crm-protocol";
 
 export async function GET(_request: Request, context: { params: Promise<{ workspaceId: string; clientId: string }> }) {
   try {
@@ -19,6 +20,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ works
   try {
     const { workspaceId, clientId } = await context.params;
     validId(clientId);
+    // Compatibility cutoff: browser bundles from before the CRM protocol change must reload.
+    if (!speaksCurrentCrmProtocol(request.headers)) throw new RequestError("APP_OUT_OF_DATE", "Makeborne was updated. Reload this page to keep working with clients.", 426);
     const { client } = await cloudContext(workspaceId, true);
     const { expectedUpdatedAt, ...fields } = await cloudBody(request, ClientUpdateSchema, 1_000_000);
     if (!Object.keys(fields).length) throw new RequestError("EMPTY_CHANGE", "Choose a field to change.");

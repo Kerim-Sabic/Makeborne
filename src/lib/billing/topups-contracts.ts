@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ExactAmountSchema } from "@/lib/jobs/contracts";
-import { CREDIT_TOPUP_CATALOG_VERSION, creditTopupPack } from "./topups-catalog";
+import { creditTopupPackForVersion } from "./topups-catalog";
 
 const packId = z.enum(["boost_100", "boost_300", "boost_1000"]);
 const uuid = z.string().uuid();
@@ -18,7 +18,7 @@ export const CreditTopupPurchaseSchema = z.object({
   userId: uuid,
   creditAccountId: uuid,
   packId,
-  catalogVersion: z.literal(CREDIT_TOPUP_CATALOG_VERSION),
+  catalogVersion: z.string().min(1).max(100),
   credits: positiveAmount,
   priceCents: positiveAmount,
   currency: z.literal("usd"),
@@ -28,7 +28,7 @@ export const CreditTopupPurchaseSchema = z.object({
   whopUserId: z.string().regex(/^user_[A-Za-z0-9]+$/),
   createdAt: datetime,
 }).strict().superRefine((purchase, ctx) => {
-  const pack = creditTopupPack(purchase.packId);
+  const pack = creditTopupPackForVersion(purchase.packId, purchase.catalogVersion);
   if (!pack || purchase.credits !== String(pack.credits) || purchase.priceCents !== String(pack.priceCents)) ctx.addIssue({ code: "custom", message: "Purchase does not match its server catalog version." });
 });
 

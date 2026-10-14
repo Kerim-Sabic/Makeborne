@@ -1,0 +1,8 @@
+BEGIN
+DO
+                                                      result                                                       
+-------------------------------------------------------------------------------------------------------------------
+ PASS: account roles, self-promotion denial, tenant boundaries, revocation, audit, credit waiver and vendor limits
+(1 row)
+
+ROLLBACK

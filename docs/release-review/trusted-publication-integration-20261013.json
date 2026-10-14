@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-13",
+  "scope": "Local uncommitted candidate only; no staging or production changes",
+  "endToEnd": {
+    "command": "MAKEBORNE_VERIFY_LOCAL_PUBLICATION=true node scripts/check-publication-end-to-end.cjs makeborne_publication_20261013034802",
+    "passed": true,
+    "database": "disposable rehearsal, fresh production-baseline plus candidate migrations",
+    "runtimeImageId": "sha256:505d5483990e8892fd3b70e11120c68f470587ba28fe445d4fab4c6974c92697",
+    "rendererId": "chromium-153.0.8010.12-controller-f5d57fc57ac22f85a3105e887b9b1600a45db9ada7d94f9c997988047ad857f3",
+    "real": [
+      "service-role queue, lease and fenced scoped original asset lookup",
+      "PNG byte size, SHA256 and raster decoding",
+      "Docker/Vite compilation with pinned toolchain and self-hosted fonts",
+      "independent browser capture from retained output",
+      "exact serialized output SHA accepted by SQL completion",
+      "previous live page preserved until explicit promotion",
+      "promotion replay increments live revision only once",
+      "both declared routes served; undeclared route refused"
+    ],
+    "doubles": ["original private storage transport returns the verified synthetic PNG", "retained object store uses an in-memory immutable map"],
+    "cleanup": "synthetic hosted rows, workspace and user removed in finally"
+  },
+  "otherChecks": {
+    "offlineHarnesses": "90/90 passed; five existing environment/live-price exclusions",
+    "nextProductionBuild": "passed",
+    "focusedLint": "passed; full lint zero errors, six existing fixture-script warnings",
+    "migrationRehearsal": "54 pending migrations, normal/failure/interruption passed; same final fingerprint f07b24a2c4afafdd78e25e1a0e0a2119; pinned inputs unchanged",
+    "mountedPublicationBrowser": "6 groups passed; actual React/Chromium, mocked APIs",
+    "workerOrchestration": "7 groups passed; mocked SQL/compiler for fault injection",
+    "assetResolver": "14 groups passed; real raster decoding and mocked fenced authority/storage",
+    "compilerVisuals": "two routes at 390/1440 width with JavaScript on/off; lazy CSS, original artwork/fonts and interactive button passed"
+  },
+  "fixesDuringQualification": [
+    "lazy-import stylesheets retained per route rather than dropping page-specific styling",
+    "artwork resolver checks cancellation before and after fenced authority reads, including empty asset sets",
+    "stale host test fixture updated to exact-path v3 reader"
+  ],
+  "providerCalls": 0,
+  "newRoundSpentUsd": 0,
+  "preparationFlag": "off by default; no worker is provisioned by the flag",
+  "remaining": [
+    "production-grade isolated durable compiler/renderer, storage and queue delivery qualification",
+    "combined exact candidate cloud staging qualification",
+    "real signed subscription and credit-pack lifecycle plus plan switching",
+    "OpenAI key, live image qualification and fresh generated-product quality",
+    "production approval remains withheld"
+  ]
+}

@@ -1,0 +1,21 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Pure candidate-preview validation; no providers or database. */
+const fs = require("node:fs"), ts = require("typescript"), assert = require("node:assert/strict"), Module = require("node:module");
+const load = Module._load;
+Module._load = function(name, parent, main) { return name === "server-only" ? {} : load.call(this, name, parent, main); };
+require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
+const { recoveryPreview } = require("./recovery-preview.ts");
+const { ProjectFiles } = require("./files.ts");
+const project = new ProjectFiles();
+project.write("index.html", '<html><head><title>Retained</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>');
+project.write("src/main.tsx", 'import{createRoot}from"react-dom/client";createRoot(document.getElementById("root")).render(<main>Retained</main>)');
+const candidate = { content: { schemaVersion: 1, kind: "website", title: "Retained", sections: [], websiteSource: project.toSource() }, expectedVersion: 2 };
+const before = JSON.stringify(candidate);
+const preview = recoveryPreview(candidate, "website");
+assert.equal(preview.files["src/main.tsx"], candidate.content.websiteSource.files.find(file => file.path === "src/main.tsx").content);
+assert.equal(JSON.stringify(candidate), before, "Preview cannot alter its saved source or metadata");
+assert.throws(() => recoveryPreview(candidate, "book"), /current project/);
+assert.throws(() => recoveryPreview({ content: { ...candidate.content, websiteSource: undefined } }, "website"), /complete source/);
+assert.throws(() => recoveryPreview({ content: { ...candidate.content, websiteSource: { ...candidate.content.websiteSource, files: [{ path: "../outside", content: "secret" }] } } }, "website"), /current project/);
+assert.throws(() => recoveryPreview({ content: { schemaVersion: 1, kind: "book", title: "B", sections: [] } }, "book"), /complete document/);
+assert.throws(() => recoveryPreview({ stored: { plan: "not an artifact" } }, "website"), /current project/);
+console.log("PASS: retained source preview, immutable identity, artifact-kind and missing/malformed source rejection (6 groups)");

@@ -1,0 +1,22 @@
+[
+  {
+    "check": "check-credit-lots-concurrency.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-credit-wallets-concurrency.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-crm-concurrency.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-live-ai-spend-concurrency.sql",
+    "exit": 0
+  },
+  {
+    "check": "check-plan-credit-concurrency.sql",
+    "exit": 0
+  }
+]

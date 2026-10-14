@@ -1,13 +1,10 @@
+import { WEBSITE_IMAGE_ASSETS, websiteImageCsp } from '../../../infra/customer-sites/website-policy';
+
 /** Curated public concept imagery. Never accept a model-invented asset URL. */
-export const WEBSITE_IMAGE_ASSETS = [
-  { url: 'https://makeborne.com/generated/good-dog-v2/coastal-dog.webp', description: 'Golden retriever in a moss collar on a coastal path; landscape lifestyle hero.' },
-  { url: 'https://makeborne.com/generated/good-dog-v2/moss-collar.webp', description: 'Moss woven collar with silver hardware on a sage surface; product concept.' },
-  { url: 'https://makeborne.com/generated/good-dog-v2/clay-lead.webp', description: 'Terracotta woven lead with silver hardware on a clay surface; product concept.' },
-] as const;
+export { WEBSITE_IMAGE_ASSETS, websiteImageCsp };
 
 const approvedImages = new Set<string>(WEBSITE_IMAGE_ASSETS.map(asset => asset.url));
 export function isApprovedWebsiteImage(url: string): boolean { return approvedImages.has(url); }
-export const websiteImageCsp = WEBSITE_IMAGE_ASSETS.map(asset => asset.url).join(' ');
 
 export function websiteAssetInstructions(brief: string): string {
   // This pilot library is relevant only to dog-accessory briefs. Other businesses

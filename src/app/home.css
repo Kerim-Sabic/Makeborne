@@ -179,3 +179,23 @@
 @media(max-width:760px){.mk-client-band{grid-template-columns:1fr;gap:30px;width:calc(100% - 40px);margin-bottom:48px;padding:32px 26px;border-radius:20px}.mk-client-copy{max-width:450px}.mk-client-copy h2{font-size:34px;letter-spacing:-1.3px;margin-top:15px}.mk-client-copy h2 br{display:none}.mk-client-copy p{max-width:410px;font-size:13px}.mk-client-cta{margin-top:22px}.mk-client-workflow{padding:22px 24px}.mk-client-workflow-heading{padding-bottom:18px}.mk-client-workflow ol{margin-top:20px}.mk-client-workflow h3{font-size:13px}.mk-client-workflow p{font-size:12px}.mk-footer{padding:30px 24px 0}.mk-footer-main{align-items:flex-start;flex-direction:column;gap:22px;padding-bottom:24px}.mk-footer nav{gap:8px 23px}.mk-footer-bottom{min-height:60px}}
 @media(max-width:380px){.mk-client-band{padding:28px 20px}.mk-client-copy h2{font-size:31px}.mk-client-workflow{padding:20px 18px}.mk-client-workflow-heading{font-size:11px}.mk-client-workflow li{gap:12px}.mk-client-workflow p{font-size:11px}.mk-footer nav{gap:8px 18px}}
 @media(prefers-reduced-motion:reduce){.mk-home *{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
+/* Format switch: liquid glass. A frosted track; a glass pill with an iridescent rim that
+   stretches toward the chosen format (leading edge first) and settles with a soft spring. */
+.mk-format-switch{--seg:calc((100% - 8px)/3);border-radius:999px;padding:4px;background:linear-gradient(180deg,#ffffff8c,#ffffff47);border:1px solid #ffffffc7;backdrop-filter:blur(22px) saturate(175%);-webkit-backdrop-filter:blur(22px) saturate(175%);box-shadow:inset 0 1px 0 #fff,inset 0 -1px 0 #5d4fa00f,0 0 0 1px #6a5fb014,0 10px 28px -14px #3c329047}
+.mk-format-switch button{border-radius:999px;color:#5c5870;font-weight:500;letter-spacing:-.1px;transition:color .25s ease,background .25s ease}
+.mk-format-switch button svg{color:#8f89a6;transition:color .25s ease,transform .35s cubic-bezier(.34,1.4,.6,1)}
+.mk-format-switch button:not(.is-active):hover{color:#25213a;background:#ffffff59}
+.mk-format-switch button:not(.is-active):hover svg{color:#6b64a0}
+.mk-format-switch button.is-active{color:#1f1b38;font-weight:600}
+.mk-format-switch button.is-active svg{color:#4b45d1;transform:scale(1.08)}
+.mk-format-switch button:focus-visible{outline:2px solid #6c63f0;outline-offset:2px}
+.mk-format-indicator{width:auto;transform:none;border:0;border-radius:999px;left:calc(4px + var(--format-index)*var(--seg));right:calc(4px + (2 - var(--format-index))*var(--seg));background:linear-gradient(180deg,#fff 0%,#ffffffe0 55%,#fbfaffd0 100%);box-shadow:inset 0 1px 0 #fff,inset 0 -2px 3px #6d5fd00d,0 1px 2px #1e164614,0 8px 18px -6px #5a50d84d;transition:left .5s cubic-bezier(.65,0,.25,1),right .5s cubic-bezier(.65,0,.25,1),scale .2s ease}
+.mk-format-switch[data-slide="right"] .mk-format-indicator{transition:right .36s cubic-bezier(.34,1.18,.6,1),left .52s cubic-bezier(.65,0,.25,1) .05s,scale .2s ease}
+.mk-format-switch[data-slide="left"] .mk-format-indicator{transition:left .36s cubic-bezier(.34,1.18,.6,1),right .52s cubic-bezier(.65,0,.25,1) .05s,scale .2s ease}
+/* Iridescent hairline rim, tinted like the hero atmosphere. */
+.mk-format-indicator::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(115deg,#a9bcff,#c9b1ff 45%,#ffcdb3);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.95}
+/* Specular sheen across the top half. */
+.mk-format-indicator::after{content:"";position:absolute;left:10%;right:10%;top:1px;height:45%;border-radius:999px;background:linear-gradient(180deg,#ffffffe6,#fff0);pointer-events:none}
+.mk-format-switch:has(button:active) .mk-format-indicator{scale:.97}
+@media(prefers-reduced-transparency:reduce){.mk-format-switch{background:#f4f3f9;backdrop-filter:none;-webkit-backdrop-filter:none}}

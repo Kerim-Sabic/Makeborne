@@ -14,7 +14,7 @@ const AccountEditor = dynamic(() => import("./cloud-studio").then(module => modu
 type Snapshot = CloudWorkspaceSnapshot & { pagination: { artifacts: { nextOffset: number | null; total: number } } };
 
 /** Account records are read independently: device drafts are never uploaded implicitly. */
-export default function AccountProjects({ search, filter, target, navigate }: { search: string; filter: string; target: AccountProjectRoute | null; navigate: (route: AccountProjectRoute | null) => void }) {
+export default function AccountProjects({ search, filter, target, navigate, onCount }: { search: string; filter: string; target: AccountProjectRoute | null; /** Loaded account projects (null until known), so the studio can avoid an empty state that contradicts this list. */ onCount?: (count: number | null) => void; navigate: (route: AccountProjectRoute | null) => void }) {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [workspaces, setWorkspaces] = useState<CloudWorkspace[]>([]);
@@ -22,6 +22,7 @@ export default function AccountProjects({ search, filter, target, navigate }: { 
   const [selected, setSelected] = useState<CloudArtifact | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  useEffect(() => { onCount?.(snapshot ? snapshot.artifacts.length : null); }, [snapshot, onCount]);
   const requestVersion = useRef(0);
   const currentAccount = useRef<string | null>(null);
   useEffect(() => {
@@ -95,6 +96,9 @@ export default function AccountProjects({ search, filter, target, navigate }: { 
     {authReady && <><p>Account projects are available to their workspace members.</p><Link className="button primary small" href={`/login?next=${encodeURIComponent(studioHref({ tab: "projects", projectId: null, clientId: null, account: target }))}`}>Sign in</Link></>}
   </section> : null;
   const visible = snapshot?.artifacts.filter(artifact => (filter === "all" || artifact.kind === filter) && artifact.title.toLowerCase().includes(search.toLowerCase())) ?? [];
+  // A brand-new account has nothing saved yet: let the studio's single welcome state speak instead of two empty panels.
+  if (snapshot && !busy && !message && !selected && !target?.artifactId && snapshot.artifacts.length === 0 && workspaces.length <= 1)
+    return <PendingCloudWrites accountId={accountId} refresh={async () => { await load(snapshot.workspace.id); }} />;
   return <section className={`account-projects${selected ? " account-project-open" : ""}`} aria-label={selected ? "Project workspace" : "Projects saved to your account"}>
     {!selected && !target?.artifactId && <div className="account-projects-heading"><div><span className="eyebrow">SAVED TO YOUR ACCOUNT</span><h2>Your saved projects</h2></div>
       {snapshot && <button type="button" className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id)}><RefreshCw size={14} /> Refresh</button>}</div>}

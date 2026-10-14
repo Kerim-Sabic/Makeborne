@@ -1,0 +1,166 @@
+[
+  {
+    "migration": "20261005113330_founder_waitlist.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008130542_canonical_website_source_revisions.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008133918_durable_generation_job_leases.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008135727_generation_outcome_settlement.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008141212_generation_execution_caps.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008143555_generation_worker_lifecycle.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008151657_generation_approved_input_authority.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008154453_generation_atomic_worker_result.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008155402_generation_worker_result_readback.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008161434_project_build_handoff.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008163228_generation_submission_boundary.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008170101_generation_preparation_boundary.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008171229_generation_request_recovery.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008181217_generation_preview_read_authority.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008181817_workspace_membership_policy_deduplication.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008182736_private_preview_sessions.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008190859_saved_website_preview_discovery.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008200855_operator_website_qualification_proposal.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261008210222_operator_website_repair_review.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261009005809_saved_native_slide_designs.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261009014243_saved_presentation_preparation.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261009015516_native_presentation_progress.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261009021050_operator_native_composition_qualification.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011090000_credit_wallets_free_tier.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011120000_artifact_plans.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011130000_client_review_links.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011140000_hosted_site_bundles.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011160000_credit_reservation_expiry.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011170000_free_tier_off_by_default.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011180000_crm_sales_delivery_split.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011190000_crm_transition.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261011200000_crm_write_freeze.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012090000_plan_credit_allocations.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012100000_plan_entitlement_history.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012110000_plan_evidence_and_jobs.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012120000_credit_lots_expiry.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012130000_credit_lock_clock.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012140000_live_ai_spend.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012150000_shared_provider_limits.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012160000_portable_site_html.sql",
+    "exit": 0
+  },
+  {
+    "migration": "20261012170000_preserve_isolated_sites.sql",
+    "exit": 0
+  }
+]

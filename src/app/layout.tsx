@@ -29,6 +29,11 @@ export const metadata: Metadata = {
     description: SITE.description,
   },
   icons: { icon: "/brand/favicon.svg" },
+  // Search Console / Bing Webmaster ownership codes (set in the host environment).
+  verification: {
+    ...(process.env.MAKEBORNE_GOOGLE_SITE_VERIFICATION ? { google: process.env.MAKEBORNE_GOOGLE_SITE_VERIFICATION } : {}),
+    ...(process.env.MAKEBORNE_BING_SITE_VERIFICATION ? { other: { "msvalidate.01": process.env.MAKEBORNE_BING_SITE_VERIFICATION } } : {}),
+  },
 };
 export default function RootLayout({
   children,

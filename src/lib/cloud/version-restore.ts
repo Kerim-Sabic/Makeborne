@@ -5,7 +5,9 @@ export function prepareVersionRestore(current: ArtifactContent, version: Artifac
   const target = ArtifactVersionSchema.parse(version);
   if (target.artifactId !== artifactId || target.content.kind !== content.kind) throw new Error("This version belongs to a different project.");
   if (target.number >= currentVersion) throw new Error("Choose an earlier saved version.");
+  if (content.websiteSource && !target.content.websiteSource) throw new Error("Restore another full-source revision. An outline cannot replace this source project.");
   for (const section of content.sections) {
+    if(section.slideDesign&&target.content.sections.some(item=>item.id===section.id&&!item.slideDesign))throw new Error("Choose a revision that preserves this slide's saved composition.");
     for (const [index, block] of section.blocks.entries()) {
       if (!block.locked) continue;
       const restored = target.content.sections.find(item => item.id === section.id)?.blocks[index];

@@ -1,0 +1,70 @@
+{
+  "recordedAt": "2026-10-12T23:38:23.753Z",
+  "productionTouched": false,
+  "paidAiCalls": 0,
+  "app": {
+    "project": "makeborne-release-staging",
+    "projectId": "prj_c9h8fuyEmVAT8F3NHFMvzFR1BnLc",
+    "deployment": "dpl_9fsW18fAPRUynckkG7kueYrYskmy",
+    "url": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+    "target": "preview",
+    "protection": "vercel_authentication",
+    "sourceManifest": "staging-source-manifest.json",
+    "manifestFiles": 500,
+    "manifestFilesDifferingFromTree": [],
+    "supersedes": [
+      "dpl_AngcBgqW7GJ5wrC5RRG3omMc9p9m (qghdni5rb, interim, same night)",
+      "dpl_7fQtetguks3163S6qb1wW98i45MS (mcl7erewk)"
+    ],
+    "deployedSourceNote": "The deployed app source differs from the tree only in infra/customer-sites/wrangler.jsonc (staging APP_ORIGIN changed to this preview after the app deploy). The Next.js app never reads that file; the Worker was deployed from the updated file."
+  },
+  "database": {
+    "ref": "xzwikrunwpurxnxgkznh",
+    "history": "makeborne_release_test.applied",
+    "migrations": 45,
+    "last": "20261013090000_hosting_review_fixes.sql",
+    "appliedNow": [
+      {
+        "file": "20261013090000_hosting_review_fixes.sql",
+        "sha256": "bba270d3b9fd308ecda9fca150e6d5bf46e13633cd543ca029fd370ac8db6c15",
+        "at": "2026-10-12T23:04:37.602Z"
+      }
+    ],
+    "providerLimitsEnabled": 0
+  },
+  "worker": {
+    "name": "makeborne-site-host-staging",
+    "version": "9668eef6-9754-4632-aeae-aef7613fb67c",
+    "appOrigin": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+    "oidcTokenExpiresAt": "2026-10-13T11:29:31.000Z",
+    "secrets": [
+      "FORMS_SIGNING_SECRET",
+      "STAGING_VERCEL_OIDC_TOKEN",
+      "SUPABASE_PUBLISHABLE_KEY"
+    ],
+    "workerSourceSha256": {
+      "_worker.js": "18738bcfbfb9656b9bcb76fcce2511605ae3b7a32cd478c58d229c6e1cdf0f14",
+      "forms.js": "a027c77ce36023dbbe1bb8b178704c746a50a97a5f6b74dd58d6a9e146f24132",
+      "site-policy.js": "8c3805a24d81254dfd633a5071d27b618c9964428a6972fd9958a85997ca12ab",
+      "wrangler.jsonc": "15f6af665a03398d7086e97eb6153721e5d519d7d3e18cf565baecf7f125bb46"
+    }
+  },
+  "auth": {
+    "siteUrl": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app",
+    "allowList": "https://makeborne-release-staging-feavd3cd1-kerimsabic-6594s-projects.vercel.app/auth/callback",
+    "previous": "https://makeborne-release-staging-poymmdz0z-kerimsabic-6594s-projects.vercel.app"
+  },
+  "verification": {
+    "sql": "cloud-release-sql.json (45 hashes, 7 rolled-back suites)",
+    "publicHosting": "public-hosting-http.json (9 checks via real DNS/TLS/Worker)",
+    "app": "cloud-app-results.json (10 checks: password auth, unpaid creation denied, writes, PDF/PPTX exports, stale edit, guest review, private uploads)",
+    "confirmation": "cloud-confirmation-results.json (6 checks: confirm, replay, external redirect, recovery, password change, sign-out)",
+    "addressChanges": "cloud-address-changes.json (publish, rename canonical, stale rename refused)",
+    "browser": "2026-10-12T23:3xZ public site at 375px: no overflow, menu opens with 5 sections + CTA, module script loads, 2 animations, attribution present; Cloudflare Web Analytics beacon injected by the zone and blocked by CSP (console error)"
+  },
+  "notVerifiedByAgent": [
+    "Branded signup email arrival in the owner mailbox (SMTP config unchanged; last passed 2026-10-12 on poymmdz0z)",
+    "Google and GitHub sign-in on feavd3cd1 (owner accounts)",
+    "Signed-in owner UI: saved website preview with generation disabled, republish from the UI (agent may not enter passwords on a non-local host)"
+  ]
+}
