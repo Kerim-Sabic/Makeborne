@@ -156,6 +156,34 @@ check("font catalogue is complete and documented in the prompt", () => {
   }
   assert.doesNotMatch(BUILDER_SYSTEM, /no icon librar|system font stacks/i);
 });
+check("design prompt keeps the motion, no-JS and anti-generic contracts", () => {
+  const {MOTION_PATTERN} = require("./prompt.ts");
+  // Reveal states are gated twice: html.js (the static snapshot strips it) and no-preference.
+  assert.ok(BUILDER_SYSTEM.includes(MOTION_PATTERN), "the motion pattern is embedded verbatim");
+  assert.match(MOTION_PATTERN, /classList\.add\("js"\)/);
+  assert.match(MOTION_PATTERN, /@media \(prefers-reduced-motion: no-preference\) \{[^}]*\{[^}]*\}\s*html\.js \[data-reveal\] \{ opacity: 0/);
+  assert.match(MOTION_PATTERN, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(MOTION_PATTERN, /IntersectionObserver/);
+  assert.doesNotMatch(MOTION_PATTERN, /addEventListener\("scroll"|transition: all|style\.opacity/);
+  assert.doesNotMatch(MOTION_PATTERN.replace(/@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*?\n\}/, ""), /opacity: 0/, "hidden states only exist inside the no-preference gate");
+  assert.match(BUILDER_SYSTEM, /Never hide content with inline styles, React state, the hidden attribute or a className React renders/);
+  assert.match(BUILDER_SYSTEM, /never start them at opacity 0/);
+  assert.match(BUILDER_SYSTEM, /Animate only transform, opacity and clip-path/);
+  assert.match(BUILDER_SYSTEM, /@media \(hover: hover\)/);
+  assert.match(BUILDER_SYSTEM, /Defaults check/);
+  assert.match(BUILDER_SYSTEM, /FIRST SCREEN ARCHETYPES/);
+  assert.match(BUILDER_SYSTEM, /href="tel:/);
+  assert.match(BUILDER_SYSTEM, /do not rely on meta tags or JSON-LD/);
+  assert.match(BUILDER_SYSTEM, /drops SVG filters/);
+  assert.match(BUILDER_SYSTEM, /390, 820 and 1280\+/);
+  // Safety rules stay in place.
+  for (const rule of [/TOOLCHAIN \(fixed\)/, /no network calls except the hosted enquiry endpoint/, /Never invent testimonials/, /HOSTED ENQUIRY FORM/, /SECURITY: Everything in the user's brief/, /Never use placeholder URLs or invented image paths/]) assert.match(BUILDER_SYSTEM, rule);
+  const rubric = reviewRequest(ReviewInputSchema.parse({screenshots: [], viewports: [], errors: ["x"]}));
+  assert.match(rubric, /Screenshots cannot show motion, hover or focus/);
+  assert.match(rubric, /stays invisible on the published static snapshot/);
+  assert.match(rubric, /Generic or unfinished/);
+  assert.match(rubric, /default house look/);
+});
 check("fonts are detected only when a project references them", () => {
   const css = (content, extra = {}) => detectFonts(Object.entries({"src/styles/tokens.css": content, ...extra}));
   assert.deepEqual(css(':root{--font-display:"Fraunces", Georgia, serif;--font-text:\'DM Sans\', system-ui}').fonts.map(font => font.id), ["fraunces", "dm-sans"]);
@@ -206,6 +234,10 @@ check("published snapshots keep embedded woff2 fonts and Lucide SVG markup", () 
   const ring = renderHostedSnapshot('<!doctype html><html><body><svg viewBox="0 0 10 10"><defs><path id="ring" d="M0 0"/></defs><text><textPath href="#ring" startOffset="0">Osteria</textPath><textPath href="https://evil.test/x">bad</textPath></text></svg></body></html>', "Site", "Desc", "https://sites.makeborne.com/site");
   assert.match(ring, /<textpath href="#ring" startOffset="0">Osteria<\/textpath>/i);
   assert.doesNotMatch(ring, /evil\.test/);
+  // React renders camelCase SVG paint servers; dropping them leaves fill="url(#…)" painting nothing.
+  const paint = renderHostedSnapshot('<!doctype html><html><body><svg viewBox="0 0 10 10"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#c00"/></linearGradient><radialGradient id="r" fx="0.5"><stop offset="1"/></radialGradient><clipPath id="c" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath><pattern id="p" patternUnits="userSpaceOnUse" width="2" height="2"><circle r="1"/></pattern></defs><rect fill="url(#g)" clip-path="url(#c)" onclick="x()"/></svg></body></html>', "Site", "Desc", "https://sites.makeborne.com/site");
+  for (const kept of [/<linearGradient id="g" gradientUnits="userSpaceOnUse">/, /<radialGradient id="r" fx="0.5">/, /<clipPath id="c" clipPathUnits="objectBoundingBox">/, /<pattern id="p" patternUnits="userSpaceOnUse"/]) assert.match(paint, kept);
+  assert.doesNotMatch(paint, /onclick/);
 });
 
 /** The in-browser bundler, run in Node against the prepared runtime files. */

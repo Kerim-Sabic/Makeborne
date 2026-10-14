@@ -1,5 +1,5 @@
 import type { Chart } from "./schema";
-import type { ChartColors } from "./slide-scene";
+import type { ChartColors, ChartStyle } from "./scene-kit";
 
 export const esc = (value: string) => value.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -16,8 +16,8 @@ const trim = (value: string, max: number) => value.length > max ? `${value.slice
 
 /** Native-looking SVG chart for the preview and PDF; the PPTX writer emits a
  * real editable chart with the same data, colors and emphasis. */
-export function chartSvg(chart: Chart, width: number, height: number, colors: ChartColors, fonts: { heading: string; body: string }) {
-  const parts: string[] = [];
+export function chartSvg(chart: Chart, width: number, height: number, colors: ChartColors, fonts: { heading: string; body: string }, style: ChartStyle = { radius: 3, grid: false }) {
+  const parts: string[] = [], rx = style.radius;
   const t = (x: number, y: number, value: string, size: number, color: string, anchor: "start" | "middle" | "end" = "middle", weight = 400, font = fonts.body) =>
     parts.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${size}" fill="${color}" text-anchor="${anchor}" font-weight="${weight}" font-family="${esc(font)}">${esc(value)}</text>`);
   const multi = chart.series.length > 1;
@@ -43,17 +43,20 @@ export function chartSvg(chart: Chart, width: number, height: number, colors: Ch
   if (chart.type === "column") {
     const top = legendH + 30, bottom = height - 44, plotH = bottom - top, group = width / n, barW = Math.min(110, group * 0.64 / chart.series.length);
     const zero = top + plotH * (max / span);
+    // A quiet value grid for analytical directions; the bars still carry their own labels.
+    if (style.grid) for (let g = 1; g <= 3; g++) { const gy = zero - plotH * (max / span) * g / 3; if (gy > top - 1) parts.push(`<line x1="0" x2="${width}" y1="${gy.toFixed(1)}" y2="${gy.toFixed(1)}" stroke="${colors.grid}" stroke-width="1" stroke-dasharray="2 5"/>`); }
     const labelSize = Math.max(11, Math.min(15, (group - 8) / (Math.max(...chart.categories.map(c => c.length)) * 0.55)));
     chart.categories.forEach((category, i) => {
       const gx = i * group + (group - barW * chart.series.length) / 2;
       chart.series.forEach((series, s) => {
         const value = series.values[i], h = Math.abs(value) / span * plotH, x = gx + s * barW, y = value >= 0 ? zero - h : zero;
-        parts.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW - (multi ? 4 : 0)).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="3" fill="${barColor(s, i)}"/>`);
-        t(x + (barW - (multi ? 4 : 0)) / 2, value >= 0 ? y - 8 : y + h + 18, formatValue(chart, value), multi ? 13 : 16, colors.ink, "middle", 700);
+        parts.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW - (multi ? 4 : 0)).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="${Math.min(rx, barW / 2)}" fill="${barColor(s, i)}"/>`);
+        const emphasis = !multi && chart.highlight === i;
+        t(x + (barW - (multi ? 4 : 0)) / 2, value >= 0 ? y - 10 : y + h + 20, formatValue(chart, value), multi ? 13 : emphasis ? 22 : 16, emphasis ? colors.highlightInk ?? colors.highlight : colors.ink, "middle", 700, emphasis ? fonts.heading : fonts.body);
       });
       t(i * group + group / 2, height - 16, trim(category, Math.floor(group / (labelSize * 0.55))), labelSize, colors.muted);
     });
-    parts.push(`<line x1="0" x2="${width}" y1="${zero.toFixed(1)}" y2="${zero.toFixed(1)}" stroke="${colors.grid}" stroke-width="1.5"/>`);
+    parts.push(`<line x1="0" x2="${width}" y1="${zero.toFixed(1)}" y2="${zero.toFixed(1)}" stroke="${colors.ink}" stroke-width="1.5"/>`);
   } else if (chart.type === "bar") {
     const labelW = Math.min(width * 0.32, 250), left = labelW + 16, right = width - 80, top = legendH + 4, row = (height - top) / n;
     const barH = Math.min(46, row * 0.62 / chart.series.length), zero = left + (right - left) * (-min / span);
@@ -62,7 +65,7 @@ export function chartSvg(chart: Chart, width: number, height: number, colors: Ch
       t(labelW, gy + barH * chart.series.length / 2 + 5, trim(category, Math.floor(labelW / 8)), 15, colors.ink, "end", chart.highlight === i ? 700 : 400);
       chart.series.forEach((series, s) => {
         const value = series.values[i], w = Math.abs(value) / span * (right - left), y = gy + s * barH, x = value >= 0 ? zero : zero - w;
-        parts.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, w).toFixed(1)}" height="${(barH - (multi ? 3 : 0)).toFixed(1)}" rx="3" fill="${barColor(s, i)}"/>`);
+        parts.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, w).toFixed(1)}" height="${(barH - (multi ? 3 : 0)).toFixed(1)}" rx="${Math.min(rx, barH / 2)}" fill="${barColor(s, i)}"/>`);
         t(value >= 0 ? x + w + 8 : x - 8, y + barH / 2 + 5, formatValue(chart, value), multi ? 13 : 15, colors.ink, value >= 0 ? "start" : "end", 700);
       });
     });

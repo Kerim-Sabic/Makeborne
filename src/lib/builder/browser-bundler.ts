@@ -92,12 +92,37 @@ export type BundleResult = { ok: true; html: string } | { ok: false; error: stri
 const scriptSafe = (code: string) => code.replace(/<\/(script)/gi, "<\\/$1").replace(/<!--/g, "<\\!--");
 
 /** Small runtime injected into previews: reports errors to the editor and keeps
- * in-page links inside the sandbox (srcdoc documents inherit the parent URL). */
+ * in-page links inside the sandbox (srcdoc documents inherit the parent URL).
+ * Edit mode (inspect builds only, switched on by the host) outlines the element
+ * under the pointer and reports the clicked element's source location and
+ * computed style instead of letting the click reach the site. */
 const PREVIEW_SHIM = `<script>(function(){
 var post=function(m){try{parent.postMessage(Object.assign({source:"makeborne-preview"},m),"*")}catch(e){}};
 addEventListener("error",function(e){post({type:"runtime-error",message:String(e.message||e.error||"Script error"),stack:e.error&&e.error.stack?String(e.error.stack).slice(0,2000):""})});
 addEventListener("unhandledrejection",function(e){post({type:"runtime-error",message:"Unhandled promise rejection: "+String(e.reason&&e.reason.message||e.reason)})});
-document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a)return;var h=a.getAttribute("href")||"";
+var LOC="data-mb-loc",editing=false,hover=null,box=null,chosen=null,scrollWait=0;
+function within(n){while(n&&n.nodeType===1){if(n.hasAttribute(LOC))return n;n=n.parentElement}return null}
+function layer(line,fill){var d=document.createElement("div");d.style.cssText="position:fixed;pointer-events:none;z-index:2147483647;box-sizing:border-box;border:2px solid "+line+";background:"+fill+";border-radius:3px;display:none";document.documentElement.appendChild(d);return d}
+function place(d,el){if(!d)return;if(!el||!el.isConnected){d.style.display="none";return}var r=el.getBoundingClientRect();d.style.display="block";d.style.left=r.left+"px";d.style.top=r.top+"px";d.style.width=r.width+"px";d.style.height=r.height+"px"}
+function same(loc){try{return document.querySelectorAll("["+LOC+"='"+loc+"']")}catch(e){return[]}}
+function select(el){chosen=el;if(!box)box=layer("#5b3f8c","rgba(91,63,140,.07)");place(box,el);place(hover,null);var loc=el.getAttribute(LOC),all=same(loc),cs=getComputedStyle(el);
+post({type:"select",loc:loc,index:Math.max(0,Array.prototype.indexOf.call(all,el)),count:all.length,tag:el.tagName.toLowerCase(),text:(el.textContent||"").split(String.fromCharCode(10)).join(" ").replace(/ {2,}/g," ").trim().slice(0,2000),
+hasParent:!!(el.parentElement&&within(el.parentElement)),style:{color:cs.color,backgroundColor:cs.backgroundColor,fontSize:cs.fontSize,fontWeight:cs.fontWeight,textAlign:cs.textAlign,padding:cs.padding,margin:cs.margin,borderRadius:cs.borderRadius}})}
+function clear(){chosen=null;place(box,null)}
+function edit(on){editing=on;if(on&&!hover)hover=layer("rgba(91,63,140,.55)","rgba(91,63,140,.05)");if(!on){place(hover,null);clear()}}
+document.addEventListener("pointermove",function(e){if(!editing)return;var el=within(e.target);place(hover,el&&el!==chosen?el:null)},true);
+document.addEventListener("pointerleave",function(){place(hover,null)});
+["click","dblclick","submit","auxclick"].forEach(function(name){document.addEventListener(name,function(e){if(!editing)return;e.preventDefault();e.stopPropagation();if(name==="click"){var el=within(e.target);if(el)select(el)}},true)});
+addEventListener("scroll",function(){if(!editing)return;place(box,chosen);place(hover,null);clearTimeout(scrollWait);scrollWait=setTimeout(function(){post({type:"scroll",y:scrollY})},150)},{passive:true});
+addEventListener("resize",function(){place(box,chosen)});
+addEventListener("keydown",function(e){if(editing&&e.key==="Escape"&&chosen){clear();post({type:"deselect"})}});
+addEventListener("message",function(e){if(e.source!==parent||!e.data||e.data.source!=="makeborne-host")return;var d=e.data;
+if(d.type==="edit-mode"){edit(!!d.on);if(!d.on)return;var tries=0;(function restore(){var all=d.loc?same(d.loc):[],el=all[Math.min(d.index||0,all.length-1)]||all[0];
+var tall=!d.y||document.documentElement.scrollHeight>=d.y+innerHeight;if((d.loc&&!el||!tall)&&tries++<30){setTimeout(restore,100);return}
+if(d.y)scrollTo(0,d.y);if(el)select(el);else if(d.loc)post({type:"deselect"})})()}
+else if(d.type==="select-parent"&&chosen){var p=within(chosen.parentElement);if(p)select(p)}
+else if(d.type==="deselect")clear()});
+document.addEventListener("click",function(e){if(editing)return;var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a)return;var h=a.getAttribute("href")||"";
 if(h.charAt(0)==="#"){e.preventDefault();if(h.length>1){location.hash=h;var t=document.getElementById(decodeURIComponent(h.slice(1)));if(t)t.scrollIntoView({behavior:"smooth"});}else{scrollTo({top:0,behavior:"smooth"});}}
 else if(h.charAt(0)==="/"||h.indexOf("about:")===0){e.preventDefault();post({type:"navigation-blocked",href:h});}
 else if(!a.target){a.target="_blank";a.rel="noopener noreferrer";}},true);
@@ -141,12 +166,20 @@ capture(e.data).catch(function(err){post({type:"capture-error",message:String(er
 type CompileResult = { ok: true; js: string; css: string } | { ok: false; error: string };
 
 /** Compile src/main.tsx with React inlined from the same-origin runtime.
- * Preview keeps readable output; publish minifies. Neither includes the shim. */
-async function compileProject(input: Record<string, string>, mode: "preview" | "publish"): Promise<CompileResult> {
+ * Preview keeps readable output; publish minifies. Neither includes the shim.
+ * `inspect` (preview only) tags HTML elements with their source location for
+ * click-to-edit; published and captured output never carries those tags. */
+async function compileProject(input: Record<string, string>, mode: "preview" | "publish", inspect = false): Promise<CompileResult> {
   const files = new Map(Object.entries(input));
   if (!files.has("src/main.tsx")) return { ok: false, error: "The project has no src/main.tsx entry yet." };
   const origin = typeof location === "undefined" ? "" : location.origin;
   let build: Esbuild;
+  // The JSX parser for click-to-edit loads only for inspect builds.
+  let instrument: ((path: string, code: string) => string) | null = null;
+  if (inspect && mode === "preview") {
+    try { instrument = (await import("./visual-edit")).instrumentSource; }
+    catch { return { ok: false, error: "Click-to-edit could not start in this browser." }; }
+  }
   try { build = await esbuild(); }
   catch { return { ok: false, error: "The preview engine could not start in this browser." }; }
   let result;
@@ -184,9 +217,10 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
             }
             return { errors: [{ text: `"${specifier}" is not installed. Only react, react-dom and lucide-react are available.` }] };
           });
-          builder.onLoad({ filter: /.*/, namespace: "project" }, args => ({
-            contents: files.get(args.path) ?? "", loader: LOADERS[extension(args.path)] ?? "text",
-          }));
+          builder.onLoad({ filter: /.*/, namespace: "project" }, args => {
+            const contents = files.get(args.path) ?? "";
+            return { contents: instrument ? instrument(args.path, contents) : contents, loader: LOADERS[extension(args.path)] ?? "text" };
+          });
           builder.onLoad({ filter: /.*/, namespace: "lucide" }, () => {
             const icons = lucideModule(files, origin);
             return icons.problems.length ? { errors: icons.problems.map(text => ({ text })) } : { contents: icons.contents, loader: "js" };
@@ -217,9 +251,10 @@ ${css}` : css,
 
 /** Bundle a project into one self-contained HTML document (React inlined).
  * preview adds the editor shim; capture adds it plus the design-review
- * rasteriser; publish minifies. */
-export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" | "capture" = "preview"): Promise<BundleResult> {
-  const compiled = await compileProject(input, mode === "publish" ? "publish" : "preview");
+ * rasteriser; publish minifies. `inspect` adds click-to-edit locations to a
+ * preview bundle only. */
+export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" | "capture" = "preview", options: { inspect?: boolean } = {}): Promise<BundleResult> {
+  const compiled = await compileProject(input, mode === "publish" ? "publish" : "preview", mode === "preview" && options.inspect === true);
   if (!compiled.ok) return compiled;
   const { js, css } = compiled;
   const source = input["index.html"] ?? '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website</title></head><body><div id="root"></div></body></html>';

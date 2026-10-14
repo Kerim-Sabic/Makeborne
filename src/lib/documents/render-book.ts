@@ -1,5 +1,6 @@
 import type { Book } from "./schema";
-import { FONTS, mix, readableOn } from "./theme";
+import { FONTS, mix, motifOf, readableOn } from "./theme";
+import { fontFaceCss, type FontSources } from "./fonts";
 import { bodyHtml, inlineHtml, parseBookMarkup, plainText, type BookBlock } from "./book-markup";
 import { esc } from "./chart-svg";
 import type { ImageMap } from "./render-deck";
@@ -22,10 +23,14 @@ function tableColumnMinimums(rows: string[][]) {
   const longest = Array.from({ length: columns }, (_, column) => Math.min(12, Math.max(0, ...rows.map(row =>
     Math.max(0, ...plainText(row[column] ?? "").split(/[\s\-–—/]+/).map(word => word.length))))));
   // Header capitals (7pt, tracked) and body text (8.6pt) both run about 5pt per character.
-  const wanted = longest.map(chars => chars * 5), padding = 10, available = (BOOK_TRIM.width - BOOK_TRIM.inside - BOOK_TRIM.outside) * 72 * 0.94;
+  // Header capitals are tracked and bold, so they need a little more room per character than body text.
+  const headerLongest = Array.from({ length: columns }, (_, column) => Math.min(12, Math.max(0, ...plainText(rows[0]?.[column] ?? "").split(/[\s\-–—/]+/).map(word => word.length))));
+  const wanted = longest.map((chars, column) => Math.max(chars * 5, headerLongest[column] * 5.8)), padding = 10, available = (BOOK_TRIM.width - BOOK_TRIM.inside - BOOK_TRIM.outside) * 72 * 0.94;
   const total = wanted.reduce((sum, width) => sum + width + padding, 0);
   const scale = total > available ? Math.max(0, (available - columns * padding) / wanted.reduce((sum, width) => sum + width, 0)) : 1;
-  return wanted.map(width => Math.floor(width * scale));
+  // Cells are border-box, so the minimum includes the cell padding the total already reserved;
+  // without it a tracked header such as "ACCOUNT" broke mid-word.
+  return wanted.map(width => Math.floor(width * scale + padding));
 }
 
 /** A drop cap needs a paragraph long enough to wrap around it. */
@@ -45,6 +50,7 @@ function blockHtml(block: BookBlock, book: Book, images: ImageMap, lead = false)
     }
     case "break": return `<div class="break" aria-hidden="true">\u25C6\u2003\u25C6\u2003\u25C6</div>`;
     case "note": return `<aside class="note">${block.title ? `<strong>${bodyHtml(block.title)}</strong>` : ""}<p>${bodyHtml(block.text)}</p></aside>`;
+    case "pullquote": return `<aside class="pullquote"><p>${bodyHtml(block.text)}</p>${block.attribution ? `<span>— ${bodyHtml(block.attribution)}</span>` : ""}</aside>`;
     case "figure": {
       const src = images[block.image], alt = book.assets.find(asset => asset.name === block.image)?.alt ?? block.caption ?? "";
       return `<figure>${src ? `<img src="${esc(src)}" alt="${esc(alt)}">` : `<div class="ph">${esc(alt || block.image)}</div>`}${block.caption ? `<figcaption>${bodyHtml(block.caption)}</figcaption>` : ""}</figure>`;
@@ -88,12 +94,16 @@ function paginateContents(book: Book) {
   return roomy.length === 1 ? { compact: false, pages: roomy } : { compact: true, pages: pack(true) };
 }
 
-export function bookHtml(book: Book, images: ImageMap, mode: "preview" | "print" = "preview") {
-  const fonts = FONTS[book.theme.fonts], p = book.theme.palette;
+/** `fonts` maps embedded faces to data: URLs where the page cannot fetch same-origin files (the PDF printer). */
+export function bookHtml(book: Book, images: ImageMap, mode: "preview" | "print" = "preview", fontSources?: FontSources) {
+  const fonts = FONTS[book.theme.fonts], p = book.theme.palette, motif = motifOf(book.theme);
   const coverArt = book.cover.image ? images[book.cover.image] : undefined;
   const coverInk = coverArt ? "#FFFFFF" : readableOn(p.dark, p.background, "#FFFFFF");
-  const cover = book.cover.composition ? authoredBookCover(book, images) : `<section class="full cover${coverArt ? " has-art" : ""}">
-${coverArt ? `<img class="cover-art" src="${esc(coverArt)}" alt="${esc(book.assets.find(asset => asset.name === book.cover.image)?.alt ?? "")}"><div class="scrim"></div>` : `<div class="disc"></div><div class="ring"></div>`}
+  // Typographic covers per motif; "orbit" keeps the original disc and ring.
+  const coverMarks = motif === "grid" ? `<div class="m-rule top"></div><div class="m-rule bottom"></div><div class="m-square"></div>`
+    : motif === "band" ? `<div class="m-band"></div>` : motif === "frame" ? `<div class="m-frame"></div>` : motif === "quiet" ? "" : `<div class="disc"></div><div class="ring"></div>`;
+  const cover = book.cover.composition ? authoredBookCover(book, images) : `<section class="full cover${coverArt ? " has-art" : ""}${coverArt || motif === "orbit" ? "" : ` motif-${motif}`}">
+${coverArt ? `<img class="cover-art" src="${esc(coverArt)}" alt="${esc(book.assets.find(asset => asset.name === book.cover.image)?.alt ?? "")}"><div class="scrim"></div>` : coverMarks}
 <div class="cover-top">${book.cover.tagline ? `<p class="tagline">${inlineHtml(book.cover.tagline)}</p>` : ""}<h1>${inlineHtml(book.title)}</h1>${book.subtitle ? `<p class="subtitle">${inlineHtml(book.subtitle)}</p>` : ""}</div>
 ${book.author ? `<p class="cover-author">${inlineHtml(book.author)}</p>` : ""}</section>`;
   const titlePage = `<section class="full front title-page"><div><h2>${inlineHtml(book.title)}</h2>${book.subtitle ? `<p class="subtitle">${inlineHtml(book.subtitle)}</p>` : ""}<div class="rule"></div>${book.author ? `<p class="by">${inlineHtml(book.author)}</p>` : ""}</div></section>`;
@@ -121,7 +131,8 @@ ${artwork || (chapter.label === undefined ? `<div class="numeral">${index + 1}</
   const marginBox = `font-family:${fonts.body};font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:${muted};vertical-align:bottom;padding-bottom:.18in`;
   const folio = `font-family:${fonts.body};font-size:8.5pt;color:${muted};vertical-align:top;padding-top:.22in`;
   const none = "@top-left{content:none}@top-right{content:none}@bottom-left{content:none}@bottom-right{content:none}";
-  const shared = `*{box-sizing:border-box}html,body{margin:0}
+  const bandInk = readableOn(p.accent, "#FFFFFF", "#111111");
+  const shared = `${fontFaceCss(fonts.faces, fontSources)}*{box-sizing:border-box}html,body{margin:0}
 body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased;font-kerning:normal;font-variant-ligatures:common-ligatures}
 .full{position:relative;width:${T.width}in;height:${T.height}in;overflow:hidden;background:${p.background}}
 .cover{background:${p.dark};color:${coverInk};display:flex;flex-direction:column;justify-content:space-between;padding:.72in .6in .62in}
@@ -135,6 +146,12 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .cover .subtitle{font-family:${fonts.heading};font-style:italic;font-size:13pt;line-height:1.3;margin:.16in 0 0;max-width:4.4in;opacity:.95}
 .cover-author{font-size:9.5pt;letter-spacing:.24em;text-transform:uppercase;margin:0}
 .has-art .cover-top,.has-art .cover-author{text-shadow:0 1px 12px rgba(0,0,0,.35)}
+.motif-grid{justify-content:flex-end;padding:.95in .6in .7in}.motif-grid .cover-top{margin-bottom:auto;order:0}.motif-grid h1{font-size:44pt;line-height:.98;max-width:4.8in;margin-top:2.1in}
+.m-rule{position:absolute;left:.6in;right:.6in;height:1pt;background:${mix(coverInk, p.dark, 0.6)}}.m-rule.top{top:.7in}.m-rule.bottom{bottom:1.05in}.m-square{position:absolute;left:.6in;top:.9in;width:.2in;height:.2in;background:${p.accent}}
+.motif-grid .cover-top{padding-top:.3in}.motif-grid .cover-author{padding-top:.18in}
+.motif-band .m-band{position:absolute;left:0;right:0;bottom:0;height:2.2in;background:${p.accent}}.motif-band .cover-author{color:${bandInk}}.motif-band h1{font-size:42pt;max-width:4.8in;margin-top:2.6in}
+.motif-frame{align-items:center;text-align:center;justify-content:center;gap:.5in}.motif-frame .m-frame{position:absolute;inset:.32in;border:1pt solid ${mix(coverInk, p.dark, 0.55)}}.motif-frame h1,.motif-frame .subtitle{margin-left:auto;margin-right:auto}.motif-frame h1{font-size:38pt}.motif-frame .cover-top::after{content:"";display:block;width:.5in;height:1.5pt;background:${p.accent};margin:.3in auto 0}
+.motif-quiet{justify-content:center;gap:.6in}.motif-quiet h1{font-size:46pt;line-height:.98;max-width:4.9in}
 .front{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1in ${T.outside + 0.1}in;text-align:center}
 .title-page h2{font-family:${fonts.heading};font-weight:${fonts.headingWeight};font-size:27pt;line-height:1.08;letter-spacing:${fonts.headingTracking};margin:0;text-wrap:balance}
 .title-page .subtitle{font-family:${fonts.heading};font-style:italic;font-size:12pt;color:${muted};margin:.18in 0 0}
@@ -169,8 +186,13 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .chapter>p:first-of-type,.chapter h3+p,.chapter .break+p,.chapter figure+p,.chapter blockquote+p,.chapter ul+p,.chapter .table+p,.chapter ol+p,.chapter .note+p,.chapter .runhead+p{text-indent:0}
 .chapter>p.lead::first-letter{initial-letter:3;-webkit-initial-letter:3;font-family:${fonts.heading};color:${p.accent};margin-right:.07em;font-weight:${fonts.headingWeight}}
 .chapter>p.lead::first-line{font-variant-caps:small-caps;letter-spacing:.04em}
-.chapter h3{font-family:${fonts.heading};font-weight:${fonts.headingWeight};font-size:12.5pt;line-height:1.25;text-align:left;margin:1.5em 0 .55em;break-after:avoid;color:${p.ink}}
-.chapter blockquote{margin:.9em 1.2em;font-style:italic;text-align:left}.chapter blockquote p{text-indent:0}
+.chapter h3{font-family:${fonts.heading};font-weight:${fonts.headingWeight};font-size:13pt;line-height:1.25;text-align:left;margin:1.6em 0 .55em;break-after:avoid;break-inside:avoid;color:${p.ink}}
+.chapter h3::before{content:"";display:block;width:.3in;height:1.25pt;background:${p.accent};margin:0 0 .5em}
+.chapter blockquote{margin:1em 0 1em .2em;padding-left:.95em;border-left:1.5pt solid ${mix(p.accent, p.background, 0.45)};font-style:italic;text-align:left}.chapter blockquote p{text-indent:0}
+.pullquote{margin:1.5em .3in;padding:.85em 0;border-top:1pt solid ${p.accent};border-bottom:1pt solid ${p.accent};text-align:center;break-inside:avoid;text-indent:0}
+.pullquote p{font-family:${fonts.heading};font-weight:${fonts.headingWeight};font-size:15.5pt;line-height:1.28;color:${p.ink};margin:0;text-indent:0;text-wrap:balance;hyphens:manual}
+.pullquote span{display:block;font-size:7pt;letter-spacing:.18em;text-transform:uppercase;color:${muted};margin-top:.7em}
+.chapter .pullquote+p{text-indent:0}
 .chapter blockquote .attr{display:block;font-style:normal;font-size:7.5pt;letter-spacing:.16em;text-transform:uppercase;color:${muted};margin-top:.35em;text-align:right}
 .break{text-align:center;color:${p.accent};font-size:6pt;margin:1.1em 0;text-indent:0;break-after:avoid}
 .chapter figure{margin:1.2em 0;break-inside:avoid;text-align:center}

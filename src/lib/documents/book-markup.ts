@@ -9,6 +9,7 @@
  *   * * *            scene break
  *   [[figure:image-name|Caption]]
  *   [[note:Title|Body text]]
+ *   [[pullquote:Short line lifted from the text|Optional attribution]]
  *   Inline: *italic*, **bold**
  *
  * A block written without its blank line (a heading directly above its text,
@@ -23,7 +24,8 @@ export type BookBlock =
   | { type: "table"; header?: string[]; rows: string[][] }
   | { type: "break" }
   | { type: "figure"; image: string; caption?: string }
-  | { type: "note"; title?: string; text: string };
+  | { type: "note"; title?: string; text: string }
+  | { type: "pullquote"; text: string; attribution?: string };
 
 type LineKind = "heading" | "quote" | "bullet" | "ordered" | "table" | "break" | "text";
 const BREAK = /^(\*\s*){3,}$|^(-\s*){3,}$|^⁂$/;
@@ -71,10 +73,11 @@ export function parseBookMarkup(source: string): BookBlock[] {
   const blocks: BookBlock[] = [];
   const chunks = source.replace(/\r\n?/g, "\n").split(/\n{2,}/).map(chunk => chunk.trim()).filter(Boolean);
   for (const chunk of chunks) {
-    const directive = /^\[\[(figure|note):([^|\]]*)(?:\|([\s\S]*?))?\]\]$/.exec(chunk);
+    const directive = /^\[\[(figure|note|pullquote):([^|\]]*)(?:\|([\s\S]*?))?\]\]$/.exec(chunk);
     if (directive) {
       const [, kind, first, second] = directive;
       if (kind === "figure") blocks.push({ type: "figure", image: first.trim(), ...(second?.trim() ? { caption: second.trim() } : {}) });
+      else if (kind === "pullquote") blocks.push({ type: "pullquote", text: first.trim(), ...(second?.trim() ? { attribution: second.trim() } : {}) });
       else blocks.push(second === undefined ? { type: "note", text: first.trim() } : { type: "note", title: first.trim() || undefined, text: second.trim() });
       continue;
     }

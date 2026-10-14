@@ -21,6 +21,9 @@ export function projectDocument(doc: DocumentSource, newId: () => string = () =>
       if (slide.diagram) blocks.push(block("list", slide.diagram.items.map(item => `${item.label}${item.detail ? ` — ${item.detail}` : ""}`).join("\n")));
       if (slide.compare) blocks.push(block("list", [slide.compare.left, slide.compare.right].map(side => `${side.heading}: ${side.points.join("; ")}`).join("\n")));
       if (slide.quote) blocks.push(block("quote", `${slide.quote.text}${slide.quote.attribution ? ` — ${slide.quote.attribution}` : ""}`));
+      if (slide.people) blocks.push(block("list", slide.people.map(person => `${person.name} — ${person.role}${person.detail ? ` (${person.detail})` : ""}`).join("\n")));
+      if (slide.tiers) blocks.push(block("list", slide.tiers.map(tier => `${tier.name}: ${tier.price}${tier.period ? ` ${tier.period}` : ""}${tier.description ? ` — ${tier.description}` : ""}${tier.features.length ? ` (${tier.features.join("; ")})` : ""}`).join("\n")));
+      if (slide.table) blocks.push(block("list", [slide.table.columns, ...slide.table.rows].map(row => row.join(" | ")).join("\n")));
       if (slide.image && assetId(slide.image)) blocks.push(block("image", doc.assets.find(asset => asset.name === slide.image)?.alt ?? "", assetId(slide.image)));
       blocks.push(block("callout", `Speaker notes: ${slide.notes}`));
       return { id: newId(), title: slide.title.slice(0, 200), blocks };
@@ -37,6 +40,7 @@ export function projectDocument(doc: DocumentSource, newId: () => string = () =>
       else if (entry.type === "list") blocks.push(block("list", entry.items.map(plainText).join("\n")));
       else if (entry.type === "table") blocks.push(block("list", [...(entry.header ? [entry.header] : []), ...entry.rows].map(row => row.map(plainText).join(" | ")).join("\n")));
       else if (entry.type === "note") blocks.push(block("callout", plainText(`${entry.title ? `${entry.title}: ` : ""}${entry.text}`)));
+      else if (entry.type === "pullquote") blocks.push(block("quote", plainText(`${entry.text}${entry.attribution ? ` — ${entry.attribution}` : ""}`)));
       else if (entry.type === "figure" && assetId(entry.image)) blocks.push(block("image", plainText(entry.caption ?? ""), assetId(entry.image)));
     }
     return { id: newId(), title: chapter.title.slice(0, 200), blocks };

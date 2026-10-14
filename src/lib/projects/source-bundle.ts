@@ -12,13 +12,13 @@ import compatibility from "../../../infra/project-runtime/toolchain-compatibilit
 import projectPackage from "../../../infra/project-runtime/toolchain/package.json";
 import projectLock from "../../../infra/project-runtime/toolchain/package-lock.json";
 
-/** Export saved source with an identified, deterministic portable font adaptation. */
-export async function websiteProjectSourceBundle(input: unknown, artwork: Awaited<ReturnType<typeof resolveWebsiteSourceAssets>>) {
+/** The portable project tree shared by the source archive and GitHub sync: the
+ * saved text files (adapted only for portable fonts or a superseded approved
+ * toolchain) plus verified original artwork. No Makeborne metadata is added. */
+export function websiteProjectExportFiles(input: unknown, artwork: Awaited<ReturnType<typeof resolveWebsiteSourceAssets>>) {
   const version = ArtifactVersionSchema.parse(input);
   if (!version.content.websiteSource) throw new Error("Choose a full-source website revision.");
   const {source, sourceHash, manifest: sourceManifest} = websiteProjectManifest(version.content.websiteSource);
-  const zip = new JSZip();
-  const fixedDate = new Date("2000-01-01T00:00:00.000Z");
   const verified = websiteSourceFiles(source, artwork);
   const toolchain = compatibility.portableToolchainFiles(source.files, projectPackage, projectLock);
   const portable = portableFonts.portableFontFiles(toolchain.files);
@@ -29,6 +29,14 @@ export async function websiteProjectSourceBundle(input: unknown, artwork: Awaite
   if (allPaths.some(path => allPaths.some(other => path !== other && path.startsWith(`${other}/`)))) throw new Error("Portable font files conflict with a project directory.");
   const entries = [...textFiles.map(file => ({path: file.path, bytes: Buffer.from(file.content)})),
     ...verified.filter(file => source.assets.some(asset => asset.path === file.path))];
+  return {version, source, sourceHash, sourceManifest, toolchain, portable, entries};
+}
+
+/** Export saved source with an identified, deterministic portable font adaptation. */
+export async function websiteProjectSourceBundle(input: unknown, artwork: Awaited<ReturnType<typeof resolveWebsiteSourceAssets>>) {
+  const {version, source, sourceHash, sourceManifest, toolchain, portable, entries} = websiteProjectExportFiles(input, artwork);
+  const zip = new JSZip();
+  const fixedDate = new Date("2000-01-01T00:00:00.000Z");
   if (portable.fonts.length || toolchain.compatibility !== "current") entries.push({path: ".makeborne/original-source.json", bytes: Buffer.from(`${canonicalSourceJson(source)}\n`)});
   const manifest = {schemaVersion: 1, adapter: "makeborne-full-source-archive-v2", artifactId: version.artifactId,
     revisionId: version.id, version: version.number, sourceHash, source: sourceManifest,

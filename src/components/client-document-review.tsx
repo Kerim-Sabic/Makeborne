@@ -2,6 +2,26 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { DocumentSource } from "@/lib/documents/schema";
 import { reviewDocumentAssets, reviewDocumentHtml } from "@/lib/client-review/document";
+import { FONTS } from "@/lib/documents/theme";
+import { faceKey, facePublicUrl, faceStyles, type FontSources } from "@/lib/documents/fonts";
+
+/** The review frame only accepts data: fonts, so the document's open-licensed
+ * faces are read from the app's own static copies and inlined. A face that
+ * fails to load is skipped; its CSS stack falls back to the Office face. */
+async function documentFonts(doc: DocumentSource, signal: AbortSignal): Promise<FontSources> {
+  const fonts: FontSources = {};
+  await Promise.all(FONTS[doc.theme.fonts].faces.flatMap(id => faceStyles(id).map(async style => {
+    try {
+      const response = await fetch(facePublicUrl(id, style), { credentials: "omit", signal });
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (!response.ok || bytes.length > 400_000) return;
+      let binary = "";
+      for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+      fonts[faceKey(id, style)] = `data:font/woff2;base64,${btoa(binary)}`;
+    } catch { /* fall back to the stack */ }
+  })));
+  return fonts;
+}
 
 const dataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
@@ -34,7 +54,7 @@ export default function ClientDocumentReview({ document: doc, token, version, on
           if (image.size > 8 * 1024 * 1024 || total > 32 * 1024 * 1024) throw new Error("This review has too much artwork to display at once. Ask the team for a smaller review copy.");
           images[asset.name] = await dataUrl(image);
         }
-        const html = reviewDocumentHtml(doc, images);
+        const html = reviewDocumentHtml(doc, images, await documentFonts(doc, controller.signal));
         if (!controller.signal.aborted) setResult({ html, error: "" });
       } catch (error) {
         if (!controller.signal.aborted) setResult({ html: "", error: error instanceof Error ? error.message : "The document could not be loaded." });

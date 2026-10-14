@@ -17,6 +17,8 @@ import { recoveryPreview } from "@/lib/builder/recovery-preview";
 import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest, prepareBuilderAttachments, type BuilderAttachment } from "@/lib/builder/attachments";
 import { attachmentOwner, projectAttachmentKey, retainBuilderAttachmentSnapshot, bindBuilderAttachmentSnapshot, readBuilderAttachmentSnapshot, type Attachment as StoredAttachment } from "@/lib/attachments";
 import { AttachmentList, useFileAttachments } from "./file-attachments";
+import BriefQuestionsCard from "./brief-questions-card";
+import { briefQuestions, briefWithAnswers, isBriefQuestion, type BriefAnswers, type BriefQuestion } from "@/lib/builder/brief-questions";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
@@ -91,6 +93,9 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const log = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const started = useRef(false);
+  // Questions before the first build, asked once per project session.
+  const [asking, setAsking] = useState<{ text: string; mode: "create" | "plan"; questions: readonly BriefQuestion[] | null } | null>(null);
+  const asked = useRef(false);
   const authorizing = useRef(false);
   const [previewingRecovery, setPreviewingRecovery] = useState<{ runId: string; version: number } | null>(null);
   const [chosenMode, setMode] = useState<"create" | "plan" | null>(null);
@@ -382,7 +387,43 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
       if (sourceSession.active) setPreparingSources(false);
     }
   }, [busy, disabled, operationRunning, plan, previewingRecovery, send, sourceSession, sources.busy, sources.files, sources.ready]);
-  const submit = (text: string) => void submitSources(text, mode);
+  /** Questions written for this brief by a small, capped AI call (free to the user). Null on any failure. */
+  const tailoredQuestions = useCallback(async (brief: string, attachments: number): Promise<readonly BriefQuestion[] | null> => {
+    try {
+      const response = await fetch("/api/build/questions", { method: "POST", cache: "no-store", signal: AbortSignal.timeout(25_000),
+        headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
+        body: JSON.stringify({ workspaceId, artifactId, kind, brief: brief.slice(0, 8000), attachments: Math.min(attachments, 20) }) });
+      if (!response.ok) return null;
+      const value = await response.json() as { questions?: unknown };
+      return Array.isArray(value.questions) && value.questions.every(isBriefQuestion) ? value.questions : null;
+    } catch { return null; }
+  }, [accountId, artifactId, kind, workspaceId]);
+  // The first request on an empty project asks what the brief leaves open.
+  const firstBuild = !turns.length && !history.length && !planner.restored && version <= 1 && (website ? Object.keys(baseFiles).length === 0 : !baseDocument);
+  const startOrAsk = useCallback((text: string, requestMode: "create" | "plan") => {
+    if (asking) { setNotice("Answer the questions above, or choose Skip questions."); return; }
+    if (firstBuild && !asked.current && text.trim()) {
+      asked.current = true;
+      const brief = text.trim(), attachments = sources.files.length;
+      const local = briefQuestions(kind, brief, { attachments });
+      setAsking({ text: brief, mode: requestMode, questions: null }); setDraft("");
+      // Tailored questions when the AI is available; otherwise the on-device set.
+      void tailoredQuestions(brief, attachments).then(tailored => {
+        const questions = tailored ?? local;
+        if (!questions.length) { setAsking(null); void submitSources(brief, requestMode); return; }
+        setAsking(current => current && current.text === brief && !current.questions ? { ...current, questions } : current);
+      });
+      return;
+    }
+    void submitSources(text, requestMode);
+  }, [asking, firstBuild, kind, sources.files.length, submitSources, tailoredQuestions]);
+  const answerQuestions = (answers: BriefAnswers | null) => {
+    if (!asking) return;
+    const { text, mode: requestMode, questions } = asking;
+    setAsking(null);
+    void submitSources(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode);
+  };
+  const submit = (text: string) => startOrAsk(text, mode);
   const buildPlan = (approved: SitePlan, level: EffortLevel) => {
     setMode("create"); setEffort(level);
     void submitSources(`Build the approved plan: ${approved.title}`, "create", { plan: approved, effort: level });
@@ -447,15 +488,19 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
   useEffect(() => {
     if (!autoStart || started.current || disabled || !sources.ready || sources.busy || turns.length || version > 1 || !operationReady || !planner.ready || hasPreviousOperation || planner.hasPrevious) return;
     started.current = true;
-    void submitSources(autoStart, autoStartMode === "plan" && website ? "plan" : "create");
-  }, [autoStart, autoStartMode, disabled, hasPreviousOperation, operationReady, planner.hasPrevious, planner.ready, sources.busy, sources.ready, submitSources, turns.length, version, website]);
+    startOrAsk(autoStart, autoStartMode === "plan" && website ? "plan" : "create");
+  }, [autoStart, autoStartMode, disabled, hasPreviousOperation, operationReady, planner.hasPrevious, planner.ready, sources.busy, sources.ready, startOrAsk, turns.length, version, website]);
 
 
   const empty = !turns.length && !history.length && !planner.restored;
   const canReview = website && Object.keys(baseFiles).length > 0;
   return <aside className="lb" aria-label="Builder chat">
     <div className="lb-log" ref={log} aria-live="polite">
-      {empty && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
+      {empty && !asking && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
+      {asking && <><div className="lb-turn lb-user"><p>{asking.text}</p></div>
+        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask…</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>Skip</button></div>
+          : <BriefQuestionsCard questions={asking.questions} kind={kind} planning={asking.mode === "plan"} busy={busy || preparingSources || Boolean(disabled)}
+          onStart={answers => answerQuestions(answers)} onSkip={() => answerQuestions(null)} />}</div></>}
       {!!history.length && <details className="lb-history"><summary>{history.length} earlier change{history.length === 1 ? "" : "s"}</summary>
         <ol>{history.map(item => <li key={item.number}><strong>v{item.number}</strong> {item.summary}</li>)}</ol></details>}
       {planner.restored && <div className="lb-turn lb-assistant">

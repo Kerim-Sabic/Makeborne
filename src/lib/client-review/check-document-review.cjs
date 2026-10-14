@@ -43,7 +43,8 @@ const reset = () => { locator = baseline; rpcError = secondError = null; calls =
 (async () => {
   await check("canonical deck chart and artwork match owner layout; notes absent from source", () => {
     const html = reviewDocumentHtml(deck, { artwork: pixel });
-    const canonical = deckHtml(deck, { artwork: pixel }, "preview").replace(/<details><summary>Speaker notes<\/summary><p>[\s\S]*?<\/p><\/details>/g, "");
+    // The review frame allows only data: fonts, so it renders with explicit (here empty) font sources instead of same-origin font URLs.
+    const canonical = deckHtml(deck, { artwork: pixel }, "preview", {}).replace(/<details><summary>Speaker notes<\/summary><p>[\s\S]*?<\/p><\/details>/g, "");
     assert.equal(html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, ""), canonical);
     assert.ok(html.includes("<svg") && html.includes(pixel) && html.includes("Public growth"));
     assert.ok(!html.includes("PRIVATE") && !html.includes("Speaker notes") && !html.includes("<details>"));
@@ -54,7 +55,11 @@ const reset = () => { locator = baseline; rpcError = secondError = null; calls =
     const book = emptyDocument("book", "Public book"); book.assets = deck.assets; book.cover.image = "artwork";
     book.chapters = [{ id: "opening", title: "Opening", image: "artwork", text: "A **clear** opening.\n\n## A heading\n\nA paragraph." }];
     const html = reviewDocumentHtml(book, { artwork: pixel });
-    assert.equal(html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, ""), bookHtml(book, { artwork: pixel }, "preview"));
+    assert.equal(html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, ""), bookHtml(book, { artwork: pixel }, "preview", {}));
+    assert.ok(!html.includes("/builder-runtime/fonts/"), "no font request the frame's CSP would block");
+    const woff = "data:font/woff2;base64,d09GMgABAAAAAA==";
+    const withFonts = reviewDocumentHtml(book, { artwork: pixel }, { "newsreader:normal": woff, "cormorant:normal": "https://external.invalid/font.woff2" });
+    assert.ok(withFonts.includes(`src:url(${woff})`) && !withFonts.includes("external.invalid"), "only inline font data is embedded");
     assert.ok(html.includes('class="cover-art"') && html.includes('id="chapter-opening"') && html.includes("<strong>clear</strong>"));
     assert.equal(reviewDocumentAssets(book).length, 1);
   });

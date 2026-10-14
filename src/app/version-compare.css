@@ -1,0 +1,46 @@
+/* Version comparison in the project History view. */
+.vc { display:grid; gap:12px; margin-top:16px; padding:16px; border:1px solid #e7e4ec; border-radius:12px; background:#fff; min-width:0; }
+.vc-head { display:flex; align-items:center; gap:8px; }
+.vc-head h3 { flex:1; display:inline-flex; align-items:center; gap:8px; margin:0; font-size:15px; }
+.vc-close { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:8px; background:transparent; color:#7c7085; cursor:pointer; }
+.vc-close:hover { background:#f3f0f6; }
+.vc-picks { display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; }
+.vc-pick { display:grid; gap:4px; font-size:11.5px; font-weight:600; color:#6f6478; }
+.vc-pick select { min-width:140px; padding:7px 9px; border:1px solid #e3dde9; border-radius:8px; background:#fff; font:inherit; font-weight:500; color:#2f2637; }
+.vc-picks > svg { margin-bottom:9px; color:#8a7f93; }
+.vc-notes { display:grid; gap:4px; margin:0; font-size:12px; color:#5b4d67; line-height:1.45; }
+.vc-notes strong { color:#2f2637; margin-right:6px; }
+.vc-summary { margin:0; font-size:13px; font-weight:600; color:#2f2637; }
+.vc-empty { margin:0; color:#5b4d67; }
+.vc-muted { color:#8a7f93; font-weight:500; }
+.vc-add { color:#1d6f46; }
+.vc-remove { color:#9a2f2a; }
+.vc-group { display:grid; gap:8px; min-width:0; }
+.vc-group h4 { margin:6px 0 0; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:#8a7f93; }
+.vc-change { border:1px solid #ece8f0; border-radius:10px; overflow:hidden; min-width:0; }
+.vc-change summary { display:flex; align-items:center; gap:10px; padding:9px 12px; cursor:pointer; list-style:none; background:#faf9fb; font-size:12.5px; }
+.vc-change summary::-webkit-details-marker { display:none; }
+.vc-change summary:focus-visible { outline:2px solid #7d5fb0; outline-offset:-2px; }
+.vc-status { flex:none; padding:2px 7px; border-radius:5px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.vc-status.is-added { background:#e2f2e9; color:#1d6f46; }
+.vc-status.is-removed { background:#f7e3e1; color:#9a2f2a; }
+.vc-status.is-changed { background:#efe9f4; color:#4b3a59; }
+.vc-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px; color:#2f2637; }
+.vc-counts { flex:none; font-size:11.5px; font-variant-numeric:tabular-nums; }
+.vc-diff { overflow-x:auto; font:12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.vc-hunk-head { padding:4px 12px; background:#f3f0f6; color:#7c7085; font-family:Inter, system-ui, sans-serif; font-size:11px; }
+.vc-line { display:grid; grid-template-columns:44px 44px 18px minmax(0, 1fr); min-width:max-content; }
+.vc-line.is-add { background:#edf8f1; }
+.vc-line.is-remove { background:#fcefee; }
+.vc-num { padding:0 8px; text-align:right; color:#a59cad; font-variant-numeric:tabular-nums; user-select:none; }
+.vc-sign { color:#8a7f93; user-select:none; }
+.vc-line.is-add .vc-sign { color:#1d6f46; }
+.vc-line.is-remove .vc-sign { color:#9a2f2a; }
+.vc-line code { padding-right:16px; white-space:pre; color:#2f2637; font:inherit; }
+.vc-more, .vc-pad { margin:8px 12px; }
+.vc-more { padding:5px 10px; border:1px solid #e3dde9; border-radius:8px; background:#fff; color:#4b3a59; font:600 12px Inter, system-ui, sans-serif; cursor:pointer; }
+.cloud-history-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; }
+.cloud-history-head h3 { margin:0; }
+.cloud-history-head .button { display:inline-flex; align-items:center; gap:6px; }
+.cloud-version > button + button { margin-top:6px; }
+.vc .vc-pick select { height:auto; min-height:0; padding:6px 30px 6px 10px; font-size:13px; line-height:1.4; }

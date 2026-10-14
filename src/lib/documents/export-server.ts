@@ -3,9 +3,11 @@ import { chromium } from "playwright";
 import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DocumentSource } from "./schema";
-import { deckHtml } from "./render-deck";
+import { deckFaces, deckHtml } from "./render-deck";
 import { bookHtml } from "./render-book";
 import { deckPptx } from "./pptx";
+import { FONTS } from "./theme";
+import { embeddedFontSources } from "./fonts-server";
 import { chromiumLaunchOptions } from "../server/export";
 
 /** Read the document's generated artwork through the caller's RLS-bound client. */
@@ -35,10 +37,13 @@ async function dataUrls(buffers: Record<string, Buffer>) {
   return urls;
 }
 
-/** Print the same HTML the preview shows, in an offline, script-free browser. */
+/** Print the same HTML the preview shows, in an offline, script-free browser.
+ * The document's typefaces are embedded: the serverless Chromium has only Open Sans. */
 export async function documentPdf(doc: DocumentSource, buffers: Record<string, Buffer>) {
   const images = await dataUrls(buffers);
-  const html = doc.kind === "deck" ? deckHtml(doc, images, "print") : bookHtml(doc, images, "print");
+  // A deck's art direction may add faces (monospaced labels) beyond its pairing.
+  const fonts = await embeddedFontSources(doc.kind === "deck" ? deckFaces(doc) : FONTS[doc.theme.fonts].faces);
+  const html = doc.kind === "deck" ? deckHtml(doc, images, "print", fonts) : bookHtml(doc, images, "print", fonts);
   const browser = await chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
   try {
     const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: doc.kind === "deck" ? { width: 1280, height: 720 } : { width: 576, height: 864 } });
@@ -47,6 +52,8 @@ export async function documentPdf(doc: DocumentSource, buffers: Record<string, B
     page.setDefaultTimeout(30_000);
     await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
     await page.emulateMedia({ media: "print" });
+    // Embedded faces decode asynchronously; print only once they are ready.
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
     return Buffer.from(await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: doc.kind === "book" }));
   } finally {
     await browser.close();
