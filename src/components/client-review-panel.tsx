@@ -6,9 +6,11 @@ import { cloudAccountGuard } from "./cloud-api";
 import { linkState, type ReviewLink, type StudioReviewComment } from "@/lib/client-review/contracts";
 import { anchorLabel, builderRequestFromFeedback, reviewMailto } from "@/lib/client-review/feedback";
 import { deliveryStageLabels, type ProjectDeliveryStage } from "@/lib/project-delivery";
+import type { ReviewViews } from "@/lib/client-review/views";
+import LinkViewStats from "./client-review-views";
 
 type Kind = "website" | "book" | "presentation";
-type Overview = { currentVersion: number; kind: Kind; title: string; links: ReviewLink[]; comments: StudioReviewComment[]; snapshots: number[]; client: { id: string; name: string; email: string; stage: string } | null; deliveryStage?: ProjectDeliveryStage };
+type Overview = { currentVersion: number; kind: Kind; title: string; links: ReviewLink[]; comments: StudioReviewComment[]; snapshots: number[]; client: { id: string; name: string; email: string; stage: string } | null; deliveryStage?: ProjectDeliveryStage; views?: ReviewViews };
 const day = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 const moment = (value: string) => new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -103,6 +105,7 @@ export default function ClientReviewPanel({ accountId, workspaceId, artifactId, 
 
   if (!data) return <section className="crp" aria-label="Client review"><p role={error ? "alert" : "status"} className="crp-muted">{error || "Loading client review…"}</p>{error && <button type="button" className="button secondary small" onClick={() => void load()}>Try again</button>}</section>;
   const linksById = new Map(data.links.map(link => [link.id, link]));
+  const views = data.views;
   const feedback = data.comments.filter(comment => comment.kind === "comment" || comment.body.trim());
   const open = feedback.filter(comment => !comment.resolved && comment.kind !== "approved");
   const visible = showResolved ? feedback : open;
@@ -175,13 +178,16 @@ export default function ClientReviewPanel({ accountId, workspaceId, artifactId, 
 
     {data.links.length > 0 && <div className="crp-links">
       <h4>Review links</h4>
+      {views?.available ? <p className="crp-muted">See when each link is opened and where your client spends time. Your own previews aren&rsquo;t counted.</p>
+        : views && <p className="crp-muted">{views.reason === "setup" ? "View tracking is being set up. Soon you’ll see when your client opens a link and where they spend time." : "Views couldn’t be loaded right now. Refresh to try again."}</p>}
       <ul>{data.links.map(link => {
         const state = linkState(link);
         return <li key={link.id}>
           <div><span className={`crp-state is-${state}`}>{state === "active" ? "Active" : state === "expired" ? "Expired" : "Off"}</span>
             {link.decision && <span className={`crp-state is-${link.decision}`}>{link.decision === "approved" ? "Approved" : "Changes requested"}</span>}
             <strong>{link.recipientName || "Client"}</strong></div>
-          <small>{link.version === null ? "Latest version" : `Version ${link.version}`} · sent {day(link.createdAt)} · {state === "active" ? `expires ${day(link.expiresAt)}` : state === "expired" ? `expired ${day(link.expiresAt)}` : `off since ${day(link.revokedAt!)}`} · {link.viewCount} {link.viewCount === 1 ? "view" : "views"}</small>
+          <small>{link.version === null ? "Latest version" : `Version ${link.version}`} · sent {day(link.createdAt)} · {state === "active" ? `expires ${day(link.expiresAt)}` : state === "expired" ? `expired ${day(link.expiresAt)}` : `off since ${day(link.revokedAt!)}`}{views?.available ? "" : ` · ${link.viewCount} ${link.viewCount === 1 ? "view" : "views"}`}</small>
+          {views?.available && <LinkViewStats summary={views.byLink[link.id] ?? null} kind={data.kind} linkLabel={link.recipientName || "this link"} />}
           {canEdit && state === "active" && <button type="button" className="crp-icon-button" aria-label={`Turn off link for ${link.recipientName || "client"}`} title="Turn off link" disabled={busy} onClick={() => void revoke(link)}><X size={14} /></button>}
         </li>;
       })}</ul>

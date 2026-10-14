@@ -1,5 +1,6 @@
 import { cloudContext, cloudError, cloudJson, databaseError, validId } from "@/lib/cloud/server";
 import { COMMENT_COLUMNS, LINK_COLUMNS, mapReviewComment, mapReviewLink } from "@/lib/client-review/mappers";
+import { loadReviewViews } from "@/lib/client-review/views";
 
 type Context = { params: Promise<{ workspaceId: string; clientId: string }> };
 
@@ -17,9 +18,10 @@ export async function GET(_request: Request, context: Context) {
     databaseError(linkError);
     const linkIds = (links ?? []).map(link => link.id as string);
     const artifactIds = [...new Set((links ?? []).map(link => link.artifact_id as string))];
-    const [comments, artifacts] = await Promise.all([
+    const [comments, artifacts, views] = await Promise.all([
       linkIds.length ? client.from("client_review_comments").select(COMMENT_COLUMNS).eq("workspace_id", workspaceId).in("link_id", linkIds).order("created_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
       artifactIds.length ? client.from("artifacts").select("id,kind,title,current_version").eq("workspace_id", workspaceId).in("id", artifactIds) : Promise.resolve({ data: [], error: null }),
+      loadReviewViews(client, workspaceId, linkIds),
     ]);
     databaseError(comments.error); databaseError(artifacts.error);
     const byArtifact = new Map((artifacts.data ?? []).map(artifact => [artifact.id as string, artifact]));
@@ -28,7 +30,12 @@ export async function GET(_request: Request, context: Context) {
       items: (links ?? []).map(row => {
         const link = mapReviewLink(row);
         const artifact = byArtifact.get(link.artifactId);
-        return { link, artifact: artifact ? { id: link.artifactId, kind: artifact.kind as string, title: artifact.title as string, currentVersion: Number(artifact.current_version) } : null, comments: mapped.filter(comment => comment.linkId === link.id) };
+        return {
+          link, artifact: artifact ? { id: link.artifactId, kind: artifact.kind as string, title: artifact.title as string, currentVersion: Number(artifact.current_version) } : null,
+          comments: mapped.filter(comment => comment.linkId === link.id),
+          // Omitted until view tracking is set up; null means "not opened yet".
+          ...(views.available ? { views: views.byLink[link.id] ?? null } : {}),
+        };
       }),
     });
   } catch (error) { return cloudError(error); }

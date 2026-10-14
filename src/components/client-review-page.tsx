@@ -6,6 +6,7 @@ import AccountPreview, { PreviewBlock, previewPalette } from "./account-preview"
 import AccountBookPreview from "./account-book-preview";
 import ClientDocumentReview from "./client-document-review";
 import AccountSlidePreview from "./account-slide-preview";
+import ClientReviewBeacon, { type ViewLocation } from "./client-review-beacon";
 import { ArtifactContentSchema, StyleProfileSchema, type ArtifactContent, type StyleProfile } from "@/lib/domain";
 import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
 import { anchorLabel } from "@/lib/client-review/feedback";
@@ -82,6 +83,22 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     const style = StyleProfileSchema.safeParse({ referenceAssetIds: [], description: "", name: "Style", version: 1, id: "review", typography: { headingFont: "Source Serif 4", bodyFont: "Inter" }, colors: {}, ...(initial.style && typeof initial.style === "object" ? initial.style : {}) });
     return content.success ? { content: content.data, style: style.success ? style.data : null } : null;
   }, [initial]);
+  // What is on screen, for the owner's "viewed for 4 min, most time on Pricing".
+  const [frameView, setFrameView] = useState<ViewLocation | null>(null);
+  const slideTitles = useMemo(() => parsed?.content.kind === "presentation" && !parsed.content.document ? previewSlides(parsed.content).map(slide => slide.title) : [], [parsed]);
+  const where = useMemo<ViewLocation | null>(() => {
+    if (initial.mode === "html" || parsed?.content.document) return frameView;
+    if (!parsed) return null;
+    const [type, value] = location.split(":");
+    const index = Math.max(0, Number(value) || 0);
+    if (parsed.content.kind === "presentation") {
+      const slide = Math.min(index, Math.max(0, slideTitles.length - 1));
+      const title = slideTitles[slide]?.trim().slice(0, 80);
+      return { ref: `slide:${slide}`, label: `Slide ${slide + 1}${title ? ` · ${title}` : ""}` };
+    }
+    if (parsed.content.kind === "book" && type === "page") return { ref: `page:${index}`, label: index === 0 ? "Cover" : `Page ${index}` };
+    return { ref: "page", label: "Website" };
+  }, [initial.mode, parsed, location, slideTitles, frameView]);
   const requiresDocument = !!parsed?.content.document;
   const approvalReady = !requiresDocument || documentReady;
   const discussion = comments.filter(comment => comment.kind === "comment");
@@ -128,6 +145,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
   const greeting = initial.recipientName.trim() ? `Hi ${initial.recipientName.trim().split(/\s+/)[0]},` : "Hello,";
   const kindLabel = initial.kind === "website" ? "website" : initial.kind === "book" ? "book" : "presentation";
   return <div className="cr-page">
+    <ClientReviewBeacon token={token} where={where} />
     <header className="cr-top">
       <div className="cr-top-title">
         <span className="cr-shared"><BrandMark size={16} /> Shared for review</span>
@@ -155,9 +173,9 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     <div className="cr-layout">
       <main className="cr-stage" aria-label={`${initial.title} ${kindLabel}`}>
         {pinning && <div className="cr-pin-hint" role="status"><Crosshair size={14} /> Click anywhere on the {kindLabel} to pin your comment. <button type="button" onClick={() => setPinning(false)}>Cancel</button></div>}
-        {initial.mode === "html" && initial.html ? <WebsiteFrame html={initial.html} title={initial.title} pinning={pinning} pins={pins} draft={pin} active={active} onPick={pick} onPin={id => setActive(id)} />
+        {initial.mode === "html" && initial.html ? <WebsiteFrame html={initial.html} title={initial.title} onView={setFrameView} pinning={pinning} pins={pins} draft={pin} active={active} onPick={pick} onPin={id => setActive(id)} />
           : parsed?.content.document ? <ClientDocumentReview key={`${token}:${initial.version}`} document={parsed.content.document} token={token} version={initial.version} onReady={setDocumentReady}
-            render={(html, onLoaded) => <WebsiteFrame html={html} title={initial.title} documentKind={parsed.content.document!.kind} onReady={onLoaded} pinning={pinning} pins={pins} draft={pin} active={active} onPick={pick} onPin={id => setActive(id)} />} />
+            render={(html, onLoaded) => <WebsiteFrame html={html} title={initial.title} documentKind={parsed.content.document!.kind} onReady={onLoaded} onView={setFrameView} pinning={pinning} pins={pins} draft={pin} active={active} onPick={pick} onPin={id => setActive(id)} />} />
           : parsed ? <ContentReview content={parsed.content} style={parsed.style} location={location} onLocation={setLocation} pinning={pinning} pins={pins} draft={pin} active={active} onPick={pick} onPin={id => setActive(id)} />
           : <p className="cr-empty" role="alert">This version can’t be displayed. Ask the team for a new link.</p>}
       </main>
@@ -196,7 +214,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
             </button>
           </li>)}</ol>
         </section>
-        <p className="cr-privacy">Your name, comments and decision are shared only with the team that sent this link. Your email is optional and never shown here.</p>
+        <p className="cr-privacy">Your name, comments and decision are shared only with the team that sent this link. Your email is optional and never shown here. The team also sees when this page is opened, for how long and which parts are viewed, but never your location or browser details.</p>
       </aside>
     </div>
   </div>;
@@ -266,15 +284,56 @@ function ContentReview({ content, style, location, onLocation, ...surface }: Sur
   return <PinLayer {...surface} refId="page" label="Website"><AccountPreview content={content} style={theme} dirty={false} /></PinLayer>;
 }
 
+const textOf = (element: Element | null | undefined) => (element?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+
+/** Slides of a deck, chapters of a book, top-level sections of a website. */
+function frameTargets(doc: Document, documentKind?: "deck" | "book"): (ViewLocation & { element: Element })[] {
+  if (documentKind === "deck") return [...doc.querySelectorAll("section.slide")].map((element, index) => ({
+    element, ref: `slide:${index}`, label: (element.getAttribute("aria-label") || `Slide ${index + 1}`).replace(/^(Slide \d+):\s*/, "$1 · ").replace(/ · $/, "").slice(0, 80),
+  }));
+  if (documentKind === "book") {
+    let chapter = 0;
+    return [...(doc.body?.children ?? [])].filter(element => element.tagName === "SECTION").map(element => {
+      if (element.classList.contains("chapter")) {
+        const label = textOf(element.querySelector(".runhead span:last-child")) || textOf(element.querySelector("h2")) || `Chapter ${chapter + 1}`;
+        return { element, ref: `chapter:${chapter++}`, label };
+      }
+      if (element.classList.contains("opener")) return { element, ref: `chapter:${chapter}`, label: textOf(element.querySelector("h2")) || `Chapter ${chapter + 1}` };
+      if (element.classList.contains("cover") || element.classList.contains("authored-cover")) return { element, ref: "page:0", label: "Cover" };
+      if (element.classList.contains("contents")) return { element, ref: "front:contents", label: "Contents" };
+      return { element, ref: "front:pages", label: "Opening pages" };
+    });
+  }
+  // Websites: outermost header/section/footer blocks, the same ones comments pin to.
+  const blocks = [...doc.querySelectorAll("header, section, footer")].filter(element => element.parentElement?.closest("section, header, footer") == null);
+  return blocks.map((element, index) => {
+    const heading = textOf(element.querySelector("h1, h2, h3"));
+    const label = element.tagName === "HEADER" ? "Header" : element.tagName === "FOOTER" ? "Footer" : heading || `Section ${index + 1}`;
+    return { element, ref: `section:${index}`, label };
+  });
+}
+
+/** The target covering most of the frame's viewport. */
+function viewInFrame(doc: Document, documentKind?: "deck" | "book"): ViewLocation | null {
+  const height = doc.defaultView?.innerHeight ?? 0;
+  let best: ViewLocation | null = null, area = 0;
+  for (const { element, ref, label } of frameTargets(doc, documentKind)) {
+    const rect = element.getBoundingClientRect();
+    const visible = Math.min(rect.bottom, height) - Math.max(rect.top, 0);
+    if (visible > area) { area = visible; best = { ref, label }; }
+  }
+  return best ?? (documentKind ? null : { ref: "page", label: "Website" });
+}
+
 /** The published-snapshot style website: sanitized, script-free HTML in a
  * sandbox without allow-scripts. Same-origin lets this page (not the site)
  * measure clicks and draw pins; the document itself can never run code. */
-function WebsiteFrame({ html, title, documentKind, onReady, pinning, pins, draft, active, onPick, onPin }: Surface & { html: string; title: string; documentKind?: "deck" | "book"; onReady?: () => void }) {
+function WebsiteFrame({ html, title, documentKind, onReady, onView, pinning, pins, draft, active, onPick, onPin }: Surface & { html: string; title: string; documentKind?: "deck" | "book"; onReady?: () => void; onView?: (view: ViewLocation) => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [mobile, setMobile] = useState(false);
   const [loaded, setLoaded] = useState(0);
-  const state = useRef({ pinning, onPick, onPin, documentKind, onReady });
-  useEffect(() => { state.current = { pinning, onPick, onPin, documentKind, onReady }; }, [pinning, onPick, onPin, documentKind, onReady]);
+  const state = useRef({ pinning, onPick, onPin, documentKind, onReady, onView });
+  useEffect(() => { state.current = { pinning, onPick, onPin, documentKind, onReady, onView }; }, [pinning, onPick, onPin, documentKind, onReady, onView]);
   const attached = useRef<Document | null>(null);
   const attach = useCallback(() => {
     const doc = frame.current?.contentDocument;
@@ -309,8 +368,17 @@ function WebsiteFrame({ html, title, documentKind, onReady, pinning, pins, draft
       }
     }, true);
     doc.addEventListener("submit", event => event.preventDefault(), true);
+    // Report the slide, chapter or section most in view (the frame scrolls itself).
+    let shown = "", pending = 0;
+    const report = () => {
+      pending = 0;
+      const view = viewInFrame(doc, state.current.documentKind);
+      if (view && view.ref !== shown) { shown = view.ref; state.current.onView?.(view); }
+    };
+    doc.defaultView?.addEventListener("scroll", () => { if (!pending) pending = window.setTimeout(report, 300); }, { passive: true });
+    report();
     setLoaded(value => value + 1);
-    void doc.fonts.ready.then(() => { if (frame.current?.contentDocument === doc) state.current.onReady?.(); });
+    void doc.fonts.ready.then(() => { if (frame.current?.contentDocument === doc) { state.current.onReady?.(); report(); } });
   }, []);
   // A server-rendered srcdoc frame can finish loading before hydration, so
   // its load event is missed: attach as soon as the document is complete.
