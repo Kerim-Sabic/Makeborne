@@ -80,6 +80,9 @@ Migrations `20261012120000_credit_lots_expiry.sql` and `20261012130000_credit_lo
   - Each run writes a JSON log line.
   - `GET /api/cron/billing-reconcile?health=1` (same auth) or `select public.makeborne_billing_job_health();` reports the last success, failures in the last 24 hours, open issues, and `overdue` (no success in 36 hours). Alert on `overdue` or a growing `openIssues`.
 - **Sandbox:** `WHOP_API_BASE_URL=https://sandbox-api.whop.com/api/v1` points every Whop call at Whop's sandbox. Only that URL and production are accepted.
+  - Local sandbox keeps its existing explicit `MAKEBORNE_WHOP_SANDBOX=true`, local `http://127.0.0.1:55435` database and non-live merchant guard.
+  - Staging HTTP qualification additionally requires `MAKEBORNE_WHOP_STAGING_SANDBOX=true`, `VERCEL=1`, `VERCEL_ENV=preview`, `VERCEL_PROJECT_ID=prj_c9h8fuyEmVAT8F3NHFMvzFR1BnLc`, and `NEXT_PUBLIC_SUPABASE_URL=https://xzwikrunwpurxnxgkznh.supabase.co`. Both `WHOP_COMPANY_ID` and `WHOP_SANDBOX_COMPANY_ID` must equal the reviewed sandbox company `biz_e4w3EGe3izP67k`; an arbitrary matching pair is refused. The API base must be exactly `https://sandbox-api.whop.com/api/v1`. Production environments, other projects/databases, and the live support merchant are refused. Rejected sandbox configurations expose no usable provider or database credentials to reconciliation callers.
+  - This source guard does not configure or qualify any cloud deployment. Creation/migration gates and verified plan mappings still apply. The prior `6dcd19a` rehearsal covered prior source only; this change requires a fresh candidate inventory and exact-source rehearsal before release.
 
 ## What Whop documents (checked 2026-10-12)
 

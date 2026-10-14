@@ -18,7 +18,7 @@ assert.equal(config.billingConfig().enabled, false);
 assert.equal(config.billingConfig().accessPlanIds.length, 0);
 env.WHOP_ACCESS_PLAN_IDS = config.CREATION_CATALOG.create;
 assert.equal(config.billingConfig().enabled, true);
-// Sandbox never opens against a cloud database or the production merchant.
+// Local sandbox never opens against a cloud database or the production merchant.
 const savedEnv = { ...env };
 Object.assign(env, { WHOP_API_BASE_URL: "https://sandbox-api.whop.com/api/v1", MAKEBORNE_WHOP_SANDBOX: "true", WHOP_COMPANY_ID: "biz_sandbox", WHOP_SANDBOX_COMPANY_ID: "biz_sandbox", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55435" });
 assert.equal(config.billingConfig().enabled, true);
@@ -30,6 +30,53 @@ assert.equal(config.billingConfig().enabled, false);
 delete env.VERCEL;
 env.WHOP_COMPANY_ID = config.SUPPORT.companyId;
 assert.equal(config.billingConfig().enabled, false);
+
+// Cloud qualification requires every reviewed staging identity and both explicit opt-ins.
+const stagingEnv = {
+  ...savedEnv, WHOP_API_BASE_URL: "https://sandbox-api.whop.com/api/v1",
+  MAKEBORNE_WHOP_SANDBOX: "true", MAKEBORNE_WHOP_STAGING_SANDBOX: "true",
+  VERCEL: "1", VERCEL_ENV: "preview", VERCEL_PROJECT_ID: "prj_c9h8fuyEmVAT8F3NHFMvzFR1BnLc",
+  NEXT_PUBLIC_SUPABASE_URL: "https://xzwikrunwpurxnxgkznh.supabase.co",
+  WHOP_COMPANY_ID: "biz_e4w3EGe3izP67k", WHOP_SANDBOX_COMPANY_ID: "biz_e4w3EGe3izP67k",
+  WHOP_ACCESS_PLAN_IDS: "plan_SandboxFixture", WHOP_PLAN_CREDIT_MAP: "plan_SandboxFixture:create:monthly",
+};
+function setEnv(value) { for (const key of Object.keys(env)) delete env[key]; Object.assign(env, value); }
+setEnv(stagingEnv);
+assert.equal(config.billingConfig().configured, true);
+assert.equal(config.billingConfig().enabled, true);
+assert.equal(config.billingConfig().apiKey, "fake-api");
+assert.equal(config.billingConfig().companyId, "biz_e4w3EGe3izP67k");
+const deniedScopes = [
+  { VERCEL: undefined }, { VERCEL: "true" }, { VERCEL_ENV: undefined }, { VERCEL_ENV: "production" }, { VERCEL_ENV: "development" },
+  { VERCEL_TARGET_ENV: "production" }, { VERCEL_PROJECT_ID: undefined }, { VERCEL_PROJECT_ID: "prj_other" },
+  { NEXT_PUBLIC_SUPABASE_URL: "https://production.supabase.co" }, { NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55435" },
+  { VERCEL: undefined, NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55435" },
+  { NEXT_PUBLIC_SUPABASE_URL: "https://xzwikrunwpurxnxgkznh.supabase.co/" },
+  { NEXT_PUBLIC_SUPABASE_URL: "https://xzwikrunwpurxnxgkznh.supabase.co.evil.test" },
+  { WHOP_COMPANY_ID: config.SUPPORT.companyId, WHOP_SANDBOX_COMPANY_ID: config.SUPPORT.companyId },
+  { WHOP_COMPANY_ID: "biz_other", WHOP_SANDBOX_COMPANY_ID: "biz_other" },
+  { WHOP_SANDBOX_COMPANY_ID: undefined }, { WHOP_SANDBOX_COMPANY_ID: "biz_other" },
+  { MAKEBORNE_WHOP_SANDBOX: undefined }, { MAKEBORNE_WHOP_STAGING_SANDBOX: undefined }, { MAKEBORNE_WHOP_STAGING_SANDBOX: "false" },
+  { WHOP_API_BASE_URL: undefined }, { WHOP_API_BASE_URL: "https://api.whop.com/api/v1" },
+  { WHOP_API_BASE_URL: "https://sandbox-api.whop.com/api/v1/" }, { WHOP_API_BASE_URL: "https://sandbox-api.whop.com.evil.test/api/v1" },
+  { WHOP_API_BASE_URL: "https://api.whop.com/api/v1", WHOP_COMPANY_ID: config.SUPPORT.companyId, WHOP_SANDBOX_COMPANY_ID: config.SUPPORT.companyId },
+];
+for (const override of deniedScopes) {
+  setEnv({ ...stagingEnv, ...override });
+  const denied = config.billingConfig();
+  assert.equal(denied.configured, false, `scope ${Object.keys(override).join(",")} must refuse`);
+  assert.equal(denied.enabled, false);
+  assert.equal(denied.apiKey, undefined, "rejected sandbox must not expose provider credentials");
+  assert.equal(denied.secretKey, undefined, "rejected sandbox must not expose DB credentials");
+  assert.equal(denied.companyId, undefined);
+}
+for (const override of [{ WHOP_ACCESS_PLAN_IDS: config.SUPPORT.planId }, { WHOP_CREATION_ENABLED: "false" }, { MAKEBORNE_BILLING_MIGRATIONS_VERIFIED: "false" }]) {
+  setEnv({ ...stagingEnv, ...override }); assert.equal(config.billingConfig().enabled, false);
+}
+// Even an otherwise local-looking environment cannot use sandbox in production.
+setEnv({ ...stagingEnv, VERCEL: undefined, VERCEL_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55435" });
+assert.equal(config.billingConfig().enabled, false);
+console.log(`PASS strict staging sandbox scope: reviewed preview accepted; ${deniedScopes.length} scope mismatches, live support plan, disabled flags and production local fallback refused.`);
 for (const key of Object.keys(env)) delete env[key];
 Object.assign(env, savedEnv);
 env.WHOP_WEBHOOK_SECRET = "";
