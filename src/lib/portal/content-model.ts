@@ -69,7 +69,7 @@ export function parseManifest(text: string | undefined): { ok: true; manifest: M
 
 /** NFC, without control characters, bidi overrides or angle brackets' dangerous cousins (React escapes the rest). */
 export function cleanText(value: string, multiline = false) {
-  const normal = value.normalize("NFC").replace(/[‪-‮⁦-⁩‎‏]/g, "");
+  const normal = value.normalize("NFC").replace(/[\u202A-\u202E\u2066-\u2069\u200E\u200F]/g, "");
   const stripped = multiline ? normal.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").replace(/\r\n?/g, "\n") : normal.replace(/[\u0000-\u001F\u007F]/g, " ");
   return multiline ? stripped.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() : stripped.replace(/\s+/g, " ").trim();
 }
@@ -77,6 +77,8 @@ export function cleanText(value: string, multiline = false) {
 /** https web addresses (no credentials), mailto:, tel:, a site route ("/menu") or an anchor ("#visit"). */
 export function safeLink(value: string, routes: readonly string[] = []) {
   const link = value.trim();
+  // Phone links may contain single spaces ("tel:+44 117 496 0000"); nothing else may contain whitespace.
+  if (/^tel:\+?[0-9() .-]{5,30}$/i.test(link)) return true;
   if (!link || /[\s\\]/.test(link) || link.length > 500) return false;
   if (/^#[A-Za-z][\w-]{0,60}$/.test(link)) return true;
   if (/^\/(?!\/)[A-Za-z0-9/_-]*(?:#[A-Za-z][\w-]{0,60})?$/.test(link)) return link.split("#")[0] === "/" || routes.length === 0 || routes.includes(link.split("#")[0]);
@@ -139,6 +141,13 @@ export function collectionSchema(collection: Collection, context: Context) {
     .refine(items => new Set(items.map(entry => entry.id)).size === items.length, "Item ids must be unique.") }).strict();
 }
 
+/** Order-independent JSON for comparing values (object keys sorted; empty optional fields count as absent). */
+export function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).filter(key => (value as Record<string, unknown>)[key] !== null && (value as Record<string, unknown>)[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  return JSON.stringify(value ?? null);
+}
+
 /** Canonical file text: two-space JSON with a trailing newline, so version diffs stay readable. */
 export const serialiseContent = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 
@@ -150,8 +159,19 @@ export function checkCollection(collection: Collection, text: string | undefined
   let value: unknown;
   try { value = JSON.parse(text); } catch { return { ok: false, message: "is not valid JSON." }; }
   const parsed = collectionSchema(collection, context).safeParse(value);
-  if (!parsed.success) { const issue = parsed.error.issues[0]; return { ok: false, message: `${issue.path.join(".") || "value"}: ${issue.message}` }; }
+  if (!parsed.success) { const issue = parsed.error.issues[0]; return { ok: false, message: `${issueLocation(collection, issue.path)}: ${issue.message}` }; }
   return { ok: true, value: parsed.data, text: serialiseContent(parsed.data) };
+}
+
+const words = (key: string) => key.replace(/_/g, " ").replace(/([a-z])([A-Z0-9])/g, "$1 $2").replace(/^./, letter => letter.toUpperCase());
+/** "Facebook" or "Service 4, Name" rather than internal keys. */
+function issueLocation(collection: Collection, path: PropertyKey[]) {
+  const field = (key: PropertyKey | undefined) => typeof key === "string" && collection.fields[key] ? collection.fields[key].label ?? words(key) : null;
+  if (collection.kind === "list" && path[0] === "items") {
+    if (typeof path[1] !== "number") return collection.label;
+    return [`${collection.itemLabel ?? "Item"} ${path[1] + 1}`, field(path[2])].filter(Boolean).join(", ");
+  }
+  return field(path[0]) ?? collection.label;
 }
 
 /** Static checks for a project that declares content (the builder must fix these before finishing). */
@@ -187,8 +207,8 @@ export function readCollections(files: ReadonlyMap<string, string>, assets: Read
 
 /** Plain-English summary of what changed between two versions of a collection ("Menu: 2 changed, 1 added"). */
 export function describeChange(collection: Collection, before: unknown, after: unknown) {
-  if (collection.kind === "single") return JSON.stringify(before) === JSON.stringify(after) ? null : `${collection.label}: updated`;
-  const items = (value: unknown) => new Map(((value as { items?: { id: string }[] } | null)?.items ?? []).map(item => [item.id, JSON.stringify(item)]));
+  if (collection.kind === "single") return canonical(before) === canonical(after) ? null : `${collection.label}: updated`;
+  const items = (value: unknown) => new Map(((value as { items?: { id: string }[] } | null)?.items ?? []).map(item => [item.id, canonical(item)]));
   const a = items(before), b = items(after);
   const added = [...b.keys()].filter(id => !a.has(id)).length, removed = [...a.keys()].filter(id => !b.has(id)).length;
   const changed = [...b.keys()].filter(id => a.has(id) && a.get(id) !== b.get(id)).length;

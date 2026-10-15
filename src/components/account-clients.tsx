@@ -15,6 +15,7 @@ import { CLIENTS_ACTION_EVENT, refreshOnboarding, takeClientsAction, type Client
 import EnquiryLeads from "./enquiry-leads";
 import BrandKits from "./brand-kits";
 import LeadRedesign from "./lead-redesign";
+import ClientPortalPanel from "./client-portal-panel";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -35,7 +36,7 @@ import "@/app/account-clients.css";
 const ClientDetails = dynamic(() => import("./cloud-studio").then(module => module.CloudClientDetails), { loading: () => <DetailSkeleton /> });
 type Page = { nextOffset: number | null; total: number };
 type Snapshot = CloudWorkspaceSnapshot & { pagination: Record<"clients" | "projects" | "artifacts", Page> };
-type ClientView = "outreach" | "email" | "details" | "projects" | "reviews";
+type ClientView = "outreach" | "email" | "details" | "brand" | "projects" | "reviews";
 type Layout = "list" | "board" | "email";
 const DEVICE_PREFERENCE = "makeborne.clients.device";
 const LAYOUT_KEY = "makeborne.clients.layout";
@@ -396,7 +397,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     setImporting(null); setRefreshKey(key => key + 1);
     setMessage(failed ? `Imported ${created} client${created === 1 ? "" : "s"}; ${failed} could not be saved. Check them and import those rows again.` : `Imported ${created} client${created === 1 ? "" : "s"}.`);
   }
-  const tabs: { id: ClientView; label: string }[] = [{ id: "outreach", label: "Outreach & activity" }, { id: "email", label: "Email" }, { id: "details", label: "Contact details" }, { id: "projects", label: "Projects" }, { id: "reviews", label: "Client reviews" }];
+  const tabs: { id: ClientView; label: string }[] = [{ id: "outreach", label: "Outreach & activity" }, { id: "email", label: "Email" }, { id: "details", label: "Contact details" }, { id: "brand", label: "Brand & client access" }, { id: "projects", label: "Projects" }, { id: "reviews", label: "Client reviews" }];
 
   // The lead finder opens from the list header, the command palette, the checklist, or "Find more like this" on a client.
   const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }} onAdded={(count, tag) => {
@@ -426,7 +427,8 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
           try { const detail = await api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`); saved(detail.client); setMessage("Client details saved to your account."); }
           catch { setMessage("Client details saved. Refresh to see the latest version."); }
         }} />}
-        {view === "details" && <BrandKits key={`brand:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} />}
+        {view === "brand" && <BrandKits key={`brand:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} />}
+        {view === "brand" && <ClientPortalPanel key={`portal:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.company || full.name} contactName={full.name} clientEmail={full.email} canEdit={canEdit} />}
         {view === "reviews" && <ClientReviewFeed key={`${snapshot.workspace.id}:${full.id}:reviews`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} canEdit={canEdit} onOpenProject={onOpenProject} />}
         {view === "email" && <ClientEmail key={full.id} accountId={accountId} workspaceId={snapshot.workspace.id} client={{ id: full.id, name: full.name, email: full.email }} canEdit={canEdit}
           onSent={() => void api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`).then(result => { saved(result.client); setOutreachRevision(value => value + 1); }).catch(() => undefined)}

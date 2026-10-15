@@ -8,8 +8,9 @@ export function proxy(request: NextRequest) {
   // Cover every API for maintenance without changing normal session/cache
   // behavior on public snapshots, signed webhooks or worker endpoints.
   const path = request.nextUrl.pathname;
-  if (path.startsWith("/api/") && !/^\/api\/(billing(?:\/|$)|cloud(?:\/|$)|workspaces$|generate$|export$)/.test(path)) return NextResponse.next();
+  // Client portal pages and APIs refresh the signed-in session like the studio.
+  if (path.startsWith("/api/") && !/^\/api\/(billing(?:\/|$)|cloud(?:\/|$)|portal(?:\/|$)|workspaces$|generate$|export$)/.test(path)) return NextResponse.next();
   return updateSession(request);
 }
 
-export const config = { matcher: ["/", "/admin", "/studio/:path*", "/chat", "/billing/:path*", "/auth/:path*", "/login", "/api/:path*"] };
+export const config = { matcher: ["/", "/admin", "/studio/:path*", "/chat", "/billing/:path*", "/auth/:path*", "/login", "/portal", "/portal/:path*", "/api/:path*"] };

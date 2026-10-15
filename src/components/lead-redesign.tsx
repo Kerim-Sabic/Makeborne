@@ -123,7 +123,7 @@ export default function LeadRedesign({ accountId, workspaceId, client, onClose, 
                 <span className="lr-swatches" aria-label="Their colours">{BRAND_COLOR_ROLES.map(role => kit.colors[role] && <span key={role} title={kit.colors[role]!} style={{ background: kit.colors[role]! }} />)}</span>
                 <span className="lr-muted">{[brandFont(kit.fonts?.heading)?.family, brandFont(kit.fonts?.body)?.family].filter(Boolean).join(" / ")}</span>
               </div>
-              <label className="lr-check"><input type="checkbox" checked={saveKit} onChange={event => setSaveKit(event.target.checked)} /> Save their logo and colours as {client.name}&apos;s brand kit, as a starting point the redesign can refine. You can edit it on their Details tab.</label>
+              <label className="lr-check"><input type="checkbox" checked={saveKit} onChange={event => setSaveKit(event.target.checked)} /> Save their logo and colours as {client.name}&apos;s brand kit, as a starting point the redesign can refine. You can edit it on their “Brand &amp; client access” tab.</label>
             </> : <p className="lr-muted">Their colours and logo couldn&apos;t be read. The builder will choose a fitting direction.</p>}
         </section>
 

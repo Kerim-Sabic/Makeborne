@@ -33,15 +33,24 @@ export type PortalHome = {
 export type PortalSite = {
   site: { artifactId: string; title: string; liveUrl: string | null };
   agency: PortalBrand;
+  /** Added by the backend: the client this grant belongs to. */
+  client: { name: string };
   baseVersion: number;
-  /** Raw src/content/collections.json text (validated by content-model on both sides). */
+  /** Raw src/content/collections.json text (validated by content-model on both sides); "" when the site has none. */
   manifest: string;
   /** Collection files the client may edit, with the sha256 of the current text. */
   collections: { key: string; path: string; sha256: string; text: string }[];
   /** Site images an image field may point at; previewUrl is a portal-served thumbnail. */
   images: { path: string; previewUrl: string }[];
+  /** Added by the backend: the site's page routes, for url-field validation (safeLink(value, routes)). */
+  routes: string[];
+  /** The open change (draft or pending) or, when none is open, the latest decided/withdrawn one (check status). */
   change: PortalChange | null;
 };
+/** Response of PUT .../draft and POST .../changes. */
+export type PortalChangeResponse = { change: PortalChange };
+/** Response of POST /api/portal/invites/[token]/accept. */
+export type PortalInviteAccepted = { accessId: string };
 
 const ContentPath = z.string().regex(/^src\/content\/[a-z][a-z0-9-]{0,39}\.json$/).refine(path => path !== "src/content/collections.json");
 /** PUT /api/portal/sites/[artifactId]/draft (Idempotency-Key header) */
@@ -50,7 +59,7 @@ export const SaveDraftSchema = z.object({
   files: z.record(ContentPath, z.string().max(200_000)).refine(files => Object.keys(files).length >= 1 && Object.keys(files).length <= 30, "Between 1 and 30 files."),
   summary: z.string().trim().max(2000).default(""),
 }).strict();
-/** POST /api/portal/sites/[artifactId]/changes */
+/** POST /api/portal/sites/[artifactId]/changes (Idempotency-Key header) */
 export const ChangeActionSchema = z.object({ action: z.enum(["submit", "withdraw"]), changeId: z.string().uuid() }).strict();
 
 /** GET /api/portal/invites/[token] (public) */
@@ -62,7 +71,13 @@ export type PortalAccessStatus = "invited" | "active" | "revoked" | "expired";
 export type PortalAccess = {
   id: string; email: string; displayName: string; status: PortalAccessStatus;
   invitedAt: string; acceptedAt: string | null; lastSeenAt: string | null; planLabel: string; paidThrough: string | null;
+  /** Added by the backend: when the current invite link stops working (meaningful while status is "invited"). */
+  inviteExpiresAt: string;
 };
+/** Response of POST .../portal (invite) and PATCH .../portal/[accessId] {action:"resend"}: the link is shown once and never stored. */
+export type PortalInviteCreated = { access: PortalAccess; inviteUrl: string };
+/** Response of PATCH {action:"update"} and DELETE .../portal/[accessId]. */
+export type PortalAccessResponse = { access: PortalAccess };
 /** GET /api/cloud/workspaces/[ws]/clients/[clientId]/portal */
 export type ClientPortalOverview = {
   available: boolean;
@@ -85,5 +100,6 @@ export type SitePortalSettings = {
   pending: (PortalChange & { authorName: string; authorEmail: string; summaryLines: string[] })[];
 };
 export const SiteSettingsSchema = z.object({ enabled: z.boolean(), collections: z.array(z.string().regex(/^[a-z][a-z0-9-]{0,39}$/)).max(30).nullable() }).strict();
-/** POST .../portal/changes/[changeId] */
+/** POST .../portal/changes/[changeId] → PortalChangeResponse. A conflict (the site changed since the client's base) is
+ * HTTP 409 with error.code "CHANGE_CONFLICT"; resend with overwrite: true to replace those files. */
 export const DecisionSchema = z.object({ decision: z.enum(["approve", "reject"]), note: z.string().trim().max(2000).default(""), overwrite: z.boolean().default(false) }).strict();
