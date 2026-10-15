@@ -54,6 +54,7 @@ check("the reader keeps the business's real facts and drops boilerplate", () => 
 check("it reads the pages that matter: services or menu, about, pricing (max three)", () => {
   const nav = readSiteContent(OLD, new URL("http://www.harbourdental.co.uk/")).nav;
   assert.deepEqual(pagesToRead(nav).map(item => item.label), ["Treatments", "About us", "Fees"]);
+  assert.deepEqual(pagesToRead([{ label: "Mari W, Treatment Coordinator", url: "https://a.example/team/mari" }, { label: "Services", url: "https://a.example/services" }]).map(item => item.label), ["Services"], "captions and staff names are not pages");
   assert.deepEqual(pagesToRead([{ label: "Shop", url: "https://a.example/shop" }, { label: "Blog", url: "https://a.example/blog" }]).map(item => item.label), ["Shop"]);
 });
 
@@ -86,7 +87,7 @@ check("the brief demands a far better site, keeps facts, uses their photos, deli
   assert.match(brief, /not secure; not built for phones/);
   assert.match(brief, /Phone: \+44 1752 000111/); assert.match(brief, /Address: 4 Quay Road, Plymouth, PL1 2AB/);
   assert.match(brief, /<their_photos>\n- http:\/\/www\.harbourdental\.co\.uk\/img\/surgery\.jpg \(1600×1067\) "Our surgery"\n<\/their_photos>/);
-  assert.match(brief, /its layout is not a model/);
+  assert.match(brief, /its layout is not a model/); assert.match(brief, /never mention a previous or old website/);
   assert.match(brief, /<\/current_site_content>$/, "the closing tag survives the length cap");
   assert.equal((brief.match(/</g) ?? []).length, 4, "only the two delimited blocks; site text cannot open or close a tag");
   assert.deepEqual(briefPhotos(brief), [{ url: "http://www.harbourdental.co.uk/img/surgery.jpg", alt: "Our surgery" }], "the build step reads back exactly the listed photos");

@@ -181,6 +181,28 @@ check("import from a website reads page, stylesheet and logo through the guard, 
   await assert.rejects(server.importBrandFromWebsite("http://10.0.0.1/", { fetcher, resolve }), /Private addresses/);
 });
 
+check("lessons from live redesigns: stock colours, dark sites, light and boxed logos", async () => {
+  // A Material Design default blue is not a bakery's brand; the black page is.
+  const tally = extract.colorTally(":root{--x:1}body{color:#ffffff}.page{background:#101010;color:#ffffff}.card{background:#101010}h1,h2,p,a,li,span{color:#ffffff}.nav a{color:#ffffff}.btn{background:#1976d2;color:#fff}.link{color:#1976d2}.sale{color:#b91c1c}.sale2{color:#b91c1c}.hero{background:#ffffff}");
+  const colors = extract.pickColors(tally);
+  assert.equal(colors.background, "#101010", "white is mostly text here, so the site is dark");
+  assert.equal(colors.text, "#ffffff"); assert.equal(colors.primary, "#b91c1c", "the stock framework blue is ignored");
+  assert.equal(extract.pickColors(extract.colorTally(".btn{background:#1976d2}"), "#1976d2").primary, "#1976d2", "unless the site declares it as its theme colour");
+  // Logos: margins are trimmed before judging; a white stamp in a transparent canvas is a boxed logo.
+  const stamp = await sharp({ create: { width: 500, height: 250, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: await sharp({ create: { width: 200, height: 200, channels: 4, background: "#ffffff" } }).png().toBuffer(), left: 150, top: 25 }]).png().toBuffer();
+  const trimmed = await sharp(await server.trimLogo(stamp)).metadata();
+  assert.deepEqual([trimmed.width, trimmed.height], [200, 200]);
+  const icon = await sharp({ create: { width: 60, height: 60, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } } }).png().toBuffer();
+  assert.equal(await server.logoTone(icon), "light");
+  const kit = BrandKitSchema.parse({ ...KIT, usage: "guide", colors: { ...KIT.colors, background: "#101010" } });
+  const boxed = websiteBrandBlock(kit, { url: "/images/brand-logo.webp", width: 248, height: 248, opaque: true, box: "#ffffff" });
+  assert.match(boxed, /solid light box that would look like a pasted patch on this design, so don't use the file/); assert.doesNotMatch(boxed, /Logo: \/images/);
+  const light = websiteBrandBlock(kit, { url: "/images/brand-logo.webp", width: 54, height: 54, tone: "light" });
+  assert.match(light, /light-coloured \(white or near-white\), made for dark backgrounds/); assert.match(light, /small icon mark, not a full logo/);
+  assert.match(websiteBrandBlock(kit, null), /Keep their light or dark character/);
+});
+
 check("builders, planner, outreach and click-to-edit use the kit; browsers cannot write kits", () => {
   const read = file => fs.readFileSync(path.join(root, file), "utf8");
   const build = read("src/app/api/build/route.ts");

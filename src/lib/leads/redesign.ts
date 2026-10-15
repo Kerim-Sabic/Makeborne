@@ -104,7 +104,8 @@ export function readSiteContent(html: string, base: URL): SiteContent {
 const PAGE_PRIORITY: [RegExp, number][] = [[/menu|treatments?|services?|what we do|our work|portfolio|products|shop|rooms|classes|courses/i, 0], [/about|story|team|who we are/i, 1], [/pric|rates|fees|packages/i, 2], [/contact|find us|visit|location|book/i, 3]];
 /** Up to `limit` navigation pages worth reading: services or menu first, then about, pricing, contact. */
 export function pagesToRead(nav: SiteContent["nav"], limit = 3) {
-  const ranked = nav.map(item => ({ item, rank: PAGE_PRIORITY.find(([pattern]) => pattern.test(`${item.label} ${new URL(item.url).pathname}`))?.[1] ?? 9 }))
+  // Real navigation labels are short; captions and staff names that happen to be links are not pages.
+  const ranked = nav.filter(item => item.label.length <= 28 && item.label.split(/\s+/).length <= 4 && !/,/.test(item.label)).map(item => ({ item, rank: PAGE_PRIORITY.find(([pattern]) => pattern.test(`${item.label} ${new URL(item.url).pathname}`))?.[1] ?? 9 }))
     .filter(entry => entry.rank < 9).sort((a, b) => a.rank - b.rank);
   const seen = new Set<number>(), out: SiteContent["nav"] = [];
   for (const entry of ranked) { if (seen.has(entry.rank)) continue; seen.add(entry.rank); out.push(entry.item); if (out.length === limit) break; }
@@ -205,7 +206,8 @@ export function redesignBrief(input: { name: string; site: string; home: SiteCon
     listPage
       ? `Structure: an outstanding home page (hero, what they offer, why them, proof drawn only from real facts, visit or contact with an enquiry form) plus one ${listPage.label} page with their full list. Nothing else.`
       : "Structure: one outstanding, long home page (hero, what they offer, why them, proof drawn only from real facts, visit or contact with an enquiry form). No other pages.",
-    "Copy: rewrite their words to be shorter, clearer and more persuasive, in their voice. Keep every fact exactly (name, services, prices, phone, address, hours). Never invent testimonials, awards, statistics, staff names or prices; use a clear [placeholder] where something is missing.",
+    "Copy: rewrite their words to be shorter, clearer and more persuasive, in their voice. Keep every fact exactly (name, services, prices, phone, address, hours). Never invent testimonials, awards, statistics, staff names or prices. Where a fact is missing, leave that element out rather than showing a placeholder, unless the page truly needs it.",
+    "Write as the business speaking on its own new website: never mention a previous or old website, a redesign, a mock-up, or where any content came from.",
     input.hasBrandKit ? "Brand: follow the brand kit; their logo and main colour must stay recognisable, everything else should be elevated." : "Brand: keep their name; their old colours are only a hint.",
     photos.length ? "Imagery: their own photos are listed below and will be uploaded as project images; use the best one in the hero and the others where they genuinely help, cropped with care. Generate extra images only for subjects their photos don't cover." : "",
     fixes.length ? `Their current site's problems, which the new one must not have: ${fixes.join("; ")}.` : "",

@@ -113,22 +113,32 @@ export function colorTally(css: string, themeColor = "") {
   return tally;
 }
 
-export function pickColors(tally: Tally): ExtractedBrand["colors"] {
+/** Stock colours from UI frameworks, site builders and social buttons: never a business's brand. */
+const STOCK = new Set(["#1976d2", "#1565c0", "#1e88e5", "#2196f3", "#007bff", "#0d6efd", "#0b5ed7", "#0a58ca", "#337ab7", "#286090", "#2271b1", "#0073aa", "#135e96", "#1e73be", "#0274be",
+  "#3b5998", "#1877f2", "#4267b2", "#1da1f2", "#0a66c2", "#0077b5", "#25d366", "#e4405f", "#c13584", "#ff0000", "#4285f4", "#34a853", "#fbbc05", "#ea4335", "#bd081c", "#0e5bf3"]);
+
+export function pickColors(tally: Tally, themeColor: string | null = null): ExtractedBrand["colors"] {
   const ranked = [...tally.entries()].sort((a, b) => b[1].score - a[1].score);
-  // Pale tints are surfaces and borders, not brand colours; and a supporting colour must be used for real, not once.
-  const chromatic = ranked.filter(([color]) => !neutral(color) && saturation(color).l <= 0.85);
+  // Pale tints are surfaces and borders, not brand colours; stock framework colours are not brands; a supporting colour must be used for real, not once.
+  const chromatic = ranked.filter(([color]) => !neutral(color) && saturation(color).l <= 0.85 && (!STOCK.has(color) || color === themeColor));
+  // The main colour must carry weight: a mid-tone rather than a pale tint, when one is in real use.
+  const lead = chromatic.find(([color, use]) => saturation(color).l >= 0.18 && saturation(color).l <= 0.7 && use.score >= chromatic[0][1].score * 0.25);
+  if (lead) { chromatic.splice(chromatic.indexOf(lead), 1); chromatic.unshift(lead); }
   const chosen: string[] = [];
   for (const [color, use] of chromatic) {
     if (chosen.length && use.score < chromatic[0][1].score * 0.12) break;
     if (chosen.every(other => distinct(color, other))) chosen.push(color);
     if (chosen.length === 3) break;
   }
-  const background = ranked.filter(([color, use]) => use.background > 0 && saturation(color).l > 0.85).sort((a, b) => b[1].background - a[1].background)[0]?.[0]
-    ?? ranked.filter(([color, use]) => use.background > 0 && saturation(color).l < 0.15).sort((a, b) => b[1].background - a[1].background)[0]?.[0] ?? null;
+  const lightBg = ranked.filter(([color, use]) => use.background > 0 && saturation(color).l > 0.85).sort((a, b) => b[1].background - a[1].background)[0];
+  const darkBg = ranked.filter(([color, use]) => use.background > 0 && saturation(color).l < 0.15).sort((a, b) => b[1].background - a[1].background)[0];
+  // A dark site: its light colour is mostly used for text, and a dark colour fills real surfaces.
+  const darkSite = Boolean(darkBg && (!lightBg || (lightBg[1].text > lightBg[1].background * 3 && darkBg[1].background >= lightBg[1].background * 0.4)));
+  const background = (darkSite ? darkBg?.[0] : lightBg?.[0] ?? darkBg?.[0]) ?? null;
   const dark = background ? saturation(background).l < 0.5 : false;
   const text = ranked.filter(([color, use]) => use.text > 0 && neutral(color) && (dark ? saturation(color).l > 0.7 : saturation(color).l < 0.35)).sort((a, b) => b[1].text - a[1].text)[0]?.[0] ?? null;
-  // A monochrome brand: its strongest dark neutral is the main colour.
-  const primary = chosen[0] ?? ranked.find(([color]) => color !== background && saturation(color).l < 0.3)?.[0] ?? null;
+  // A monochrome brand: its strongest dark neutral is the main colour (on a dark site, its light one).
+  const primary = chosen[0] ?? ranked.find(([color]) => color !== background && (dark ? saturation(color).l > 0.85 : saturation(color).l < 0.3))?.[0] ?? null;
   return { primary, secondary: chosen[1] ?? null, accent: chosen[2] ?? null, background, text };
 }
 
@@ -273,7 +283,7 @@ export function extractBrand(html: string, css: string, url: URL): ExtractedBran
   const fonts = fontUsage(html, allCss);
   return {
     name: siteName(html, url), tagline: tagline(html),
-    colors: pickColors(colorTally(allCss, meta(html, "theme-color"))),
+    colors: pickColors(colorTally(allCss, meta(html, "theme-color")), parseColor(meta(html, "theme-color"))),
     fonts: { heading: fonts.heading ? libraryFont(fonts.heading) : null, body: fonts.body ? libraryFont(fonts.body) : null },
     fontSources: { heading: fonts.heading, body: fonts.body }, detectedFonts: fonts.detected,
     logoCandidates: logoCandidates(html, url),

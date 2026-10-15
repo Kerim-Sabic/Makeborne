@@ -5,7 +5,7 @@ import { pinnedFetcher, pinnedPageFetch, publicTarget, type Fetcher, type Lookup
 import { readWithHtml } from "../leads/enrich";
 import { storeProjectImage } from "../builder/images";
 import type { ProjectFiles } from "../builder/files";
-import { BRAND_LOGO_PATH, BRAND_LOGO_URL, brandFont, LOGO_DATA_URL, LOGO_MAX_BYTES, parseBrandKit, type BrandKit, type BrandKitInput } from "./kit";
+import { toHex, BRAND_LOGO_PATH, BRAND_LOGO_URL, brandFont, LOGO_DATA_URL, LOGO_MAX_BYTES, parseBrandKit, type BrandKit, type BrandKitInput } from "./kit";
 import { extractBrand, safeSvg, stylesheetLinks } from "./extract";
 
 type Deps = { fetcher?: Fetcher; resolve?: Lookup };
@@ -54,7 +54,7 @@ export async function normaliseLogo(input: Buffer | string): Promise<string> {
   if (/<svg\b|<\?xml/i.test(text) && !safeSvg(bytes.toString("utf8"))) throw new Error("This SVG links to outside files. Export it as a PNG instead.");
   let image;
   try {
-    image = sharp(bytes, { density: 300, limitInputPixels: 40_000_000, animated: false }).rotate().resize({ width: LOGO_EDGE, height: LOGO_EDGE, fit: "inside", withoutEnlargement: !/<svg\b/i.test(text) });
+    image = sharp(await trimLogo(await sharp(bytes, { density: 300, limitInputPixels: 40_000_000, animated: false }).rotate().png().toBuffer())).resize({ width: LOGO_EDGE, height: LOGO_EDGE, fit: "inside", withoutEnlargement: !/<svg\b/i.test(text) });
     const meta = await image.metadata();
     if (!meta.width || !meta.height) throw new Error("unreadable");
   } catch { throw new Error("That file isn't a readable image."); }
@@ -126,7 +126,7 @@ export const projectBrandKit = (client: SupabaseClient, workspaceId: string, pro
 export async function ensureBrandLogo(client: SupabaseClient, scope: { workspaceId: string; projectId: string }, kit: BrandKit, files: ProjectFiles) {
   if (!kit.logo) return null;
   try {
-    const bytes = Buffer.from(kit.logo.slice(kit.logo.indexOf(",") + 1), "base64");
+    const bytes = await trimLogo(Buffer.from(kit.logo.slice(kit.logo.indexOf(",") + 1), "base64"));
     const stored = await storeProjectImage(client, scope, bytes, { kind: "brand-logo", brand: kit.name.slice(0, 80) });
     const existing = files.assets.get(BRAND_LOGO_PATH);
     if (existing?.sha256 !== stored.sha256) files.addAsset({ id: stored.id, path: BRAND_LOGO_PATH, sha256: stored.sha256, bytes: stored.bytes, mediaType: "image/webp" });
@@ -134,6 +134,29 @@ export async function ensureBrandLogo(client: SupabaseClient, scope: { workspace
     const { isOpaque } = await sharp(bytes).stats();
     const corner = isOpaque ? null : await sharp(bytes).extract({ left: 0, top: 0, width: Math.min(4, stored.width), height: Math.min(4, stored.height) }).stats().catch(() => null);
     const opaque = isOpaque || (corner?.channels[3]?.min ?? 0) > 250;
-    return { url: BRAND_LOGO_URL, width: stored.width, height: stored.height, opaque };
+    // The colour of a boxed logo's box (its top-left corner), so the builder knows where it can sit.
+    const box = opaque ? await sharp(bytes).flatten({ background: "#ffffff" }).extract({ left: 0, top: 0, width: Math.min(4, stored.width), height: Math.min(4, stored.height) }).stats().then(stats => toHex(stats.channels[0].mean, stats.channels[1].mean, stats.channels[2].mean)).catch(() => undefined) : undefined;
+    return { url: BRAND_LOGO_URL, width: stored.width, height: stored.height, opaque, box, tone: opaque ? undefined : await logoTone(bytes) };
   } catch { return null; }
+}
+
+/** Whether a transparent logo's visible pixels are light (made for dark backgrounds), dark, or mixed. */
+export async function logoTone(bytes: Buffer): Promise<"light" | "dark" | "mixed"> {
+  const { data, info } = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let light = 0, dark = 0;
+  for (let index = 0; index < data.length; index += info.channels) {
+    if (data[index + 3] < 128) continue;
+    const luma = (0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2]) / 255;
+    if (luma > 0.82) light++; else if (luma < 0.45) dark++;
+  }
+  const total = light + dark;
+  return total && light / total > 0.8 ? "light" : total && dark / total > 0.8 ? "dark" : "mixed";
+}
+
+/** Removes transparent or blank margins around a logo, so its real shape and box can be judged and it sits tight on the page. */
+export async function trimLogo(bytes: Buffer) {
+  try {
+    const trimmed = await sharp(bytes).trim({ threshold: 12 }).png().toBuffer({ resolveWithObject: true });
+    return trimmed.info.width >= 8 && trimmed.info.height >= 8 ? trimmed.data : bytes;
+  } catch { return bytes; }
 }

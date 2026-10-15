@@ -71,3 +71,25 @@ The causes were constraints that kept the new design too close to the old site, 
   - The brief now asks for a site dramatically better than the original, a fresh concept, an art-directed first screen, rewritten copy and no reuse of the old layout.
   - It builds one outstanding home page, plus one list page (menu, prices, treatments) only when their content needs it.
   - Site text is labelled as "facts and wording, not a model".
+
+## Live quality runs (2026-10-15, owner-approved, $2.75 total)
+
+Five real builds ran through `runBuilder` with the same context `/api/build` assembles (`work/redesign-quality/build.cjs`), and were rendered with the preview bundler's fonts and assets (`render.cjs`). Two dated small-business sites were used: a dental template site and a family bakery.
+
+What each run taught, and the fix that followed:
+
+- **Logos.**
+  - A white icon logo was placed on a light header. Logo tone is now detected (`logoTone`), and icon marks are recognised.
+  - A white stamp logo inside a transparent canvas was misjudged. Logos are now trimmed of transparent or blank margins (`trimLogo`) before they are judged and stored.
+  - A boxed logo whose box clashes with the brand's background is replaced by a typographic wordmark, decided in code rather than left to the builder.
+- **Colours.**
+  - A bakery came out navy and corporate blue because a Material Design default blue was read as its brand. Stock framework and social colours are now ignored (unless declared as the `theme-color`).
+  - Dark sites are recognised from how their light colour is used (mostly as text).
+  - "Starting point" kits are told to keep the site's light or dark character, and to take the palette from their photos and logo when the colours look generic.
+- **Wording.** Copy said "from our previous website". The brief now forbids mentioning a previous site, a redesign or content sources, and prefers leaving out an element over showing a placeholder.
+- **Page reading.** A staff caption was read as a page. Navigation labels must now be short (at most 28 characters and 4 words, no commas).
+
+Results:
+- Medium effort finished in 92–182 s for $0.38–0.66 per build.
+- High effort produced a more refined site, but hit the 280 s run limit before calling `finish`. Its files were valid and kept.
+- The final runs had no static problems and no horizontal overflow on desktop or phone.

@@ -12,7 +12,7 @@
     },
     "Claude": {
       "capUsd": 20,
-      "spentUsd": 0.251635,
+      "spentUsd": 3.005149,
       "reservedUsd": 0
     },
     "sharedReserve": {
@@ -155,6 +155,31 @@
       "releasedReservationUsd": 2.49705,
       "usageBasis": "Actual staging atomic provider-spending ledger, all settled, no overrun; provider invoice not independently reconciled.",
       "evidence": "work/publication-cloud-e2e-20261014/smoke-provider-ledger.json"
+    },
+    {
+      "packageId": "claude-redesign-quality-20261015",
+      "owner": "Claude",
+      "status": "settled",
+      "reservedUsd": 9,
+      "reservedAt": "2026-10-14T23:54:25.113Z",
+      "purpose": "Owner-approved live quality runs of the \"Redesign this lead's website\" builder path: real website builds (claude-opus-5-5 via runBuilder, same context as /api/build) from public small-business sites read by the free redesign reader. Local script, in-memory spend gate per run, mocked storage, no app/staging/production database. No image model (OpenAI absent).",
+      "limits": {
+        "builds": 4,
+        "maxUsdPerBuild": 2.7
+      },
+      "spentUsd": 2.753514,
+      "releasedReservationUsd": 6.246486,
+      "settledAt": "2026-10-15T00:13:08.486Z",
+      "providerCalls": 26,
+      "actualByRunUsd": {
+        "run1-monee (medium)": 0.657829,
+        "run3-monee-high (high)": 0.828931,
+        "run2-bakery (medium)": 0.431117,
+        "run4-bakery (medium)": 0.376633,
+        "run5-bakery (medium)": 0.459004
+      },
+      "usageBasis": "Provider-reported usage metered per call by RunSpend in a local script (in-memory gate, per-run cap from the effort ceiling); no app/staging/production. Unknown-usage calls would count at their full bound. Invoice reconciliation not performed.",
+      "evidence": "work/redesign-quality/<run>/report.json, brief.txt, context.txt, screenshots"
     }
   ],
   "rules": [
