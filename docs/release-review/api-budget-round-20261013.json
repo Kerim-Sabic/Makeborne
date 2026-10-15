@@ -12,7 +12,7 @@
     },
     "Claude": {
       "capUsd": 20,
-      "spentUsd": 3.005149,
+      "spentUsd": 4.042723,
       "reservedUsd": 0
     },
     "sharedReserve": {
@@ -180,6 +180,28 @@
       },
       "usageBasis": "Provider-reported usage metered per call by RunSpend in a local script (in-memory gate, per-run cap from the effort ceiling); no app/staging/production. Unknown-usage calls would count at their full bound. Invoice reconciliation not performed.",
       "evidence": "work/redesign-quality/<run>/report.json, brief.txt, context.txt, screenshots"
+    },
+    {
+      "packageId": "claude-portal-content-ab-20261015",
+      "owner": "Claude",
+      "status": "settled",
+      "reservedUsd": 3,
+      "reservedAt": "2026-10-15T00:19:25.159Z",
+      "purpose": "Owner-approved A/B quality check: the same two redesign builds with the client-editable content contract enabled (claude-opus-5-5 via runBuilder). Local script, in-memory spend gate, no database.",
+      "limits": {
+        "builds": 2,
+        "maxUsdPerBuild": 1.5
+      },
+      "spentUsd": 1.037574,
+      "releasedReservationUsd": 1.962426,
+      "settledAt": "2026-10-15T00:23:21.313Z",
+      "providerCalls": 10,
+      "actualByRunUsd": {
+        "ab-bakery": 0.415741,
+        "ab-monee": 0.621833
+      },
+      "usageBasis": "Provider-reported usage metered per call by RunSpend in a local script; no app/staging/production. Invoice reconciliation not performed.",
+      "evidence": "work/redesign-quality/ab-*/report.json and screenshots"
     }
   ],
   "rules": [

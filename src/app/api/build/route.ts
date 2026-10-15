@@ -22,6 +22,8 @@ import { SitePlanSchema, planToBrief } from "@/lib/builder/plan";
 import { websiteBrandBlock } from "@/lib/brand/kit";
 import { ensureBrandLogo, projectBrandKit } from "@/lib/brand/server";
 import { importTheirPhotos, photosContext } from "@/lib/leads/redesign-server";
+import { CONTENT_CONTRACT } from "@/lib/builder/content-prompt";
+import { MANIFEST_PATH } from "@/lib/portal/content-model";
 
 export const runtime = "nodejs";
 // Vercel Hobby allows 300s; raise to 800 on Pro for long Ultra runs.
@@ -114,6 +116,8 @@ export async function POST(request: Request) {
       `Visual direction: ${styleDirection(project.styleId, current.style) || "No preset — choose the best direction for this business."}`,
       brand ? websiteBrandBlock(brand, logo) : "",
       photosContext(photos),
+      // Client sites get client-editable content (owner default); sites that already declare content keep the contract.
+      artifact.kind === "website" && (project.clientId || files.files.has(MANIFEST_PATH)) ? CONTENT_CONTRACT : "",
       outline ? `Existing outline content to use:\n${outline}` : "",
       current.content.website ? `Existing static design to convert into the React project (keep its look and copy unless asked otherwise):\n<html>${current.content.website.html.slice(0, 40_000)}</html>\n<css>${current.content.website.css.slice(0, 30_000)}</css>` : "",
       history ? `Recent revisions:\n${history}` : "",
