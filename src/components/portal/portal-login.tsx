@@ -27,7 +27,7 @@ export default function PortalLogin({ allowCreate = false, emailHint, onSignedIn
         if (!allowCreate && /signups not allowed|not found|user/i.test(error.message)) throw new Error("There's no client portal access for this email yet. Ask your agency to send you an invite.");
         throw error;
       }
-      setSent(true); setMessage({ error: false, text: `We sent a 6-digit code to ${email.trim()}. It expires in a few minutes.` });
+      setSent(true); setMessage({ error: false, text: `We sent a one-time code to ${email.trim()}. Enter the code from your email below.` });
     } catch (error) { setMessage({ error: true, text: error instanceof Error && !("code" in error) ? error.message : accountError(error) }); }
     finally { setBusy(false); }
   }
