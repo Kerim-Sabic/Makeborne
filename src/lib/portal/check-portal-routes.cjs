@@ -16,7 +16,12 @@ function reset(overrides = {}) {
     claims: { sub: USER, session_id: SESSION, exp: Math.floor(Date.now() / 1000) + 3600, role: "authenticated", is_anonymous: false },
     rpc: () => ({ data: null, error: null }), accessClient: CLIENT, downloads: [], uploads: [], removed: [], filters: {}, uploadRows: { data: [], error: null }, ...overrides };
 }
-const respond = (via, name, args) => { state.calls.push({ via, name, args }); return state.rpc(name, args, via); };
+const BILLING_DEFAULTS = { makeborne_portal_billing_home: { data: {}, error: null }, makeborne_portal_billing_site: { data: { billing: null }, error: null } };
+const respond = (via, name, args) => {
+  state.calls.push({ via, name, args });
+  const answer = state.rpc(name, args, via);
+  return name in BILLING_DEFAULTS && answer?.error?.code === "XX000" ? BILLING_DEFAULTS[name] : answer;
+};
 function builder(table) {
   state.tables.push(table);
   const query = { select: () => query, eq: (column, value) => { (state.filters[table] ??= []).push([column, value]); return query; },
@@ -91,7 +96,9 @@ const PORTAL_ROUTES = ["src/app/api/portal/route.ts", "src/app/api/portal/invite
 const CLEANUP = { makeborne_portal_sweep_unused_uploads: { removed: 0 }, makeborne_portal_take_upload_trash: { paths: [], waiting: 0 }, makeborne_portal_clear_upload_trash: { cleared: 0 } };
 const withCleanup = rpc => (name, args, via) => name in CLEANUP ? { data: CLEANUP[name], error: null } : rpc(name, args, via);
 const AGENCY_ROUTES = ["src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/portal/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/portal/[accessId]/route.ts",
-  "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/changes/[changeId]/route.ts"];
+  "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/changes/[changeId]/route.ts",
+  "src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/care-plan/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/care-plan/payments/route.ts",
+  "src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/care-plan/payments/[paymentId]/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/care-plans/route.ts"];
 const route = file => load(rel(file));
 const { checkCollection, parseManifest, serialiseContent } = load(rel("src/lib/portal/content-model.ts"));
 
@@ -145,7 +152,8 @@ check("home: service-role RPC with actor and session; no tables, no cookie-clien
   const result = await json(await route(PORTAL_ROUTES[0]).GET(request("/api/portal")));
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.equal(result.headers.get("cache-control"), "private, no-store");
-  assert.deepEqual(state.calls.map(call => `${call.via}:${call.name}`), ["service:makeborne_portal_home"]);
+  assert.deepEqual(state.calls.map(call => `${call.via}:${call.name}`), ["service:makeborne_portal_home", "service:makeborne_portal_billing_home"]);
+  assert.equal(result.body.grants[0].billing, null, "no care plan");
   assert.ok(trustedArgs(state.calls[0].args));
   assert.deepEqual(state.tables, []);
   assert.equal(state.creationChecks, 0);
@@ -170,7 +178,7 @@ check("account header mismatch → 409; signed out → 401; a JWT without a sess
 });
 
 check("site read maps images to portal thumbnails and never exposes asset ids beyond the preview URL", async () => {
-  reset({ rpc: () => ({ data: SITE_ROW, error: null }) });
+  reset({ rpc: name => name === "makeborne_portal_read_site" ? { data: SITE_ROW, error: null } : { data: null, error: { code: "XX000" } } });
   const result = await json(await route(PORTAL_ROUTES[3]).GET(request(`/api/portal/sites/${SITE}`), params({ artifactId: SITE })));
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.deepEqual(result.body.images, [{ path: "/images/dish.webp", previewUrl: `/api/portal/sites/${SITE}/images/${ASSET}` }]);
@@ -485,6 +493,82 @@ check("settings map declared collections and change summaries; approval re-valid
   const rejected = await agencyCall(3, "POST", `${siteUrl}/changes/${CHANGE}`, { workspaceId: WS, artifactId: SITE, changeId: CHANGE }, { decision: "reject", note: "No" });
   assert.equal(rejected.body.change.status, "rejected");
   assert.deepEqual(state.calls.map(call => call.name), ["makeborne_decide_portal_change"], "reject needs no re-validation");
+});
+
+check("care plans: the portal shows the plan and maps a paused write to 402; missing care functions degrade to no plan", async () => {
+  const BILLING = { label: "Monthly care", amountCents: 4900, currency: "EUR", interval: "month", paymentUrl: "https://buy.stripe.com/test_abc", status: "paused",
+    paidThrough: "2026-10-01", dueOn: "2026-10-02", pausesOn: "2026-10-09" };
+  const home = { email: "client@example.com", grants: [{ accessId: ACCESS, agency: BRAND, client: { name: "Saffron Table" }, sites: [] }] };
+  reset({ rpc: name => name === "makeborne_portal_home" ? { data: home, error: null } : name === "makeborne_portal_billing_home" ? { data: { [ACCESS]: BILLING }, error: null } : { data: null, error: { code: "XX000" } } });
+  let result = await json(await route(PORTAL_ROUTES[0]).GET(request("/api/portal")));
+  assert.deepEqual(result.body.grants[0].billing, BILLING);
+  assert.ok(trustedArgs(state.calls[1].args));
+  reset({ rpc: name => name === "makeborne_portal_read_site" ? { data: SITE_ROW, error: null } : name === "makeborne_portal_billing_site" ? { data: { billing: BILLING }, error: null } : { data: null, error: { code: "XX000" } } });
+  result = await json(await route(PORTAL_ROUTES[3]).GET(request(`/api/portal/sites/${SITE}`), params({ artifactId: SITE })));
+  assert.equal(result.status, 200, JSON.stringify(result.body)); assert.deepEqual(result.body.billing, BILLING);
+  assert.equal(state.calls[1].args.p_artifact, SITE); assert.ok(trustedArgs(state.calls[1].args));
+  reset({ rpc: name => name === "makeborne_portal_billing_home" ? { data: null, error: { code: "42883" } } : name === "makeborne_portal_home" ? { data: home, error: null } : { data: null, error: { code: "XX000" } } });
+  result = await json(await route(PORTAL_ROUTES[0]).GET(request("/api/portal")));
+  assert.equal(result.status, 200); assert.equal(result.body.grants[0].billing, null, "before the care-plan migration");
+  reset({ rpc: name => name === "makeborne_portal_billing_home" ? { data: { [ACCESS]: { ...BILLING, paymentUrl: "javascript:alert(1)" } }, error: null } : name === "makeborne_portal_home" ? { data: home, error: null } : { data: null, error: { code: "XX000" } } });
+  assert.notEqual((await route(PORTAL_ROUTES[0]).GET(request("/api/portal"))).status, 200, "a non-https payment link never reaches the client");
+  reset({ rpc: name => name === "makeborne_portal_save_draft" ? { data: null, error: { code: "PB402", message: "Editing is paused until your agency receives your payment" } } : name === "makeborne_portal_read_site" ? { data: SITE_ROW, error: null } : { data: null, error: { code: "XX000" } } });
+  const files = { "src/content/menu.json": MENU };
+  const paused = await json(await route(PORTAL_ROUTES[4]).PUT(request(`/api/portal/sites/${SITE}/draft`, { method: "PUT", body: { baseVersion: 3, files }, headers: { origin: ORIGIN, "Idempotency-Key": KEY } }), params({ artifactId: SITE })));
+  assert.equal(paused.status, 402, JSON.stringify(paused.body)); assert.equal(paused.body.error.code, "PAYMENT_DUE"); assert.match(paused.body.error.message, /paused until your agency receives your payment/);
+});
+
+check("care plans (agency): validated plan updates, https payment links only, idempotent payments, undo, overview", async () => {
+  const PLAN = { clientId: CLIENT, label: "Monthly care", amountCents: 4900, currency: "EUR", interval: "month", paymentUrl: "https://buy.stripe.com/test_abc", active: true,
+    updatedAt: "2026-10-18T10:00:00+00:00", status: "paid", paidThrough: "2026-11-17", dueOn: "2026-11-18", pausesOn: "2026-11-25" };
+  const PAYMENT = { id: CHANGE, amountCents: 4900, currency: "EUR", coversFrom: "2026-10-18", coversTo: "2026-11-17", note: "", recordedAt: "2026-10-18T10:00:00+00:00", undoneAt: null };
+  const planUrl = `/api/cloud/workspaces/${WS}/clients/${CLIENT}/care-plan`, value = { workspaceId: WS, clientId: CLIENT };
+  const [planRoute, paymentsRoute, paymentRoute, overviewRoute] = AGENCY_ROUTES.slice(4).map(route);
+  const ok = { plan: PLAN, payments: [PAYMENT] };
+  const body = { label: "Monthly care", amountCents: 4900, currency: "eur", interval: "month", paymentUrl: "https://buy.stripe.com/test_abc", paidThrough: null, active: true };
+  const put = async payload => json(await planRoute.PUT(request(planUrl, { method: "PUT", body: payload, headers: { origin: ORIGIN } }), params(value)));
+
+  reset({ rpc: name => name === "makeborne_set_care_plan" ? { data: ok, error: null } : { data: null, error: { code: "XX000" } } });
+  let result = await put(body);
+  assert.equal(result.status, 200, JSON.stringify(result.body)); assert.deepEqual(result.body.plan, PLAN);
+  const call = state.calls[0];
+  assert.equal(call.via, "cookie", "plans are written as the signed-in agency user");
+  assert.deepEqual([call.args.p_label, call.args.p_amount_cents, call.args.p_currency, call.args.p_interval, call.args.p_payment_url, call.args.p_active], ["Monthly care", 4900, "EUR", "month", "https://buy.stripe.com/test_abc", true]);
+  for (const bad of [{ paymentUrl: "javascript:alert(1)" }, { paymentUrl: "http://pay.example.com" }, { paymentUrl: "https://u:p@pay.example.com" }, { paymentUrl: "https://pay.example.com/a b" },
+    { amountCents: 4900, currency: null }, { interval: "week" }, { label: "" }, { label: "<b>x</b>" }, { paidThrough: "18/10/2026" }, { extra: true }]) {
+    reset({ rpc: () => ({ data: ok, error: null }) });
+    assert.equal((await put({ ...body, ...bad })).status, 400, JSON.stringify(bad));
+    assert.equal(state.calls.length, 0, `${JSON.stringify(bad)} reached the database`);
+  }
+  reset({ rpc: () => ({ data: ok, error: null }) });
+  assert.equal((await planRoute.PUT(request(planUrl, { method: "PUT", body, headers: { origin: "https://evil.example" } }), params(value))).status, 403);
+
+  reset({ rpc: name => name === "makeborne_care_plan" ? { data: null, error: { code: "42883" } } : { data: null, error: { code: "XX000" } } });
+  result = await json(await planRoute.GET(request(planUrl), params(value)));
+  assert.deepEqual(result.body, { available: false, plan: null, payments: [] }, "before the migration");
+
+  reset({ rpc: name => name === "makeborne_record_care_payment" ? { data: ok, error: null } : { data: null, error: { code: "XX000" } } });
+  assert.equal((await paymentsRoute.POST(request(`${planUrl}/payments`, { method: "POST", body: { note: "Bank" }, headers: { origin: ORIGIN } }), params(value))).status, 400, "Idempotency-Key required");
+  result = await json(await paymentsRoute.POST(request(`${planUrl}/payments`, { method: "POST", body: { note: "Bank" }, headers: { origin: ORIGIN, "Idempotency-Key": KEY } }), params(value)));
+  assert.equal(result.status, 201); assert.deepEqual([state.calls[0].args.p_request, state.calls[0].args.p_note], [KEY, "Bank"]);
+  reset({ rpc: () => ({ data: null, error: { code: "P0002", message: "Set up a care plan for this client first" } }) });
+  result = await json(await paymentsRoute.POST(request(`${planUrl}/payments`, { method: "POST", body: {}, headers: { origin: ORIGIN, "Idempotency-Key": KEY } }), params(value)));
+  assert.equal(result.status, 404); assert.match(result.body.error.message, /Set up a care plan/);
+
+  reset({ rpc: name => name === "makeborne_undo_care_payment" ? { data: ok, error: null } : { data: null, error: { code: "XX000" } } });
+  result = await json(await paymentRoute.DELETE(request(`${planUrl}/payments/${CHANGE}`, { method: "DELETE", headers: { origin: ORIGIN } }), params({ ...value, paymentId: CHANGE })));
+  assert.equal(result.status, 200); assert.equal(state.calls[0].args.p_payment, CHANGE);
+  reset({ rpc: () => ({ data: null, error: { code: "PT409", message: "Only the latest payment can be undone. Change the paid-until date instead." } }) });
+  result = await json(await paymentRoute.DELETE(request(`${planUrl}/payments/${CHANGE}`, { method: "DELETE", headers: { origin: ORIGIN } }), params({ ...value, paymentId: CHANGE })));
+  assert.equal(result.status, 409); assert.match(result.body.error.message, /Only the latest payment/);
+
+  reset({ rpc: name => name === "makeborne_care_plans" ? { data: [{ ...PLAN, status: "paused", clientName: "Saffron Table" }], error: null } : { data: null, error: { code: "XX000" } } });
+  result = await json(await overviewRoute.GET(request(`/api/cloud/workspaces/${WS}/care-plans`), params({ workspaceId: WS })));
+  assert.equal(result.status, 200); assert.equal(result.body.plans[0].clientName, "Saffron Table");
+  for (const [handler, args] of [[planRoute.GET, [request(planUrl), params(value)]], [overviewRoute.GET, [request(`/api/cloud/workspaces/${WS}/care-plans`), params({ workspaceId: WS })]]]) {
+    reset({ role: "reviewer" });
+    assert.equal((await handler(...args)).status, 403, "reviewers cannot see billing"); assert.equal(state.calls.length, 0);
+  }
 });
 
 check("the proxy refreshes sessions on portal pages and APIs", () => {

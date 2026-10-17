@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Clock, LoaderCircle, PencilLine } from "lucide-react";
 import type { PortalHome as Home } from "@/lib/portal/contracts";
+import { BillingLine, BillingNotice } from "./portal-billing";
 import PortalShell from "./portal-shell";
 import { PortalError, portalRequest } from "./portal-api";
 
@@ -27,6 +28,7 @@ export default function PortalHome() {
     {!home.grants.length && <div className="portal-card"><p>You don&apos;t have access to any websites yet. When your agency invites you, open the link in their email.</p></div>}
     {home.grants.map(grant => <section key={grant.accessId} className="portal-group" aria-label={`${grant.agency.name} for ${grant.client.name}`}>
       {home.grants.length > 1 && <h2>{grant.client.name} <span className="portal-muted">· {grant.agency.name}</span></h2>}
+      <BillingNotice billing={grant.billing} agency={grant.agency.name} />
       {!grant.sites.length && <div className="portal-card"><p className="portal-muted">{grant.agency.name} hasn&apos;t turned on editing for any of your websites yet.</p></div>}
       <ul className="portal-sites">{grant.sites.map(site => <li key={site.artifactId} className="portal-card portal-site">
         <div>
@@ -36,6 +38,7 @@ export default function PortalHome() {
         </div>
         <Link className="portal-button" href={`/portal/sites/${site.artifactId}`}><PencilLine size={16} /> Edit content</Link>
       </li>)}</ul>
+      <BillingLine billing={grant.billing} />
     </section>)}
   </PortalShell>;
 }

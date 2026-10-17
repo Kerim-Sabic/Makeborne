@@ -82,6 +82,7 @@ export function portalDatabaseError(error: DatabaseError) {
   const code = error.code ?? "";
   if (missingPortal(error)) throw new RequestError("PORTAL_SETUP", PORTAL_SETUP_MESSAGE, 503);
   if (code === "PT409") throw new RequestError("CHANGE_CONFLICT", plain(error.message, "Your agency updated this content since you opened it. Reload to see the latest version, then make your change again."), 409);
+  if (code === "PB402") throw new RequestError("PAYMENT_DUE", plain(error.message, "Editing is paused until your agency receives your payment."), 402);
   if (code === "MB429") throw new RequestError("TOO_MANY", plain(error.message, "Too many changes in a short time. Please wait a little and try again."), 429);
   if (code === "MB409") throw new RequestError("IDEMPOTENCY_CONFLICT", "This request key was already used for different content. Reload and save again.", 409);
   if (code === "P0002") throw new RequestError("NOT_AVAILABLE", "This site is not available to you. Ask your agency if you think this is a mistake.", 404);

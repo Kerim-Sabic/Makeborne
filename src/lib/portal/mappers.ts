@@ -7,6 +7,7 @@ import { z } from "zod";
 import { siteAddress } from "@/lib/hosting/config";
 import { PortalBrandSchema, type ClientPortalOverview, type PortalAccess, type PortalChange, type PortalHome, type PortalInvite,
   type PortalSite, type SitePortalSettings } from "./contracts";
+import type { CareBilling } from "./care";
 import { collectionPath, describeChange, parseManifest, CONTENT_DIR } from "./content-model";
 
 const uuid = z.string().uuid();
@@ -36,12 +37,12 @@ export function mapAccess(value: unknown): PortalAccess {
 export const accessClientId = (value: unknown) => AccessRowSchema.parse(value).clientId;
 const liveUrl = (value: string | null) => value ? siteAddress(value) : null;
 
-export function mapHome(value: unknown): PortalHome {
+export function mapHome(value: unknown, billing: Record<string, CareBilling | null> = {}): PortalHome {
   const row = z.object({ email: z.string(), grants: z.array(z.object({
     accessId: uuid, agency: PortalBrandSchema, client: z.object({ name: z.string() }),
     sites: z.array(z.object({ artifactId: uuid, title: z.string(), slug, change: z.object({ id: uuid, status: ChangeRowSchema.shape.status, updatedAt: stamp }).nullable() })),
   })) }).parse(value);
-  return { email: row.email, grants: row.grants.map(grant => ({ accessId: grant.accessId, agency: grant.agency, client: grant.client,
+  return { email: row.email, grants: row.grants.map(grant => ({ accessId: grant.accessId, agency: grant.agency, client: grant.client, billing: billing[grant.accessId] ?? null,
     sites: grant.sites.map(site => ({ artifactId: site.artifactId, title: site.title, liveUrl: liveUrl(site.slug), change: site.change })) })) };
 }
 
@@ -54,10 +55,10 @@ export const SiteRowSchema = z.object({
 export type SiteRow = z.infer<typeof SiteRowSchema>;
 export const portalImageUrl = (artifactId: string, assetId: string) => `/api/portal/sites/${artifactId}/images/${assetId}`;
 
-export function mapSite(row: SiteRow): PortalSite {
+export function mapSite(row: SiteRow, billing: CareBilling | null = null): PortalSite {
   return {
     site: { artifactId: row.site.artifactId, title: row.site.title, liveUrl: liveUrl(row.site.slug) }, agency: row.agency,
-    client: { name: row.client.name ?? "" }, baseVersion: row.baseVersion, manifest: row.manifest ?? "",
+    client: { name: row.client.name ?? "" }, billing, baseVersion: row.baseVersion, manifest: row.manifest ?? "",
     collections: row.collections, images: row.images.map(image => ({ path: image.path, previewUrl: portalImageUrl(row.site.artifactId, image.assetId), ...(image.removable ? { removable: true } : {}) })),
     routes: row.routes, change: row.change ? mapChange(row.change) : null,
   };

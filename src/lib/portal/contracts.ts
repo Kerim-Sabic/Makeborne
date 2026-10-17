@@ -4,6 +4,7 @@
  * routes and the UI. Client-safe.
  */
 import { z } from "zod";
+import type { CareBilling } from "./care";
 
 export const PortalBrandSchema = z.object({
   name: z.string(), logo: z.string().nullable(),
@@ -25,6 +26,8 @@ export type PortalHome = {
   email: string;
   grants: {
     accessId: string; agency: PortalBrand; client: { name: string };
+    /** The client's care plan with this agency (null: none); "paused" means read-only. */
+    billing: CareBilling | null;
     sites: { artifactId: string; title: string; liveUrl: string | null; change: Pick<PortalChange, "id" | "status" | "updatedAt"> | null }[];
   }[];
 };
@@ -35,6 +38,8 @@ export type PortalSite = {
   agency: PortalBrand;
   /** Added by the backend: the client this grant belongs to. */
   client: { name: string };
+  /** The client's care plan (null: none). While "paused" the editor is read-only. */
+  billing: CareBilling | null;
   baseVersion: number;
   /** Raw src/content/collections.json text (validated by content-model on both sides); "" when the site has none. */
   manifest: string;

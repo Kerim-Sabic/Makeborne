@@ -3,6 +3,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 import { ArrowDown, ArrowUp, ArrowUpRight, Check, ChevronDown, Clock, LoaderCircle, Plus, Send, Trash2, Undo2 } from "lucide-react";
 import { canonical, checkCollection, describeChange, newItemId, parseManifest, serialiseContent, type Collection, type Manifest } from "@/lib/portal/content-model";
 import type { PortalChange, PortalSite } from "@/lib/portal/contracts";
+import { BillingLine, BillingNotice } from "./portal-billing";
 import PortalShell from "./portal-shell";
 import { FieldInput, type Images, type PhotoActions } from "./portal-fields";
 import { PortalError, portalAccount, portalDeletePhoto, portalRequest, portalUpload } from "./portal-api";
@@ -65,6 +66,8 @@ function Editor({ site, path, reload }: { site: PortalSite; path: string; reload
   const [notice, setNotice] = useState("");
   const timer = useRef<number | undefined>(undefined);
   const pending = open?.status === "pending";
+  // Unpaid care plan past its grace period: read-only until the agency records a payment.
+  const paused = site.billing?.status === "paused";
   const agency = site.agency.name;
 
   const checks = useMemo(() => Object.fromEntries(editable.map(entry => [entry.key, checkCollection(manifest!.collections[entry.key], serialiseContent(values[entry.key]), { assets, routes: site.routes })])), [editable, manifest, values, assets, site.routes]);
@@ -89,11 +92,11 @@ function Editor({ site, path, reload }: { site: PortalSite; path: string; reload
   const saveAfterPause = useEffectEvent(() => { void persist(); });
   const edited = useRef(false);
   useEffect(() => {
-    if (!edited.current || pending) return;
+    if (!edited.current || pending || paused) return;
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(saveAfterPause, SAVE_DELAY_MS);
     return () => window.clearTimeout(timer.current);
-  }, [values, pending]);
+  }, [values, pending, paused]);
 
   const setValue = (key: string, value: unknown) => { edited.current = true; setValues(current => ({ ...current, [key]: value })); };
 
@@ -119,9 +122,10 @@ function Editor({ site, path, reload }: { site: PortalSite; path: string; reload
         <h1>{site.site.title}</h1>
         {site.site.liveUrl && <a className="portal-muted" href={site.site.liveUrl} target="_blank" rel="noreferrer noopener">View the live website <ArrowUpRight size={13} /></a>}
       </div>
-      <SaveState save={save} pending={pending} />
+      <SaveState save={save} pending={pending || paused} />
     </div>
 
+    <BillingNotice billing={site.billing} agency={agency} />
     {pending && <div className="pe-banner is-pending" role="status"><Clock size={16} /><div><strong>Waiting for {agency} to review your changes.</strong> {open?.summary && <span>{open.summary}.</span>} They&apos;ll go live once approved.</div>
       <button type="button" className="portal-link" disabled={busy} onClick={() => void act("withdraw")}><Undo2 size={14} /> Withdraw to keep editing</button></div>}
     {last?.status === "approved" && <div className="pe-banner is-approved" role="status"><Check size={16} /><div><strong>{agency} approved your last changes.</strong> {last.decisionNote}</div></div>}
@@ -136,7 +140,7 @@ function Editor({ site, path, reload }: { site: PortalSite; path: string; reload
 
     <section className="portal-card pe-panel" aria-label={collection.label}>
       {collection.help && <p className="portal-muted">{collection.help}</p>}
-      <fieldset disabled={pending || busy}>
+      <fieldset disabled={pending || paused || busy}>
         {collection.kind === "single"
           ? <ItemForm prefix={current.key} collection={collection} value={(values[current.key] as Values | null) ?? {}} images={images} photos={photos} manifest={manifest} onChange={value => setValue(current.key, value)} />
           : <ListEditor prefix={current.key} collection={collection} value={(values[current.key] as { items: Values[] } | null) ?? { items: [] }} images={images} photos={photos} manifest={manifest} onChange={value => setValue(current.key, value)} />}
@@ -144,13 +148,14 @@ function Editor({ site, path, reload }: { site: PortalSite; path: string; reload
       {!checks[current.key].ok && <p className="portal-error" role="alert">{(checks[current.key] as { message: string }).message}</p>}
     </section>
 
-    {!pending && <div className="pe-actions">
+    {!pending && !paused && <div className="pe-actions">
       <p className="portal-muted">{changed.length ? summary.join(" · ") : "No changes yet."}</p>
       {changed.length > 0 && <button type="button" className="portal-link" disabled={busy} onClick={() => { edited.current = true; setValues(original); }}><Undo2 size={14} /> Discard changes</button>}
       <button type="button" className="portal-button" disabled={busy || !changed.length || editable.some(entry => !checks[entry.key].ok)} onClick={() => void act("submit")}>
         {busy ? <LoaderCircle size={16} className="portal-spin" /> : <Send size={16} />} Send changes to {agency}</button>
     </div>}
     {notice && <p className="portal-error" role="alert">{notice}</p>}
+    <BillingLine billing={site.billing} />
   </div>;
 }
 

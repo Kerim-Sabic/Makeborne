@@ -108,7 +108,7 @@ There are no uploads in Phase 1; image fields pick from the site's existing phot
 
 - Custom portal domains and white-label branding.
 - Branded transactional email.
-- Agency-to-client billing.
+- Agency-to-client billing (care plans with the agency's own payment link: built on `feature/client-care-plans`, see `docs/CLIENT_CARE_PLANS.md`).
 - Portal seats in Makeborne plans.
 - Multiple client users with roles.
 - Showing clients their analytics and enquiries.

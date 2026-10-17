@@ -134,3 +134,10 @@
 .pf-photo-confirm button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 10px; border: 0; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .pf-photo-yes { background: #fff; color: #9b1c1c; }
 .pf-photo-no { background: transparent; color: #fff; }
+.pe-banner.is-due { background: #fff4e0; color: #5d3a06; align-items: center; }
+.pe-banner.is-paused { background: #fdecea; color: #7a1d16; align-items: center; }
+.pe-banner .pe-pay { margin-left: auto; flex: none; text-decoration: none; }
+.portal-group > .pe-banner { margin: 0 0 12px; }
+.pe-billing { margin: 18px 0 0; font-size: 12.5px; }
+.portal-group > .pe-billing { margin: 10px 0 0; }
+.pe-banner .pe-pay svg { margin-top: 0; }

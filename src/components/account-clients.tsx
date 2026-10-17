@@ -16,6 +16,7 @@ import EnquiryLeads from "./enquiry-leads";
 import BrandKits from "./brand-kits";
 import LeadRedesign from "./lead-redesign";
 import ClientPortalPanel from "./client-portal-panel";
+import CarePlanPanel from "./care-plan-panel";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -429,6 +430,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
         }} />}
         {view === "brand" && <BrandKits key={`brand:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} />}
         {view === "brand" && <ClientPortalPanel key={`portal:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.company || full.name} contactName={full.name} clientEmail={full.email} canEdit={canEdit} />}
+        {view === "brand" && <CarePlanPanel key={`care:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.company || full.name} canEdit={canEdit} />}
         {view === "reviews" && <ClientReviewFeed key={`${snapshot.workspace.id}:${full.id}:reviews`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} canEdit={canEdit} onOpenProject={onOpenProject} />}
         {view === "email" && <ClientEmail key={full.id} accountId={accountId} workspaceId={snapshot.workspace.id} client={{ id: full.id, name: full.name, email: full.email }} canEdit={canEdit}
           onSent={() => void api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`).then(result => { saved(result.client); setOutreachRevision(value => value + 1); }).catch(() => undefined)}

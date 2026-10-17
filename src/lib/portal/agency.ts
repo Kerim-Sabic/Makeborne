@@ -37,5 +37,6 @@ export function agencyDatabaseError(error: DatabaseError) {
   if (code === "PP409") throw new RequestError("ALREADY_INVITED", plain(error.message, "This email already has portal access for this client."), 409);
   if (code === "MB429") throw new RequestError("WRITE_LIMIT", plain(error.message, "Portal limit reached. Try again later."), 429);
   if (code === "22023") throw new RequestError("INVALID", plain(error.message, "Some details are not valid."), 400);
+  if (code === "P0002") throw new RequestError("NOT_FOUND", plain(error.message, "This record is unavailable in this workspace."), 404);
   databaseError(error);
 }
