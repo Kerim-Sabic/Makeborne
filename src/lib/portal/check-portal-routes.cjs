@@ -380,6 +380,10 @@ check("the proxy refreshes sessions on portal pages and APIs", () => {
   const login = fs.readFileSync(rel("src/components/portal/portal-login.tsx"), "utf8");
   assert.match(login, /We sent a one-time code/);
   assert.doesNotMatch(login, /\b(?:6|six|8|eight)-digit code\b/i, "OTP length is provider-configured");
+  assert.match(login, /placeholder="Code from your email"/);
+  const editor = fs.readFileSync(rel("src/components/portal/portal-site-editor.tsx"), "utf8");
+  assert.match(editor, /Your agency publishes them separately/);
+  assert.doesNotMatch(editor, /go live once approved/i);
   const proxy = fs.readFileSync(rel("src/proxy.ts"), "utf8");
   assert.match(proxy, /"\/portal", "\/portal\/:path\*"/);
   assert.match(proxy, /portal\(\?:\\\/\|\$\)/);

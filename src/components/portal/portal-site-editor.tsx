@@ -110,7 +110,7 @@ function Editor({ site, path, reload }: { site: PortalSite; path: string; reload
       <SaveState save={save} pending={pending} />
     </div>
 
-    {pending && <div className="pe-banner is-pending" role="status"><Clock size={16} /><div><strong>Waiting for {agency} to review your changes.</strong> {open?.summary && <span>{open.summary}.</span>} They&apos;ll go live once approved.</div>
+    {pending && <div className="pe-banner is-pending" role="status"><Clock size={16} /><div><strong>Waiting for {agency} to review your changes.</strong> {open?.summary && <span>{open.summary}.</span>} Approved changes are saved as a new version. Your agency publishes them separately.</div>
       <button type="button" className="portal-link" disabled={busy} onClick={() => void act("withdraw")}><Undo2 size={14} /> Withdraw to keep editing</button></div>}
     {last?.status === "approved" && <div className="pe-banner is-approved" role="status"><Check size={16} /><div><strong>{agency} approved your last changes.</strong> {last.decisionNote}</div></div>}
     {last?.status === "rejected" && <div className="pe-banner is-rejected" role="status"><div><strong>{agency} didn&apos;t approve your last changes.</strong> {last.decisionNote || "They may contact you about it."}</div></div>}

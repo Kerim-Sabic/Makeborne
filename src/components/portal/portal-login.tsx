@@ -52,7 +52,7 @@ export default function PortalLogin({ allowCreate = false, emailHint, onSignedIn
       <button type="submit" className="portal-button" disabled={busy || !email.trim()}>{busy ? <LoaderCircle size={16} className="portal-spin" /> : <Mail size={16} />} Email me a sign-in code</button>
     </form> : <form onSubmit={verify}>
       <label htmlFor="portal-code">Sign-in code</label>
-      <input id="portal-code" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={event => setCode(event.target.value)} placeholder="123456" maxLength={12} />
+      <input id="portal-code" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={event => setCode(event.target.value)} placeholder="Code from your email" maxLength={12} />
       <button type="submit" className="portal-button" disabled={busy || code.replace(/\s/g, "").length < 6}>{busy ? <LoaderCircle size={16} className="portal-spin" /> : <ArrowRight size={16} />} Sign in</button>
       <button type="button" className="portal-link" onClick={() => { setSent(false); setCode(""); setMessage(null); }}>Use a different email</button>
     </form>}
