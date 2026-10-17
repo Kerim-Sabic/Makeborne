@@ -231,6 +231,37 @@ begin
   return makeborne_private.portal_change_json(c);
 end $$;
 
+-- Same as 20261016090000, plus this site's uploads in 'images', so the agency's approval
+-- re-validates a change that uses a client photo against the photos the client could pick.
+create or replace function makeborne_rpc.makeborne_portal_site_settings(p_workspace uuid, p_artifact uuid) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare a public.artifacts%rowtype; s public.client_portal_sites%rowtype; v public.artifact_versions%rowtype; v_client uuid;
+begin
+  if not makeborne_private.client_review_can_edit_as((select auth.uid()), p_workspace) then raise exception 'Editor access required' using errcode='42501'; end if;
+  select * into a from public.artifacts where id = p_artifact and workspace_id = p_workspace and kind = 'website';
+  if not found then raise exception 'Website not found' using errcode='P0002'; end if;
+  select client_id into v_client from public.projects where id = a.project_id and workspace_id = p_workspace;
+  select * into s from public.client_portal_sites where artifact_id = a.id;
+  select * into v from public.artifact_versions where artifact_id = a.id and workspace_id = p_workspace and version_number = a.current_version;
+  return jsonb_build_object('clientId', v_client, 'enabled', coalesce(s.enabled, false), 'collections', to_jsonb(s.collections),
+    'version', a.current_version,
+    'manifest', makeborne_private.portal_file(v.content, 'src/content/collections.json'),
+    'images', coalesce((select jsonb_agg(i order by i) from (
+      select '/' || substr(x->>'path', 8) as i
+      from jsonb_array_elements(coalesce(v.content->'websiteSource'->'assets', '[]'::jsonb)) x
+      where x->>'path' like 'public/%' and x->>'mediaType' in ('image/png','image/jpeg','image/webp')
+      union
+      select '/images/client-' || u.path_key || '.webp' from public.client_portal_uploads u
+      where u.artifact_id = a.id and u.workspace_id = p_workspace) images), '[]'::jsonb),
+    'routes', coalesce((select jsonb_agg(r->>'path' order by r->>'path') from jsonb_array_elements(coalesce(v.content->'websiteSource'->'routes', '[]'::jsonb)) r), '[]'::jsonb),
+    'pending', coalesce((select jsonb_agg(makeborne_private.portal_change_json(c) || jsonb_build_object(
+        'authorName', g.display_name, 'authorEmail', g.email,
+        'currentFiles', coalesce((select jsonb_object_agg(k, makeborne_private.portal_file(v.content, k)) from jsonb_object_keys(c.files) k), '{}'::jsonb))
+        order by c.submitted_at, c.id)
+      from public.client_portal_changes c join public.client_portal_access g on g.id = c.access_id
+      where c.artifact_id = a.id and c.workspace_id = p_workspace and c.status = 'pending'), '[]'::jsonb));
+end $$;
+
 -- Service-role bridges for the two new client functions (same pattern as 20261016090000).
 do $$ declare f record; args text; names text; begin
   for f in select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'makeborne_private'

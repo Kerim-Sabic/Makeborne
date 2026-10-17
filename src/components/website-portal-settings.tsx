@@ -24,16 +24,29 @@ function hoursChanges(before: unknown, after: unknown) {
   return lines.length ? lines : ["Holiday hours updated"];
 }
 
+/** "Photo added", "Photo replaced", "Photo description: … → …" for an image field. */
+function imageChange(label: string, before: unknown, after: unknown) {
+  const src = (value: unknown) => value && typeof value === "object" && "src" in value ? String((value as { src: string }).src) : "";
+  const alt = (value: unknown) => value && typeof value === "object" && "alt" in value ? String((value as { alt: string }).alt) : "";
+  if (!src(before)) return `${label} added`;
+  if (!src(after)) return `${label} removed`;
+  if (src(before) !== src(after)) return `${label} replaced`;
+  return `${label} description: ${show(alt(before))} → ${show(alt(after))}`;
+}
+/** Lower-cases the field name that starts a line, for "“Item”: field …" lines. */
+const lowerLead = (line: string) => /^[^:]+: /.test(line) ? line.replace(/^[^:]+: /, match => match.toLowerCase()) : line.charAt(0).toLowerCase() + line.slice(1);
+
 /** Field-level differences for one collection file, in plain words. */
 function differences(collection: Collection, beforeText: string | undefined, afterText: string) {
   const parse = (text: string | undefined) => { try { return text ? JSON.parse(text) : null; } catch { return null; } };
   const before = parse(beforeText), after = parse(afterText), lines: string[] = [];
   const fieldsOf = (a: Values, b: Values) => Object.keys(collection.fields).filter(key => JSON.stringify(a?.[key] ?? null) !== JSON.stringify(b?.[key] ?? null))
-    .flatMap(key => collection.fields[key].type === "hours" ? hoursChanges(a?.[key], b?.[key]) : [`${collection.fields[key].label ?? key}: ${show(a?.[key])} → ${show(b?.[key])}`]);
+    .flatMap(key => collection.fields[key].type === "hours" ? hoursChanges(a?.[key], b?.[key])
+      : collection.fields[key].type === "image" ? [imageChange(collection.fields[key].label ?? "Photo", a?.[key], b?.[key])] : [`${collection.fields[key].label ?? key}: ${show(a?.[key])} → ${show(b?.[key])}`]);
   if (collection.kind === "single") return fieldsOf(before ?? {}, after ?? {});
   const title = (item: Values) => String(item[collection.titleField ?? Object.keys(collection.fields)[0]] ?? "item");
   const a = new Map<string, Values>((before?.items ?? []).map((item: Values) => [item.id as string, item])), b = new Map<string, Values>((after?.items ?? []).map((item: Values) => [item.id as string, item]));
-  for (const [id, item] of b) { const old = a.get(id); if (!old) lines.push(`Added “${title(item)}”`); else { const changed = fieldsOf(old, item); if (changed.length) lines.push(`“${title(item)}”: ${changed.map(line => line.replace(/^[^:]+: /, match => match.toLowerCase())).join("; ")}`); } }
+  for (const [id, item] of b) { const old = a.get(id); if (!old) lines.push(`Added “${title(item)}”`); else { const changed = fieldsOf(old, item); if (changed.length) lines.push(`“${title(item)}”: ${changed.map(lowerLead).join("; ")}`); } }
   for (const [id, item] of a) if (!b.has(id)) lines.push(`Removed “${title(item)}”`);
   return lines.slice(0, 40);
 }

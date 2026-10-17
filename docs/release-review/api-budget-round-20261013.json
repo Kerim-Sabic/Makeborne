@@ -12,7 +12,7 @@
     },
     "Claude": {
       "capUsd": 20,
-      "spentUsd": 4.042723,
+      "spentUsd": 4.551596,
       "reservedUsd": 0
     },
     "sharedReserve": {
@@ -202,6 +202,25 @@
       },
       "usageBasis": "Provider-reported usage metered per call by RunSpend in a local script; no app/staging/production. Invoice reconciliation not performed.",
       "evidence": "work/redesign-quality/ab-*/report.json and screenshots"
+    },
+    {
+      "packageId": "claude-make-editable-20261017",
+      "owner": "Claude",
+      "status": "settled",
+      "reservedUsd": 3,
+      "reservedAt": "2026-10-17T17:39:40.533Z",
+      "purpose": "Owner-approved quality test of \"Make this site client-editable\": one real builder edit (claude-opus-5-5 via runBuilder, same context as /api/build for an existing client site) on a previously generated local test site, then a visible-text and screenshot comparison. Local script, in-memory spend gate, no database.",
+      "limits": {
+        "builds": 2,
+        "maxUsdPerBuild": 1.5
+      },
+      "spentUsd": 0.508873,
+      "releasedReservationUsd": 2.491127,
+      "settledAt": "2026-10-17T17:43:09.722Z",
+      "providerCalls": 6,
+      "usageBasis": "Provider-reported usage metered per call by RunSpend in a local script; no app/staging/production. Invoice reconciliation not performed.",
+      "result": "Visible text identical (97/97 lines, same order), same page size, 0.002% pixel difference; 6 content collections created; no static problems.",
+      "evidence": "work/redesign-quality/make-editable/report.json, compare.cjs output"
     }
   ],
   "rules": [

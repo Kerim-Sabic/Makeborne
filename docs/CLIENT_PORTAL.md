@@ -1,4 +1,4 @@
-# Client portal (Phase 1: agency approves every change)
+# Client portal (agency approves every change)
 
 Agencies let a client edit their own website content (menu or services, prices, opening hours, contact details, news) in a simple portal with the agency's branding and a small "Powered by Makeborne" credit. Every client change goes to the agency for approval; nothing a client does changes the website until an owner or editor approves it. The design and later phases are in `docs/CLIENT_PORTAL_PLAN.md`.
 
@@ -69,3 +69,36 @@ Agencies let a client edit their own website content (menu or services, prices, 
 1. Rehearse and apply `supabase/migrations/20261016090000_client_portal.sql`. It is additive: three tables, two partial indexes on `audit_events`, and the portal functions. It works with or without `brand_kits` (the agency brand falls back to the workspace name).
 2. **Supabase Auth:** the Magic Link and Confirm sign-up email templates must include `{{ .Token }}` so clients can type the code. Custom SMTP must be on.
 3. No publication-function changes. Clients can't publish in Phase 1, by owner decision.
+
+## Phase 2 (branch `feature/client-editing-phase-2`, not part of the 2026-10-17 release)
+
+Three additions, all still behind agency approval:
+
+- **"Make this site client-editable".** On a client website that declares no editable content, the Publish tab offers this button. It only puts a fixed request (`MAKE_EDITABLE_REQUEST` in `src/lib/builder/content-prompt.ts`) in the builder chat; the owner sends it as a normal build (credits, undo from History). The request is a restructure, not a redesign: facts move into `src/content/*.json` collections and every visible word, image and style stays.
+- **"Let my client edit this"** in click-to-edit (client websites only). The selected plain text moves into `src/content/site.json` (a single collection "Website text", one text field named by the agency) and the JSX renders `{siteContent.<key>}`. The page looks the same; it is an ordinary saved version and can be undone. Text with styled runs (for example an italic word) or live values is refused with a pointer to the builder. Re-selecting a handed-over text explains where it is now edited.
+- **Client photo uploads.** In an image field the client can upload a JPG, PNG, WebP, AVIF or iPhone (HEIC) photo up to 8 MB. The server re-encodes it with sharp (orientation applied, EXIF/GPS and other metadata dropped, at most 2400 px, WebP 82, at least 200 px, at most 4 MB stored) into `project-assets/<workspace>/<project>/portal/<asset id>.webp` and registers it (`public.assets` row with provenance `portal_upload`, plus `client_portal_uploads`). It appears in that site's picker as `/images/client-<12 hex>.webp`. The agency sees the new photos with the change; approving adds only the photos the approved files reference to the new version's `websiteSource.assets` and `asset_manifest` (at most 100 source assets). Limits: 40 uploads per grant per day and 60 per site in total (MB429). Known limit: there is no way yet to delete an upload, and unused uploads stay in storage; a cleanup or delete action belongs in a later phase.
+
+### Migration `20261017090000_client_portal_uploads.sql`
+
+Additive, applies after `20261017080000_rpc_definer_boundary.sql`:
+
+- table `client_portal_uploads` (RLS: members read; no browser writes; cascades with the grant, site and workspace);
+- `makeborne_private.portal_upload_scope` and `portal_register_upload`, each behind a service-role-only `public` invoker bridge;
+- `create or replace` of `makeborne_private.portal_read_site` and `portal_image` (uploads in the picker and thumbnails);
+- `create or replace` of `makeborne_rpc.makeborne_decide_portal_change` (attaches referenced uploads) and `makeborne_rpc.makeborne_portal_site_settings` (lists the site's uploads among the images the agency's approval validates against). These replace the privileged implementations behind the existing `public` security-invoker wrappers, so grants and the advisor result are unchanged.
+
+### Verification (2026-10-17)
+
+- **SQL:** `supabase/check-client-portal-uploads.sql` passes 5 groups. Together with the 7 release suites (brand kits, client portal 11/11, custom domains, GitHub refresh, review views, analytics, sitemap), it runs on top of the whole release chain plus this migration inside BEGIN…ROLLBACK. The advisor-equivalent query (SECURITY DEFINER functions in `public` executable by anon or authenticated) returns the same 6 baseline functions as before the release.
+- **Offline:** `check-visual-edit.cjs` 12/12 (hand-over: keys, import placement including multi-line imports, merging an existing collection, refusals, `problems()` clean), `check-portal-routes.cjs` 16/16 (upload route: same origin, photo types only, re-encoding with metadata stripped, storage path, trusted arguments, quota, idempotent re-upload; settings uploads), `check-content-model.cjs` 9/9 (studio wiring). `run-checks` 133/133, TypeScript and ESLint clean.
+- **Real end-to-end on the local release-auth stack** (`work/client-editing-phase2-20261017/e2e.cjs` with `db.cjs setup`/`teardown`, phase 2 code served from the worktree):
+  - the client uploads a 3000×2000 JPEG carrying EXIF; the stored object is a 2400×1600 WebP with no metadata;
+  - the agency's review reads "“Teeth whitening”: photo added" and shows the photo; approving creates version 2 whose source assets and asset manifest hold exactly that photo;
+  - the agency hands the hero intro to the client: the preview is unchanged, `site.json` and the import are written, and the photo asset survives the agency save; the client then sees a "Website text" tab with the text;
+  - on a client site without editable content, the button fills the builder chat and creates no version;
+  - no browser errors; the teardown left 0 portal objects or test rows.
+- **Paid test** of the make-editable request (Monee Dental redesign, medium effort, $0.51): one pass, 0 static problems, 6 content collections. The visible text was identical (97/97 lines, same order), with the same page size and a 0.002% pixel difference.
+
+### Release steps (when the owner approves Phase 2)
+
+Apply `20261017090000_client_portal_uploads.sql` after the release migrations; re-run `check-client-portal-uploads.sql` and the advisor comparison on staging (expect no new warnings). No Worker, Auth or environment changes. The `project-assets` bucket already exists.

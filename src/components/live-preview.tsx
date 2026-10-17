@@ -166,7 +166,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     const loc = engine.remapLoc(picked.loc, result.change);
     restore.current = { ...restore.current, loc: loc ? engine.formatLoc(loc) : null, index: picked.index };
     setPicked(loc ? { ...picked, loc, text: edit.kind === "text" ? edit.value : picked.text } : null);
-    setEditNote("");
+    setEditNote(edit.kind === "extract" ? `Handed over. Your client can now edit “${edit.label.trim()}” in their portal, under Website text.` : "");
     visualEdit.onApply(result.source, result.summary);
   }
   function undo() {

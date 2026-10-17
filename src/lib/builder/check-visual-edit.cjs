@@ -198,4 +198,68 @@ check("stale selections and managed files fail closed", () => {
   assert.match(applyVisualEdit(source, { kind: "text", loc: { path: "src/Missing.tsx", offset: 0 }, value: "x" }).message, /changed since you selected/);
 });
 
+check("handing a text to the client moves it into site.json without changing the page", () => {
+  const { ProjectFiles } = require("./files.ts");
+  const { contentKey, contentImportPath, SITE_CONTENT_IMPORT } = require("./visual-edit.ts");
+  assert.equal(contentKey("Hero headline", []), "heroHeadline");
+  assert.equal(contentKey("Hero headline", ["heroHeadline"]), "heroHeadline2");
+  assert.equal(contentKey("2025 offer!", []), "text2025Offer");
+  assert.equal(contentKey("Čevapi — opening", []), "cevapiOpening");
+  assert.equal(contentKey("!!!", []), "text");
+  assert.equal(contentImportPath("src/App.tsx"), "./content/site.json");
+  assert.equal(contentImportPath("src/components/Hero.tsx"), "../content/site.json");
+  assert.equal(contentImportPath("src/content/x.ts"), "./site.json");
+
+  const first = ok(applyVisualEdit(source, { kind: "extract", loc: at("<h1>"), label: "Headline" }));
+  const app = fileOf(first.source, "src/App.tsx");
+  assert.match(app, /<h1>\{siteContent\.headline\}<\/h1>/);
+  assert.match(app, /^import \{ MENU \} from "\.\/data";\nimport siteContent from "\.\/content\/site\.json";\n/m, "import goes after the last import");
+  const manifest = JSON.parse(fileOf(first.source, "src/content/collections.json"));
+  assert.deepEqual(manifest.collections.site, { label: "Website text", kind: "single", fields: { headline: { type: "text", label: "Headline", required: true, max: 80 } } });
+  assert.deepEqual(JSON.parse(fileOf(first.source, "src/content/site.json")), { headline: "Fresh bread daily" });
+  assert.deepEqual(new ProjectFiles(first.source).problems(), []);
+  assert.match(describeElement(first.source, at("<h1>", first.source)).text.reason, /client edits this text in their portal, under Website text/, "a handed-over text says where it is edited");
+  assert.equal(describeElement(source, at('<p>{"Open')).text.value, "Open every day", "other expressions are unaffected");
+  assert.equal(describeElement(first.source, remapLoc(at("<footer>"), first.change)).tag, "footer", "selection survives the import insert");
+
+  const second = ok(applyVisualEdit(first.source, { kind: "extract", loc: at('<p className="lede">', first.source), label: "Headline" }));
+  const app2 = fileOf(second.source, "src/App.tsx");
+  assert.equal(app2.split(SITE_CONTENT_IMPORT + " from").length, 2, "one import");
+  assert.match(app2, /<p className="lede">\{siteContent\.headline2\}<\/p>/);
+  assert.deepEqual(JSON.parse(fileOf(second.source, "src/content/site.json")), { headline: "Fresh bread daily", headline2: "Baked by hand in Sarajevo & sold warm" });
+  assert.deepEqual(Object.keys(JSON.parse(fileOf(second.source, "src/content/collections.json")).collections.site.fields), ["headline", "headline2"]);
+  assert.deepEqual(new ProjectFiles(second.source).problems(), []);
+
+  const literal = ok(applyVisualEdit(source, { kind: "extract", loc: at('<p>{"Open'), label: "Opening line" }));
+  assert.match(fileOf(literal.source, "src/App.tsx"), /<p>\{siteContent\.openingLine\}<\/p>/);
+  assert.deepEqual(new ProjectFiles(literal.source).problems(), []);
+});
+
+check("hand-over keeps existing collections, multi-line imports and refuses what it can't move", () => {
+  const { ProjectFiles } = require("./files.ts");
+  const withImports = { ...source, files: source.files.map(file => file.path === "src/App.tsx"
+    ? { ...file, content: file.content.replace('import { MENU } from "./data";', 'import {\n  MENU,\n  TAGLINE,\n} from "./data";') } : file) };
+  const multi = ok(applyVisualEdit(withImports, { kind: "extract", loc: at("<small>", withImports), label: "Since" }));
+  assert.match(fileOf(multi.source, "src/App.tsx"), /\n\} from "\.\/data";\nimport siteContent from "\.\/content\/site\.json";\n/);
+  assert.deepEqual(new ProjectFiles(multi.source).problems(), []);
+
+  const hours = { version: 1, collections: { hours: { label: "Hours", kind: "single", fields: { note: { type: "text", label: "Note" } } } } };
+  const declared = { ...source, files: [...source.files,
+    { path: "src/content/collections.json", content: JSON.stringify(hours) },
+    { path: "src/content/hours.json", content: "{\"note\":\"Closed Sundays\"}" }].map(file => file.path === "src/App.tsx"
+    ? { ...file, content: `import hoursData from "./content/hours.json";\n${file.content.replace("<small>Since 1998</small>", "<small>{hoursData.note}</small>")}` } : file) };
+  const kept = ok(applyVisualEdit(declared, { kind: "extract", loc: at("<h1>", declared), label: "Headline" }));
+  assert.deepEqual(Object.keys(JSON.parse(fileOf(kept.source, "src/content/collections.json")).collections), ["hours", "site"]);
+  assert.deepEqual(new ProjectFiles(kept.source).problems(), []);
+
+  assert.match(applyVisualEdit(source, { kind: "extract", loc: at("<h3>"), label: "Tagline" }).message, /styled differently/);
+  assert.equal(applyVisualEdit(source, { kind: "extract", loc: at("<p>We bake"), label: "Bake" }).ok, false, "live values stay in code");
+  assert.match(applyVisualEdit(source, { kind: "extract", loc: at("<h1>"), label: " <> " }).message, /Give this text a name/);
+  const clash = { ...source, files: source.files.map(file => file.path === "src/App.tsx" ? { ...file, content: file.content.replace("const heading", "const siteContent = 1;\nconst heading") } : file) };
+  assert.match(applyVisualEdit(clash, { kind: "extract", loc: at("<h1>", clash), label: "Headline" }).message, /already uses the name siteContent/);
+  const list = { ...declared, files: declared.files.map(file => file.path === "src/content/collections.json"
+    ? { ...file, content: JSON.stringify({ version: 1, collections: { ...hours.collections, site: { label: "Sites", kind: "list", fields: { name: { type: "text", label: "Name" } } } } }) } : file) };
+  assert.match(applyVisualEdit(list, { kind: "extract", loc: at("<h1>", list), label: "Headline" }).message, /“site” for a list/);
+});
+
 console.log(`\n${passed} visual edit checks passed.`);

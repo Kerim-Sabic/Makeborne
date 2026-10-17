@@ -14,12 +14,13 @@ let state;
 function reset(overrides = {}) {
   state = { calls: [], tables: [], creationChecks: 0, headers: {}, role: "owner", user: { id: USER, email: "client@example.com" },
     claims: { sub: USER, session_id: SESSION, exp: Math.floor(Date.now() / 1000) + 3600, role: "authenticated", is_anonymous: false },
-    rpc: () => ({ data: null, error: null }), accessClient: CLIENT, downloads: [], ...overrides };
+    rpc: () => ({ data: null, error: null }), accessClient: CLIENT, downloads: [], uploads: [], filters: {}, uploadRows: { data: [], error: null }, ...overrides };
 }
 const respond = (via, name, args) => { state.calls.push({ via, name, args }); return state.rpc(name, args, via); };
 function builder(table) {
   state.tables.push(table);
-  const query = { select: () => query, eq: () => query, maybeSingle: async () => {
+  const query = { select: () => query, eq: (column, value) => { (state.filters[table] ??= []).push([column, value]); return query; },
+    limit: async () => table === "client_portal_uploads" ? state.uploadRows : { data: null, error: { code: "42501" } }, maybeSingle: async () => {
     if (table === "workspaces") return { data: { id: WS, name: "Studio", owner_id: state.role === "owner" ? USER : OTHER }, error: null };
     if (table === "workspace_members") return { data: state.role === "owner" ? null : { role: state.role }, error: null };
     if (table === "client_portal_access") return { data: { id: ACCESS, client_id: state.accessClient }, error: null };
@@ -36,7 +37,8 @@ const cookieClient = () => ({
 const serviceClient = () => ({
   rpc: async (name, args) => respond("service", name, args),
   from: table => { state.tables.push(`service:${table}`); throw new Error("service client must not read tables"); },
-  storage: { from: bucket => ({ download: async objectPath => { state.downloads.push({ bucket, objectPath }); return { data: new Blob([Buffer.from("png")]), error: null }; } }) },
+  storage: { from: bucket => ({ download: async objectPath => { state.downloads.push({ bucket, objectPath }); return { data: new Blob([Buffer.from("png")]), error: null }; },
+    upload: async (objectPath, bytes, options) => { state.uploads.push({ bucket, objectPath, bytes, options }); return state.uploadResult ?? { data: { path: objectPath }, error: null }; } }) },
 });
 const anonClient = () => ({ rpc: async (name, args) => respond("anon", name, args), from: table => { state.tables.push(`anon:${table}`); throw new Error("anon tables"); } });
 
@@ -83,7 +85,7 @@ for (const level of ["log", "info", "warn", "error", "debug"]) { const original 
 
 const PORTAL_ROUTES = ["src/app/api/portal/route.ts", "src/app/api/portal/invites/[token]/route.ts", "src/app/api/portal/invites/[token]/accept/route.ts",
   "src/app/api/portal/sites/[artifactId]/route.ts", "src/app/api/portal/sites/[artifactId]/draft/route.ts", "src/app/api/portal/sites/[artifactId]/changes/route.ts",
-  "src/app/api/portal/sites/[artifactId]/images/[assetId]/route.ts"];
+  "src/app/api/portal/sites/[artifactId]/images/[assetId]/route.ts", "src/app/api/portal/sites/[artifactId]/images/route.ts"];
 const AGENCY_ROUTES = ["src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/portal/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/portal/[accessId]/route.ts",
   "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/changes/[changeId]/route.ts"];
 const route = file => load(rel(file));
@@ -279,6 +281,49 @@ check("thumbnails: only the object the grant RPC returns is downloaded and re-re
   assert.deepEqual(state.downloads, []);
 });
 
+check("photo uploads: same origin, photo types only, re-encoded to WebP without metadata, stored under the scope's project, registered with the trusted actor", async () => {
+  const sharp = require("sharp");
+  const { assetId } = load(rel("src/lib/builder/images.ts"));
+  const PROJECT = "abababab-abab-4bab-8bab-abababababab";
+  const photo = await sharp({ create: { width: 3200, height: 1800, channels: 3, background: "#c0503a" } }).jpeg().withMetadata({ orientation: 6, exif: { IFD0: { Artist: "Ana" } } }).toBuffer();
+  const upload = (body, type = "image/jpeg", headers = {}) => route(PORTAL_ROUTES[7]).POST(new Request(`${ORIGIN}/api/portal/sites/${SITE}/images`, { method: "POST",
+    headers: { "content-type": type, origin: ORIGIN, ...headers }, body }), params({ artifactId: SITE }));
+  const rpc = (name, args) => name === "makeborne_portal_upload_scope" ? { data: { workspaceId: WS, projectId: PROJECT }, error: null }
+    : name === "makeborne_portal_register_upload" ? { data: { assetId: args.p_asset, path: "/images/client-0123456789ab.webp" }, error: null } : { data: null, error: { code: "XX000" } };
+
+  reset({ rpc });
+  const result = await json(await upload(photo));
+  assert.equal(result.status, 201, JSON.stringify(result.body));
+  assert.deepEqual(state.calls.map(call => [call.via, call.name]), [["service", "makeborne_portal_upload_scope"], ["service", "makeborne_portal_register_upload"]]);
+  assert.ok(state.calls.every(call => trustedArgs(call.args) && call.args.p_artifact === SITE));
+  const [stored] = state.uploads, registered = state.calls[1].args;
+  const meta = await sharp(stored.bytes).metadata();
+  assert.equal(meta.format, "webp"); assert.deepEqual([meta.width, meta.height], [1350, 2400], "rotated by EXIF orientation, longest edge 2400");
+  assert.equal(meta.exif, undefined, "EXIF stripped");
+  const sha = crypto.createHash("sha256").update(stored.bytes).digest("hex");
+  assert.deepEqual([registered.p_sha256, registered.p_bytes, registered.p_width, registered.p_height], [sha, stored.bytes.length, 1350, 2400]);
+  assert.equal(registered.p_asset, assetId(WS, PROJECT, sha));
+  assert.deepEqual([stored.bucket, stored.objectPath, stored.options.contentType, stored.options.upsert], ["project-assets", `${WS}/${PROJECT}/portal/${registered.p_asset}.webp`, "image/webp", false]);
+  assert.deepEqual(result.body.image, { path: "/images/client-0123456789ab.webp", previewUrl: `/api/portal/sites/${SITE}/images/${registered.p_asset}` });
+
+  reset({ rpc, uploadResult: { data: null, error: { message: "The resource already exists" } } });
+  assert.equal((await upload(photo)).status, 201, "re-uploading the same photo is idempotent");
+
+  for (const [body, type, status, headers] of [[photo, "image/gif", 415], [photo, "application/octet-stream", 415], [Buffer.from("not an image"), "image/png", 415],
+    [await sharp({ create: { width: 120, height: 90, channels: 3, background: "#fff" } }).png().toBuffer(), "image/png", 400], [photo, "image/jpeg", 403, { origin: "https://evil.example" }]]) {
+    reset({ rpc });
+    const response = await upload(body, type, headers);
+    assert.equal(response.status, status, `${type} ${status}`);
+    assert.deepEqual(state.uploads, [], "nothing stored");
+    assert.ok(!state.calls.some(call => call.name === "makeborne_portal_register_upload"), "nothing registered");
+  }
+  reset({ rpc: () => ({ data: null, error: { code: "P0002" } }) });
+  assert.equal((await upload(photo)).status, 404, "no grant for this site: nothing read or stored");
+  assert.deepEqual(state.uploads, []);
+  reset({ rpc: (name, args) => name === "makeborne_portal_register_upload" ? { data: null, error: { code: "MB429" } } : rpc(name, args) });
+  assert.equal((await upload(photo)).status, 429, "daily photo quota");
+});
+
 const agencyCall = async (index, method, url, value, body, headers = {}) => json(await route(AGENCY_ROUTES[index])[method](request(url, { method, body, headers }), params(value)));
 const clientUrl = `/api/cloud/workspaces/${WS}/clients/${CLIENT}/portal`, siteUrl = `/api/cloud/workspaces/${WS}/artifacts/${SITE}/portal`;
 
@@ -351,6 +396,15 @@ check("settings map declared collections and change summaries; approval re-valid
   reset({ rpc: () => ({ data: SETTINGS_ROW({ "src/content/menu.json": proposed }), error: null }) });
   const settings = await agencyCall(2, "GET", siteUrl, { workspaceId: WS, artifactId: SITE });
   assert.deepEqual(settings.body.declared, [{ key: "menu", label: "Menu" }, { key: "hours", label: "Opening hours" }]);
+  assert.deepEqual(settings.body.uploads, []);
+  reset({ rpc: () => ({ data: SETTINGS_ROW(null), error: null }), uploadRows: { data: [{ id: ASSET, path_key: "0123456789ab" }], error: null } });
+  const withPhotos = await agencyCall(2, "GET", siteUrl, { workspaceId: WS, artifactId: SITE });
+  assert.deepEqual(withPhotos.body.uploads, [{ path: "/images/client-0123456789ab.webp", previewUrl: `/api/cloud/workspaces/${WS}/artifacts/${SITE}/assets/${ASSET}` }]);
+  assert.deepEqual(state.filters.client_portal_uploads, [["workspace_id", WS], ["artifact_id", SITE]], "photos are read for this site only, through RLS");
+  reset({ rpc: () => ({ data: SETTINGS_ROW(null), error: null }), uploadRows: { data: null, error: { code: "42P01", message: "relation \"public.client_portal_uploads\" does not exist" } } });
+  assert.deepEqual((await agencyCall(2, "GET", siteUrl, { workspaceId: WS, artifactId: SITE })).body.uploads, [], "before the uploads migration: no photos, no error");
+  reset({ rpc: () => ({ data: SETTINGS_ROW({ "src/content/menu.json": proposed }), error: null }) });
+  await agencyCall(2, "GET", siteUrl, { workspaceId: WS, artifactId: SITE });
   assert.deepEqual(settings.body.pending[0].summaryLines, ["Menu: 1 changed, 1 added"]);
   assert.equal(settings.body.pending[0].authorName, "Ana"); assert.equal(settings.body.pending[0].currentFiles, undefined, "current file text is not part of the contract");
   reset({ rpc: (name, args) => name === "makeborne_portal_site_settings" ? { data: SETTINGS_ROW({ "src/content/menu.json": proposed }), error: null }

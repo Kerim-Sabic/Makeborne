@@ -167,6 +167,23 @@ check("project checks: declared files must exist, validate, be imported and be d
   assert.equal(readCollections(new Map(), ctx.assets), null);
 });
 
+check("studio wiring: make-editable fills the builder chat, hand-over is offered only on client sites, photos are shown before approval", () => {
+  const read = file => fs.readFileSync(path.join(src, "..", file), "utf8");
+  const { MAKE_EDITABLE_REQUEST, CONTENT_CONTRACT } = require("../builder/content-prompt.ts");
+  assert.match(MAKE_EDITABLE_REQUEST, /restructure, not a redesign/);
+  assert.match(MAKE_EDITABLE_REQUEST, /keep every visible word, number, image, style, layout and animation exactly/);
+  assert.ok(CONTENT_CONTRACT.length > 200);
+  const settings = read("src/components/website-portal-settings.tsx");
+  assert.match(settings, /!declared\.length && onAskBuilder && <button[^>]*onClick=\{\(\) => onAskBuilder\(MAKE_EDITABLE_REQUEST\)\}/, "the button only prefills; the owner sends it");
+  assert.match(settings, /uses credits; you can undo it from History/);
+  assert.match(settings, /New photos in this change/);
+  const studio = read("src/components/cloud-studio.tsx");
+  assert.match(studio, /onAskBuilder=\{useLiveBuilder \? text => \{ setBuilderPrefill\(\{ key: crypto\.randomUUID\(\), text \}\); setView\("preview"\); \} : undefined\}/);
+  assert.match(studio, /clientEditing: Boolean\(project\?\.clientId\)/);
+  assert.match(read("src/components/live-preview.tsx"), /clientEditing=\{visualEdit\?\.clientEditing\}/);
+  assert.match(read("src/components/visual-editor-panel.tsx"), /\{clientEditing && text && <HandOver [^\n]*kind: "extract", loc, label, rendered: picked\.text/);
+});
+
 let failed = 0;
 for (const [name, fn] of checks) {
   try { fn(); console.log(`PASS ${name}`); }

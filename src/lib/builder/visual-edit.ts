@@ -191,6 +191,8 @@ function textTarget(source: WebsiteProjectSource, parsed: Parsed, loc: ElementLo
   if (inner.length === 1 && inner[0].name === "JSXEscape") {
     const literal = escapedLiteral(inner[0]);
     if (literal) { const raw = text(parsed, literal); return { kind: "literal", path: loc.path, from: literal.from, to: literal.to, quote: raw[0], value: literalValue(raw) ?? "" }; }
+    if (new RegExp(`^\\{\\s*${SITE_CONTENT_IMPORT}\\.[A-Za-z][A-Za-z0-9]*\\s*\\}$`).test(text(parsed, inner[0])))
+      return { reason: "Your client edits this text in their portal, under Website text. To change it yourself, edit src/content/site.json in Code." };
     // Text from data (e.g. {item.title}): edit the one string that renders it.
     const matches = rendered ? literalsMatching(source, rendered) : [];
     if (matches.length === 1) return { kind: "literal", ...matches[0] };
@@ -419,7 +421,7 @@ const SITE_COLLECTION = "site";
 
 /** "Hero headline" → "heroHeadline" (unique within the collection's fields). */
 export function contentKey(label: string, taken: readonly string[]) {
-  const words = label.normalize("NFKD").replace(/[^A-Za-z0-9 ]/g, " ").trim().split(/\s+/).filter(Boolean);
+  const words = label.normalize("NFKD").replace(/\p{M}/gu, "").replace(/[^A-Za-z0-9 ]/g, " ").trim().split(/\s+/).filter(Boolean);
   let base = words.map((word, index) => index ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word.toLowerCase()).join("").slice(0, 32) || "text";
   if (!/^[a-z]/.test(base)) base = `text${base}`.slice(0, 32);
   let key = base;

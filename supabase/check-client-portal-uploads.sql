@@ -32,6 +32,10 @@ begin
     and pr.proname in ('portal_upload_scope','portal_register_upload','portal_read_site','portal_image') and not coalesce(pr.proconfig,'{}') @> array['search_path=""']), 'search_path';
   assert has_function_privilege('authenticated','public.makeborne_decide_portal_change(uuid,uuid,uuid,text,text,boolean,text)','execute')
     and not has_function_privilege('anon','public.makeborne_decide_portal_change(uuid,uuid,uuid,text,text,boolean,text)','execute'), 'replaced decide lost its grants';
+  assert has_function_privilege('authenticated','public.makeborne_portal_site_settings(uuid,uuid)','execute')
+    and not has_function_privilege('anon','public.makeborne_portal_site_settings(uuid,uuid)','execute'), 'replaced site settings lost its grants';
+  assert (select prosecdef and provolatile = 's' and proconfig = array['search_path=""'] from pg_proc
+    where oid = coalesce(to_regprocedure('makeborne_rpc.makeborne_portal_site_settings(uuid,uuid)'), 'public.makeborne_portal_site_settings(uuid,uuid)'::regprocedure)), 'site settings core';
   raise notice 'PASS client portal uploads: RLS on, browser roles cannot write, new functions service-role only, replaced functions keep grants and pinned search_path';
 
   -- ---------------------------------------------------------------- fixtures
@@ -113,6 +117,10 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub',u,'role','authenticated')::text, true);
   set local role authenticated;
   assert (select count(*) from public.client_portal_uploads) = 2, 'owner reads the workspace uploads';
+  -- The agency's approval validates against these images: this site's uploads, not another site's.
+  assert (select public.makeborne_portal_site_settings(w,a)->'images') @> jsonb_build_array(v_path), 'site settings list the upload';
+  assert (select count(*) from jsonb_array_elements_text(public.makeborne_portal_site_settings(w,a)->'images') i where i like '/images/client-%') = 2
+    and (select count(*) from jsonb_array_elements_text(public.makeborne_portal_site_settings(w,a2)->'images') i where i like '/images/client-%') = 0, 'only this site''s uploads';
   reset role;
   raise notice 'PASS client portal uploads: uploads appear in that site''s picker and thumbnails only; portal users and strangers read no rows, members do';
 
