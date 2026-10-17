@@ -27,6 +27,8 @@ export type VisualEditHost = {
   onAsk?: (text: string) => void;
   /** Brand colours offered first in the colour pickers. */
   swatches?: { label: string; value: string }[];
+  /** The site belongs to a client: offer "Let my client edit this" on texts. */
+  clientEditing?: boolean;
 };
 
 const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
@@ -213,7 +215,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
           style={{ width: width ? `${width}px` : "100%" }}
         /> : <div className="lp-empty">{building || !buildError ? "Your website will appear here as it's built." : "The first build needs a fix — ask the builder to repair it."}</div>}
       </div>
-      {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} note={editNote} canUndo={history.length > 0}
+      {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} clientEditing={visualEdit?.clientEditing} note={editNote} canUndo={history.length > 0}
         onEdit={apply} onUndo={undo} onClose={toggleEditing}
         onParent={() => toFrame({ type: "select-parent" })}
         onAsk={visualEdit?.onAsk} />}

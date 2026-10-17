@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, KeyRound, LoaderCircle, X } from "lucide-react";
+import { Check, KeyRound, LoaderCircle, Wand2, X } from "lucide-react";
+import { MAKE_EDITABLE_REQUEST } from "@/lib/builder/content-prompt";
 import { parseManifest, MANIFEST_PATH, type Collection } from "@/lib/portal/content-model";
 import type { SitePortalSettings } from "@/lib/portal/contracts";
 import { brandRequest } from "./brand-kit-api";
@@ -38,8 +39,10 @@ function differences(collection: Collection, beforeText: string | undefined, aft
 }
 
 /** In a client website's Publish tab: turn client editing on, choose what they may edit, and review their changes. */
-export default function WebsitePortalSettings({ accountId, workspaceId, artifactId, files, onApproved }: {
+export default function WebsitePortalSettings({ accountId, workspaceId, artifactId, files, onApproved, onAskBuilder }: {
   accountId: string; workspaceId: string; artifactId: string; files: Record<string, string>; onApproved: () => void;
+  /** Puts a request in the builder chat (not sent until the agency presses send). */
+  onAskBuilder?: (text: string) => void;
 }) {
   const [data, setData] = useState<SitePortalSettings | null>(null);
   const [error, setError] = useState("");
@@ -82,7 +85,9 @@ export default function WebsitePortalSettings({ accountId, workspaceId, artifact
   const declared = data.declared;
   return <section className="cpp" aria-label="Client editing">
     <div className="cpp-head"><h3><KeyRound size={17} /> Client editing</h3>
-      <p className="cpp-muted">{declared.length ? "Your client can update this content in their portal. You approve every change before it's saved to the website." : "This website has no client-editable content yet. Ask the builder: “Make the menu, hours and contact details client-editable.”"}</p></div>
+      <p className="cpp-muted">{declared.length ? "Your client can update this content in their portal. You approve every change before it's saved to the website." : "This website has no client-editable content yet. The builder can restructure it so your client can update their services, prices, hours and contact details, without changing how it looks."}</p>
+      {!declared.length && onAskBuilder && <button type="button" className="button primary small cpp-make" onClick={() => onAskBuilder(MAKE_EDITABLE_REQUEST)}><Wand2 size={14} /> Make this site client-editable</button>}
+      {!declared.length && onAskBuilder && <p className="cpp-muted">This puts the request in the builder chat for you to send. It&apos;s a normal build and uses credits; you can undo it from History.</p>}</div>
     {declared.length > 0 && <div className="cpp-settings">
       <label className="cpp-switch"><input type="checkbox" checked={data.enabled} disabled={busy === "settings"} onChange={event => void save(event.target.checked, data.collections)} /> <span>{data.enabled ? "Client editing is on" : "Client editing is off"}</span></label>
       {data.enabled && <fieldset className="cpp-collections"><legend>They can edit</legend>{declared.map(item => {
@@ -105,6 +110,12 @@ export default function WebsitePortalSettings({ accountId, workspaceId, artifact
           const lines = differences(collection, files[path], text);
           return [<li key={path}><strong>{collection.label}</strong>{lines.length ? <ul>{lines.map(line => <li key={line}>{line}</li>)}</ul> : <span className="cpp-muted"> no visible change</span>}</li>];
         })}</ul>
+        {(() => {
+          const text = Object.values(change.files).join(" "), photos = (data.uploads ?? []).filter(photo => text.includes(photo.path));
+          return photos.length > 0 && <div className="cpp-photos"><strong>New photos in this change</strong><div>{photos.map(photo =>
+            // eslint-disable-next-line @next/next/no-img-element -- authenticated agency preview of a client upload
+            <a key={photo.path} href={photo.previewUrl} target="_blank" rel="noreferrer"><img src={photo.previewUrl} alt="Photo uploaded by your client" loading="lazy" /></a>)}</div></div>;
+        })()}
         <label className="cpp-note">Note to your client <span className="cpp-muted">(optional)</span><input value={notes[change.id] ?? ""} maxLength={2000} onChange={event => setNotes({ ...notes, [change.id]: event.target.value })} placeholder="Thanks, live from today." /></label>
         <div className="cpp-row">
           <button type="button" className="button primary small" disabled={Boolean(busy)} onClick={() => void decide(change.id, "approve")}>{busy === change.id ? <LoaderCircle size={14} className="cpp-spin" /> : <Check size={14} />} Approve and save</button>

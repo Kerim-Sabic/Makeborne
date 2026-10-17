@@ -98,6 +98,8 @@ export type SitePortalSettings = {
   /** Collections the current version declares (key + label). */
   declared: { key: string; label: string }[];
   pending: (PortalChange & { authorName: string; authorEmail: string; summaryLines: string[] })[];
+  /** Photos clients uploaded for this site (GET only), with an agency-side preview URL. */
+  uploads?: { path: string; previewUrl: string }[];
 };
 export const SiteSettingsSchema = z.object({ enabled: z.boolean(), collections: z.array(z.string().regex(/^[a-z][a-z0-9-]{0,39}$/)).max(30).nullable() }).strict();
 /** POST .../portal/changes/[changeId] → PortalChangeResponse. A conflict (the site changed since the client's base) is

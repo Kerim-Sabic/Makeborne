@@ -125,3 +125,4 @@
 .pe-list ol { margin-bottom: 8px; }
 .pe-item-head { min-width: 0; }
 .pe-panel { min-width: 0; overflow: hidden; }
+.pf-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 8px; }

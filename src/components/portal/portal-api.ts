@@ -36,3 +36,14 @@ export function brandStyle(brand: PortalBrand | null | undefined): Record<string
   const ink = contrast(text, surface) >= 4.5 ? text : "#17181c";
   return { "--p-primary": primary, "--p-on-primary": contrast(primary, "#ffffff") >= 4.5 ? "#ffffff" : "#17181c", "--p-surface": surface, "--p-ink": ink };
 }
+
+/** Uploads one photo for a site (raw bytes; the server re-encodes it). */
+export async function portalUpload(artifactId: string, file: File): Promise<{ path: string; previewUrl: string }> {
+  if (file.size > 8_000_000) throw new PortalError(413, "This photo is larger than 8 MB. Try a smaller one.");
+  const id = await portalAccount();
+  const response = await fetch(`/api/portal/sites/${artifactId}/images`, { method: "POST", body: file, cache: "no-store",
+    headers: { "Content-Type": file.type || "application/octet-stream", ...(id ? { "X-Makeborne-Account": id } : {}) } });
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new PortalError(response.status, value?.error?.message ?? "The photo couldn't be uploaded. Try again.", value?.error?.code ?? "");
+  return value.image;
+}

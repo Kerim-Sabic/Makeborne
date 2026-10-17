@@ -72,7 +72,7 @@ export default function ClientPortalPanel({ accountId, workspaceId, clientId, cl
       {!data.sites.length && <p className="cpp-muted">No websites for this client yet.</p>}
       <ul>{data.sites.map(site => <li key={site.artifactId}>
         <div><strong>{site.title}</strong>
-          <span className="cpp-muted">{!site.hasContent ? "No editable content yet. Websites built for a client from now on include it; ask the builder to make this one client-editable." : site.pending ? `${site.pending} change${site.pending === 1 ? "" : "s"} waiting for your review in the website's Publish tab` : site.enabled ? "Client can edit content; you approve every change" : "Editing is off"}</span></div>
+          <span className="cpp-muted">{!site.hasContent ? "No editable content yet. Open the website’s Publish tab and choose “Make this site client-editable”." : site.pending ? `${site.pending} change${site.pending === 1 ? "" : "s"} waiting for your review in the website's Publish tab` : site.enabled ? "Client can edit content; you approve every change" : "Editing is off"}</span></div>
         {canEdit && site.hasContent && <label className="cpp-switch"><input type="checkbox" checked={site.enabled} disabled={busy === site.artifactId} onChange={event => void toggleSite(site.artifactId, event.target.checked, site.collections)} /> <span>{site.enabled ? "On" : "Off"}</span></label>}
       </li>)}</ul>
     </div>

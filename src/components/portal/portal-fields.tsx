@@ -1,16 +1,18 @@
 "use client";
-import { Plus, Trash2, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { ImagePlus, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import { emptyHours, type Field, type Hours, type RichText } from "@/lib/portal/content-model";
 
 export type Images = { path: string; previewUrl: string }[];
+export type Uploader = (file: File) => Promise<{ path: string; previewUrl: string }>;
 const DAYS: [keyof Omit<Hours, "exceptions">, string][] = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
 
 const words = (key: string) => key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, letter => letter.toUpperCase());
 export const fieldLabel = (key: string, field: Field) => field.label ?? words(key);
 
 /** One form control for a content field. Values follow the content model (null = empty). */
-export function FieldInput({ id, name, field, value, onChange, images, currency, locale }: {
-  id: string; name: string; field: Field; value: unknown; onChange: (value: unknown) => void; images: Images; currency?: string; locale?: string;
+export function FieldInput({ id, name, field, value, onChange, images, onUpload, currency, locale }: {
+  id: string; name: string; field: Field; value: unknown; onChange: (value: unknown) => void; images: Images; onUpload?: Uploader; currency?: string; locale?: string;
 }) {
   const label = fieldLabel(name, field), text = typeof value === "string" ? value : "";
   const head = <label htmlFor={id}>{label}{field.required ? "" : <em> optional</em>}</label>;
@@ -37,7 +39,7 @@ export function FieldInput({ id, name, field, value, onChange, images, currency,
     case "phone": return <div className="pf-field">{head}<input id={id} type="tel" value={text} onChange={event => onChange(event.target.value || null)} />{help}</div>;
     case "hours": return <div className="pf-field">{<span className="pf-label">{label}</span>}<HoursEditor id={id} value={(value as Hours | null) ?? emptyHours()} onChange={onChange} />{help}</div>;
     case "richtext": return <div className="pf-field"><span className="pf-label">{label}</span><RichTextEditor id={id} value={(value as RichText | null) ?? []} onChange={onChange} />{help}</div>;
-    case "image": return <div className="pf-field"><span className="pf-label">{label}</span><ImagePicker id={id} value={value as { src: string; alt: string } | null} images={images} onChange={onChange} />{help}</div>;
+    case "image": return <div className="pf-field"><span className="pf-label">{label}</span><ImagePicker id={id} value={value as { src: string; alt: string } | null} images={images} onChange={onChange} onUpload={onUpload} />{help}</div>;
   }
 }
 
@@ -77,16 +79,32 @@ function RichTextEditor({ id, value, onChange }: { id: string; value: RichText; 
   </div>;
 }
 
-function ImagePicker({ id, value, images, onChange }: { id: string; value: { src: string; alt: string } | null; images: Images; onChange: (value: { src: string; alt: string } | null) => void }) {
-  if (!images.length) return <p className="portal-muted">This website has no photos to choose from yet. Ask your agency to add some.</p>;
+function ImagePicker({ id, value, images, onChange, onUpload }: { id: string; value: { src: string; alt: string } | null; images: Images; onChange: (value: { src: string; alt: string } | null) => void; onUpload?: Uploader }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  async function upload(file: File) {
+    if (!onUpload) return;
+    setBusy(true); setError("");
+    try { const image = await onUpload(file); onChange({ src: image.path, alt: value?.alt ?? "" }); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "The photo couldn't be uploaded."); }
+    finally { setBusy(false); }
+  }
   return <div className="pf-images" id={id}>
-    <div role="radiogroup" aria-label="Choose a photo">
+    {images.length > 0 ? <div role="radiogroup" aria-label="Choose a photo">
       {images.map(image => <button key={image.path} type="button" role="radio" aria-checked={value?.src === image.path} title={image.path.split("/").pop()}
         onClick={() => onChange({ src: image.path, alt: value?.alt ?? "" })}>
         {/* eslint-disable-next-line @next/next/no-img-element -- portal-served thumbnail */}
         <img src={image.previewUrl} alt="" loading="lazy" />
       </button>)}
-    </div>
+    </div> : <p className="portal-muted">No photos yet{onUpload ? ". Upload one below." : ". Ask your agency to add some."}</p>}
+    {onUpload && <div className="pf-upload">
+      <input ref={input} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif" hidden
+        onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} />
+      <button type="button" className="portal-link" disabled={busy} onClick={() => input.current?.click()}>{busy ? <LoaderCircle size={14} className="portal-spin" /> : <ImagePlus size={14} />} {busy ? "Uploading…" : "Upload a photo"}</button>
+      <span className="portal-muted">JPG, PNG or iPhone photos up to 8 MB. Your agency sees it when you send your changes.</span>
+    </div>}
+    {error && <p className="portal-error" role="alert">{error}</p>}
     {value && <div className="pf-image-meta">
       <input aria-label="Describe the photo for people who can't see it" placeholder="Describe the photo (for screen readers and Google)" maxLength={300} value={value.alt} onChange={event => onChange({ ...value, alt: event.target.value })} />
       <button type="button" className="portal-link" onClick={() => onChange(null)}><Trash2 size={14} /> No photo</button>

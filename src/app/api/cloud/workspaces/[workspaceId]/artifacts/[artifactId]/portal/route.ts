@@ -15,7 +15,11 @@ export async function GET(_request: Request, context: Context) {
     const { data, error } = await client.rpc("makeborne_portal_site_settings", { p_workspace: workspaceId, p_artifact: artifactId });
     if (missingPortal(error)) return cloudJson(UNAVAILABLE_SETTINGS);
     agencyDatabaseError(error);
-    return cloudJson(mapSettings(data));
+    // Client-uploaded photos, so the agency sees each photo before approving a change that uses it (members read them through RLS).
+    const uploads = await client.from("client_portal_uploads").select("id,path_key").eq("workspace_id", workspaceId).eq("artifact_id", artifactId).limit(200);
+    if (uploads.error && !missingPortal(uploads.error)) agencyDatabaseError(uploads.error);
+    return cloudJson({ ...mapSettings(data), uploads: (uploads.data ?? []).map(row => ({ path: `/images/client-${row.path_key}.webp`,
+      previewUrl: `/api/cloud/workspaces/${workspaceId}/artifacts/${artifactId}/assets/${row.id}` })) });
   } catch (error) { return cloudError(error); }
 }
 

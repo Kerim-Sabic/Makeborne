@@ -5,6 +5,7 @@
 import { javascriptLanguage, jsxLanguage, tsxLanguage, typescriptLanguage } from "@codemirror/lang-javascript";
 import { editWebsiteSource } from "@/lib/projects/source-edit";
 import { SourcePathSchema, type WebsiteProjectSource } from "@/lib/projects/website-source";
+import { CONTENT_LIMITS, MANIFEST_PATH, ManifestSchema, collectionPath, parseManifest, serialiseContent, type Manifest } from "@/lib/portal/content-model";
 
 type Tree = ReturnType<typeof tsxLanguage.parser.parse>;
 type SyntaxNode = Tree["topNode"];
@@ -305,7 +306,8 @@ export type VisualEdit =
   | { kind: "text"; loc: ElementLoc; value: string; rendered?: string; part?: number }
   | { kind: "style"; loc: ElementLoc; style: Partial<Record<StyleField, string>> }
   | { kind: "attribute"; loc: ElementLoc; name: "href" | "alt" | "src"; value: string }
-  | { kind: "remove"; loc: ElementLoc };
+  | { kind: "remove"; loc: ElementLoc }
+  | { kind: "extract"; loc: ElementLoc; label: string; rendered?: string };
 export type SourceChange = { path: string; from: number; to: number; length: number };
 export type VisualEditResult = { ok: true; source: WebsiteProjectSource; summary: string; change: SourceChange } | { ok: false; message: string };
 
@@ -346,6 +348,8 @@ export function applyVisualEdit(source: WebsiteProjectSource, edit: VisualEdit, 
     }
     return commit(source, target.path, target.from, target.to, encodeLiteral(value, target.quote), `Edited text of ${where}`);
   }
+
+  if (edit.kind === "extract") return extractText(source, parsed, element, edit, where);
 
   if (edit.kind === "attribute") {
     const allowed = edit.name === "href" ? tag === "a" : tag === "img";
@@ -405,6 +409,102 @@ export function applyVisualEdit(source: WebsiteProjectSource, edit: VisualEdit, 
   const lineStart = code.lastIndexOf("\n", from - 1) + 1, nextBreak = code.indexOf("\n", to), lineEnd = nextBreak < 0 ? code.length : nextBreak;
   if (!code.slice(lineStart, from).trim() && !code.slice(to, lineEnd).trim()) { from = lineStart; to = Math.min(code.length, lineEnd + 1); }
   return commit(source, edit.loc.path, from, to, "", `Removed ${where}`);
+}
+
+// ---------------------------------------------------------------- hand a text to the client
+
+/** The identifier generated code imports the client-editable site text as. */
+export const SITE_CONTENT_IMPORT = "siteContent";
+const SITE_COLLECTION = "site";
+
+/** "Hero headline" → "heroHeadline" (unique within the collection's fields). */
+export function contentKey(label: string, taken: readonly string[]) {
+  const words = label.normalize("NFKD").replace(/[^A-Za-z0-9 ]/g, " ").trim().split(/\s+/).filter(Boolean);
+  let base = words.map((word, index) => index ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word.toLowerCase()).join("").slice(0, 32) || "text";
+  if (!/^[a-z]/.test(base)) base = `text${base}`.slice(0, 32);
+  let key = base;
+  for (let n = 2; taken.includes(key); n++) key = `${base}${n}`;
+  return key;
+}
+
+/** Relative import specifier from a source file to src/content/site.json. */
+export function contentImportPath(fromPath: string) {
+  const from = fromPath.split("/").slice(0, -1), to = collectionPath(SITE_COLLECTION).split("/");
+  let shared = 0;
+  while (shared < from.length && shared < to.length - 1 && from[shared] === to[shared]) shared++;
+  const up = from.length - shared;
+  return `${up ? "../".repeat(up) : "./"}${to.slice(shared).join("/")}`;
+}
+
+/** Moves one literal text into src/content/site.json (declared in collections.json as a text field)
+ * and renders it from there, so the client can edit it in the portal. The visible page is unchanged. */
+function extractText(source: WebsiteProjectSource, parsed: Parsed, element: SyntaxNode, edit: Extract<VisualEdit, { kind: "extract" }>, where: string): VisualEditResult {
+  const label = edit.label.replace(/[<>\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!label) return fail("Give this text a name your client will recognise, like “Opening offer”.");
+  const target = textTarget(source, parsed, edit.loc, element, edit.rendered);
+  if ("reason" in target) return fail(target.reason);
+  if (target.kind === "runs") return fail("Part of this text is styled differently (like a word in italics), so it can't be handed over as one piece. Ask the builder to make it client-editable.");
+  const value = target.value.replace(/\s+/g, " ").trim();
+  if (!value) return fail("There's no text here to hand over.");
+  if (value.length > MAX_TEXT) return fail(`Texts over ${MAX_TEXT} characters can't be handed over here.`);
+
+  const manifestFile = source.files.find(file => file.path === MANIFEST_PATH);
+  let collections: Manifest["collections"] = {}, locale: string | undefined, currency: string | undefined;
+  if (manifestFile) {
+    const current = parseManifest(manifestFile.content);
+    if (!current.ok) return fail("This site's list of editable content has a problem. Ask the builder to fix it first.");
+    collections = current.manifest.collections; locale = current.manifest.locale; currency = current.manifest.currency;
+  }
+  const existing = collections[SITE_COLLECTION];
+  if (existing && existing.kind !== "single") return fail("This site already uses “site” for a list. Ask the builder to make this text client-editable.");
+  if (!existing && Object.keys(collections).length >= CONTENT_LIMITS.collections) return fail("This site already has the maximum number of editable sections.");
+  const fields = { ...(existing?.fields ?? {}) };
+  if (Object.keys(fields).length >= CONTENT_LIMITS.fields) return fail(`Your client can already edit ${CONTENT_LIMITS.fields} texts on this site.`);
+  const key = contentKey(label, Object.keys(fields));
+  fields[key] = { type: "text", label, required: true, ...(value.length > 120 ? { multiline: true } : {}), max: Math.min(MAX_TEXT, Math.max(80, Math.ceil(value.length * 2))) };
+  const manifest = ManifestSchema.safeParse({ version: 1, ...(locale ? { locale } : {}), ...(currency ? { currency } : {}),
+    collections: { ...collections, [SITE_COLLECTION]: { label: existing?.label ?? "Website text", kind: "single", ...(existing?.help ? { help: existing.help } : {}), fields } } });
+  if (!manifest.success) return fail("This text can't be handed over automatically. Ask the builder to make it client-editable.");
+
+  const dataPath = collectionPath(SITE_COLLECTION), dataFile = source.files.find(file => file.path === dataPath);
+  let data: Record<string, unknown> = {};
+  if (dataFile) {
+    try { data = JSON.parse(dataFile.content); } catch { return fail("This site's editable text file has a problem. Ask the builder to fix it first."); }
+    if (!data || typeof data !== "object" || Array.isArray(data)) return fail("This site's editable text file has a problem. Ask the builder to fix it first.");
+  }
+  data = { ...data, [key]: value };
+
+  const file = source.files.find(item => item.path === target.path);
+  if (!file) return fail("This file is no longer in the project.");
+  const code = file.content, reference = `${SITE_CONTENT_IMPORT}.${key}`;
+  const hasImport = new RegExp(`import\\s+${SITE_CONTENT_IMPORT}\\s+from\\s+["'][^"']*content/site\\.json["']`).test(code);
+  if (!hasImport && new RegExp(`\\b${SITE_CONTENT_IMPORT}\\b`).test(code)) return fail("This file already uses the name siteContent. Ask the builder to make this text client-editable.");
+  const insert = target.kind === "jsx" ? `${/^\s*/.exec(target.raw)![0]}{${reference}}${/\s*$/.exec(target.raw)![0]}` : reference;
+  let next = code.slice(0, target.from) + insert + code.slice(target.to), start = target.from, length = insert.length;
+  if (!hasImport) {
+    const statement = `import ${SITE_CONTENT_IMPORT} from "${contentImportPath(target.path)}";\n`;
+    // After the file's last top-level import statement (multi-line imports included), found with the parser.
+    const parser = scriptParser(target.path);
+    if (!parser) return fail("This text lives in a file the editor can't change. Ask the builder to make it client-editable.");
+    const lastImport = parser.parse(code).topNode.getChildren("ImportDeclaration").at(-1);
+    const lineEnd = lastImport ? code.indexOf("\n", lastImport.to) : -1;
+    const at = lastImport ? (lineEnd < 0 ? code.length : lineEnd + 1) : 0;
+    if (at > target.from) return fail("This text can't be handed over automatically. Ask the builder to make it client-editable.");
+    next = next.slice(0, at) + statement + next.slice(at);
+    length += statement.length + (target.from - at); start = at;
+  }
+
+  let result = editWebsiteSource(source, { type: "edit", path: target.path, content: next });
+  if (!result.ok) return fail(result.message);
+  for (const [path, content] of [[MANIFEST_PATH, serialiseContent(manifest.data)], [dataPath, serialiseContent(data)]] as const) {
+    if (!result.source.files.some(item => item.path === path)) {
+      result = editWebsiteSource(result.source, { type: "add", path });
+      if (!result.ok) return fail(result.message);
+    }
+    result = editWebsiteSource(result.source, { type: "edit", path, content });
+    if (!result.ok) return fail(result.message);
+  }
+  return { ok: true, source: result.source, summary: `Let the client edit “${label}” (${where})`, change: { path: target.path, from: start, to: target.to, length } };
 }
 
 /** Where a selected element is after an edit; null when it was removed. */

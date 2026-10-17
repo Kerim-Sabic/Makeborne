@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { AlignCenter, AlignLeft, AlignRight, ChevronsUp, MessageSquarePlus, MousePointerClick, RotateCcw, Trash2, Undo2, X } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, ChevronsUp, MessageSquarePlus, MousePointerClick, RotateCcw, Trash2, Undo2, UserRoundPen, X } from "lucide-react";
 import type { ElementDescription, ElementLoc, StyleField, VisualEdit } from "@/lib/builder/visual-edit";
 import "@/app/visual-editor.css";
 
@@ -27,8 +27,8 @@ const px = (value: string | undefined) => { const number = parseFloat(value ?? "
 
 export type Swatch = { label: string; value: string };
 
-export default function VisualEditorPanel({ picked, description, images, swatches = [], note, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
-  picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; swatches?: Swatch[]; note: string; canUndo: boolean;
+export default function VisualEditorPanel({ picked, description, images, swatches = [], clientEditing = false, note, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
+  picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; swatches?: Swatch[]; clientEditing?: boolean; note: string; canUndo: boolean;
   onEdit: (edit: VisualEdit) => void; onParent: () => void; onClose: () => void; onUndo: () => void; onAsk?: (text: string) => void;
 }) {
   return <aside className="ve" aria-label="Edit selected element">
@@ -41,12 +41,12 @@ export default function VisualEditorPanel({ picked, description, images, swatche
     {!picked || !description
       ? <div className="ve-empty"><p>Click any text, image, link or section in the preview to change it.</p><p className="ve-muted">Edits save automatically as a new version and don&apos;t use credits.</p></div>
       : <Inspector key={`${picked.loc.path}@${picked.loc.offset}:${picked.index}:${"value" in description.text ? description.text.value : "parts" in description.text ? description.text.parts.join("|") : ""}`}
-        picked={picked} description={description} images={images} swatches={swatches} onEdit={onEdit} onParent={onParent} onAsk={onAsk} />}
+        picked={picked} description={description} images={images} swatches={swatches} clientEditing={clientEditing} onEdit={onEdit} onParent={onParent} onAsk={onAsk} />}
   </aside>;
 }
 
-function Inspector({ picked, description, images, swatches, onEdit, onParent, onAsk }: {
-  picked: PickedElement; description: ElementDescription; images: ProjectImage[]; swatches: Swatch[];
+function Inspector({ picked, description, images, swatches, clientEditing, onEdit, onParent, onAsk }: {
+  picked: PickedElement; description: ElementDescription; images: ProjectImage[]; swatches: Swatch[]; clientEditing: boolean;
   onEdit: (edit: VisualEdit) => void; onParent: () => void; onAsk?: (text: string) => void;
 }) {
   const loc = picked.loc;
@@ -78,6 +78,7 @@ function Inspector({ picked, description, images, swatches, onEdit, onParent, on
         <TextPart key={`${index}:${part}`} index={index} total={parts.length} value={part} onApply={value => onEdit({ kind: "text", loc, value, part: index })} />)
       : <p className="ve-muted">{"reason" in description.text ? description.text.reason : ""}</p>}
       {"parts" in description.text && <p className="ve-muted">Styled words, like the ones in italics, are separate. Click them in the preview to edit them.</p>}
+      {clientEditing && text && <HandOver suggestion={handoverName(description.tag, text.value)} onApply={label => onEdit({ kind: "extract", loc, label, rendered: picked.text })} />}
     </section>
 
     {description.href && <section className="ve-section" aria-label="Link">
@@ -214,4 +215,24 @@ function TextField({ id, label, hint, inline, computed, onChange }: { id: string
       <Reset shown={Boolean(inline)} label={label.toLowerCase()} onReset={() => onChange("")} />
     </div>
   </div>;
+}
+
+/** "Let my client edit this": names the text and moves it into the site's client-editable content. */
+function HandOver({ suggestion, onApply }: { suggestion: string; onApply: (label: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState(suggestion);
+  if (!open) return <button type="button" className="ve-link" onClick={() => setOpen(true)}><UserRoundPen size={13} />Let my client edit this</button>;
+  return <form className="ve-handover" onSubmit={event => { event.preventDefault(); if (label.trim()) onApply(label.trim()); }}>
+    <label htmlFor="ve-handover">Name it for your client</label>
+    <input id="ve-handover" value={label} maxLength={60} onChange={event => setLabel(event.target.value)} placeholder="e.g. Opening offer" />
+    <p className="ve-muted">It appears under “Website text” in their portal. The page looks exactly the same.</p>
+    <span className="ve-inline-actions"><button type="submit" className="ve-apply" disabled={!label.trim()}>Hand over</button><button type="button" className="ve-secondary" onClick={() => setOpen(false)}>Cancel</button></span>
+  </form>;
+}
+
+/** A friendly default name: "Headline" for h1, otherwise the first few words. */
+function handoverName(tag: string, value: string) {
+  if (tag === "h1") return "Headline";
+  const words = value.replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/).slice(0, 4).join(" ");
+  return (words || "Text").slice(0, 60);
 }

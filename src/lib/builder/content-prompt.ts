@@ -17,3 +17,6 @@ This website belongs to a client who will update some of its content themselves 
 7. Use only real facts from the brief; where a value is unknown, leave it null rather than inventing it (no invented prices or hours).
 8. When editing later, preserve existing items and their ids, change content files only when asked, and if you change a field in the manifest, migrate the data files to match.
 </client_editable_content>`;
+
+/** The builder request behind "Make this site client-editable" (an existing client website; a normal paid build). */
+export const MAKE_EDITABLE_REQUEST = "Make this website client-editable. Move the facts the owner will want to update (services or menu with prices, opening hours, contact details and address, team, news or events) into content collections exactly as described in the client-editable content instructions, and render them from the JSON files. This is a restructure, not a redesign: keep every visible word, number, image, style, layout and animation exactly as it is now, and change nothing else.";

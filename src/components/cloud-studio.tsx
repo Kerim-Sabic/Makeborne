@@ -1722,6 +1722,7 @@ export function CloudEditor({
             },
             onAsk: useLiveBuilder ? text => setBuilderPrefill({ key: crypto.randomUUID(), text }) : undefined,
             swatches: brandColors,
+            clientEditing: Boolean(project?.clientId),
           } : undefined} />}
         {view === "preview" && useLiveBuilder && !liveDocument && !live && !content.websiteSource && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
         {view === "preview" && !useLiveBuilder && !useSourcePreview && artifact.kind === "website" && generatedVersionId && (() => {
@@ -1746,7 +1747,8 @@ export function CloudEditor({
           {role === "owner" && <WebsiteAnalytics key={`analytics:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} />}
           <WebsiteGithub key={`github:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"} source />
           {role === "owner" && <WebsiteDomains key={`domains:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} />}
-          {role !== "reviewer" && project?.clientId && <WebsitePortalSettings key={`portal:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} files={sourceFiles} onApproved={() => void load()} />}</div>}
+          {role !== "reviewer" && project?.clientId && <WebsitePortalSettings key={`portal:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} files={sourceFiles} onApproved={() => void load()}
+            onAskBuilder={useLiveBuilder ? text => { setBuilderPrefill({ key: crypto.randomUUID(), text }); setView("preview"); } : undefined} />}</div>}
         {view === "review" && <div className="lb-publish cloud-client-review"><ClientReviewPanel key={`review:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id}
           version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || Boolean(live)} canEdit={role !== "reviewer"}
           capture={content.websiteSource ? () => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id }) : undefined}

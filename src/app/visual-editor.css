@@ -63,3 +63,6 @@
   .ve { flex:0 0 auto; max-height:46dvh; border-left:0; border-top:1px solid #ebe8ef; }
 }
 @media (prefers-reduced-motion: reduce) { .ve * { transition:none !important; } }
+.ve-handover { display: grid; gap: 6px; margin-top: 10px; padding: 10px; border: 1px dashed #d6cfe0; border-radius: 10px; }
+.ve-handover label { font-size: 12px; font-weight: 600; color: #4b3a59; }
+.ve-inline-actions { display: flex; gap: 6px; }

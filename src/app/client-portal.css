@@ -43,3 +43,7 @@
 .cpp-diff ul { margin: 4px 0 0 14px !important; gap: 2px !important; list-style: disc !important; color: #3d4049; }
 .cpp .cpp-switch input { width: 34px !important; height: 20px !important; min-height: 0 !important; min-width: 0; padding: 0 !important; margin: 0; border: 0 !important; box-shadow: none; }
 .cpp-sites li > div > .cpp-chip, .cpp-people li > div > .cpp-chip { justify-self: start; margin-left: 0; }
+.cpp-make { justify-self: start; margin-top: 10px; }
+.cpp-photos { display: grid; gap: 6px; font-size: 13px; }
+.cpp-photos > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.cpp-photos img { width: 120px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
