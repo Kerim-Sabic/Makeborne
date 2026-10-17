@@ -11,8 +11,8 @@ export async function GET(_request: Request, context: Context) {
     const { workspaceId } = await context.params;
     const { client } = await agencyContext(workspaceId, false);
     const { data, error } = await client.rpc("makeborne_care_plans", { p_workspace: workspaceId });
-    if (missingPortal(error)) return cloudJson({ available: false, plans: [] } satisfies CareOverview);
+    if (missingPortal(error)) return cloudJson({ available: false, plans: [], month: new Date().toISOString().slice(0, 8) + "01", collected: [] } satisfies CareOverview);
     agencyDatabaseError(error);
-    return cloudJson({ available: true, plans: CareOverviewSchema.parse(data) } satisfies CareOverview);
+    return cloudJson({ available: true, ...CareOverviewSchema.parse(data) } satisfies CareOverview);
   } catch (error) { return cloudError(error); }
 }

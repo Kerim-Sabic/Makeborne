@@ -144,7 +144,13 @@ begin
   begin perform public.makeborne_record_care_payment(w,cl,gen_random_uuid(),''); raise exception 'payment on an inactive plan'; exception when sqlstate '22023' then null; end;
   begin perform public.makeborne_record_care_payment(w,cl2,gen_random_uuid(),''); raise exception 'payment without a plan'; exception when sqlstate 'P0002' then null; end;
   perform public.makeborne_set_care_plan(w,cl2,'Basic',null,null,'month',null,today + 3,true);
-  assert jsonb_array_length(public.makeborne_care_plans(w)) = 2 and (public.makeborne_care_plans(w))->0->>'clientName' = 'Bo Lee', 'overview lists active-first with names';
+  r := public.makeborne_care_plans(w);
+  assert jsonb_array_length(r->'plans') = 2 and r->'plans'->0->>'clientName' = 'Bo Lee' and r->'plans'->1->>'clientName' = 'Saffron Table', 'overview: active first, switched-off last, with names: '||r::text;
+  assert r->'plans'->1->>'lastPaymentAt' is not null and r->'plans'->0->'lastPaymentAt' = 'null'::jsonb, 'last payment per plan';
+  assert r->>'month' = date_trunc('month', now() at time zone 'utc')::date::text, 'month';
+  assert (select (x->>'amountCents')::bigint = (select sum(amount_cents) from public.client_care_payments where workspace_id = w and undone_at is null and currency = 'EUR')
+      and (x->>'payments')::int = (select count(*) from public.client_care_payments where workspace_id = w and undone_at is null and currency = 'EUR')
+    from jsonb_array_elements(r->'collected') x where x->>'currency' = 'EUR'), 'collected this month excludes undone payments: '||(r->'collected')::text;
   reset role;
   assert (select count(*) from public.audit_events where action = 'portal.care_payment_recorded' and workspace_id = w) >= 6
     and (select count(*) from public.audit_events where action = 'portal.care_payment_undone' and workspace_id = w) = 1, 'payments audited';

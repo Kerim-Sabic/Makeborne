@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, Check, Columns3, Download, List, Mail, Plus, RefreshCw, Search, Sparkles, Upload, Users, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Columns3, Download, List, Mail, Plus, RefreshCw, Search, Sparkles, Upload, Users, Wallet, Wand2 } from "lucide-react";
 import MailCenter from "./mail/mail-center";
 import ClientEmail from "./mail/client-email";
 import BulkEnroll from "./mail/bulk-enroll";
@@ -17,6 +17,7 @@ import BrandKits from "./brand-kits";
 import LeadRedesign from "./lead-redesign";
 import ClientPortalPanel from "./client-portal-panel";
 import CarePlanPanel from "./care-plan-panel";
+import CareDashboard from "./care-dashboard";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -38,7 +39,7 @@ const ClientDetails = dynamic(() => import("./cloud-studio").then(module => modu
 type Page = { nextOffset: number | null; total: number };
 type Snapshot = CloudWorkspaceSnapshot & { pagination: Record<"clients" | "projects" | "artifacts", Page> };
 type ClientView = "outreach" | "email" | "details" | "brand" | "projects" | "reviews";
-type Layout = "list" | "board" | "email";
+type Layout = "list" | "board" | "email" | "billing";
 const DEVICE_PREFERENCE = "makeborne.clients.device";
 const LAYOUT_KEY = "makeborne.clients.layout";
 const readDevicePreference = () => { try { return typeof window !== "undefined" && window.sessionStorage.getItem(DEVICE_PREFERENCE) === "1"; } catch { return false; } };
@@ -191,7 +192,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const leadMeta = useLeadMeta(accountId, snapshot?.workspace.id, target?.clientId ? [target.clientId] : listedIds, refreshKey);
   // Returning from connecting a mailbox opens Email with the result.
   const [connectResult] = useState(() => { if (typeof window === "undefined") return null; const query = new URLSearchParams(window.location.search), result = query.get("mail"); return result ? { result, detail: query.get("mailDetail") ?? "" } : null; });
-  const [layout, setLayout] = useState<Layout>(() => { if (connectResult) return "email"; try { const saved = typeof window !== "undefined" ? window.localStorage.getItem(LAYOUT_KEY) : null; return saved === "board" || saved === "email" ? saved : "list"; } catch { return "list"; } });
+  const [layout, setLayout] = useState<Layout>(() => { if (connectResult) return "email"; try { const saved = typeof window !== "undefined" ? window.localStorage.getItem(LAYOUT_KEY) : null; return saved === "board" || saved === "email" || saved === "billing" ? saved : "list"; } catch { return "list"; } });
   const chooseLayout = (next: Layout) => { setLayout(next); try { window.localStorage.setItem(LAYOUT_KEY, next); } catch { /* storage unavailable */ } };
   useEffect(() => { if (!connectResult) return; const url = new URL(window.location.href); url.searchParams.delete("mail"); url.searchParams.delete("mailDetail"); window.history.replaceState(window.history.state, "", url); }, [connectResult]);
   // Selected clients (kept with their details so bulk actions work across pages and filters).
@@ -446,6 +447,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     { id: "overdue", label: "Show overdue follow-ups", hint: directory.data ? `${directory.data.counts.overdue} overdue` : undefined, icon: "overdue" },
     layout === "list" ? { id: "board", label: "Switch to pipeline board", icon: "board" } : { id: "list", label: "Switch to list", icon: "list" },
     ...(layout !== "email" ? [{ id: "email", label: "Open Email: mailboxes, sequences, replies", icon: "email" as const }] : []),
+    ...(layout !== "billing" ? [{ id: "billing", label: "Open Care plans: who owes you, recurring income", icon: "list" as const }] : []),
     { id: "export", label: "Export clients to CSV", icon: "export" },
     ...(canEdit ? [{ id: "import", label: "Import clients from CSV", icon: "import" as const }] : []),
   ];
@@ -453,7 +455,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     if (id === "add") { chooseLayout("list"); setAdding(true); }
     else if (id === "find") setFinding(true);
     else if (id === "overdue") { chooseLayout("list"); setFollowUp("overdue"); }
-    else if (id === "board" || id === "list" || id === "email") chooseLayout(id);
+    else if (id === "board" || id === "list" || id === "email" || id === "billing") chooseLayout(id);
     else if (id === "export") void exportCsv();
     else if (id === "import") importInput.current?.click();
   }
@@ -473,8 +475,9 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
         <button type="button" role="radio" aria-checked={layout === "list"} onClick={() => chooseLayout("list")}><List size={15} />List</button>
         <button type="button" role="radio" aria-checked={layout === "board"} onClick={() => chooseLayout("board")}><Columns3 size={15} />Pipeline</button>
         <button type="button" role="radio" aria-checked={layout === "email"} onClick={() => chooseLayout("email")}><Mail size={15} />Email</button>
+        <button type="button" role="radio" aria-checked={layout === "billing"} onClick={() => chooseLayout("billing")}><Wallet size={15} />Care plans</button>
       </div>
-      {layout !== "email" && <label className="ac-search"><Search size={16} /><input ref={searchInput} aria-label="Search account clients" maxLength={200} placeholder="Search name, company, or email" value={search} onChange={event => setSearch(event.target.value)} /><kbd aria-hidden="true">/</kbd></label>}
+      {layout !== "email" && layout !== "billing" && <label className="ac-search"><Search size={16} /><input ref={searchInput} aria-label="Search account clients" maxLength={200} placeholder="Search name, company, or email" value={search} onChange={event => setSearch(event.target.value)} /><kbd aria-hidden="true">/</kbd></label>}
       {layout === "list" && <select aria-label="Outreach stage" value={stage} onChange={event => setStage(event.target.value)}><option>All stages</option>{outreachStages.map(item => <option key={item}>{item}</option>)}</select>}
       {workspaces.length > 1 && <select aria-label="Client workspace" disabled={busy || adding} value={snapshot.workspace.id} onChange={event => navigate({ workspaceId: event.target.value, clientId: null })}>{workspaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
       <div className="ac-tool-icons">
@@ -487,7 +490,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     {message && <p role="status" className="ac-message">{message}</p>}
     {directory.error && <p role="alert">{directory.error}</p>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />
-    {snapshot && snapshot.workspace.role === "owner" && layout !== "email" && !adding && !importing && <EnquiryLeads key={`${accountId}:${snapshot.workspace.id}:${refreshKey}`} accountId={accountId} workspaceId={snapshot.workspace.id}
+    {snapshot && snapshot.workspace.role === "owner" && layout !== "email" && layout !== "billing" && !adding && !importing && <EnquiryLeads key={`${accountId}:${snapshot.workspace.id}:${refreshKey}`} accountId={accountId} workspaceId={snapshot.workspace.id}
       onAdded={text => { setMessage(text); setRefreshKey(key => key + 1); refreshOnboarding(); }} />}
     {importing && <section className="ac-import" aria-labelledby="ac-import-title">
       <h2 id="ac-import-title">Import {importing.clients.length} client{importing.clients.length === 1 ? "" : "s"}</h2>
@@ -501,7 +504,8 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
       </div>
     </section>}
     {adding && <form className="ac-add" onSubmit={add}><h2>Add a client</h2><p>Start with their name. You can add details and outreach history next.</p><label>Name<input required autoFocus maxLength={120} value={name} disabled={busy || uncertain} onChange={event => setName(event.target.value)} /></label><label>Email (optional)<input type="email" value={email} disabled={busy || uncertain} onChange={event => setEmail(event.target.value)} /></label><div className="button-row"><button className="button primary" disabled={busy || uncertain || !name.trim()}>{busy ? "Saving…" : "Save client"}</button><button className="button secondary" type="button" disabled={busy} onClick={() => setAdding(false)}>Cancel</button></div></form>}
-    {snapshot && layout === "email" && !adding ? <MailCenter accountId={accountId} workspaceId={snapshot.workspace.id} canEdit={canEdit} connectResult={connectResult} onOpenClient={id => { open(id); setView("email"); }} />
+    {snapshot && layout === "billing" && !adding ? (snapshot.workspace.role === "reviewer" ? <p className="small-note">Care plans are visible to owners and editors.</p> : <CareDashboard key={`care:${snapshot.workspace.id}:${refreshKey}`} accountId={accountId} workspaceId={snapshot.workspace.id} canEdit={canEdit} onOpenClient={id => { open(id); setView("brand"); }} />)
+    : snapshot && layout === "email" && !adding ? <MailCenter accountId={accountId} workspaceId={snapshot.workspace.id} canEdit={canEdit} connectResult={connectResult} onOpenClient={id => { open(id); setView("email"); }} />
     : snapshot && layout === "board" && !adding ? <ClientBoard accountId={accountId} workspaceId={snapshot.workspace.id} search={search} today={today} canEdit={canEdit} refreshKey={refreshKey} onOpen={open}
       onChanged={client => saved(client)} onError={setMessage} />
     : (busy && !snapshot) || directory.loading ? <ListSkeleton label="Loading clients" /> : !adding && <>

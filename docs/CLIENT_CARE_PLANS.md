@@ -27,7 +27,12 @@ An agency charges its own client a recurring fee for looking after their website
   - **When nothing is enforced:** a plan that is switched off, or has no paid-through date yet.
 - **Agency screens:**
   - Clients → a client → **Brand & client access** → **Care plan**: set up, edit, record a payment (with an optional note), payment history, and Undo on the latest payment.
-  - `GET /api/cloud/workspaces/[ws]/care-plans` lists every plan with paused and due first, for an overview. It has no screen yet.
+  - **Clients → Care plans** ("who owes me"), for owners and editors only:
+    - monthly recurring income per currency, with quarterly and yearly plans spread evenly;
+    - payments recorded this calendar month (UTC), excluding undone ones;
+    - how many plans are paused or due;
+    - a list that opens on *Needs attention*, with *All*, *Paid up* and *Not started or off* filters, a one-click Record payment, and a link to each client's plan.
+  - Data: `GET /api/cloud/workspaces/[ws]/care-plans` returns `{ plans (each with lastPaymentAt), month, collected }`.
 - **Not affected:** the per-person "access until" date on portal access (`client_portal_access.paid_through`) is unchanged. It ends one person's access entirely.
 
 ## Security
@@ -72,3 +77,38 @@ An agency charges its own client a recurring fee for looking after their website
 1. Apply `20261018090000_client_care_plans.sql`.
 2. Run `check-client-care-plans.sql` and the advisor comparison on staging.
 3. No Worker, Auth or environment changes are needed.
+
+## Dashboard verification (2026-10-18)
+
+- **Offline:** `check-care.cjs` passes 5/5. It now also covers the recurring-income math and the dashboard wiring.
+- **SQL:** the care plans check also covers the overview: ordering, last payment, and this month's totals without undone payments.
+- **Browser** (`e2e-dashboard.cjs`, four seeded plans: paused, due, paid, off):
+  - the stats read "€148.00 + US$100.00, 3 active plans", "US$1,200.00, 1 payment" and "Needs attention 2 (1 paused, 1 due)";
+  - recording Monee Dental's payment from the list moved it to paid: attention 1, recorded €49.00 + US$1,200.00;
+  - opening the client landed on its plan;
+  - no browser errors, and the teardown left 0 test rows.
+
+## Next: Makeborne takes a % through Whop (research 2026-10-18)
+
+Whop for Platforms works like Stripe Connect and fits this model:
+
+1. Each agency becomes a **connected account**, going through Whop's identity checks and payout setup.
+2. Makeborne creates a recurring checkout configuration on the agency's account (`plan_type: renewal`, `billing_period`, `renewal_price`) with `application_fee_amount`. That is a fixed amount, so we compute it from our %.
+3. The client pays through `purchase_url`, which is what the portal's Pay button opens.
+4. With these *direct charges*, the agency pays Whop's fees and handles refunds and disputes.
+5. Webhooks would then record payments automatically and pause or resume editing.
+
+To settle before building:
+- **Access:** platform access is invite-only, so the owner needs to email Whop.
+- **Renewals:** confirm the application fee applies to **every renewal**. The docs only say "per unit purchased".
+- **Pricing:** any extra platform pricing.
+- **Payouts:** the payout countries our agencies need.
+- **Webhooks:** that connected-account events reach the platform.
+- **Fallback:** if renewals aren't covered, transfers are the alternative. Makeborne would collect the full payment and pay agencies out, which makes it the merchant of record. That is heavier, so avoid it.
+- **Entity:** the PAY01 and PAY04 entity questions also apply.
+
+Sources:
+- docs.whop.com/developer/platforms/collect-payments-for-connected-accounts
+- docs.whop.com/api-reference/checkout-configurations/create-checkout-configuration
+- docs.whop.com/supported-business-models/platforms
+- docs.whop.com/fees

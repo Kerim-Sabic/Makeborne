@@ -562,9 +562,9 @@ check("care plans (agency): validated plan updates, https payment links only, id
   result = await json(await paymentRoute.DELETE(request(`${planUrl}/payments/${CHANGE}`, { method: "DELETE", headers: { origin: ORIGIN } }), params({ ...value, paymentId: CHANGE })));
   assert.equal(result.status, 409); assert.match(result.body.error.message, /Only the latest payment/);
 
-  reset({ rpc: name => name === "makeborne_care_plans" ? { data: [{ ...PLAN, status: "paused", clientName: "Saffron Table" }], error: null } : { data: null, error: { code: "XX000" } } });
+  reset({ rpc: name => name === "makeborne_care_plans" ? { data: { plans: [{ ...PLAN, status: "paused", clientName: "Saffron Table", lastPaymentAt: null }], month: "2026-10-01", collected: [{ currency: "EUR", amountCents: 4900, payments: 1 }] }, error: null } : { data: null, error: { code: "XX000" } } });
   result = await json(await overviewRoute.GET(request(`/api/cloud/workspaces/${WS}/care-plans`), params({ workspaceId: WS })));
-  assert.equal(result.status, 200); assert.equal(result.body.plans[0].clientName, "Saffron Table");
+  assert.equal(result.status, 200); assert.equal(result.body.plans[0].clientName, "Saffron Table"); assert.deepEqual(result.body.collected, [{ currency: "EUR", amountCents: 4900, payments: 1 }]);
   for (const [handler, args] of [[planRoute.GET, [request(planUrl), params(value)]], [overviewRoute.GET, [request(`/api/cloud/workspaces/${WS}/care-plans`), params({ workspaceId: WS })]]]) {
     reset({ role: "reviewer" });
     assert.equal((await handler(...args)).status, 403, "reviewers cannot see billing"); assert.equal(state.calls.length, 0);

@@ -272,15 +272,25 @@ begin
   return makeborne_rpc.makeborne_care_plan(p_workspace, p_client);
 end $$;
 
--- Every plan in the workspace with its status (paused and due first), for the agency's overview.
+-- The agency's billing overview: every plan with its status and last payment (paused and due first),
+-- plus what was recorded this calendar month (UTC), per currency.
 create function makeborne_rpc.makeborne_care_plans(p_workspace uuid) returns jsonb
 language plpgsql stable security definer set search_path='' as $$
+declare v_month date := date_trunc('month', now() at time zone 'utc')::date;
 begin
   if (select auth.uid()) is null or not makeborne_private.can_edit(p_workspace) then raise exception 'Editor access required' using errcode='42501'; end if;
-  return coalesce((select jsonb_agg(makeborne_private.care_plan_json(p) || jsonb_build_object('clientName', coalesce(nullif(c.company, ''), c.name))
-      order by case makeborne_private.care_status(p)->>'status' when 'paused' then 0 when 'due' then 1 when 'paid' then 2 else 3 end, p.paid_through nulls last, c.name)
-    from public.client_care_plans p join public.clients c on c.id = p.client_id and c.workspace_id = p.workspace_id
-    where p.workspace_id = p_workspace), '[]'::jsonb);
+  return jsonb_build_object(
+    'plans', coalesce((select jsonb_agg(makeborne_private.care_plan_json(p) || jsonb_build_object('clientName', coalesce(nullif(c.company, ''), c.name),
+        'lastPaymentAt', (select max(r.created_at) from public.client_care_payments r where r.client_id = p.client_id and r.undone_at is null))
+      order by case when not p.active then 4 else case makeborne_private.care_status(p)->>'status' when 'paused' then 0 when 'due' then 1 when 'paid' then 2 else 3 end end,
+        p.paid_through nulls last, c.name)
+      from public.client_care_plans p join public.clients c on c.id = p.client_id and c.workspace_id = p.workspace_id
+      where p.workspace_id = p_workspace), '[]'::jsonb),
+    'month', v_month,
+    'collected', coalesce((select jsonb_agg(jsonb_build_object('currency', x.currency, 'amountCents', x.total, 'payments', x.n) order by x.currency)
+      from (select r.currency, sum(r.amount_cents) as total, count(*) as n from public.client_care_payments r
+        where r.workspace_id = p_workspace and r.undone_at is null and r.currency is not null
+          and (r.created_at at time zone 'utc')::date >= v_month group by r.currency) x), '[]'::jsonb));
 end $$;
 
 -- ---------------------------------------------------------------- exposure

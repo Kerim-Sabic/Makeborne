@@ -32,9 +32,22 @@ export type CarePayment = z.infer<typeof CarePaymentSchema>;
 export const CarePlanResponseSchema = z.object({ plan: CarePlanSchema.nullable(), payments: z.array(CarePaymentSchema) });
 /** GET/PUT .../clients/[clientId]/care-plan, POST .../payments, DELETE .../payments/[id] */
 export type CarePlanResponse = z.infer<typeof CarePlanResponseSchema>;
-export const CareOverviewSchema = z.array(CarePlanSchema.extend({ clientName: z.string() }));
-/** GET .../care-plans: every plan in the workspace, paused and due first. */
-export type CareOverview = { available: boolean; plans: z.infer<typeof CareOverviewSchema> };
+export const CareOverviewSchema = z.object({
+  plans: z.array(CarePlanSchema.extend({ clientName: z.string(), lastPaymentAt: z.string().nullable() })),
+  /** First day of the current UTC month, and the payments recorded since then per currency (undone ones excluded). */
+  month: day,
+  collected: z.array(z.object({ currency: z.string().regex(/^[A-Z]{3}$/), amountCents: z.number().int().nonnegative(), payments: z.number().int().nonnegative() })),
+});
+/** GET .../care-plans: the agency's billing overview (paused and due first). */
+export type CareOverview = { available: boolean } & z.infer<typeof CareOverviewSchema>;
+
+const PER_MONTH: Record<CareInterval, number> = { month: 1, quarter: 3, year: 12 };
+/** Recurring income per month from active priced plans, per currency (quarterly and yearly plans spread evenly). */
+export function monthlyRecurring(plans: { active: boolean; amountCents: number | null; currency: string | null; interval: CareInterval }[]) {
+  const totals = new Map<string, number>();
+  for (const plan of plans) if (plan.active && plan.amountCents !== null && plan.currency) totals.set(plan.currency, (totals.get(plan.currency) ?? 0) + plan.amountCents / PER_MONTH[plan.interval]);
+  return [...totals].sort(([a], [b]) => a < b ? -1 : 1).map(([currency, cents]) => ({ currency, amountCents: Math.round(cents) }));
+}
 
 /** PUT .../clients/[clientId]/care-plan */
 export const CarePlanUpdateSchema = z.object({

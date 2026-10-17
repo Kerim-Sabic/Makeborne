@@ -59,4 +59,21 @@ check("portal: paused care plans make the editor read-only; Pay opens the agency
   assert.match(read("src/lib/portal/server.ts"), /code === "PB402"\) throw new RequestError\("PAYMENT_DUE"/);
 });
 
+check("dashboard: monthly recurring income per currency, quarterly and yearly spread evenly, inactive and unpriced plans excluded", () => {
+  const plans = [{ active: true, amountCents: 4900, currency: "EUR", interval: "month" }, { active: true, amountCents: 30000, currency: "EUR", interval: "quarter" },
+    { active: true, amountCents: 120000, currency: "USD", interval: "year" }, { active: false, amountCents: 9900, currency: "EUR", interval: "month" },
+    { active: true, amountCents: null, currency: null, interval: "month" }];
+  assert.deepEqual(care.monthlyRecurring(plans), [{ currency: "EUR", amountCents: 14900 }, { currency: "USD", amountCents: 10000 }]);
+  assert.deepEqual(care.monthlyRecurring([]), []);
+  const overview = care.CareOverviewSchema.parse({ plans: [], month: "2026-10-01", collected: [{ currency: "EUR", amountCents: 4900, payments: 1 }] });
+  assert.equal(overview.collected[0].payments, 1);
+  const clients = read("src/components/account-clients.tsx");
+  assert.match(clients, /type Layout = "list" \| "board" \| "email" \| "billing";/);
+  assert.match(clients, /snapshot\.workspace\.role === "reviewer" \? <p className="small-note">Care plans are visible to owners and editors\.<\/p> : <CareDashboard /, "reviewers never load billing");
+  assert.match(clients, /onOpenClient=\{id => \{ open\(id\); setView\("brand"\); \}\}/, "opening a plan lands on the client's care plan");
+  const dashboard = read("src/components/care-dashboard.tsx");
+  assert.match(dashboard, /headers: \{ "Idempotency-Key": key \}/);
+  assert.match(dashboard, /href=\{plan\.paymentUrl\} target="_blank" rel="noopener noreferrer"/);
+});
+
 console.log(`\n${passed} care plan checks passed.`);
