@@ -13,7 +13,7 @@ export function HelpHeader() {
 
 export function HelpFooter() {
   return <footer className={styles.footer}><span>© 2026 Makeborne</span>
-    <nav aria-label="Footer navigation"><Link href="/">Home</Link><Link href="/help">Help center</Link><Link href="/billing">Pricing</Link><Link href="/billing/terms">Subscriptions &amp; refunds</Link><Link href="/privacy">Privacy</Link></nav>
+    <nav aria-label="Footer navigation"><Link href="/">Home</Link><Link href="/done-for-you">Done for you</Link><Link href="/help">Help center</Link><Link href="/billing">Pricing</Link><Link href="/billing/terms">Subscriptions &amp; refunds</Link><Link href="/privacy">Privacy</Link></nav>
   </footer>;
 }
 
