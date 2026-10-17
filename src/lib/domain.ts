@@ -1,3 +1,4 @@
+import { SiteSeoSchema } from "./hosting/seo";
 import { z } from "zod";
 import { WebsiteDesignSchema } from "./generation/website-contract";
 import { ClientOutreachSchema } from "./client-outreach";
@@ -93,6 +94,8 @@ export const ArtifactContentSchema = z
     /** Live-built presentation or book source; `sections` hold its outline projection. */
     document: DocumentSourceSchema.optional(),
     reviewQuestions: z.array(z.string().min(1).max(1000)).max(20).optional(),
+    /** Search and business details used when a website is published. */
+    seo: SiteSeoSchema.optional(),
     title: text.min(1).max(200),
     kind: ArtifactKindSchema,
     sections: z.array(

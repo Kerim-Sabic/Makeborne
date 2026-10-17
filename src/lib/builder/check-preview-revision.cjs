@@ -15,5 +15,5 @@ assert.notEqual(revision({'a':'🌕'}),revision({'a':'🌑'}));
 assert.notEqual(revision({'a':'same'}),revision({'b':'same'}));
 const component=fs.readFileSync(require.resolve('../../components/live-preview.tsx'),'utf8');
 assert.match(component,/useMemo\(\(\) => previewFileRevision\(files\), \[files\]\)/);
-assert.match(component,/\[fileKey, images, building, reloadKey\]/);
+assert.match(component,/\[fileKey, images, building, reloadKey, inspecting\]/,'rebuilds on full content, and when click-to-edit switches the tagged build on or off');
 console.log('PASS: full-content preview invalidation, equal-length middle/style edits, Unicode, rename/removal and stable path ordering');

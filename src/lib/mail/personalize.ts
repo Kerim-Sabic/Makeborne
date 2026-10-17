@@ -19,6 +19,11 @@ Kerim`,
     goal: "This business could win more customers with a better website (clearer offer, works on phones, easy booking or enquiries). Offer a short, specific idea or mock-up for their site. The ask: reply YES to see it.",
     style: "",
   },
+  redesign: {
+    label: "Businesses: I redesigned your website",
+    goal: "I made a free redesign of this business's current website. Mention one or two specific problems with their current site from the site audit below (only ones it lists), say in one sentence what the new version does better for their customers, and offer to send it. The ask: reply YES to see it.",
+    style: "",
+  },
   custom: { label: "My own angle", goal: "", style: "" },
 } as const;
 export type Campaign = keyof typeof CAMPAIGNS;

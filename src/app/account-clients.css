@@ -546,3 +546,4 @@ a.lf-chip:hover { border-color: #cfc3e3; color: #2c2240; }
 
 /* The dialog sheet takes focus on open (for screen readers and Escape); it needs no visible ring itself. */
 .mc-sheet:focus { outline: none; }
+.ac-heading-actions { display: flex; flex-wrap: wrap; gap: 8px; }

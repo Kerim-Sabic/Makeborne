@@ -3,6 +3,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { billingDatabase } from "@/lib/billing/database";
 import { databaseError } from "@/lib/cloud/server";
 import { RequestError } from "@/lib/server/http";
+import { githubClient } from "@/lib/github/api";
+import { activeGitHubToken,type ActiveGitHubToken,type ConnectionDatabase } from "@/lib/github/connection";
 
 export const GITHUB_CALLBACK = "https://makeborne.com/api/github/callback";
 export function githubConfigured() {
@@ -27,21 +29,17 @@ function openToken(value:string,userId:string) {
   return Buffer.concat([cipher.update(data),cipher.final()]).toString("utf8");
 }
 export async function githubRequest<T>(token:string,path:string,method="GET",body?:unknown,allow404=false):Promise<T|null> {
-  if(!path.startsWith("/") || path.startsWith("//")) throw new Error("Invalid GitHub path");
-  const response=await fetch(`https://api.github.com${path}`,{method,headers:{Authorization:`Bearer ${token}`,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2026-03-10","Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",redirect:"error",signal:AbortSignal.timeout(20_000)});
-  if(allow404&&response.status===404)return null;
-  if(!response.ok)throw new RequestError("GITHUB_REQUEST_FAILED",[401,403].includes(response.status)?"Reconnect GitHub and check the selected repository permissions.":response.status===409||response.status===422?"The repository changed. Refresh its status before syncing again.":"GitHub could not finish this request. Your saved website is unchanged.",response.status===429?429:409);
-  return response.status===204?null:await response.json() as T;
+  return githubClient(token)<T>(path,method,body,allow404);
 }
+// One renewal per user per server instance; other instances are serialized by the
+// compare-and-swap in activeGitHubToken because GitHub refresh tokens are single-use.
+const renewals=new Map<string,Promise<ActiveGitHubToken>>();
 export async function githubConnection(userId:string) {
-  githubConfig();
-  const {data,error}=await billingDatabase().from("github_connections").select("*").eq("user_id",userId).maybeSingle();
-  databaseError(error);
-  if(!data||Date.parse(data.expires_at)<Date.now()+60_000)throw new RequestError("GITHUB_RECONNECT","Connect GitHub to choose a repository. Connections expire after eight hours; reconnect to continue syncing.",401);
-  const token=openToken(data.token_ciphertext,userId);
+  const config=githubConfig();
+  const {token,githubUserId,login}=await activeGitHubToken(userId,{db:billingDatabase() as unknown as ConnectionDatabase,config,seal:value=>sealToken(value,userId),open:value=>openToken(value,userId),dbError:databaseError,renewals});
   const identity=await githubRequest<{id:number}>(token,"/user");
-  if(identity?.id!==data.github_user_id)throw new RequestError("GITHUB_IDENTITY","Reconnect the correct GitHub account.",403);
-  return {token,login:data.login as string};
+  if(identity?.id!==githubUserId)throw new RequestError("GITHUB_IDENTITY","Reconnect the correct GitHub account.",403);
+  return {token,login};
 }
 export type GitHubRepository={id:number;full_name:string;private:boolean;archived:boolean;disabled:boolean;permissions?:{push?:boolean};default_branch:string};
 export async function githubRepositories(token:string) {

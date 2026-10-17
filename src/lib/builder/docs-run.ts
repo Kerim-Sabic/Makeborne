@@ -16,6 +16,7 @@ import { projectDocument, documentAssetIds } from "../documents/project";
 import { wordCount } from "../documents/book-markup";
 import { runDocumentBuilder, type DocBuilderEvent, type DocBuilderRun } from "./docs-agent";
 import { documentStyleDirection } from "./docs-style";
+import { documentBrandBlock, type BrandKit } from "../brand/kit";
 
 export type DocumentBuildInput = {
   client: SupabaseClient;
@@ -29,6 +30,8 @@ export type DocumentBuildInput = {
   versions: ArtifactVersion[];
   message: string;
   effort: EffortLevel;
+  /** The project's brand kit, if it has one. */
+  brand?: BrandKit | null;
   attachments: BetaContentBlockParam[];
   maxDuration: number;
   /** Injected providers (tests). */
@@ -38,7 +41,7 @@ export type DocumentBuildInput = {
 };
 
 /** Model-facing context: brief, style, history, and the current document. */
-export function documentContext(input: Pick<DocumentBuildInput, "artifact" | "project" | "current" | "versions">, editor: DocumentEditor, fresh: boolean) {
+export function documentContext(input: Pick<DocumentBuildInput, "artifact" | "project" | "current" | "versions" | "brand">, editor: DocumentEditor, fresh: boolean) {
   const { artifact, project, current, versions } = input;
   const label = artifact.kind === "book" ? "book" : "presentation";
   const outline = fresh ? current.content.sections.map(section => [section.title, ...section.blocks.map(block => block.text)].filter(Boolean).join("\n")).join("\n\n").trim().slice(0, 20_000) : "";
@@ -52,6 +55,7 @@ export function documentContext(input: Pick<DocumentBuildInput, "artifact" | "pr
     `Brief: ${project.brief || "(none)"}`,
     project.audience ? `Audience: ${project.audience}` : "", project.purpose ? `Purpose: ${project.purpose}` : "",
     `Visual direction: ${documentStyleDirection(artifact.kind, project.styleId, current.style)}`,
+    input.brand ? documentBrandBlock(input.brand, artifact.kind === "book" ? "book" : "presentation") : "",
     outline && outline !== artifact.title ? `Existing outline content to use:\n${outline}` : "",
     history ? `Recent revisions:\n${history}` : "",
     "</project>",

@@ -1,17 +1,66 @@
-import type { FontPairing, Theme } from "./schema";
+import type { FontPairing, Motif, Theme } from "./schema";
+import type { FaceId } from "./fonts";
 
-/** Font pairings built only from faces installed with Windows/macOS/Office, so
- * the preview, the printed PDF and the editable PPTX all use the same type. */
-export const FONTS: Record<FontPairing, { heading: string; body: string; pptxHeading: string; pptxBody: string; headingWeight: number; headingTracking: string; width: number; label: string }> = {
-  editorial: { heading: 'Georgia, "Times New Roman", serif', body: '"Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Georgia", pptxBody: "Segoe UI", headingWeight: 400, headingTracking: "-0.02em", width: 0.52, label: "Georgia + Segoe UI" },
-  modern: { heading: '"Segoe UI", "Helvetica Neue", Arial, sans-serif', body: '"Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Segoe UI Semibold", pptxBody: "Segoe UI", headingWeight: 600, headingTracking: "-0.025em", width: 0.53, label: "Segoe UI" },
-  geometric: { heading: '"Century Gothic", "Avenir Next", Futura, sans-serif', body: '"Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Century Gothic", pptxBody: "Segoe UI", headingWeight: 700, headingTracking: "-0.02em", width: 0.6, label: "Century Gothic + Segoe UI" },
-  classic: { heading: '"Palatino Linotype", Palatino, "Book Antiqua", serif', body: '"Palatino Linotype", Palatino, "Book Antiqua", serif', pptxHeading: "Palatino Linotype", pptxBody: "Palatino Linotype", headingWeight: 400, headingTracking: "-0.01em", width: 0.52, label: "Palatino" },
-  garamond: { heading: 'Garamond, "EB Garamond", "Adobe Garamond Pro", Georgia, serif', body: 'Garamond, "EB Garamond", "Adobe Garamond Pro", Georgia, serif', pptxHeading: "Garamond", pptxBody: "Garamond", headingWeight: 400, headingTracking: "-0.01em", width: 0.47, label: "Garamond" },
-  grotesk: { heading: '"Franklin Gothic Medium", "Franklin Gothic", "Arial Narrow", Arial, sans-serif', body: 'Arial, "Helvetica Neue", sans-serif', pptxHeading: "Franklin Gothic Medium", pptxBody: "Arial", headingWeight: 400, headingTracking: "-0.01em", width: 0.5, label: "Franklin Gothic + Arial" },
-  humanist: { heading: '"Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif', body: 'Verdana, "Segoe UI", sans-serif', pptxHeading: "Trebuchet MS", pptxBody: "Verdana", headingWeight: 700, headingTracking: "-0.015em", width: 0.58, label: "Trebuchet + Verdana" },
-  condensed: { heading: 'Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif', body: '"Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Bahnschrift", pptxBody: "Segoe UI", headingWeight: 600, headingTracking: "-0.01em", width: 0.48, label: "Bahnschrift + Segoe UI" },
+export type FontPairingSpec = {
+  /** CSS stacks for the preview and PDF. */
+  heading: string; body: string;
+  /** Office faces written into the editable PPTX (PowerPoint cannot embed fonts). */
+  pptxHeading: string; pptxBody: string;
+  /** Whether a heading at the pairing's own weight is bold in PPTX; omitted keeps the original rule. */
+  pptxHeadingBold?: boolean;
+  headingWeight: number; headingTracking: string;
+  /** Conservative average glyph advance (em) for fitting: the wider of the web and Office faces, plus margin. */
+  width: number; bodyWidth: number;
+  /** Bold ÷ regular advance, the larger of the web and Office faces (Georgia Bold runs 17% wider). Default 1.05. */
+  headingBold?: number; bodyBold?: number;
+  /** Display faces that run narrow may be set larger. */
+  scale?: number;
+  /** Average advance (em) of an UPPERCASE heading line: the wider of the web and Office faces. Uppercase display type is fitted with it. */
+  caps: number;
+  /** CSS font-stretch for the heading (the poster pairing uses Archivo's condensed cut). */
+  headingStretch?: string;
+  /** Open-licensed faces embedded with @font-face; legacy system pairings use them only where the Office face is missing (e.g. the serverless PDF printer). */
+  faces: FaceId[];
+  label: string; voice: string;
 };
+
+/** The first eight pairings are built on faces installed with Windows/macOS/
+ * Office; each now names an open-licensed fallback right after its Office face,
+ * so a machine without that face (the serverless PDF printer has only Open
+ * Sans) gets a close match instead of a generic substitute. The newer pairings
+ * lead with embedded faces in the preview and PDF and map to Office faces in
+ * the PPTX. Glyph-width factors are measured in Chromium (see
+ * scripts/render-document-quality.cjs) and padded ~19%. */
+export const FONTS: Record<FontPairing, FontPairingSpec> = {
+  editorial: { heading: 'Georgia, Newsreader, "Times New Roman", serif', body: '"Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif', pptxHeading: "Georgia", pptxBody: "Segoe UI", headingWeight: 400, headingTracking: "-0.02em", width: 0.52, bodyWidth: 0.52, headingBold: 1.17, bodyBold: 1.07, caps: 0.594, faces: ["newsreader", "inter"], label: "Georgia + Segoe UI", voice: "assured editorial serif with a clean sans; consulting, proposals, culture" },
+  modern: { heading: '"Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif', body: '"Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif', pptxHeading: "Segoe UI Semibold", pptxBody: "Segoe UI", headingWeight: 600, headingTracking: "-0.025em", width: 0.53, bodyWidth: 0.52, headingBold: 1.07, bodyBold: 1.07, caps: 0.569, faces: ["inter"], label: "Segoe UI", voice: "neutral corporate sans; internal updates and operations" },
+  geometric: { heading: '"Century Gothic", Outfit, "Avenir Next", Futura, sans-serif', body: '"Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif', pptxHeading: "Century Gothic", pptxBody: "Segoe UI", headingWeight: 700, headingTracking: "-0.02em", width: 0.6, bodyWidth: 0.52, headingBold: 1.05, bodyBold: 1.07, caps: 0.574, faces: ["outfit", "inter"], label: "Century Gothic + Segoe UI", voice: "round geometric; consumer, education, lifestyle" },
+  classic: { heading: '"Palatino Linotype", Palatino, Newsreader, "Book Antiqua", serif', body: '"Palatino Linotype", Palatino, Newsreader, "Book Antiqua", serif', pptxHeading: "Palatino Linotype", pptxBody: "Palatino Linotype", headingWeight: 400, headingTracking: "-0.01em", width: 0.52, bodyWidth: 0.5, headingBold: 1.05, bodyBold: 1.05, caps: 0.599, faces: ["newsreader"], label: "Palatino", voice: "traditional book serif; history, heritage, memoir" },
+  garamond: { heading: 'Garamond, "EB Garamond", "Adobe Garamond Pro", Cormorant, Georgia, serif', body: 'Garamond, "EB Garamond", "Adobe Garamond Pro", Newsreader, Georgia, serif', pptxHeading: "Garamond", pptxBody: "Garamond", headingWeight: 400, headingTracking: "-0.01em", width: 0.47, bodyWidth: 0.46, headingBold: 1.1, bodyBold: 1.1, caps: 0.573, faces: ["cormorant", "newsreader"], label: "Garamond", voice: "literary book face; fiction, essays, poetry" },
+  grotesk: { heading: '"Franklin Gothic Medium", "Franklin Gothic", Archivo, "Arial Narrow", Arial, sans-serif', body: 'Arial, Inter, "Helvetica Neue", sans-serif', pptxHeading: "Franklin Gothic Medium", pptxBody: "Arial", headingWeight: 400, headingTracking: "-0.01em", width: 0.5, bodyWidth: 0.5, headingBold: 1.08, bodyBold: 1.08, caps: 0.588, faces: ["archivo", "inter"], label: "Franklin Gothic + Arial", voice: "newsy American grotesk; reports, journalism, public sector" },
+  humanist: { heading: '"Trebuchet MS", "DM Sans", "Gill Sans", "Segoe UI", sans-serif', body: 'Verdana, "DM Sans", "Segoe UI", sans-serif', pptxHeading: "Trebuchet MS", pptxBody: "Verdana", headingWeight: 700, headingTracking: "-0.015em", width: 0.58, bodyWidth: 0.58, headingBold: 1.06, bodyBold: 1.12, caps: 0.57, faces: ["dm-sans"], label: "Trebuchet + Verdana", voice: "friendly and very legible; training, community, accessibility" },
+  condensed: { heading: 'Bahnschrift, "DIN Alternate", Archivo, "Arial Narrow", sans-serif', body: '"Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif', pptxHeading: "Bahnschrift", pptxBody: "Segoe UI", headingWeight: 600, headingTracking: "-0.01em", width: 0.48, bodyWidth: 0.52, headingBold: 1.08, bodyBold: 1.07, caps: 0.592, faces: ["archivo", "inter"], label: "Bahnschrift + Segoe UI", voice: "industrial DIN; engineering, logistics, sport" },
+  fraunces: { heading: 'Fraunces, Georgia, serif', body: 'Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Georgia", pptxBody: "Segoe UI", pptxHeadingBold: false, headingWeight: 600, headingTracking: "-0.02em", width: 0.48, bodyWidth: 0.48, headingBold: 1.17, bodyBold: 1.07, caps: 0.594, faces: ["fraunces", "inter"], label: "Fraunces + Inter", voice: "warm soft serif with a crisp sans; hospitality, food, wellness, consumer brands, guides" },
+  instrument: { heading: '"Instrument Serif", Georgia, serif', body: 'Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Georgia", pptxBody: "Segoe UI", pptxHeadingBold: false, headingWeight: 400, headingTracking: "-0.01em", width: 0.48, bodyWidth: 0.48, scale: 1.2, headingBold: 1.17, bodyBold: 1.07, caps: 0.594, faces: ["instrument-serif", "inter"], label: "Instrument Serif + Inter", voice: "tall high-contrast display serif; architecture, fashion, studios, premium SaaS" },
+  playfair: { heading: '"Playfair Display", Georgia, serif', body: '"Plus Jakarta Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Georgia", pptxBody: "Segoe UI", pptxHeadingBold: false, headingWeight: 600, headingTracking: "-0.015em", width: 0.5, bodyWidth: 0.51, headingBold: 1.17, bodyBold: 1.07, caps: 0.594, faces: ["playfair-display", "plus-jakarta-sans"], label: "Playfair Display + Plus Jakarta Sans", voice: "Didone luxury; hotels, weddings, fashion, fine dining" },
+  newsreader: { heading: 'Newsreader, Georgia, serif', body: 'Newsreader, Georgia, serif', pptxHeading: "Georgia", pptxBody: "Georgia", pptxHeadingBold: false, headingWeight: 400, headingTracking: "-0.015em", width: 0.48, bodyWidth: 0.48, headingBold: 1.17, bodyBold: 1.17, caps: 0.594, faces: ["newsreader"], label: "Newsreader", voice: "editorial text serif; research, policy, long-form reports and nonfiction books" },
+  "space-grotesk": { heading: '"Space Grotesk", "Segoe UI", sans-serif', body: 'Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Segoe UI Semibold", pptxBody: "Segoe UI", headingWeight: 600, headingTracking: "-0.02em", width: 0.53, bodyWidth: 0.48, headingBold: 1.07, bodyBold: 1.07, caps: 0.55, faces: ["space-grotesk", "inter"], label: "Space Grotesk + Inter", voice: "quirky techno-grotesk; AI, creative technology, agencies, events" },
+  bricolage: { heading: '"Bricolage Grotesque", "Franklin Gothic Medium", sans-serif', body: '"DM Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Franklin Gothic Medium", pptxBody: "Segoe UI", pptxHeadingBold: false, headingWeight: 700, headingTracking: "-0.025em", width: 0.48, bodyWidth: 0.51, headingBold: 1.05, bodyBold: 1.07, caps: 0.529, faces: ["bricolage-grotesque", "dm-sans"], label: "Bricolage Grotesque + DM Sans", voice: "characterful ink-trap grotesk; studios, food and drink, culture, indie brands" },
+  sora: { heading: 'Sora, "Century Gothic", sans-serif', body: 'Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Century Gothic", pptxBody: "Segoe UI", pptxHeadingBold: true, headingWeight: 600, headingTracking: "-0.03em", width: 0.56, bodyWidth: 0.48, headingBold: 1.05, bodyBold: 1.07, caps: 0.612, faces: ["sora", "inter"], label: "Sora + Inter", voice: "wide future-facing geometric; AI products, mobility, climate tech" },
+  archivo: { heading: 'Archivo, Impact, "Arial Narrow", sans-serif', body: 'Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Impact", pptxBody: "Segoe UI", pptxHeadingBold: false, headingWeight: 700, headingTracking: "-0.005em", width: 0.48, bodyWidth: 0.48, headingBold: 1, bodyBold: 1.07, caps: 0.44, headingStretch: "62%", faces: ["archivo", "inter"], label: "Archivo Condensed + Inter", voice: "compressed poster grotesk set in capitals; bold launches, sport, culture, campaigns (PPTX: Impact)" },
+  geist: { heading: 'Geist, "Segoe UI", sans-serif', body: 'Geist, "Segoe UI", "Helvetica Neue", Arial, sans-serif', pptxHeading: "Segoe UI Semibold", pptxBody: "Segoe UI", headingWeight: 600, headingTracking: "-0.03em", width: 0.525, bodyWidth: 0.5, headingBold: 1.07, bodyBold: 1.07, caps: 0.575, faces: ["geist"], label: "Geist", voice: "precise Swiss-technical sans; developer tools, B2B SaaS, data, fintech" },
+};
+
+/** Decorative system for covers, dividers and page furniture. Omitted = "orbit",
+ * the original look, so saved documents render exactly as before. */
+export const MOTIF_NOTES: Record<Motif, string> = {
+  orbit: "soft circles and rings (the original look)",
+  grid: "Swiss: hairline rules, numbered furniture, oversized flush-left type",
+  band: "bold color bands and blocks; confident, poster-like",
+  frame: "inset hairline frame and centered, formal composition; editorial or luxury",
+  quiet: "no decoration; large type and generous space carry the design",
+};
+export const motifOf = (theme: Theme): Motif => theme.motif ?? "orbit";
 
 const channel = (value: number) => { const v = value / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
 export function luminance(hex: string) {

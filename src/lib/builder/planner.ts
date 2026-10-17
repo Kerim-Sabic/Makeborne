@@ -7,6 +7,7 @@ import { PROPOSE_PLAN_INPUT_SCHEMA, parsePlan, planToBrief, type SitePlan } from
 import { aiCostUsdPerCredit } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
 import { SpendError, type RunSpend } from "../ai/run-spend";
+import { FONT_CATALOG } from "./fonts";
 
 /** Smallest output allowance worth a planning call (a complete plan needs room). */
 export const MIN_PLAN_TOKENS = 4_096;
@@ -39,7 +40,8 @@ How to plan:
 - Investigate first: read the brief, the project details, attachments and the current files (when there are any). For an existing site, ground the plan in what is actually there: name real components and files, keep what works, change what the user asked for.
 - Be decisive. Pick one direction and commit to it. Do not offer alternatives or menus of options. Every field should read like a confident creative director's call, specific to this business. Generic phrases ("modern and clean", "user-friendly") are not allowed.
 - Sitemap: the smallest set of pages that achieves the goal. A one-page site is a single page "/" with its sections in order. Each section gets a clear purpose and concrete key content (headline idea, the items it lists, the proof it shows, the call to action).
-- Design direction: a named concept; a type pairing (display + body, with family names and a system fallback; the builder loads fonts according to its own toolchain rules); a restrained palette of 3 to 8 colors with six-digit hex values and roles, with AA contrast between text and background colors; 2 to 5 specific layout ideas; the imagery approach (what photographs or illustrations to create, in what style); one signature interaction.
+- Design direction: a named concept drawn from this business (place, craft, materials, people); a type pairing (display + body, with family names and a system fallback) chosen only from the builder's font library: ${FONT_CATALOG.map(font => font.family).join(", ")}; a restrained palette of 3 to 8 colors with six-digit hex values and roles, derived from the subject's materials or place, with AA contrast between text and background colors; 2 to 5 specific layout ideas, starting with the first-screen composition; the imagery approach (what photographs or illustrations to create, in what style); one signature interaction that respects reduced motion.
+- Avoid the generic default look unless the client asked for it: a cream ground with a serif headline and one coloured italic word, Inter body text, a dark pill button, a centred hero over three identical cards. Grounds can be dark, saturated, cool, mid-tone or photographic.
 - Edits to an existing site: set kind to "edit" and list each concrete change with the files likely touched (paths from current_files). Keep the sitemap and design direction describing the site as it will be after the change.
 - Open questions: at most 3, only when the answer would materially change the build. Everything else becomes an explicit assumption. Never ask about things you can decide well yourself.
 - Honesty: never invent testimonials, statistics, awards, prices, addresses or client names. Plan clearly marked placeholders for real details the client must supply.

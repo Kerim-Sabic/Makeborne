@@ -10,6 +10,9 @@ import { ProjectFiles } from "@/lib/builder/files";
 import { blankVersion } from "@/lib/builder/blank-version";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
+import { BRAND_LOGO_URL, websiteBrandBlock } from "@/lib/brand/kit";
+import { projectBrandKit } from "@/lib/brand/server";
+import { briefPhotos } from "@/lib/leads/redesign";
 import { PLAN_CEILING_CREDITS, SitePlanSchema, StoredPlanSchema, estimatePlanCredits, recommendedEffort, type StoredPlan } from "@/lib/builder/plan";
 import { planStreamResponse } from "@/lib/builder/plan-run";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
@@ -151,6 +154,7 @@ export async function POST(request: Request) {
     if (body.expectedRevision !== (existing?.revision ?? 0)) throw new RequestError("PLAN_REVISION_CONFLICT", "The plan changed. Reload it before requesting a new plan.", 409);
 
     const files = new ProjectFiles(current.content.websiteSource);
+    const brand = await projectBrandKit(client, body.workspaceId, project);
     const snapshot = files.files.size ? files.snapshot() : "";
     const outline = current.content.websiteSource ? "" : current.content.sections.map(section => [section.title, ...section.blocks.map(block => block.text)].filter(Boolean).join("\n")).join("\n\n").slice(0, 12_000);
     const history = versions.filter(version => version.number <= artifact.current_version).reverse().map(version => `v${version.number}: ${version.changeSummary}`).join("\n");
@@ -159,6 +163,8 @@ export async function POST(request: Request) {
       `Brief: ${project.brief || "(none)"}`,
       project.audience ? `Audience: ${project.audience}` : "", project.purpose ? `Purpose: ${project.purpose}` : "",
       `Visual direction: ${styleDirection(project.styleId, current.style) || "No preset — choose the best direction for this business."}`,
+      brand ? websiteBrandBlock(brand, brand.logo ? { url: BRAND_LOGO_URL, width: 0, height: 0 } : null) : "",
+      briefPhotos(project.brief).length ? `The client's own photos listed in the brief will be uploaded as /images/photo-1.webp to /images/photo-${briefPhotos(project.brief).length}.webp when the site is built; plan the imagery around them.` : "",
       outline ? `Existing outline content:\n${outline}` : "",
       history ? `Recent revisions:\n${history}` : "",
       operation.originalMessage ? `Original authorized request: ${operation.originalMessage}` : "",

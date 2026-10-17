@@ -1,0 +1,25 @@
+/* New website enquiries panel on the Clients page. */
+.el { display:grid; gap:12px; margin:0 0 18px; padding:16px; border:1px solid #dfe6dc; border-radius:14px; background:linear-gradient(180deg, #f6faf4, #fff 60%); }
+.el-head { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.el-head > div { flex:1 1 220px; min-width:0; }
+.el-head h3 { margin:0; font-size:15px; }
+.el-head p { margin:2px 0 0; font-size:12.5px; color:#5f6b5c; }
+.el-head .button, .el-actions .button { display:inline-flex; align-items:center; gap:6px; }
+.el-icon { display:grid; place-items:center; width:34px; height:34px; border-radius:10px; background:#e3efdd; color:#2f6b3a; flex:none; }
+.el-error { margin:0; padding:8px 10px; border-radius:8px; background:#fff4f2; color:#9a2f2a; font-size:12.5px; }
+.el-list { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
+.el-item { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:4px 14px; padding:12px; border:1px solid #e6ebe4; border-radius:11px; background:#fff; }
+.el-who { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; min-width:0; }
+.el-who strong { font-size:13.5px; }
+.el-who span { font-size:12.5px; color:#5f6b5c; overflow-wrap:anywhere; }
+.el-message { grid-column:1; margin:0; font-size:13px; line-height:1.5; color:#2c3329; overflow-wrap:anywhere; }
+.el-meta { grid-column:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:11.5px; color:#6f7a6c; }
+.el-known { display:inline-flex; align-items:center; gap:3px; margin-left:4px; padding:1px 6px; border-radius:6px; background:#e3efdd; color:#2f6b3a; font-weight:600; }
+.el-actions { grid-column:2; grid-row:1 / span 3; display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:6px; }
+.el-dismiss { display:inline-flex; align-items:center; gap:4px; padding:3px 4px; border:0; background:none; color:#6f7a6c; font:inherit; font-size:12px; cursor:pointer; }
+.el-dismiss:hover { color:#2c3329; text-decoration:underline; }
+.el-dismiss:focus-visible { outline:2px solid #2f6b3a; outline-offset:2px; border-radius:4px; }
+.el-spin { animation:el-spin 1s linear infinite; }
+@keyframes el-spin { to { transform:rotate(360deg); } }
+@media (max-width:640px) { .el-item { grid-template-columns:1fr; } .el-actions { grid-column:1; grid-row:auto; flex-direction:row; align-items:center; justify-content:flex-start; } }
+@media (prefers-reduced-motion: reduce) { .el-spin { animation:none; } }

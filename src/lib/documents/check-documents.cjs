@@ -88,7 +88,9 @@ const invalid = (editor, name, input, pattern) => assert.throws(() => editor.app
     assert.ok(editor.problems().some(problem => problem.includes("roof")));
     editor.addAsset({ name: "roof", id: "00000000-0000-4000-8000-000000000001", aspect: "landscape", alt: "Roof", prompt: "" });
     assert.deepEqual(editor.problems(), []);
-    editor.apply("write_slide", { slide: slide({ id: "long", layout: "stats", stats: Array.from({ length: 4 }, () => ({ value: "1,234,567", label: "A label that is far too long for a narrow statistic column" })) }) });
+    // Art directions fall back across compositions until one fits, so the overflow must defeat every table composition.
+    const cell = "Far more words than any slide can show in one table cell";
+    editor.apply("write_slide", { slide: slide({ id: "long", layout: "table", table: { columns: ["One", "Two", "Three", "Four", "Five", "Six"], rows: Array.from({ length: 8 }, () => Array.from({ length: 6 }, () => cell)) } }) });
     const first = editor.problems();
     assert.ok(first.some(problem => /Shorten/.test(problem)), "fit warning should block once");
     assert.deepEqual(editor.problems(), [], "second finish accepts heuristic fit warnings");

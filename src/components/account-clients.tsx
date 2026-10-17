@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, Check, Columns3, Download, List, Mail, Plus, RefreshCw, Search, Sparkles, Upload, Users } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Columns3, Download, List, Mail, Plus, RefreshCw, Search, Sparkles, Upload, Users, Wand2 } from "lucide-react";
 import MailCenter from "./mail/mail-center";
 import ClientEmail from "./mail/client-email";
 import BulkEnroll from "./mail/bulk-enroll";
@@ -12,6 +12,10 @@ import { compactCount, countValue, formatMoney, scoreLead, type Lead } from "@/l
 import { mapImport, parseCsv, toCsv, type ImportedClient } from "@/lib/client-csv";
 import ClientBoard from "./client-board";
 import { CLIENTS_ACTION_EVENT, refreshOnboarding, takeClientsAction, type ClientsRequest, type LeadFinderSeed } from "./onboarding/signals";
+import EnquiryLeads from "./enquiry-leads";
+import BrandKits from "./brand-kits";
+import LeadRedesign from "./lead-redesign";
+import ClientPortalPanel from "./client-portal-panel";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -32,7 +36,7 @@ import "@/app/account-clients.css";
 const ClientDetails = dynamic(() => import("./cloud-studio").then(module => module.CloudClientDetails), { loading: () => <DetailSkeleton /> });
 type Page = { nextOffset: number | null; total: number };
 type Snapshot = CloudWorkspaceSnapshot & { pagination: Record<"clients" | "projects" | "artifacts", Page> };
-type ClientView = "outreach" | "email" | "details" | "projects" | "reviews";
+type ClientView = "outreach" | "email" | "details" | "brand" | "projects" | "reviews";
 type Layout = "list" | "board" | "email";
 const DEVICE_PREFERENCE = "makeborne.clients.device";
 const LAYOUT_KEY = "makeborne.clients.layout";
@@ -40,7 +44,7 @@ const readDevicePreference = () => { try { return typeof window !== "undefined" 
 const writeDevicePreference = (value: boolean) => { try { window.sessionStorage.setItem(DEVICE_PREFERENCE, value ? "1" : "0"); } catch { /* private mode */ } };
 
 /** Account changes unmount every client draft and invalidate outstanding reads. */
-type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient) => void };
+type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient, prefill?: { brief: string; title: string }) => void };
 type ClientNavigation = { target: AccountClientRoute | null; navigate: (route: AccountClientRoute | null) => void };
 export default function AccountClients({ deviceClients, target, navigate, onCreate, onOpenProject, initialDevice = false }: ClientNavigation & ClientCreation & { deviceClients: ReactNode; initialDevice?: boolean }) {
   const [account, setAccount] = useState<string | null>(null);
@@ -254,6 +258,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const listed = clientId ? directory.data?.clients.find(item => item.id === clientId) : undefined;
   const full = clientId ? loaded[clientId] : undefined;
   const opened = full ?? listed ?? null;
+  const [redesigning, setRedesigning] = useState(false);
   const openError = clientId && detailError?.id === clientId ? detailError.message : "";
 
   async function refresh() {
@@ -392,7 +397,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     setImporting(null); setRefreshKey(key => key + 1);
     setMessage(failed ? `Imported ${created} client${created === 1 ? "" : "s"}; ${failed} could not be saved. Check them and import those rows again.` : `Imported ${created} client${created === 1 ? "" : "s"}.`);
   }
-  const tabs: { id: ClientView; label: string }[] = [{ id: "outreach", label: "Outreach & activity" }, { id: "email", label: "Email" }, { id: "details", label: "Contact details" }, { id: "projects", label: "Projects" }, { id: "reviews", label: "Client reviews" }];
+  const tabs: { id: ClientView; label: string }[] = [{ id: "outreach", label: "Outreach & activity" }, { id: "email", label: "Email" }, { id: "details", label: "Contact details" }, { id: "brand", label: "Brand & client access" }, { id: "projects", label: "Projects" }, { id: "reviews", label: "Client reviews" }];
 
   // The lead finder opens from the list header, the command palette, the checklist, or "Find more like this" on a client.
   const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }} onAdded={(count, tag) => {
@@ -403,7 +408,11 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   if (clientId) return <section className="ac-workspace" aria-label="Account client" ref={root}>
     <button className="button ghost small ac-back" disabled={saving} onClick={backToList}><ArrowLeft size={15} /> All clients</button>
     <header className="ac-heading"><div><span className="eyebrow">CLIENT</span><h1>{opened?.name ?? "Client"}</h1><p>{opened ? [opened.company, opened.email].filter(Boolean).join(" · ") || "Contact details, conversations, and the work you create together." : "Opening client…"}</p></div>
-      {opened && snapshot && canEdit && <button className="button primary" disabled={saving} onClick={() => onCreate(snapshot.workspace.id, opened)}><Plus size={16} /> Create for this client</button>}</header>
+      {opened && snapshot && canEdit && <div className="ac-heading-actions">
+        {opened.website && <button className="button" disabled={saving} onClick={() => setRedesigning(true)}><Wand2 size={16} /> Redesign their website</button>}
+        <button className="button primary" disabled={saving} onClick={() => onCreate(snapshot.workspace.id, opened)}><Plus size={16} /> Create for this client</button></div>}</header>
+    {redesigning && opened && snapshot && <LeadRedesign accountId={accountId} workspaceId={snapshot.workspace.id} client={{ id: opened.id, name: opened.company || opened.name, website: opened.website }}
+      onClose={() => setRedesigning(false)} onCreate={(brief, title) => { setRedesigning(false); onCreate(snapshot.workspace.id, opened, { brief, title }); }} />}
     {message && <p role="status">{message}</p>}
     {openError && <div className="ac-notice" role="alert"><p>{openError}</p><button className="button secondary small" onClick={backToList}>Back to clients</button></div>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />
@@ -418,6 +427,8 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
           try { const detail = await api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`); saved(detail.client); setMessage("Client details saved to your account."); }
           catch { setMessage("Client details saved. Refresh to see the latest version."); }
         }} />}
+        {view === "brand" && <BrandKits key={`brand:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} />}
+        {view === "brand" && <ClientPortalPanel key={`portal:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.company || full.name} contactName={full.name} clientEmail={full.email} canEdit={canEdit} />}
         {view === "reviews" && <ClientReviewFeed key={`${snapshot.workspace.id}:${full.id}:reviews`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} canEdit={canEdit} onOpenProject={onOpenProject} />}
         {view === "email" && <ClientEmail key={full.id} accountId={accountId} workspaceId={snapshot.workspace.id} client={{ id: full.id, name: full.name, email: full.email }} canEdit={canEdit}
           onSent={() => void api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`).then(result => { saved(result.client); setOutreachRevision(value => value + 1); }).catch(() => undefined)}
@@ -474,6 +485,8 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     {message && <p role="status" className="ac-message">{message}</p>}
     {directory.error && <p role="alert">{directory.error}</p>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />
+    {snapshot && snapshot.workspace.role === "owner" && layout !== "email" && !adding && !importing && <EnquiryLeads key={`${accountId}:${snapshot.workspace.id}:${refreshKey}`} accountId={accountId} workspaceId={snapshot.workspace.id}
+      onAdded={text => { setMessage(text); setRefreshKey(key => key + 1); refreshOnboarding(); }} />}
     {importing && <section className="ac-import" aria-labelledby="ac-import-title">
       <h2 id="ac-import-title">Import {importing.clients.length} client{importing.clients.length === 1 ? "" : "s"}</h2>
       <p>From <strong>{importing.file}</strong>. Columns found: {Object.entries(importing.columns).map(([field, column]) => `${field} ← “${column}”`).join(", ") || "none"}.</p>

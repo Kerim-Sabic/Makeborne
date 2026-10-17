@@ -6,6 +6,7 @@ import {
 } from "../projects/website-source";
 import { FONT_IMPORT, FONTS_BY_ID, unavailableFonts } from "./fonts";
 import { LUCIDE, lucideImports, unknownLucideIcons } from "./icons";
+import { contentProblems, MANIFEST_PATH } from "../portal/content-model";
 
 export type SourceAsset = WebsiteProjectSource["assets"][number];
 export type DesignDirection = NonNullable<WebsiteProjectSource["designDirection"]>;
@@ -132,6 +133,9 @@ export class ProjectFiles {
     }
     const missing = unknownLucideIcons(icons);
     if (missing.length) issues.push(`These are not Lucide icon names: ${missing.join(", ")}. Pick existing Lucide icons (lucide-react has no brand logos; draw those as inline SVG or use text links).`);
+    // Client-editable content: the manifest, every data file and its import must be valid, and editable text never reaches raw HTML.
+    issues.push(...contentProblems(this.files, assetPaths, this.routes.map(route => route.path)).map(problem => problem.message));
+    if (this.files.has(MANIFEST_PATH)) for (const [path, content] of this.files) if (/dangerouslySetInnerHTML/.test(content)) issues.push(`${path} uses dangerouslySetInnerHTML. Sites with client-editable content render text only as React text (rich text through a small block renderer).`);
     return issues.slice(0, 20);
   }
 

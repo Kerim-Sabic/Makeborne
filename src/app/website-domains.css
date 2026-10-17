@@ -1,0 +1,46 @@
+/* Custom domains panel in the Publish view. */
+.wd { display:grid; gap:12px; }
+.wd h3 { display:flex; align-items:center; gap:8px; }
+.wd-label { font-size:12px; font-weight:600; color:#4b3a59; }
+.wd-add { display:grid; gap:6px; }
+.wd-add-row { display:flex; gap:8px; }
+.wd-add-row input { flex:1; min-width:0; padding:8px 10px; border:1px solid #e3dde9; border-radius:9px; font:inherit; font-size:13.5px; }
+.wd-add-row input:focus-visible { outline:2px solid #7d5fb0; outline-offset:1px; }
+.wd-add-row .button { display:inline-flex; align-items:center; gap:6px; }
+.wd-add small, .wd-actions small { color:#8a7f93; font-size:11.5px; }
+.wd-note { margin:0; padding:8px 10px; border-radius:8px; background:#f6f3f9; color:#5b4d67; font-size:12.5px; }
+.wd-error { margin:0; padding:8px 10px; border-radius:8px; background:#fff4f2; color:#9a2f2a; font-size:12.5px; }
+.wd-domain { display:grid; gap:8px; padding:12px; border:1px solid #ebe6f0; border-radius:12px; background:#fff; min-width:0; }
+.wd-domain[data-status="active"] { border-color:#cfe6d6; background:#f8fcf9; }
+.wd-domain-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.wd-domain-head strong { font-size:14px; overflow-wrap:anywhere; }
+.wd-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
+.wd-chip.is-pending { background:#fff6e5; color:#8a5a00; }
+.wd-chip.is-active { background:#e2f2e9; color:#1d6f46; }
+.wd-chip.is-failed { background:#fbe7e5; color:#9a2f2a; }
+.wd-open { display:inline-flex; align-items:center; gap:4px; margin-left:auto; font-size:12px; font-weight:600; color:#5b3f8c; }
+.wd-detail { margin:0; font-size:12.5px; color:#5b4d67; line-height:1.45; }
+.wd-records { display:grid; gap:0; border:1px solid #ece8f0; border-radius:10px; overflow:hidden; }
+.wd-row { display:grid; grid-template-columns:70px minmax(0, 1fr) minmax(0, 1.6fr); gap:10px; align-items:center; padding:8px 10px; border-top:1px solid #f1eef4; font-size:12.5px; }
+.wd-row-head { border-top:0; background:#faf9fb; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#8a7f93; }
+.wd-row code { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px; overflow-wrap:anywhere; }
+.wd-copyable { display:flex; align-items:center; gap:6px; min-width:0; }
+.wd-copyable button { flex:none; display:grid; place-items:center; width:24px; height:24px; padding:0; border:1px solid #e3dde9; border-radius:6px; background:#fff; color:#6f6478; cursor:pointer; }
+.wd-copyable button:focus-visible, .wd-link:focus-visible, .wd-danger:focus-visible { outline:2px solid #7d5fb0; outline-offset:1px; }
+.wd-purpose { margin:0; padding:8px 10px; border-top:1px solid #f1eef4; font-size:11.5px; color:#6f6478; background:#fcfbfd; }
+.wd-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.wd-actions .button { display:inline-flex; align-items:center; gap:6px; }
+.wd-link { display:inline-flex; align-items:center; gap:4px; padding:4px 2px; border:0; background:none; color:#6f6478; font:inherit; font-size:12px; font-weight:600; cursor:pointer; }
+.wd-remove { margin-left:auto; }
+.wd-confirm { display:inline-flex; flex-wrap:wrap; align-items:center; gap:8px; margin-left:auto; font-size:12px; }
+.wd-danger { padding:5px 10px; border:1px solid #e8c4c0; border-radius:8px; background:#fdf2f1; color:#9a2f2a; font:inherit; font-size:12px; font-weight:600; cursor:pointer; }
+.wd-help { font-size:12.5px; color:#4b3a59; }
+.wd-help summary { cursor:pointer; font-weight:600; }
+.wd-help dl { display:grid; gap:8px; margin:10px 0; }
+.wd-help dt { font-weight:700; }
+.wd-help dd { margin:2px 0 0; color:#5b4d67; line-height:1.45; }
+.wd-help p { margin:0; color:#6f6478; }
+.wd-spin { animation:wd-spin 1s linear infinite; }
+@keyframes wd-spin { to { transform:rotate(360deg); } }
+@media (max-width:560px) { .wd-row { grid-template-columns:1fr; gap:4px; } .wd-row-head { display:none; } .wd-add-row { flex-direction:column; } }
+@media (prefers-reduced-motion: reduce) { .wd-spin { animation:none; } }

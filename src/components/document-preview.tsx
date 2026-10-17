@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Loader2, Maximize2 } from "lucide-react";
-import type { DocumentSource } from "@/lib/documents/schema";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Play, X } from "lucide-react";
+import type { Deck, DocumentSource } from "@/lib/documents/schema";
 import { deckHtml } from "@/lib/documents/render-deck";
 import { bookHtml, chapterLabel } from "@/lib/documents/render-book";
 import { wordCount } from "@/lib/documents/book-markup";
@@ -20,6 +20,75 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(blob);
 });
 
+const NEXT_KEYS = new Set(["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"]);
+const PREVIOUS_KEYS = new Set(["ArrowLeft", "ArrowUp", "PageUp", "Backspace"]);
+
+/** Full-screen presenter for decks. The slides are the same script-free HTML in
+ * "present" mode; this host only toggles which slide is current, and CSS in the
+ * frame provides the transition and builds (instant under reduced motion). */
+function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<string, string>; onClose: () => void }) {
+  const root = useRef<HTMLDivElement>(null), frame = useRef<HTMLIFrameElement>(null), entered = useRef(false);
+  const [index, setIndex] = useState(0);
+  const total = deck.slides.length, current = Math.max(0, Math.min(index, total - 1));
+  const html = useMemo(() => deckHtml(deck, images, "present"), [deck, images]);
+  const go = useCallback((next: number) => setIndex(Math.max(0, Math.min(total - 1, next))), [total]);
+
+  const sync = useCallback(() => {
+    const page = frame.current?.contentDocument;
+    page?.querySelectorAll<HTMLElement>(".deck .slide").forEach((slide, i) => {
+      slide.classList.toggle("is-current", i === current);
+      slide.classList.toggle("is-past", i < current);
+      slide.setAttribute("aria-hidden", String(i !== current));
+    });
+  }, [current]);
+  useEffect(sync, [sync]);
+
+  const onKey = useCallback((event: KeyboardEvent) => {
+    if (NEXT_KEYS.has(event.key)) { event.preventDefault(); go(current + 1); }
+    else if (PREVIOUS_KEYS.has(event.key)) { event.preventDefault(); go(current - 1); }
+    else if (event.key === "Home") { event.preventDefault(); go(0); }
+    else if (event.key === "End") { event.preventDefault(); go(total - 1); }
+    else if (event.key === "Escape") onClose();
+  }, [current, go, onClose, total]);
+  const keyHandler = useRef(onKey);
+  useEffect(() => { keyHandler.current = onKey; }, [onKey]);
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => keyHandler.current(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
+
+  // Full screen when the browser allows it; leaving full screen ends the presentation.
+  useEffect(() => {
+    const element = root.current;
+    element?.focus();
+    void element?.requestFullscreen?.().then(() => { entered.current = true; }).catch(() => undefined);
+    const change = () => { if (entered.current && !document.fullscreenElement) onClose(); };
+    document.addEventListener("fullscreenchange", change);
+    return () => {
+      document.removeEventListener("fullscreenchange", change);
+      if (document.fullscreenElement === element) void document.exitFullscreen().catch(() => undefined);
+    };
+  }, [onClose]);
+
+  const onLoad = () => {
+    sync();
+    const view = frame.current?.contentWindow;
+    view?.addEventListener("keydown", event => keyHandler.current(event));
+    view?.document.addEventListener("click", () => keyHandler.current(new KeyboardEvent("keydown", { key: "ArrowRight" })));
+  };
+
+  return <div ref={root} className="dp-present" role="dialog" aria-modal="true" aria-label={`Presenting ${deck.title}`} tabIndex={-1}>
+    <iframe ref={frame} title={`Slide ${current + 1} of ${total}`} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={onLoad} />
+    <div className="dp-present-bar">
+      <button type="button" aria-label="Previous slide" disabled={current === 0} onClick={() => go(current - 1)}><ChevronLeft size={16} /></button>
+      <span aria-live="polite">{current + 1} / {total}</span>
+      <button type="button" aria-label="Next slide" disabled={current >= total - 1} onClick={() => go(current + 1)}><ChevronRight size={16} /></button>
+      <button type="button" aria-label="Exit presentation" onClick={onClose}><X size={15} /></button>
+    </div>
+  </div>;
+}
+
 /** Live preview for presentations and books. Renders the same HTML the PDF
  * printer uses, inside a script-free sandboxed frame. */
 export default function DocumentPreview({ document: doc, focus, scope, building, savedVersion, canExport }: {
@@ -35,6 +104,8 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
   const [html, setHtml] = useState("");
   const [exporting, setExporting] = useState<"pdf" | "pptx" | null>(null);
   const [message, setMessage] = useState("");
+  const [presenting, setPresenting] = useState(false);
+  const closePresenter = useCallback(() => setPresenting(false), []);
   const cache = useRef(new Map<string, string>());
   const scroll = useRef(0);
 
@@ -150,6 +221,7 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
           {exporting === "pdf" ? <Loader2 size={13} className="lb-spin" /> : <Download size={13} />}PDF</button>
         {doc.kind === "deck" && <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pptx")} title="Download an editable PowerPoint file">
           {exporting === "pptx" ? <Loader2 size={13} className="lb-spin" /> : <Download size={13} />}PPTX</button>}
+        {doc.kind === "deck" && doc.slides.length > 0 && <button type="button" aria-label="Present" title="Present: arrow keys move, Esc exits" onClick={() => setPresenting(true)}><Play size={15} /></button>}
         <button type="button" aria-label="Full screen preview" onClick={() => void frame.current?.requestFullscreen?.().catch(() => undefined)}><Maximize2 size={15} /></button>
       </div>
     </header>
@@ -157,5 +229,6 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
       {html ? <iframe ref={frame} title={doc.kind === "deck" ? "Presentation preview" : "Book preview"} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={onLoad} style={{ width: "100%" }} />
         : <div className="lp-empty">Preparing preview…</div>}
     </div>
+    {presenting && doc.kind === "deck" && doc.slides.length > 0 && <Presenter deck={doc} images={images} onClose={closePresenter} />}
   </section>;
 }

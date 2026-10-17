@@ -1,0 +1,19 @@
+/**
+ * Builder instructions for client-editable content. Added to the project
+ * context for websites that belong to a client (the owner's default), so the
+ * client can later update menus, prices, hours and news in the client portal.
+ * The contract is enforced by ProjectFiles.problems() (src/lib/portal/content-model.ts).
+ */
+export const CONTENT_CONTRACT = `<client_editable_content>
+This website belongs to a client who will update some of its content themselves in a simple form-based portal. Build it with client-editable content:
+
+1. Declare collections in src/content/collections.json and keep each one's data in src/content/<name>.json. Collections are the things a business owner changes: menu or services with prices, opening hours, contact details and address, team members, news or events, testimonials (only real ones supplied by the client), gallery captions. Fixed marketing copy (headline, story, section intros) stays in the components.
+2. Manifest format (exact): {"version":1,"locale":"en-GB","currency":"GBP","collections":{"menu":{"label":"Menu","kind":"list","itemLabel":"Dish","titleField":"name","maxItems":80,"fields":{"name":{"type":"text","required":true,"max":80},"description":{"type":"text","multiline":true,"max":300},"price":{"type":"price"},"category":{"type":"select","options":["Starters","Mains","Desserts"]},"image":{"type":"image"},"available":{"type":"boolean","default":true}}},"hours":{"label":"Opening hours","kind":"single","fields":{"week":{"type":"hours"},"note":{"type":"text","max":160}}},"contact":{"label":"Contact details","kind":"single","fields":{"phone":{"type":"phone"},"email":{"type":"email"},"address":{"type":"text","multiline":true},"bookingUrl":{"type":"url"}}}}}
+   Field types: text (multiline optional, max), richtext, number, price (string "12.50"), date ("2026-10-15"), time ("09:00"), hours, boolean, select (options), url, email, phone, image. Collection and field names: lowercase-first, letters, digits, "_" or "-". Set locale and currency to the business's.
+3. Data shapes: a list is {"items":[{"id":"m1", ...fields}]} with a short unique lowercase id per item; a single is a plain object. hours is {"mon":[{"open":"09:00","close":"17:30"}],"tue":[],...,"sun":[]} (an empty array means closed), plus optional "exceptions":[{"date":"2026-12-25","closed":true,"label":"Christmas"}]. richtext is an array of blocks: {"type":"paragraph","text":"…"}, {"type":"heading","text":"…"}, {"type":"quote","text":"…"}, {"type":"list","items":["…"]}. image is {"src":"/images/<existing image>.webp","alt":"…"} and must point at an image already in the project. Optional values may be null.
+4. Components import the JSON statically (import menu from "../content/menu.json") and render values only as React text, links built from url/email/phone fields (https:, mailto:, tel:) or <img> from image fields. Never use dangerouslySetInnerHTML; render richtext with a small component that maps blocks to <p>, <h3>, <blockquote> and <ul>. Format prices with Intl.NumberFormat(locale, {style:"currency",currency}) and hours with a helper that groups days.
+5. One source of truth: header, contact section and footer all read contact.json and hours.json; never repeat those facts as hard-coded text.
+6. Layouts must hold up as the client edits: 0 items (show a short, graceful empty state), 1 item, and maxItems items; long names wrap cleanly. Never design a composition that only works with exactly 3 or 6 items; filter out items with "available": false.
+7. Use only real facts from the brief; where a value is unknown, leave it null rather than inventing it (no invented prices or hours).
+8. When editing later, preserve existing items and their ids, change content files only when asked, and if you change a field in the manifest, migrate the data files to match.
+</client_editable_content>`;

@@ -55,6 +55,8 @@
         "LEGACY_SITES_HOST": "sites.makeborne.com"
       },
       // SUPABASE_PUBLISHABLE_KEY: `wrangler secret put SUPABASE_PUBLISHABLE_KEY --env production`
+      // ANALYTICS_SIGNING_SECRET (optional, enables visitor analytics; absent = off): the same
+      // 32+ character value as makeborne_private.site_analytics_key, see docs/SITE_ANALYTICS.md.
       "observability": { "enabled": true, "head_sampling_rate": 0.1, "logs": { "enabled": true, "invocation_logs": false } }
     }
   }

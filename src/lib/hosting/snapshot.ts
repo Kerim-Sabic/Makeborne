@@ -5,8 +5,8 @@ const MAX_SNAPSHOT_BYTES = 3_900_000;
 const DATA_IMAGE = /^data:image\/(?:webp|png|jpeg|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
 /** Self-hosted library fonts embedded by the builder as data: URLs. */
 const DATA_FONT = /^data:font\/woff2;base64,[A-Za-z0-9+/=]+$/;
-const SVG_TAGS = ["svg", "g", "path", "circle", "ellipse", "line", "polyline", "polygon", "rect", "defs", "lineargradient", "radialgradient", "stop", "clippath", "mask", "pattern", "symbol", "use", "title", "desc", "text", "tspan", "textpath", "textPath"];
-const SVG_ATTRIBUTES = ["viewbox", "viewBox", "xmlns", "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset", "stroke-opacity", "fill-opacity", "fill-rule", "clip-rule", "opacity", "d", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "x2", "y1", "y2", "width", "height", "points", "transform", "offset", "stop-color", "stop-opacity", "gradientUnits", "gradientTransform", "preserveAspectRatio", "clip-path", "mask", "href", "text-anchor", "dominant-baseline", "font-size", "font-weight", "letter-spacing", "startOffset", "dx", "dy", "font-family", "font-style", "textLength"];
+const SVG_TAGS = ["svg", "g", "path", "circle", "ellipse", "line", "polyline", "polygon", "rect", "defs", "lineargradient", "linearGradient", "radialgradient", "radialGradient", "stop", "clippath", "clipPath", "mask", "pattern", "symbol", "use", "title", "desc", "text", "tspan", "textpath", "textPath"];
+const SVG_ATTRIBUTES = ["viewbox", "viewBox", "xmlns", "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset", "stroke-opacity", "fill-opacity", "fill-rule", "clip-rule", "opacity", "d", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "x2", "y1", "y2", "width", "height", "points", "transform", "offset", "stop-color", "stop-opacity", "gradientUnits", "gradientTransform", "spreadMethod", "fx", "fy", "patternUnits", "patternContentUnits", "patternTransform", "clipPathUnits", "maskUnits", "maskContentUnits", "preserveAspectRatio", "clip-path", "mask", "href", "text-anchor", "dominant-baseline", "font-size", "font-weight", "letter-spacing", "startOffset", "dx", "dy", "font-family", "font-style", "textLength"];
 /** The editor marks the project's own compiled stylesheet in captured snapshots. */
 const BUNDLE_STYLE = /\bdata-makeborne-bundle\b/i;
 const ROOT_ATTRIBUTES = ["class", "id", "style", "role", "title", "lang", "dir", "hidden", "tabindex", "data-*", "aria-*"];
@@ -37,6 +37,12 @@ function documentAttributes(snapshot: string, cleanStyle: (value: string) => str
 }
 
 export type SnapshotOptions = {
+  /** Site name for og:site_name. */
+  siteName?: string;
+  /** Absolute https URL of the share image (og:image). */
+  image?: string;
+  /** schema.org JSON from seo.structuredData (already safe for a data script). */
+  jsonLd?: string | null;
   /** Published project images (`/images/hero.webp`) that the snapshot may reference. */
   assetPaths?: ReadonlySet<string>;
   /** Same-origin compiled stylesheet that replaces the captured bundle <style>. */
@@ -120,5 +126,10 @@ export function renderHostedSnapshot(snapshot: string, title: string, descriptio
   const links = [...new Set([...(stylesheet ? [stylesheet] : []), ...(options.stylesheets ?? [])])];
   if ((options.stylesheets ?? []).some(path => !assets.has(path) || !/^\/[A-Za-z0-9_./-]+\.css$/.test(path))) throw new Error("The compiled website stylesheet is unavailable.");
   const link = links.map(path => `<link rel="stylesheet" href="${e(path)}">`).join("");
-  return `<!doctype html><html${roots.html}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)}</title><meta name="description" content="${e(description)}"><link rel="canonical" href="${e(url)}"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:url" content="${e(url)}"><meta property="og:type" content="website">${link}<style>${styles}</style></head><body${roots.body}>${clean}</body></html>`;
+  const image = options.image && /^https:\/\/[^\s"'<>]+$/.test(options.image) ? options.image : null;
+  // A data block, never executed; it must not be able to close its own element.
+  if (options.jsonLd && (!options.jsonLd.startsWith("{") || /[<>]/.test(options.jsonLd))) throw new Error("Invalid structured data.");
+  const share = `${options.siteName ? `<meta property="og:site_name" content="${e(options.siteName)}">` : ""}${image ? `<meta property="og:image" content="${e(image)}"><meta name="twitter:card" content="summary_large_image">` : `<meta name="twitter:card" content="summary">`}`;
+  const data = options.jsonLd ? `<script type="application/ld+json">${options.jsonLd}</script>` : "";
+  return `<!doctype html><html${roots.html}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)}</title><meta name="description" content="${e(description)}"><link rel="canonical" href="${e(url)}"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:url" content="${e(url)}"><meta property="og:type" content="website">${share}${data}${link}<style>${styles}</style></head><body${roots.body}>${clean}</body></html>`;
 }

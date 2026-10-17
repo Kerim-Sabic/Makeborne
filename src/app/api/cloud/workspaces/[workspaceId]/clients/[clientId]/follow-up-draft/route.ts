@@ -6,6 +6,9 @@ import { chatEnabled, startExpertReply } from "@/lib/experts/start";
 import { buildEmailBrief, CAMPAIGNS, type Campaign } from "@/lib/mail/personalize";
 import { researchBlock, researchLinks } from "@/lib/mail/research";
 import { saveResearch } from "@/lib/mail/lead-research";
+import { senderVoiceBlock } from "@/lib/brand/kit";
+import { readBrandKit } from "@/lib/brand/server";
+import { auditBlock, auditLeadHome } from "@/lib/leads/redesign-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -42,6 +45,9 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     databaseError(error);
     if (!data) throw new RequestError("NOT_FOUND", "This client is unavailable in this workspace.", 404);
     const record = mapClient(data), outreach = record.outreach;
+    // The sender's own brand voice (the workspace kit), when one is saved.
+    const ownBrand = await readBrandKit(client, workspaceId, null).catch(() => null);
+    const voice = ownBrand ? senderVoiceBlock(ownBrand) : "";
     const history = (outreach?.activity ?? []).slice(-8).map(item => `- ${item.at.slice(0, 10)} (${item.type}): ${clip(item.text, 300)}`).join("\n");
     const body = parsed.data;
     if (body.format === "email") {
@@ -49,8 +55,10 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
       const results = body.research ? await researchLinks([record.outreach?.profileUrl ?? "", record.website]) : [];
       // What was read is kept on the lead profile (best effort), so it shows in the CRM without researching again.
       if (results.some(item => item.ok)) await saveResearch(client, workspaceId, clientId, results).catch(() => null);
-      const research = researchBlock(results);
-      const brief = buildEmailBrief({ client: record, research, goal: body.goal, tone: body.tone, senderName: body.senderName, campaign: body.campaign });
+      // The redesign angle cites real problems with their current site, found without AI.
+      const audit = body.campaign === "redesign" && body.research && record.website ? auditBlock(await auditLeadHome(record.website).catch(() => [])) : "";
+      const research = [researchBlock(results), audit].filter(Boolean).join("\n");
+      const brief = [buildEmailBrief({ client: record, research, goal: body.goal, tone: body.tone, senderName: body.senderName, campaign: body.campaign }), voice].filter(Boolean).join("\n");
       // Ready-to-send emails (single or bulk personalisation) always use the fast standard model.
       return await startExpertReply({ user, expert: "rex", mode: "standard", turns: [{ role: "user", content: brief }], purpose: "personalize", signal: request.signal, maxDuration });
     }

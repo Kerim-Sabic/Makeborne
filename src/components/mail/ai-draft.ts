@@ -22,7 +22,7 @@ export function parseEmailDraft(text: string): { subject: string; body: string; 
 /** While streaming, show only the email part (the notes arrive last). */
 export const visibleDraft = (text: string) => text.split(/\n?-{3}\s*NOTES/i)[0];
 
-export type DraftOptions = { goal: string; tone: "warm" | "direct" | "formal"; mode: "standard" | "genius"; senderName: string; campaign?: "audience_value" | "website" | "custom"; research?: boolean };
+export type DraftOptions = { goal: string; tone: "warm" | "direct" | "formal"; mode: "standard" | "genius"; senderName: string; campaign?: "audience_value" | "website" | "redesign" | "custom"; research?: boolean };
 
 /** One personalised email for one client: the server reads their linked public pages, then Rex (Haiku) writes from record + research. */
 export async function generateEmailDraft(input: { accountId: string; workspaceId: string; clientId: string; options: DraftOptions; signal: AbortSignal; onText?: (text: string) => void }) {

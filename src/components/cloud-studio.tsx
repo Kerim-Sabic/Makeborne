@@ -12,6 +12,13 @@ import ClientReviewPanel from "./client-review-panel";
 import { takeReviewPrefill } from "@/lib/client-review/prefill";
 import WebsiteGithub from "./website-github";
 import WebsiteSourceDownload from "./website-source-download";
+import VersionCompare from "./version-compare";
+import WebsiteDomains from "./website-domains";
+import WebsiteAnalytics from "./website-analytics";
+import WebsiteSeo from "./website-seo";
+import WebsitePortalSettings from "./website-portal-settings";
+import { brandSwatches as kitSwatches, parseBrandKit } from "@/lib/brand/kit";
+import { brandRequest } from "./brand-kit-api";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
@@ -53,6 +60,7 @@ import {
   Save,
   Users,
   MessageSquareText,
+  GitCompareArrows,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { clearAccountLocalData } from "@/lib/account-local-data";
@@ -1115,12 +1123,24 @@ export function CloudEditor({
   accountId: string;
   workspaceId: string;
   artifact: CloudArtifact;
-  project?: Pick<Project, "brief" | "effort">;
+  project?: Pick<Project, "brief" | "effort" | "clientId">;
   role: WorkspaceSummary["role"];
   back: () => void;
   notify: (s: string) => void;
 }) {
   const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
+  // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
+  const [brandColors, setBrandColors] = useState<{ label: string; value: string }[]>([]);
+  const brandClient = project?.clientId ?? null;
+  useEffect(() => {
+    if (artifact.kind !== "website" || role === "reviewer") return;
+    let active = true;
+    brandRequest<{ kits: { clientId: string | null; kit: unknown }[] }>(accountId, `/api/cloud/workspaces/${workspaceId}/brand-kits`).then(value => {
+      const kit = parseBrandKit(value.kits.find(entry => entry.clientId === brandClient)?.kit);
+      if (active) setBrandColors(kit ? kitSwatches(kit) : []);
+    }, () => undefined);
+    return () => { active = false; };
+  }, [accountId, workspaceId, brandClient, artifact.kind, role]);
   // Client feedback placed in the builder composer for review. Never auto-sent.
   const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string } | null>(null);
   useEffect(() => {
@@ -1148,6 +1168,7 @@ export function CloudEditor({
   const [removedSection, setRemovedSection] = useState<RemovedAccountSection | null>(null);
   const [removedBlock, setRemovedBlock] = useState<RemovedAccountBlock | null>(null);
   const [inspectedVersion, setInspectedVersion] = useState<ArtifactVersion | null>(null);
+  const [comparing, setComparing] = useState<{ from: number; to: number } | null>(null);
   const [style, setStyle] = useState<StyleProfile | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(
     artifact.currentVersion,
@@ -1530,7 +1551,8 @@ export function CloudEditor({
       const reference = readGenerationReference(localStorage, accountId, scope);
       if (!reference?.autoStart || reference.jobId) return;
       saveGenerationReference(localStorage, { ...reference, autoStart: false });
-      const brief = project.brief.trim();
+      // The builder's first message is capped at 8,000 characters; the full brief is always in the project context.
+      const full = project.brief.trim(), brief = full.length > 8000 ? `${full.slice(0, 7400).replace(/\s+\S*$/, "")}…\n\n(The full brief is in the project details.)` : full;
       queueMicrotask(() => { setAutoStartMode(reference.planFirst ? "plan" : "create"); setAutoStart(brief); });
     } catch { /* storage unavailable: the user can send the brief manually */ }
   }, [useLiveBuilder, liveDocument, content, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
@@ -1690,7 +1712,17 @@ export function CloudEditor({
         {view === "preview" && (useLiveBuilder || useSourcePreview) && !liveDocument && (live || content.websiteSource) && <LivePreview
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
-          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)} />}
+          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
+          visualEdit={content.websiteSource && role !== "reviewer" && !live ? {
+            source: content.websiteSource,
+            disabledReason: uncertainSave || conflict || recovery ? "Resolve the save notice above before editing." : lockChangePending ? "Saving content protection…" : undefined,
+            onApply: (next, summary) => {
+              if (uncertainSave || conflict || recovery || lockChangePending) return;
+              editRevision.current++; setContent(current => current ? { ...current, websiteSource: next } : current); setDirty(true); setNote(summary);
+            },
+            onAsk: useLiveBuilder ? text => setBuilderPrefill({ key: crypto.randomUUID(), text }) : undefined,
+            swatches: brandColors,
+          } : undefined} />}
         {view === "preview" && useLiveBuilder && !liveDocument && !live && !content.websiteSource && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
         {view === "preview" && !useLiveBuilder && !useSourcePreview && artifact.kind === "website" && generatedVersionId && (() => {
           const generated=versions.find(version=>version.id===generatedVersionId);
@@ -1707,7 +1739,14 @@ export function CloudEditor({
           </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} /></>}
         </div>}
         {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
-          capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} /></div>}
+          capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} />
+          {role === "owner" && <WebsiteSeo key={`seo:${accountId}:${workspaceId}:${artifact.id}`} source={content.websiteSource!} siteTitle={content.title} seo={content.seo}
+            disabled={uncertainSave || conflict || !!recovery || Boolean(live)} scope={{ accountId, workspaceId, artifactId: artifact.id }}
+            onChange={seo => { if (uncertainSave || conflict || recovery) return; editRevision.current++; setContent(current => current ? { ...current, seo } : current); setDirty(true); setNote("Updated search and sharing details"); }} />}
+          {role === "owner" && <WebsiteAnalytics key={`analytics:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} />}
+          <WebsiteGithub key={`github:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"} source />
+          {role === "owner" && <WebsiteDomains key={`domains:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} />}
+          {role !== "reviewer" && project?.clientId && <WebsitePortalSettings key={`portal:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} files={sourceFiles} onApproved={() => void load()} />}</div>}
         {view === "review" && <div className="lb-publish cloud-client-review"><ClientReviewPanel key={`review:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id}
           version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || Boolean(live)} canEdit={role !== "reviewer"}
           capture={content.websiteSource ? () => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id }) : undefined}
@@ -1799,7 +1838,14 @@ export function CloudEditor({
         </div>}
         </div>
         <section className="cloud-workbench-history" hidden={view !== "history"} aria-label="Project version history">
-            <h3>Version history</h3>
+            <div className="cloud-history-head">
+              <h3>Version history</h3>
+              {versions.length > 1 && <button type="button" className="button secondary small" aria-expanded={Boolean(comparing)} onClick={() => {
+                const numbers = versions.map(version => version.number).sort((a, b) => b - a);
+                setComparing(comparing ? null : { from: numbers[1], to: numbers[0] });
+              }}><GitCompareArrows size={14} />{comparing ? "Close comparison" : "Compare versions"}</button>}
+            </div>
+            {comparing && <VersionCompare key={`${comparing.from}:${comparing.to}`} versions={versions} from={comparing.from} to={comparing.to} onClose={() => setComparing(null)} />}
             {versions.length === 0 ? (
               <p>No saved versions yet.</p>
             ) : (
@@ -1811,6 +1857,7 @@ export function CloudEditor({
                     <p>{v.changeSummary}</p>
                     <small>{new Date(v.createdAt).toLocaleString()}</small>
                     <button type="button" className="button secondary small" aria-expanded={inspectedVersion?.id === v.id} onClick={() => setInspectedVersion(inspectedVersion?.id === v.id ? null : v)}> {inspectedVersion?.id === v.id ? "Close preview" : `Preview version ${v.number}`}</button>
+                    {v.number < Math.max(...versions.map(version => version.number)) && <button type="button" className="button secondary small" onClick={() => setComparing({ from: v.number, to: Math.max(...versions.map(version => version.number)) })}>Compare with latest</button>}
                   </div>
                 ))
             )}

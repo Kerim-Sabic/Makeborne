@@ -50,3 +50,13 @@
 .crp-state.is-approved{background:#e3f4ea;color:#1f6b45}.crp-state.is-changes_requested{background:#fff0e3;color:#94470f}
 @media(max-width:560px){.crp-row,.crp-scope{grid-template-columns:1fr}.crp-url{flex-direction:column}}
 .crp-feed{display:grid;gap:4px}
+.crp-views{display:grid;gap:3px;margin-top:4px;font-size:11px;line-height:1.5;color:#4a4d57}
+.crp-views p{margin:0}.crp-views svg{display:inline-block;vertical-align:-2px;margin-right:2px;color:#3358d4}.crp-views strong{color:#20222a}
+p.crp-views.crp-muted{display:block;margin-top:4px;font-size:11px}
+.crp-links li:has(.crp-views) .crp-icon-button{top:10px;transform:none}
+.crp-links .crp-bars{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:6px}
+.crp-links .crp-bars li{position:static;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;padding:0;border-radius:0;background:none;font-size:11px}
+.crp-bars li>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crp-bar{grid-column:1/-1;height:6px;border-radius:999px;background:#e7e9f1;overflow:hidden}.crp-bar i{display:block;height:100%;border-radius:inherit;background:#3358d4}
+.crp-comments li.crp-view-entry{background:#f6f8ff;border-color:#e3e8f8}
+.crp-view-entry .crp-where{color:#4a4d57;font-weight:500}

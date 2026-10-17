@@ -48,4 +48,14 @@ assert.equal(authDestination("/auth/update-password?next=/auth/update-password")
 for (const target of [null, "", "https://evil.example/auth/callback?next=/chat", "//evil.example/auth/callback?next=/chat", "/other?next=/chat", `${origin}/auth/callback?next=https://evil.example`]) {
   assert.equal(emailAuthDestination(target, origin), "/studio");
 }
-console.log("PASS: account, draft, billing, checkout and email return URLs preserved; external and unsupported destinations rejected.");
+// Client portal destinations: home, one site by UUID, one invite by 43-character token; nothing else under /portal.
+const portalToken = "abc_DEF-123abc_DEF-123abc_DEF-123abc_DEF-12";
+for (const target of ["/portal", `/portal/sites/${artifact}`, `/portal/join/${portalToken}`]) assert.equal(authDestination(target), target);
+assert.equal(authDestination(`/portal/sites/${artifact}?next=https://evil.example#x`), `/portal/sites/${artifact}`);
+for (const target of ["/portal/", "/portal/admin", "/portal/sites/not-a-uuid", `/portal/sites/${artifact}/extra`, "/portal/join/short", `/portal/join/${portalToken}x`,
+  `/portal/join/${portalToken.slice(0, 42)}!`, "/portalevil", "//portal", `/portal/join/../../admin`]) {
+  assert.notEqual(authDestination(target).startsWith("/portal"), true, target);
+}
+assert.equal(emailAuthDestination(`${origin}/auth/callback?next=${encodeURIComponent(`/portal/join/${portalToken}`)}`, origin), `/portal/join/${portalToken}`);
+assert.equal(emailAuthDestination(`${origin}/auth/callback?next=${encodeURIComponent("/portal/sites/bad")}`, origin), "/studio");
+console.log("PASS: account, draft, billing, checkout, portal and email return URLs preserved; external and unsupported destinations rejected.");

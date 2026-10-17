@@ -1,0 +1,36 @@
+/* Questions before the first build, one at a time in the builder chat. Palette follows live-builder.css. */
+.bq { display:grid; gap:12px; padding:14px; border:1px solid #e7e1ee; border-radius:14px; background:#fff; color:#2f2637; box-shadow:0 1px 2px #2a1d350d; }
+.bq-head { display:flex; align-items:center; gap:7px; color:#7d5fb0; }
+.bq-kicker { flex:1; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7c7085; }
+.bq-dots { display:flex; gap:4px; }
+.bq-dots i { display:block; width:14px; height:4px; border-radius:2px; background:#ece7f1; transition:background-color .2s; }
+.bq-dots i[data-state="done"] { background:#b9a6d3; }
+.bq-dots i[data-state="now"] { background:#5b3f8c; }
+.bq-body { display:grid; gap:9px; animation:bq-in .22s ease-out; }
+@keyframes bq-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+.bq-body h4 { margin:0; font-size:15px; line-height:1.3; font-weight:650; }
+.bq-body h4:focus { outline:none; }
+.bq-why { margin:-3px 0 0; font-size:12px; color:#8a7f93; line-height:1.45; }
+.bq-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.bq-chip { display:inline-flex; align-items:center; gap:7px; min-height:34px; padding:6px 11px; border:1px solid #e3dde9; border-radius:999px; background:#fff; color:#2f2637; font:inherit; font-size:12.5px; font-weight:550; cursor:pointer; transition:border-color .15s, background-color .15s, box-shadow .15s, transform .1s; }
+.bq-chip:hover:not(:disabled) { border-color:#cbbfd8; background:#fbfafc; }
+.bq-chip:active:not(:disabled) { transform:scale(.98); }
+.bq-chip[aria-pressed="true"] { border-color:#5b3f8c; background:#f4eefb; color:#3f2b63; box-shadow:0 0 0 1px #5b3f8c inset; }
+.bq-chip[aria-pressed="true"] svg { color:#5b3f8c; }
+.bq-chip:disabled { opacity:.55; cursor:default; }
+.bq-chip:focus-visible, .bq-skip:focus-visible, .bq-back:focus-visible, .bq-custom input:focus-visible { outline:2px solid #7d5fb0; outline-offset:2px; }
+.bq-swatch { display:flex; border-radius:5px; overflow:hidden; box-shadow:0 0 0 1px #0000001f; }
+.bq-swatch i { display:block; width:7px; height:16px; }
+.bq-hint { margin:-2px 0 0; font-size:11.5px; color:#5b4d67; }
+.bq-custom { display:grid; gap:4px; font-size:11px; color:#8a7f93; }
+.bq-custom input { width:100%; min-width:0; padding:7px 10px; border:1px solid #e3dde9; border-radius:9px; background:#fff; color:#2f2637; font:inherit; font-size:12.5px; }
+.bq-note { margin:0; padding:6px 9px; border-radius:8px; background:#f6f3f9; font-size:11.5px; color:#5b4d67; line-height:1.4; }
+.bq-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; padding-top:10px; border-top:1px solid #f0edf3; }
+.bq-actions .button { display:inline-flex; align-items:center; gap:6px; }
+.bq-back { display:grid; place-items:center; width:30px; height:30px; padding:0; border:1px solid #e3dde9; border-radius:8px; background:#fff; color:#4b3a59; cursor:pointer; }
+.bq-skip { padding:5px 2px; border:0; background:none; color:#6f6478; font:inherit; font-size:12px; font-weight:600; cursor:pointer; }
+.bq-skip:hover { color:#3f2b63; text-decoration:underline; }
+.bq-skip-all { margin-left:auto; }
+@media (prefers-reduced-motion: reduce) { .bq-body { animation:none; } .bq-chip, .bq-dots i { transition:none; } }
+.bq-loading { display:flex; align-items:center; gap:9px; font-size:12.5px; color:#5b4d67; }
+.bq-loading span { flex:1; }

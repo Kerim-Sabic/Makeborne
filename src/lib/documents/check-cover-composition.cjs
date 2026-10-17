@@ -21,10 +21,21 @@ const copy = value => structuredClone(value);
     const deck = { ...emptyDocument("deck", "Legacy deck"), slides: [{ id: "cover", layout: "cover", tone: "dark", title: "Legacy title", subtitle: "Legacy subtitle", notes: "Notes" }, { id: "close", layout: "closing", tone: "light", title: "Legacy closing", body: "Next steps", notes: "Notes" }] };
     // Re-pinned 2026-10-13 for optional book openings/contents links. This no-label, one-chapter fixture's
     // DOM was compared with the frozen pre-change renderer and is unchanged; only CSS was added/adjusted.
-    assert.equal(hash(bookHtml(book, {})), "d5f96829b0edd919287ed6be329492bcdddda44f3954a56e5f73281be8bed691");
-    assert.equal(hash(bookHtml(book, {}, "print")), "8b60abde00591634d209f932e10718a288294c77d068cbf5b7e5b3a798d8f1ca");
-    assert.equal(hash(deckHtml(deck, {})), "aebc19cb4928ac358d2af86422a331f7c49f8f025fcfe9f7ec31070c4c911ca1");
-    assert.equal(hash(JSON.stringify(deck.slides.map((s, i) => composeSlide(deck, s, i, 2)))), "99a0c779d96ce096aecbde1f150424a804e09a153356712f29a5cd1356a814fd");
+    // Re-pinned 2026-10-14 for embedded document faces (@font-face + an open-licensed fallback after each
+    // Office face, so the serverless PDF printer no longer substitutes Open Sans), subheading/blockquote/
+    // pull-quote CSS, motif cover CSS and balanced slide titles. The DOM after </style> and the slide scenes are byte-identical
+    // to the frozen pre-change renderer (DOM hashes below were taken from it); only CSS changed.
+    // Re-pinned 2026-10-14 (deck only) for art directions: a saved deck without theme.direction now maps to one
+    // (legacyDirection: no motif + Georgia pairing → editorial), so its slides are recomposed by design. The book
+    // hashes are unchanged; the deck still validates and renders, and check-art-directions.cjs covers legacy decks.
+    const dom = html => html.slice(html.indexOf("</style>"));
+    assert.equal(hash(dom(bookHtml(book, {}))), "17a7ef025d71b8621e2162c22fe13b3062596f6d5636e41bd07b6426758ee61e");
+    assert.equal(hash(dom(bookHtml(book, {}, "print"))), "70e2e3e9a3805c3b9981614329280c2d405b56d52f6596e8ea71b025340f12cd");
+    assert.equal(hash(dom(deckHtml(deck, {}))), "7000fc80561b345b948c5aecd0e86070790a867e7d21b8ae7a4b54a17314218e");
+    assert.equal(hash(bookHtml(book, {})), "239844c2c2eb972639a83f4212307afce8df5613b3d2358fa15dcffa2b1a3516");
+    assert.equal(hash(bookHtml(book, {}, "print")), "8ed87c64375ec31d1763cf3b9faad05dc36492d372fe6b4955fdb641dd8c5da8");
+    assert.equal(hash(deckHtml(deck, {})), "4472d02fd1d5f820d5b9f49e69fa340699b516960da3930da5640170df4dc444");
+    assert.equal(hash(JSON.stringify(deck.slides.map((s, i) => composeSlide(deck, s, i, 2)))), "eb8405ba973264fa7e5e21657fceb953dc6c1153ee30bcfc028b2477623ddcd2");
   });
   await check("three synthetic subject compositions stay editable, distinct and within both canvases", async () => {
     const signatures = new Set();

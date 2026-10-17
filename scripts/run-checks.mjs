@@ -33,7 +33,9 @@ const all = process.argv.includes("--all");
 const filters = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("MAKEBORNE_VERIFY_")));
 // Explicit script harnesses that require no environment, browser or services.
-const extras = ["scripts/check-trusted-publication-worker.cjs", "infra/project-runtime/vercel-publication-check.mjs"];
+// The customer-site Worker checks run the real Worker under a local workerd with every outbound call mocked.
+const extras = ["scripts/check-trusted-publication-worker.cjs", "infra/project-runtime/vercel-publication-check.mjs",
+  "infra/customer-sites/check-namespace.mjs", "infra/customer-sites/check-custom-hosts.mjs", "infra/customer-sites/check-analytics.mjs", "infra/customer-sites/check-sitemap.mjs"];
 const checks = [...findChecks(join(root, "src")), ...extras].sort()
   .filter((file) => all || !excluded.has(file))
   .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)));

@@ -8,6 +8,25 @@ if (publicSupabaseKey && !publicSupabaseKey.startsWith("sb_publishable_")) {
   );
 }
 
+/** Latin WOFF2 files for every face in DOCUMENT_FACES (checked by src/lib/documents/check-design-quality.cjs). */
+const DOCUMENT_FONT_FILES = [
+  "@fontsource-variable/fraunces/files/fraunces-latin-opsz-*.woff2",
+  "@fontsource/instrument-serif/files/instrument-serif-latin-400-*.woff2",
+  "@fontsource-variable/playfair-display/files/playfair-display-latin-wght-*.woff2",
+  "@fontsource-variable/newsreader/files/newsreader-latin-wght-*.woff2",
+  "@fontsource-variable/cormorant/files/cormorant-latin-wght-*.woff2",
+  "@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-*.woff2",
+  "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-opsz-*.woff2",
+  "@fontsource-variable/sora/files/sora-latin-wght-*.woff2",
+  "@fontsource-variable/geist/files/geist-latin-wght-*.woff2",
+  "@fontsource-variable/inter/files/inter-latin-opsz-*.woff2",
+  "@fontsource-variable/dm-sans/files/dm-sans-latin-wght-*.woff2",
+  "@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-*.woff2",
+  "@fontsource-variable/outfit/files/outfit-latin-wght-*.woff2",
+  "@fontsource-variable/archivo/files/archivo-latin-wdth-*.woff2",
+  "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-*.woff2",
+].map((file) => `./node_modules/${file}`);
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // PDF export runs Chromium; on Vercel it comes from @sparticuz/chromium's packed binary.
@@ -16,7 +35,9 @@ const nextConfig: NextConfig = {
     // Playwright loads its registry and runtime resources dynamically. Include
     // them explicitly for both export entry points in serverless deployments.
     "/api/export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*"],
-    "/api/cloud/workspaces/*/artifacts/*/document-export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*"],
+    // Document PDFs embed their open-licensed faces (src/lib/documents/fonts.ts):
+    // the serverless Chromium has only Open Sans, and fonts-server.ts reads these files.
+    "/api/cloud/workspaces/*/artifacts/*/document-export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", ...DOCUMENT_FONT_FILES],
   },
   async headers() {
     return [

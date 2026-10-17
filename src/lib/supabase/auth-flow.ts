@@ -33,6 +33,10 @@ export function authDestination(next: string | null): string {
     return `/studio${safe.size ? `?${safe}` : ""}`;
   }
   if (["/studio/cloud", "/chat", "/admin"].includes(url.pathname)) return url.pathname;
+  // Client portal: home, one site (UUID) or an invite (43-character token). No query is kept.
+  if (url.pathname === "/portal"
+    || /^\/portal\/sites\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(url.pathname)
+    || /^\/portal\/join\/[A-Za-z0-9_-]{43}$/.test(url.pathname)) return url.pathname;
   if (url.pathname === "/billing") {
     // One nesting level only: billing may return to a creation route, never itself.
     const after = url.searchParams.get("next");

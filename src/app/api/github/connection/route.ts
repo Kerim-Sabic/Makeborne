@@ -1,17 +1,21 @@
 import { cloudContext,cloudError,cloudJson,databaseError } from "@/lib/cloud/server";
 import { billingDatabase } from "@/lib/billing/database";
-import { sameOrigin } from "@/lib/server/http";
+import { RequestError,sameOrigin } from "@/lib/server/http";
 import { githubConfigured,githubConfig,githubConnection,githubRepositories } from "@/lib/github/server";
 export async function GET() {
   try {
     const {user}=await cloudContext();
     if(!githubConfigured())return cloudJson({configured:false});
-    const {data,error}=await billingDatabase().from("github_connections").select("login,expires_at").eq("user_id",user.id).maybeSingle();databaseError(error);
+    const {data,error}=await billingDatabase().from("github_connections").select("login").eq("user_id",user.id).maybeSingle();databaseError(error);
     const installUrl=`https://github.com/apps/${encodeURIComponent(githubConfig().slug)}/installations/new`;
-    if(!data||Date.parse(data.expires_at)<Date.now()+60_000)return cloudJson({configured:true,connected:false,installUrl});
-    const {token,login}=await githubConnection(user.id);
-    const repositories=await githubRepositories(token);
-    return cloudJson({configured:true,connected:true,login,installUrl,expiresAt:data.expires_at,repositories:repositories.map(r=>({id:r.id,name:r.full_name,private:r.private}))});
+    if(!data)return cloudJson({configured:true,connected:false,installUrl});
+    // An expired eight-hour token is renewed here when a refresh token is held;
+    // only a connection GitHub no longer accepts reads as disconnected.
+    let session:Awaited<ReturnType<typeof githubConnection>>;
+    try{session=await githubConnection(user.id);}
+    catch(error){if(error instanceof RequestError&&error.code==="GITHUB_RECONNECT")return cloudJson({configured:true,connected:false,installUrl});throw error;}
+    const repositories=await githubRepositories(session.token);
+    return cloudJson({configured:true,connected:true,login:session.login,installUrl,repositories:repositories.map(r=>({id:r.id,name:r.full_name,private:r.private}))});
   }catch(error){return cloudError(error);}
 }
 export async function DELETE(request:Request) {

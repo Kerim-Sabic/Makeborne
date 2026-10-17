@@ -1,0 +1,45 @@
+.cpp { display: grid; gap: 16px; margin: 8px 0 28px; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.cpp h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+.cpp h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.cpp-head p { margin: 0; }
+.cpp-muted { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.cpp-error { margin: 0; color: #a3271f; font-size: 13px; }
+.cpp-spin { animation: cpp-spin 0.9s linear infinite; vertical-align: -2px; }
+@keyframes cpp-spin { to { transform: rotate(360deg); } }
+.cpp ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cpp-sites li, .cpp-people li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #f8f8fa; }
+.cpp-sites li > div, .cpp-people li > div { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: 13.5px; }
+.cpp-chip { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #eef1f6; color: #3f4756; font-size: 11px; font-weight: 600; }
+.cpp-chip.is-active { background: #e5f4ec; color: #22603f; }
+.cpp-chip.is-invited { background: #eaf0ff; color: #2845aa; }
+.cpp-chip.is-revoked, .cpp-chip.is-expired { background: #f3f3f3; color: #6b6f78; }
+.cpp-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.cpp-switch input { width: 34px; height: 20px; appearance: none; border-radius: 999px; background: #cfd2d8; position: relative; cursor: pointer; transition: background 0.15s; flex: none; }
+.cpp-switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0003; transition: transform 0.15s; }
+.cpp-switch input:checked { background: var(--blue); }
+.cpp-switch input:checked::after { transform: translateX(14px); }
+.cpp-switch input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.cpp-icon { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; flex: none; }
+.cpp-icon:hover { background: #16181d0d; color: var(--ink); }
+.cpp-confirm { display: inline-flex; gap: 6px; }
+.cpp-danger { background: #a3271f !important; border-color: #a3271f !important; color: #fff !important; }
+.cpp-invite { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid var(--line); }
+.cpp-invite h4 { margin-top: 12px; }
+.cpp-invite .button { justify-self: start; }
+.cpp-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.cpp-row label, .cpp-note { display: grid; gap: 4px; flex: 1; min-width: 180px; font-size: 12.5px; font-weight: 600; }
+.cpp input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font: inherit; font-size: 13.5px; font-weight: 400; }
+.cpp-link { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; background: #eef6f1; font-size: 13px; }
+.cpp-link p { margin: 0; }
+.cpp-link .cpp-row input { flex: 1; min-width: 200px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.cpp-settings { display: grid; gap: 10px; }
+.cpp-collections { display: flex; flex-wrap: wrap; gap: 8px 16px; border: 0; margin: 0; padding: 0; font-size: 13px; }
+.cpp-collections legend { width: 100%; margin-bottom: 4px; font-weight: 600; font-size: 12.5px; }
+.cpp-collections label { display: inline-flex; align-items: center; gap: 6px; }
+.cpp-review { display: grid; gap: 12px; }
+.cpp-change { display: grid; gap: 10px; padding: 14px; border: 1px solid #f0d7a6; border-radius: 12px; background: #fffaf0; }
+.cpp-change p { margin: 0; font-size: 13.5px; }
+.cpp-diff { gap: 6px !important; font-size: 13px; }
+.cpp-diff ul { margin: 4px 0 0 14px !important; gap: 2px !important; list-style: disc !important; color: #3d4049; }
+.cpp .cpp-switch input { width: 34px !important; height: 20px !important; min-height: 0 !important; min-width: 0; padding: 0 !important; margin: 0; border: 0 !important; box-shadow: none; }
+.cpp-sites li > div > .cpp-chip, .cpp-people li > div > .cpp-chip { justify-self: start; margin-left: 0; }

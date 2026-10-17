@@ -5,6 +5,7 @@ import {
 } from "./schema";
 import { defaultTheme, themeIssues } from "./theme";
 import { composeSlide } from "./slide-scene";
+import { directionOf } from "./directions";
 import { parseBookMarkup, wordCount } from "./book-markup";
 import { CoverCompositionSchema } from "./composition-schema";
 
@@ -20,7 +21,8 @@ const BookDetails = z.object({
 
 /** Tool inputs validated before any change is applied. */
 export const DocToolInputs = {
-  set_theme: ThemeSchema.extend({ mood: z.string().trim().max(300).optional(), imageStyle: z.string().trim().max(600).optional().describe("Omit to keep the current image style") }).strict(),
+  set_theme: ThemeSchema.extend({ mood: z.string().trim().max(300).optional(), imageStyle: z.string().trim().max(600).optional().describe("Omit to keep the current image style"), motif: ThemeSchema.shape.motif.describe("Decorative system: grid, band, frame, quiet or orbit. Omit to keep the current one."),
+    direction: ThemeSchema.shape.direction.describe("Presentations: the art direction (swiss, editorial, poster, luxury, colorblock, tech, organic, data, architect, brutalist). Omit to keep the current one.") }).strict(),
   set_deck_details: DeckDetails,
   set_book_details: BookDetails,
   write_slide: z.object({ slide: SlideSchema, after: position }).strict(),
@@ -39,7 +41,7 @@ export const DECK_TOOLS: DocToolName[] = ["set_theme", "set_deck_details", "writ
 export const BOOK_TOOLS: DocToolName[] = ["set_theme", "set_book_details", "write_chapter", "edit_chapter", "delete_chapter", "move_chapter", "generate_image", "finish"];
 
 const DESCRIPTIONS: Record<DocToolName, string> = {
-  set_theme: "Set the visual theme: a 7-color palette (contrast is checked), a font pairing, the mood, and one image style that every generated image will share. Call it first on a new document and whenever the user asks for a different look.",
+  set_theme: "Set the visual theme: a 7-color palette (contrast is checked), a font pairing, the art direction (presentations) or decorative motif (books), the mood, and one image style that every generated image will share. Call it first on a new document and whenever the user asks for a different look; changing the direction recomposes every slide.",
   set_deck_details: "Set the presentation title (shown in slide footers), subtitle and presenter/author.",
   set_book_details: "Set the book title, subtitle, author, dedication, the cover image name and an optional cover tagline. Use cover_composition for an original editable portrait cover; omit it to preserve the existing composition, or null to explicitly restore the legacy cover.",
   write_slide: "Create a slide or replace an existing slide with the same id (send the complete slide). The slide appears in the live preview immediately. Use `after` to position it.",
@@ -114,11 +116,14 @@ export class DocumentEditor {
   }
 
   setTheme(input: z.infer<typeof DocToolInputs.set_theme>) {
-    const theme = { palette: input.palette, fonts: input.fonts, mood: input.mood ?? this.doc.theme.mood, imageStyle: input.imageStyle ?? this.doc.theme.imageStyle };
+    const motif = input.motif ?? this.doc.theme.motif;
+    // Art directions compose slides; books keep their motif-based covers.
+    const direction = this.doc.kind === "deck" ? input.direction ?? this.doc.theme.direction : undefined;
+    const theme = { palette: input.palette, fonts: input.fonts, mood: input.mood ?? this.doc.theme.mood, imageStyle: input.imageStyle ?? this.doc.theme.imageStyle, ...(motif ? { motif } : {}), ...(direction ? { direction } : {}) };
     const issues = themeIssues(theme);
     if (issues.length) throw new DocToolError(`Palette contrast is too low: ${issues.join(" ")} Adjust the colors and call set_theme again.`);
     this.commit({ ...this.doc, theme } as DocumentSource);
-    return `Theme set (${input.fonts}).`;
+    return `Theme set (${input.fonts}${direction ? `, ${direction} direction` : ""}${motif ? `, ${motif} motif` : ""}).`;
   }
   setDeckDetails(input: z.infer<typeof DeckDetails>) {
     const deck = this.deck();
@@ -137,11 +142,15 @@ export class DocumentEditor {
     if (deck.slides.length >= 40 && !deck.slides.some(slide => slide.id === input.slide.id)) throw new DocToolError("A presentation can have at most 40 slides.");
     const { list, index, replaced } = this.place(deck.slides, input.slide as Slide, input.after);
     this.commit({ ...deck, slides: list });
-    return `${replaced ? "Updated" : "Added"} slide ${index + 1} of ${list.length} (${input.slide.layout}).${this.slideWarnings(this.deck(), index)}`;
+    const composed = composeSlide(this.deck(), this.deck().slides[index], index, list.length).composition;
+    return `${replaced ? "Updated" : "Added"} slide ${index + 1} of ${list.length} (${input.slide.layout}${composed && !this.deck().slides[index].composition ? ` as ${composed}` : ""}).${this.slideWarnings(this.deck(), index)}`;
   }
   private slideWarnings(deck: Deck, index: number) {
     const slide = deck.slides[index], notes: string[] = [];
     if (slide.image && !this.hasImage(slide.image)) notes.push(`image "${slide.image}" does not exist yet; generate it before finishing`);
+    for (const person of slide.people ?? []) if (person.image && !this.hasImage(person.image)) notes.push(`portrait "${person.image}" does not exist yet; generate it or drop the image field`);
+    const rhythm = deckRhythmIssues(deck).find(issue => issue.slides.includes(index));
+    if (rhythm) notes.push(rhythm.message);
     const scene = composeSlide(deck, slide, index, deck.slides.length);
     if (scene.issues.length) notes.push(`text may not fit: ${scene.issues.slice(0, 3).join("; ")}. Tighten the copy`);
     return notes.length ? ` Check: ${notes.join(". ")}.` : "";
@@ -212,6 +221,7 @@ export class DocumentEditor {
       if (!deck.slides.length) issues.push("The presentation has no slides yet.");
       deck.slides.forEach((slide, index) => {
         if (slide.image && !this.hasImage(slide.image)) issues.push(`Slide ${index + 1} (${slide.id}) uses image "${slide.image}", which was not generated. Generate it or change the slide.`);
+        for (const person of slide.people ?? []) if (person.image && !this.hasImage(person.image)) issues.push(`Slide ${index + 1} (${slide.id}) uses portrait "${person.image}", which was not generated. Generate it or remove that image field.`);
         const scene = composeSlide(deck, slide, index, deck.slides.length);
         if (scene.issues.length) fit.push(`Slide ${index + 1} (${slide.id}): ${scene.issues[0]}.`);
       });
@@ -224,7 +234,9 @@ export class DocumentEditor {
         for (const name of this.chapterImages(chapter)) if (!this.hasImage(name)) issues.push(`Chapter ${index + 1} (${chapter.id}) uses image "${name}", which was not generated.`);
       });
     }
-    if (fit.length && this.finishAttempts++ === 0) issues.push(...fit.slice(0, 8).map(message => `${message} Shorten the copy or choose a roomier layout.`));
+    // Visual rhythm is advisory like fit: it blocks the first finish only.
+    if (this.doc.kind === "deck") fit.push(...deckRhythmIssues(this.doc).map(issue => `${issue.message}.`));
+    if (fit.length && this.finishAttempts++ === 0) issues.push(...fit.slice(0, 8).map(message => /rhythm/.test(message) ? message : `${message} Shorten the copy or choose a roomier layout.`));
     return issues;
   }
 
@@ -250,6 +262,27 @@ export class DocumentEditor {
 
   /** Compact model-facing snapshot of the current document. */
   snapshot() { return JSON.stringify(this.doc); }
+}
+
+/** Layouts that are mostly running text; three in a row read as a document, not a deck. */
+const TEXT_HEAVY = new Set<Slide["layout"]>(["points", "compare", "split", "table"]);
+/** Advisory rhythm checks so decks vary their compositions instead of repeating one template. */
+export function deckRhythmIssues(deck: Pick<Deck, "slides"> & Partial<Pick<Deck, "theme">>) {
+  const issues: { slides: number[]; message: string }[] = [], slides = deck.slides;
+  for (let i = 2; i < slides.length; i++) {
+    const run = [slides[i - 2], slides[i - 1], slides[i]];
+    if (run.every(slide => slide.layout === run[0].layout) && run[0].layout !== "section") issues.push({ slides: [i - 2, i - 1, i], message: `rhythm: slides ${i - 1}–${i + 1} all use the ${run[0].layout} layout; vary the composition (stats, chart, diagram, quote, team, table, statement)` });
+    else if (run.every(slide => TEXT_HEAVY.has(slide.layout))) issues.push({ slides: [i - 2, i - 1, i], message: `rhythm: slides ${i - 1}–${i + 1} are all text-heavy (${run.map(slide => slide.layout).join(", ")}); turn one into a statement, stats, chart, diagram or image slide` });
+  }
+  if (slides.length >= 8 && (!deck.theme || directionOf(deck.theme).ground === "light") && slides.every(slide => slide.tone === "light")) issues.push({ slides: [0, slides.length - 1], message: "rhythm: every slide is light; set the cover or closing and one key statement, stat or quote to tone dark (or accent) for contrast" });
+  const content = slides.filter(slide => !["cover", "closing", "section"].includes(slide.layout));
+  if (content.length >= 6) {
+    const counts = new Map<string, number>();
+    for (const slide of content) counts.set(slide.layout, (counts.get(slide.layout) ?? 0) + 1);
+    const [layout, count] = [...counts].sort((a, b) => b[1] - a[1])[0];
+    if (count / content.length > 0.5) issues.push({ slides: slides.flatMap((slide, index) => slide.layout === layout ? [index] : []), message: `rhythm: ${count} of ${content.length} content slides use the ${layout} layout; use a wider range of layouts` });
+  }
+  return issues;
 }
 
 export const parseDeck = (value: unknown) => DeckSchema.parse(value);

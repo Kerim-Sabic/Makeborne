@@ -14,6 +14,7 @@ import GenerationPermissions, {useGenerationConsent} from "./generation-permissi
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
 import AccountClients from "./account-clients";
+import BrandKits from "./brand-kits";
 import { useCreationAccount, type CreationAccount } from "./use-creation-account";
 import GettingStarted from "./onboarding/getting-started";
 import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
@@ -824,8 +825,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
               setInitialClient(opportunityClient); setInitialBrief(brief); setInitialTitle(title); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating(kind); setOpportunityClient(null);
             }} />}
             {tab === "clients" && !opportunityClient && (
-              <AccountClients initialDevice={!!clientDetail} onOpenProject={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} onCreate={(workspaceId, client) => {
-                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(""); setInitialTitle(""); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating("website");
+              <AccountClients initialDevice={!!clientDetail} onOpenProject={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} onCreate={(workspaceId, client, prefill) => {
+                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(prefill?.brief ?? ""); setInitialTitle(prefill?.title ?? ""); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating("website");
               }} target={accountClientRoute} navigate={accountClient => openRoute({ tab: "clients", projectId: null, clientId: null, accountClient })} deviceClients={
               <ClientWorkspace
                 clients={workspace.clients}
@@ -871,6 +872,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     <Plus size={17} /> Custom style
                   </button>
                 </div>
+                {composerAccount.accountId && composerAccount.workspace && <BrandKits key={`${composerAccount.accountId}:${composerAccount.workspace.id}`} accountId={composerAccount.accountId} workspaceId={composerAccount.workspace.id} />}
                 <TemplateGallery onChoose={chooseDirection} />
                 {workspace.styles.some(
                   (style) =>

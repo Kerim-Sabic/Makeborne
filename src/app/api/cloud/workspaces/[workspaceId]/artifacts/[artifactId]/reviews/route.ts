@@ -5,6 +5,7 @@ import { RequestError } from "@/lib/server/http";
 import { ReviewCreateSchema } from "@/lib/client-review/contracts";
 import { COMMENT_COLUMNS, LINK_COLUMNS, mapReviewComment, mapReviewLink } from "@/lib/client-review/mappers";
 import { newReviewToken, reviewUrl, reviewWebsiteHtml } from "@/lib/client-review/server";
+import { loadReviewViews } from "@/lib/client-review/views";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,7 +27,11 @@ export async function GET(_request: Request, context: Context) {
     ]);
     databaseError(links.error); databaseError(snapshots.error); databaseError(project.error);
     const ids = (links.data ?? []).map(link => link.id as string);
-    const comments = ids.length ? await client.from("client_review_comments").select(COMMENT_COLUMNS).eq("workspace_id", workspaceId).in("link_id", ids).order("created_at", { ascending: true }).limit(1000) : { data: [], error: null };
+    const [comments, views] = await Promise.all([
+      ids.length ? client.from("client_review_comments").select(COMMENT_COLUMNS).eq("workspace_id", workspaceId).in("link_id", ids).order("created_at", { ascending: true }).limit(1000) : Promise.resolve({ data: [], error: null }),
+      // Who opened each link and for how long; { available: false } until its migration lands.
+      loadReviewViews(client, workspaceId, ids),
+    ]);
     databaseError(comments.error);
     let linkedClient = null;
     if (project.data?.client_id) {
@@ -39,6 +44,7 @@ export async function GET(_request: Request, context: Context) {
       links: (links.data ?? []).map(mapReviewLink), comments: (comments.data ?? []).map(mapReviewComment),
       snapshots: (snapshots.data ?? []).map(row => Number(row.version_number)), client: linkedClient,
       deliveryStage: ProjectDeliveryStageSchema.catch("active").parse(project.data?.delivery_stage),
+      views,
     });
   } catch (error) { return cloudError(error); }
 }
