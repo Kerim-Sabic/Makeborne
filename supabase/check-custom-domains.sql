@@ -20,7 +20,8 @@ begin
     = array['id','workspace_id','artifact_id','hostname','status','cloudflare_id','verification','ssl_status','error','created_by','created_at','updated_at','last_checked_at'], 'Unexpected columns';
   assert (select count(*) from pg_constraint where conrelid = 'public.custom_domains'::regclass and contype = 'f' and confdeltype = 'c') = 2, 'Foreign keys must cascade';
   assert (select count(*) from pg_constraint where conrelid = 'public.custom_domains'::regclass and contype = 'u') = 1, 'hostname must be unique';
-  assert (select prosecdef and provolatile = 's' and proconfig = array['search_path=""'] from pg_proc where oid = 'public.makeborne_resolve_site_host(text)'::regprocedure), 'Resolver must be stable security definer with empty search_path';
+  assert (select prosecdef and provolatile = 's' and proconfig = array['search_path=""'] from pg_proc where oid = coalesce(to_regprocedure('makeborne_rpc.makeborne_resolve_site_host(text)'), 'public.makeborne_resolve_site_host(text)'::regprocedure)), 'Resolver must be stable security definer with empty search_path';
+  assert to_regprocedure('makeborne_rpc.makeborne_resolve_site_host(text)') is null or (select not prosecdef from pg_proc where oid = 'public.makeborne_resolve_site_host(text)'::regprocedure), 'Public makeborne_resolve_site_host must be a security-invoker wrapper';
   raise notice 'PASS custom domains: columns, cascades, unique hostname, resolver definition';
 
   -- Fixtures: owner workspace with 11 sites, plus another account's workspace.

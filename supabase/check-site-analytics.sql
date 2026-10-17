@@ -40,8 +40,8 @@ begin
     = array['artifact_id','workspace_id','day','dimension','value','views'], 'Unexpected site_view_breakdowns columns';
   assert (select array_agg(column_name::text order by ordinal_position) from information_schema.columns where table_schema = 'makeborne_private' and table_name = 'site_view_visitors')
     = array['artifact_id','day','visitor','views'], 'Unexpected site_view_visitors columns';
-  assert (select prosecdef and provolatile = 'v' and proconfig = array['search_path=""'] from pg_proc
-    where oid = 'public.makeborne_record_site_view(text,text,text,text,text,text,bigint,text)'::regprocedure), 'Recorder must be volatile security definer with empty search_path';
+  assert (select prosecdef and provolatile = 'v' and proconfig = array['search_path=""'] from pg_proc where oid = coalesce(to_regprocedure('makeborne_rpc.makeborne_record_site_view(text,text,text,text,text,text,bigint,text)'), 'public.makeborne_record_site_view(text,text,text,text,text,text,bigint,text)'::regprocedure)), 'Recorder must be volatile security definer with empty search_path';
+  assert to_regprocedure('makeborne_rpc.makeborne_record_site_view(text,text,text,text,text,text,bigint,text)') is null or (select not prosecdef from pg_proc where oid = 'public.makeborne_record_site_view(text,text,text,text,text,text,bigint,text)'::regprocedure), 'Public makeborne_record_site_view must be a security-invoker wrapper';
   assert exists(select 1 from pg_indexes where schemaname = 'public' and tablename = 'site_view_days' and indexdef like '%(workspace_id, day)%'), 'Missing site_view_days (workspace_id, day) index';
   assert exists(select 1 from pg_indexes where schemaname = 'public' and tablename = 'site_view_breakdowns' and indexdef like '%(workspace_id, day)%'), 'Missing site_view_breakdowns (workspace_id, day) index';
   assert obj_description('public.makeborne_record_site_view(text,text,text,text,text,text,bigint,text)'::regprocedure, 'pg_proc') is not null, 'Recorder comment missing';

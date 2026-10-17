@@ -22,8 +22,8 @@ begin
   assert (select count(*) from pg_constraint where conrelid = 'public.client_review_views'::regclass and contype = 'f' and confdeltype = 'c'
     and confrelid = 'public.client_review_links'::regclass) = 1, 'Views must cascade with their link';
   assert (select count(*) from pg_constraint where conrelid = 'public.client_review_views'::regclass and contype = 'u') = 1, 'One session row per link';
-  assert (select prosecdef and proconfig = array['search_path=""'] from pg_proc
-    where oid = 'public.makeborne_record_client_review_view(text,uuid,text,boolean,jsonb)'::regprocedure), 'Heartbeat must be security definer with empty search_path';
+  assert (select prosecdef and proconfig = array['search_path=""'] from pg_proc where oid = coalesce(to_regprocedure('makeborne_rpc.makeborne_record_client_review_view(text,uuid,text,boolean,jsonb)'), 'public.makeborne_record_client_review_view(text,uuid,text,boolean,jsonb)'::regprocedure)), 'Heartbeat must be security definer with empty search_path';
+  assert to_regprocedure('makeborne_rpc.makeborne_record_client_review_view(text,uuid,text,boolean,jsonb)') is null or (select not prosecdef from pg_proc where oid = 'public.makeborne_record_client_review_view(text,uuid,text,boolean,jsonb)'::regprocedure), 'Public makeborne_record_client_review_view must be a security-invoker wrapper';
   raise notice 'PASS review views: columns, cascade, unique session, heartbeat definition';
 
   -- Grants: browsers can call the heartbeat, read through RLS, never write.
