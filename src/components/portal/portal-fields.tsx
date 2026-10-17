@@ -3,16 +3,17 @@ import { useRef, useState } from "react";
 import { ImagePlus, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import { emptyHours, type Field, type Hours, type RichText } from "@/lib/portal/content-model";
 
-export type Images = { path: string; previewUrl: string }[];
-export type Uploader = (file: File) => Promise<{ path: string; previewUrl: string }>;
+export type Images = { path: string; previewUrl: string; removable?: boolean }[];
+/** The client's own photos: upload a new one, or delete one that isn't on the website. */
+export type PhotoActions = { upload: (file: File) => Promise<Images[number]>; remove: (image: Images[number]) => Promise<void> };
 const DAYS: [keyof Omit<Hours, "exceptions">, string][] = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
 
 const words = (key: string) => key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, letter => letter.toUpperCase());
 export const fieldLabel = (key: string, field: Field) => field.label ?? words(key);
 
 /** One form control for a content field. Values follow the content model (null = empty). */
-export function FieldInput({ id, name, field, value, onChange, images, onUpload, currency, locale }: {
-  id: string; name: string; field: Field; value: unknown; onChange: (value: unknown) => void; images: Images; onUpload?: Uploader; currency?: string; locale?: string;
+export function FieldInput({ id, name, field, value, onChange, images, photos, currency, locale }: {
+  id: string; name: string; field: Field; value: unknown; onChange: (value: unknown) => void; images: Images; photos?: PhotoActions; currency?: string; locale?: string;
 }) {
   const label = fieldLabel(name, field), text = typeof value === "string" ? value : "";
   const head = <label htmlFor={id}>{label}{field.required ? "" : <em> optional</em>}</label>;
@@ -39,7 +40,7 @@ export function FieldInput({ id, name, field, value, onChange, images, onUpload,
     case "phone": return <div className="pf-field">{head}<input id={id} type="tel" value={text} onChange={event => onChange(event.target.value || null)} />{help}</div>;
     case "hours": return <div className="pf-field">{<span className="pf-label">{label}</span>}<HoursEditor id={id} value={(value as Hours | null) ?? emptyHours()} onChange={onChange} />{help}</div>;
     case "richtext": return <div className="pf-field"><span className="pf-label">{label}</span><RichTextEditor id={id} value={(value as RichText | null) ?? []} onChange={onChange} />{help}</div>;
-    case "image": return <div className="pf-field"><span className="pf-label">{label}</span><ImagePicker id={id} value={value as { src: string; alt: string } | null} images={images} onChange={onChange} onUpload={onUpload} />{help}</div>;
+    case "image": return <div className="pf-field"><span className="pf-label">{label}</span><ImagePicker id={id} value={value as { src: string; alt: string } | null} images={images} onChange={onChange} photos={photos} />{help}</div>;
   }
 }
 
@@ -79,26 +80,43 @@ function RichTextEditor({ id, value, onChange }: { id: string; value: RichText; 
   </div>;
 }
 
-function ImagePicker({ id, value, images, onChange, onUpload }: { id: string; value: { src: string; alt: string } | null; images: Images; onChange: (value: { src: string; alt: string } | null) => void; onUpload?: Uploader }) {
+function ImagePicker({ id, value, images, onChange, photos }: { id: string; value: { src: string; alt: string } | null; images: Images; onChange: (value: { src: string; alt: string } | null) => void; photos?: PhotoActions }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   async function upload(file: File) {
-    if (!onUpload) return;
+    if (!photos) return;
     setBusy(true); setError("");
-    try { const image = await onUpload(file); onChange({ src: image.path, alt: value?.alt ?? "" }); }
+    try { const image = await photos.upload(file); onChange({ src: image.path, alt: value?.alt ?? "" }); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "The photo couldn't be uploaded."); }
+    finally { setBusy(false); }
+  }
+  async function remove(image: Images[number]) {
+    if (!photos) return;
+    setBusy(true); setError("");
+    try { await photos.remove(image); setConfirming(null); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "The photo couldn't be deleted."); setConfirming(null); }
     finally { setBusy(false); }
   }
   return <div className="pf-images" id={id}>
     {images.length > 0 ? <div role="radiogroup" aria-label="Choose a photo">
-      {images.map(image => <button key={image.path} type="button" role="radio" aria-checked={value?.src === image.path} title={image.path.split("/").pop()}
-        onClick={() => onChange({ src: image.path, alt: value?.alt ?? "" })}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- portal-served thumbnail */}
-        <img src={image.previewUrl} alt="" loading="lazy" />
-      </button>)}
-    </div> : <p className="portal-muted">No photos yet{onUpload ? ". Upload one below." : ". Ask your agency to add some."}</p>}
-    {onUpload && <div className="pf-upload">
+      {images.map(image => <div key={image.path} className="pf-photo">
+        <button type="button" role="radio" aria-checked={value?.src === image.path} title={image.path.split("/").pop()}
+          onClick={() => onChange({ src: image.path, alt: value?.alt ?? "" })}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- portal-served thumbnail */}
+          <img src={image.previewUrl} alt="" loading="lazy" />
+        </button>
+        {/* Only the client's own photos that aren't on the website, and not the one chosen here. */}
+        {photos && image.removable && value?.src !== image.path && (confirming === image.path
+          ? <div className="pf-photo-confirm" role="group" aria-label="Delete this photo?">
+            <button type="button" className="pf-photo-yes" disabled={busy} onClick={() => void remove(image)}>{busy ? <LoaderCircle size={13} className="portal-spin" /> : <Trash2 size={13} />} Delete</button>
+            <button type="button" className="pf-photo-no" disabled={busy} onClick={() => setConfirming(null)}>Keep</button>
+          </div>
+          : <button type="button" className="pf-photo-delete" aria-label="Delete this photo" title="Delete this photo" onClick={() => setConfirming(image.path)}><X size={13} /></button>)}
+      </div>)}
+    </div> : <p className="portal-muted">No photos yet{photos ? ". Upload one below." : ". Ask your agency to add some."}</p>}
+    {photos && <div className="pf-upload">
       <input ref={input} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif" hidden
         onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} />
       <button type="button" className="portal-link" disabled={busy} onClick={() => input.current?.click()}>{busy ? <LoaderCircle size={14} className="portal-spin" /> : <ImagePlus size={14} />} {busy ? "Uploading…" : "Upload a photo"}</button>

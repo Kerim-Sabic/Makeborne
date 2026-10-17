@@ -126,3 +126,11 @@
 .pe-item-head { min-width: 0; }
 .pe-panel { min-width: 0; overflow: hidden; }
 .pf-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 8px; }
+.pf-photo { position: relative; }
+.pf-photo [role="radio"] { width: 100%; }
+.pf-photo-delete { position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgb(20 20 20 / .66); color: #fff; cursor: pointer; }
+.pf-photo-delete:hover, .pf-photo-delete:focus-visible { background: rgb(20 20 20 / .86); }
+.pf-photo-confirm { position: absolute; inset: 2px; display: grid; place-content: center; gap: 4px; border-radius: 9px; background: rgb(20 20 20 / .74); }
+.pf-photo-confirm button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 10px; border: 0; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.pf-photo-yes { background: #fff; color: #9b1c1c; }
+.pf-photo-no { background: transparent; color: #fff; }

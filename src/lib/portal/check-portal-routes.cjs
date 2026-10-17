@@ -14,7 +14,7 @@ let state;
 function reset(overrides = {}) {
   state = { calls: [], tables: [], creationChecks: 0, headers: {}, role: "owner", user: { id: USER, email: "client@example.com" },
     claims: { sub: USER, session_id: SESSION, exp: Math.floor(Date.now() / 1000) + 3600, role: "authenticated", is_anonymous: false },
-    rpc: () => ({ data: null, error: null }), accessClient: CLIENT, downloads: [], uploads: [], filters: {}, uploadRows: { data: [], error: null }, ...overrides };
+    rpc: () => ({ data: null, error: null }), accessClient: CLIENT, downloads: [], uploads: [], removed: [], filters: {}, uploadRows: { data: [], error: null }, ...overrides };
 }
 const respond = (via, name, args) => { state.calls.push({ via, name, args }); return state.rpc(name, args, via); };
 function builder(table) {
@@ -38,7 +38,8 @@ const serviceClient = () => ({
   rpc: async (name, args) => respond("service", name, args),
   from: table => { state.tables.push(`service:${table}`); throw new Error("service client must not read tables"); },
   storage: { from: bucket => ({ download: async objectPath => { state.downloads.push({ bucket, objectPath }); return { data: new Blob([Buffer.from("png")]), error: null }; },
-    upload: async (objectPath, bytes, options) => { state.uploads.push({ bucket, objectPath, bytes, options }); return state.uploadResult ?? { data: { path: objectPath }, error: null }; } }) },
+    upload: async (objectPath, bytes, options) => { state.uploads.push({ bucket, objectPath, bytes, options }); return state.uploadResult ?? { data: { path: objectPath }, error: null }; },
+    remove: async paths => { state.removed.push({ bucket, paths }); return state.removeResult ?? { data: paths.map(name => ({ name })), error: null }; } }) },
 });
 const anonClient = () => ({ rpc: async (name, args) => respond("anon", name, args), from: table => { state.tables.push(`anon:${table}`); throw new Error("anon tables"); } });
 
@@ -86,6 +87,9 @@ for (const level of ["log", "info", "warn", "error", "debug"]) { const original 
 const PORTAL_ROUTES = ["src/app/api/portal/route.ts", "src/app/api/portal/invites/[token]/route.ts", "src/app/api/portal/invites/[token]/accept/route.ts",
   "src/app/api/portal/sites/[artifactId]/route.ts", "src/app/api/portal/sites/[artifactId]/draft/route.ts", "src/app/api/portal/sites/[artifactId]/changes/route.ts",
   "src/app/api/portal/sites/[artifactId]/images/[assetId]/route.ts", "src/app/api/portal/sites/[artifactId]/images/route.ts"];
+// Cleanup RPCs answer like an idle queue unless a check says otherwise.
+const CLEANUP = { makeborne_portal_sweep_unused_uploads: { removed: 0 }, makeborne_portal_take_upload_trash: { paths: [], waiting: 0 }, makeborne_portal_clear_upload_trash: { cleared: 0 } };
+const withCleanup = rpc => (name, args, via) => name in CLEANUP ? { data: CLEANUP[name], error: null } : rpc(name, args, via);
 const AGENCY_ROUTES = ["src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/portal/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/portal/[accessId]/route.ts",
   "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/route.ts", "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/changes/[changeId]/route.ts"];
 const route = file => load(rel(file));
@@ -288,14 +292,17 @@ check("photo uploads: same origin, photo types only, re-encoded to WebP without 
   const photo = await sharp({ create: { width: 3200, height: 1800, channels: 3, background: "#c0503a" } }).jpeg().withMetadata({ orientation: 6, exif: { IFD0: { Artist: "Ana" } } }).toBuffer();
   const upload = (body, type = "image/jpeg", headers = {}) => route(PORTAL_ROUTES[7]).POST(new Request(`${ORIGIN}/api/portal/sites/${SITE}/images`, { method: "POST",
     headers: { "content-type": type, origin: ORIGIN, ...headers }, body }), params({ artifactId: SITE }));
-  const rpc = (name, args) => name === "makeborne_portal_upload_scope" ? { data: { workspaceId: WS, projectId: PROJECT }, error: null }
-    : name === "makeborne_portal_register_upload" ? { data: { assetId: args.p_asset, path: "/images/client-0123456789ab.webp" }, error: null } : { data: null, error: { code: "XX000" } };
+  const rpc = withCleanup((name, args) => name === "makeborne_portal_upload_scope" ? { data: { workspaceId: WS, projectId: PROJECT }, error: null }
+    : name === "makeborne_portal_register_upload" ? { data: { assetId: args.p_asset, path: "/images/client-0123456789ab.webp" }, error: null } : { data: null, error: { code: "XX000" } });
 
   reset({ rpc });
   const result = await json(await upload(photo));
   assert.equal(result.status, 201, JSON.stringify(result.body));
-  assert.deepEqual(state.calls.map(call => [call.via, call.name]), [["service", "makeborne_portal_upload_scope"], ["service", "makeborne_portal_register_upload"]]);
-  assert.ok(state.calls.every(call => trustedArgs(call.args) && call.args.p_artifact === SITE));
+  assert.deepEqual(state.calls.map(call => [call.via, call.name]), [["service", "makeborne_portal_upload_scope"], ["service", "makeborne_portal_register_upload"],
+    ["service", "makeborne_portal_sweep_unused_uploads"], ["service", "makeborne_portal_take_upload_trash"]]);
+  assert.ok(state.calls.slice(0, 2).every(call => trustedArgs(call.args) && call.args.p_artifact === SITE));
+  assert.deepEqual(state.calls[2].args, { p_artifact: SITE, p_limit: 10 }, "opportunistic cleanup of this site only");
+  assert.deepEqual(state.removed, [], "nothing queued, nothing removed");
   const [stored] = state.uploads, registered = state.calls[1].args;
   const meta = await sharp(stored.bytes).metadata();
   assert.equal(meta.format, "webp"); assert.deepEqual([meta.width, meta.height], [1350, 2400], "rotated by EXIF orientation, longest edge 2400");
@@ -304,7 +311,7 @@ check("photo uploads: same origin, photo types only, re-encoded to WebP without 
   assert.deepEqual([registered.p_sha256, registered.p_bytes, registered.p_width, registered.p_height], [sha, stored.bytes.length, 1350, 2400]);
   assert.equal(registered.p_asset, assetId(WS, PROJECT, sha));
   assert.deepEqual([stored.bucket, stored.objectPath, stored.options.contentType, stored.options.upsert], ["project-assets", `${WS}/${PROJECT}/portal/${registered.p_asset}.webp`, "image/webp", false]);
-  assert.deepEqual(result.body.image, { path: "/images/client-0123456789ab.webp", previewUrl: `/api/portal/sites/${SITE}/images/${registered.p_asset}` });
+  assert.deepEqual(result.body.image, { path: "/images/client-0123456789ab.webp", previewUrl: `/api/portal/sites/${SITE}/images/${registered.p_asset}`, removable: true });
 
   reset({ rpc, uploadResult: { data: null, error: { message: "The resource already exists" } } });
   assert.equal((await upload(photo)).status, 201, "re-uploading the same photo is idempotent");
@@ -322,6 +329,56 @@ check("photo uploads: same origin, photo types only, re-encoded to WebP without 
   assert.deepEqual(state.uploads, []);
   reset({ rpc: (name, args) => name === "makeborne_portal_register_upload" ? { data: null, error: { code: "MB429" } } : rpc(name, args) });
   assert.equal((await upload(photo)).status, 429, "daily photo quota");
+  assert.deepEqual(state.removed.map(entry => entry.paths), [[state.uploads[0].objectPath]], "an object this request stored but could not register is removed");
+  reset({ uploadResult: { data: null, error: { message: "The resource already exists" } }, rpc: (name, args) => name === "makeborne_portal_register_upload" ? { data: null, error: { code: "MB429" } } : rpc(name, args) });
+  assert.equal((await upload(photo)).status, 429);
+  assert.deepEqual(state.removed, [], "an object that already existed is never removed");
+  reset({ rpc: (name, args) => name === "makeborne_portal_sweep_unused_uploads" ? { data: null, error: { code: "XX000" } } : rpc(name, args) });
+  assert.equal((await upload(photo)).status, 201, "a cleanup failure never fails the upload");
+});
+
+check("photo delete and cleanup: same origin and trusted session; storage removal only for leased portal objects, cleared only after it succeeds", async () => {
+  const { purgePortalUploads } = load(rel("src/lib/portal/upload-cleanup.ts"));
+  const OBJ = `${WS}/${SITE}/portal/${ASSET}.webp`;
+  const del = (headers = { origin: ORIGIN }) => route(PORTAL_ROUTES[6]).DELETE(new Request(`${ORIGIN}/api/portal/sites/${SITE}/images/${ASSET}`, { method: "DELETE", headers }), params({ artifactId: SITE, assetId: ASSET }));
+  const queue = paths => (name, args) => name === "makeborne_portal_delete_upload" ? { data: { deleted: true }, error: null }
+    : name === "makeborne_portal_take_upload_trash" ? { data: { paths, waiting: paths.length }, error: null }
+    : name === "makeborne_portal_clear_upload_trash" ? { data: { cleared: args.p_paths.length }, error: null }
+    : name === "makeborne_portal_sweep_unused_uploads" ? { data: { removed: 0 }, error: null } : { data: null, error: { code: "XX000" } };
+
+  reset({ rpc: queue([OBJ, "../../etc/passwd", "other/bucket/file.png"]) });
+  const result = await json(await del());
+  assert.equal(result.status, 200, JSON.stringify(result.body)); assert.deepEqual(result.body, { deleted: true });
+  const call = state.calls.find(item => item.name === "makeborne_portal_delete_upload");
+  assert.equal(call.via, "service"); assert.ok(trustedArgs(call.args)); assert.deepEqual([call.args.p_artifact, call.args.p_asset], [SITE, ASSET]);
+  assert.deepEqual(state.removed, [{ bucket: "project-assets", paths: [OBJ] }], "only well-formed portal object paths are removed");
+  assert.deepEqual(state.calls.find(item => item.name === "makeborne_portal_clear_upload_trash").args, { p_paths: [OBJ] });
+
+  reset({ rpc: queue([OBJ]) });
+  assert.equal((await del({ origin: "https://evil.example" })).status, 403);
+  assert.deepEqual(state.calls, [], "cross-site delete never reaches the database");
+  reset({ rpc: (name, args) => name === "makeborne_portal_delete_upload" ? { data: null, error: { code: "PT409", message: "This photo is part of your website, so it stays. You can stop using it in your content instead." } } : queue([])(name, args) });
+  const refused = await json(await del());
+  assert.equal(refused.status, 409); assert.match(refused.body.error.message, /part of your website/);
+  assert.deepEqual(state.removed, []);
+
+  reset({ rpc: queue([OBJ]), removeResult: { data: null, error: { message: "storage down" } } });
+  const kept = await purgePortalUploads(serviceClient(), null, 50);
+  assert.deepEqual(kept, { swept: 0, removed: 0, failed: 1, waiting: 1 });
+  assert.ok(!state.calls.some(item => item.name === "makeborne_portal_clear_upload_trash"), "a failed removal stays queued");
+
+  const cron = load(rel("src/app/api/cron/portal-uploads/route.ts"));
+  process.env.CRON_SECRET = "c".repeat(40);
+  reset({ rpc: queue([]) });
+  assert.equal((await cron.GET(new Request(`${ORIGIN}/api/cron/portal-uploads`))).status, 401);
+  assert.equal((await cron.GET(new Request(`${ORIGIN}/api/cron/portal-uploads`, { headers: { authorization: `Bearer ${"x".repeat(40)}` } }))).status, 401);
+  assert.deepEqual(state.calls, []);
+  let batches = 0;
+  reset({ rpc: (name, args) => name === "makeborne_portal_take_upload_trash" ? (batches++ < 2 ? { data: { paths: [OBJ], waiting: 1 }, error: null } : { data: { paths: [], waiting: 0 }, error: null }) : queue([])(name, args) });
+  const ran = await json(await cron.GET(new Request(`${ORIGIN}/api/cron/portal-uploads`, { headers: { authorization: `Bearer ${"c".repeat(40)}` } })));
+  assert.equal(ran.status, 200); assert.deepEqual([ran.body.batches, ran.body.removed], [3, 2], "runs batches until the queue is idle");
+  assert.ok(state.calls.filter(item => item.name === "makeborne_portal_sweep_unused_uploads").every(item => item.args.p_artifact === null && item.args.p_limit === 100), "the job sweeps every site");
+  delete process.env.CRON_SECRET;
 });
 
 const agencyCall = async (index, method, url, value, body, headers = {}) => json(await route(AGENCY_ROUTES[index])[method](request(url, { method, body, headers }), params(value)));

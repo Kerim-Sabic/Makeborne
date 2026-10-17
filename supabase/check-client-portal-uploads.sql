@@ -16,6 +16,7 @@ declare
   menu1 constant text := E'{\n  "items": [\n    {\n      "id": "m1",\n      "name": "Margherita"\n    }\n  ]\n}\n';
   token text := rtrim(translate(encode(extensions.gen_random_bytes(32),'base64'),'+/','-_'),'=');
   files jsonb; content jsonb; x jsonb; r jsonb; v_path text; v_change uuid; n integer; k1 text;
+  up3 uuid := gen_random_uuid(); v_path2 text; v_obj2 text; v_paths text[];
 begin
   -- ---------------------------------------------------------------- exposure
   assert (select relrowsecurity from pg_class where oid = 'public.client_portal_uploads'::regclass), 'RLS disabled';
@@ -36,6 +37,16 @@ begin
     and not has_function_privilege('anon','public.makeborne_portal_site_settings(uuid,uuid)','execute'), 'replaced site settings lost its grants';
   assert (select prosecdef and provolatile = 's' and proconfig = array['search_path=""'] from pg_proc
     where oid = coalesce(to_regprocedure('makeborne_rpc.makeborne_portal_site_settings(uuid,uuid)'), 'public.makeborne_portal_site_settings(uuid,uuid)'::regprocedure)), 'site settings core';
+  foreach k1 in array array['makeborne_portal_delete_upload(uuid,uuid,timestamptz,uuid,uuid)','makeborne_portal_sweep_unused_uploads(uuid,integer)',
+      'makeborne_portal_take_upload_trash(integer)','makeborne_portal_clear_upload_trash(text[])'] loop
+    assert has_function_privilege('service_role','public.'||k1,'execute'), 'service_role cannot execute '||k1;
+    assert not has_function_privilege('authenticated','public.'||k1,'execute') and not has_function_privilege('anon','public.'||k1,'execute'), 'browser can execute '||k1;
+    assert not (select prosecdef from pg_proc where oid = ('public.'||k1)::regprocedure), k1||' bridge must be invoker';
+  end loop;
+  foreach k1 in array array['anon','authenticated','service_role'] loop
+    assert not has_table_privilege(k1,'makeborne_private.portal_upload_trash','select'), k1||' reads the trash';
+    assert not has_function_privilege(k1,'makeborne_private.portal_upload_in_website(public.client_portal_uploads)','execute'), k1||' runs the helper';
+  end loop;
   raise notice 'PASS client portal uploads: RLS on, browser roles cannot write, new functions service-role only, replaced functions keep grants and pinned search_path';
 
   -- ---------------------------------------------------------------- fixtures
@@ -150,18 +161,93 @@ begin
   reset role;
   raise notice 'PASS client portal uploads: approval adds only the photos the change uses to the new version''s assets and manifest (website source guard satisfied) and audits the count';
 
+  -- ---------------------------------------------------------------- cleanup: client delete, unused sweep, storage queue
+  v_path2 := '/images/client-' || left(replace(up2::text,'-',''),12) || '.webp';
+  v_obj2 := w||'/'||p||'/portal/'||up2||'.webp';
+  perform set_config('request.jwt.claims', svc, true);
+  set local role service_role;
+  r := public.makeborne_portal_read_site(cu,s_cu,ex,a);
+  assert (select (i->>'removable')::boolean from jsonb_array_elements(r->'images') i where i->>'assetId' = up2::text), 'unused upload is removable';
+  assert (select i->'removable' from jsonb_array_elements(r->'images') i where i->>'assetId' = up1::text) is null, 'website photo is not offered for deletion';
+  begin perform public.makeborne_portal_delete_upload(cu,s_cu,ex,a,up1); raise exception 'website photo deleted';
+  exception when sqlstate 'PT409' then null; end;
+  begin perform public.makeborne_portal_delete_upload(su,s_su,ex,a,up2); raise exception 'stranger deleted';
+  exception when sqlstate 'P0002' then null; end;
+  begin perform public.makeborne_portal_delete_upload(cu,s_su,ex,a,up2); raise exception 'foreign session deleted';
+  exception when others then if sqlstate in ('PT409') or sqlstate like '00%' then raise; end if; end;
+  begin perform public.makeborne_portal_delete_upload(cu,s_cu,ex,a2,up2); raise exception 'other site deleted';
+  exception when sqlstate 'P0002' then null; end;
+  -- In an open change: refused until the change no longer uses it.
+  r := public.makeborne_portal_save_draft(cu,s_cu,ex,a,2,jsonb_build_object('src/content/menu.json',
+    E'{\n  "items": [\n    {\n      "id": "m1",\n      "name": "Margherita",\n      "image": {\n        "src": "' || v_path2 || E'",\n        "alt": "Pizza"\n      }\n    }\n  ]\n}\n'),'Menu: 1 changed',gen_random_uuid());
+  begin perform public.makeborne_portal_delete_upload(cu,s_cu,ex,a,up2); raise exception 'photo in a draft deleted';
+  exception when sqlstate 'PT409' then null; end;
+  reset role;
+  update public.client_portal_changes set status = 'withdrawn' where id = (r->>'id')::uuid;
+  perform set_config('request.jwt.claims', svc, true);
+  set local role service_role;
+  assert (public.makeborne_portal_delete_upload(cu,s_cu,ex,a,up2))->>'deleted' = 'true', 'client delete';
+  begin perform public.makeborne_portal_delete_upload(cu,s_cu,ex,a,up2); raise exception 'second delete accepted';
+  exception when sqlstate 'P0002' then null; end;
+  r := public.makeborne_portal_read_site(cu,s_cu,ex,a);
+  assert not exists(select 1 from jsonb_array_elements(r->'images') i where i->>'assetId' = up2::text), 'deleted photo left the picker';
+  reset role;
+  assert not exists(select 1 from public.assets where id = up2), 'asset row removed';
+  assert exists(select 1 from public.assets where id = up1), 'website photo asset kept';
+  assert (select count(*) from makeborne_private.portal_upload_trash where object_path = v_obj2 and workspace_id = w) = 1, 'object queued for removal';
+  assert (select count(*) from public.audit_events where action = 'portal.image_deleted' and workspace_id = w) = 1, 'delete audited';
+
+  -- Unused for 30 days: swept; recent or website photos stay.
+  insert into public.assets(id,workspace_id,project_id,object_path,content_type,sha256,provenance)
+    values(up3,w,p,w||'/'||p||'/portal/'||up3||'.webp','image/webp',repeat('a',64),'{"kind":"portal_upload"}');
+  insert into public.client_portal_uploads(id,workspace_id,project_id,artifact_id,access_id,actor_id,path_key,object_path,sha256,bytes,width,height,created_at)
+    values(up3,w,p,a,(select id from public.client_portal_access where user_id = cu),cu,left(replace(up3::text,'-',''),12),w||'/'||p||'/portal/'||up3||'.webp',repeat('a',64),1,1,1,now() - interval '31 days');
+  update public.client_portal_uploads set created_at = now() - interval '40 days' where id = up1;
+  perform set_config('request.jwt.claims', svc, true);
+  set local role service_role;
+  begin perform public.makeborne_portal_sweep_unused_uploads(null, 0); raise exception 'bad limit accepted';
+  exception when sqlstate '22023' then null; end;
+  assert (public.makeborne_portal_sweep_unused_uploads(a2, 50))->>'removed' = '0', 'sweep scoped to a site';
+  assert (public.makeborne_portal_sweep_unused_uploads(null, 50))->>'removed' = '1', 'one unused old photo swept';
+  r := public.makeborne_portal_take_upload_trash(10);
+  select array_agg(value order by value) into v_paths from jsonb_array_elements_text(r->'paths');
+  assert v_paths = (select array_agg(o.pth order by o.pth) from unnest(array[v_obj2, w||'/'||p||'/portal/'||up3||'.webp']) o(pth)), 'both objects leased: '||r::text;
+  assert jsonb_array_length((public.makeborne_portal_take_upload_trash(10))->'paths') = 0, 'leased objects back off';
+  assert (public.makeborne_portal_clear_upload_trash(v_paths))->>'cleared' = '2', 'cleared after removal';
+  assert (public.makeborne_portal_take_upload_trash(10))->>'waiting' = '0', 'queue empty';
+  reset role;
+  assert exists(select 1 from public.client_portal_uploads where id = up1) and not exists(select 1 from public.client_portal_uploads where id = up3), 'website photo never swept';
+  raise notice 'PASS client portal uploads: clients delete only unused photos (not on the website, not in an open change, own site and session), unused photos are swept after 30 days, removed objects are queued with backoff and cleared, asset rows follow';
+
   -- ---------------------------------------------------------------- limits and cascades
   insert into public.client_portal_uploads(id,workspace_id,project_id,artifact_id,access_id,actor_id,path_key,object_path,sha256,bytes,width,height)
-    select gen_random_uuid(),w,p,a,(select id from public.client_portal_access where user_id = cu),cu,left(md5(i::text),12),'x',repeat('e',64),1,1,1 from generate_series(1,38) i;
+    select gen_random_uuid(),w,p,a,(select id from public.client_portal_access where user_id = cu),cu,left(md5(i::text),12),'x',repeat('e',64),1,1,1 from generate_series(1,40) i; -- up1 and up2 no longer count today (backdated, deleted)
   perform set_config('request.jwt.claims', svc, true);
   set local role service_role;
   begin perform public.makeborne_portal_register_upload(cu,s_cu,ex,a,gen_random_uuid(),repeat('f',64),1000,800,600); raise exception 'daily limit not enforced';
   exception when sqlstate 'MB429' then null; end;
   reset role;
   delete from public.client_portal_uploads where object_path = 'x';
+  delete from makeborne_private.portal_upload_trash where object_path = 'x';
+  -- The site cap counts only photos not yet on the website (up1 is on it).
+  insert into public.client_portal_uploads(id,workspace_id,project_id,artifact_id,access_id,actor_id,path_key,object_path,sha256,bytes,width,height,created_at)
+    select gen_random_uuid(),w,p,a,(select id from public.client_portal_access where user_id = cu),cu,left(md5('cap'||i),12),'cap/'||i,repeat('e',64),1,1,1,now() - interval '2 days' from generate_series(1,59) i;
+  perform set_config('request.jwt.claims', svc, true);
+  set local role service_role;
+  perform public.makeborne_portal_upload_scope(cu,s_cu,ex,a);
+  reset role;
+  insert into public.client_portal_uploads(id,workspace_id,project_id,artifact_id,access_id,actor_id,path_key,object_path,sha256,bytes,width,height,created_at)
+    values(gen_random_uuid(),w,p,a,(select id from public.client_portal_access where user_id = cu),cu,left(md5('cap60'),12),'cap/60',repeat('e',64),1,1,1,now() - interval '2 days');
+  perform set_config('request.jwt.claims', svc, true);
+  set local role service_role;
+  begin perform public.makeborne_portal_upload_scope(cu,s_cu,ex,a); raise exception 'site cap not enforced';
+  exception when sqlstate 'MB429' then null; end;
+  reset role;
   delete from public.client_portal_access where workspace_id = w;
   assert (select count(*) from public.client_portal_uploads where workspace_id = w) = 0, 'revoking the grant row removes its uploads';
-  raise notice 'PASS client portal uploads: 40 per grant per day enforced (MB429); removing a grant removes its upload rows';
+  assert (select count(*) from makeborne_private.portal_upload_trash where object_path like 'cap/%') = 60, 'cascaded unused photos queued for removal';
+  assert not exists(select 1 from makeborne_private.portal_upload_trash where object_path like '%'||up1::text||'%'), 'website photo object kept';
+  raise notice 'PASS client portal uploads: 40 per grant per day and 60 unused per site enforced (MB429); removing a grant removes its upload rows and queues only unused objects';
 end $$;
 select 'PASS: client portal uploads' as result;
 rollback;

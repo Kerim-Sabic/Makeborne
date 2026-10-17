@@ -4,8 +4,8 @@ import { ArrowDown, ArrowUp, ArrowUpRight, Check, ChevronDown, Clock, LoaderCirc
 import { canonical, checkCollection, describeChange, newItemId, parseManifest, serialiseContent, type Collection, type Manifest } from "@/lib/portal/content-model";
 import type { PortalChange, PortalSite } from "@/lib/portal/contracts";
 import PortalShell from "./portal-shell";
-import { FieldInput, type Images, type Uploader } from "./portal-fields";
-import { PortalError, portalAccount, portalRequest, portalUpload } from "./portal-api";
+import { FieldInput, type Images, type PhotoActions } from "./portal-fields";
+import { PortalError, portalAccount, portalDeletePhoto, portalRequest, portalUpload } from "./portal-api";
 
 type Values = Record<string, unknown>;
 const SAVE_DELAY_MS = 1500;
@@ -35,11 +35,17 @@ function Editor({ site, path, reload }: { site: PortalSite; path: string; reload
   const manifest: Manifest | null = parsed.ok ? parsed.manifest : null;
   // Photos the client uploads join the picker immediately (they reach the website only on approval).
   const [images, setImages] = useState<Images>(site.images);
-  const upload: Uploader = async file => {
-    const image = await portalUpload(site.site.artifactId, file);
-    setImages(list => list.some(item => item.path === image.path) ? list : [...list, image]);
-    return image;
-  };
+  const photos: PhotoActions = useMemo(() => ({
+    upload: async file => {
+      const image = await portalUpload(site.site.artifactId, file);
+      setImages(list => list.some(item => item.path === image.path) ? list : [...list, image]);
+      return image;
+    },
+    remove: async image => {
+      await portalDeletePhoto(site.site.artifactId, image.previewUrl);
+      setImages(list => list.filter(item => item.path !== image.path));
+    },
+  }), [site.site.artifactId]);
   const assets = useMemo(() => new Set(images.map(image => image.path)), [images]);
   // Tabs follow the order the site declares its collections in.
   const editable = useMemo(() => {
@@ -132,8 +138,8 @@ function Editor({ site, path, reload }: { site: PortalSite; path: string; reload
       {collection.help && <p className="portal-muted">{collection.help}</p>}
       <fieldset disabled={pending || busy}>
         {collection.kind === "single"
-          ? <ItemForm prefix={current.key} collection={collection} value={(values[current.key] as Values | null) ?? {}} images={images} onUpload={upload} manifest={manifest} onChange={value => setValue(current.key, value)} />
-          : <ListEditor prefix={current.key} collection={collection} value={(values[current.key] as { items: Values[] } | null) ?? { items: [] }} images={images} onUpload={upload} manifest={manifest} onChange={value => setValue(current.key, value)} />}
+          ? <ItemForm prefix={current.key} collection={collection} value={(values[current.key] as Values | null) ?? {}} images={images} photos={photos} manifest={manifest} onChange={value => setValue(current.key, value)} />
+          : <ListEditor prefix={current.key} collection={collection} value={(values[current.key] as { items: Values[] } | null) ?? { items: [] }} images={images} photos={photos} manifest={manifest} onChange={value => setValue(current.key, value)} />}
       </fieldset>
       {!checks[current.key].ok && <p className="portal-error" role="alert">{(checks[current.key] as { message: string }).message}</p>}
     </section>
@@ -158,13 +164,13 @@ function SaveState({ save, pending }: { save: { state: string; text?: string }; 
 
 const safeParse = (text: string) => { try { return JSON.parse(text); } catch { return null; } };
 
-function ItemForm({ prefix, collection, value, images, onUpload, manifest, onChange }: { prefix: string; collection: Collection; value: Values; images: Images; onUpload: Uploader; manifest: Manifest; onChange: (value: Values) => void }) {
+function ItemForm({ prefix, collection, value, images, photos, manifest, onChange }: { prefix: string; collection: Collection; value: Values; images: Images; photos: PhotoActions; manifest: Manifest; onChange: (value: Values) => void }) {
   return <div className="pe-form">{Object.entries(collection.fields).map(([name, field]) =>
-    <FieldInput key={name} id={`${prefix}-${name}`} name={name} field={field} value={value[name] ?? null} images={images} onUpload={onUpload} currency={manifest.currency} locale={manifest.locale}
+    <FieldInput key={name} id={`${prefix}-${name}`} name={name} field={field} value={value[name] ?? null} images={images} photos={photos} currency={manifest.currency} locale={manifest.locale}
       onChange={next => onChange({ ...value, [name]: next })} />)}</div>;
 }
 
-function ListEditor({ prefix, collection, value, images, onUpload, manifest, onChange }: { prefix: string; collection: Collection; value: { items: Values[] }; images: Images; onUpload: Uploader; manifest: Manifest; onChange: (value: { items: Values[] }) => void }) {
+function ListEditor({ prefix, collection, value, images, photos, manifest, onChange }: { prefix: string; collection: Collection; value: { items: Values[] }; images: Images; photos: PhotoActions; manifest: Manifest; onChange: (value: { items: Values[] }) => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const items = value.items ?? [], max = collection.maxItems ?? 200, noun = collection.itemLabel ?? "item";
@@ -194,7 +200,7 @@ function ListEditor({ prefix, collection, value, images, onUpload, manifest, onC
               : <button type="button" className="pf-icon" aria-label={`Remove ${titleOf(item)}`} onClick={() => setConfirm(id)}><Trash2 size={14} /></button>}
           </span>
         </div>
-        {expanded && <ItemForm prefix={`${prefix}-${id}`} collection={collection} value={item} images={images} onUpload={onUpload} manifest={manifest} onChange={next => set(items.map(entry => entry.id === id ? { ...next, id } : entry))} />}
+        {expanded && <ItemForm prefix={`${prefix}-${id}`} collection={collection} value={item} images={images} photos={photos} manifest={manifest} onChange={next => set(items.map(entry => entry.id === id ? { ...next, id } : entry))} />}
       </li>;
     })}</ol>
     <button type="button" className="portal-link" disabled={items.length >= max} onClick={add}><Plus size={15} /> Add {noun.toLowerCase()}</button>

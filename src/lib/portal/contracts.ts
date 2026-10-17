@@ -40,8 +40,8 @@ export type PortalSite = {
   manifest: string;
   /** Collection files the client may edit, with the sha256 of the current text. */
   collections: { key: string; path: string; sha256: string; text: string }[];
-  /** Site images an image field may point at; previewUrl is a portal-served thumbnail. */
-  images: { path: string; previewUrl: string }[];
+  /** Site images an image field may point at; previewUrl is a portal-served thumbnail. removable: a client photo not on the website, which the client may delete. */
+  images: { path: string; previewUrl: string; removable?: boolean }[];
   /** Added by the backend: the site's page routes, for url-field validation (safeLink(value, routes)). */
   routes: string[];
   /** The open change (draft or pending) or, when none is open, the latest decided/withdrawn one (check status). */

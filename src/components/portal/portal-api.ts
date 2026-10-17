@@ -38,7 +38,12 @@ export function brandStyle(brand: PortalBrand | null | undefined): Record<string
 }
 
 /** Uploads one photo for a site (raw bytes; the server re-encodes it). */
-export async function portalUpload(artifactId: string, file: File): Promise<{ path: string; previewUrl: string }> {
+export async function portalDeletePhoto(artifactId: string, previewUrl: string) {
+  if (!previewUrl.startsWith(`/api/portal/sites/${artifactId}/images/`)) throw new PortalError(400, "This photo can't be deleted here.");
+  await portalRequest<{ deleted: true }>(previewUrl, { method: "DELETE" });
+}
+
+export async function portalUpload(artifactId: string, file: File): Promise<{ path: string; previewUrl: string; removable?: boolean }> {
   if (file.size > 8_000_000) throw new PortalError(413, "This photo is larger than 8 MB. Try a smaller one.");
   const id = await portalAccount();
   const response = await fetch(`/api/portal/sites/${artifactId}/images`, { method: "POST", body: file, cache: "no-store",

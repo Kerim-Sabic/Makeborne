@@ -9,6 +9,10 @@
 -- makeborne_rpc behind its public invoker wrapper since 20261017080000): portal_read_site and portal_image
 -- also list/serve this site's uploads; makeborne_decide_portal_change attaches the
 -- uploads an approved change references. Rehearse with supabase/check-client-portal-uploads.sql.
+-- Cleanup: a client may delete a photo that is not on the website and not in an open
+-- change; photos unused for 30 days are removed automatically. Removing an upload row
+-- (by either path, or by cascade) queues its stored object in makeborne_private.portal_upload_trash,
+-- which the app empties from the project-assets bucket (and retries with backoff).
 begin;
 
 create table public.client_portal_uploads (
@@ -38,6 +42,45 @@ grant select on public.client_portal_uploads to authenticated;
 grant all on public.client_portal_uploads to service_role;
 create policy client_portal_uploads_read on public.client_portal_uploads for select to authenticated using(makeborne_private.can_read(workspace_id));
 
+-- An upload is part of the website once any version of any website in its project lists it
+-- in its asset manifest (history and undo keep needing it), and in use while an open change
+-- (draft or waiting for review) of its site mentions its path.
+create function makeborne_private.portal_upload_in_website(u public.client_portal_uploads) returns boolean
+language sql stable security definer set search_path='' as $$
+  select exists(select 1 from public.artifact_versions v join public.artifacts x on x.id = v.artifact_id
+    where x.project_id = u.project_id and x.workspace_id = u.workspace_id and v.asset_manifest ? u.id::text)
+$$;
+create function makeborne_private.portal_upload_in_changes(u public.client_portal_uploads) returns boolean
+language sql stable security definer set search_path='' as $$
+  select exists(select 1 from public.client_portal_changes c where c.artifact_id = u.artifact_id and c.status in ('draft','pending')
+    and position(('/images/client-' || u.path_key || '.webp') in c.files::text) > 0)
+$$;
+
+-- Stored objects waiting to be removed from the project-assets bucket. Not exposed.
+create table makeborne_private.portal_upload_trash (
+  object_path text primary key check(char_length(object_path) between 1 and 300),
+  workspace_id uuid not null,
+  queued_at timestamptz not null default now(),
+  attempts integer not null default 0,
+  next_attempt_at timestamptz not null default now()
+);
+revoke all on makeborne_private.portal_upload_trash from public, anon, authenticated, service_role;
+
+-- Whenever an upload row goes (client delete, unused sweep, or a cascade from its grant,
+-- site or workspace) and no website version needs it: drop its asset row, queue its object.
+create function makeborne_private.portal_upload_removed() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+  if not makeborne_private.portal_upload_in_website(old) then
+    delete from public.assets where id = old.id and workspace_id = old.workspace_id and provenance->>'kind' = 'portal_upload';
+    insert into makeborne_private.portal_upload_trash(object_path, workspace_id) values(old.object_path, old.workspace_id)
+      on conflict (object_path) do update set next_attempt_at = now();
+  end if;
+  return old;
+end $$;
+create trigger client_portal_uploads_removed after delete on public.client_portal_uploads
+  for each row execute function makeborne_private.portal_upload_removed();
+
 -- Where an upload goes, after the grant and quota checks (40 per grant per day, 60 not-yet-used per site).
 create function makeborne_private.portal_upload_scope(p_actor uuid, p_session uuid, p_expires timestamptz, p_artifact uuid) returns jsonb
 language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
@@ -49,8 +92,8 @@ begin
   if (select count(*) from public.client_portal_uploads where access_id = g.id and created_at > now() - interval '1 day') >= 40 then
     raise exception 'Photo upload limit reached for today' using errcode='MB429';
   end if;
-  if (select count(*) from public.client_portal_uploads where artifact_id = a.id) >= 60 then
-    raise exception 'This site has reached its photo limit' using errcode='MB429';
+  if (select count(*) from public.client_portal_uploads u where u.artifact_id = a.id and not makeborne_private.portal_upload_in_website(u)) >= 60 then
+    raise exception 'This site already has 60 photos waiting to be used. Delete some you no longer need.' using errcode='MB429';
   end if;
   return jsonb_build_object('workspaceId', a.workspace_id, 'projectId', a.project_id);
 end $$;
@@ -77,8 +120,8 @@ begin
   if (select count(*) from public.client_portal_uploads where access_id = g.id and created_at > now() - interval '1 day') >= 40 then
     raise exception 'Photo upload limit reached for today' using errcode='MB429';
   end if;
-  if (select count(*) from public.client_portal_uploads where artifact_id = a.id) >= 60 then
-    raise exception 'This site has reached its photo limit' using errcode='MB429';
+  if (select count(*) from public.client_portal_uploads u where u.artifact_id = a.id and not makeborne_private.portal_upload_in_website(u)) >= 60 then
+    raise exception 'This site already has 60 photos waiting to be used. Delete some you no longer need.' using errcode='MB429';
   end if;
   v_key := left(replace(p_asset::text, '-', ''), 12);
   v_path := a.workspace_id::text || '/' || a.project_id::text || '/portal/' || p_asset::text || '.webp';
@@ -93,6 +136,71 @@ begin
     values(p_asset, a.workspace_id, a.project_id, a.id, g.id, p_actor, v_key, v_path, p_sha256, p_bytes, p_width, p_height);
   perform makeborne_private.portal_audit(a.workspace_id, p_actor, 'portal.image_uploaded', g.id, jsonb_build_object('artifactId', a.id, 'bytes', p_bytes));
   return jsonb_build_object('assetId', p_asset, 'path', '/images/client-' || v_key || '.webp');
+end $$;
+
+-- A client deletes one of this site's photos that is not on the website and not in an open change.
+create function makeborne_private.portal_delete_upload(p_actor uuid, p_session uuid, p_expires timestamptz, p_artifact uuid, p_asset uuid) returns jsonb
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+declare g public.client_portal_access%rowtype; u public.client_portal_uploads%rowtype;
+begin
+  perform makeborne_private.check_submission_session(p_actor, p_session, p_expires);
+  g := makeborne_private.portal_grant(p_actor, p_artifact, true);
+  select * into u from public.client_portal_uploads where id = p_asset and artifact_id = p_artifact and workspace_id = g.workspace_id for update;
+  if not found then raise exception 'Photo not found' using errcode='P0002'; end if;
+  if makeborne_private.portal_upload_in_website(u) then
+    raise exception 'This photo is part of your website, so it stays. You can stop using it in your content instead.' using errcode='PT409';
+  end if;
+  if makeborne_private.portal_upload_in_changes(u) then
+    raise exception 'This photo is used in changes you haven''t finished. Choose another photo there first.' using errcode='PT409';
+  end if;
+  delete from public.client_portal_uploads where id = u.id;
+  perform makeborne_private.portal_audit(g.workspace_id, p_actor, 'portal.image_deleted', g.id, jsonb_build_object('artifactId', p_artifact));
+  return jsonb_build_object('deleted', true);
+end $$;
+
+-- Service role: removes photos unused for 30 days (not on the website, not in an open change),
+-- for one site or everywhere, at most p_limit per call. Returns how many were removed.
+create function makeborne_private.portal_sweep_unused_uploads(p_artifact uuid, p_limit integer) returns jsonb
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+declare v_count integer;
+begin
+  if p_limit is null or p_limit not between 1 and 500 then raise exception 'Invalid limit' using errcode='22023'; end if;
+  with gone as (
+    delete from public.client_portal_uploads where id in (
+      select u.id from public.client_portal_uploads u
+      where (p_artifact is null or u.artifact_id = p_artifact) and u.created_at < now() - interval '30 days'
+        and not makeborne_private.portal_upload_in_website(u) and not makeborne_private.portal_upload_in_changes(u)
+      order by u.created_at limit p_limit for update skip locked)
+    returning 1)
+  select count(*) into v_count from gone;
+  return jsonb_build_object('removed', v_count);
+end $$;
+
+-- Service role: leases up to p_limit queued objects (retry backoff 5 min doubling, at most a day).
+create function makeborne_private.portal_take_upload_trash(p_limit integer) returns jsonb
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+declare v_paths jsonb;
+begin
+  if p_limit is null or p_limit not between 1 and 1000 then raise exception 'Invalid limit' using errcode='22023'; end if;
+  with taken as (
+    update makeborne_private.portal_upload_trash t set attempts = t.attempts + 1,
+      next_attempt_at = now() + least(interval '1 day', interval '5 minutes' * power(2, least(t.attempts, 10)))
+    where t.object_path in (select object_path from makeborne_private.portal_upload_trash
+      where next_attempt_at <= now() order by next_attempt_at limit p_limit for update skip locked)
+    returning t.object_path)
+  select coalesce(jsonb_agg(object_path order by object_path), '[]'::jsonb) into v_paths from taken;
+  return jsonb_build_object('paths', v_paths, 'waiting', (select count(*) from makeborne_private.portal_upload_trash));
+end $$;
+
+-- Service role: forgets objects the app removed from storage.
+create function makeborne_private.portal_clear_upload_trash(p_paths text[]) returns jsonb
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+declare v_count integer;
+begin
+  if p_paths is null or cardinality(p_paths) > 1000 then raise exception 'Invalid paths' using errcode='22023'; end if;
+  delete from makeborne_private.portal_upload_trash where object_path = any(p_paths);
+  get diagnostics v_count = row_count;
+  return jsonb_build_object('cleared', v_count);
 end $$;
 
 -- Same as 20261016090000, plus this site's uploads in 'images'.
@@ -128,7 +236,8 @@ begin
         from jsonb_array_elements(coalesce(v.content->'websiteSource'->'assets', '[]'::jsonb)) x
         where x->>'path' like 'public/%' and x->>'mediaType' in ('image/png','image/jpeg','image/webp')
         union all
-        select jsonb_build_object('path', '/images/client-' || u.path_key || '.webp', 'assetId', u.id::text)
+        select jsonb_build_object('path', '/images/client-' || u.path_key || '.webp', 'assetId', u.id::text,
+          'removable', not makeborne_private.portal_upload_in_website(u))
         from public.client_portal_uploads u where u.artifact_id = a.id
           and not exists(select 1 from jsonb_array_elements(coalesce(v.content->'websiteSource'->'assets', '[]'::jsonb)) y where y->>'id' = u.id::text)
       ) images), '[]'::jsonb),
@@ -262,10 +371,14 @@ begin
       where c.artifact_id = a.id and c.workspace_id = p_workspace and c.status = 'pending'), '[]'::jsonb));
 end $$;
 
--- Service-role bridges for the two new client functions (same pattern as 20261016090000).
+-- Helpers and the trigger function: no direct execution by any API role.
+revoke all on function makeborne_private.portal_upload_in_website(public.client_portal_uploads), makeborne_private.portal_upload_in_changes(public.client_portal_uploads),
+  makeborne_private.portal_upload_removed() from public, anon, authenticated, service_role;
+
+-- Service-role bridges for the new client and cleanup functions (same pattern as 20261016090000).
 do $$ declare f record; args text; names text; begin
   for f in select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'makeborne_private'
-    and p.proname in ('portal_upload_scope','portal_register_upload') loop
+    and p.proname in ('portal_upload_scope','portal_register_upload','portal_delete_upload','portal_sweep_unused_uploads','portal_take_upload_trash','portal_clear_upload_trash') loop
     args := pg_get_function_arguments(f.oid);
     select string_agg(x, ',' order by ord) into names from unnest((select proargnames from pg_proc where oid = f.oid)) with ordinality a(x, ord);
     execute format('create function public.makeborne_%I(%s) returns jsonb language sql security invoker set search_path='''' as $fn$ select makeborne_private.%I(%s); $fn$',

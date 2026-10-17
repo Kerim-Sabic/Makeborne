@@ -49,7 +49,7 @@ export const SiteRowSchema = z.object({
   site: z.object({ artifactId: uuid, title: z.string(), slug }), agency: PortalBrandSchema, client: z.object({ name: z.string().nullable() }),
   baseVersion: z.number().int().nonnegative(), manifest: z.string().nullable(),
   collections: z.array(z.object({ key: z.string(), path: z.string(), sha256: z.string().regex(/^[0-9a-f]{64}$/), text: z.string() })),
-  images: z.array(z.object({ path: z.string(), assetId: uuid })), routes: z.array(z.string()), change: z.unknown(),
+  images: z.array(z.object({ path: z.string(), assetId: uuid, removable: z.boolean().optional() })), routes: z.array(z.string()), change: z.unknown(),
 });
 export type SiteRow = z.infer<typeof SiteRowSchema>;
 export const portalImageUrl = (artifactId: string, assetId: string) => `/api/portal/sites/${artifactId}/images/${assetId}`;
@@ -58,7 +58,7 @@ export function mapSite(row: SiteRow): PortalSite {
   return {
     site: { artifactId: row.site.artifactId, title: row.site.title, liveUrl: liveUrl(row.site.slug) }, agency: row.agency,
     client: { name: row.client.name ?? "" }, baseVersion: row.baseVersion, manifest: row.manifest ?? "",
-    collections: row.collections, images: row.images.map(image => ({ path: image.path, previewUrl: portalImageUrl(row.site.artifactId, image.assetId) })),
+    collections: row.collections, images: row.images.map(image => ({ path: image.path, previewUrl: portalImageUrl(row.site.artifactId, image.assetId), ...(image.removable ? { removable: true } : {}) })),
     routes: row.routes, change: row.change ? mapChange(row.change) : null,
   };
 }

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { MAX_PREVIEW_SOURCE_BYTES, renderAssetPreview } from "@/lib/cloud/image-preview";
-import { portalContext, portalDatabaseError, portalFail, validUuid } from "@/lib/portal/server";
-import { RequestError } from "@/lib/server/http";
+import { portalContext, portalDatabaseError, portalFail, portalJson, validUuid } from "@/lib/portal/server";
+import { purgePortalUploads } from "@/lib/portal/upload-cleanup";
+import { RequestError, sameOrigin } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 type Context = { params: Promise<{ artifactId: string; assetId: string }> };
@@ -23,5 +24,23 @@ export async function GET(request: Request, context: Context) {
     catch { throw new RequestError("INVALID_IMAGE", "This image cannot be previewed.", 415); }
     return new Response(bytes, { headers: { "Content-Type": "image/webp", "Cache-Control": "private, no-store", Vary: "Cookie, X-Makeborne-Account",
       "X-Content-Type-Options": "nosniff", "Cross-Origin-Resource-Policy": "same-origin" } });
+  } catch (error) { return portalFail(error); }
+}
+
+/**
+ * The client deletes a photo they uploaded that is not on the website and not used in an
+ * open change. Its stored object is removed right away (or retried later by the cleanup).
+ */
+export async function DELETE(request: Request, context: Context) {
+  try {
+    sameOrigin(request);
+    const params = await context.params;
+    const artifactId = validUuid(params.artifactId, "site"), assetId = validUuid(params.assetId, "image");
+    const { trusted, db } = await portalContext(request);
+    const { error } = await db.rpc("makeborne_portal_delete_upload", { ...trusted, p_artifact: artifactId, p_asset: assetId });
+    portalDatabaseError(error);
+    // Best effort: a failure here leaves the object queued for the next cleanup.
+    await purgePortalUploads(db, artifactId, 20).catch(() => undefined);
+    return portalJson({ deleted: true });
   } catch (error) { return portalFail(error); }
 }
