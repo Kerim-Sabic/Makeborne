@@ -4,9 +4,34 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const { REVIEW_TOKEN, ReviewAnchorSchema, ReviewCommentInputSchema, ReviewDecisionInputSchema, ReviewPayloadSchema, ReviewCreateSchema, linkState } = require("./contracts.ts");
 const { anchorLabel, builderRequestFromFeedback, reviewMailto } = require("./feedback.ts");
 const { mapReviewLink, mapReviewComment } = require("./mappers.ts");
+const { reviewDateLabel, reviewTimeLabel } = require("./date-format.ts");
 
 let count = 0;
 function check(name, fn) { fn(); count++; console.log(`PASS ${name}`); }
+
+check("public review dates are identical across server/browser locales and timezones", () => {
+  const { spawnSync } = require("node:child_process");
+  assert.equal(reviewDateLabel("2026-10-18T00:30:00+14:00"), "17 Oct 2026");
+  assert.equal(reviewTimeLabel("2026-10-18T00:30:00+14:00"), "17 Oct, 10:30 UTC");
+  assert.equal(reviewDateLabel("2028-02-29T23:59:59Z"), "29 Feb 2028");
+  assert.equal(reviewTimeLabel("invalid"), "Date unavailable");
+  const file = require.resolve("./date-format.ts");
+  const source = ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const script = `const m = {exports:{}}; new Function('exports', ${JSON.stringify(source)})(m.exports); console.log(JSON.stringify([m.exports.reviewDateLabel('2026-10-17T23:30:00Z'),m.exports.reviewTimeLabel('2026-10-17T23:30:00Z')]));`;
+  const outputs = [
+    { TZ: "Etc/GMT+12", LANG: "en_US.UTF-8" },
+    { TZ: "Pacific/Kiritimati", LANG: "de_DE.UTF-8" },
+  ].map(env => {
+    const result = spawnSync(process.execPath, ["-e", script], { encoding: "utf8", env: { ...process.env, ...env }, timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout.trim());
+  });
+  assert.deepEqual(outputs[0], ["17 Oct 2026", "17 Oct, 23:30 UTC"]);
+  assert.deepEqual(outputs[1], outputs[0]);
+  const page = fs.readFileSync(require("node:path").join(__dirname, "../../components/client-review-page.tsx"), "utf8");
+  assert.match(page, /reviewDateLabel as dateLabel, reviewTimeLabel as timeLabel/);
+  assert.doesNotMatch(page, /toLocale(?:Date)?String|suppressHydrationWarning/);
+});
 
 check("tokens are 256-bit base64url and match the SQL format", () => {
   for (let i = 0; i < 200; i++) {

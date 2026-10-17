@@ -10,14 +10,13 @@ import ClientReviewBeacon, { type ViewLocation } from "./client-review-beacon";
 import { ArtifactContentSchema, StyleProfileSchema, type ArtifactContent, type StyleProfile } from "@/lib/domain";
 import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
 import { anchorLabel } from "@/lib/client-review/feedback";
+import { reviewDateLabel as dateLabel, reviewTimeLabel as timeLabel } from "@/lib/client-review/date-format";
 import type { ActiveReview, ReviewAnchor, ReviewComment, ReviewDecision, ReviewPayload } from "@/lib/client-review/contracts";
 import "@/app/account-preview.css";
 
 type Identity = { name: string; email: string };
 type Pin = { x: number; y: number; ref: string; label: string };
 const IDENTITY_KEY = "makeborne.review-identity.v1";
-const dateLabel = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-const timeLabel = (value: string) => new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 function readIdentity(): Identity {
   try {
