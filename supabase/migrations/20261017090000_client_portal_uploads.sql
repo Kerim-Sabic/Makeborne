@@ -5,7 +5,8 @@
 -- reaches the website only when the agency approves a change that uses it: approval
 -- then adds it to the new version's source assets and asset manifest.
 -- Additive plus three `create or replace` bodies of portal functions from
--- 20261016090000 (same signatures and grants): portal_read_site and portal_image
+-- 20261016090000 (same signatures and grants; the decision function lives in
+-- makeborne_rpc behind its public invoker wrapper since 20261017080000): portal_read_site and portal_image
 -- also list/serve this site's uploads; makeborne_decide_portal_change attaches the
 -- uploads an approved change references. Rehearse with supabase/check-client-portal-uploads.sql.
 begin;
@@ -159,7 +160,7 @@ end $$;
 
 -- Same as 20261016090000, plus: uploads referenced by the approved files are added to
 -- the new version's source assets and asset manifest (at most 100 source assets).
-create or replace function public.makeborne_decide_portal_change(p_workspace uuid, p_artifact uuid, p_change uuid, p_decision text,
+create or replace function makeborne_rpc.makeborne_decide_portal_change(p_workspace uuid, p_artifact uuid, p_change uuid, p_decision text,
   p_note text, p_overwrite boolean, p_summary text) returns jsonb
 language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
 declare a public.artifacts%rowtype; c public.client_portal_changes%rowtype; g public.client_portal_access%rowtype;
