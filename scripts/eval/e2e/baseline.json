@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "entries": {
+    "contrast": {
+      "editor@1440": {
+        "lowContrastCount": 8
+      },
+      "editor@375": {
+        "lowContrastCount": 8
+      },
+      "studio@1440": {
+        "lowContrastCount": 39
+      },
+      "studio@375": {
+        "lowContrastCount": 35
+      }
+    },
+    "funnel": {
+      "knownBlocked": []
+    },
+    "quality": {
+      "editor-toolbar@800": {
+        "toolbarClipped": true,
+        "overflowPx": 0
+      },
+      "editor@1440": {
+        "axeCritical": 0,
+        "axeSerious": 1,
+        "cls": 0.1957,
+        "lcpMs": 972,
+        "overflowPx": 0
+      },
+      "editor@375": {
+        "axeCritical": 0,
+        "axeSerious": 1,
+        "cls": 0.1293,
+        "lcpMs": 968,
+        "overflowPx": 0
+      },
+      "home@1440": {
+        "axeCritical": 0,
+        "axeSerious": 2,
+        "cls": 0,
+        "lcpMs": 140,
+        "overflowPx": 0
+      },
+      "home@375": {
+        "axeCritical": 0,
+        "axeSerious": 2,
+        "cls": 0,
+        "lcpMs": 112,
+        "overflowPx": 0
+      },
+      "studio@1440": {
+        "axeCritical": 0,
+        "axeSerious": 2,
+        "cls": 0.0256,
+        "lcpMs": 396,
+        "overflowPx": 0
+      },
+      "studio@375": {
+        "axeCritical": 0,
+        "axeSerious": 2,
+        "cls": 0.0085,
+        "lcpMs": 348,
+        "overflowPx": 0
+      }
+    }
+  },
+  "qualityBar": "1 (2026-10-18)",
+  "updatedAt": "2026-10-18T11:09:13.919Z",
+  "source": "outputs/eval/e2e/20261018T110742Z",
+  "measuredOn": "next dev on http://127.0.0.1:3210 (development build, provider keys blank), Chromium headless, device scale 1",
+  "changes": [
+    {
+      "at": "2026-10-18T23:50:09.244Z",
+      "entry": "funnel.knownBlocked",
+      "from": [
+        "review-comment",
+        "review-decision"
+      ],
+      "to": [],
+      "why": "The isolated stack received migration 20261013160000_client_review_view_integrity (with the other 24 missing migrations) on 2026-10-18; the e2e run outputs/eval/e2e/20261018T234724Z passed review-comment and review-decision for real, so a 503 there is now a regression. Other entries unchanged (that run reproduced them exactly)."
+    }
+  ]
+}

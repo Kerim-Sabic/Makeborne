@@ -1,0 +1,23 @@
+{
+  "id": "w04-creator-mira-objects",
+  "order": 4,
+  "format": "website",
+  "direction": "creator",
+  "title": "Mira Objects",
+  "shared": true,
+  "brief": "Build a complete portfolio and enquiry website for Mira Objects, an independent ceramic artist. Asymmetric but readable layout, collection filtering, a work detail interaction (open a piece to see it larger with its details) and a commission enquiry form with accessible validation. I will add my own photographs of the pieces later: until then use clearly marked placeholders or simple drawings of vessels with distinct silhouettes, never stock photos presented as my work. All links useful, outstanding mobile layout. The form is not connected yet, so it must not pretend an enquiry was delivered. No invented exhibitions, stockists, prices or press. Make it visually distinct from typical SaaS sites.",
+  "source": {
+    "type": "real",
+    "path": "scripts/qualify-products.mjs:10",
+    "adaptation": "Removed \"Warm ivory and charcoal, oversized serif typography\" (it names the house look the golden set must not force) and \"no image API available\" (runtime). Replaced \"original SVG illustrations of ceramic objects\" with the artist's honest image situation (her photos follow later; placeholders or drawings, never stock passed off as her work) so tools with stock libraries or image generation get the same instruction. Spelled out \"work detail interaction\" and the no-invented-facts rule that \"No fake form delivery\" implied."
+  },
+  "persona": null,
+  "mustHave": [
+    "collection filtering that actually filters the pieces",
+    "work detail interaction: a piece opens larger with its details",
+    "commission enquiry form with accessible validation that does not claim delivery",
+    "no stock photos presented as the artist's work",
+    "no invented exhibitions, stockists, prices or press"
+  ],
+  "notes": "Prior output: outputs/product-qualification/portfolio.json (+ portfolio.html)."
+}

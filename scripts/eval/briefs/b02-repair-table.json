@@ -1,0 +1,23 @@
+{
+  "id": "b02-repair-table",
+  "order": 24,
+  "format": "book",
+  "direction": "civic",
+  "title": "The Repair Table",
+  "shared": false,
+  "brief": "Create a complete short practical ebook titled The Repair Table, for volunteers running a monthly community repair cafe. Write 1,200–1,600 useful words in three substantive chapters: receiving an item and agreeing its scope; organizing a safe, respectful repair conversation; recording the result and a clear handover. Use a clearly fictional small-appliance example without hazardous electrical repair instructions. Include a short introduction, contents, a reusable intake checklist, a worked before/after record, and a concise final checklist. Make it a readable 6×9 inch portrait ebook ready for PDF export. Choose a coherent visual identity suited to this subject; do not add invented endorsements, citations or missing image placeholders.",
+  "source": {
+    "type": "real",
+    "path": "scripts/fresh-quality-common.mjs:17",
+    "adaptation": "Verbatim; the brief contains no Makeborne runtime lines."
+  },
+  "persona": null,
+  "mustHave": [
+    "three substantive chapters: intake and scope, a safe respectful repair conversation, recording and handover",
+    "1,200-1,600 words",
+    "contents, short introduction, reusable intake checklist, worked before/after record and final checklist",
+    "6 x 9 inch portrait proportions",
+    "no hazardous electrical repair instructions, invented endorsements, citations or image placeholders"
+  ],
+  "notes": "Prior outputs: outputs/fresh-product-quality-ac4b08bd-b91f-47bb-9956-c6d719505738/book. Closest direction: civic (community volunteers)."
+}

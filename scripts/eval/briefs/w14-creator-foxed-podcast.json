@@ -1,0 +1,24 @@
+{
+  "id": "w14-creator-foxed-podcast",
+  "order": 16,
+  "format": "website",
+  "direction": "creator",
+  "title": "Foxed",
+  "shared": false,
+  "brief": "Foxed is a weekly podcast about forgotten books found in secondhand shops, hosted by Isla Brodie and Ravi Menon from Glasgow: 112 episodes since 2024. Right now our website is just the hosting page. We want a proper show site where every episode is easy to find: the newest episode up top with listen buttons for Apple Podcasts, Spotify and YouTube (links to add), an episode index you can search and filter, a page for guests who want to pitch an episode, and a short sponsor section. The five newest: 112 \"The Cookbook Nobody Cooked From\" (48 min), 111 \"A Ghost Story Bought for 50p\" (41 min), 110 \"Poets Who Sold Out, in a Good Way\" (52 min), 109 \"The Atlas With the Wrong Sea\" (39 min), 108 \"Self-Help From 1974\" (45 min). The full archive will come from our RSS feed later, so don't invent more episodes. No listener or download numbers anywhere; the media kit comes later. The guest pitch form isn't connected yet, so it mustn't say the pitch was sent. Email: hello@foxedpod.example.",
+  "source": {
+    "type": "persona",
+    "path": "Helix: Knowledge/Customers/Podcaster.md",
+    "adaptation": "Hosts' voice from the persona (website is \"just the hosting page\", episode pages that can be found, guest booking page, sponsor kit not ready). Show, hosts and episodes are fictional but supplied, so no tool has to invent episode titles."
+  },
+  "persona": "Podcaster.md",
+  "mustHave": [
+    "newest episode featured with Apple Podcasts, Spotify and YouTube buttons pointing to marked placeholders",
+    "episode index of the five supplied episodes with working search or filter",
+    "no invented episodes beyond the five supplied",
+    "guest pitch form that does not claim the pitch was sent",
+    "no listener or download numbers",
+    "email as a mailto: link"
+  ],
+  "notes": "No prior output."
+}

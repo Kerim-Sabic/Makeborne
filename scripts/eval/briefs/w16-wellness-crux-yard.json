@@ -1,0 +1,23 @@
+{
+  "id": "w16-wellness-crux-yard",
+  "order": 18,
+  "format": "website",
+  "direction": "wellness",
+  "title": "Crux Yard",
+  "shared": false,
+  "brief": "Website for Crux Yard, a bouldering gym in a converted tram depot in Leeds. 300 problems reset every week across six walls, a training area with a campus board and kilter board, a cafe serving coffee and toasties, and kids' sessions on weekend mornings. First-timers do a 15-minute induction, shoe hire available. Prices: day pass, 10-visit pass, monthly membership (exact prices to confirm). Open late every day; exact opening hours to confirm. The vibe: loud, chalky, friendly, not elitist. Main goal: book a first visit / induction. There is no online booking system connected yet, so the booking action should explain how to book (at the desk or by phone, number to add) instead of pretending a slot was reserved. No member testimonials or invented staff bios: we haven't collected any yet.",
+  "source": {
+    "type": "real",
+    "path": "makeborne-local DB 127.0.0.1:55322 public.projects.brief, workspace 0a3d6952-0e17-492f-a83b-f48b11796b77, project ea75bd43-3db7-4d02-a141-e5b311441f97",
+    "adaptation": "Verbatim, plus \"exact opening hours to confirm\" and two honesty sentences (no booking system connected; no testimonials or staff bios supplied)."
+  },
+  "persona": null,
+  "mustHave": [
+    "first visit / induction booking action that explains how to book without faking a reservation",
+    "day pass, 10-visit pass and monthly membership with prices as placeholders",
+    "15-minute induction and shoe hire explained for first-timers",
+    "kids' weekend morning sessions",
+    "no testimonials or invented staff bios"
+  ],
+  "notes": "Prior output: artifact 98060eaa-e808-4fbb-9d3c-a8c965263a03 (2 versions) in the same DB. Wellness direction with a deliberately loud brief: the soft wellness defaults must yield to it."
+}

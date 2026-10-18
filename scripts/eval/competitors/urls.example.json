@@ -1,0 +1,42 @@
+{
+  "lovable": {
+    "w01-restaurant-saffron-table": "https://replace-me-w01.lovable.app/",
+    "w02-saas-relay-operations": "https://replace-me-w02.lovable.app/",
+    "w03-professional-hartwell-rook": "https://replace-me-w03.lovable.app/",
+    "w04-creator-mira-objects": "https://replace-me-w04.lovable.app/",
+    "w05-ecommerce-good-dog": "https://replace-me-w05.lovable.app/",
+    "w06-wellness-laurel-creek-dental": "https://replace-me-w06.lovable.app/",
+    "w07-trades-hollis-heating-plumbing": "https://replace-me-w07.lovable.app/",
+    "w08-events-low-ceiling": "https://replace-me-w08.lovable.app/"
+  },
+  "bolt": {
+    "w01-restaurant-saffron-table": "https://replace-me-w01.bolt.host/",
+    "w02-saas-relay-operations": "https://replace-me-w02.bolt.host/",
+    "w03-professional-hartwell-rook": "https://replace-me-w03.bolt.host/",
+    "w04-creator-mira-objects": "https://replace-me-w04.bolt.host/",
+    "w05-ecommerce-good-dog": "https://replace-me-w05.bolt.host/",
+    "w06-wellness-laurel-creek-dental": "https://replace-me-w06.bolt.host/",
+    "w07-trades-hollis-heating-plumbing": "https://replace-me-w07.bolt.host/",
+    "w08-events-low-ceiling": "https://replace-me-w08.bolt.host/"
+  },
+  "framer": {
+    "w01-restaurant-saffron-table": "https://replace-me-w01.framer.website/",
+    "w02-saas-relay-operations": "https://replace-me-w02.framer.website/",
+    "w03-professional-hartwell-rook": "https://replace-me-w03.framer.website/",
+    "w04-creator-mira-objects": "https://replace-me-w04.framer.website/",
+    "w05-ecommerce-good-dog": "https://replace-me-w05.framer.website/",
+    "w06-wellness-laurel-creek-dental": "https://replace-me-w06.framer.website/",
+    "w07-trades-hollis-heating-plumbing": "https://replace-me-w07.framer.website/",
+    "w08-events-low-ceiling": "https://replace-me-w08.framer.website/"
+  },
+  "base44": {
+    "w01-restaurant-saffron-table": "https://replace-me-w01.base44.app/",
+    "w02-saas-relay-operations": "https://replace-me-w02.base44.app/",
+    "w03-professional-hartwell-rook": "https://replace-me-w03.base44.app/",
+    "w04-creator-mira-objects": "https://replace-me-w04.base44.app/",
+    "w05-ecommerce-good-dog": "https://replace-me-w05.base44.app/",
+    "w06-wellness-laurel-creek-dental": "https://replace-me-w06.base44.app/",
+    "w07-trades-hollis-heating-plumbing": "https://replace-me-w07.base44.app/",
+    "w08-events-low-ceiling": "https://replace-me-w08.base44.app/"
+  }
+}

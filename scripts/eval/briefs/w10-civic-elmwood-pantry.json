@@ -1,0 +1,24 @@
+{
+  "id": "w10-civic-elmwood-pantry",
+  "order": 12,
+  "format": "website",
+  "direction": "civic",
+  "title": "Elmwood Neighbors Pantry",
+  "shared": false,
+  "brief": "I coordinate volunteers at Elmwood Neighbors Pantry, a small volunteer-run food pantry in the rear hall of 30 Halvorsen Street, Providence, RI 02907. Our website was built by a volunteer in 2016 and nobody can update it. The new one has three jobs. People who need food should see right away when we're open (Tuesday 4–7pm, Thursday 10am–1pm, Saturday 9am–noon) and that no ID or proof of income is needed. Donors should see where the money goes. Neighbors should be able to sign up to volunteer. Last year about 140 volunteers handed out 9,400 bags of groceries to roughly 1,100 households; use only these numbers. Many of our neighbors speak Spanish, so add a short Spanish summary of the hours and the no-ID rule. Our online donation page isn't set up yet: the Donate button should go to a placeholder link and mention that checks can be mailed to the address above. The volunteer form isn't connected either, so it can't say we'll be in touch. Phone (401) 555-0136.",
+  "source": {
+    "type": "persona",
+    "path": "Helix: Knowledge/Customers/Nonprofit organizer.md",
+    "adaptation": "Volunteer coordinator's voice from the persona (site built by a volunteer in 2016, \"show donors where the money goes\", big donate action, volunteer recruitment, no budget for a payment setup yet). Pantry, street and figures are fictional but supplied; the phone is in the reserved 555-01xx range."
+  },
+  "persona": "Nonprofit organizer.md",
+  "mustHave": [
+    "opening hours and \"no ID or proof of income needed\" visible in the first screen",
+    "short Spanish summary of the hours and the no-ID rule",
+    "Donate action pointing to a marked placeholder; no fake payment",
+    "volunteer signup form that does not claim it was sent",
+    "only the supplied impact numbers (140 volunteers, 9,400 bags, 1,100 households)",
+    "phone (401) 555-0136 as a tel: link"
+  ],
+  "notes": "No prior output. Tests a second language block and dignity-first copy."
+}

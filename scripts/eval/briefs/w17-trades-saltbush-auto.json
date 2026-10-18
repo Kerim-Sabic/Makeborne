@@ -1,0 +1,24 @@
+{
+  "id": "w17-trades-saltbush-auto",
+  "order": 19,
+  "format": "website",
+  "direction": "trades",
+  "title": "Saltbush Auto Repair",
+  "shared": false,
+  "brief": "We're Saltbush Auto Repair, a family-run five-bay independent shop in Tucson, Arizona. Word of mouth has always been our best advertising, but people searching \"mechanic near me\" never find us, and a lot of them think we cost more than the dealer. We don't. Services: brakes, check-engine diagnostics, AC repair (it's Tucson), cooling systems, oil service, hybrid service for Toyota and Lexus, and fleet accounts for local businesses. Phone (520) 555-0187, 1840 W. Saltbush Road, Tucson, AZ 85705. Hours: Monday to Friday 7:30am–5:30pm, Saturday 8am–1pm. Our warranty: 24 months or 24,000 miles on parts and labor for most repairs. The diagnostic fee is to confirm and is credited to the repair if you go ahead. Visitors should be able to call or request an appointment from a phone in one tap. The request form isn't linked to our shop software yet, so it can't confirm a booking. Don't write anything about manufacturer warranties, and no made-up reviews or star ratings.",
+  "source": {
+    "type": "persona",
+    "path": "Helix: Knowledge/Customers/US auto repair shop owner.md",
+    "adaptation": "Owner's voice from the persona (word of mouth, \"people think we're more expensive than the dealer\", trust through warranty and process, careful wording around manufacturer warranties, no incentivized or fake reviews). Shop and street are fictional; the phone is in the reserved 555-01xx range."
+  },
+  "persona": "US auto repair shop owner.md",
+  "mustHave": [
+    "phone (520) 555-0187 as a tel: link reachable in one tap on mobile",
+    "opening hours and address visible",
+    "service list including AC repair, hybrid service and fleet accounts",
+    "24-month / 24,000-mile warranty as supplied; diagnostic fee as a placeholder",
+    "appointment request form that does not confirm a booking",
+    "no reviews, ratings or manufacturer-warranty claims"
+  ],
+  "notes": "No prior output."
+}

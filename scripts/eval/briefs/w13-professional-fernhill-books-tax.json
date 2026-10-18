@@ -1,0 +1,24 @@
+{
+  "id": "w13-professional-fernhill-books-tax",
+  "order": 15,
+  "format": "website",
+  "direction": "professional",
+  "title": "Fernhill Books & Tax",
+  "shared": false,
+  "brief": "We're Fernhill Books & Tax, a three-person firm in Portland, Oregon: Grace Lindqvist, CPA, plus an enrolled agent and a bookkeeper. We want to be known as the accountants for independent restaurants, cafés and food carts, and move away from one-off $200 tax returns. Packages: Monthly Books from $450 a month (bookkeeping and reconciliations, payroll coordination, a one-page monthly report), Books + Tax from $750 a month (adds quarterly estimates and the business and owner returns), and Cleanup projects quoted after a free 20-minute call. The main goal is booking that call. We take new clients from May to December only; during tax season we serve existing clients, so say that plainly. Only Grace is a CPA, so don't call the whole team CPAs. Never collect tax documents through a website form: point clients to our secure portal (link to add). Phone (503) 555-0119, office hours Monday to Thursday 9am–5pm. No client logos or testimonials.",
+  "source": {
+    "type": "persona",
+    "path": "Helix: Knowledge/Customers/US accountant and bookkeeper.md",
+    "adaptation": "Owner's voice from the persona (niche positioning, fixed-fee packages instead of \"$200 tax return\" clients, no marketing in tax season, Circular 230/AICPA care with the CPA title, FTC Safeguards: never collect tax documents through web forms). Firm, people and prices are fictional but supplied; the phone is in the reserved 555-01xx range."
+  },
+  "persona": "US accountant and bookkeeper.md",
+  "mustHave": [
+    "three packages with the supplied \"from\" prices",
+    "free 20-minute call booking as the primary action",
+    "new clients May-December note visible",
+    "no document upload form; secure portal link as a placeholder",
+    "CPA credential attached only to Grace Lindqvist",
+    "phone (503) 555-0119 as a tel: link"
+  ],
+  "notes": "No prior output."
+}

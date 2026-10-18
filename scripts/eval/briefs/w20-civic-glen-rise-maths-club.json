@@ -1,0 +1,23 @@
+{
+  "id": "w20-civic-glen-rise-maths-club",
+  "order": 22,
+  "format": "website",
+  "direction": "civic",
+  "title": "Glen Rise Saturday Maths Club",
+  "shared": false,
+  "brief": "I teach maths at a secondary school in Cork and run the Glen Rise Saturday Maths Club, a free club for children aged 10 to 13 at the Glen Rise Community Centre. This autumn we meet on six Saturdays, 7 November to 12 December 2026, 10:00–12:00, with 20 places. The children work in small groups on puzzles, games and a bit of coding, and nobody is graded. Every session has two Garda-vetted volunteers, and the building is step-free. Parents need a simple page: what the club is, the dates, what to bring (a pencil, a snack and a water bottle), how to sign up, and who runs it. Many parents don't have English as their first language, so keep the words plain and short. Sign-up is by email to mathsclub@glenrise.example for now; a form is fine, but it isn't connected, so it must not say a place was booked. Please don't use any photos of children. No made-up quotes from parents or pupils.",
+  "source": {
+    "type": "persona",
+    "path": "Helix: Knowledge/Customers/Teacher and educator.md",
+    "adaptation": "Teacher's voice from the persona (time-poor, wants a simple page for parents with dates, photo-consent caution). The persona is US K-12; the club is set in Ireland for geographic variety, with Irish safeguarding wording (Garda vetting). Club and centre are fictional; Ireland has no reserved fictional phone range, so contact is email only."
+  },
+  "persona": "Teacher and educator.md",
+  "mustHave": [
+    "the six session dates (Saturdays 7 Nov-12 Dec 2026, 10:00-12:00) and the 20 places",
+    "sign-up by email as a mailto: link; any form does not claim a place was booked",
+    "what-to-bring list (pencil, snack, water bottle)",
+    "safeguarding note: two Garda-vetted volunteers per session; step-free building",
+    "plain, short wording; no photos of children; no invented quotes"
+  ],
+  "notes": "Dates checked against the 2026 calendar (7 Nov and 12 Dec 2026 are Saturdays)."
+}

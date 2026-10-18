@@ -1,0 +1,24 @@
+{
+  "id": "w09-property-lumen-atelier",
+  "order": 11,
+  "format": "website",
+  "direction": "property",
+  "title": "Lumen Atelier",
+  "shared": false,
+  "brief": "We're Lumen Atelier, a two-person architecture and interiors studio in Lisbon: Ana Ferraz, architect, and Tomás Reis, interior designer. We redesign older apartments and townhouses for homeowners planning a renovation: new layouts, more daylight, kitchens and bathrooms, built-in joinery, and we can manage the builders for you. Our approach is calm craft over loud trends. We want a quiet, confident site with two pages: Home (what we do, how we work in four steps from first visit to handover, selected projects, contact) and Studio (our story and the two of us). The main goal is booking a first consultation: a 45-minute visit at your home, fee to confirm, deducted from the design fee if you go ahead. Our project photos are not ready yet, so leave clearly marked spaces for interior photos (natural light, no people) instead of stock photos passed off as our work. Use placeholders for our phone and studio address; email hello@lumenatelier.example. No awards, press logos or client quotes.",
+  "source": {
+    "type": "real",
+    "path": "src/lib/builder/check-plan.cjs:14-15",
+    "adaptation": "The source is a plan seed (summary \"A quiet, confident studio site that books consultations\", goal \"Book a consultation\", audience \"Homeowners planning a renovation\", positioning \"Calm craft over loud trend\", pages Home and Studio with their sections, imagery \"Natural-light interiors, no people\", open question \"Do you have project photos?\", assumption \"Placeholder contact details\"). Expanded into a full brief in a small studio owner's voice. The seed's design block (Fraunces and Inter on #f6f3ee paper) was deliberately not carried over so the brief does not force the house look. Location, names and the consultation detail are new and fictional."
+  },
+  "persona": "Small business owner needing a website.md",
+  "mustHave": [
+    "two pages, Home and Studio, with working navigation between them",
+    "consultation booking action explaining the 45-minute home visit",
+    "four-step process from first visit to handover",
+    "marked photo placeholders; no stock photos presented as the studio's projects",
+    "phone and address as placeholders; email as a mailto: link",
+    "no awards, press logos or client quotes"
+  ],
+  "notes": "Only multi-page website in the set (two routes). Not the same business as the makeup brand \"Lumen Atelier\" in the makeborne-local DB."
+}

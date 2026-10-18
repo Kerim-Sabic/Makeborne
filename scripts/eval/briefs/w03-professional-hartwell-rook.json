@@ -1,0 +1,24 @@
+{
+  "id": "w03-professional-hartwell-rook",
+  "order": 3,
+  "format": "website",
+  "direction": "professional",
+  "title": "Hartwell Rook",
+  "shared": true,
+  "brief": "Website for Hartwell Rook, employment solicitors in Manchester who act only for employees and senior executives, never for employers. Office: 4th floor, 12 Bridgewater Row, Manchester M2 3AB. Phone 0161 496 0731, email consult@hartwellrook.example, open Monday to Friday 08:30–18:00. Six practice areas: unfair dismissal, discrimination, whistleblowing, settlement agreements, redundancy and senior executive exits. How a matter works: a first call, written advice, negotiation, and the employment tribunal if it comes to that. The main goal is that people book a consultation before their time limit runs out (for most claims it is three months less one day), so make the deadline clear without scaring anyone and keep the phone one tap away. Our SRA number, fees and privacy notice are not ready: keep them as clearly bracketed placeholders. No client testimonials, rankings or success rates.",
+  "source": {
+    "type": "real",
+    "path": "work/generation-quality-20261014/website/law/fixture.json (.brief)",
+    "adaptation": "Rewritten from the fixture's note form into the client's voice; removed the harness preface \"Sample brief (fictional firm; details treated as supplied by the client)\" and the \"(Ofcom drama range)\" annotation (0161 496 0731 is inside the Ofcom drama range 0161 496 0000-0999). The fixture said \"six practice areas\" without naming them; six typical employee-side areas are now named so every tool builds the same scope. Added the statutory time limit the goal refers to and the no-testimonial rule."
+  },
+  "persona": null,
+  "mustHave": [
+    "phone 0161 496 0731 as a tel: link, one tap away on mobile",
+    "consultation booking action in the first screen",
+    "the six named practice areas",
+    "four-step process: first call, written advice, negotiation, tribunal",
+    "SRA number, fees and privacy notice as bracketed placeholders",
+    "office address and hours visible"
+  ],
+  "notes": "Prior output: work/generation-quality-20261014/website/law/law.source.json (+ law.static.html, law.report.json). Phone, email and address are supplied facts, so W17 must accept them."
+}
