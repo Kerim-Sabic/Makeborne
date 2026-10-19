@@ -1,0 +1,122 @@
+{
+  "sourceCommit": "d14bf303165806ab2544299c3e1b63f923a5c9ea",
+  "deploymentId": "dpl_BSTNcBDmzcEHDWSvoTV1pPpjq6cW",
+  "start": "2026-10-19T12:27:08.122Z",
+  "requiredMinutes": 30,
+  "iterations": [
+    {
+      "at": "2026-10-19T12:27:08.123Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:28:18.911Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    }
+  ],
+  "runtimeErrorRecords": 0,
+  "serverErrorRecords": 0,
+  "httpFailures": 0,
+  "logQueryFailures": 0
+}

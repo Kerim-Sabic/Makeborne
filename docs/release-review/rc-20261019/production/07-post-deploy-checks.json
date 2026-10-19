@@ -1,0 +1,130 @@
+{
+  "at": "2026-10-19T12:27:09.586Z",
+  "site": "https://makeborne.com",
+  "checks": {
+    "/": {
+      "status": 200,
+      "printReady": false,
+      "liveInSeconds": false,
+      "robots": null
+    },
+    "/help": {
+      "status": 200,
+      "printReady": false,
+      "liveInSeconds": false,
+      "robots": null
+    },
+    "/help/publish-your-website": {
+      "status": 200,
+      "printReady": false,
+      "liveInSeconds": false,
+      "robots": null
+    },
+    "/help/make-a-book-with-ai": {
+      "status": 200,
+      "printReady": false,
+      "liveInSeconds": false,
+      "robots": null
+    },
+    "/billing": {
+      "status": 200,
+      "printReady": false,
+      "liveInSeconds": false,
+      "robots": "noindex, nofollow"
+    },
+    "/login": {
+      "status": 200,
+      "printReady": false,
+      "liveInSeconds": false,
+      "robots": "noindex, nofollow"
+    },
+    "/portal/login": {
+      "status": 200,
+      "printReady": false,
+      "liveInSeconds": false,
+      "robots": null
+    },
+    "/api/build": {
+      "available": false,
+      "configured": true,
+      "state": "paused",
+      "estimates": true
+    },
+    "/api/workspaces (signed out)": {
+      "status": 401
+    },
+    "POST /api/telemetry (signed out)": {
+      "status": 204
+    }
+  },
+  "classification": {
+    "artifacts": 17,
+    "counts": {
+      "website:starting": 9,
+      "website:outline": 1,
+      "presentation:outline": 2,
+      "book:outline": 2,
+      "book:starting": 1,
+      "website:website-design": 2
+    },
+    "withContent": 7,
+    "contentNotSaved": [],
+    "legacyRecords": 7,
+    "legacyByKind": {
+      "website": 3,
+      "presentation": 2,
+      "book": 2
+    },
+    "auditedIdsAllSaved": false,
+    "auditedIds": 5,
+    "legacy": [
+      {
+        "id": "669f50a8-1b81-4a6f-97fb-b54cc7805cbe",
+        "kind": "website",
+        "version": 2,
+        "format": "outline"
+      },
+      {
+        "id": "03edc914-01d5-4838-9824-1f684bd705b5",
+        "kind": "presentation",
+        "version": 2,
+        "format": "outline"
+      },
+      {
+        "id": "c63ae7ce-3a0d-4ab6-82d3-cce9435b3a45",
+        "kind": "book",
+        "version": 17,
+        "format": "outline"
+      },
+      {
+        "id": "fd656736-32b6-4a17-a1cd-d8d5d0dd12a4",
+        "kind": "website",
+        "version": 7,
+        "format": "website-design"
+      },
+      {
+        "id": "7d4ee000-62e5-4d0b-b44e-08a10b3b87dd",
+        "kind": "website",
+        "version": 2,
+        "format": "website-design"
+      },
+      {
+        "id": "cd6cc7f0-0e72-41ed-ace0-35847c41a415",
+        "kind": "book",
+        "version": 6,
+        "format": "outline"
+      },
+      {
+        "id": "2318c8ae-13e4-45e3-821c-1047545f5c8e",
+        "kind": "presentation",
+        "version": 3,
+        "format": "outline"
+      }
+    ]
+  },
+  "telemetryTables": {
+    "studioVisits": 0,
+    "errorGroups": 0
+  },
+  "passed": true
+}

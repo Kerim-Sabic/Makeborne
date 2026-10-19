@@ -1,0 +1,11 @@
+import fs from "node:fs"; import pg from "pg"; import { rootCertificates } from "node:tls";
+const MAIN = "C:/Users/kerim/Documents/Codex/2026-10-03/referenced-chatgpt-conversation-this-is-an/work/makeborne-app";
+let pw = fs.readFileSync(`${MAIN}/.env.production-db.private`, "utf8").replace(/^\uFEFF/, "").match(/^SUPABASE_PRODUCTION_DB_PASSWORD\s*=\s*([^\r\n]+)/m)[1].trim(); if (pw.startsWith('"')) pw = JSON.parse(pw);
+const token = fs.readFileSync("C:/Users/kerim/.supabase/access-token", "utf8").trim();
+const pools = await (await fetch("https://api.supabase.com/v1/projects/rklojnmmsmhwnkbzuidp/config/database/pooler", { headers: { Authorization: `Bearer ${token}` } })).json();
+const url = new URL((pools.find(p => p.database_type === "PRIMARY") ?? pools[0]).connection_string);
+const db = new pg.Client({ host: url.hostname, port: 5432, user: url.username, password: pw, database: "postgres", ssl: { rejectUnauthorized: true, ca: rootCertificates.join("\n") + "\n" + fs.readFileSync(`${MAIN}/work/release-auth-stack/supabase-ca.crt`, "utf8") } });
+await db.connect(); await db.query("begin read only");
+console.log(JSON.stringify((await db.query("select page, day::text, count(*)::int visits from makeborne_private.studio_visits group by 1,2 order by 2 desc, 1 limit 5")).rows));
+console.log(JSON.stringify((await db.query("select count(*)::int groups, coalesce(sum(total),0)::int occurrences from (select g.fingerprint, (select coalesce(sum(d.count),0) from makeborne_private.app_error_days d where d.fingerprint=g.fingerprint) total from makeborne_private.app_error_groups g) x")).rows));
+await db.query("commit"); await db.end();
