@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Check, Copy, ExternalLink, Globe, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import ComingSoon from "./coming-soon";
 import { cloudAccountGuard } from "./cloud-api";
 import type { DomainView } from "@/lib/hosting/custom-domain-view";
 import "@/app/website-domains.css";
@@ -84,10 +85,10 @@ export default function WebsiteDomains({ accountId, workspaceId, artifactId }: {
   }
 
   if (!state) return <section className="website-publish wd" aria-label="Custom domains"><h3><Globe size={16} />Your own domain</h3><p role="status">{error || "Loading domains…"}</p></section>;
+  if (!state.configured) return <ComingSoon title="Your own domain" text="Show this website on a domain you own. Until then it stays on its Makeborne address." />;
   return <section className="website-publish wd" aria-label="Custom domains">
     <h3><Globe size={16} />Your own domain</h3>
-    {!state.configured ? <p>Custom domains are being set up. Your site stays available on its Makeborne address.</p>
-      : !state.published ? <p>Publish this website once, then connect a domain like <strong>www.yourbusiness.com</strong>.</p>
+    {!state.published ? <p>Publish this website once, then connect a domain like <strong>www.yourbusiness.com</strong>.</p>
       : <>
         <p>Show this website on a domain you own. Add it here, then add one record at your domain provider. The secure https certificate is set up for you.</p>
         <form className="wd-add" onSubmit={event => void add(event)}>

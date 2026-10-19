@@ -558,7 +558,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         {planner.active?.turnId === planner.restored.turnId ? <><p>Here is the plan we left off with. Edit anything, reply to revise it, or build it.</p>{planCard(planner.active)}</>
           : <div className="pc pc-collapsed"><ListChecks size={14} /><span>Earlier plan · <strong>{planner.restored.stored.plan.title}</strong> — revised below</span></div>}
       </div>}
-      {turns.map(turn => <div key={turn.id} className={`lb-turn lb-${turn.role}`} data-state={turn.state} data-review={turn.review || undefined}>
+      {turns.map((turn, index) => <div key={turn.id} className={`lb-turn lb-${turn.role}`} data-state={turn.state} data-review={turn.review || undefined}>
         {turn.review && <p className="lb-review-title"><Eye size={13} />{turn.state === "streaming" ? "Reviewing the design…" : "Design review"}</p>}
         {!!turn.shots?.length && <ul className="lb-shots" aria-label="Review screenshots">{turn.shots.map(shot =>
           // eslint-disable-next-line @next/next/no-img-element -- data URL screenshots, not optimisable
@@ -572,7 +572,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           <span>{item.label}</span></li>)}</ul>}
         {turn.role === "assistant" && !turn.review && turn.state === "streaming" && !turn.text && !turn.activity.length && <p className="lb-thinking"><Loader2 size={14} className="lb-spin" /> Thinking…</p>}
         {turn.receipt && <Receipt receipt={turn.receipt} kind={kind} />}
-        {turn.role === "assistant" && typeof turn.credits === "number" && turn.credits > 0 && <small className="lb-cost">{turn.state === "streaming" ? `${turn.credits} credits so far` : `${turn.credits} credits`}</small>}
+        {turn.role === "assistant" && typeof turn.credits === "number" && turn.credits > 0
+          // Once the request's receipt follows, it carries the total; a finished step does not repeat its own figure.
+          && (turn.state === "streaming" || !turns.slice(index + 1).some(later => later.receipt)) && <small className="lb-cost">{turn.state === "streaming" ? `${turn.credits} credits so far` : `${turn.credits} credits`}</small>}
       </div>)}
     </div>
     {(operation || recoveryNotice || previewingRecovery) && <section className="lb-operation" aria-label="Request allowance">

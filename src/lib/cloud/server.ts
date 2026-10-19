@@ -85,6 +85,10 @@ export function databaseError(error: { code?: string } | null) {
       "INVALID_REFERENCE",
       "The content or its references are not valid for this project.",
     );
+  // A missing function or table means this feature is not deployed in this environment yet:
+  // say so plainly instead of the cautious "outcome unknown" message meant for real write failures.
+  if (["42883", "42P01", "PGRST202", "PGRST205"].includes(error.code ?? ""))
+    throw new RequestError("FEATURE_NOT_READY", "This feature isn’t available here yet. Your saved work is not affected.", 503);
   throw new RequestError(
     "CLOUD_OUTCOME_UNKNOWN",
     "Cloud storage could not confirm this request. Keep your draft and retry with the same request key before starting another write.",

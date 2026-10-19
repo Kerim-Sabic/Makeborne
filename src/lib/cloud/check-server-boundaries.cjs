@@ -134,6 +134,12 @@ async function main() {
       assert.deepEqual(state.events, ["client", "identity", "schema"]);
     });
   }
+  await check("missing database objects say the feature is not ready; real failures stay cautious", async () => {
+    const {server} = fixture();
+    for (const code of ["42883", "42P01", "PGRST202", "PGRST205"])
+      assert.throws(() => server.databaseError({code}), error => error.code === "FEATURE_NOT_READY" && error.status === 503 && /available here yet/.test(error.message), code);
+    assert.throws(() => server.databaseError({code: "XX000"}), error => error.code === "CLOUD_OUTCOME_UNKNOWN");
+  });
   await check("invalid workspace is rejected before query construction", async () => {
     const {server, state} = fixture();
     await denied(server.cloudContext("invalid"), "INVALID_ID", 400);

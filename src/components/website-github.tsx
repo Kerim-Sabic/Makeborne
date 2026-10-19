@@ -1,6 +1,7 @@
 "use client";
 import {useCallback,useEffect,useState} from "react";
 import {GitBranch,ArrowUpRight,LoaderCircle} from "lucide-react";
+import ComingSoon from "./coming-soon";
 import {cloudAccountGuard} from "./cloud-api";
 import "./website-publish.css";
 type Connection={configured:boolean;connected?:boolean;login?:string;installUrl?:string;repositories?:{id:number;name:string;private:boolean}[]};
@@ -35,10 +36,11 @@ export default function WebsiteGithub({accountId,workspaceId,artifactId,version,
     }finally{setBusy(false);}
   }
   if(!owner)return null;
+  if(connection?.configured===false)return <ComingSoon title="Your code, on GitHub" text="Push the full website source to your own repository."/>;
   const reconnect=reconnectCodes.has(code)||(!!link&&connection?.configured&&!connection.connected);
   return <section className="website-publish" aria-labelledby={`github-${artifactId}`}>
     <div className="website-publish-heading"><span className="website-publish-icon"><GitBranch size={18}/></span><div><h3 id={`github-${artifactId}`}>Your code, on GitHub</h3><p>{connection?.connected?`Connected as ${connection.login}`:"Keep a copy in your repository"}</p></div></div>
-    {connection?.configured===false?<p className="website-publish-detail">Repository connections are being set up. Your work is saved here.</p>:<>
+    <>
       <p className="website-publish-detail">{source?<>Push the complete React + Vite source of saved version {version} — every file and image — as one commit on its own branch. Your default branch stays untouched.</>:"Sync your published website to its own branch. Your default branch stays untouched."}</p>
       {!connection?.connected?<button className="button secondary" type="button" disabled={busy} onClick={()=>void act("connect")}>{reconnect?"Reconnect GitHub":"Connect GitHub"}</button>:<>
         <label className="website-publish-label">Repository<select aria-label="GitHub repository" value={repository||""} disabled={!!link||busy} onChange={e=>{setRepository(Number(e.target.value));setAgreed(false);}}><option value="" disabled>Choose a repository</option>{connection.repositories?.map(r=><option key={r.id} value={r.id}>{r.name} · {r.private?"Private":"Public"}</option>)}</select></label>
@@ -54,7 +56,7 @@ export default function WebsiteGithub({accountId,workspaceId,artifactId,version,
         <a className="website-publish-text-button" href={status.branchUrl??`https://github.com/${link.repository_name}/tree/${link.branch}`} target="_blank" rel="noopener noreferrer">View branch <ArrowUpRight size={13}/></a>
       </>}
       <p className="website-publish-note">{source?"One-way export of the full source, original images and a README with run instructions. Nothing is force-pushed, and changes made in GitHub aren’t imported. Your GitHub connection renews itself; you only reconnect if GitHub asks you to.":"One-way export of the published HTML, styles, and images. External edits aren’t imported. Your GitHub connection renews itself; you only reconnect if GitHub asks you to."}</p>
-    </>}
+    </>
     {message&&<p className="website-publish-message" role="status">{message}</p>}
     {code==="BRANCH_CHANGED"&&link&&<a className="website-publish-text-button" href={status.branchUrl??`https://github.com/${link.repository_name}/tree/${link.branch}`} target="_blank" rel="noopener noreferrer">Review the branch in GitHub <ArrowUpRight size={13}/></a>}
   </section>;

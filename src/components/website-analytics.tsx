@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, BarChart3, Minus } from "lucide-react";
+import ComingSoon from "./coming-soon";
 import { cloudAccountGuard } from "./cloud-api";
 import { ANALYTICS_RANGES, dimensionLabel, type AnalyticsRange, type Dimension, type Metric, type Summary } from "@/lib/hosting/site-analytics";
 import "@/app/website-analytics.css";
@@ -43,9 +44,10 @@ export default function WebsiteAnalytics({ accountId, workspaceId, artifactId }:
       <button key={days} type="button" aria-pressed={range === days} onClick={() => setRange(days)}>{days} days</button>)}</div>}
   </header>;
 
+  if (error && /available here yet/.test(error)) return <ComingSoon title="Visitor analytics" text="See visitors, where they came from and who got in touch, without cookies." />;
   if (error) return <section className="website-publish wa" aria-label="Visitor analytics">{header}<p className="wa-error" role="alert">{error}</p></section>;
   if (!data) return <section className="website-publish wa" aria-label="Visitor analytics">{header}<p role="status">Loading visitors…</p></section>;
-  if (!data.available) return <section className="website-publish wa" aria-label="Visitor analytics">{header}<p>Visitor analytics are being set up. Once they&apos;re on, you&apos;ll see visitors, where they came from and how many got in touch, without cookies or tracking banners.</p></section>;
+  if (!data.available) return <ComingSoon title="Visitor analytics" text="See visitors, where they came from and who got in touch, without cookies." />;
   if (!summary?.hasData) return <section className="website-publish wa" aria-label="Visitor analytics">{header}<p>{data.live ? "No visits counted yet in this period. Share your site's address and check back soon." : "Publish your website to start counting visitors."} Visitors are counted privately: no cookies, no personal data, and bots are left out.</p></section>;
 
   const { totals } = summary;
