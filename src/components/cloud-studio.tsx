@@ -1739,7 +1739,7 @@ export function CloudEditor({
           </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} /></>}
         </div>}
         {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
-          capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} />
+          capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} source={content.websiteSource} />
           {role === "owner" && <WebsiteSeo key={`seo:${accountId}:${workspaceId}:${artifact.id}`} source={content.websiteSource!} siteTitle={content.title} seo={content.seo}
             disabled={uncertainSave || conflict || !!recovery || Boolean(live)} scope={{ accountId, workspaceId, artifactId: artifact.id }}
             onChange={seo => { if (uncertainSave || conflict || recovery) return; editRevision.current++; setContent(current => current ? { ...current, seo } : current); setDirty(true); setNote("Updated search and sharing details"); }} />}

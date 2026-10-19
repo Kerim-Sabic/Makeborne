@@ -2,6 +2,8 @@
 import "./website-publish.css";
 import WebsiteEnquiries from "./website-enquiries";
 import TrustedWebsitePublish from "./trusted-website-publish";
+import ClientReadyCheck from "./client-ready-check";
+import type { ClientReadyInput } from "@/lib/builder/client-ready";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowUpRight, Copy, Globe2, LoaderCircle } from "lucide-react";
 import { cloudAccountGuard } from "./cloud-api";
@@ -9,14 +11,15 @@ import { HOSTING, SITE_ADDRESS_PARTS, siteAddress, validSiteSlug, type HostedSit
 
 export type PublishCapture = { snapshot: string; bundle?: { js: string; css: string } };
 
-type PublishProps = {accountId:string;workspaceId:string;artifactId:string;title:string;version:number;dirty:boolean;disabled:boolean;owner:boolean;capture?:()=>Promise<PublishCapture>};
+/** source: the React website shown in the client-ready check before publishing. */
+type PublishProps = {accountId:string;workspaceId:string;artifactId:string;title:string;version:number;dirty:boolean;disabled:boolean;owner:boolean;capture?:()=>Promise<PublishCapture>;source?:ClientReadyInput};
 
 export default function WebsitePublish(props:PublishProps) {
   return props.capture ? <TrustedWebsitePublish key={`${props.accountId}:${props.workspaceId}:${props.artifactId}`} {...props}/> : <LegacyWebsitePublish {...props}/>;
 }
 
-function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, version, dirty, disabled, owner, capture }: {
-  accountId:string; workspaceId:string; artifactId:string; title:string; version:number; dirty:boolean; disabled:boolean; owner:boolean;
+function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, version, dirty, disabled, owner, capture, source }: {
+  accountId:string; workspaceId:string; artifactId:string; title:string; version:number; dirty:boolean; disabled:boolean; owner:boolean; source?:ClientReadyInput;
   /** React projects: render the saved site (static snapshot) and build its production bundle. */
   capture?: () => Promise<PublishCapture>;
 }) {
@@ -82,6 +85,7 @@ function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, versi
     {site?.live&&scriptable&&<p className={`website-publish-runtime${scriptsLive?" on":""}`} role="note">{scriptsLive?"JavaScript enabled: interactive features work on the live site.":"Static version: scripts don’t run on the live site."}</p>}
     {scriptable&&owner&&<label className="website-publish-toggle"><input type="checkbox" role="switch" aria-checked={interactive} checked={interactive} disabled={busy||switching||!!pending} onChange={e=>void changeInteractive(e.target.checked)}/><span><strong>Interactive (JavaScript)</strong><small>Runs your site’s code (menus, tabs, carousels, forms, animations) on its own isolated domain. Turn off to publish a static version.</small></span></label>}
     {dirty&&<p className="website-publish-detail">Save your changes before publishing a new version.</p>}
+    {source&&<ClientReadyCheck source={source}/>}
     {!owner?<p className="website-publish-detail">Only the workspace owner can publish this website.</p>:<>
       <label className="website-publish-consent"><input type="checkbox" checked={agreed} disabled={busy||!!pending} onChange={e=>setAgreed(e.target.checked)}/><span>I’ve reviewed this version and have permission to make its text and images public.</span></label>
       <button type="button" className="button primary" disabled={busy||switching||!ready||disabled||(!pending&&(dirty||!agreed||!validSiteSlug(slug)||version<1))} onClick={()=>void publish(true)}>{busy?<LoaderCircle size={15} className="auth-spinner"/>:<Globe2 size={15}/>} {busy?"Publishing…":pending?"Retry publishing request":site&&slug!==site.slug?"Publish at new address":site?.live?"Publish saved changes":"Publish website"}</button>
