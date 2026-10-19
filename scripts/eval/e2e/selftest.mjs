@@ -50,7 +50,7 @@ export function startFakeApp(mode, { port = 0 } = {}) {
         res.writeHead(200, { 'Content-Type': 'application/javascript' });
         return res.end(`function getSupabaseConfig() { const url = ("TURBOPACK compile-time value", "${config.supabase}"); return { url }; }`);
       }
-      if (req.method === 'GET' && pathname === '/api/build') return json(res, 200, { available: config.builder && Boolean(config.key) });
+      if (req.method === 'GET' && pathname === '/api/build') return json(res, 200, config.builder && config.key ? { available: true, configured: true, state: 'ready' } : { available: false, configured: false, state: 'off' });
       if (req.method === 'GET' && pathname === '/api/capabilities') {
         // src/lib/capabilities/snapshot.ts: configured = cloud configured && key.trim() && server credential.
         return json(res, 200, { schemaVersion: 2, aiGeneration: { configured: Boolean(config.key.trim()), available: false },

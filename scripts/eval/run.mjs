@@ -800,11 +800,12 @@ async function waitForBuilder(child) {
       const response = await fetch(`${ORIGIN}/api/build`, { signal: AbortSignal.timeout(60_000) });
       if (response.ok) {
         const body = await response.json();
-        if (body.available === true) return;
-        throw new Error('The builder reports available:false (check the server env)');
+        // Provider limits are enabled per brief after this, so a configured builder may still report paused here.
+        if ((body.configured ?? body.available) === true) return;
+        throw new Error('The builder reports configured:false (check the server env)');
       }
     } catch (error) {
-      if (/available:false/.test(error.message)) throw error;
+      if (/configured:false/.test(error.message)) throw error;
     }
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
@@ -814,7 +815,7 @@ async function waitForBuilder(child) {
 // ---------------------------------------------------------------------------
 // Server identity: the server on 3211 must be OUR child, built against the
 // isolated stack. .env.local points NEXT_PUBLIC_SUPABASE_URL at a cloud
-// project, so a stray dev server would answer /api/build with available:true
+// project, so a stray dev server would answer /api/build with configured:true
 // while spending through cloud (and our read-only ledger would read $0).
 // ---------------------------------------------------------------------------
 

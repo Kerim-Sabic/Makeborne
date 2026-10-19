@@ -26,6 +26,8 @@ import LiveBuilder, { type LiveUpdate } from "./live-builder";
 import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
+import { choosePreview, hasBuilderSource, savedFormat } from "@/lib/cloud/saved-preview";
+import { BUILDER_OFF, BUILDER_WAITING_COPY, parseBuilderAvailability, type BuilderAvailability } from "@/lib/builder/availability";
 import "@/app/live-builder.css";
 import { captureProjectPublication, captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
 import "@/app/cloud-workbench.css";
@@ -1147,13 +1149,13 @@ export function CloudEditor({
     queueMicrotask(() => { const text = takeReviewPrefill(artifact.id); if (text) setBuilderPrefill({ key: crypto.randomUUID(), text }); });
   }, [artifact.id]);
   const [generatedVersionId,setGeneratedVersionId]=useState<string|null>(null);
-  const [builderAvailable, setBuilderAvailable] = useState(false);
+  const [builder, setBuilder] = useState<BuilderAvailability>(BUILDER_OFF);
   const [live, setLive] = useState<LiveUpdate | null>(null);
   const [autoStart, setAutoStart] = useState<string | null>(null);
   const [autoStartMode, setAutoStartMode] = useState<"create" | "plan">("create");
   useEffect(() => {
     let current = true;
-    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) setBuilderAvailable(value?.available === true); }).catch(() => undefined);
+    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) setBuilder(parseBuilderAvailability(value)); }).catch(() => undefined);
     return () => { current = false; };
   }, [artifact.kind]);
   const recoveryKey = `makeborne.cloud-draft.${accountId}.${workspaceId}.${artifact.id}`;
@@ -1533,19 +1535,20 @@ export function CloudEditor({
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  const previewBlocks = content?.sections.flatMap(section => section.blocks) ?? [];
-  const useLiveBuilder = builderAvailable && role !== "reviewer";
-  // Saved source remains previewable and publishable while paid generation is off.
-  const useSourcePreview = artifact.kind === "website" && Boolean(content?.websiteSource);
-  const liveDocument = artifact.kind !== "website";
-  // Reading a saved document does not require an enabled generation provider.
+  // A configured builder is shown even while paused, so its state is honest and runs in flight stay recoverable.
   // Reviewers see saved content only; generation and editing retain their gates.
-  const previewDocument = liveDocument ? (useLiveBuilder ? live?.document ?? content?.document : content?.document) : undefined;
+  const useLiveBuilder = builder.configured && role !== "reviewer";
+  const builderWaiting = builder.state === "ready" || builder.state === "off" ? undefined : BUILDER_WAITING_COPY[builder.state];
+  const liveDocument = artifact.kind !== "website";
+  // The preview follows the saved format, never the builder's availability: older saved work stays visible.
+  const format = content ? savedFormat(content, expectedVersion) : null;
+  const preview = format ? choosePreview({ kind: artifact.kind, format, builder: useLiveBuilder, canBuild: builder.available, live, generatedVersion: Boolean(generatedVersionId) }) : null;
+  const previewDocument = !liveDocument ? undefined : preview === "live" ? live?.document : preview === "document" ? content?.document : undefined;
   const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
     .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content])), [content?.websiteSource]);
-  // A project created from the home prompt starts building as soon as it opens.
+  // A project created from the home prompt starts building as soon as it opens, once the builder can run.
   useEffect(() => {
-    if (!useLiveBuilder || !content || (liveDocument ? content.document : content.websiteSource) || !project?.brief.trim() || expectedVersion > 1) return;
+    if (!useLiveBuilder || !builder.available || !format || hasBuilderSource(format) || !project?.brief.trim() || expectedVersion > 1) return;
     const scope = { workspaceId, projectId: artifact.projectId, artifactId: artifact.id };
     try {
       const reference = readGenerationReference(localStorage, accountId, scope);
@@ -1555,8 +1558,7 @@ export function CloudEditor({
       const full = project.brief.trim(), brief = full.length > 8000 ? `${full.slice(0, 7400).replace(/\s+\S*$/, "")}…\n\n(The full brief is in the project details.)` : full;
       queueMicrotask(() => { setAutoStartMode(reference.planFirst ? "plan" : "create"); setAutoStart(brief); });
     } catch { /* storage unavailable: the user can send the brief manually */ }
-  }, [useLiveBuilder, liveDocument, content, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
-  const isStartingDraft = !content?.websiteSource && (!previewBlocks.length || (expectedVersion <= 1 && previewBlocks.length === 1 && previewBlocks[0].type === "heading" && previewBlocks[0].text === content?.title && !previewBlocks[0].assetId));
+  }, [useLiveBuilder, builder.available, format, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
   const PreviewIcon = artifact.kind === "website" ? PanelsTopLeft : artifact.kind === "book" ? BookOpen : Presentation;
   return (
     <section className="cloud-editor workspace-workbench cloud-workbench">
@@ -1596,7 +1598,7 @@ export function CloudEditor({
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
-          defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : undefined} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
+          defaultEffort={project?.effort} disabled={!content || !builder.available || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
           kind={artifact.kind} baseDocument={content?.document}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
@@ -1708,8 +1710,8 @@ export function CloudEditor({
           onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
         {view === "preview" && previewDocument && <DocumentPreview key={`${accountId}:${workspaceId}:${artifact.id}`} document={previewDocument} focus={useLiveBuilder ? live?.focus : undefined}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={useLiveBuilder && Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} />}
-        {view === "preview" && useLiveBuilder && liveDocument && !live?.document && !content.document && <div className="lp-empty dp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
-        {view === "preview" && (useLiveBuilder || useSourcePreview) && !liveDocument && (live || content.websiteSource) && <LivePreview
+        {view === "preview" && preview === "start-builder" && liveDocument && <div className="lp-empty dp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
+        {view === "preview" && !liveDocument && (preview === "live" || preview === "website-source") && <LivePreview
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
@@ -1723,15 +1725,19 @@ export function CloudEditor({
             onAsk: useLiveBuilder ? text => setBuilderPrefill({ key: crypto.randomUUID(), text }) : undefined,
             swatches: brandColors,
           } : undefined} />}
-        {view === "preview" && useLiveBuilder && !liveDocument && !live && !content.websiteSource && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
-        {view === "preview" && !useLiveBuilder && !useSourcePreview && artifact.kind === "website" && generatedVersionId && (() => {
+        {view === "preview" && preview === "start-builder" && !liveDocument && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
+        {view === "preview" && preview === "generated-website" && (() => {
           const generated=versions.find(version=>version.id===generatedVersionId);
           const saved=versions.find(version=>version.number===expectedVersion);
           const versionId=generated&&saved&&saved.number>generated.number?saved.id:generatedVersionId??saved?.id;
           return versionId?<SavedWebsitePreview key={`${accountId}:${workspaceId}:${artifact.id}:${versionId}`} accountId={accountId} workspaceId={workspaceId} projectId={artifact.projectId} artifactId={artifact.id} versionId={versionId}/>:<p className="small-note" role="status">Opening the saved website revision…</p>;
         })()}
-        {view === "preview" && style && !useLiveBuilder && !previewDocument && !(artifact.kind === "website" && (content.websiteSource || generatedVersionId)) && <div className="cloud-workbench-preview">
-          {isStartingDraft ? <div className="cloud-workbench-empty">
+        {view === "preview" && style && (preview === "outline" || preview === "start-draft") && <div className="cloud-workbench-preview">
+          {preview === "outline" && useLiveBuilder && <p className="cloud-workbench-format" role="note">
+            {format === "website-design" ? "This website is saved as a static design." : `This ${artifact.kind} is saved as an outline of its text.`} You can read, edit and export it as it is from the Edit tab.
+            {" "}A build in the chat saves a new {artifact.kind === "website" ? "website project" : `designed ${artifact.kind}`} as the next version; this version stays in History.
+          </p>}
+          {preview === "start-draft" ? <div className="cloud-workbench-empty">
             <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
             <h3>Your {artifact.kind} starts here</h3>
             <p>{project?.brief.trim() ? "Your brief is saved. " : ""}Your editable draft will appear here. {role === "reviewer" ? "You have view access to this project." : "You can add your own content in the editor."}</p>

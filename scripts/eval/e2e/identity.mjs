@@ -9,7 +9,7 @@
 //      exactly the isolated stack (http://127.0.0.1:55435); no script carries a cloud
 //      project URL (https://<20-char ref>.supabase.co|in; the SDK's own docs
 //      mention https://xyzcompany.supabase.co, which is not a project);
-//   3. GET /api/build answers {available: false}: the live builder is off, so no
+//   3. GET /api/build answers {available: false, configured: false, state: "off"}: the live builder is off, so no
 //      paid generation can start from this server (/api/build/plan and
 //      /api/build/questions use the same switch);
 //   4. GET /api/capabilities shows no Anthropic key: aiGeneration.configured is
@@ -109,7 +109,7 @@ export async function checkServerIdentity(origin, { timeoutMs = 60_000 } = {}) {
     const build = await get(`${origin}/api/build`, timeoutMs);
     const body = parse(build.text);
     facts.build = { status: build.status, body: body ?? build.text.slice(0, 80) };
-    if (!(build.ok && body && body.available === false && Object.keys(body).length === 1)) problems.push(`GET /api/build must answer {"available":false} (builder off), got ${build.status} ${JSON.stringify(facts.build.body)}`);
+    if (!(build.ok && body && body.available === false && body.configured === false && body.state === 'off' && Object.keys(body).length === 3)) problems.push(`GET /api/build must answer {"available":false,"configured":false,"state":"off"} (builder off), got ${build.status} ${JSON.stringify(facts.build.body)}`);
   } catch (error) {
     problems.push(`GET /api/build failed: ${error.message}`);
   }
