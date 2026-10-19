@@ -1,0 +1,31 @@
+{
+  "ref": "xzwikrunwpurxnxgkznh",
+  "productionTouched": false,
+  "candidateCommit": "a6e70c6f577aa5bf7654e72cd8d85b9977bd247e",
+  "dryRun": false,
+  "startedAt": "2026-10-19T11:07:30.559Z",
+  "verified": {
+    "lf": 60,
+    "crlf": 12,
+    "inventoryRaw": 1
+  },
+  "pending": [
+    "20261019090000_app_observability.sql"
+  ],
+  "applied": [
+    {
+      "file": "20261019090000_app_observability.sql",
+      "sha256": "c05a3c7b974a15331150b56a0b43976da109f3b3c3e86f484d6f16fc1b1efeb4",
+      "at": "2026-10-19T11:07:53.456Z"
+    }
+  ],
+  "backup": {
+    "file": "staging-before-a6e70c6.dump",
+    "bytes": 7266943,
+    "sha256": "fc2c0f4824e51924fcbd7b61fc68652bd11e331a32faa137973aa955172c3d55",
+    "entries": 2340
+  },
+  "totalTracked": 74,
+  "passed": true,
+  "finishedAt": "2026-10-19T11:07:53.511Z"
+}

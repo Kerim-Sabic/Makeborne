@@ -1,0 +1,24 @@
+{
+  "id": "w06-wellness-laurel-creek-dental",
+  "order": 6,
+  "format": "website",
+  "direction": "wellness",
+  "title": "Laurel Creek Family Dental",
+  "shared": true,
+  "brief": "I'm the office manager at Laurel Creek Family Dental, a six-chair general practice in East Sacramento run by Dr. Maren Okafor. We want more new patients, especially implant and clear aligner cases, not just cleanings. Our current site is slow on phones and the call button is buried. Phone (916) 555-0148, 2715 Alder Park Way, Sacramento, CA 95819. Hours: Monday to Thursday 7:30am–5pm, Friday 7:30am–1pm. Services: exams and cleanings, fillings, crowns, implants, clear aligners, and same-week emergency visits for new and existing patients. We take most PPO plans and have an in-house membership plan for patients without insurance (price to confirm, so leave a placeholder). A phone visitor should be able to call or request an appointment in one tap. The request form must not ask for any medical details and must not pretend it was sent, because nothing is connected yet. No patient testimonials, before-and-after photos, star ratings or \"best dentist\" badges: we don't have written permission or awards.",
+  "source": {
+    "type": "persona",
+    "path": "Helix: Knowledge/Customers/US dental practice owner.md",
+    "adaptation": "Office manager's voice from the persona: high-value cases over cleanings, slow mobile site with a buried call button, HIPAA caution (no clinical details on web forms), written authorization before testimonials. Practice, dentist and street are fictional; the phone is in the reserved 555-01xx range."
+  },
+  "persona": "US dental practice owner.md",
+  "mustHave": [
+    "phone (916) 555-0148 as a tel: link in the first screen on mobile",
+    "opening hours visible",
+    "appointment request form with no medical-detail fields that does not claim it was sent",
+    "implants and clear aligners each explained",
+    "membership plan price as a placeholder",
+    "no testimonials, before-and-after photos, ratings or badges"
+  ],
+  "notes": "No prior output. Wellness direction, but the brief is clinical rather than spa-like: the soft wellness defaults should not override it."
+}

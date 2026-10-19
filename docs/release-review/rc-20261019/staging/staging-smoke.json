@@ -1,0 +1,156 @@
+{
+  "at": "2026-10-19T11:12:53.593Z",
+  "origin": "https://makeborne-release-staging-qa2026101-kerimsabic-6594s-projects.vercel.app",
+  "candidate": "a6e70c6f577aa5bf7654e72cd8d85b9977bd247e",
+  "productionTouched": false,
+  "checks": {
+    "public /": {
+      "status": 200,
+      "headers": {
+        "x-robots-tag": null,
+        "content-security-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "x-frame-options": "DENY",
+        "location": null
+      },
+      "printReady": false,
+      "liveInSeconds": false
+    },
+    "public /help": {
+      "status": 200,
+      "headers": {
+        "x-robots-tag": null,
+        "content-security-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "x-frame-options": "DENY",
+        "location": null
+      },
+      "printReady": false,
+      "liveInSeconds": false
+    },
+    "public /help/publish-your-website": {
+      "status": 200,
+      "headers": {
+        "x-robots-tag": null,
+        "content-security-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "x-frame-options": "DENY",
+        "location": null
+      },
+      "printReady": false,
+      "liveInSeconds": false
+    },
+    "public /help/make-a-book-with-ai": {
+      "status": 200,
+      "headers": {
+        "x-robots-tag": null,
+        "content-security-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "x-frame-options": "DENY",
+        "location": null
+      },
+      "printReady": false,
+      "liveInSeconds": false
+    },
+    "public /billing": {
+      "status": 200,
+      "headers": {
+        "x-robots-tag": "noindex, nofollow",
+        "content-security-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "x-frame-options": "DENY",
+        "location": null
+      },
+      "printReady": false,
+      "liveInSeconds": false
+    },
+    "public /robots.txt": {
+      "status": 200,
+      "headers": {
+        "x-robots-tag": null,
+        "content-security-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "x-frame-options": "DENY",
+        "location": null
+      },
+      "printReady": false,
+      "liveInSeconds": false
+    },
+    "GET /api/build": {
+      "status": 200,
+      "availability": {
+        "available": false,
+        "configured": true,
+        "state": "paused"
+      },
+      "estimates": true
+    },
+    "GET /api/capabilities": {
+      "status": 200,
+      "manualExports": false,
+      "publicPublishing": true
+    },
+    "signIn": {
+      "ok": true,
+      "user": "7ee4b8b6-9d65-42cc-8fb2-5f6524132cda"
+    },
+    "workspace": {
+      "status": 200,
+      "projects": 5,
+      "artifacts": [
+        {
+          "id": "f609468a-d140-4ef9-9b33-164f5aab5c7a",
+          "kind": "website",
+          "title": "Clay & Form",
+          "version": 2
+        },
+        {
+          "id": "426feb56-ef44-4b8a-8b0d-75f011d2e86b",
+          "kind": "book",
+          "title": "Coastal field guide",
+          "version": 3
+        },
+        {
+          "id": "b49012e3-f4c6-4540-9b5f-a246daa5a6cb",
+          "kind": "presentation",
+          "title": "Better coastal walks",
+          "version": 2
+        },
+        {
+          "id": "acc2df0c-c36c-453d-b54a-a5c811ed79ca",
+          "kind": "website",
+          "title": "Coast & Kind — Good days, together",
+          "version": 3
+        },
+        {
+          "id": "d1fbb97a-e50a-4da0-9808-4fe4321e37cf",
+          "kind": "website",
+          "title": "Relay Operations",
+          "version": 2
+        }
+      ]
+    },
+    "QA website artifact": {
+      "status": 200,
+      "versions": [
+        2,
+        1
+      ],
+      "hasSource": true
+    },
+    "credits": {
+      "status": 200,
+      "body": {
+        "available": 0,
+        "unlimited": true
+      }
+    },
+    "POST /api/telemetry": {
+      "status": 204
+    },
+    "GET /studio (signed in)": {
+      "status": 200,
+      "location": null
+    }
+  }
+}

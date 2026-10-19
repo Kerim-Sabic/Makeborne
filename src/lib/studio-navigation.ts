@@ -34,6 +34,10 @@ export function readStudioRoute(search: string, workspace: {
     } : {}),
   };
 }
+/** Whether a studio URL opens one saved account project (known before the workspace loads). */
+export function opensAccountProject(search: string) {
+  return Boolean(readStudioRoute(search, { projects: [], clients: [] }).account?.artifactId);
+}
 export function studioHref(route: StudioRoute): string {
   const query = new URLSearchParams({ tab: route.tab });
   if (route.tab === "projects" && route.account) {

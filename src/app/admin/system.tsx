@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { ArrowUpRight, Check, CircleDashed, CreditCard, Database, Globe2, Sparkles } from "lucide-react";
 import type { getCapabilities } from "@/lib/capabilities/server";
+import type { CompileOutcome } from "@/lib/builder/compile";
 
 type Operations = ReturnType<typeof getCapabilities>["operations"];
 
 /** Configuration snapshot: what the app is set up to do, not a live health check. */
-export default function SystemTab({ operations }: { operations: Operations }) {
+export default function SystemTab({ operations, compiler }: { operations: Operations; compiler?: CompileOutcome }) {
   const { cloud, pilot, liveBuilder, hosting, billing, routing } = operations;
   const checks = [
     { label: "Supabase configuration", set: cloud.configured, detail: "Project URL and publishable key are accepted by the configuration reader." },
@@ -16,6 +17,8 @@ export default function SystemTab({ operations }: { operations: Operations }) {
     { icon: Sparkles, title: "Live builder", status: liveBuilder.enabledByConfiguration ? "Enabled by configuration · Health unverified" : liveBuilder.configured ? "Disabled by configuration" : "Setup incomplete", text: `${liveBuilder.reason} Provider spending limits still apply. Administrators are included.`, link: null },
     { icon: CircleDashed, title: "Legacy operator jobs", status: "Retired", text: `${pilot.reason} ${routing.configured} of ${routing.total} legacy model routes are configured; these counts do not determine live builder availability.`, link: null },
     { icon: CreditCard, title: "Payments & credits", status: billing.enabledByConfiguration ? "Enabled by configuration · Delivery unverified" : billing.configured ? "Disabled by configuration" : "Setup incomplete", text: billing.reason, link: { href: "/billing", label: "Plans & credits" } },
+    ...(compiler ? [{ icon: Check, title: "Website compiler", status: compiler.ok === true ? `Available · ${compiler.ms} ms` : compiler.ok === null ? "Unavailable · builds are saved as unverified" : "Self-test failed",
+      text: compiler.ok === true ? "A two-file self-test compiled in this deployment. Builder runs compile every website before finishing." : compiler.ok === null ? `The compiler could not start here (${compiler.reason.slice(0, 160)}). Builds still save after the static checks, and customers are told the version is not verified to build; fix the deployment so the compile check runs.` : `The self-test did not compile: ${compiler.errors[0]?.slice(0, 160) ?? "unknown error"}`, link: undefined }] : []),
     { icon: Globe2, title: "Website hosting", status: hosting.configured ? "Configured" : "Setup incomplete", text: hosting.reason, link: { href: "/studio?tab=clients", label: "Client workspace" } },
   ];
   return <>

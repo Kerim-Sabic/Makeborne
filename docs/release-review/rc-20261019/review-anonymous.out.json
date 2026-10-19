@@ -1,0 +1,27 @@
+{
+  "page": {
+    "status": 200,
+    "mentionsProject": true,
+    "robots": "noindex, nofollow, noarchive"
+  },
+  "comment": {
+    "status": 200,
+    "body": "{\"comment\":{\"id\":\"acff3180-b798-403b-91ae-c949e1e16020\",\"kind\":\"comment\",\"authorName\":\"RC Test Client\",\"body\":\"Please make the hero headline shorter.\",\"anchor\":{\"kind\":\"general\"},\"version\":2,\"createdA"
+  },
+  "wrongToken": {
+    "status": 404,
+    "body": "{\"error\":{\"code\":\"REVIEW_UNAVAILABLE\",\"message\":\"This review link has expired or was turned off. Ask for a new link.\"}}"
+  },
+  "crossSite": {
+    "status": 403,
+    "body": "{\"error\":{\"code\":\"ORIGIN_DENIED\",\"message\":\"This request must originate from this application.\"}}"
+  },
+  "decision": {
+    "status": 200,
+    "body": "{\"decision\":{\"value\":\"changes_requested\",\"name\":\"RC Test Client\",\"at\":\"2026-10-19T10:59:11.027715+00:00\",\"version\":2},\"comment\":{\"id\":\"34e77a08-3675-44c3-af2c-d64405d6f390\",\"kind\":\"changes_requested\","
+  },
+  "decisionRepeat": {
+    "status": 200,
+    "body": "{\"decision\":{\"value\":\"changes_requested\",\"name\":\"RC Test Client\",\"at\":\"2026-10-19T10:59:11.068462+00:00\",\"version\":2},\"comment\":{\"id\":\"b9a0f10c-252d-43ad-a97e-08cd236bcaa4\",\"kind\":\"changes_requested\","
+  }
+}

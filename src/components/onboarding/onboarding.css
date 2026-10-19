@@ -22,7 +22,7 @@
 .gs-pill:focus-visible { outline: 2px solid #7c5cf0; outline-offset: 2px; }
 .gs-pill span { display: grid; line-height: 1.25; }
 .gs-pill strong { font-size: 13px; font-weight: 600; }
-.gs-pill small { font-size: 11.5px; color: #7a7386; }
+.gs-pill small { font-size: 12px; color: var(--text-muted); }
 .gs-ring { width: 32px; height: 32px; transform: rotate(-90deg); }
 .gs-ring circle { fill: none; stroke: #ece7f5; stroke-width: 4; }
 .gs-ring circle.is-fill { stroke: #6a48d8; stroke-linecap: round; transition: stroke-dasharray .5s cubic-bezier(.22, 1, .36, 1); }

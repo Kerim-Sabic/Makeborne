@@ -5,6 +5,7 @@ import { HOLD_LIFETIME_MS, type CreditHold } from "../credits/server";
 import { RunSpend, SpendError, type SpendGate } from "./run-spend";
 import { AI_STOP_MESSAGES } from "./failure";
 import { RequestError } from "../server/http";
+import type { ProviderCapacity } from "../builder/availability";
 
 /**
  * Preflight before any credit hold: refuses with a retryable 503 when the
@@ -12,12 +13,22 @@ import { RequestError } from "../server/http";
  * that cannot start never touches credits. Only a reason is returned, never amounts.
  */
 export async function requireProviderCapacity(provider: "anthropic" | "openai") {
-  const { data, error } = await billingDatabase().rpc("makeborne_provider_spend_status", { p_provider: provider });
-  if (error || !data || typeof data !== "object") throw new RequestError("AI_UNAVAILABLE", AI_STOP_MESSAGES.AI_UNAVAILABLE, 503);
-  const status = data as { available?: unknown; reason?: unknown };
-  if (status.available === true) return;
-  if (status.reason === "limit") throw new RequestError("AI_DAILY_LIMIT", AI_STOP_MESSAGES.AI_DAILY_LIMIT, 503);
+  const capacity = await providerCapacity(provider);
+  if (capacity === "available") return;
+  if (capacity === "unavailable") throw new RequestError("AI_UNAVAILABLE", AI_STOP_MESSAGES.AI_UNAVAILABLE, 503);
+  if (capacity === "limit") throw new RequestError("AI_DAILY_LIMIT", AI_STOP_MESSAGES.AI_DAILY_LIMIT, 503);
   throw new RequestError("AI_PAUSED", AI_STOP_MESSAGES.AI_PAUSED, 503);
+}
+
+/** The same preflight as a reason, for saying what can be offered before work is requested. */
+export async function providerCapacity(provider: "anthropic" | "openai"): Promise<ProviderCapacity> {
+  try {
+    const { data, error } = await billingDatabase().rpc("makeborne_provider_spend_status", { p_provider: provider });
+    if (error || !data || typeof data !== "object") return "unavailable";
+    const status = data as { available?: unknown; reason?: unknown };
+    if (status.available === true) return "available";
+    return status.reason === "limit" ? "limit" : "paused";
+  } catch { return "unavailable"; }
 }
 
 /**

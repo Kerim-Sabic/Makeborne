@@ -1,0 +1,24 @@
+{
+  "id": "d01-keep-the-wheels-turning",
+  "order": 9,
+  "format": "presentation",
+  "direction": "trades",
+  "title": "Keep the Wheels Turning",
+  "shared": false,
+  "brief": "Create an eight-slide proposal titled Keep the Wheels Turning for Tern, a fictional independent bicycle workshop proposing a simple maintenance membership to its local customers. Explain the customer problem, what is included, what is excluded, a three-step member journey, a comparison of two clearly fictional sample plans, a native editable chart using explicitly illustrative quarterly visit counts 12, 18, 25 and 30, a realistic launch timeline, and a clear next step. Use useful speaker notes and concise persuasive content. Choose a distinctive visual identity for Tern. Keep native text, shapes and chart editable in PowerPoint. Do not invent testimonials, real results or working checkout links.",
+  "source": {
+    "type": "real",
+    "path": "scripts/fresh-quality-common.mjs:18",
+    "adaptation": "Verbatim; the brief contains no Makeborne runtime lines."
+  },
+  "persona": null,
+  "mustHave": [
+    "exactly eight slides",
+    "native editable chart with the quarterly visit counts 12, 18, 25 and 30, labelled illustrative",
+    "comparison of two clearly fictional sample plans",
+    "three-step member journey and a launch timeline",
+    "speaker notes on the slides",
+    "no testimonials, real results or working checkout links"
+  ],
+  "notes": "Prior outputs: outputs/fresh-product-quality-ac4b08bd-b91f-47bb-9956-c6d719505738/deck. Closest direction: trades (local bicycle workshop)."
+}

@@ -13,10 +13,10 @@
   margin-bottom: 32px;
 }
 .mbg-eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.16em;
-  color: #858585;
+  color: var(--text-muted);
 }
 .mbg-heading h2 {
   font-size: 30px;
@@ -28,7 +28,7 @@
 .mbg-heading > p {
   font-size: 13px;
   line-height: 1.6;
-  color: #777;
+  color: var(--text-muted);
   margin: 0;
 }
 .mbg-filter-row {
@@ -46,7 +46,7 @@
 .mbg-filter {
   border: 0;
   background: transparent;
-  color: #737373;
+  color: var(--text-muted);
   font: inherit;
   font-size: 12px;
   padding: 10px 17px;
@@ -68,7 +68,7 @@
 }
 .mbg-preview-note {
   font-size: 11px;
-  color: #969696;
+  color: var(--text-muted);
 }
 .mbg-grid {
   display: grid;
@@ -151,23 +151,23 @@
   line-height: 1.4;
 }
 .mbg-card-details p {
-  font-size: 10px;
-  line-height: 1.6;
-  color: #8a8a8a;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
   margin: 5px 0 0;
 }
 .mbg-kind {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 9px;
-  color: #8a8a8a;
+  font-size: 12px;
+  color: var(--text-muted);
   padding-top: 3px;
   white-space: nowrap;
 }
 .mbg-gallery-footnote {
   font-size: 11px;
-  color: #929292;
+  color: var(--text-muted);
   line-height: 1.6;
   text-align: center;
   margin: 32px 0 0;

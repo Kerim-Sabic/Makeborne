@@ -1,0 +1,71 @@
+{
+  "before": {
+    "available": 850,
+    "reserved": 0
+  },
+  "reserved": {
+    "amount": 40,
+    "status": "reserved",
+    "balance": 850,
+    "replayed": false,
+    "reserved": 40,
+    "available": 810,
+    "unlimited": false
+  },
+  "during": {
+    "available": 810,
+    "reserved": 40
+  },
+  "settled": {
+    "lapsed": 0,
+    "balance": 825,
+    "charged": 25,
+    "outcome": "settled",
+    "absorbed": 0,
+    "recorded": true,
+    "replayed": false,
+    "reserved": 0,
+    "returned": 15,
+    "available": 825,
+    "unlimited": false,
+    "providerMicrousd": 0,
+    "uncertainMicrousd": 0
+  },
+  "replay": {
+    "balance": 825,
+    "charged": 25,
+    "outcome": "replayed",
+    "absorbed": 0,
+    "recorded": false,
+    "replayed": true,
+    "reserved": 0,
+    "available": 825,
+    "unlimited": false,
+    "providerMicrousd": 0,
+    "uncertainMicrousd": 0
+  },
+  "after": {
+    "available": 825,
+    "reserved": 0,
+    "nextExpiry": {
+      "at": "2027-01-15T10:38:48.607+00:00",
+      "credits": 825
+    }
+  },
+  "ledger": [
+    {
+      "kind": "plan_grant",
+      "delta": 850
+    },
+    {
+      "kind": "reserve",
+      "delta": -40
+    },
+    {
+      "kind": "settle",
+      "delta": 15
+    }
+  ],
+  "ledgerSum": 825,
+  "ledgerMatchesWallet": true
+}

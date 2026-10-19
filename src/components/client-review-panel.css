@@ -4,12 +4,12 @@
 .crp-icon{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:12px;background:#eef1fb;color:#3358d4}
 .crp-icon-button{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;border:1px solid #e4e5eb;background:#fff;color:#5c616d;flex:0 0 auto}
 .crp-icon-button:hover{background:#f4f5f8}
-.crp-muted{margin:0;font-size:12px;color:#7a7c88}
+.crp-muted{margin:0;font-size:12px;color:var(--text-muted)}
 .crp-client{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:12px;color:#4a4d57;padding:10px 12px;border-radius:12px;background:#f7f7f4}
-.crp-client small{width:100%;color:#7a7c88;font-size:11px}
+.crp-client small{width:100%;color:var(--text-muted);font-size:11px}
 .crp-pill{display:inline-flex;padding:2px 9px;border-radius:999px;background:#fff;border:1px solid #e1e1e6;font-size:11px;font-weight:600}
 .crp-create{display:grid;gap:12px;padding-top:4px}
-.crp-create label{display:grid;gap:6px;font-size:11px;font-weight:600;color:#4a4d57}.crp-create label small{font-weight:400;color:#8a8c97}
+.crp-create label{display:grid;gap:6px;font-size:11px;font-weight:600;color:#4a4d57}.crp-create label small{font-weight:400;font-size:11px;color:var(--text-muted)}
 .crp-create input,.crp-create select,.crp-create textarea{width:100%;min-width:0;border:1px solid #dedee7;border-radius:10px;padding:9px 11px;font:inherit;font-size:13px;font-weight:400;background:#fff;color:#20222a}
 .crp-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .crp-scope{display:grid;grid-template-columns:1fr 1fr;gap:8px}

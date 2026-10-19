@@ -3,7 +3,7 @@
   --canvas: #fafafa;
   --surface: #fff;
   --ink: #171717;
-  --muted: #737373;
+  --muted: var(--text-muted);
   --line: #e8e8e8;
   --blue: #202020;
   --blue-hover: #3a3a3a;
@@ -64,7 +64,7 @@
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.07em;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .sidebar {
   width: 224px;
@@ -104,11 +104,11 @@
 }
 .studio-shell .workspace-switch small {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   margin-top: 2px;
 }
 .studio-shell .workspace-switch > svg {
-  color: #72727c;
+  color: var(--text-muted);
   width: 13px;
 }
 .studio-shell .create-button {
@@ -128,7 +128,7 @@
   letter-spacing: 0.025em;
   font-weight: 500;
   text-transform: none;
-  color: #72727c;
+  color: var(--text-muted);
   padding: 0 11px;
   margin-bottom: 8px;
 }
@@ -179,7 +179,7 @@
 .studio-shell .local-notice p {
   font-size: 12px;
   line-height: 1.7;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .status-dot {
   background: #6c957f;
@@ -206,7 +206,7 @@
   justify-content: flex-start;
   gap: 5px;
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .sidebar-home > svg:last-child {
   margin-left: auto;
@@ -267,7 +267,7 @@
 }
 .studio-shell .page-heading p {
   font-size: 12px;
-  color: #8b8b8b;
+  color: var(--text-muted);
   line-height: 1.7;
 }
 .studio-shell .page-heading > .button {
@@ -310,7 +310,7 @@
   min-height: 33px;
   background: transparent;
   font-size: 12px;
-  color: #8b8b8b;
+  color: var(--text-muted);
 }
 .studio-shell .composer-format-tabs > button.active {
   color: #333;
@@ -325,7 +325,7 @@
 .studio-shell .composer-format-tabs > span {
   margin-left: auto;
   font-size: 12px;
-  color: #b1b1b1;
+  color: var(--text-muted);
 }
 .studio-shell .composer-input-label {
   margin: 0;
@@ -349,7 +349,7 @@
   outline: 0;
 }
 .studio-shell .composer-input-label textarea::placeholder {
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .composer-bottom {
   display: flex;
@@ -363,7 +363,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .composer-bottom > span svg {
   stroke-width: 1.4;
@@ -377,7 +377,7 @@
 .studio-shell .composer-note {
   text-align: center;
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   margin: 10px 0 26px;
 }
 .studio-shell .quick-create {
@@ -436,7 +436,7 @@
 }
 .studio-shell .quick-create small {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   margin-top: 3px;
 }
 .studio-shell .quick-create > button > svg {
@@ -453,7 +453,7 @@
 }
 .studio-shell .filter-tabs button {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   min-height: 33px;
   padding: 7px 11px;
   border-radius: 6px;
@@ -465,7 +465,7 @@
 }
 .studio-shell .search-field {
   gap: 7px;
-  color: #72727c;
+  color: var(--text-muted);
   margin-bottom: 0;
 }
 .studio-shell .search-field svg {
@@ -489,7 +489,7 @@
   border: 1px solid #ededed;
   border-radius: 12px;
   background: #f9f9f9;
-  color: #72727c;
+  color: var(--text-muted);
   transform: none;
   margin-bottom: 19px;
 }
@@ -512,7 +512,7 @@
 .studio-shell .empty-state p {
   font-size: 12px;
   line-height: 1.8;
-  color: #72727c;
+  color: var(--text-muted);
   max-width: 350px;
   margin-bottom: 21px;
 }
@@ -591,7 +591,7 @@
   color: #333;
 }
 .studio-shell .project-info span {
-  color: #72727c;
+  color: var(--text-muted);
   font-size: 12px;
 }
 .studio-shell .project-info > svg {
@@ -600,13 +600,13 @@
 .studio-shell .project-meta {
   padding: 7px 16px 17px;
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .status-label {
   font-size: 12px;
   border-color: #e8e8e8;
   background: #f7f7f7;
-  color: #8b8b8b;
+  color: var(--text-muted);
   border-radius: 4px;
   padding: 3px 6px;
 }
@@ -659,13 +659,13 @@
 }
 .studio-shell .client-card p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .client-card-meta {
   border-color: #eee;
   margin-top: 24px;
   padding-top: 15px;
-  color: #72727c;
+  color: var(--text-muted);
   font-size: 12px;
   justify-content: space-between;
 }
@@ -684,7 +684,7 @@
 }
 .studio-shell .client-profile p {
   font-size: 12px;
-  color: #8b8b8b;
+  color: var(--text-muted);
   line-height: 1.8;
 }
 .studio-shell .client-project {
@@ -698,11 +698,11 @@
 }
 .studio-shell .client-project small {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .client-project > svg {
   width: 16px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .subheading {
   font-family: var(--font-inter), Arial, sans-serif;
@@ -725,7 +725,7 @@
   color: #727272;
 }
 .studio-shell .activity-list p {
-  color: #72727c;
+  color: var(--text-muted);
   font-size: 12px;
 }
 .studio-shell .timeline-dot {
@@ -754,7 +754,7 @@
 }
 .studio-shell .style-card p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   line-height: 1.8;
 }
 .studio-shell .style-card .text-link {
@@ -812,11 +812,11 @@
 .studio-shell .settings-panel p {
   font-size: 12px;
   line-height: 1.85;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .toggle {
   font-size: 12px;
-  color: #777;
+  color: var(--text-muted);
 }
 .studio-shell .toggle > span {
   background: #d3d3d3;
@@ -836,7 +836,7 @@
 }
 .studio-shell .icon-button {
   border-radius: 6px;
-  color: #8b8b8b;
+  color: var(--text-muted);
   min-width: 34px;
   min-height: 34px;
 }
@@ -860,7 +860,7 @@
   right: 15px;
   border-radius: 7px;
   background: #f7f7f7;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .modal h2 {
   font-family: var(--font-inter), Arial, sans-serif;
@@ -873,7 +873,7 @@
 }
 .studio-shell .modal-intro {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   line-height: 1.7;
   margin-bottom: 22px;
 }
@@ -891,7 +891,7 @@
 .studio-shell label {
   font-size: 12px;
   font-weight: 500;
-  color: #737373;
+  color: var(--text-muted);
   margin-bottom: 18px;
 }
 .studio-shell label input,
@@ -910,7 +910,7 @@
 }
 .studio-shell label input::placeholder,
 .studio-shell label textarea::placeholder {
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell label input:focus-visible,
 .studio-shell label textarea:focus-visible,
@@ -928,7 +928,7 @@
   background: #fafafa;
   border-radius: 9px;
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   min-height: 82px;
   gap: 9px;
 }
@@ -959,7 +959,7 @@
 .studio-shell .inline-info p {
   font-size: 12px;
   line-height: 1.8;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .style-picker > button {
   border: 1px solid #e8e8e8;
@@ -979,7 +979,7 @@
 }
 .studio-shell .style-picker small {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .style-chip {
   border-radius: 5px;
@@ -999,7 +999,7 @@
 }
 .studio-shell .creation-summary p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .editor-heading {
   background: #fff;
@@ -1016,7 +1016,7 @@
 }
 .studio-shell .editor-heading p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   margin-top: 4px;
 }
 .studio-shell .editor-actions {
@@ -1060,12 +1060,12 @@
   padding: 21px 13px;
 }
 .studio-shell .outline-heading {
-  color: #72727c;
+  color: var(--text-muted);
   padding-bottom: 16px;
 }
 .studio-shell .outline-heading .eyebrow {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .outline-item {
   border-radius: 7px;
@@ -1084,10 +1084,10 @@
 }
 .studio-shell .outline-item > button > span:first-child {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .outline-item .icon-button {
-  color: #72727c;
+  color: var(--text-muted);
   min-height: 23px;
   min-width: 25px;
 }
@@ -1097,7 +1097,7 @@
   border-radius: 7px;
   padding: 9px 10px;
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   margin-top: 9px;
   gap: 6px;
   min-height: 34px;
@@ -1109,7 +1109,7 @@
 .studio-shell .outline-footnote {
   font-size: 12px;
   line-height: 1.8;
-  color: #72727c;
+  color: var(--text-muted);
   padding: 19px 7px;
 }
 .studio-shell .artifact-canvas {
@@ -1119,14 +1119,14 @@
 .studio-shell .canvas-toolbar {
   padding: 22px 0;
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   letter-spacing: 0.05em;
 }
 .studio-shell .canvas-toolbar > div {
   gap: 9px;
 }
 .studio-shell .canvas-toolbar button {
-  color: #72727c;
+  color: var(--text-muted);
   padding: 4px 6px;
   font-size: 12px;
 }
@@ -1147,7 +1147,7 @@
 }
 .studio-shell .inspector-panel label {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .inspector-panel label input,
 .studio-shell .inspector-panel label textarea,
@@ -1178,7 +1178,7 @@
   border-radius: 5px;
   padding: 6px 7px;
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   min-height: 32px;
 }
 .studio-shell .website-sections {
@@ -1190,7 +1190,7 @@
 }
 .studio-shell .website-sections p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   line-height: 1.8;
 }
 .studio-shell .website-sections .button {
@@ -1203,7 +1203,7 @@
   border-radius: 9px;
   padding: 15px;
   margin-top: 29px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .ai-panel h3 {
   font-size: 12px;
@@ -1212,7 +1212,7 @@
   color: #777;
 }
 .studio-shell .ai-panel p {
-  color: #72727c;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.8;
 }
@@ -1228,16 +1228,16 @@
 }
 .studio-shell .export-options .eyebrow {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .export-options .text-link {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   min-height: 34px;
 }
 .studio-shell .book-export-details p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   line-height: 1.8;
 }
 .studio-shell .review-layout {
@@ -1254,7 +1254,7 @@
 }
 .studio-shell .review-layout p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .version-list article {
   background: #fff;
@@ -1266,7 +1266,7 @@
 }
 .studio-shell .version-number {
   background: #f2f2f2;
-  color: #72727c;
+  color: var(--text-muted);
   border-radius: 6px;
   width: 28px;
   height: 30px;
@@ -1278,7 +1278,7 @@
 }
 .studio-shell .version-list p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .version-list .button {
   font-size: 12px;
@@ -1287,7 +1287,7 @@
 .studio-shell .preview-disclaimer,
 .studio-shell .preview-layout-note {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 /* Actual artifact typography, palette and content retain their chosen style. */
 .studio-shell .book-preview,
@@ -1800,7 +1800,7 @@
 }
 .studio-shell .fresh-workspace .page-heading p {
   font-size: 13px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .fresh-workspace .studio-composer {
   max-width: 790px;
@@ -1830,11 +1830,11 @@
 }
 .studio-shell .fresh-workspace .empty-state h2 {
   font-size: 16px;
-  color: #8a8a8a;
+  color: var(--text-muted);
 }
 .studio-shell .fresh-workspace .empty-state p {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   margin-bottom: 0;
 }
 .studio-shell .fresh-workspace .empty-symbol {
@@ -1935,11 +1935,11 @@
 .studio-shell .mbg-preview-note,
 .studio-shell .mbg-gallery-footnote {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .mbg-heading > p,
 .studio-shell .mbg-card-details p {
-  color: #72727c;
+  color: var(--text-muted);
 }
 .studio-shell .saved-style-directions {
   margin: 38px 0 0;
@@ -1980,7 +1980,7 @@
 }
 .studio-shell .saved-style-grid small {
   font-size: 12px;
-  color: #72727c;
+  color: var(--text-muted);
   line-height: 1.6;
 }
 .studio-shell .saved-style-swatch {
@@ -2613,8 +2613,8 @@
 .studio-shell .sidebar-bottom { padding-top: 20px; gap: 3px; }
 .studio-shell .sidebar-settings,.studio-shell .sidebar-home { min-height: 44px; padding: 11px 13px; font-size: 12px; gap: 12px; border-radius: 10px; color: #687184; }
 .studio-shell .sidebar-device { margin: 14px 9px 0; padding-top: 16px; border-top: 1px solid #e1e5ee; }
-.sidebar-device-label { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #747e90; }
-.sidebar-device button { display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 10px 0; min-height: 36px; color: #65718a; font-size: 11px; cursor: pointer; }
+.sidebar-device-label { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-muted); }
+.sidebar-device button { display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 10px 0; min-height: 36px; color: #5d6880; font-size: 12px; cursor: pointer; }
 .sidebar-device button:hover { color: #354ea5; }
 @media(prefers-reduced-transparency:reduce) { .studio-shell .sidebar { background: #f9fafc; } }
 @media(forced-colors:active) { .studio-shell .sidebar { background: Canvas; border-color: CanvasText; } .studio-shell .studio-nav button.active { outline: 1px solid Highlight; } }
@@ -2636,7 +2636,7 @@
 .studio-shell .studio-main { margin-left: 232px; width: calc(100% - 232px); }
 .studio-shell .sidebar > .wordmark { margin-bottom: 30px; padding: 0 8px; font-size: 20px; letter-spacing: -.055em; color: #242b3e; }
 .studio-shell .create-button { border: 1px solid #cad4eb; background: linear-gradient(110deg,#f0f4ff,#f5f1ff); color: #3d5098; box-shadow: inset 0 1px 0 #fff; border-radius: 12px; margin-bottom: 29px; }
-.studio-shell .studio-nav button { color: #69738a; }
+.studio-shell .studio-nav button { color: var(--text-muted); }
 .studio-shell .studio-nav button.active { background: #ffffffed; color: #4058a8; box-shadow: 0 3px 10px #3c538a09,inset 0 0 0 1px #e1e7f5; }
 .studio-shell .studio-topbar { height: 72px; padding: 0 30px; background: transparent; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .studio-shell .breadcrumb { font-size: 14px; font-weight: 550; color: #566078; letter-spacing: -.015em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2705,6 +2705,10 @@
 .studio-account-popover button:disabled { opacity: .6; cursor: wait; }
 .studio-account-error { position: absolute; right: 0; top: calc(100% + 12px); width: 250px; padding: 12px; background: #fff8eb; color: #725526; border: 1px solid #eedcc0; border-radius: 10px; font-size: 12px; z-index: 51; }
 .account-projects { margin: 24px 0 30px; padding: 24px; border: 1px solid #e5e5ef; border-radius: 20px; background: #ffffffc9; min-width: 0; }
+.account-projects.account-project-open { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; min-height: 0; }
+/* Until its editor mounts (or if the link fails), an opening project's text sits where "Opening your workspace…" was, not in the corner. Padding, not margin, so the section itself never moves. */
+.account-projects.account-project-open > :is(h2, p, label, .button, .account-project-grid) { margin-left: 60px; margin-right: 60px; }
+.account-projects.account-project-open > :first-child:is(h2, p, label) { margin-top: 0; padding-top: 60px; }
 .account-projects-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .account-projects-heading h2 { font-size: 20px; letter-spacing: -.5px; margin: 6px 0 0; }
 .account-project-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
@@ -2742,7 +2746,7 @@
 .studio-shell button:hover{transform:none}.studio-shell .modal{animation:none}
 @media(max-width:600px){.creation-session>header{padding:0 20px}.creation-session-content{padding:25px 20px 60px}.creation-session h2{font-size:23px}.creation-session .form-grid{grid-template-columns:1fr}.studio-shell .saved-style-grid{grid-template-columns:1fr}}
 
-.studio-shell .studio-chat-link{display:flex;align-items:center;gap:12px;padding:12px 16px;color:#80758c;text-decoration:none;font-size:13px;border-radius:9px;margin-top:4px}.studio-shell .studio-chat-link:hover{background:#f0ecf5;color:#51435f}
+.studio-shell .studio-chat-link{display:flex;align-items:center;gap:12px;padding:12px 16px;color: var(--text-muted);text-decoration:none;font-size:13px;border-radius:9px;margin-top:4px}.studio-shell .studio-chat-link:hover{background:#f0ecf5;color:#51435f}
 
 /* 2026-10-13 readability pass (studio only; the home page keeps its own type).
    Labels and meta text never go below 12px; miniature previews are untouched. */

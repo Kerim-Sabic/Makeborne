@@ -1,0 +1,24 @@
+{
+  "id": "w19-events-ridgeline-weddings",
+  "order": 21,
+  "format": "website",
+  "direction": "events",
+  "title": "Ridgeline Day-Of Co.",
+  "shared": false,
+  "brief": "I'm Jo Whitaker, owner of Ridgeline Day-Of Co., a small wedding planning business in Asheville, North Carolina. I plan micro-weddings and elopements in the Blue Ridge mountains and coordinate wedding days within 90 minutes of Asheville. I take at most 18 weddings a year and I'm now booking 2027. Packages: Elopement planning from $1,200, Day-of coordination from $1,800, Partial planning from $3,900. I get a lot of inquiries, but half can't afford me, so the inquiry form should ask for the date, guest count, venue (booked or not) and budget range, and the pricing should be clear before anyone reaches the form. The form isn't connected yet, so it must not say the inquiry was sent. Phone (828) 555-0163, email hello@ridgelinedayof.example. I don't have permission to use couples' photos or other vendors' work yet, so use clearly marked placeholders. No reviews, \"as featured in\" logos or award badges.",
+  "source": {
+    "type": "persona",
+    "path": "Helix: Knowledge/Customers/US wedding vendor.md",
+    "adaptation": "Planner's voice from the persona (\"half can't afford me\", \"starting at\" pricing that pre-qualifies, inquiry form that filters, image rights and review rules). Business, owner and prices are fictional but supplied; the phone is in the reserved 555-01xx range."
+  },
+  "persona": "US wedding vendor.md",
+  "mustHave": [
+    "three packages with the supplied \"from\" prices, visible before the inquiry form",
+    "qualifying inquiry form (date, guest count, venue status, budget range) that does not claim it was sent",
+    "service area (within 90 minutes of Asheville) and the 2027 booking note",
+    "photo placeholders; no couples' or other vendors' photos",
+    "no reviews, \"as featured in\" logos or badges",
+    "phone (828) 555-0163 as a tel: link"
+  ],
+  "notes": "No prior output. Events direction but not nightlife: the poster defaults should yield to the brief."
+}

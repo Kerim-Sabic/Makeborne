@@ -1,0 +1,23 @@
+{
+  "id": "w12-saas-ledgerline",
+  "order": 14,
+  "format": "website",
+  "direction": "saas",
+  "title": "Ledgerline",
+  "shared": false,
+  "brief": "Landing page for Ledgerline, a bookkeeping app for freelancers and tiny agencies in the UK. It connects to your bank, auto-categorises transactions, matches receipts photographed on your phone, tracks VAT and estimates your Self Assessment tax bill in real time, so there are no surprises in January. Exports to accountants in one click. Pricing: a free plan for up to 20 transactions a month, and a paid plan. We're in public beta, so the main goal is getting people onto the waitlist / free signup. Audience: designers, developers, writers and consultants who hate admin. Tone: smart, calm, a little dry humour. The paid plan's price isn't set yet, so show it as a placeholder. No customer logos, user numbers, ratings or testimonials: we have none to show yet. The signup form isn't connected, so don't fake a confirmation.",
+  "source": {
+    "type": "real",
+    "path": "makeborne-local DB 127.0.0.1:55322 public.projects.brief, workspace 0a3d6952-0e17-492f-a83b-f48b11796b77, project a1a909f3-16ec-45d4-a70f-1b1df7492b62",
+    "adaptation": "Verbatim, plus three honesty sentences the owner left implicit: the paid price is not set (placeholder), there is no social proof yet, and the signup is not connected."
+  },
+  "persona": null,
+  "mustHave": [
+    "pricing with the free plan (up to 20 transactions a month) and the paid price as a placeholder",
+    "waitlist / free signup as the primary action",
+    "signup form that does not fake a confirmation",
+    "features cover bank connection, auto-categorisation, receipt matching, VAT, the Self Assessment estimate and accountant export",
+    "no customer logos, user numbers, ratings or testimonials"
+  ],
+  "notes": "Prior output: artifact 911f301e-8a08-4bdd-a7fe-70b7f7c42860 (2 versions) in the same DB."
+}

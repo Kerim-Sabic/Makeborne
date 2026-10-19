@@ -1,0 +1,23 @@
+{
+  "id": "d02-tidewater-seed-pitch",
+  "order": 23,
+  "format": "presentation",
+  "direction": "saas",
+  "title": "Tidewater seed pitch",
+  "shared": false,
+  "brief": "I need a 10-slide seed pitch deck by Friday for Tidewater, our startup that turns retired electric-vehicle batteries into home energy storage for coastal homes in Croatia. Audience: seed investors in Zagreb. Last time investors said the story wasn't clear, so give it a clear arc: problem, solution, pilot traction, market, business model, team, the ask and use of funds. Facts we can use: a 2025 pilot with 40 homes in Split cut household electricity bills by 31% on average; second-life batteries cost 45% less than new ones; Croatia will retire an estimated 12,000 EV batteries by 2030 (our estimate, so label it); team of six, including two battery engineers from the EV industry; we are raising EUR 1.2M to reach 500 homes by the end of 2027. Anything else (revenue, customer names, market size in euros) stays a bracketed placeholder. Include one native editable chart, speaker notes on every slide, and keep all text editable. Tone: confident, warm, Adriatic.",
+  "source": {
+    "type": "real",
+    "path": "makeborne-local DB 127.0.0.1:55322 public.projects.brief, workspace 0a3d6952-0e17-492f-a83b-f48b11796b77, project 146754b7-c201-44ec-bda1-0e9e656c38fa",
+    "adaptation": "Real seed-pitch brief rewritten in the voice of the \"Startup founder needing a pitch deck\" persona: kept every supplied fact; replaced \"two battery engineers from Rimac\" with \"from the EV industry\" (no real company named for fictional people); added the persona's deadline, the \"story isn't clear\" feedback and the standard arc, the placeholder rule for unsupplied numbers, one editable chart and speaker notes."
+  },
+  "persona": "Startup founder needing a pitch deck.md",
+  "mustHave": [
+    "exactly ten slides covering problem, solution, traction, market, business model, team, ask and use of funds",
+    "only the supplied figures (40 homes, 31%, 45%, 12,000 labelled as an estimate, EUR 1.2M, 500 homes by end of 2027)",
+    "one native editable chart",
+    "speaker notes on every slide",
+    "unsupplied figures as bracketed placeholders"
+  ],
+  "notes": "Prior output: artifact 400bf89c-013a-4f1d-bbf3-e723265c2198 (\"Tidewater — Seed Round\", 4 versions) in the same DB, made from the original wording. Closest direction: saas (startup and product story); no direction fits an energy-hardware startup exactly."
+}

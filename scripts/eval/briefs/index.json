@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "frozenAt": "2026-10-18",
+  "count": 24,
+  "effort": "medium",
+  "order": [
+    "w01-restaurant-saffron-table",
+    "w02-saas-relay-operations",
+    "w03-professional-hartwell-rook",
+    "w04-creator-mira-objects",
+    "w05-ecommerce-good-dog",
+    "w06-wellness-laurel-creek-dental",
+    "w07-trades-hollis-heating-plumbing",
+    "w08-events-low-ceiling",
+    "d01-keep-the-wheels-turning",
+    "b01-useful-client-brief",
+    "w09-property-lumen-atelier",
+    "w10-civic-elmwood-pantry",
+    "w11-restaurant-ovenbird-bakehouse",
+    "w12-saas-ledgerline",
+    "w13-professional-fernhill-books-tax",
+    "w14-creator-foxed-podcast",
+    "w15-ecommerce-kafa-tamo",
+    "w16-wellness-crux-yard",
+    "w17-trades-saltbush-auto",
+    "w18-property-hisa-burja",
+    "w19-events-ridgeline-weddings",
+    "w20-civic-glen-rise-maths-club",
+    "d02-tidewater-seed-pitch",
+    "b02-repair-table"
+  ],
+  "sha256": {
+    "w01-restaurant-saffron-table": "4777eb7bdc8e49692482628ae40c080d6bf81f109e6d48c306288cf86aad71cb",
+    "w02-saas-relay-operations": "a687e104274a8028b1bf7ddeb6ab7cd5168f94d613ca1c4c7eb76eecc1a30086",
+    "w03-professional-hartwell-rook": "d95240382d25654d20b691be7037a38b55dcea104525e027fbe2eacd3e0b0e0a",
+    "w04-creator-mira-objects": "b55c6da4219ee94900a69259faf81201a248f780113f6f518e98fb223ebcb59c",
+    "w05-ecommerce-good-dog": "269eee9654b874508c8f6d7d25a4b5166cbfcbc5bf1f7c0a251c4e3c67d68a0c",
+    "w06-wellness-laurel-creek-dental": "0cad527d77b5c1e0453a96e0ada457b3452af840c117837dd840382b30430bea",
+    "w07-trades-hollis-heating-plumbing": "db03ccbd5e7228e777f310a466ea6ec1ceafcb4ee4303c172dd784fc89b8db9b",
+    "w08-events-low-ceiling": "5d2623fd1d8c88dd6ca9dbd21eece817c10d300c17bd592d75ea8abc0cdecd4a",
+    "d01-keep-the-wheels-turning": "ae1de6016a43932084e1159c51af3a36e8ff4bde3e54fa4397447a9c3655419d",
+    "b01-useful-client-brief": "e9f7b2e00ba3f19b5b048b17327f145a8880d92bd4391bfb24556c341c1c14c5",
+    "w09-property-lumen-atelier": "847c7d8ffe4939f3af60949bd8384447a25f32e39e26ef7eaadb009d50af225f",
+    "w10-civic-elmwood-pantry": "894c6e2d1e9a05793f0cc355635ee2be519adc1025d84562295a3955f248c22a",
+    "w11-restaurant-ovenbird-bakehouse": "81a74ad0bf9fb377def99c55481b4661b53691229c25d2f676afc7ca637f0d3c",
+    "w12-saas-ledgerline": "4d350dec44e15192d0bf0c64ecebe36640ae5b1254ad20fa7f809501e91ad835",
+    "w13-professional-fernhill-books-tax": "845abf1f0e5e7231b423e1aa16d672e1c19d010280b45b4bb5556519ad92c9ea",
+    "w14-creator-foxed-podcast": "1f8b7c05f4fe3fd243fb9771c52a168c0ad74dad6e27d6bbdb78c769d9e27d1b",
+    "w15-ecommerce-kafa-tamo": "a47a0b6a122c03ebcb97174cdd42f9badf85306fff75b5091af51971001aa79e",
+    "w16-wellness-crux-yard": "98b7656fafaba1beb98673d0245385c481e61617a15ebcf3fdb5dcbfe87b51b3",
+    "w17-trades-saltbush-auto": "b0e07ed0ecbeb55984254e25aee6e858a2d936df4fca58f25539554204bbc5f8",
+    "w18-property-hisa-burja": "4479a5d0acba93001c64b9cb537747990736451674f40f3877838103ac19b066",
+    "w19-events-ridgeline-weddings": "d55f3a284978fc22c6e8aa3a3342d804248fae9e825441a906798c3116ed42d8",
+    "w20-civic-glen-rise-maths-club": "0f08dfb9950ae9cc730a190e724dfe6928cfe227a4fb29f3baaee24230fbd1b3",
+    "d02-tidewater-seed-pitch": "814113971edbd0bae59a617eb102df4cd321e9761953c78b972dfc7d65d67809",
+    "b02-repair-table": "1bf68afba90e3940f09c2ae52ba32c64513c687e9a1de1d57cb8b75975596358"
+  },
+  "directions": {
+    "restaurant": [
+      "w01-restaurant-saffron-table",
+      "w11-restaurant-ovenbird-bakehouse"
+    ],
+    "saas": [
+      "w02-saas-relay-operations",
+      "w12-saas-ledgerline",
+      "d02-tidewater-seed-pitch"
+    ],
+    "professional": [
+      "w03-professional-hartwell-rook",
+      "w13-professional-fernhill-books-tax"
+    ],
+    "creator": [
+      "w04-creator-mira-objects",
+      "b01-useful-client-brief",
+      "w14-creator-foxed-podcast"
+    ],
+    "ecommerce": [
+      "w05-ecommerce-good-dog",
+      "w15-ecommerce-kafa-tamo"
+    ],
+    "wellness": [
+      "w06-wellness-laurel-creek-dental",
+      "w16-wellness-crux-yard"
+    ],
+    "trades": [
+      "w07-trades-hollis-heating-plumbing",
+      "d01-keep-the-wheels-turning",
+      "w17-trades-saltbush-auto"
+    ],
+    "events": [
+      "w08-events-low-ceiling",
+      "w19-events-ridgeline-weddings"
+    ],
+    "property": [
+      "w09-property-lumen-atelier",
+      "w18-property-hisa-burja"
+    ],
+    "civic": [
+      "w10-civic-elmwood-pantry",
+      "w20-civic-glen-rise-maths-club",
+      "b02-repair-table"
+    ]
+  },
+  "shared": [
+    "w01-restaurant-saffron-table",
+    "w02-saas-relay-operations",
+    "w03-professional-hartwell-rook",
+    "w04-creator-mira-objects",
+    "w05-ecommerce-good-dog",
+    "w06-wellness-laurel-creek-dental",
+    "w07-trades-hollis-heating-plumbing",
+    "w08-events-low-ceiling"
+  ]
+}

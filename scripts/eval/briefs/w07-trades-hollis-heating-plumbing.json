@@ -1,0 +1,24 @@
+{
+  "id": "w07-trades-hollis-heating-plumbing",
+  "order": 7,
+  "format": "website",
+  "direction": "trades",
+  "title": "Hollis Heating & Plumbing",
+  "shared": true,
+  "brief": "I run Hollis Heating & Plumbing in Saint Paul, Minnesota: me, four techs and my wife Dana on dispatch. I don't need a pretty website, I need the phone to ring. We do furnace and boiler repair and replacement, AC repair and installs, water heaters (tank and tankless), drain cleaning and general plumbing repairs. Service area: Saint Paul, Minneapolis, Roseville, Maplewood, Woodbury and West St. Paul. Phone (651) 555-0172, answered 24/7 for no-heat and burst-pipe emergencies; office hours Monday to Friday 7am–6pm, Saturday 8am–2pm. We sell a maintenance plan with two tune-ups a year and priority scheduling (price to confirm). Put the phone and service area at the top, explain every service in plain words, show how a visit works, and add a quote request form. The form isn't hooked up yet, so it can't promise a call back in five minutes. Our license number goes in as a placeholder. No financing rates, no fake reviews, star ratings or \"Google Guaranteed\" badges.",
+  "source": {
+    "type": "persona",
+    "path": "Helix: Knowledge/Customers/US home services contractor.md",
+    "adaptation": "Owner's voice from the persona (\"I need the phone to ring\", decides in one call, shoulder-season maintenance plans, license-number and financing-advertising rules, no fake reviews). Business, people and details are fictional; the phone is in the reserved 555-01xx range."
+  },
+  "persona": "US home services contractor.md",
+  "mustHave": [
+    "phone (651) 555-0172 as a tel: link above the fold",
+    "service-area towns listed near the top",
+    "24/7 emergency line for no-heat and burst pipes stated",
+    "quote request form that does not promise or fake a response",
+    "license number as a placeholder; no financing rates",
+    "no reviews, ratings or badges"
+  ],
+  "notes": "No prior output."
+}

@@ -1,0 +1,24 @@
+{
+  "id": "w05-ecommerce-good-dog",
+  "order": 5,
+  "format": "website",
+  "direction": "ecommerce",
+  "title": "Good Dog",
+  "shared": true,
+  "brief": "Create an exceptional original website for Good Dog, a fictional independent dog accessories studio for city dogs and their people. The product range is walking sets, everyday bowls and washable resting mats. Position it as useful design with playful character, not luxury fashion. The main goal is to explore the collection and join a launch email list. No actual prices, testimonials, sales counts, addresses, manufacturing claims or launch dates are supplied: do not invent them. Checkout and email delivery are not connected; explain this honestly and do not fake success. Build a complete polished website with a distinctive memorable hero, compelling typography, purposeful editorial rhythm, useful product category interactions and details, an accessible mobile navigation and a readable care section. Users should immediately understand the product and enjoy the design. No product photography is supplied: make original artwork rather than empty image placeholders or generic gradients. Do not use another brand's logo or copy. Avoid the default AI three-card landing-page formula. Keep all controls meaningful and all copy specific, short and human.",
+  "source": {
+    "type": "real",
+    "path": "infra/generation-worker/run-qualification.mjs:153",
+    "adaptation": "Trimmed from 1,332 characters: removed \"Choose the strongest visual identity for this specific business without a preset\" (Makeborne preset vocabulary) and \"generous but\" from the rhythm clause, and shortened \"No supplied photography or external images: create sophisticated original vector/graphic compositions instead of empty image placeholders or generic gradients\" to the supplied-asset fact plus the same ban, without prescribing vector art (tools with image generation may use it). Every honesty constraint is kept word for word."
+  },
+  "persona": null,
+  "mustHave": [
+    "collection explorable by category: walking sets, everyday bowls, washable resting mats",
+    "launch email list signup that does not fake success",
+    "honest statement that checkout is not connected; no add-to-cart that pretends to order",
+    "no invented prices, testimonials, sales counts, addresses or launch dates",
+    "readable care section",
+    "accessible mobile navigation"
+  ],
+  "notes": "Prior qualification rounds used this brief at light effort through the generation worker (infra/generation-worker)."
+}

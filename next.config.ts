@@ -30,8 +30,14 @@ const DOCUMENT_FONT_FILES = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // PDF export runs Chromium; on Vercel it comes from @sparticuz/chromium's packed binary.
-  serverExternalPackages: ["@sparticuz/chromium", "playwright", "playwright-core"],
+  // The builder compiles generated sites with esbuild-wasm, which locates its
+  // WebAssembly service relative to its own files and cannot be bundled.
+  serverExternalPackages: ["@sparticuz/chromium", "playwright", "playwright-core", "esbuild-wasm"],
   outputFileTracingIncludes: {
+    // Compile check at the end of a website build (src/lib/builder/compile.ts):
+    // the service runs bin/esbuild with node, which loads esbuild.wasm by path.
+    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm"],
+    "/admin": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm"],
     // Playwright loads its registry and runtime resources dynamically. Include
     // them explicitly for both export entry points in serverless deployments.
     "/api/export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*"],

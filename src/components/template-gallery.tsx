@@ -155,7 +155,6 @@ export default function TemplateGallery({
               className={`mbg-card${selectedStyleId === direction.style.id ? " is-selected" : ""}`}
               key={direction.id}
               onClick={() => choose(direction)}
-              aria-label={`Use ${direction.title} style for a ${kindLabel[direction.kind].toLowerCase()} project`}
               aria-pressed={selectedStyleId === direction.style.id}
             >
               <PreviewFrame direction={direction} selected={selectedStyleId === direction.style.id} />

@@ -1,0 +1,59 @@
+{
+  "https://release-check.makeborne.site/": {
+    "status": 404,
+    "csp": true,
+    "robots": "noindex",
+    "location": null,
+    "bytes": 599,
+    "title": "Page not found",
+    "scripts": 0,
+    "forms": 0,
+    "links": []
+  },
+  "https://release-check-renamed.makeborne.site/": {
+    "status": 200,
+    "csp": true,
+    "robots": "noindex",
+    "location": null,
+    "bytes": 4121,
+    "title": "Coast &amp; Kind — Good days, together",
+    "scripts": 1,
+    "forms": 1,
+    "links": [
+      "/assets/index-CyrAmEaQ.css"
+    ]
+  },
+  "https://release-check.makeborne.site/robots.txt": {
+    "status": 200,
+    "csp": true,
+    "robots": "noindex",
+    "location": null,
+    "bytes": 26,
+    "title": null,
+    "scripts": 0,
+    "forms": 0,
+    "links": []
+  },
+  "https://release-check.makeborne.site/sitemap.xml": {
+    "status": 404,
+    "csp": true,
+    "robots": "noindex",
+    "location": null,
+    "bytes": 599,
+    "title": "Page not found",
+    "scripts": 0,
+    "forms": 0,
+    "links": []
+  },
+  "https://release-check.makeborne.site/does-not-exist": {
+    "status": 404,
+    "csp": true,
+    "robots": "noindex",
+    "location": null,
+    "bytes": 599,
+    "title": "Page not found",
+    "scripts": 0,
+    "forms": 0,
+    "links": []
+  }
+}

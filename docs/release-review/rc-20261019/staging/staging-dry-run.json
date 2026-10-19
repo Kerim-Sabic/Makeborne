@@ -1,0 +1,18 @@
+{
+  "ref": "xzwikrunwpurxnxgkznh",
+  "productionTouched": false,
+  "candidateCommit": "a6e70c6f577aa5bf7654e72cd8d85b9977bd247e",
+  "dryRun": true,
+  "startedAt": "2026-10-19T11:05:03.221Z",
+  "verified": {
+    "lf": 60,
+    "crlf": 12,
+    "inventoryRaw": 1
+  },
+  "pending": [
+    "20261019090000_app_observability.sql"
+  ],
+  "applied": [],
+  "passed": true,
+  "finishedAt": "2026-10-19T11:05:03.542Z"
+}

@@ -1,0 +1,79 @@
+{
+  "// reasons": {
+    "about": "W11 (QUALITY_BAR §2) runs html-validate on the static snapshot or the rendered DOM. Correctness and accessibility rules stay on as errors; purely stylistic rules, and rules that only flag how a browser serialises a DOM, are off. lib/instruments/htmlvalidate.mjs strips every key starting with // before handing this file to html-validate (its schema accepts no extra keys).",
+    "extends": "html-validate:recommended plus html-validate:document (missing-doctype, input-missing-label, no-missing-references, heading-level, require-sri) because every input is a whole document.",
+    "attr-case": "off: attribute names are case-insensitive in HTML; serialised SVG keeps camelCase (viewBox).",
+    "attr-delimiter": "off: whitespace around = is valid HTML; a style choice.",
+    "attr-quotes": "off: unquoted, single- and double-quoted values are all valid; a style choice.",
+    "attribute-boolean-style": "off: hidden and hidden=\"\" are equivalent; browsers serialise the second form, so it would fire on every snapshot.",
+    "attribute-empty-style": "off: same as attribute-boolean-style for empty values.",
+    "doctype-style": "off: <!doctype html> is case-insensitive.",
+    "element-case": "off: tag names are case-insensitive.",
+    "no-inline-style": "off: style attributes are valid; the builder contract itself sets CSS custom properties inline (style={{\"--i\": index}} for reveal staggering). CSP is not part of W11.",
+    "no-trailing-whitespace": "off: whitespace only.",
+    "void-style": "off: <br> and <br/> are both valid.",
+    "prefer-button": "off: <input type=submit> is valid; preference only.",
+    "prefer-tbody": "off: the parser inserts <tbody>; a style choice in source and never present in a serialised DOM.",
+    "no-implicit-input-type": "off: <input> without type is a text input by definition.",
+    "tel-non-breaking": "off: typographic preference (non-breaking spaces inside phone link text).",
+    "script-type": "off: only flags a redundant type=text/javascript, which is harmless.",
+    "long-title": "off: SEO preference, and the platform writes the published <title> (W5 also excludes it).",
+    "require-sri": "off: subresource integrity is a security policy for third-party assets, not markup validity; published Makeborne sites load same-origin bundles.",
+    "valid-id": "relaxed: HTML5 allows any id without whitespace; React useId produces ids such as «r0» or :r0: that the strict pattern rejects.",
+    "no-implicit-button-type": "warn: a button without type submits only inside a form; elsewhere it is harmless. Reported, does not fail W11.",
+    "no-redundant-role": "warn: redundant (nav role=navigation), not wrong.",
+    "no-redundant-for": "warn: redundant, not wrong.",
+    "no-redundant-aria-label": "warn: redundant, not wrong.",
+    "no-dup-class": "warn: harmless duplication.",
+    "heading-level": "warn: skipped heading levels are an accessibility advisory (WCAG G141), not invalid markup; multiple h1 allowed.",
+    "aria-label-misuse": "error, with allowAnyNamable. A <div> or <span> with no role has the generic role, and ARIA 1.2 prohibits naming generic (likewise <p>, paragraph role): aria-label there is reported \"cannot be used on this element\", stays an error and fails W11 with or without the option. allowAnyNamable only silences the other message, \"strictly allowed but not recommended\", which html-validate gives where ARIA permits a name but its recommended list (landmarks such as <section>/<nav>, interactive and labelable elements, img/figure/table/td/th/dialog/fieldset/iframe/summary/area, any element with a role or tabindex) does not include the element, e.g. <ul> (list) or <h2> (heading): naming is conformant there, so that advice does not fail W11. Checked with html-validate 10.17.0.",
+    "prefer-native-element": "warn: a role (role=\"table\"/\"cell\"/\"region\") on a generic element where a native element exists is valid ARIA; the rule is a best-practice preference. Reported, does not fail W11."
+  },
+  "extends": [
+    "html-validate:recommended",
+    "html-validate:document"
+  ],
+  "rules": {
+    "attr-case": "off",
+    "attr-delimiter": "off",
+    "attr-quotes": "off",
+    "attribute-boolean-style": "off",
+    "attribute-empty-style": "off",
+    "doctype-style": "off",
+    "element-case": "off",
+    "no-inline-style": "off",
+    "no-trailing-whitespace": "off",
+    "void-style": "off",
+    "prefer-button": "off",
+    "prefer-tbody": "off",
+    "no-implicit-input-type": "off",
+    "tel-non-breaking": "off",
+    "script-type": "off",
+    "long-title": "off",
+    "require-sri": "off",
+    "valid-id": [
+      "error",
+      {
+        "relaxed": true
+      }
+    ],
+    "no-implicit-button-type": "warn",
+    "no-redundant-role": "warn",
+    "no-redundant-for": "warn",
+    "no-redundant-aria-label": "warn",
+    "no-dup-class": "warn",
+    "heading-level": [
+      "warn",
+      {
+        "allowMultipleH1": true
+      }
+    ],
+    "aria-label-misuse": [
+      "error",
+      {
+        "allowAnyNamable": true
+      }
+    ],
+    "prefer-native-element": "warn"
+  }
+}

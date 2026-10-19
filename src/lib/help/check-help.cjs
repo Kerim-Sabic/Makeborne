@@ -83,6 +83,17 @@ check("comparisons are sourced, dated, consistent and honest about Makeborne's l
   }
 });
 
+check("publishing and book export guides promise only what ships (no instant publishing, no print-ready claim)", () => {
+  const article = slug => HELP_ARTICLES.find(item => item.slug === slug);
+  // Book PDFs fail paperback preflight (no bleed or cover wrap); publishing waits on verified publishing.
+  for (const text of [JSON.stringify(HELP_ARTICLES), JSON.stringify(DEMO_SCRIPTS), fs.readFileSync(path.join(src, "lib", "site-metadata.ts"), "utf8")]) {
+    assert.doesNotMatch(text, /print-ready/i);
+    assert.doesNotMatch(text, /live in seconds|goes live in seconds/i);
+  }
+  assert.match(article("publish-your-website").answer, /until then the Publish tab says so/);
+  assert.match(JSON.stringify(article("make-a-book-with-ai")), /Paperback print files .* are not included/);
+});
+
 check("current search and email availability is explicit in guides", () => {
   const article = slug => HELP_ARTICLES.find(item => item.slug === slug);
   for (const slug of ["find-new-leads", "find-instagram-influencers-in-your-niche"]) {

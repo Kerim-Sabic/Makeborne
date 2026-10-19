@@ -107,7 +107,7 @@ function date(value: string) {
   });
 }
 
-export default function Studio({ isAdmin = false, unlimitedCredits = false, initialTab = "projects" }: { isAdmin?: boolean; unlimitedCredits?: boolean; initialTab?: string }) {
+export default function Studio({ isAdmin = false, unlimitedCredits = false, initialTab = "projects", initialProjectOpen = false }: { isAdmin?: boolean; unlimitedCredits?: boolean; initialTab?: string; initialProjectOpen?: boolean }) {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [accountClientRoute, setAccountClientRoute] = useState<AccountClientRoute | null>(null);
   const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
@@ -500,7 +500,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       );
   if (directStart && creating) return <div className="studio-shell creation-route">{creationView}</div>;
   return (
-    <div className={`studio-shell ${project || accountRoute?.artifactId ? "is-project-open" : ""}`}>
+    <div className={`studio-shell ${project || accountRoute?.artifactId || (!loaded && initialProjectOpen) ? "is-project-open" : ""}`}>
       {mobileNav && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
       <aside
         id="studio-navigation"

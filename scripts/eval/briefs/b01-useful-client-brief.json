@@ -1,0 +1,23 @@
+{
+  "id": "b01-useful-client-brief",
+  "order": 10,
+  "format": "book",
+  "direction": "creator",
+  "title": "The Useful Client Brief",
+  "shared": false,
+  "brief": "Create a COMPLETE practical ebook titled The Useful Client Brief, for freelance designers. Portrait 6 by 9 inch ebook proportions, premium restrained editorial typography, cover, contents, introduction, five substantive chapters, useful examples, reusable brief worksheet and final checklist. At least 2500 words of useful original material; no filler, no about-the-design section. Use original typographic diagrams and varied page structures; do not include missing image placeholders. Ready for readable PDF export.",
+  "source": {
+    "type": "real",
+    "path": "scripts/qualify-products.mjs:11",
+    "adaptation": "Removed only the runtime clause \"image API is unavailable so\"; everything else is verbatim so the prior output stays a valid regression baseline."
+  },
+  "persona": null,
+  "mustHave": [
+    "6 x 9 inch portrait proportions",
+    "cover, contents, introduction and five substantive chapters",
+    "at least 2,500 words of original material",
+    "reusable brief worksheet and final checklist",
+    "no missing-image placeholders and no about-the-design section"
+  ],
+  "notes": "Prior output for regression: outputs/product-qualification/book.json and book.pdf. Closest direction: creator (audience is freelance designers)."
+}

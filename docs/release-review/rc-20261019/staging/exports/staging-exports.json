@@ -1,0 +1,36 @@
+{
+  "at": "2026-10-19T11:21:37.842Z",
+  "origin": "https://makeborne-release-staging-qa2026101-kerimsabic-6594s-projects.vercel.app",
+  "results": [
+    {
+      "name": "staging-book",
+      "format": "pdf",
+      "status": 200,
+      "type": "application/pdf",
+      "bytes": 133488,
+      "sha256": "7ed25fe72863324595bd90a6d45351684dd0d12ea1daf03fdc77737071dd70e6",
+      "ms": 6612,
+      "error": null
+    },
+    {
+      "name": "staging-deck",
+      "format": "pdf",
+      "status": 200,
+      "type": "application/pdf",
+      "bytes": 139483,
+      "sha256": "aac18205edb9fbd70b2cf1db74aac8535aa9f7bf4a850d8787b70ff1107bb7ee",
+      "ms": 841,
+      "error": null
+    },
+    {
+      "name": "staging-deck",
+      "format": "pptx",
+      "status": 200,
+      "type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "bytes": 22067,
+      "sha256": "02a20b6a8bc94d92ab84602a55327e3967ddec7f6fcde7c3a2b369266233973a",
+      "ms": 419,
+      "error": null
+    }
+  ]
+}

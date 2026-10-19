@@ -53,6 +53,24 @@ export type AdminCustomerDetail = {
   sites: { slug: string; live: boolean; interactive: boolean; enquiriesEnabled: boolean; updatedAt: string; enquiries: number }[];
 };
 
+export type AdminHealth = {
+  generatedAt: string; days: number;
+  errors: { last24h: number; window: number; byDay: { day: string; server: number; client: number }[];
+    top: { fingerprint: string; source: "server" | "client"; kind: string; message: string; route: string; count: number; total: number; firstSeen: string; lastSeen: string; release: string }[] };
+  visits: Record<string, number>;
+  funnel: { signedUp: number; confirmed: number; createdProject: number; ranBuild: number; sharedReview: number; published: number; paid: number };
+  signupsByDay: { day: string; count: number }[];
+};
+
+/** Errors, visits and the sign-up funnel for the last `days` (1-90). */
+export async function adminHealth(actor: string, days: number) {
+  const data = await call<AdminHealth>("makeborne_admin_health", { p_actor: actor, p_days: days });
+  // jsonb sums arrive as numbers or numeric strings; normalise once.
+  return { ...data, errors: { ...data.errors, last24h: Number(data.errors.last24h), window: Number(data.errors.window),
+    byDay: data.errors.byDay.map(day => ({ day: day.day, server: Number(day.server ?? 0), client: Number(day.client ?? 0) })),
+    top: data.errors.top.map(item => ({ ...item, count: Number(item.count), total: Number(item.total) })) } };
+}
+
 async function call<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await billingDatabase().rpc(fn, args);
   if (error) {

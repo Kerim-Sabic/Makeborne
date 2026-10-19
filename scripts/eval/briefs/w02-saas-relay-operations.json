@@ -1,0 +1,24 @@
+{
+  "id": "w02-saas-relay-operations",
+  "order": 2,
+  "format": "website",
+  "direction": "saas",
+  "title": "Relay Operations",
+  "shared": true,
+  "brief": "Build a complete, polished B2B SaaS website for Relay Operations: a shared handoff and issue tracker for small logistics teams. Distinctive, precise industrial design; an interactive product demonstration built from real HTML and CSS; clear features; transparent pricing with figures clearly labelled as fictional samples; an FAQ and an accessible mobile menu. The main goal is demo requests. The demo request form must validate and honestly state that it is only a demo and nothing is sent. No fake customer logos, no unsupported claims (uptime, hours saved, customer counts) and no stock gradients everywhere.",
+  "source": {
+    "type": "real",
+    "path": "scripts/qualify-products.mjs:9",
+    "adaptation": "Removed \"Use original SVG illustrations; image API unavailable.\" (Makeborne runtime). Made the goal explicit (demo requests, implied by the original form requirement) and gave examples of unsupported claims. \"Transparent fictional sample pricing\" reworded so the sample figures must be labelled. Otherwise verbatim."
+  },
+  "persona": null,
+  "mustHave": [
+    "interactive product demonstration built in HTML/CSS, not a static image",
+    "pricing whose figures are visibly labelled as fictional samples",
+    "FAQ section",
+    "demo request form that validates and states it is only a demo",
+    "no customer logos and no unsupported performance claims",
+    "accessible mobile menu"
+  ],
+  "notes": "Prior output: outputs/product-qualification/saas.json (+ saas.html)."
+}

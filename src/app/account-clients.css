@@ -1,10 +1,10 @@
 .ac-workspace { max-width: 1120px; margin: 26px auto; color: #242330; }
 .ac-source { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 24px; }
-.ac-source button { border: 0; background: transparent; color: #73717e; padding: 10px 15px; border-radius: 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.ac-source button { border: 0; background: transparent; color: var(--text-muted); padding: 10px 15px; border-radius: 10px; font: inherit; font-size: 13px; cursor: pointer; }
 .ac-source button[aria-pressed="true"] { background: #eeebfa; color: #594799; }
 .ac-heading { display: flex; gap: 24px; justify-content: space-between; align-items: center; margin-bottom: 30px; }
 .ac-heading h1 { font-size: clamp(26px, 3vw, 36px); font-weight: 500; letter-spacing: -.045em; margin: 10px 0; }
-.ac-heading p, .ac-add p { font-size: 14px; line-height: 1.6; color: #73717e; }
+.ac-heading p, .ac-add p { font-size: 14px; line-height: 1.6; color: var(--text-muted); }
 .ac-toolbar { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
 .ac-search { flex: 1; display: flex; gap: 10px; align-items: center; min-width: 210px; border: 1px solid #e8e6ee; background: white; border-radius: 12px; padding: 0 14px; }
 .studio-shell .ac-search input, .ac-search input { width: 100%; min-width: 0; padding: 13px 0; border: 0; box-shadow: none; background: transparent; font: inherit; font-size: 13px; }

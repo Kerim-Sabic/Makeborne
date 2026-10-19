@@ -10,7 +10,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node scripts/run-checks.mjs"
+    "test": "node scripts/run-checks.mjs",
+    "eval:install": "npm --prefix scripts/eval ci",
+    "eval:fixtures": "node scripts/eval/run.mjs --fixtures",
+    "eval:run": "node scripts/eval/run.mjs",
+    "eval:measure": "node scripts/eval/measure.mjs",
+    "eval:judge": "node scripts/eval/judge.mjs",
+    "e2e": "node scripts/eval/node_modules/@playwright/test/cli.js test -c scripts/eval/e2e/playwright.config.mjs",
+    "e2e:launch-gate": "node scripts/eval/e2e/run-gate.mjs launch"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

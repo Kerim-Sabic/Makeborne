@@ -1,0 +1,14 @@
+{
+  "target": "staging xzwikrunwpurxnxgkznh",
+  "passed": true,
+  "notices": [
+    "PASS observability: private tables, three service-role-only functions with pinned search_path",
+    "PASS observability: errors grouped by fingerprint with daily counts, fields capped, bad input refused, 300 new kinds a day then one overflow group",
+    "PASS observability: visits count once per visitor per page per day, only salted hashes stored, salts kept two days, unlisted pages refused",
+    "PASS observability: admin-only health (errors by day and top kinds, visits, sign-up funnel from existing records), window bounded to 90 days"
+  ],
+  "residueAfter": {
+    "errors": 0,
+    "visits": 0
+  }
+}

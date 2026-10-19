@@ -1,0 +1,59 @@
+ok   check-account-privileges.sql
+ok   check-admin-console.sql
+ok   check-ai-operations.sql
+ok   check-app-observability.sql
+ok   check-billing-lifecycle-concurrency.sql  [rehearsal, retargeted]
+ok   check-billing-lifecycle.sql
+ok   check-brand-kits.sql
+ok   check-budget-reservations.sql
+ok   check-client-directory.sql
+ok   check-client-outreach.sql
+ok   check-client-portal.sql
+ok   check-client-projects.sql
+ok   check-client-review-document-assets.sql
+ok   check-client-review-links.sql
+ok   check-credit-lots-concurrency.sql  [rehearsal, retargeted]
+ok   check-credit-lots-expiry.sql
+ok   check-credit-wallets-concurrency.sql  [rehearsal, retargeted]
+ok   check-credit-wallets.sql
+ok   check-crm-concurrency.sql  [rehearsal, retargeted]
+ok   check-crm-lead-profile.sql  [rehearsal]
+ok   check-crm-mail-boundaries.sql  [rehearsal]
+ok   check-crm-mail-security.sql  [rehearsal]
+skip check-crm-mail-upgrade.sql
+ok   check-crm-sales-delivery.sql
+ok   check-custom-domains.sql
+ok   check-durable-jobs.sql
+ok   check-generation-authority.sql
+ok   check-generation-caps.sql
+ok   check-generation-dispatch.sql
+ok   check-generation-result.sql
+ok   check-generation-settlement.sql
+ok   check-github-connection-refresh.sql
+ok   check-hosting-modes.sql
+ok   check-live-ai-spend-concurrency.sql  [rehearsal, retargeted]
+ok   check-live-ai-spend.sql
+skip check-local-pilot-lock.sql
+ok   check-locked-content.sql
+skip check-mail-granted-scopes-upgrade.sql
+ok   check-mail-granted-scopes.sql  [rehearsal]
+ok   check-plan-credit-allocations.sql
+ok   check-plan-credit-concurrency.sql  [rehearsal, retargeted]
+ok   check-plan-credit-rollover.sql
+ok   check-proposal-storage.sql
+ok   check-publication-controller-boundary.sql  [rehearsal]
+ok   check-publication-sandbox-journal.sql
+ok   check-publication-worker-authority.sql
+ok   check-review-link-views.sql
+ok   check-site-address-changes.sql
+ok   check-site-address-namespace.sql
+ok   check-site-analytics.sql
+ok   check-site-badge-setting.sql
+ok   check-site-enquiries.sql
+ok   check-site-sitemap.sql
+ok   check-topup-fulfillment.sql  [makeborne_topup_verify]
+ok   check-topup-status.sql  [makeborne_topup_status_20261013]
+ok   check-trusted-publication.sql
+ok   check-unified-creation.sql
+ok   check-unlimited-sites.sql
+55/58 suites passed; base residue after run: 0

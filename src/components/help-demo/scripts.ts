@@ -34,7 +34,7 @@ export const DEMO_SCRIPTS: Record<DemoId, DemoScript> = {
       { do: "click", target: "create", patch: { view: "plan" } },
       { caption: "Read the proposed chapters, then approve the plan.", do: "move", target: "chapters" },
       { do: "click", target: "approve", patch: { view: "book" } },
-      { caption: "Your book is typeset like a real one. Export a print-ready PDF.", do: "wait", ms: 900 },
+      { caption: "Your book is typeset like a real one. Export it as a PDF.", do: "wait", ms: 900 },
       { do: "click", target: "export", patch: { menu: true } },
       { do: "click", target: "export-pdf", patch: { menu: false, toast: "PDF ready · The Café Owner’s First Year.pdf" } },
       { do: "wait", ms: 1500 },
@@ -150,7 +150,7 @@ export const DEMO_SCRIPTS: Record<DemoId, DemoScript> = {
     steps: [
       { caption: "When the website is ready, choose Publish.", do: "click", target: "publish", patch: { dialog: true } },
       { caption: "Choose its web address.", do: "type", target: "slug", field: "slug", text: "bloom-and-co" },
-      { caption: "Publish: it's live in seconds. Republish after any change.", do: "click", target: "go-live", patch: { dialog: false, live: true } },
+      { caption: "Publish to your Makeborne address. Republish after any change.", do: "click", target: "go-live", patch: { dialog: false, live: true } },
       { do: "wait", ms: 1800 },
     ],
   },

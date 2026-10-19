@@ -1,0 +1,248 @@
+{
+  "book-b01.pdf": {
+    "pages": 38,
+    "pageSizesPt": [
+      [
+        432,
+        648
+      ]
+    ],
+    "fonts": {
+      "": {
+        "type": "Type3",
+        "embedded": false
+      }
+    },
+    "allFontsEmbedded": false,
+    "words": 5761,
+    "pagesWithoutTextOrImages": [],
+    "outlineEntries": 63,
+    "links": 8,
+    "firstPageText": "A field guide for freelance designers\nThe Useful Client\nBrief\nAsk better questions, scope with confidence and start every design\nproject on solid ground\n"
+  },
+  "book-b02.pdf": {
+    "pages": 13,
+    "pageSizesPt": [
+      [
+        432,
+        648
+      ]
+    ],
+    "fonts": {
+      "": {
+        "type": "Type3",
+        "embedded": false
+      },
+      "PAAAAA+SegoeUISymbol": {
+        "type": "Type0",
+        "embedded": true
+      }
+    },
+    "allFontsEmbedded": false,
+    "words": 1773,
+    "pagesWithoutTextOrImages": [],
+    "outlineEntries": 23,
+    "links": 5,
+    "firstPageText": "The Repair\nTable\nA volunteer's guide to intake, safe repair\nconversations and clear handovers\nFor monthly community repair cafes\n"
+  },
+  "deck-d01.pdf": {
+    "pages": 8,
+    "pageSizesPt": [
+      [
+        960,
+        540
+      ]
+    ],
+    "fonts": {
+      "": {
+        "type": "Type3",
+        "embedded": false
+      }
+    },
+    "allFontsEmbedded": false,
+    "words": 350,
+    "pagesWithoutTextOrImages": [],
+    "outlineEntries": 0,
+    "links": 0,
+    "firstPageText": "TERN MEMBERSHIP\nKeep the\nWheels Turning\nA simple maintenance membership that keeps\nyour bike safe, smooth and ready to ride\nTERN BICYCLE WORKSHOP\n"
+  },
+  "deck-d01.pptx": {
+    "slides": 8,
+    "slidesWithEditableText": 8,
+    "notesSlides": 8,
+    "notesWithText": 8,
+    "nativeCharts": 1,
+    "media": 1,
+    "typefaces": [
+      "Franklin Gothic Medium",
+      "Segoe UI"
+    ],
+    "embeddedFontList": false,
+    "fontParts": [],
+    "perSlide": [
+      {
+        "slide": "slide1.xml",
+        "textRuns": 4,
+        "chars": 142,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide2.xml",
+        "textRuns": 5,
+        "chars": 184,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide3.xml",
+        "textRuns": 15,
+        "chars": 388,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide4.xml",
+        "textRuns": 13,
+        "chars": 309,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide5.xml",
+        "textRuns": 24,
+        "chars": 323,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide6.xml",
+        "textRuns": 8,
+        "chars": 224,
+        "pictures": 0,
+        "graphicFrames": 1
+      },
+      {
+        "slide": "slide7.xml",
+        "textRuns": 12,
+        "chars": 242,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide8.xml",
+        "textRuns": 3,
+        "chars": 128,
+        "pictures": 0,
+        "graphicFrames": 0
+      }
+    ]
+  },
+  "deck-d02.pdf": {
+    "pages": 10,
+    "pageSizesPt": [
+      [
+        960,
+        540
+      ]
+    ],
+    "fonts": {
+      "": {
+        "type": "Type3",
+        "embedded": false
+      }
+    },
+    "allFontsEmbedded": false,
+    "words": 316,
+    "pagesWithoutTextOrImages": [],
+    "outlineEntries": 0,
+    "links": 0,
+    "firstPageText": "TIDEWATER\nSEED ROUND \u00b7 ZAGREB\nCoastal homes,\npowered by second-\nlife batteries\nTidewater turns retired EV batteries into affordable\nhome energy storage along th"
+  },
+  "deck-d02.pptx": {
+    "slides": 10,
+    "slidesWithEditableText": 10,
+    "notesSlides": 10,
+    "notesWithText": 10,
+    "nativeCharts": 1,
+    "media": 1,
+    "typefaces": [
+      "Georgia",
+      "Segoe UI"
+    ],
+    "embeddedFontList": false,
+    "fontParts": [],
+    "perSlide": [
+      {
+        "slide": "slide1.xml",
+        "textRuns": 4,
+        "chars": 173,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide2.xml",
+        "textRuns": 5,
+        "chars": 161,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide3.xml",
+        "textRuns": 16,
+        "chars": 250,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide4.xml",
+        "textRuns": 10,
+        "chars": 139,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide5.xml",
+        "textRuns": 7,
+        "chars": 195,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide6.xml",
+        "textRuns": 8,
+        "chars": 217,
+        "pictures": 0,
+        "graphicFrames": 1
+      },
+      {
+        "slide": "slide7.xml",
+        "textRuns": 10,
+        "chars": 212,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide8.xml",
+        "textRuns": 10,
+        "chars": 122,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide9.xml",
+        "textRuns": 18,
+        "chars": 258,
+        "pictures": 0,
+        "graphicFrames": 0
+      },
+      {
+        "slide": "slide10.xml",
+        "textRuns": 3,
+        "chars": 117,
+        "pictures": 0,
+        "graphicFrames": 0
+      }
+    ]
+  }
+}

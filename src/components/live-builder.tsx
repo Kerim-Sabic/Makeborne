@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Check, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, Paperclip, Sparkles } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, MessageSquare, Paperclip, ReceiptText, Sparkles, TriangleAlert } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
 import type { SitePlan } from "@/lib/builder/plan";
 import type { DocumentSource } from "@/lib/documents/schema";
@@ -8,6 +8,8 @@ import { captureDesign } from "@/lib/builder/design-capture";
 import { autoReviewRounds, reviewCoverageIssue, reviewCreditCeiling } from "@/lib/builder/review-policy";
 import { BUILDER_EFFORT } from "@/lib/builder/pricing";
 import { PLAN_CEILING_CREDITS } from "@/lib/builder/plan";
+import type { BuilderEstimates } from "@/lib/builder/credit-estimate";
+import { meterEvent, meterLost, meterRefused, newRunMeter, runReceipt, formatDuration, type RunMeter, type RunReceipt } from "@/lib/builder/run-receipt";
 import { readCloudImage } from "./cloud-api";
 import PlanCard from "./plan-card";
 import { usePlanMode } from "./use-plan-mode";
@@ -22,7 +24,7 @@ import { briefQuestions, briefWithAnswers, isBriefQuestion, type BriefAnswers, t
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
-type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[] };
+type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[]; receipt?: RunReceipt };
 type Attachment = BuilderAttachment;
 type Live = { files: Record<string, string>; assets: { id: string; path: string }[]; document?: DocumentSource; focus?: string };
 type RunResult = { version: number; changed: boolean; touched: number; finished: boolean; operation?: OperationSnapshot };
@@ -34,6 +36,23 @@ const COPY = {
 } as const;
 
 const newId = () => crypto.randomUUID();
+
+/** What one request cost and did, from the server's settled charges and the checks that ran. */
+function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "book" | "presentation" }) {
+  const changes = kind === "website" ? receipt.files : receipt.items;
+  const noun = kind === "website" ? "file" : "change";
+  return <section className="lb-receipt" aria-label="Request receipt">
+    <p className="lb-receipt-title"><ReceiptText size={13} />Receipt</p>
+    <dl>
+      <div><dt>Charged</dt><dd>{receipt.charged === null ? "Being confirmed. Use Check saved result & charge below." : `${receipt.charged} credit${receipt.charged === 1 ? "" : "s"}${receipt.unlimited ? " · unlimited allowance" : ""}`}</dd></div>
+      <div><dt>Result</dt><dd>{receipt.saved ? receipt.version ? `Saved as version ${receipt.version}` : "Saved" : "No new version"}</dd></div>
+      <div><dt>Time</dt><dd>{formatDuration(receipt.durationMs)}</dd></div>
+      <div><dt>{kind === "website" ? "Files changed" : "Changes"}</dt><dd>{changes.length ? <details><summary>{changes.length} {noun}{changes.length === 1 ? "" : "s"}</summary><ul>{changes.slice(0, 40).map(item => <li key={item}>{item}</li>)}{changes.length > 40 && <li>and {changes.length - 40} more</li>}</ul></details> : "None"}</dd></div>
+    </dl>
+    {!!receipt.checks.length && <ul className="lb-receipt-checks">{receipt.checks.map(check => <li key={check.label} data-ok={check.ok}>{check.ok ? <Check size={13} aria-label="Passed" /> : <TriangleAlert size={13} aria-label="Needs attention" />}<span>{check.label}</span></li>)}</ul>}
+    {receipt.notCharged && <p className="lb-receipt-note">Nothing was saved, and this request was not charged.</p>}
+  </section>;
+}
 /** Follow-up runs after a time-limited run saved partial progress. */
 const MAX_CONTINUATIONS = 2;
 
@@ -60,7 +79,7 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, onLive, onSaved, kind = "website", baseDocument }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, onLive, onSaved, kind = "website", baseDocument, estimates = null }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback. Never sent automatically. */
   prefill?: { key: string; text: string } | null;
@@ -75,6 +94,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   onSaved: () => Promise<void> | void;
   /** Books and presentations use the structured document builder: no Plan mode or visual review. */
   kind?: "website" | "book" | "presentation"; baseDocument?: DocumentSource;
+  /** Measured credit ranges from GET /api/build, shown before a first build. */
+  estimates?: BuilderEstimates | null;
 }) {
   const copy = COPY[kind], website = kind === "website";
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -88,6 +109,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const sourceSession = useMemo(() => ({ active: true, accountId, workspaceId, artifactId }), [accountId, workspaceId, artifactId]);
   useEffect(() => { sourceSession.active = true; return () => { sourceSession.active = false; }; }, [sourceSession]);
   const [busy, setBusy] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [balance, setBalance] = useState<{ available: number; unlimited: boolean } | null>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -134,14 +156,14 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
 
   /** Stream one /api/build run into a reply turn, mirroring edits into the live
    * preview. Resolves with the saved result, or null when the run failed. */
-  const stream = useCallback(async (payload: Record<string, unknown>, replyId: string, live: Live): Promise<RunResult | null> => {
+  const stream = useCallback(async (payload: Record<string, unknown>, replyId: string, live: Live, meter?: RunMeter): Promise<RunResult | null> => {
     const activity = (item: Omit<Activity, "id">, key?: string) => update(replyId, turn => {
       const existing = key ? turn.activity.findIndex(entry => entry.id === key) : -1;
       if (existing >= 0) { const next = [...turn.activity]; next[existing] = { ...next[existing], ...item }; return { ...turn, activity: next }; }
       return { ...turn, activity: [...turn.activity, { id: key ?? newId(), ...item }] };
     });
     const touched = new Set<string>();
-    let result: RunResult | null = null, finished = false;
+    let result: RunResult | null = null, finished = false, refused = false;
     let latestOperation: OperationSnapshot | null = null;
     const envelope = payload.operation as OperationRequest | undefined;
     let boundOperation: string | null = null;
@@ -161,6 +183,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       if (!response.ok || !response.body) {
         const failure = await response.json().catch(() => null);
         if (failure?.operation) { latestOperation = observeOperation(failure.operation); if (latestOperation) await rememberSources(latestOperation); }
+        // Refused before the step ran: the server settles a reserved step at zero.
+        refused = true; if (meter) meterRefused(meter);
         throw new Error(failure?.error?.message ?? "The builder couldn't start. Please try again.");
       }
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -177,6 +201,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
           if (!line) continue;
           const event = JSON.parse(line.slice(6));
           if (event.operation) { latestOperation = observeOperation(event.operation); if (latestOperation) await rememberSources(latestOperation); }
+          if (meter) meterEvent(meter, event);
           switch (event.type) {
             case "operation": break;
             case "text": update(replyId, turn => ({ ...turn, text: turn.text + event.delta })); break;
@@ -224,11 +249,12 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         }
       }
       if (!finished) {
+        if (meter) meterLost(meter);
         await refreshOperation().catch(() => null);
         update(replyId, turn => ({ ...turn, state: "error", text: `${turn.text}\n\nThe connection closed early. Check the saved result and recorded charge below before sending the same request again.` }));
       }
     } catch (error) {
-      if (!finished) await refreshOperation().catch(() => null);
+      if (!finished) { if (meter && !refused) meterLost(meter); await refreshOperation().catch(() => null); }
       update(replyId, turn => ({ ...turn, state: "error", text: error instanceof Error ? error.message : "Something went wrong." }));
     }
     return result;
@@ -236,7 +262,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
 
   /** One visual review round: render the saved version at desktop and mobile
    * sizes, show the screenshots, and let the builder fix what it sees. */
-  const reviewRound = useCallback(async (base: { version: number; round: number; effort: EffortLevel; operation?: OperationSnapshot }, live: Live): Promise<RunResult | null> => {
+  const reviewRound = useCallback(async (base: { version: number; round: number; effort: EffortLevel; operation?: OperationSnapshot }, live: Live, meter?: RunMeter): Promise<RunResult | null> => {
     const reply: Turn = { id: newId(), role: "assistant", text: "", review: true, state: "streaming",
       activity: [{ id: "capture", kind: "note", label: "Capturing desktop and mobile screenshots…", done: false }] };
     setTurns(current => [...current, reply]);
@@ -260,9 +286,11 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       shots: screenshots.map(shot => ({ label: `${shot.viewport === "desktop" ? "Desktop" : "Mobile"} ${shot.index + 1}/${shot.of}`, url: `data:${shot.mediaType};base64,${shot.data}`, viewport: shot.viewport })),
       activity: [{ id: "capture", kind: "note", done: true,
         label: `Captured ${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}${errors.length ? ` · ${errors.length} runtime error${errors.length === 1 ? "" : "s"}` : ""}` }] }));
-    return stream({ expectedVersion: base.version, message: "Design review", effort: base.effort, mode: "review",
+    const reviewed = await stream({ expectedVersion: base.version, message: "Design review", effort: base.effort, mode: "review",
       operation: base.operation ? { id: base.operation.id, stepKey: newId(), kind: "review" } : beginOperation(),
-      review: { round: base.round, screenshots, viewports, errors } }, reply.id, live);
+      review: { round: base.round, screenshots, viewports, errors } }, reply.id, live, meter);
+    if (reviewed && meter) meter.reviews++;
+    return reviewed;
   }, [accountId, artifactId, beginOperation, onLive, sourceSession, stream, workspaceId]);
 
   const finishRun = useCallback(async () => {
@@ -272,6 +300,13 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     catch { setNotice("The project list could not refresh. Your recorded result and charge can be checked below; refreshing does not start another generation."); }
   }, [onLive, onSaved, refreshBalance]);
 
+  /** A receipt in the conversation once a request ends: charge, changes, checks, time. */
+  const unlimited = Boolean(balance?.unlimited);
+  const addReceipt = useCallback((meter: RunMeter) => {
+    const receipt = runReceipt(meter, { website, unlimited });
+    if (receipt) setTurns(current => [...current, { id: newId(), role: "assistant", text: "", activity: [], state: "done", receipt }]);
+  }, [unlimited, website]);
+
   const send = useCallback(async (text: string, files: Attachment[] = [], options?: { plan?: SitePlan; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[] }) => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
     setBusy(true); setNotice(""); setDraft("");
@@ -280,6 +315,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     setTurns(current => [...current, userTurn, reply]);
     const live: Live = { files: { ...baseFiles }, assets: [...baseAssets], document: baseDocument };
     onLive({ ...live, building: true });
+    const meter = newRunMeter();
     try {
       const level = options?.effort ?? effort;
       const requestOperation: OperationRequest = options?.operation ? { id: options.operation.id, stepKey: newId(), kind: "continuation" } : beginOperation();
@@ -287,7 +323,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       if (!sourceSession.active) return;
       let result = await stream({ expectedVersion: version, message: text.trim(), effort: level,
         operation: requestOperation,
-        attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan } : {}) }, reply.id, live);
+        attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan } : {}) }, reply.id, live, meter);
       if (result && options?.plan) planner.markBuilt(options.plan);
       // A run cut off by the platform time limit saves its progress; pick up
       // where it stopped in a fresh request instead of asking the user to.
@@ -300,7 +336,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
           operation: { id: result.operation.id, stepKey: newId(), kind: "continuation" },
           attachments: files,
           message: `Continue the previous request and complete everything that is still missing, then check the project and call finish. The previous request was:
-${text.trim().slice(0, 6000)}` }, next.id, live);
+${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         if (!continued) break;
         touched += continued.touched;
         result = continued;
@@ -309,7 +345,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
       const rounds = result?.changed && website ? autoReviewRounds(level, { firstBuild: !Object.keys(baseFiles).length, filesTouched: touched }) : 0;
       for (let round = 1; round <= rounds && result?.changed && result.operation && result.operation.remainingCredits > 0; round++) {
         refreshBalance();
-        result = await reviewRound({ version: result.version, round, effort: level, operation: result.operation }, live);
+        result = await reviewRound({ version: result.version, round, effort: level, operation: result.operation }, live, meter);
       }
       // The final repair invalidates earlier screenshots. Re-render its result
       // without another model call rather than presenting pre-fix images as proof.
@@ -323,11 +359,13 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
           const issue = reviewCoverageIssue(capture);
           const hasDiagnostics = capture.errors.length > 0 || capture.viewports.some(view => view.overflowX > 1 || view.brokenImages.length > 0 || view.missingAlt > 0);
           const incomplete = issue || hasDiagnostics || !result.finished;
+          meter.render = { ok: !issue && !hasDiagnostics };
           update(check.id, turn => ({ ...turn, state: incomplete ? "error" : "done", activity: [], credits: 0,
             shots: capture.screenshots.map(shot => ({ label: `${shot.viewport === "desktop" ? "Desktop" : "Mobile"} ${shot.index + 1}/${shot.of}`, url: `data:${shot.mediaType};base64,${shot.data}`, viewport: shot.viewport })),
             text: incomplete ? `Your changes are saved. ${issue || "The final check still needs attention."} No credits were used for this capture.`
               : "Captured the updated desktop and mobile views. No runtime errors, broken images or horizontal overflow were detected. This capture used no credits." }));
         } catch {
+          meter.render = { ok: false };
           update(check.id, turn => ({ ...turn, state: "error", activity: [], credits: 0,
             text: "Your changes are saved, but the final render could not be captured. No credits were used for this capture." }));
         }
@@ -335,18 +373,19 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
     } catch (error) {
       if (sourceSession.active) { setNotice(error instanceof Error ? error.message : "The sources could not be retained."); setDraft(text); }
     } finally {
-      if (sourceSession.active) await finishRun();
+      if (sourceSession.active) { addReceipt(meter); await finishRun(); }
     }
-  }, [accountId, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, busy, disabled, effort, finishRun, onLive, operationRunning, planner, previewingRecovery, refreshBalance, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
+  }, [accountId, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, busy, disabled, effort, finishRun, onLive, operationRunning, planner, previewingRecovery, refreshBalance, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
 
   /** Manual "Review design" for the current saved version. */
   const review = useCallback(async () => {
     if (busy || disabled || operationRunning || previewingRecovery || !Object.keys(baseFiles).length) return;
     setBusy(true); setNotice("");
     setTurns(current => [...current, { id: newId(), role: "user", text: "Review the design", activity: [], state: "done" }]);
-    try { await reviewRound({ version, round: 1, effort }, { files: { ...baseFiles }, assets: [...baseAssets] }); }
-    finally { await finishRun(); }
-  }, [baseAssets, baseFiles, busy, disabled, effort, finishRun, operationRunning, previewingRecovery, reviewRound, version]);
+    const meter = newRunMeter();
+    try { await reviewRound({ version, round: 1, effort }, { files: { ...baseFiles }, assets: [...baseAssets] }, meter); }
+    finally { if (sourceSession.active) addReceipt(meter); await finishRun(); }
+  }, [addReceipt, baseAssets, baseFiles, busy, disabled, effort, finishRun, operationRunning, previewingRecovery, reviewRound, sourceSession, version]);
 
   /** Plan mode: investigate and propose an editable plan; never writes code.
    * A message while a draft plan is open revises that plan. */
@@ -442,8 +481,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
       setBusy(false);
       if (approved.pendingKind === "review") {
         setBusy(true);
-        try { await reviewRound({ version, round: 1, effort: approved.effort, operation: approved }, { files: { ...baseFiles }, assets: [...baseAssets] }); }
-        finally { await finishRun(); }
+        const meter = newRunMeter();
+        try { await reviewRound({ version, round: 1, effort: approved.effort, operation: approved }, { files: { ...baseFiles }, assets: [...baseAssets] }, meter); }
+        finally { if (sourceSession.active) addReceipt(meter); await finishRun(); }
       } else await send("Continue the saved request and finish the remaining work.", files, { effort: approved.effort, operation: approved });
     } catch (error) {
       await refreshOperation().catch(() => null);
@@ -493,9 +533,20 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
 
 
   const empty = !turns.length && !history.length && !planner.restored;
+  // Phones show the preview first; the conversation opens on demand above the composer.
+  const lastAssistant = [...turns].reverse().find(turn => turn.role === "assistant");
+  const chatSummary = busy ? [...(lastAssistant?.activity ?? [])].reverse().find(item => !item.done)?.label ?? "Working…"
+    : lastAssistant?.receipt ? (lastAssistant.receipt.charged === null ? "Finished · check the charge" : `Finished · ${lastAssistant.receipt.charged} credit${lastAssistant.receipt.charged === 1 ? "" : "s"}`)
+    : turns.length ? `Conversation · ${turns.filter(turn => turn.role === "user").length} request${turns.filter(turn => turn.role === "user").length === 1 ? "" : "s"}`
+    : history.length ? `${history.length} earlier change${history.length === 1 ? "" : "s"}` : "Conversation";
+  const measured = estimates && effort === estimates.effort && firstBuild ? estimates.firstBuild[kind] : null;
+  const ceiling = BUILDER_EFFORT[effort].ceilingCredits;
   const canReview = website && Object.keys(baseFiles).length > 0;
-  return <aside className="lb" aria-label="Builder chat">
-    <div className="lb-log" ref={log} aria-live="polite">
+  return <aside className="lb" aria-label="Builder chat" data-chat-open={chatOpen || undefined}>
+    <button type="button" className="workbench-chat-toggle" aria-expanded={chatOpen} aria-controls={`lb-log-${artifactId}`} onClick={() => setChatOpen(open => !open)}>
+      {busy ? <Loader2 size={14} className="lb-spin" /> : <MessageSquare size={14} />}<span aria-live="polite">{chatSummary}</span><ChevronDown size={15} className="workbench-chat-chevron" />
+    </button>
+    <div className="lb-log" id={`lb-log-${artifactId}`} ref={log} aria-live="polite">
       {empty && !asking && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {asking && <><div className="lb-turn lb-user"><p>{asking.text}</p></div>
         <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask…</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>Skip</button></div>
@@ -520,6 +571,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
           {item.kind === "image" ? <ImageIcon size={13} /> : item.kind === "file" ? <FileCode2 size={13} /> : null}
           <span>{item.label}</span></li>)}</ul>}
         {turn.role === "assistant" && !turn.review && turn.state === "streaming" && !turn.text && !turn.activity.length && <p className="lb-thinking"><Loader2 size={14} className="lb-spin" /> Thinking…</p>}
+        {turn.receipt && <Receipt receipt={turn.receipt} kind={kind} />}
         {turn.role === "assistant" && typeof turn.credits === "number" && turn.credits > 0 && <small className="lb-cost">{turn.state === "streaming" ? `${turn.credits} credits so far` : `${turn.credits} credits`}</small>}
       </div>)}
     </div>
@@ -556,7 +608,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
       {mode === "plan" && <p className="lb-plan-note"><ListChecks size={12} />{draftPlan ? "Plan mode — your reply revises the plan above." : "Plan mode — I'll study your project and propose a plan. No code is written."}</p>}
       {draftPlan && <p className="lb-plan-note">Building the approved plan uses the source files currently listed here. Review this selection if you changed files after planning.</p>}
       <AttachmentList files={sources.files} onRemove={id => void sources.remove(id)} disabled={busy || preparingSources || sources.busy || disabled || operationRunning} compact note="Saved on this device · sent to AI with each new request. Continuing uses the original request’s files." />
-      <p className="lb-plan-note">AI sources: PNG, JPEG, WebP, GIF, PDF, TXT or Markdown · up to 5 files, 3 MB combined. Text: up to 200,000 characters.</p>
+      <p className="lb-plan-note lb-source-formats">AI sources: PNG, JPEG, WebP, GIF, PDF, TXT or Markdown · up to 5 files, 3 MB combined. Text: up to 200,000 characters.</p>
       {sources.error && <p className="lb-notice" role="alert">{sources.error}</p>}
       <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
         onChange={event => setDraft(event.target.value)}
@@ -570,11 +622,19 @@ ${text.trim().slice(0, 6000)}` }, next.id, live);
         <select aria-label="Effort" value={effort} disabled={busy || operationRunning || Boolean(previewingRecovery)} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}
         </select>
-        {canReview && <button type="button" className="lb-review" aria-label={`Review design, up to ${reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} credits`} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} />Review · {reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} max</button>}
+        {canReview && <button type="button" className="lb-review" aria-label={`Review design, up to ${reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} credits`} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} /><span className="lb-review-label">Review · {reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} max</span></button>}
         <span className="lb-balance">{balance ? balance.unlimited ? "Unlimited credits" : `${balance.available} credits` : ""}</span>
         <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>
       </div>
-      <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : BUILDER_EFFORT[effort].ceilingCredits} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
+      <div className="lb-estimate">
+        <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
+        {/* Only measured figures: the settlement charges what was used, and a plan that does not finish is released at zero. */}
+        <p className="lb-estimate-detail">{mode === "plan" ? "You pay only for what is used. A plan that doesn’t finish isn’t charged."
+          : measured ? `In testing, a first ${kind} at ${EFFORT_PRESENTATION[effort].label} used ${measured.min}–${measured.max} credits (${measured.samples} test ${kind}s, no AI images). You pay only for what is used.`
+          : `You pay only for what is used, never more than ${ceiling} credits without your approval.`}</p>
+        {/* Phones: one line instead of the three above (limit, measured range, balance). */}
+        <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
+      </div>
       {(notice || (disabled && disabledReason)) && <p className="lb-notice" role="status">{notice || disabledReason}</p>}
     </form>
   </aside>;
