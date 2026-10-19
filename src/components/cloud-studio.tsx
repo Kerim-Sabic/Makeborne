@@ -25,6 +25,8 @@ import BuildConversation from "./build-conversation";
 import LiveBuilder, { type LiveUpdate } from "./live-builder";
 import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
+import WorkbenchMore from "./workbench-more";
+import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
 import "@/app/live-builder.css";
 import { captureProjectPublication, captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
@@ -1148,12 +1150,13 @@ export function CloudEditor({
   }, [artifact.id]);
   const [generatedVersionId,setGeneratedVersionId]=useState<string|null>(null);
   const [builderAvailable, setBuilderAvailable] = useState(false);
+  const [builderEstimates, setBuilderEstimates] = useState<BuilderEstimates | null>(null);
   const [live, setLive] = useState<LiveUpdate | null>(null);
   const [autoStart, setAutoStart] = useState<string | null>(null);
   const [autoStartMode, setAutoStartMode] = useState<"create" | "plan">("create");
   useEffect(() => {
     let current = true;
-    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) setBuilderAvailable(value?.available === true); }).catch(() => undefined);
+    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) { setBuilderAvailable(value?.available === true); setBuilderEstimates(parseBuilderEstimates(value?.estimates)); } }).catch(() => undefined);
     return () => { current = false; };
   }, [artifact.kind]);
   const recoveryKey = `makeborne.cloud-draft.${accountId}.${workspaceId}.${artifact.id}`;
@@ -1597,19 +1600,20 @@ export function CloudEditor({
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           defaultEffort={project?.effort} disabled={!content || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : undefined} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
-          kind={artifact.kind} baseDocument={content?.document}
+          kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
             <div>
-              <button type="button" aria-pressed={view === "preview"} onClick={() => setView("preview")}><Eye size={15} />Preview</button>
-              <button type="button" aria-pressed={view === "edit"} onClick={() => setView("edit")}><PencilLine size={15} />{content?.website || content?.websiteSource ? "Code" : "Edit"}</button>
-              <button type="button" aria-pressed={view === "history"} onClick={() => setView("history")}><History size={15} />History</button>
-              {content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} onClick={() => setView("publish")}><Globe2 size={15} />Publish</button>}
-              <button type="button" aria-pressed={view === "review"} onClick={() => setView("review")}><MessageSquareText size={15} />Client review</button>
+              {/* Under 960px the labels collapse to icons (still the accessible name); see cloud-workbench.css. */}
+              <button type="button" aria-pressed={view === "preview"} title="Preview" onClick={() => setView("preview")}><Eye size={15} /><span className="workbench-tab-label">Preview</span></button>
+              <button type="button" aria-pressed={view === "edit"} title={content?.website || content?.websiteSource ? "Code" : "Edit"} onClick={() => setView("edit")}><PencilLine size={15} /><span className="workbench-tab-label">{content?.website || content?.websiteSource ? "Code" : "Edit"}</span></button>
+              <button type="button" aria-pressed={view === "history"} title="History" onClick={() => setView("history")}><History size={15} /><span className="workbench-tab-label">History</span></button>
+              {content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} title="Publish" onClick={() => setView("publish")}><Globe2 size={15} /><span className="workbench-tab-label">Publish</span></button>}
+              <button type="button" aria-pressed={view === "review"} title="Client review" onClick={() => setView("review")}><MessageSquareText size={15} /><span className="workbench-tab-label">Client review</span></button>
             </div>
-            {(content?.website || content?.websiteSource) && role !== "reviewer" ? <WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} /> : <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>}
+            {(content?.website || content?.websiteSource) && role !== "reviewer" ? <WorkbenchMore><WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} /></WorkbenchMore> : <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>}
           </nav>
           <div className="cloud-workbench-content">
       {uncertainSave && (

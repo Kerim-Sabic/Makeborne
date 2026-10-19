@@ -9,7 +9,8 @@ import { EffortLevelSchema } from "@/lib/routing/effort";
 import { ProjectFiles } from "@/lib/builder/files";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
-import { BUILDER_EFFORT } from "@/lib/builder/pricing";
+import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
+import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
 import { REVIEW_MAX_TURNS, reviewCreditCeiling } from "@/lib/builder/review-policy";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
@@ -47,7 +48,8 @@ const BuildRequest = z.object({
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 
 export async function GET() {
-  return Response.json({ available: builderEnabled() }, { headers: { "Cache-Control": "no-store" } });
+  // Measured credit ranges for the composer's estimate, in credits at the live rate (no provider call).
+  return Response.json({ available: builderEnabled(), estimates: builderEstimates(aiCostUsdPerCredit()) }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {

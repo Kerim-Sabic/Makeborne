@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Check, ChevronRight, FileText, History, Sparkles } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ChevronRight, FileText, History, MessageSquare, PowerOff } from "lucide-react";
 import BrandMark from "./brand-mark";
 import ComposerControls from "./composer-controls";
 import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
@@ -28,6 +28,12 @@ function Conversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, ef
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [writable, setWritable] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  // The welcome message is shown in full once per project on this device, then as a one-line summary.
+  const welcomeKey = `makeborne.project-welcome.v1:${projectKey}`;
+  const [welcomeSeen] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem(welcomeKey) === "1"; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem(welcomeKey, "1"); } catch { /* storage unavailable: the full message shows again */ } }, [welcomeKey]);
+  const device = projectKey.startsWith("device:");
   const input = useRef<HTMLTextAreaElement>(null);
   const messages = useRef<HTMLDivElement>(null);
   const storageKey = `makeborne.project-conversation.v1:${projectKey}`;
@@ -71,24 +77,29 @@ function Conversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, ef
     if (!persist("", next)) return;
     setInstructions(next); setDraft(""); setError(""); input.current?.focus();
   }
-  return <aside className="build-conversation" aria-label="Project conversation">
+  return <aside className="build-conversation" aria-label="Project conversation" data-chat-open={chatOpen || undefined}>
+    <button type="button" className="workbench-chat-toggle" aria-expanded={chatOpen} aria-controls={`build-messages-${projectKey}`} onClick={() => setChatOpen(open => !open)}>
+      <MessageSquare size={14} /><span>{instructions.length ? `Project notes · ${instructions.length}` : "Brief & project notes"}</span><ChevronDown size={15} className="workbench-chat-chevron" />
+    </button>
     <div className="build-conversation-heading"><span><BrandMark size={18} />Makeborne</span><span className="build-project-state"><i />Draft</span></div>
-    <div className="build-messages" ref={messages}>
+    <div className="build-messages" id={`build-messages-${projectKey}`} ref={messages}>
       {brief ? <article className="build-user-message"><small>Your brief</small><p>{brief}</p></article> : <div className="build-no-brief"><FileText size={18} /><p>Your {kind} workspace is ready for your content.</p></div>}
       <AttachmentList files={attachments.files} onRemove={readonly ? undefined : id => void attachments.remove(id)} disabled={attachments.busy} compact />
-      <div className="build-system-message"><span className="build-system-mark"><BrandMark size={20} /></span><div><h2>Your idea has a home.</h2><p>Your project is saved. Review and shape your {kind} in the editor. Available generation controls appear beside the preview.</p><div className="build-quick-actions"><button type="button" onClick={onOpenEditor}><FileText size={14} />Edit content<ChevronRight size={13} /></button>{onOpenHistory && <button type="button" onClick={onOpenHistory}><History size={14} />Version history<ChevronRight size={13} /></button>}</div></div></div>
+      {welcomeSeen ? <div className="build-system-message is-compact"><span className="build-system-mark"><BrandMark size={16} /></span><p>Project saved.</p><div className="build-quick-actions"><button type="button" onClick={onOpenEditor}><FileText size={14} />Edit content</button>{onOpenHistory && <button type="button" onClick={onOpenHistory}><History size={14} />History</button>}</div></div>
+        : <div className="build-system-message"><span className="build-system-mark"><BrandMark size={20} /></span><div><h2>Your idea has a home.</h2><p>Your project is saved. Review and shape your {kind} in the editor. Available generation controls appear beside the preview.</p><div className="build-quick-actions"><button type="button" onClick={onOpenEditor}><FileText size={14} />Edit content<ChevronRight size={13} /></button>{onOpenHistory && <button type="button" onClick={onOpenHistory}><History size={14} />Version history<ChevronRight size={13} /></button>}</div></div></div>}
       {instructions.map(item => <article className="build-user-message build-followup" key={item.id}><small>{item.mode === "plan" ? "Planning note" : "Change request"}</small><p>{item.text}</p><span><Check size={11} />Saved in this tab · not applied</span></article>)}
     </div>
     <div className="build-compose-area">
-      <div className="build-availability"><Sparkles size={12} />Project instructions</div>
+      {readonly ? <p className="build-state-card" role="status">You have read-only access to this project.</p>
+        : <div className="build-state-card" role="note"><PowerOff size={14} aria-hidden="true" /><p><strong>{device ? "AI building works in projects saved to your account." : "AI building is off right now."}</strong> Notes stay in this browser tab; nothing is sent to AI or charged.</p></div>}
       <form className={`build-composer${drop.dragging ? " is-file-dragging" : ""}`} {...drop.handlers} onSubmit={event => { event.preventDefault(); submit(); }}>
         {drop.dragging && <p className="attachment-drop-hint">Drop files to attach to this project</p>}
         <label className="sr-only" htmlFor={`build-message-${projectKey}`}>Message about your project</label>
-        <textarea ref={input} id={`build-message-${projectKey}`} rows={2} value={draft} disabled={!ready || readonly} maxLength={4000} placeholder={mode === "plan" ? "What should we think through?" : "Describe what you’d like to change…"} onChange={event => { setDraft(event.target.value); persist(event.target.value, instructions); }} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); submit(); } }} />
-        <div className="build-composer-tools"><AttachFilesButton onFiles={attachments.add} disabled={readonly || !attachments.ready} busy={attachments.busy} compact /><ComposerControls mode={mode} onMode={setMode} effort={currentEffort} onEffort={value => { setLocalEffort(value); onEffort?.(value); }} /><button type="submit" disabled={!ready || !writable || readonly || !draft.trim()} aria-label="Save instruction for later" title="Save instruction for later"><ArrowUp size={16} /></button></div>
+        <textarea ref={input} id={`build-message-${projectKey}`} rows={2} value={draft} disabled={!ready || readonly} maxLength={4000} placeholder={mode === "plan" ? "Note what to think through…" : "Note a change you’d like…"} onChange={event => { setDraft(event.target.value); persist(event.target.value, instructions); }} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); submit(); } }} />
+        <div className="build-composer-tools"><AttachFilesButton onFiles={attachments.add} disabled={readonly || !attachments.ready} busy={attachments.busy} compact /><ComposerControls mode={mode} onMode={setMode} effort={currentEffort} onEffort={value => { setLocalEffort(value); onEffort?.(value); }} /><button type="submit" disabled={!ready || !writable || readonly || !draft.trim()} aria-label="Save note in this tab" title="Save note in this tab"><ArrowUp size={16} /></button></div>
       </form>
       {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
-      <p className="build-compose-note" role={error ? "alert" : undefined}>{error || (readonly ? "You have read-only access to this project." : "Instructions save in this tab. No AI changes or charges.")}</p>
+      {error && <p className="build-compose-note" role="alert">{error}</p>}
     </div>
   </aside>;
 }

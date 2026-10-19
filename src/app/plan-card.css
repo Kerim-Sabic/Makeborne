@@ -87,10 +87,10 @@ li:hover > .pc-remove, .pc-section-head:hover .pc-remove, .pc-remove:focus-visib
 @media (prefers-reduced-motion:reduce) { .pc * { transition:none !important; } }
 /* Composer mode switch (Build / Plan). */
 .lb-mode { display:inline-flex; padding:2px; border-radius:9px; background:#f3f0f6; }
-.lb-mode button { display:inline-flex; align-items:center; gap:4px; min-height:26px; padding:0 9px; border:0; border-radius:7px; background:transparent; color:#7a6d85; font:inherit; font-size:11px; cursor:pointer; }
+.lb-mode button { display:inline-flex; align-items:center; gap:4px; min-height:26px; padding:0 9px; border:0; border-radius:7px; background:transparent; color:var(--text-muted); font:inherit; font-size:12px; cursor:pointer; }
 .lb-mode button[aria-pressed="true"] { background:#fff; color:#3f2f4c; box-shadow:0 1px 3px #2a1d3514; }
 .lb-composer[data-mode="plan"] { border-color:#cdb9dc; background:linear-gradient(180deg,#fcfaff,#fff); }
-.lb-plan-note { display:flex; align-items:center; gap:6px; margin:0 0 6px; color:#765887; font-size:10.5px; }
+.lb-plan-note { display:flex; align-items:center; gap:6px; margin:0 0 6px; color:#765887; font-size:12px; }
 .pc-detail summary { display:block; margin-top:2px; list-style:none; cursor:pointer; color:#8a7e94; font-size:11px; }
 .pc-detail summary::-webkit-details-marker { display:none; }
 .pc-detail summary span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }

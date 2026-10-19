@@ -4,6 +4,8 @@ import BillingWorkspace from "@/components/billing-workspace";
 import { getAccountPrivileges } from "@/lib/account/privileges";
 import { billingUser } from "@/lib/billing/access";
 import { getFreeTierOffer } from "@/lib/credits/server";
+import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
+import { builderEstimates } from "@/lib/builder/credit-estimate";
 import "./billing.css";
 import "./billing-topup-return.css";
 
@@ -15,5 +17,5 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const [params, accountPrivileges, freeTier, user] = await Promise.all([searchParams, getAccountPrivileges(), getFreeTierOffer(), billingUser()]);
   // The live balance loads client-side from /api/credits (CreditBalance). Itemized
   // usage rows stay unavailable here until they are mapped to project activity.
-  return <BillingWorkspace topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} summary={{ status: "unavailable", unit: "whole_customer_credits", available: null, reserved: null, used: null, period: null, entries: [] }} />;
+  return <BillingWorkspace topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} costs={builderEstimates(aiCostUsdPerCredit())} summary={{ status: "unavailable", unit: "whole_customer_credits", available: null, reserved: null, used: null, period: null, entries: [] }} />;
 }

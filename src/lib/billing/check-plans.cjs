@@ -52,8 +52,26 @@ for (const plan of CREATION_PLANS) {
   assert.equal(Object.hasOwn(plan, "storage"), false, "catalogue cannot sell an unimplemented storage entitlement");
   assert.equal(plan.sites, "unlimited");
 }
+// The per-action credit table renders the live pricing constants and only measured ranges.
+const estimates = require("../builder/credit-estimate.ts");
+const BillingCreditCosts = loadComponent("billing-credit-costs", {
+  "@/lib/builder/pricing": require("../builder/pricing.ts"),
+  "@/lib/builder/plan": require("../builder/plan.ts"),
+  "@/lib/builder/review-policy": require("../builder/review-policy.ts"),
+  "@/lib/routing/effort": require("../routing/effort.ts"),
+});
+const costs = renderToStaticMarkup(React.createElement(BillingCreditCosts, {estimates: estimates.builderEstimates(0.03)}));
+for (const limit of ["10 credits", "20 credits", "50 credits", "90 credits", "140 credits", "240 credits", "Light 12 · Medium 15 · High 27 · Super high 42 · Ultra 72"]) assert.ok(costs.includes(limit), limit);
+assert.ok(costs.includes("First website: 16–45 credits (20 test websites)"));
+assert.ok(costs.includes("Medium: 8–11 credits (20 test rounds)"));
+assert.equal((costs.match(/test websites/g) || []).length, 1, "measured ranges appear only at the measured effort");
+assert.match(costs, /a plan that doesn’t finish/);
+assert.doesNotMatch(costs, /failed runs are free/i);
+const withoutMeasurements = renderToStaticMarkup(React.createElement(BillingCreditCosts, {estimates: null}));
+assert.doesNotMatch(withoutMeasurements, /test websites/);
 const BillingWorkspace = loadComponent("billing-workspace", {
   "next/link": link,
+  "./billing-credit-costs": {default: BillingCreditCosts},
   "./brand-mark": {default: () => null},
   "./billing-plans": {default: CreationPlans},
   // The live return component is exercised separately in the browser harness.

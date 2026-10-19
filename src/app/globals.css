@@ -4,6 +4,8 @@
   --surface: #fff;
   --ink: #16181d;
   --muted: #5c616d;
+  /* Secondary text: at least 4.8:1 on white and on every tinted studio canvas (#eeedf1 and lighter). */
+  --text-muted: #6b6577;
   --line: #dcddd9;
   --blue: #3358d4;
   --blue-hover: #2845aa;

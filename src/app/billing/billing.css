@@ -157,6 +157,20 @@
 .billing-empty>span{display:grid;place-items:center;width:42px;height:42px;margin:0 auto 13px;border-radius:12px;background:#f7f3fa;color:#ae99bc}
 .billing-empty h3{font-size:13px;font-weight:500;margin:0 0 8px;color:#785c89}
 .billing-empty p{max-width:430px;margin:auto;font-size:11px;line-height:1.8;color:#776184}
+/* What building costs: limits from the pricing constants beside measured usage. */
+.billing-costs{margin-top:48px;scroll-margin-top:26px}
+.billing-costs-table{border:1px solid #e5deed;border-radius:15px;background:#fff}
+.billing-costs table{width:100%;border-collapse:collapse;text-align:left;font-size:13px;color:#4f3f5c}
+.billing-costs thead th{padding:12px 18px;font-size:12px;font-weight:500;white-space:nowrap;background:#faf8fc;border-bottom:1px solid #eee7f4;color:var(--text-muted)}
+.billing-costs tbody th,.billing-costs td{padding:13px 18px;border-bottom:1px solid #f0eaf5;vertical-align:top;line-height:1.55}
+.billing-costs tbody tr:last-child>*{border-bottom:0}
+.billing-costs tbody th{font-weight:500;color:#3f2f4c}
+.billing-costs tbody th span{display:block;margin-top:3px;font-size:12px;font-weight:400;color:var(--text-muted)}
+.billing-costs td{font-variant-numeric:tabular-nums}
+.billing-costs td ul{margin:0;padding:0;list-style:none;display:grid;gap:3px}
+.billing-costs-notes{margin:16px 2px 0;padding-left:18px;display:grid;gap:7px;font-size:12px;line-height:1.65;color:var(--text-muted)}
+.billing-costs-notes strong{font-weight:600;color:#4f3f5c}
+@media(max-width:640px){.billing-costs thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.billing-costs table,.billing-costs tbody,.billing-costs tr,.billing-costs tbody th,.billing-costs td{display:block}.billing-costs tr{padding:12px 16px;border-bottom:1px solid #f0eaf5}.billing-costs tbody tr:last-child{border-bottom:0}.billing-costs tbody th,.billing-costs td{padding:0;border:0}.billing-costs td{margin-top:6px}.billing-costs td:nth-of-type(1)::before{content:"Most it can charge: ";color:var(--text-muted)}.billing-costs td:nth-of-type(2)::before{content:"Measured: ";color:var(--text-muted)}}
 .billing-details{margin-top:45px}
 .billing-details h2{margin:0 0 15px;font-weight:500;font-size:22px;letter-spacing:-.6px}
 .billing-details details{border-bottom:1px solid #ede7f3;padding:17px 0}
