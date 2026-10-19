@@ -202,7 +202,7 @@ async function checkAdmin() {
       const customers = adminModule("customers");
       let overviewReads = 0;
       const page = load("src/app/admin/page.tsx", {
-        "./format": format, "./customers": customers, "./money": adminModule("money"), "./overview": adminModule("overview"), "./system": adminModule("system"), "./health": adminModule("health"),
+        "./format": format, "./customers": customers, "./money": adminModule("money"), "./overview": adminModule("overview"), "./system": adminModule("system"), "./health": adminModule("health"), "@/lib/builder/compile": {compilerSelfTest: async () => ({ok: true, ms: 1, bytes: 1})},
         "@/lib/admin/console": {CUSTOMER_FILTERS: ["all", "subscribed", "admin", "unconfirmed"],
           adminOverview: async actor => { overviewReads++; assert.equal(actor, "verified-user"); return {...ADMIN_OVERVIEW, revenue: revenue.subscriptionRevenue(ADMIN_OVERVIEW.subscriptions)}; },
           adminCustomers: async () => { throw new Error("customers not requested"); }, adminCustomer: async () => null},
