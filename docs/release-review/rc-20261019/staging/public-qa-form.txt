@@ -1,0 +1,3 @@
+{"js":"/assets/index-BzeWt_1e.js","endpoints":["/_mb/enquiries"],"formHtml":"<form aria-busy=\"false\">"}
+/_mb/enquiries 400 {"error":{"message":"Check your name, email and message."}}
+{"status":503,"body":"{\"error\":{\"message\":\"Your enquiry was not confirmed. Keep your message and retry.\"}}","cache":"no-store"}

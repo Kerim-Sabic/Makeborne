@@ -1,0 +1,93 @@
+{
+  "at": "2026-10-19T10:38:49.255Z",
+  "stack": "makeborne-rc-20261019",
+  "entitlement": {
+    "simulated": true,
+    "tier": "studio",
+    "interval": "monthly",
+    "monthlyCredits": 850,
+    "periodStart": "2026-10-16T10:38:48.607Z",
+    "periodEnd": "2026-11-15T10:38:48.607Z",
+    "reconciled": {
+      "granted": 0,
+      "memberships": 1
+    },
+    "wallet": {
+      "balance": 850,
+      "reserved": 0,
+      "available": 850,
+      "unlimited": false,
+      "nextExpiry": {
+        "at": "2027-01-15T10:38:48.607+00:00",
+        "credits": 850
+      }
+    }
+  },
+  "users": [
+    {
+      "label": "owner",
+      "id": "b5969f2c-cd0b-4e1c-94ee-12d61150088d"
+    },
+    {
+      "label": "client",
+      "id": "1291cf82-4cc9-45be-a832-eac28b43baf2"
+    },
+    {
+      "label": "outsider",
+      "id": "9f07625a-30a9-4a64-b11c-47ddcb3d9595"
+    }
+  ],
+  "workspaceId": "5936f6c2-f96d-4bec-ba80-b66ddccbaa31",
+  "outsiderWorkspaceId": "c813b0d6-4073-47a7-88c6-6ca72af0d6d5",
+  "projects": [
+    {
+      "title": "The Lantern Keeper",
+      "kind": "book",
+      "projectId": "55358995-f4d6-42c8-a3bf-e8d728da605c",
+      "artifactId": "3d13a6d3-1ece-4d32-b71e-63e75f86b8a4",
+      "version": 6
+    },
+    {
+      "title": "Quarterly",
+      "kind": "presentation",
+      "projectId": "4c47fcb4-f076-4e53-91d2-1ee0b788590a",
+      "artifactId": "e1526cac-4028-427d-8b16-3bace8190a5f",
+      "version": 3
+    },
+    {
+      "title": "Harbour Bakery",
+      "kind": "website",
+      "projectId": "6cf0e0a7-71a3-4255-9f07-93594a80df50",
+      "artifactId": "e42a6ebd-9e14-4c30-a8f8-29a2077dc141",
+      "version": 2
+    },
+    {
+      "title": "Old site",
+      "kind": "website",
+      "projectId": "af8b2487-aa5b-4e75-8846-298eb2a2fc32",
+      "artifactId": "4045405e-bbbb-4e27-887e-4e44d87ede49",
+      "version": 2
+    },
+    {
+      "title": "Relay Operations",
+      "kind": "website",
+      "projectId": "58dc9117-dbac-44dd-af2c-441e23766184",
+      "artifactId": "12138670-a22b-4a37-a2cf-09a35c401e88",
+      "version": 2
+    },
+    {
+      "title": "The Repair Table",
+      "kind": "book",
+      "projectId": "41824e13-1c14-4b66-8b1f-cc72860c53ec",
+      "artifactId": "2d3c1634-32ac-4db1-a410-cdb64785b2b3",
+      "version": 2
+    },
+    {
+      "title": "Tidewater",
+      "kind": "presentation",
+      "projectId": "719a4758-892b-44cb-bfc6-0f8ac84c9fb0",
+      "artifactId": "420eb65e-656d-47d9-8a0f-365461de0f2f",
+      "version": 2
+    }
+  ]
+}

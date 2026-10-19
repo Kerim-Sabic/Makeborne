@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-19T11:20:05.322Z",
+  "origin": "https://makeborne-release-staging-qa2026101-kerimsabic-6594s-projects.vercel.app",
+  "candidate": "a6e70c6f577aa5bf7654e72cd8d85b9977bd247e",
+  "productionTouched": false,
+  "steps": [
+    {
+      "step": "sign in through the login form",
+      "ok": true,
+      "landed": "/studio"
+    },
+    {
+      "step": "create client review link",
+      "ok": true
+    },
+    {
+      "step": "anonymous client opens review and comments",
+      "reviewRenders": true,
+      "comment": {
+        "status": 200,
+        "body": "{\"comment\":{\"id\":\"673ac8a7-ed7c-418b-9a50-95acd78fa0ba\",\"kind\":\"comment\",\"authorName\":\"RC staging client\",\"body\":\"Staging RC check: please confirm opening hours"
+      },
+      "issues": []
+    },
+    {
+      "step": "agency sees the comment; link turned off",
+      "seen": true,
+      "off": {
+        "found": false
+      },
+      "reviewAfterRevoke": 200
+    },
+    {
+      "step": "phone editor (book)",
+      "cls": 0,
+      "overflowX": 0,
+      "issues": [
+        {
+          "type": "console",
+          "text": "Failed to load resource: the server responded with a status of 404 ()"
+        }
+      ]
+    }
+  ],
+  "desktopIssues": []
+}

@@ -1,0 +1,170 @@
+{
+  "at": "2026-10-19T10:51:52.728Z",
+  "source": "outputs/eval/runs/live-20261018T161405Z/*/source.json (reused)",
+  "sites": 19,
+  "passed": 19,
+  "failed": [],
+  "unverified": [],
+  "medianMs": 34,
+  "maxMs": 285,
+  "controls": {
+    "syntaxError": "failed",
+    "missingImport": "failed",
+    "engineTimeout": "unverified",
+    "realOneMsBudget": null
+  },
+  "results": [
+    {
+      "site": "w02-saas-relay-operations",
+      "files": 17,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 285,
+      "verdict": "passed"
+    },
+    {
+      "site": "w03-professional-hartwell-rook",
+      "files": 19,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 46,
+      "verdict": "passed"
+    },
+    {
+      "site": "w04-creator-mira-objects",
+      "files": 11,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 35,
+      "verdict": "passed"
+    },
+    {
+      "site": "w05-ecommerce-good-dog",
+      "files": 10,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 34,
+      "verdict": "passed"
+    },
+    {
+      "site": "w06-wellness-laurel-creek-dental",
+      "files": 7,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 28,
+      "verdict": "passed"
+    },
+    {
+      "site": "w07-trades-hollis-heating-plumbing",
+      "files": 16,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 36,
+      "verdict": "passed"
+    },
+    {
+      "site": "w08-events-low-ceiling",
+      "files": 5,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 21,
+      "verdict": "passed"
+    },
+    {
+      "site": "w09-property-lumen-atelier",
+      "files": 12,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 25,
+      "verdict": "passed"
+    },
+    {
+      "site": "w10-civic-elmwood-pantry",
+      "files": 6,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 27,
+      "verdict": "passed"
+    },
+    {
+      "site": "w11-restaurant-ovenbird-bakehouse",
+      "files": 18,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 26,
+      "verdict": "passed"
+    },
+    {
+      "site": "w12-saas-ledgerline",
+      "files": 9,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 30,
+      "verdict": "passed"
+    },
+    {
+      "site": "w13-professional-fernhill-books-tax",
+      "files": 14,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 34,
+      "verdict": "passed"
+    },
+    {
+      "site": "w14-creator-foxed-podcast",
+      "files": 14,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 38,
+      "verdict": "passed"
+    },
+    {
+      "site": "w15-ecommerce-kafa-tamo",
+      "files": 14,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 27,
+      "verdict": "passed"
+    },
+    {
+      "site": "w16-wellness-crux-yard",
+      "files": 7,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 19,
+      "verdict": "passed"
+    },
+    {
+      "site": "w17-trades-saltbush-auto",
+      "files": 23,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 52,
+      "verdict": "passed"
+    },
+    {
+      "site": "w18-property-hisa-burja",
+      "files": 16,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 34,
+      "verdict": "passed"
+    },
+    {
+      "site": "w19-events-ridgeline-weddings",
+      "files": 16,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 35,
+      "verdict": "passed"
+    },
+    {
+      "site": "w20-civic-glen-rise-maths-club",
+      "files": 6,
+      "staticProblems": 0,
+      "compile": true,
+      "ms": 21,
+      "verdict": "passed"
+    }
+  ]
+}

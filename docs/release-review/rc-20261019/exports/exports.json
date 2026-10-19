@@ -1,0 +1,60 @@
+{
+  "at": "2026-10-19T10:50:33.186Z",
+  "source": "outputs/eval/runs/live-20261018T161405Z (document.json, reused)",
+  "results": [
+    {
+      "name": "book-b02",
+      "format": "pdf",
+      "ok": true,
+      "bytes": 387611,
+      "sha256": "5bd5beaf6a5493270b6577dce9a0540de0364536824c6a970140fa3bc4f68f89",
+      "ms": 813,
+      "assets": 0
+    },
+    {
+      "name": "deck-d02",
+      "format": "pdf",
+      "ok": true,
+      "bytes": 436193,
+      "sha256": "d5383fc1be84cb1bdd95649cebaa7fada4fb01fd710415cb65c4f768d118d592",
+      "ms": 934,
+      "assets": 0
+    },
+    {
+      "name": "deck-d02",
+      "format": "pptx",
+      "ok": true,
+      "bytes": 53648,
+      "sha256": "8e10b6f80a251d227009faa15c9a404a1d523cdc0dc21206879178b175a6105a",
+      "ms": 55,
+      "assets": 0
+    },
+    {
+      "name": "book-b01",
+      "format": "pdf",
+      "ok": true,
+      "bytes": 689327,
+      "sha256": "1bd36b0e66e9105920439878e2366b221f3fc7b8c5155f9c22814ca8f8e50d33",
+      "ms": 1058,
+      "assets": 0
+    },
+    {
+      "name": "deck-d01",
+      "format": "pdf",
+      "ok": true,
+      "bytes": 284739,
+      "sha256": "a3cdd5c97535cf9769bd31c466309defd1c1f53080c77ceb1ec0c6e92621a12b",
+      "ms": 504,
+      "assets": 0
+    },
+    {
+      "name": "deck-d01",
+      "format": "pptx",
+      "ok": true,
+      "bytes": 47240,
+      "sha256": "08678de9071a3603b35ee00d02345ffed331691e2e2ba9ec941d26d9be1f2f42",
+      "ms": 22,
+      "assets": 0
+    }
+  ]
+}

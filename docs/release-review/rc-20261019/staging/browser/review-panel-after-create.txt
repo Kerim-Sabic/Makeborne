@@ -1,0 +1,26 @@
+Client review
+
+A private link for your client: no account, comments on the page, approve or request changes.
+
+Delivery
+Active
+Sending a link marks this project In review; the client’s decision marks it Delivered or Changes requested.
+Share for review
+Latest version
+Update the review copy after new saves
+Version 2 only
+Fixed, for sign-off
+Client name
+Link expires
+In 3 days
+In 7 days
+In 14 days
+In 30 days
+In 90 days
+Personal note
+(shown on the review page)
+Preparing…
+Client feedback
+0 open
+
+Comments appear here as soon as your client leaves them.
