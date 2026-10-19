@@ -2951,3 +2951,7 @@ label input[type="color"] {
 
 /* Fields that drop their own outline show focus on their container instead. */
 .search-field:focus-within { border-radius: 6px; box-shadow: 0 0 0 3px #7c6cf040; }
+.app-error { max-width: 520px; margin: 12vh auto; padding: 0 20px; text-align: center; }
+.app-error h1 { margin: 0 0 8px; font-size: 24px; }
+.app-error p { margin: 0 0 20px; color: var(--muted); line-height: 1.55; }
+.app-error-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
