@@ -1,0 +1,23 @@
+{
+  "id": "w01-restaurant-saffron-table",
+  "order": 1,
+  "format": "website",
+  "direction": "restaurant",
+  "title": "Saffron Table",
+  "shared": true,
+  "brief": "Build a complete website for Saffron Table, a contemporary neighbourhood restaurant in Bristol. It should feel warm and confident, with exceptional typography. Include a seasonal menu, opening hours, the location, accessible mobile navigation and a reservation enquiry form with real validation. I will send the final menu prices, opening hours, street address and phone number later, so show those as clearly marked placeholders for now instead of making them up. Do not pretend a reservation has been sent when nothing is connected behind the form: say honestly what happens next. Make every link and button useful. No template look and no fake awards, reviews or press quotes.",
+  "source": {
+    "type": "real",
+    "path": "scripts/qualify-products.mjs:8",
+    "adaptation": "Removed the Makeborne runtime clause \"original CSS/SVG food-inspired art (image API is unavailable)\" and the phrase \"Warm editorial art direction\", which steered the audit fixture into the cream/serif house look (\"warm\" is kept). The original asked for a \"seasonal menu with prices\" but supplied no prices, hours, address or phone; the owner now says these follow later and stay as placeholders, so the brief no longer forces invented content (W17). British spelling for a Bristol business."
+  },
+  "persona": null,
+  "mustHave": [
+    "seasonal menu section; prices shown as marked placeholders, not invented figures",
+    "opening hours and location sections, with placeholders for the unsupplied details",
+    "reservation enquiry form with real field validation that never claims a booking was sent",
+    "accessible mobile navigation (menu usable by keyboard and screen reader)",
+    "no awards, reviews or press quotes"
+  ],
+  "notes": "Prior output: outputs/product-qualification/restaurant.json (+ restaurant.html). This is the audit case for the cream/serif/italic/pill tell (W15, D1-D4)."
+}

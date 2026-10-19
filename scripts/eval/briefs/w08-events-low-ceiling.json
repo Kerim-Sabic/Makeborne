@@ -1,0 +1,24 @@
+{
+  "id": "w08-events-low-ceiling",
+  "order": 8,
+  "format": "website",
+  "direction": "events",
+  "title": "Low Ceiling",
+  "shared": true,
+  "brief": "We run Low Ceiling, a 280-capacity basement music venue and late bar near Gent-Dampoort station in Ghent, Belgium. Gigs Thursday to Saturday, doors 20:00; Saturday club nights run until 04:00 and are 18+. Upcoming: Thu 5 Nov Marrow Choir + Fennick (€16); Fri 6 Nov Saltwater Static (€18); Sat 7 Nov club night Lower Floor with our residents (€10); Thu 12 Nov Ines Vael Trio (€14); Fri 13 Nov Gutter Bloom + Mollusk (€15); Sat 14 Nov club night (€10). Tickets on the door cost €3 more. Tickets are sold through an outside ticket shop we haven't linked yet, so every ticket button should point to a clearly marked placeholder, never a fake checkout. The listings are the heart of the site: make them big and easy to scan on a phone. Be straight about access: the venue is down a flight of stairs and there is no lift. Band booking enquiries go to bookings@lowceiling.example. A newsletter signup is fine, but it isn't connected, so no fake \"you're in\". Street address to confirm.",
+  "source": {
+    "type": "persona",
+    "path": "none: no Helix persona covers music venues; owner voice written for this set",
+    "adaptation": "Plausible owner voice with concrete supplied listings so no tool has to invent acts, dates or prices. Venue and acts are fictional. Belgium has no reserved fictional phone range, so contact is email only and the street address stays a placeholder."
+  },
+  "persona": null,
+  "mustHave": [
+    "listings for the six supplied dates with acts and prices, easy to scan on a phone",
+    "ticket buttons point to marked placeholders; no fake checkout",
+    "access information stating the stairs and that there is no lift",
+    "doors time and the 18+ club-night rule visible",
+    "newsletter signup that does not fake success",
+    "bookings email as a mailto: link"
+  ],
+  "notes": "Dates checked against the 2026 calendar (5 Nov 2026 is a Thursday). Events direction has no Helix persona."
+}

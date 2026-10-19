@@ -1,0 +1,24 @@
+{
+  "id": "w18-property-hisa-burja",
+  "order": 20,
+  "format": "website",
+  "direction": "property",
+  "title": "Hiša Burja",
+  "shared": false,
+  "brief": "Hiša Burja is our ten-room guesthouse in a restored stone farmhouse in the Slovenian Karst, 25 minutes by car from Trieste. Rooms: six doubles, two twins and two family lofts that sleep four; one ground-floor double has step-free access, and dogs are welcome in two rooms. Breakfast is included; dinner on Friday and Saturday by reservation, with wine from the neighbours' vineyards. Check-in 15:00–20:00, check-out 11:00. Closed in January and February. We don't have an online booking engine: guests send their dates through an enquiry form or to stay@hisaburja.example, and we confirm availability within a day. The form isn't connected yet, so it must never show a \"booked\" confirmation. Room rates are to confirm, so show placeholders. We'd like big, calm photographs of the house and the landscape; ours come next month, so use clearly marked placeholders. Include how to get here (car recommended, or the bus from Trieste) and a short guide to the area. No awards, review scores or guest quotes.",
+  "source": {
+    "type": "persona",
+    "path": "none: no Helix persona covers hotels; owner voice written for this set",
+    "adaptation": "Plausible owner voice for a small guesthouse with supplied rooms, policies and times. Fictional business. Slovenia has no reserved fictional phone range, so contact is email only."
+  },
+  "persona": null,
+  "mustHave": [
+    "room types (doubles, twins, family lofts) with rates as placeholders",
+    "availability enquiry form that never shows a booked confirmation",
+    "check-in and check-out times and the January-February closure visible",
+    "step-free room and dog-friendly rooms stated",
+    "how-to-get-here section",
+    "no awards, review scores or guest quotes"
+  ],
+  "notes": "Hotels have no Helix persona. Non-ASCII title on purpose (š) to exercise font coverage."
+}

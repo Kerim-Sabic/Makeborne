@@ -91,6 +91,7 @@
 .cloud-workbench-preview .ap-mobile .ap-document { max-width: 390px; box-shadow: 0 6px 25px #20182e0b; }
 .cloud-workbench-preview .ap-stage.book .ap-document { max-width: 720px; margin: auto; }
 .cloud-workbench-preview .ap-note { margin: 0; padding: 9px 14px; font-size:12px; background: #fff; border-top: 1px solid #e9e7ed; }
+.cloud-workbench-format { margin: 0 0 12px; padding: 10px 14px; border: 1px solid #e3dfe8; border-radius: 10px; background: #fff; color: #4a4452; font-size: 12px; line-height: 1.6; }
 .cloud-workbench-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding: 48px 24px; border: 1px solid #eae7ee; border-radius: 10px; background: #fff; text-align: center; }
 .cloud-workbench-empty-icon { display: grid; place-items: center; width: 66px; height: 66px; border: 1px solid #e9e3ef; border-radius: 19px; background: #f9f7fc; color:var(--text-muted); }
 .cloud-workbench-empty h3 { margin: 22px 0 8px; color: #39333e; font-family: var(--font-inter), Arial, sans-serif; font-size: 20px; font-weight: 500; letter-spacing: -.04em; }

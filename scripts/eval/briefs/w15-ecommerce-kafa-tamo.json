@@ -1,0 +1,23 @@
+{
+  "id": "w15-ecommerce-kafa-tamo",
+  "order": 17,
+  "format": "website",
+  "direction": "ecommerce",
+  "title": "Kafa Tamo",
+  "shared": false,
+  "brief": "A website for Kafa Tamo, a small specialty coffee roastery in Sarajevo. They sell single-origin beans online with a monthly subscription (three tiers: Taster, Regular, Office), run a tiny café with opening hours, publish a brewing guide for džezva, V60 and espresso, and take wholesale inquiries from cafés and hotels through a form. Prices, the current origins, the café address and the opening hours are not final yet, so show them as clearly marked placeholders rather than inventing them. Online checkout is not connected yet: say so honestly instead of showing a fake order confirmation, and the wholesale form must not pretend an inquiry was sent.",
+  "source": {
+    "type": "real",
+    "path": "makeborne-local DB 127.0.0.1:55322 public.projects.brief, workspace 0a3d6952-0e17-492f-a83b-f48b11796b77, project 6d14f673-e18c-4010-9e93-85a3aa67dd9b",
+    "adaptation": "Verbatim, plus two honesty sentences: the owner supplied no prices, origins, address or hours (placeholders), and checkout and the wholesale form are not connected."
+  },
+  "persona": null,
+  "mustHave": [
+    "three subscription tiers named Taster, Regular and Office, with prices as placeholders",
+    "brewing guide covering džezva, V60 and espresso",
+    "café section with opening hours as placeholders",
+    "wholesale inquiry form that does not fake success",
+    "honest note that checkout is not connected; no fake order confirmation"
+  ],
+  "notes": "Prior output: artifact 44782994-b6f9-409d-9ace-c21ae854c9a2 (titled \"Untitled website\", 3 versions) in the same DB."
+}

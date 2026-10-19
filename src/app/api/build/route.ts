@@ -17,7 +17,8 @@ import { OperationRequestSchema } from "@/lib/builder/operation-contract";
 import { beginOperation, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
 import { documentBuildResponse } from "@/lib/builder/docs-run";
 import { websiteBuildResponse } from "@/lib/builder/website-run";
-import { requireProviderCapacity } from "@/lib/ai/live-run";
+import { providerCapacity, requireProviderCapacity } from "@/lib/ai/live-run";
+import { builderAvailability } from "@/lib/builder/availability";
 import { requirePricedModel } from "@/lib/ai/model-check";
 import { SitePlanSchema, planToBrief } from "@/lib/builder/plan";
 import { websiteBrandBlock } from "@/lib/brand/kit";
@@ -47,9 +48,11 @@ const BuildRequest = z.object({
 
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 
+// Configured is not runnable: paused or exhausted provider spending is reported before work is offered.
 export async function GET() {
+  const availability = await builderAvailability({ configured: builderEnabled(), priced: () => requirePricedModel(builderModel()), capacity: () => providerCapacity("anthropic") });
   // Measured credit ranges for the composer's estimate, in credits at the live rate (no provider call).
-  return Response.json({ available: builderEnabled(), estimates: builderEstimates(aiCostUsdPerCredit()) }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()) }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {

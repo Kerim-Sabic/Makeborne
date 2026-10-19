@@ -1,0 +1,24 @@
+{
+  "id": "w11-restaurant-ovenbird-bakehouse",
+  "order": 13,
+  "format": "website",
+  "direction": "restaurant",
+  "title": "Ovenbird Bakehouse",
+  "shared": false,
+  "brief": "Website for Ovenbird Bakehouse, our wood-fired sourdough bakery at 14 Fennel Street, Leith, Edinburgh EH6 4QA. Phone 0131 496 0412; email hello@ovenbird.example for general questions, orders@ovenbird.example for pre-orders and wholesale@ovenbird.example for cafés and restaurants. Open Wednesday to Saturday 07:30–14:00 and Sunday 08:30–13:00. We bake six loaves every day, sourdough and rye among them (I will send the final list and prices, so use clearly marked placeholders until then), and run a pastry counter best known for our cardamom knots. The main thing we want is for people to pre-order bread for Saturday collection, by phone or email only: there is no online payment and no order system behind the site, so don't fake one. Keep the address, hours and phone easy to find on a phone.",
+  "source": {
+    "type": "real",
+    "path": "work/generation-quality-20261014/website/bakery/fixture.json (.brief)",
+    "adaptation": "Rewritten from the fixture's note form into the owner's voice; removed the harness preface and the \"(Ofcom drama range)\" annotation (0131 496 0412 is inside the Ofcom drama range). The fixture listed \"six daily loaves with prices\" but supplied neither names nor prices; the owner now says they follow later as placeholders. \"Rye\" and \"cardamom knots\" come from the fixture description."
+  },
+  "persona": null,
+  "mustHave": [
+    "phone 0131 496 0412 as a tel: link",
+    "mailto: links for the hello, orders and wholesale addresses",
+    "opening hours and address visible",
+    "Saturday pre-order action by phone or email",
+    "no online payment or fake order confirmation",
+    "loaf prices as placeholders, not invented"
+  ],
+  "notes": "Prior output: work/generation-quality-20261014/website/bakery/bakery.source.json (+ bakery.static.html, bakery.report.json)."
+}
