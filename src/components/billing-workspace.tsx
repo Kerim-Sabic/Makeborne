@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowUpRight, CircleHelp, Layers3, ReceiptText, Search, Shie
 import BrandMark from "./brand-mark";
 import BillingPlans from "./billing-plans";
 import BillingTopupReturn from "./billing-topup-return";
+import BillingAutotopup from "./billing-autotopup";
 import CreditBalance, { creditExpiryLabel, type CreditBalanceData } from "./credit-balance";
 import { formatBillingCredits } from "./billing-amount";
 import BillingCreditCosts from "./billing-credit-costs";
@@ -15,7 +16,7 @@ export type { BillingEntry, BillingViewModel } from "@/lib/billing/view";
 
 const categories = ["All activity", "Creation", "Media", "Hosting", "Research"] as const;
 
-export default function BillingWorkspace({ summary: input, membershipRequired = false, accountPrivileges, trialCredits = null, signedIn = true, topupOrderId, costs = null }: { summary: BillingViewModel; /** Measured builder costs, in credits at the live rate. */ costs?: BuilderEstimates | null; membershipRequired?: boolean; accountPrivileges?: { isAdmin: boolean; unlimitedCredits: boolean }; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null; /** Signed-out visitors see plans and a sign-in prompt instead of an empty balance. */ signedIn?: boolean; topupOrderId?: string }) {
+export default function BillingWorkspace({ summary: input, membershipRequired = false, refundedPeriod = null, autotopupSetup = false, accountPrivileges, trialCredits = null, signedIn = true, topupOrderId, costs = null }: { summary: BillingViewModel; /** Measured builder costs, in credits at the live rate. */ costs?: BuilderEstimates | null; membershipRequired?: boolean; /** Current billing period whose payment was refunded or charged back. */ refundedPeriod?: { periodEnd: string; reason: string } | null; /** Automatic top-up setup (qualification flag only; never charges). */ autotopupSetup?: boolean; accountPrivileges?: { isAdmin: boolean; unlimitedCredits: boolean }; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null; /** Signed-out visitors see plans and a sign-in prompt instead of an empty balance. */ signedIn?: boolean; topupOrderId?: string }) {
   const summary = readBillingView(input);
   const unlimitedCredits = accountPrivileges?.unlimitedCredits === true;
   const [category, setCategory] = useState<(typeof categories)[number]>("All activity");
@@ -49,7 +50,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
       <div className="billing-heading"><div><span className="billing-eyebrow">MAKEBORNE MEMBERSHIPS</span><h1>Plans &amp; credits.</h1><p>Room for your ideas. Clarity on what you spend.</p></div></div>
       <nav className="billing-section-nav" aria-label="Billing sections"><a href="#plans">Plans</a>{!unlimitedCredits && <a href="#topups">Credit packs</a>}<a href="#credits">Your credits</a><a href="#costs">What building costs</a><a href="#billing-questions">Questions</a><a href="#support">Support us</a></nav>
       {topupOrderId !== undefined && <BillingTopupReturn orderId={topupOrderId} />}
-      {unlimitedCredits ? <div className="billing-membership-note"><ShieldCheck size={18} aria-hidden="true" /><div><strong>Unlimited credits · Administrator allowance</strong><p>No creation subscription or credit top-ups are required for this account.</p><Link className="billing-allowance-link" href="/studio">Open studio<ArrowUpRight size={13} aria-hidden="true" /></Link></div></div> : membershipRequired && <div className="billing-membership-note" role="status"><CircleHelp size={18} /><div><strong>Creation access isn&rsquo;t available for this account yet.</strong><p>{trialCredits ? `Confirmed accounts start free with ${trialCredits} trial credits while the free tier is open. ` : "Creation needs a creation plan. "}Coffee support is optional and does not include app access.</p></div></div>}
+      {unlimitedCredits ? <div className="billing-membership-note"><ShieldCheck size={18} aria-hidden="true" /><div><strong>Unlimited credits · Administrator allowance</strong><p>No creation subscription or credit top-ups are required for this account.</p><Link className="billing-allowance-link" href="/studio">Open studio<ArrowUpRight size={13} aria-hidden="true" /></Link></div></div> : refundedPeriod ? <div className="billing-membership-note" role="status"><CircleHelp size={18} /><div><strong>{refundedPeriod.reason === "dispute_lost" ? "This billing period's payment was charged back." : "This billing period's payment was refunded."}</strong><p>Creation access for this billing period (until {new Date(refundedPeriod.periodEnd).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" })}, UTC) ended with it, and the period&rsquo;s unused credits were removed. Access returns with your next paid period. Questions: <a href="mailto:admin@makeborne.com">admin@makeborne.com</a>.</p></div></div> : membershipRequired && <div className="billing-membership-note" role="status"><CircleHelp size={18} /><div><strong>Creation access isn&rsquo;t available for this account yet.</strong><p>{trialCredits ? `Confirmed accounts start free with ${trialCredits} trial credits while the free tier is open. ` : "Creation needs a creation plan. "}Coffee support is optional and does not include app access.</p></div></div>}
       <BillingPlans unlimitedCredits={unlimitedCredits} />
       {signedIn ? <>
       <section id="credits" className="billing-credit-section" aria-labelledby="credits-heading">
@@ -59,6 +60,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
           <div className="billing-metrics"><div><span className="billing-metric-icon"><Layers3 size={18} /></span><div><span>Reserved</span><strong>{credits ? format(String(credits.reserved)) : format(summary.reserved)}</strong><p>Set aside for work in progress</p></div></div><div><span className="billing-metric-icon"><Sparkles size={18} /></span><div><span>Used {summary.period ? `· ${summary.period}` : "this period"}</span><strong>{format(summary.used)}</strong><p>Finalised credit usage</p></div></div></div>
         </div>
       </section>
+        {autotopupSetup && !unlimitedCredits && <BillingAutotopup />}
         <section id="activity" className="billing-activity" aria-labelledby="activity-heading">
         <div className="billing-section-heading"><div><h2 id="activity-heading">Usage history</h2><p>See the project and action behind each charge.</p></div>{summary.status === "ready" && <button disabled={entries.length === 0} onClick={downloadUsage}>Download usage (JSON)</button>}</div>
         {downloadError && <p className="billing-checkout-error" role="alert">{downloadError}</p>}

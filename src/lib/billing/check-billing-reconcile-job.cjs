@@ -163,6 +163,28 @@ function whopWith(fetchImpl) { return load("./whop.ts", env, { "@/lib/server/htt
     assert.deepEqual(calls.fetched.filter(id => id === "mem_down").length, 1, "a failing membership is attempted once per run (no loop)");
   });
 
+  await check("refunds: every refreshed membership's recent payments are reconciled (current state) before allocation evidence; old ones skipped; failures stay per membership", async () => {
+    const pay = (id, paidAt) => ({ id, planId: "plan_x", billingReason: "subscription_cycle", paidAt, refunded: true });
+    const rows = [due("mem_ref"), { ...due("mem_ev"), needs_payments: true }, due("mem_err")];
+    const { deps, calls } = harness({ due: rows, memberships: { mem_ref: membership("mem_ref"), mem_ev: membership("mem_ev"), mem_err: membership("mem_err") }, payments: {
+      mem_ref: { payments: [pay("pay_old", "2026-06-01T00:00:00.000Z"), pay("pay_recent", "2026-10-19T13:33:08.000Z")], skipped: 0, complete: true },
+      mem_ev: { payments: [pay("pay_ev", "2026-10-10T00:00:00.000Z")], skipped: 0, complete: true },
+      mem_err: { payments: [pay("pay_err", "2026-10-18T00:00:00.000Z")], skipped: 0, complete: true } } });
+    const order = [];
+    deps.now = () => Date.parse("2026-10-20T00:00:00.000Z");
+    deps.recordPayment = async (user, id, payment) => { order.push(`evidence:${payment.id}`); return { outcome: "evidence", granted: 0 }; };
+    deps.reconcilePayment = async (user, m, paymentId) => {
+      order.push(`reconcile:${m.id}:${paymentId}`);
+      if (paymentId === "pay_err") throw Object.assign(new Error("evidence"), { code: "PLAN_PAYMENT_UNVERIFIED" });
+      return { outcome: "updated", state: paymentId === "pay_recent" ? "reversed" : "funded" };
+    };
+    const result = plain(await job.runPlanCreditReconcileJob(deps, { pageSize: 10 }));
+    assert.deepEqual(order, ["reconcile:mem_ref:pay_recent", "reconcile:mem_ev:pay_ev", "evidence:pay_ev", "reconcile:mem_err:pay_err"]);
+    assert.deepEqual([result.stats.paymentsReconciled, result.stats.paymentsNotFunded, result.stats.processed, result.stats.failed], [2, 1, 2, 1]);
+    assert.equal(result.status, "partial");
+    assert.match(calls.finish.p_error, /mem_err: PLAN_PAYMENT_UNVERIFIED/);
+  });
+
   await check("bounded: time budget and membership cap stop the run as partial; heartbeats renew the lease", async () => {
     const rows = Array.from({ length: 30 }, (_, i) => due(`mem_${String(i).padStart(2, "0")}x`));
     const memberships = Object.fromEntries(rows.map(r => [r.membership_id, membership(r.membership_id)]));

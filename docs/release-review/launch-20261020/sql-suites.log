@@ -1,0 +1,749 @@
+
+===== check-account-privileges.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+                                                      result                                                       
+-------------------------------------------------------------------------------------------------------------------
+ PASS: account roles, self-promotion denial, tenant boundaries, revocation, audit, credit waiver and vendor limits
+(1 row)
+
+
+===== check-admin-console.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+       result        
+---------------------
+ PASS: admin console
+(1 row)
+
+NOTICE:  PASS admin console: non-administrators and NULL actors are refused
+NOTICE:  PASS admin console: overview counts users and current subscriptions
+NOTICE:  PASS admin console: search is literal and finds by email or id
+NOTICE:  PASS admin console: filters, pagination and bounds
+NOTICE:  PASS admin console: customer detail, unknown customer, no credentials
+NOTICE:  PASS admin console: server role only
+
+===== check-ai-operations.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS cumulative cap, idempotency, rounding, absorption, atomic save, recovery, consent, expiry, provider uncertainty, plans, ACL
+NOTICE:  PASS artifact/workspace/account deletion, exact hold release, retained provider exposure and audit
+
+===== check-app-observability.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+         result          
+-------------------------
+ PASS: app observability
+(1 row)
+
+NOTICE:  PASS observability: private tables, three service-role-only functions with pinned search_path
+NOTICE:  PASS observability: errors grouped by fingerprint with daily counts, fields capped, bad input refused, 300 new kinds a day then one overflow group
+NOTICE:  PASS observability: visits count once per visitor per page per day, only salted hashes stored, salts kept two days, unlisted pages refused
+NOTICE:  PASS observability: admin-only health (errors by day and top kinds, visits, sign-up funnel from existing records), window bounded to 90 days
+
+===== check-billing-lifecycle-concurrency.sql (db rehearsal, dblink host retargeted; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS lifecycle race: eight different memberships on one account mint one allowance and seven durable review issues
+NOTICE:  PASS lifecycle race: eight account checkout requests reserve exactly one provider attempt
+NOTICE:  PASS concurrency: 4 duplicate observations + 4 duplicate payment deliveries + a racing reconcile -> 4 started allocations granted exactly once (4 x 850; 1 expired, 2 rolled over and 1 current), 1 period, 4 observations + 1 payment kept
+
+===== check-billing-lifecycle.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS lifecycle: renewal requires period-local evidence; stale older and invalid anchors cannot increase renewal credits
+NOTICE:  PASS lifecycle: reversed renewal/initial evidence order and repeated reconciliation preserve exactly one grant per paid month
+NOTICE:  PASS lifecycle: account overlap refused durably; same-membership difference-only grants, adjacent time and other accounts allowed; top-ups unchanged
+NOTICE:  PASS lifecycle: twelve annual monthly lots; late catch-up never resurrects expired months; every lot uses allocation end plus two months
+NOTICE:  PASS lifecycle: active subscription blocks checkout; completed checkout cannot bind another membership; stale reactivation cannot duplicate account subscription
+NOTICE:  PASS lifecycle: private helpers unavailable to browser and service roles; original service-only observation entry point retained
+
+===== check-brand-kits.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS brand kits: columns and cascading keys
+NOTICE:  PASS brand kits: one per workspace and per client, upsert, client must belong to the workspace
+NOTICE:  PASS brand kits: kit shape and size checks
+NOTICE:  PASS brand kits: members read, strangers and browser writes refused
+NOTICE:  PASS brand kits: client deletion cascades
+
+===== check-budget-reservations.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS default spending denied
+NOTICE:  PASS nonmember denied
+NOTICE:  PASS reviewer denied
+NOTICE:  PASS changed approval denied
+NOTICE:  PASS changed input denied
+NOTICE:  PASS emergency stop denied
+NOTICE:  PASS browser function call denied
+NOTICE:  PASS service reserve and idempotent replay
+NOTICE:  PASS exact counters increment once
+NOTICE:  PASS duplicate proposal denied
+NOTICE:  PASS changed request key denied
+NOTICE:  PASS concurrency bound
+NOTICE:  PASS insufficient budgets denied
+NOTICE:  PASS failed operations leave no allocations
+NOTICE:  PASS customer credit bound independently enforced
+NOTICE:  PASS vendor bound independently enforced
+NOTICE:  PASS stale artifact version denied
+NOTICE:  PASS expired proposal denied
+NOTICE:  PASS reviewer release denied
+NOTICE:  PASS browser release denied
+NOTICE:  PASS dispatched release denied
+NOTICE:  PASS uncertain release denied
+NOTICE:  PASS inconsistent counters denied
+NOTICE:  PASS cancellation permitted while spending stopped
+NOTICE:  PASS both balances released exactly once without charges
+NOTICE:  PASS release replay retains original audit
+NOTICE:  PASS cancellation reason required
+
+===== check-client-directory.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS bounded first page with full total
+NOTICE:  PASS workspace counts exclude closed followups
+NOTICE:  PASS search finds client beyond first page
+NOTICE:  PASS overdue queue finds client beyond first page
+NOTICE:  PASS directory omits history and notes
+NOTICE:  PASS wildcard punctuation searched literally
+NOTICE:  PASS last page bounded
+NOTICE:  PASS stage and followup intersect
+NOTICE:  PASS other workspace denied
+NOTICE:  PASS invalid page denied
+NOTICE:  PASS anonymous directory denied
+
+===== check-client-outreach.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS: 15 outreach checks (roles, tenant isolation, revisions, validation, history); fixtures rolled back
+
+===== check-client-portal.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+       result        
+---------------------
+ PASS: client portal
+(1 row)
+
+NOTICE:  PASS client portal: RLS on, token hashes unselectable, client and invite functions service-role only, agency functions authenticated only, definers pin search_path
+NOTICE:  PASS client portal: invites (bad name/email/lifetime/hash, reviewer, stranger, foreign or unbounded session refused; duplicate refused), anonymous read (masked email, agency brand), strict email match, single use, expiry, re-invite after expiry, resend rotates the token, no workspace membership
+NOTICE:  PASS client portal: site settings (reviewer refused; no client, no content, undeclared collection, other workspace refused), client overview without token data
+NOTICE:  PASS client portal: home and site read (allowed collections with sha256, images, routes; no source), other client, stranger and foreign session refused, images only from the site's current version
+NOTICE:  PASS client portal: isolation (portal user reads 0 rows from 12 tenant and portal tables, cannot insert versions or call agency or service functions; members never read token hashes; other workspaces see nothing)
+NOTICE:  PASS client portal: content boundary (src/App.tsx, collections.json, undeclared, mis-cased, traversal, nested, non-JSON, __proto__ paths refused; other client's site, invalid JSON, non-text, 31 files, empty, future base refused; disallowed collections refused), drafts never create versions, idempotent saves, submit and withdraw lifecycle
+NOTICE:  PASS client portal: approval refused when the agency changed a file after the client's base (unless overwrite), approve splices only the changed collection files into a new version by the approving editor (other files byte-identical), non-conflicting edits merge, reviewer refused, reject keeps the version, stale bases refused at save, decision visible to the client
+NOTICE:  PASS client portal: grants re-checked on every call (paid_through, project reassignment, site disabled, owner hosting), revocation (reviewer and stranger refused, idempotent, open changes withdrawn, invite unusable) works for an owner without a creation membership
+NOTICE:  PASS client portal: rate limits refuse with MB429 (120 draft saves/hour/grant, 30 submissions/day/grant, 20 client versions/day/site, 30 invites/day/workspace, 10 grants/client, 100 grants/workspace)
+NOTICE:  PASS client portal: 11 portal audit actions recorded with actor, names and counts only (no content, emails or notes)
+NOTICE:  PASS client portal: cascades (client, artifact and workspace removal remove grants, site settings and changes)
+
+===== check-client-projects.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS first page and full client total
+NOTICE:  PASS final page
+NOTICE:  PASS stable non-overlapping pages
+NOTICE:  PASS projects without documents remain visible
+NOTICE:  PASS client isolation and minimal payload
+NOTICE:  PASS workspace denied
+NOTICE:  PASS unavailable client denied
+NOTICE:  PASS invalid page denied
+NOTICE:  PASS anonymous denied
+
+===== check-client-review-document-assets.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS locator server-only; token/version/document/manifest/project/workspace allowlists enforced
+NOTICE:  PASS latest/pinned semantics, creator access loss, revoked and expired links denied
+
+===== check-client-review-links.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS creation, hashing, roles and project delivery move
+NOTICE:  PASS anonymous read, comment validation, sanitising and rate limits
+NOTICE:  PASS tenant isolation and column privileges
+NOTICE:  PASS decisions move only the reviewed project
+NOTICE:  PASS stale writes rejected without effects; current and pinned writes accepted
+NOTICE:  PASS revocation, expiry, latest vs pinned, website snapshots
+
+===== check-credit-autotopup.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS auto top-up: ships off with no price and no authorized account; consent must match the exact current offer
+NOTICE:  PASS auto top-up: subscription required, threshold, one attempt in flight, cooldown, daily and calendar-month limits, unique provider payment
+NOTICE:  PASS auto top-up: re-consent on offer change, suspension after two failures, revocation cancels planned attempts
+NOTICE:  PASS auto top-up: service-role entry points only; the switch is not writable through the API
+
+===== check-credit-lots-concurrency.sql (db rehearsal, dblink host retargeted; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  PASS concurrent reservations: 3 of 6 fit, each hold funded exactly (expiring plan credits first), ledger = available
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=40
+NOTICE:  PASS spend vs expiry: requests started before the end but locked after it cannot spend the allocation; lapse recorded once
+NOTICE:  Reservation already released
+NOTICE:  PASS timeout vs late settle: the hold is reclaimed exactly once and can never also be spent
+NOTICE:  PASS settle vs release: exactly one resolution (settled), ledger = available
+
+===== check-credit-lots-expiry.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+                                                                  result                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------
+ PASS: credit lots lifecycle (order, boundary, held expiry, returns, timeout, MB402, plan top-ups/catch-up, legacy migration, privileges)
+(1 row)
+
+NOTICE:  PASS spend order: soonest-expiring plan credits, then trial, top-up, adjustment, refund; every hold records its lots
+NOTICE:  PASS expiry boundary: expired at the end instant, exact on reads, recorded once
+NOTICE:  PASS held allocation expiring mid-run: usage charged within the hold, unspent expired credits lapse, retries idempotent, never above the hold
+NOTICE:  PASS returns: valid credits go back to their own lot and expiry; expired credits lapse, never re-issued
+NOTICE:  PASS hold timeout: reclaimed after 15 minutes (valid parts back, expired parts lapse); a reclaimed hold can never be settled
+NOTICE:  PASS insufficient funds (MB402) counts only valid credits
+NOTICE:  PASS plan allocations: late catch-up honours the two-month rollover, top-ups expire with their month, retries idempotent
+NOTICE:  PASS legacy migration: audited non-expiring lot funds existing holds, reconciles exactly, refuses mismatches and repeats, spent last
+NOTICE:  PASS reads and privileges: own balance with next expiry; lots private; expiry job service-only
+
+===== check-credit-wallets-concurrency.sql (db rehearsal, dblink host retargeted; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+                      result                      
+--------------------------------------------------
+ PASS: concurrent reserve and trial serialization
+(1 row)
+
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  Insufficient credits
+DETAIL:  available=10 required=30
+NOTICE:  PASS concurrency: 6 racing reserves of 30 on 100 credits -> 3 ok, 3 MB402; 4 racing trials -> 1 grant
+
+===== check-credit-wallets.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+                                                                   result                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------
+ PASS: free tier gate, trial/grant idempotency, reserve MB402, settle partial/capped at hold, release, ledger invariants, admin bypass, RLS
+(1 row)
+
+NOTICE:  PASS free-tier access gate
+NOTICE:  PASS trial idempotency and eligibility
+NOTICE:  PASS grant idempotency and validation
+NOTICE:  PASS reserve, insufficient credits (MB402) and replay
+NOTICE:  PASS settle partial, over-hold and replay
+NOTICE:  PASS release and replay
+NOTICE:  PASS ledger invariants
+NOTICE:  PASS admin bypass
+NOTICE:  PASS RLS and privileges
+NOTICE:  PASS stale hold expiry
+
+===== check-crm-concurrency.sql (db rehearsal, dblink host retargeted; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  Client records are briefly read-only while Makeborne finishes an update. Try again in a minute.
+NOTICE:  This version of Makeborne is out of date. Reload the page to keep working with clients.
+NOTICE:  PASS G concurrency: freeze drained an in-flight write, blocked a racing write, out-of-date server rejected after contract, previous app restored after rollback
+
+===== check-crm-lead-profile.sql (db rehearsal; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS lead SQL: old app insert uses empty additive defaults and tags GIN index exists
+NOTICE:  PASS lead SQL: old edits retain profile fields; owner/editor writes and reviewer/outsider restrictions preserved
+NOTICE:  PASS lead SQL: tag count/content/null, deal range, currency, source and profile shape/size boundaries
+
+===== check-crm-mail-boundaries.sql (db rehearsal; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS mail boundaries: explicit owner, private definer/public invoker, restricted RPC grants, token RLS and no direct service table access
+NOTICE:  PASS mail boundaries: server cross-tenant/wrong-client/wrong-account/null-client bindings rejected; linked sequence cannot move even with both workspace permissions
+NOTICE:  PASS mail boundaries: enrollment/sequence deletion retains message tenant/client/account fields; mailbox deletion still cascades
+NOTICE:  PASS mail boundaries: multidimensional and shifted tag arrays rejected; empty and bounded flat arrays remain compatible
+
+===== check-crm-mail-security.sql (db rehearsal; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS mail SQL: exposed tables RLS, browser/server write ACLs, private token and RPC ACLs, pinned search paths
+NOTICE:  PASS mail SQL: owner/editor/reviewer/outsider visibility, editor-only edits, workspace-move refusal, token calls and mailbox writes denied
+NOTICE:  PASS mail SQL: token missing-row failure, service read/write, refresh preservation, unique row and size bound
+NOTICE:  PASS mail SQL: unique send/enrollment/message claims, client workspace binding, sequence/quota bounds, mailbox cascade cleanup
+
+===== check-crm-mail-upgrade.sql SKIPPED: Upgrade-path test: runs mid-chain with the 20261013260000 migration body substituted for its placeholder (scripts/rehearse-candidate.mjs). That migration is already applied in production and unchanged in this candidate.
+
+===== check-crm-sales-delivery.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS A project delivery backfill: mapped, audited, idempotent, status preserved
+NOTICE:  PASS E delivery stage permissions
+NOTICE:  PASS B expand: previous-app writes accepted, new-app Conversation stored compatibly with provenance, audited, history intact
+NOTICE:  PASS C contract: requires freeze, freeze blocks writes, cutoff rejects out-of-date servers and legacy stages
+NOTICE:  PASS D rollback: requires freeze, exact provenance restored, later user changes kept, previous app writes again
+NOTICE:  PASS H repeated cycles: exact provenance, history intact, audit complete, inconsistent resume refused
+NOTICE:  PASS F decisions (during a CRM freeze): anonymous, plan-less and paid reviewers move only the linked project, atomically; dead links, foreign projects and marker abuse rejected
+
+===== check-custom-domains.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+        result        
+----------------------
+ PASS: custom domains
+(1 row)
+
+NOTICE:  PASS custom domains: columns, cascades, unique hostname, resolver definition
+NOTICE:  PASS custom domains: 22 invalid hostnames refused, 7 valid accepted, unique, status/error/verification/workspace checks
+NOTICE:  PASS custom domains: 5 per site and 50 per workspace enforced with MB429 (insert and move)
+NOTICE:  PASS custom domains: resolver returns the slug only for active hostnames of live sites
+NOTICE:  PASS custom domains: owner-only reads, browser roles cannot write, service_role writes through limits
+NOTICE:  PASS custom domains: cascade on site removal
+
+===== check-durable-jobs.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS rejected enqueue rolls back budget and reservation together
+NOTICE:  PASS job, existing reservation and outbox enqueue are atomic and idempotent
+NOTICE:  PASS browser dispatch and direct worker state/audit/core mutation denied
+NOTICE:  PASS lease recovery increments fence; stale workers and legacy paths cannot bypass it
+NOTICE:  PASS one dispatch intent; lost worker and cancellation retain uncertain holds without redispatch
+NOTICE:  PASS pre-dispatch cancellation releases once and invalidates active workers
+NOTICE:  PASS deadline releases unused work; unresolved provider hold remains exact and uncharged
+
+===== check-generation-authority.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS invalid session and missing processing/external/rights confirmations roll back reservation, job and outbox
+NOTICE:  PASS immutable replay, scoped fenced source load and denied worker bind/dispatch bypass
+NOTICE:  PASS signed-out/expired session, revoked creation access and reviewer dispatch denied with caps enabled
+NOTICE:  PASS source content/approval/permission, proposal fingerprint and stale revision deny before dispatch/holds
+NOTICE:  PASS unchanged authorized job can dispatch through original exact cap/reservation authority
+
+===== check-generation-caps.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS disabled caps block even unlimited administrator; worker cannot mutate policy or call legacy dispatch/outcome
+NOTICE:  PASS missing draft, expired price, global stop and independently disabled provider deny before allocation
+NOTICE:  PASS durable dispatch draws on the shared daily provider limits: disabled or exhausted limits refuse it atomically
+NOTICE:  PASS global and independent provider concurrency are atomic; dispatch replay does not allocate twice
+NOTICE:  PASS shared global cap and per-provider cap deny independently; invalid fence rolls back allocations
+NOTICE:  PASS unknown outcomes retain both caps; operator reconciliation must match route and settles actual cost once
+NOTICE:  PASS outcome cannot change approved provider; debit failure rolls back all cap counters; zero-cost settlement and replay are exact
+NOTICE:  PASS incurred overrun stops both authorities and retains full cost; immutable cap holds prevent audit rewrite
+
+===== check-generation-dispatch.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS browser dispatch denied
+NOTICE:  PASS nonmember dispatch denied
+NOTICE:  PASS another editor cannot dispatch approval
+NOTICE:  PASS request key required
+NOTICE:  PASS changed approval denied
+NOTICE:  PASS changed input denied
+NOTICE:  PASS spending rechecked at dispatch
+NOTICE:  PASS emergency stop rechecked at dispatch
+NOTICE:  PASS edited project cannot dispatch old approval
+NOTICE:  PASS expiry rechecked at dispatch
+NOTICE:  PASS inconsistent counters denied
+NOTICE:  PASS cancelled reservation cannot dispatch
+NOTICE:  PASS access revoked after reservation blocks dispatch
+NOTICE:  PASS rejected dispatches leave no records
+NOTICE:  PASS runtime worker cannot use legacy dispatch
+NOTICE:  PASS operator-only legacy regression gets first claim
+NOTICE:  PASS same-key retry never redispatches
+NOTICE:  PASS new-key retry never redispatches
+NOTICE:  PASS dispatched reservation cannot be released as unused
+NOTICE:  PASS dispatch retains both holds without inventing charges
+NOTICE:  PASS one immutable dispatch audit record
+NOTICE:  PASS worker cannot rewrite dispatch audit
+
+===== check-generation-result.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS null/stale worker, outline and wrong output rejected without a saved revision or outcome
+NOTICE:  PASS failed evidence atomically rolls back canonical revision, pointer, receipt and usage; auth context restored
+NOTICE:  PASS signout, editor revocation and changed source after dispatch block result save
+NOTICE:  PASS rollback after build insertion leaves no source, build, outcome, ledger or replay receipt
+NOTICE:  PASS exact replay creates one canonical version, receipt, outcome and provider ledger entry; actor restored and no customer charge
+NOTICE:  PASS changed evidence/content replay and subsequent customer revision rejected
+
+===== check-generation-settlement.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS unknown and undispatched outcomes cannot settle or create cost evidence
+NOTICE:  PASS live fenced outcome binds exact saved result; stale, foreign and conflicting replays denied
+NOTICE:  PASS injected debit failure rolls back settlement and all reservation counters together
+NOTICE:  PASS accepted settlement atomically charges exact quoted credits once and releases unused vendor hold
+NOTICE:  PASS failed output records actual provider expense and charges no customer credits
+NOTICE:  PASS cancelled workers cannot attest; explicit operator reconciliation resolves actual cost without a refund
+NOTICE:  PASS exact integer cost above JavaScript safe range is preserved, stops dispatch and never expands customer charge
+NOTICE:  PASS accounting evidence is append-only; browser model details and direct worker ledger writes denied
+
+===== check-github-connection-refresh.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+             result              
+---------------------------------
+ PASS: github connection refresh
+(1 row)
+
+NOTICE:  PASS github refresh: nullable refresh_ciphertext text and refresh_expires_at timestamptz
+NOTICE:  PASS github refresh: only service_role can read or write the refresh columns
+NOTICE:  PASS github refresh: connections without a refresh token remain valid (no backfill)
+NOTICE:  PASS github refresh: refresh token and expiry are stored together
+NOTICE:  PASS github refresh: compare-and-swap lets exactly one renewal win and stale clears do nothing
+
+===== check-hosting-modes.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+                                                   result                                                   
+------------------------------------------------------------------------------------------------------------
+ PASS: hosting modes (existing links, republish, isolated copy, rollback, new projects, guards, privileges)
+(1 row)
+
+NOTICE:  PASS existing published link is served unchanged by both readers
+NOTICE:  PASS legacy republish: same address, portable document on the existing host, no script stored or enabled
+NOTICE:  PASS isolated publish: existing host keeps the portable copy; isolated host serves its copy and script; replays are exact
+NOTICE:  PASS rollback: republishing in the default mode removes the isolated copy and script; both hosts serve the portable copy
+NOTICE:  PASS new project publishes portable by default; offline hides it everywhere
+NOTICE:  PASS privileges: only the service role publishes; visitors read only published documents
+
+===== check-live-ai-spend-concurrency.sql (db rehearsal, dblink host retargeted; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  Daily AI provider spending limit reached
+DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000
+NOTICE:  PASS 8 users on 8 concurrent sessions against a limit for 3: exactly 3 admitted, reservations exact
+NOTICE:  PASS finish racing the sweeper: the call is closed exactly once (settled)
+
+===== check-live-ai-spend.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+                                                 result                                                  
+---------------------------------------------------------------------------------------------------------
+ PASS: live AI spend gate (fail closed, daily limits, actual/uncertain/overrun/expired) and run outcomes
+(1 row)
+
+NOTICE:  PASS gate ships disabled and refuses calls
+NOTICE:  PASS global and per-provider daily limits are both enforced; begin is idempotent
+NOTICE:  PASS actual cost settled once, unknown usage charged at the bound, overrun stops the provider until an operator clears it
+NOTICE:  PASS abandoned calls expire at their full bound
+NOTICE:  PASS UTC days: calls charge their own day, a new day is a fresh allowance; late usage reconciles once, never released twice; preflight reports only paused/limit
+NOTICE:  PASS run outcomes: settled (capped at the hold, excess absorbed), replayed, missing_hold, released_hold, released, exempt
+NOTICE:  PASS privileges: service role uses the gate; only the database owner sets limits; browsers have no access
+
+===== check-local-pilot-lock.sql SKIPPED: Postcondition of one developer stack (requires its dedicated local source fixture); not a property of the migration chain.
+
+===== check-locked-content.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS locked text edits denied
+NOTICE:  PASS edit bundled with unlock denied
+NOTICE:  PASS locked block removal denied
+NOTICE:  PASS locked section removal denied
+NOTICE:  PASS rejected changes leave revision unchanged
+NOTICE:  PASS separate unlock saved
+NOTICE:  PASS edits after saved unlock allowed
+
+===== check-mail-granted-scopes-upgrade.sql SKIPPED: Upgrade-path test: runs mid-chain with the 20261013270000 migration body substituted (scripts/rehearse-candidate.mjs). Already applied in production; unchanged in this candidate.
+
+===== check-mail-granted-scopes.sql (db rehearsal; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS scopes SQL: RLS/ACLs retained, no browser scope writes, service validation callable, immutable private invoker
+NOTICE:  PASS scopes SQL: service insert default empty, recorded Google/Microsoft scope formats valid, unrelated edits preserve grants
+NOTICE:  PASS scopes SQL: owner/editor/reviewer read own workspace evidence, outsider/anonymous denied, all browsers unable to fabricate grants
+NOTICE:  PASS scopes SQL: invalid content/null/duplicate/matrix/lower-bound/count/length rejected without mutation; 32 by 200 boundary and empty list valid
+
+===== check-plan-credit-allocations.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS upgrade in month 6: months 1-5 unchanged, month 6 topped up, month 7 at the new tier (incl. delayed catch-up)
+NOTICE:  PASS downgrade in month 6: month 6 unchanged, month 7 at the lower tier, no clawback
+NOTICE:  PASS repeated upgrades/downgrades: each month gets its historical tier plus in-month upgrades only; repeats idempotent
+NOTICE:  PASS monthly->yearly->monthly transitions at renewal boundaries: 14 allocations, no gap or duplicate
+NOTICE:  PASS month ends (Jan 31 anchor), leap years (Feb 29 anchor) and renewal boundaries
+NOTICE:  PASS cancellation: canceling keeps months, cancelled months not granted, reactivation resumes
+NOTICE:  PASS earlier single-reference grants honoured
+NOTICE:  PASS no inferred history: months before evidence open issues; paid initial payment resolves them; duplicates ignored
+NOTICE:  PASS subscription_update and refunded payments are stored but are not entitlement evidence
+NOTICE:  PASS manual review: owed and not-owed resolutions, audit note required, other months stay open
+NOTICE:  PASS recording: stable anchors, duplicates, out-of-order, extension, renewal, missing/inconsistent data refused, unknown tiers rejected
+NOTICE:  PASS permissions: only the service role records and reconciles; nobody grants with a caller-chosen tier
+NOTICE:  PASS job control: no overlapping runs, crashed lease recovered as abandoned, heartbeat/finish once, health, stalest-first selection
+
+===== check-plan-credit-concurrency.sql (db rehearsal, dblink host retargeted; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS concurrency: 4 duplicate observations + 4 duplicate payment deliveries + a racing reconcile -> 4 started allocations granted exactly once (4 x 850; 1 expired, 2 rolled over and 1 current), 1 period, 4 observations + 1 payment kept
+
+===== check-plan-credit-rollover.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+           result           
+----------------------------
+ PASS: plan credit rollover
+(1 row)
+
+NOTICE:  PASS rollover: credits stay spendable for two months after their month ends; older months lapse
+NOTICE:  PASS rollover: soonest-expiring (older) credits are spent first
+NOTICE:  PASS rollover: new lots are marked extended, so the one-time migration extension cannot re-run on them
+NOTICE:  PASS historical rollover: spent/held quantities preserved, release returns to original lot, expiry audit coherent, replay idempotent
+NOTICE:  PASS historical rollover: expired and exact-boundary lots stay lapsed, ledger reconciles
+NOTICE:  PASS rolled-over hold: expiry charges only actual usage and lapses the unused hold without resurrection
+
+===== check-plan-payment-refunds.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS refunds A: full refund of a subscription payment revokes that period's access and withholds its unused credits; refresh and reconcile cannot undo it
+NOTICE:  PASS refunds B: used credits make a payment ineligible; an external refund after use withholds the rest and opens the exposure for review
+NOTICE:  PASS refunds C: live holds block, released holds do not count, begin freezes spending, cancel restores, provider refund completes the case
+NOTICE:  PASS refunds D: partial refund holds, full refund reverses; duplicate/stale/conflicting/regressing evidence handled
+NOTICE:  PASS refunds E: open dispute holds and aborts live holds, won dispute restores, lost dispute revokes
+NOTICE:  PASS refunds F: subscription and pack credits are separate payments; spend order is deterministic; a pack refund leaves the subscription intact
+NOTICE:  PASS refunds G: with several payments only the refunded payment's credits and period are affected
+NOTICE:  PASS refunds H: a revocation is limited to its period; a later paid renewal grants access and credits
+NOTICE:  PASS refunds I: refund evidence arriving first reverses at once; a refunded period receives no allocation; a refund matched to its period later is applied then
+NOTICE:  PASS refunds J: unattributable and ambiguous payments are held for manual review
+NOTICE:  PASS refunds K: membership binding, plan, unpaid attempts, funding immutability and administrator boundaries
+NOTICE:  PASS refunds L: service-role entry points only; helpers and tables unreachable from clients
+
+===== check-proposal-storage.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS service insert and read
+NOTICE:  PASS service update denied
+NOTICE:  PASS service delete denied
+NOTICE:  PASS authenticated read denied
+NOTICE:  PASS anonymous read denied
+NOTICE:  PASS duplicate proposal rejected
+NOTICE:  PASS snapshot price mismatch rejected
+NOTICE:  PASS missing snapshot fields rejected
+NOTICE:  PASS preapproved snapshot rejected
+NOTICE:  PASS changed scope rejected
+NOTICE:  PASS RLS enabled
+
+===== check-publication-controller-boundary.sql (db rehearsal; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS lead validation stays available to authorized client writers without publication access
+NOTICE:  PASS actual publication attestation succeeds with final mail/lead schema and rejects unrelated helper
+
+===== check-publication-sandbox-journal.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS journal RLS, no caller table/snapshot grants, no cascade FK, indexed bounded discovery/retention, three restricted fixed-path private/public bridges
+
+===== check-publication-worker-authority.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS restricted role attributes, membership, explicit preparation/journal RPC grants, fixed search paths, no table or unrelated RPC access, legacy service grants
+NOTICE:  PASS SECURITY DEFINER rejects owner session without explicit SQL worker role
+
+===== check-review-link-views.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+         result          
+-------------------------
+ PASS: review link views
+(1 row)
+
+NOTICE:  PASS review views: columns, cascade, unique session, heartbeat definition
+NOTICE:  PASS review views: anon/authenticated execute only; members read every column except the session id; no browser writes
+NOTICE:  PASS review views: anonymous open, 1 s throttle, wall-clock cap, 60 s per heartbeat split in order, labels cleaned, opens counted
+NOTICE:  PASS review views: 4 h session cap, monotonic seconds, at most 200 pages per session
+NOTICE:  PASS review views: 15 malformed heartbeats refused with 22023 and nothing written
+NOTICE:  PASS review views: unknown, malformed, revoked and expired links refused with P0002
+NOTICE:  PASS review views: owner/member previews not counted, signed-in outsiders counted, RLS reads, no browser writes
+NOTICE:  PASS review views: 200 new sessions per link per day (MB429), existing sessions continue, window rolls
+NOTICE:  PASS review views: cascade on link removal
+
+===== check-site-address-changes.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS rename, refreshed document, old URL unavailable, idempotent retry
+NOTICE:  PASS stale request and invalid document leave original address untouched
+NOTICE:  PASS retired reservation, unrelated owner denial and role permissions
+NOTICE:  PASS at most 10 addresses per website; earlier addresses stay reusable
+
+===== check-site-address-namespace.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS namespace policy RLS, zero caller table/helper grants, owner-invoker configuration, private fixed paths, three write guards, unchanged service and worker scope
+
+===== check-site-analytics.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+        result        
+----------------------
+ PASS: site analytics
+(1 row)
+
+NOTICE:  PASS site analytics: columns, RLS enabled, recorder definition, indexes, comments
+NOTICE:  PASS site analytics: unconfigured refused (MB503); secret is a single row of at least 32 characters
+NOTICE:  PASS site analytics: signed views recorded; visitors deduplicated per day; (direct)/(unknown) defaults; breakdowns per dimension
+NOTICE:  PASS site analytics: bad/tampered/foreign signatures (MB401), stale and future stamps (MB408), 14 malformed inputs (22023), offline and unknown sites (MB404) rejected without effect
+NOTICE:  PASS site analytics: one visitor counts at most 200 views per site per day, then visitor_cap
+NOTICE:  PASS site analytics: 300 distinct values per dimension per day, overflow counted as (other), known values still increment
+NOTICE:  PASS site analytics: retention 2 days (hashes) / 400 days (totals), per site and global, opportunistic once per site per day
+NOTICE:  PASS site analytics: owner-only reads, browser roles cannot write, private tables and purge unreachable, anon records only with a valid signature
+NOTICE:  PASS site analytics: cascade on site removal
+
+===== check-site-badge-setting.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+          result          
+--------------------------
+ PASS: site badge setting
+(1 row)
+
+NOTICE:  PASS badge: shown by default on published websites
+NOTICE:  PASS badge: only the owner can change it
+NOTICE:  PASS badge: the owner removes it and the public reader reports branding=false
+NOTICE:  PASS badge: the new grant covers only the badge column
+NOTICE:  PASS badge: unpaid owner cannot bypass paid eligibility with direct database update
+
+===== check-site-enquiries.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+        result        
+----------------------
+ PASS: site enquiries
+(1 row)
+
+NOTICE:  PASS enquiries: off by default, accepted once, identical retry idempotent, changed retry refused
+NOTICE:  PASS enquiries: per-visitor limit enforced without blocking other visitors
+NOTICE:  PASS enquiries: refused for ineligible owners and static sites
+NOTICE:  PASS enquiries: gateway-only writes, owner-only reads
+
+===== check-site-sitemap.sql (db launch_suite, wrapped in begin/rollback; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS: site sitemap
+
+===== check-topup-fulfillment.sql (db makeborne_topup_verify; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+      makeborne_find_topup_payment      
+----------------------------------------
+ {"purchase": null, "knownPack": false}
+(1 row)
+
+NOTICE:  PASS top-ups: checkout request claims, immutable body, bounded retry and saved checkout resume
+NOTICE:  PASS top-ups: closed catalogue, replay binding and ownership
+NOTICE:  PASS top-ups: failed attempt cannot bind purchase or block out-of-order successful retry
+NOTICE:  PASS top-ups: single grant, duplicate/stale evidence and identity conflicts
+NOTICE:  PASS top-ups: dispute aborts funded reservations; winning restores original lot
+NOTICE:  PASS top-ups: partial/full refund, consumed exposure, no repeated debit or negative balance
+NOTICE:  PASS top-ups: refund before delivery grants nothing; globally unique checkout
+NOTICE:  PASS top-ups: fair due queue, durable cursor, monitoring, overlapping/expired lease refusal
+NOTICE:  PASS top-ups: browser roles refused; server RPC only, no direct table access
+
+===== check-topup-status.sql (db makeborne_topup_status_20261013; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS status SQL: restricted execute, explicit owner, stable private definer/public invoker, no table grants
+NOTICE:  PASS status SQL: all eight state/grant combinations, no-plan owner, exact projection, frozen historic amounts, missing/wrong owner/null, repeated reads unchanged
+NOTICE:  PASS status SQL: anonymous/authenticated RPC denial and direct service table denial
+
+===== check-trusted-publication.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS raw source v4 denied and previous live bytes preserved
+NOTICE:  PASS actor/session/scope, request replay, conflicting input and latest recovery
+NOTICE:  PASS exclusive claim, expiry/reclaim fence, immutable receipt, exact output/file hashes and old-live preservation
+NOTICE:  PASS revoked current authority blocks, atomic promotion exact bytes, lost-response replay after newer publication
+NOTICE:  PASS saved-version and publication CAS; exact old request recovery
+NOTICE:  PASS bounded retry, expired/failed preparations never change live
+NOTICE:  PASS source website offline path preserved
+NOTICE:  PASS RLS and exact service/browser grants, internal promotion/retired bypasses inaccessible
+
+===== check-unified-creation.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+NOTICE:  PASS: 14 atomic creation checks; fixtures rolled back
+
+===== check-unlimited-sites.sql (db launch_suite; exit 0)
+
+
+pg_restore: warning: errors ignored on restore: 6
+        result         
+-----------------------
+ PASS: unlimited sites
+(1 row)
+
+NOTICE:  PASS unlimited sites: 50 live websites in one workspace (old caps were 5 live, 20 total)
+NOTICE:  PASS fair use: the 51st new website in one day is refused with MB429
+NOTICE:  PASS fair use does not block republishing an existing site
+NOTICE:  PASS republishing and unpublishing retain immutable daily publication accounting
+NOTICE:  PASS rolling-day boundary reopens one slot; browser cannot erase publication events
+NOTICE:  PASS fair-use ceiling still refuses live site 1,001

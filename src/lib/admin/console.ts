@@ -4,10 +4,11 @@ import { RequestError } from "@/lib/server/http";
 import { subscriptionRevenue, type SubscriptionGroup } from "./revenue";
 
 /**
- * Read-only administrator data for /admin. Every call passes the verified
- * session's user id as the actor; the database functions refuse anyone who is
- * not an administrator (20261013100000_admin_console.sql), so this module adds
- * no authority of its own. Nothing here writes.
+ * Administrator data for /admin. Every call passes the verified session's user
+ * id as the actor; the database functions refuse anyone who is not an
+ * administrator (20261013100000_admin_console.sql), so this module adds no
+ * authority of its own. The only writes are the support refund begin/cancel
+ * steps at the end of this file.
  */
 
 export type AdminOverview = {
@@ -95,4 +96,44 @@ export function adminCustomers(actor: string, query: { search: string; filter: C
 export function adminCustomer(actor: string, customerId: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId)) return Promise.resolve(null);
   return call<AdminCustomerDetail | null>("makeborne_admin_user", { p_actor: actor, p_user: customerId });
+}
+
+// ---------------------------------------------------------------------------
+// Payments and the support refund workflow (20261020090000). Reads use the same
+// administrator check; begin/cancel are the console's only writes and change
+// credits only through the audited database functions. Refunds themselves are
+// issued by support in the Whop dashboard; the runtime key has no refund scope.
+// ---------------------------------------------------------------------------
+export const REFUND_DECISIONS = ["eligible", "not_eligible_used", "blocked_active_hold", "refund_in_progress", "already_refunded", "held_for_review",
+  "manual_review_unattributed", "manual_review_no_credits", "nothing_to_refund", "not_paid", "unknown_payment"] as const;
+export type RefundDecision = typeof REFUND_DECISIONS[number];
+export type AdminPaymentRefund = {
+  payment: string; kind: "subscription" | "credit_pack"; decision: RefundDecision;
+  provider: { state: string; principalCents: number; refundedCents: number; currency: string; dispute: string };
+  subscription: { membershipId: string; billingReason: string; paidAt: string; attribution: string; periodStart: string | null; periodEnd: string | null; consumedExposureCredits: number; revoked: boolean } | null;
+  creditPack: { orderId: string; packId: string; credits: number; withheldCredits: number; consumedExposureCredits: number } | null;
+  credits: { spent: number; unused: number; withheld: number; activeHolds: number; lots: { lot: number; source: string; amount: number; spent: number; held: number; lapsed: number; expiresAt: string | null }[] };
+  refundCase: { id: number; state: "pending" | "completed" | "canceled"; reason: string; withheldCredits: number; openedAt: string; closedAt: string | null; closeReason: string | null } | null;
+  usage?: { reference: string; status: string; held: number; charged: number | null; returned: number | null; createdAt: string }[];
+  ledger?: { kind: string; delta: number; reference: string; balanceAfter: number; createdAt: string }[];
+};
+export type AdminCustomerPayments = {
+  subscriptionPayments: AdminPaymentRefund[]; creditPackPayments: AdminPaymentRefund[];
+  revocations: { payment: string; membershipId: string; periodStart: string; periodEnd: string; reason: string; revokedAt: string; liftedAt: string | null }[];
+};
+
+export function adminCustomerPayments(actor: string, customerId: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId)) return Promise.resolve(null);
+  return call<AdminCustomerPayments>("makeborne_admin_user_payments", { p_actor: actor, p_user: customerId });
+}
+
+const PAYMENT_ID = /^pay_[A-Za-z0-9]{1,64}$/;
+/** Begin withholds the payment's unused credits under the wallet lock (eligible payments only); cancel restores them if Whop shows no refund. */
+export async function supportRefund(actor: string, action: "check" | "begin" | "cancel", paymentId: string, reason: string) {
+  if (!PAYMENT_ID.test(paymentId)) throw new RequestError("INVALID_PAYMENT", "Enter a Whop payment ID (pay_…).", 400);
+  const trimmed = reason.trim();
+  if (action !== "check" && (trimmed.length < 5 || trimmed.length > 500)) throw new RequestError("REASON_REQUIRED", "Give a reason of 5–500 characters.", 400);
+  const fn = action === "check" ? "makeborne_support_payment_refund_check" : action === "begin" ? "makeborne_support_payment_refund_begin" : "makeborne_support_payment_refund_cancel";
+  return call<AdminPaymentRefund & { began?: boolean; canceled?: boolean; blocked?: string; withheldCredits?: number; restoredCredits?: number }>(fn,
+    action === "check" ? { p_actor: actor, p_payment: paymentId } : { p_actor: actor, p_payment: paymentId, p_reason: trimmed });
 }

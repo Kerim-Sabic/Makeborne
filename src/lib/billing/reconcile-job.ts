@@ -8,8 +8,11 @@ import type { WhopMembership, WhopPaymentEvidence } from "./whop";
  *  2. refreshes the stalest bound memberships from Whop, oldest observation
  *     first, in pages, within a time budget (missed runs only mean more rows
  *     are due; nothing is skipped by date);
- *  3. for memberships with open no-evidence issues, reads their paid payments
- *     from Whop as evidence;
+ *  3. reads each refreshed membership's recent payments from Whop: retrieves
+ *     and reconciles each one's current state (refunds and disputes revoke the
+ *     refunded period's access and withhold its credits; Whop keeps a refunded
+ *     membership active), and records paid ones as allocation evidence for
+ *     memberships with open no-evidence issues;
  *  4. runs the database reconcile for every recorded entitlement;
  *  5. records the outcome (succeeded / partial / failed) with stats.
  * Every write is idempotent, so a retried or repeated run is safe.
@@ -26,6 +29,8 @@ export type ReconcileJobDeps = {
   recordObservation: (userId: string, observation: { membershipId: string; planId: string; status: string; paid: boolean;
     periodStart: string | null; periodEnd: string | null; source: "reconcile" }) => Promise<{ outcome: string; granted: number }>;
   recordPayment: (userId: string, membershipId: string, payment: WhopPaymentEvidence) => Promise<{ outcome: string; granted: number }>;
+  /** Retrieves one payment and records its verified state (makeborne_reconcile_plan_payment). */
+  reconcilePayment?: (userId: string, membership: WhopMembership, paymentId: string) => Promise<{ outcome: string; state?: string }>;
   isActive: (membership: WhopMembership) => boolean;
   hasCreditRule: (planId: string) => boolean;
   companyId: string;
@@ -33,21 +38,21 @@ export type ReconcileJobDeps = {
   log?: (event: Record<string, unknown>) => void;
 };
 
-export type ReconcileJobOptions = { pageSize?: number; maxMemberships?: number; staleSeconds?: number; leaseSeconds?: number; budgetMs?: number };
+export type ReconcileJobOptions = { pageSize?: number; maxMemberships?: number; staleSeconds?: number; leaseSeconds?: number; budgetMs?: number; paymentLookbackDays?: number };
 
 export type ReconcileJobResult = {
   status: "skipped" | "succeeded" | "partial" | "failed"; runId: number | null;
   stats: { processed: number; failed: number; bindingMismatch: number; unknownPlan: number; observationsGranted: number;
-    paymentsRecorded: number; paymentsGranted: number; paymentPagesIncomplete: number; paymentEvidenceSkipped: number; reconciledMemberships: number; reconcileGranted: number; expiryWallets: number; expiredProviderCalls: number; budgetExhausted: boolean; backlog: boolean };
+    paymentsRecorded: number; paymentsGranted: number; paymentsReconciled: number; paymentsNotFunded: number; paymentPagesIncomplete: number; paymentEvidenceSkipped: number; reconciledMemberships: number; reconcileGranted: number; expiryWallets: number; expiredProviderCalls: number; budgetExhausted: boolean; backlog: boolean };
   errors: string[];
 };
 
 export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options: ReconcileJobOptions = {}): Promise<ReconcileJobResult> {
   const now = deps.now ?? Date.now, started = now();
   const pageSize = options.pageSize ?? 50, maxMemberships = options.maxMemberships ?? 200, staleSeconds = options.staleSeconds ?? 20 * 3600;
-  const leaseSeconds = options.leaseSeconds ?? 300, budgetMs = options.budgetMs ?? 240_000;
+  const leaseSeconds = options.leaseSeconds ?? 300, budgetMs = options.budgetMs ?? 240_000, lookbackMs = (options.paymentLookbackDays ?? 120) * 86_400_000;
   const stats: ReconcileJobResult["stats"] = { processed: 0, failed: 0, bindingMismatch: 0, unknownPlan: 0, observationsGranted: 0,
-    paymentsRecorded: 0, paymentsGranted: 0, paymentPagesIncomplete: 0, paymentEvidenceSkipped: 0, reconciledMemberships: 0, reconcileGranted: 0, expiryWallets: 0, expiredProviderCalls: 0, budgetExhausted: false, backlog: false };
+    paymentsRecorded: 0, paymentsGranted: 0, paymentsReconciled: 0, paymentsNotFunded: 0, paymentPagesIncomplete: 0, paymentEvidenceSkipped: 0, reconciledMemberships: 0, reconcileGranted: 0, expiryWallets: 0, expiredProviderCalls: 0, budgetExhausted: false, backlog: false };
   const errors: string[] = [];
   const begin = await deps.rpc("makeborne_billing_job_begin", { p_job: "plan_credits", p_lease_seconds: leaseSeconds });
   if (begin.error) throw new Error(`Job lease unavailable: ${begin.error.code ?? begin.error.message ?? "error"}`);
@@ -88,11 +93,18 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
           const observed = await deps.recordObservation(row.user_id, { membershipId: row.membership_id, planId: membership.plan.id, status: membership.status,
             paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "reconcile" });
           stats.observationsGranted += observed.granted;
-          if (row.needs_payments) {
+          if (row.needs_payments || deps.reconcilePayment) {
             const list = await deps.listPayments(row.membership_id);
             if (!list.complete) stats.paymentPagesIncomplete++;
             stats.paymentEvidenceSkipped += list.skipped;
             for (const payment of list.payments) {
+              // Current state first: a refund recorded here blocks this period's allocation below.
+              if (deps.reconcilePayment && Date.parse(payment.paidAt) > now() - lookbackMs) {
+                const reconciled = await deps.reconcilePayment(row.user_id, membership, payment.id);
+                stats.paymentsReconciled++;
+                if (reconciled.state && reconciled.state !== "funded") stats.paymentsNotFunded++;
+              }
+              if (!row.needs_payments) continue;
               const recorded = await deps.recordPayment(row.user_id, row.membership_id, payment);
               if (recorded.outcome !== "duplicate") stats.paymentsRecorded++;
               stats.paymentsGranted += recorded.granted;

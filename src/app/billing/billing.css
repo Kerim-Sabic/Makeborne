@@ -244,3 +244,12 @@
 .billing-back,.billing-admin-link{font-size:13px}
 .billing-balance-bottom,.billing-metrics span{font-size:12px}
 .billing-effort-preview small{font-size:12px}
+.billing-autotopup{margin-top:24px;padding:24px 28px;border:1px solid #e2ddeb;border-radius:18px;background:#fff;display:grid;gap:12px;font-size:14px;line-height:1.6;color:#4d4558}
+.billing-autotopup h2{font-size:20px;letter-spacing:-.4px;font-weight:500;margin:0;color:#211c2a}.billing-autotopup p{margin:0}
+.billing-autotopup-choices{display:flex;flex-wrap:wrap;gap:12px}.billing-autotopup-choices label{display:grid;gap:4px;font-size:13px}
+.billing-autotopup select{height:36px;padding:0 10px;border:1px solid #d9d2e4;border-radius:10px;background:#fff;font-size:14px;color:#211c2a}
+.billing-autotopup-consent{padding:12px 14px;border-radius:12px;background:#f7f5fb;font-size:13px}.billing-autotopup-note{font-size:13px;color:#7a5a12}
+.billing-autotopup-confirm{display:flex;gap:8px;align-items:center;justify-content:flex-start;font-size:14px;color:#211c2a}
+.billing-autotopup-confirm input{flex:none;width:18px;height:18px;margin:0;padding:0;accent-color:#211c2a}
+.billing-autotopup button{justify-self:start;height:38px;padding:0 16px;border:0;border-radius:10px;background:#211c2a;color:#fff;font-size:14px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.billing-autotopup button:disabled{opacity:.5;cursor:default}.billing-autotopup .billing-autotopup-secondary{background:#fff;color:#211c2a;border:1px solid #d9d2e4}
