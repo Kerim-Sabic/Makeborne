@@ -10,6 +10,7 @@ import { aiStop } from "../ai/failure";
 import { holdIsActive, releaseRun, settleRun, type CreditHold } from "../credits/server";
 import { runBuilder, type BuilderEvent, type BuilderRun } from "./agent";
 import type { ProjectFiles } from "./files";
+import { compileProblems } from "./compile";
 import { aiCostUsdPerCredit } from "./pricing";
 import { finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
 
@@ -36,6 +37,7 @@ export type WebsiteBuildInput = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: BuilderRun["storeImage"];
+  compile?: BuilderRun["compile"];
 };
 
 /** Logs a spending-control stop privately (operator diagnostics stay out of the response). */
@@ -52,6 +54,7 @@ export function logAiStop(reference: string, error: unknown) {
  */
 export function websiteBuildResponse(input: WebsiteBuildInput): Response {
   const { client, hold, spend, artifact, current, files, reviewing } = input;
+  const compile = input.compile ?? compileProblems;
   const rate = input.operation ? input.operation.rateMicrousd / 1e6 : aiCostUsdPerCredit();
   const measured = () => spend.customerCredits(rate);
   const encoder = new TextEncoder();
@@ -74,7 +77,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
           result = await runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
             request: input.request, context: input.context, attachments: input.attachments, emit, signal: controller.signal,
             deadline: Date.now() + (input.maxDuration - 20) * 1000, limits: input.limits,
-            anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs });
+            anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile });
         } catch (error) {
           // A step was cut off (time limit or provider error): keep finished work if it is valid.
           if (!files.changed.size || (error as { code?: string }).code === "REFUSED" || aiStop(error)) throw error;
@@ -97,6 +100,8 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         }
         let source;
         try { source = files.toSource(); } catch { source = null; }
+        // finish compiles; progress kept without it is compiled here. A version that does not build is never saved.
+        if (source && !result.finished && files.changed.size && (await compile(files.files)).length) source = null;
         if (!source || !files.changed.size && !result.finished) {
           if (input.operation) {
             emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "incomplete", { ...detail, code: "BUILD_INCOMPLETE", message: "The builder stopped before a usable change was ready. Your previous saved version is safe.", version: artifact.current_version, changed: false, finished: false })));
@@ -141,8 +146,8 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         if (input.operation) {
           const stop = logAiStop(hold.reference, error);
           let candidate: OperationCandidate | undefined;
-          if (files.changed.size) try { const source = files.toSource(); candidate = { content: { schemaVersion: 1, kind: "website", title: current.content.title, sections: [], websiteSource: source }, style: current.style,
-            assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])], summary: "Recovered the work completed before the builder stopped.", expectedVersion: artifact.current_version }; } catch { /* Only validated source is offered for recovery. */ }
+          if (files.changed.size) try { const source = files.toSource(); if ((await compile(files.files)).length) throw new Error("does not compile"); candidate = { content: { schemaVersion: 1, kind: "website", title: current.content.title, sections: [], websiteSource: source }, style: current.style,
+            assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])], summary: "Recovered the work completed before the builder stopped.", expectedVersion: artifact.current_version }; } catch { /* Only validated source that builds is offered for recovery. */ }
           emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false }, candidate));
           return;
         }

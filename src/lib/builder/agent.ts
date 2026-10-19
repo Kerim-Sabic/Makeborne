@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { EffortLevel } from "../routing/effort";
 import { WebsiteDesignDirectionSchema } from "../projects/website-source";
 import { FileToolError, ProjectFiles } from "./files";
+import { compileProblems } from "./compile";
 import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage } from "./images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
@@ -92,13 +93,15 @@ export type BuilderRun = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: (request: { name: string; prompt: string; model: string }, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
+  /** Compile check at finish (tests inject one); production bundles with esbuild. */
+  compile?: (files: ReadonlyMap<string, string>) => Promise<string[]>;
 };
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds. */
 export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; stopped: string | null };
 
 /** Agentic edit loop: Claude edits the in-memory project through tools until it
- * calls finish with a project that passes static checks, or the budget runs out. */
+ * calls finish with a project that passes static checks and compiles, or the budget runs out. */
 export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const policy = { ...BUILDER_EFFORT[run.effort], ...run.limits };
   const model = builderModel();
@@ -257,6 +260,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (input.routes?.length) run.files.routes = input.routes.some(route => route.path === "/") ? input.routes : [{ path: "/", title: "Home" }, ...input.routes];
             if (input.design) run.files.design = input.design;
             if (!problems.length) { try { run.files.toSource(); } catch (error) { problems.push((error as Error).message); } }
+            // A saved version must build: compile once the static checks pass.
+            if (!problems.length) { run.emit({ type: "status", message: "Checking that the website builds…" }); problems.push(...await (run.compile ?? compileProblems)(run.files.files)); }
             if (problems.length) { fail(`Not finished yet. Fix these problems, then call finish again:\n- ${problems.join("\n- ")}`); break; }
             summary = input.summary; title = input.title; finished = true;
             results.push({ type: "tool_result", tool_use_id: use.id, content: "Saved." });

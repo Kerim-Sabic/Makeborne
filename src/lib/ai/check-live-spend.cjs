@@ -338,6 +338,39 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
     assert.equal(events.at(-1).type, "done");
   });
 
+  const brokenApp = "export default function App() { return <main><h1>Updated</main>; }";
+  await check("website run: finish compiles the site; build errors go back to the model and only the fixed version is saved", async () => {
+    const hold = billing.hold(50);
+    const { spend } = spendFor(hold);
+    const fake = fakeAnthropic([
+      { usage: { input_tokens: 5000, output_tokens: 900 }, content: [toolUse("write_file", { path: "src/App.tsx", content: brokenApp }), toolUse("finish", { summary: "Done.", title: "T" })] },
+      { usage: { input_tokens: 6000, output_tokens: 900 }, content: [toolUse("write_file", { path: "src/App.tsx", content: app }), toolUse("finish", { summary: "Fixed.", title: "T" })] }]);
+    const { response, db } = websiteRun(hold, spend, fake.client);
+    const events = await sse(response);
+    const refused = events.find(event => event.type === "tool_error" && event.tool === "finish");
+    assert.ok(refused && /does not compile/.test(refused.message) && /src\/App\.tsx:1:/.test(refused.message), JSON.stringify(refused));
+    const feedback = fake.log.streams[1].messages.flatMap(message => Array.isArray(message.content) ? message.content : []).find(block => block.type === "tool_result" && block.is_error);
+    assert.match(feedback?.content ?? "", /does not compile[\s\S]*src\/App\.tsx/, "the build errors reach the model as finish problems");
+    assert.equal(db.saves.length, 1);
+    const saved = db.saves[0].args.p_content.websiteSource.files.find(file => file.path === "src/App.tsx").content;
+    assert.equal(saved, app);
+    assert.equal(events.at(-1).type, "done"); assert.equal(events.at(-1).finished, true);
+  });
+
+  await check("website run: progress cut off before finish is not saved when it does not compile", async () => {
+    const hold = billing.hold(50);
+    const { spend } = spendFor(hold);
+    const json = JSON.stringify({ path: "src/App.tsx", content: brokenApp });
+    const fake = fakeAnthropic([{ started: true, partialOutput: 3000, error: midStreamError(), events: [
+      { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "tu_1", name: "write_file", input: {} } },
+      { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: json } },
+      { type: "content_block_stop", index: 0 }] }]);
+    const { response, db } = websiteRun(hold, spend, fake.client);
+    const events = await sse(response);
+    assert.equal(db.saves.length, 0, "a version that does not build is never saved");
+    assert.equal(events.at(-1).code, "BUILD_INCOMPLETE");
+  });
+
   await check("website run: images budgeted per call; a failed image costs its bound but is not charged", async () => {
     const hold = billing.hold(50);
     const { spend } = spendFor(hold);
