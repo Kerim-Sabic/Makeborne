@@ -1738,7 +1738,7 @@ export function CloudEditor({
         })()}
         {view === "preview" && style && (preview === "outline" || preview === "start-draft") && <div className="cloud-workbench-preview">
           {preview === "outline" && useLiveBuilder && <p className="cloud-workbench-format" role="note">
-            {format === "website-design" ? "This website is saved as a static design." : `This ${artifact.kind} is saved as an outline of its text.`} You can read, edit and export it as it is from the Edit tab.
+            {format === "website-design" ? "This website is saved as a static design." : `This ${artifact.kind} is saved as an outline of its text.`} You can read and edit it as it is from the Edit tab, and download a copy of the draft there.
             {" "}A build in the chat saves a new {artifact.kind === "website" ? "website project" : `designed ${artifact.kind}`} as the next version; this version stays in History.
           </p>}
           {preview === "start-draft" ? <div className="cloud-workbench-empty">

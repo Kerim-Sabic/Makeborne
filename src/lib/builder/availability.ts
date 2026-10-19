@@ -31,7 +31,8 @@ export function parseBuilderAvailability(value: unknown): BuilderAvailability {
 
 /** Shown in the builder while it is configured but cannot start new work. */
 export const BUILDER_WAITING_COPY: Record<Exclude<BuilderState, "ready" | "off">, string> = {
-  paused: "AI building is paused right now. Your saved work is safe, and you can still read, edit and export it.",
+  // Exports differ by format and environment (production has no standard export for outline records), so none is promised here.
+  paused: "AI building is paused right now. Your saved work is safe, and you can still open and edit it.",
   limit: "Today's AI building capacity has been reached. Your saved work is safe; please try again later.",
   unavailable: "AI building is temporarily unavailable. Your saved work is safe; please try again shortly.",
 };

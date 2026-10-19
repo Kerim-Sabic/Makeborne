@@ -95,6 +95,7 @@ const get = async () => {
       assert.deepEqual(parseBuilderAvailability({ state, configured: true, available: false }), { available: false, configured: true, state });
       assert.match(BUILDER_WAITING_COPY[state], /saved work is safe/);
       assert.doesNotMatch(BUILDER_WAITING_COPY[state], /charged/, "said before any request, so nothing to refund");
+      assert.doesNotMatch(BUILDER_WAITING_COPY[state], /export/i, "production has no standard export for outline records, so the builder copy promises none");
     }
   });
   console.log(`PASS ${passed} builder availability checks: configured, runnable and paused states are distinct; database and providers mocked.`);

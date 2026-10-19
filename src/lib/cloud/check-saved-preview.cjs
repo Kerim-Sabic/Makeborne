@@ -116,4 +116,12 @@ check("the editor selects previews through choosePreview and no longer hides sav
   for (const condition of invitations) assert.match(condition, /preview === "start-builder"/, "the empty-builder screen appears only when nothing is saved");
   assert.match(source, /if \(!useLiveBuilder \|\| !builder\.available \|\| !format \|\| hasBuilderSource\(format\)/, "auto-start needs a runnable builder and no builder source");
 });
+check("the saved-format notice promises only what production delivers (no standard export there)", () => {
+  const studio = fs.readFileSync(path.join(__dirname, "..", "..", "components", "cloud-studio.tsx"), "utf8");
+  const notice = studio.slice(studio.indexOf('className="cloud-workbench-format"'), studio.indexOf("</p>", studio.indexOf('className="cloud-workbench-format"')));
+  assert.ok(notice.length > 0, "notice found");
+  const exportRoute = fs.readFileSync(path.join(__dirname, "..", "..", "app", "api", "export", "route.ts"), "utf8");
+  if (/process\.env\.NODE_ENV === "production"\)\s*throw new RequestError\(\s*"EXPORT_NOT_CONFIGURED"/.test(exportRoute))
+    assert.doesNotMatch(notice, /export/i, "outline and static-design records cannot be exported in production; the notice must not offer it");
+});
 console.log(`PASS ${count} saved-content compatibility checks: legacy books, decks and websites stay visible and unchanged in every builder state.`);
