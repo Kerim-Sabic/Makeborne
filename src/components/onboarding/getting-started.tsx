@@ -111,7 +111,7 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
           <Link className="gs-link" href="/help" target="_blank"><MessageCircle size={13} />Help center</Link>
         </footer>
       </section>}
-      <button type="button" className="gs-pill" aria-expanded={open} aria-label={`Getting started, ${done} of ${steps.length} done`} onClick={() => setOpen(!open)}>
+      <button type="button" className="gs-pill" aria-expanded={open} onClick={() => setOpen(!open)}>
         <svg className="gs-ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" /><circle cx="18" cy="18" r="15" className="is-fill" style={{ strokeDasharray: `${done / steps.length * 94.2} 94.2` }} /></svg>
         <span><strong>{complete ? "All set" : "Getting started"}</strong><small>{done}/{steps.length} done</small></span>
       </button>

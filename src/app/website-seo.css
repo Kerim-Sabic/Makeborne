@@ -7,11 +7,11 @@
 .ws-preview-text { font-size:13px; line-height:1.5; color:#4d5156; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .ws-error { margin:0; padding:8px 10px; border-radius:8px; background:#fff4f2; color:#9a2f2a; font-size:12.5px; }
 .ws-group { display:grid; gap:10px; margin:0; padding:12px; border:1px solid #ebe6f0; border-radius:12px; min-width:0; }
-.ws-group legend { padding:0 4px; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#8a7f93; }
-.ws-hint { margin:-4px 0 0; font-size:12px; color:#8a7f93; }
+.ws-group legend { padding:0 4px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); }
+.ws-hint { margin:-4px 0 0; font-size:12px; color:var(--text-muted); }
 .ws-field { display:grid; gap:4px; min-width:0; font-size:12px; color:#5b4d67; }
 .ws-field > span { display:flex; justify-content:space-between; gap:8px; font-weight:600; }
-.ws-field small { font-weight:500; color:#a59cad; }
+.ws-field small { font-weight:500; font-size:11px; color:var(--text-muted); }
 .ws input:not([type="checkbox"]), .ws textarea, .ws select { width:100%; min-width:0; padding:7px 9px; border:1px solid #e3dde9; border-radius:8px; background:#fff; color:#2f2637; font:inherit; font-size:13px; }
 .ws textarea { resize:vertical; line-height:1.45; }
 .ws input:focus-visible, .ws textarea:focus-visible, .ws select:focus-visible, .ws button:focus-visible { outline:2px solid #7d5fb0; outline-offset:1px; }

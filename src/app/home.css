@@ -160,8 +160,8 @@
 .mk-client-workflow li{position:relative;display:flex;align-items:flex-start;gap:15px;padding:0 0 25px}
 .mk-client-workflow li:last-child{padding-bottom:0}
 .mk-client-workflow li:not(:last-child)::after{content:"";position:absolute;left:14px;top:33px;bottom:6px;width:1px;background:#e5deee}
-.mk-workflow-step{display:grid;place-items:center;flex:0 0 29px;height:29px;border:1px solid #e4ddec;border-radius:50%;background:#f9f7fc;color:#8c7b9f;font-size:10px;font-weight:500;font-variant-numeric:tabular-nums}
-.mk-client-workflow li:last-child .mk-workflow-step{background:#f0ecf7;border-color:#e4ddec;color:#7b6796}
+.mk-workflow-step{display:grid;place-items:center;flex:0 0 29px;height:29px;border:1px solid #e4ddec;border-radius:50%;background:#f9f7fc;color:#6f5f86;font-size:10px;font-weight:500;font-variant-numeric:tabular-nums}
+.mk-client-workflow li:last-child .mk-workflow-step{background:#f0ecf7;border-color:#e4ddec;color:#6f5f86}
 .mk-client-workflow h3{margin:1px 0 5px;font-size:13px;font-weight:550;line-height:1.5;letter-spacing:-.15px;color:#4c4257}
 .mk-client-workflow p{margin:0;font-size:12px;line-height:1.65;color:#746b7f;text-wrap:pretty}
 .mk-footer{padding:38px max(48px,calc((100vw - 1224px)/2)) 0;background:#fff;border-top:1px solid #eeecf1;color:#8c8596;font-size:12px}

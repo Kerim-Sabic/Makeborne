@@ -2753,11 +2753,11 @@ label input[type="color"] {
   font-size: 12px;
 }
 .cloud-version p {
-  font-size: 10px;
+  font-size: 12px;
   margin: 6px 0;
 }
 .cloud-version small {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
 }
 .cloud-conflict,

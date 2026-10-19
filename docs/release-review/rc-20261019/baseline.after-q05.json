@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "entries": {
+    "contrast": {
+      "editor@1440": {
+        "lowContrastCount": 0
+      },
+      "editor@375": {
+        "lowContrastCount": 0
+      },
+      "studio@1440": {
+        "lowContrastCount": 0
+      },
+      "studio@375": {
+        "lowContrastCount": 0
+      }
+    },
+    "funnel": {
+      "knownBlocked": []
+    },
+    "quality": {
+      "editor-toolbar@800": {
+        "toolbarClipped": false,
+        "overflowPx": 0
+      },
+      "editor@1440": {
+        "axeCritical": 0,
+        "axeSerious": 0,
+        "cls": 0.1957,
+        "lcpMs": 972,
+        "overflowPx": 0
+      },
+      "editor@375": {
+        "axeCritical": 0,
+        "axeSerious": 0,
+        "cls": 0.1293,
+        "lcpMs": 968,
+        "overflowPx": 0
+      },
+      "home@1440": {
+        "axeCritical": 0,
+        "axeSerious": 0,
+        "cls": 0,
+        "lcpMs": 140,
+        "overflowPx": 0
+      },
+      "home@375": {
+        "axeCritical": 0,
+        "axeSerious": 0,
+        "cls": 0,
+        "lcpMs": 112,
+        "overflowPx": 0
+      },
+      "studio@1440": {
+        "axeCritical": 0,
+        "axeSerious": 0,
+        "cls": 0.0256,
+        "lcpMs": 396,
+        "overflowPx": 0
+      },
+      "studio@375": {
+        "axeCritical": 0,
+        "axeSerious": 0,
+        "cls": 0.0085,
+        "lcpMs": 348,
+        "overflowPx": 0
+      }
+    }
+  },
+  "qualityBar": "1 (2026-10-18)",
+  "updatedAt": "2026-10-19T10:27:53.978Z",
+  "source": "outputs/eval/e2e/launch-core-residual (worktree jolly-engelbart-d24df6: dedf6d1 + q05-residual-on-launch-core.patch)",
+  "measuredOn": "next dev on http://127.0.0.1:3210 (development build, provider keys blank), Chromium headless, device scale 1",
+  "changes": [
+    {
+      "at": "2026-10-18T23:50:09.244Z",
+      "entry": "funnel.knownBlocked",
+      "from": [
+        "review-comment",
+        "review-decision"
+      ],
+      "to": [],
+      "why": "The isolated stack received migration 20261013160000_client_review_view_integrity (with the other 24 missing migrations) on 2026-10-18; the e2e run outputs/eval/e2e/20261018T234724Z passed review-comment and review-decision for real, so a 503 there is now a regression. Other entries unchanged (that run reproduced them exactly)."
+    },
+    {
+      "at": "2026-10-19T10:27:53.978Z",
+      "entry": "contrast.*.lowContrastCount",
+      "from": {
+        "studio1440": 39,
+        "studio375": 35,
+        "editor1440": 8,
+        "editor375": 8
+      },
+      "to": 0,
+      "why": "feature/launch-core 734d794 (--text-muted token, 12px labels) measured 0 at all four keys on the isolated stack (outputs/eval/e2e/launch-core-asis), unchanged with the Q05 residual patch (launch-core-residual)."
+    },
+    {
+      "at": "2026-10-19T10:27:53.978Z",
+      "entry": "quality.editor-toolbar@800.toolbarClipped",
+      "from": true,
+      "to": false,
+      "why": "launch-core icon tabs + More menu under 960px: 0px hidden at 800 (was 39px); browser check: one row, nothing clipped at 768/800/820/900/960/1440, Download source in More."
+    },
+    {
+      "at": "2026-10-19T10:27:53.978Z",
+      "entry": "quality.*.axeSerious",
+      "from": {
+        "studio": 2,
+        "editor": 1,
+        "home": 2
+      },
+      "to": 0,
+      "why": "launch-core fixed editor (0) and studio colour-contrast; the Q05 residual patch removed the aria-labels that contradicted visible text (.creation-effort-trigger, .mbg-card, .gs-pill) and the home/gallery pale greys: run launch-core-residual measured 0 at all six keys."
+    }
+  ]
+}
