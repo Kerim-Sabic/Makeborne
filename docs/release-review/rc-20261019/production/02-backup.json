@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-19T12:02:18.005Z",
+  "ref": "rklojnmmsmhwnkbzuidp",
+  "file": "production-before-a6e70c6-20261019120157.dump",
+  "bytes": 1827363,
+  "sha256": "6eaed14fe9ddaa9046a517c78d1c3cd3ffb96e67ea5f5824f24f0a172e6b7eb8",
+  "entries": 2335,
+  "fullDecodePassed": true,
+  "location": "owner-private ignored folder work/release-rc-20261019-production/"
+}

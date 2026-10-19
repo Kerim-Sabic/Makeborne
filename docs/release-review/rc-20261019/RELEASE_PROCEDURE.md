@@ -20,7 +20,9 @@ credit packs closed, `MAKEBORNE_TRUSTED_PUBLICATION_ENABLED` unset, enquiries fo
    explicit production target (pattern: `work/release-studio-parity-qualified-20261017/production-apply.mjs`), and record
    version `20261019090000` in `supabase_migrations.schema_migrations`. **Never `supabase db push` against the linked project.**
 3. Verify read-only: 94 migrations; tables `makeborne_private.app_error_groups`, `app_error_days`, `telemetry_salts`,
-   `studio_visits` exist with RLS on and no client grants; `makeborne_record_app_error`, `makeborne_record_studio_visit`,
+   `studio_visits` exist with no SELECT/INSERT/UPDATE/DELETE privilege for `anon` or `authenticated` and the private schema
+   is not API-exposed (criterion corrected during execution: these private tables have RLS off, like two pre-existing private
+   tables, so "RLS on" was mis-specified; enabling RLS on them is optional hardening); `makeborne_record_app_error`, `makeborne_record_studio_visit`,
    `makeborne_admin_health` are executable by `service_role` only; Security Advisor shows no new warning.
    The migration is additive and unused by `f696b3a`, so it is safe before the app changes.
 

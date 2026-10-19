@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-19T12:02:25.204Z",
+  "ref": "rklojnmmsmhwnkbzuidp",
+  "candidateCommit": "a6e70c6f577aa5bf7654e72cd8d85b9977bd247e",
+  "approved": true,
+  "file": "20261019090000_app_observability.sql",
+  "sha256": "c05a3c7b974a15331150b56a0b43976da109f3b3c3e86f484d6f16fc1b1efeb4",
+  "passed": true,
+  "dryRunMatched": true,
+  "afterCount": 94,
+  "completedAt": "2026-10-19T12:02:27.472Z"
+}
