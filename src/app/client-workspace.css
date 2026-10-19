@@ -138,7 +138,7 @@
   border-radius: 8px;
   padding: 0 12px;
   min-height: 44px;
-  color: #72727c;
+  color: var(--text-muted);
   max-width: 340px;
   width: 100%;
   margin: 0 !important;
@@ -183,7 +183,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #72727c;
+  color: var(--text-muted);
   margin-bottom: 23px;
 }
 .cw-avatar {
@@ -236,7 +236,7 @@
 }
 .cw-empty > svg {
   margin: 0 auto 15px;
-  color: #72727c;
+  color: var(--text-muted);
 }
 .cw-empty h3 {
   font-size: 18px;

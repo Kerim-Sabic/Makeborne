@@ -7,8 +7,9 @@ const ids={account:'11111111-1111-4111-8111-111111111111',workspace:'22222222-22
 const project=new ProjectFiles();project.write('index.html','<html><head><title>Fixture</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>');project.write('src/main.tsx','import{createRoot}from"react-dom/client";createRoot(document.getElementById("root")).render(<h1>Fixture</h1>)');project.write('src/style.css','body{color:red}');
 const source=project.toSource();
 const scope=JSON.stringify(ids);
+const estimates={effort:'medium',firstBuild:{website:{min:16,median:32,max:45,samples:20},presentation:{min:7,median:8,max:9,samples:2},book:{min:9,median:12,max:14,samples:2}},reviewRound:{min:8,median:9,max:11,samples:20}};
 const fixture=`import React,{useState}from'react';import{createRoot}from'react-dom/client';import LiveBuilder from'./src/components/live-builder';
-const ids=${scope};function App(){const[version,setVersion]=useState(1),[files,setFiles]=useState({});return <LiveBuilder accountId={ids.account} workspaceId={ids.workspace} artifactId={ids.artifact} version={version} history={[]} baseFiles={files} baseAssets={[]} onLive={v=>{window.live=v;}} onSaved={async()=>{setVersion(window.savedVersion??version);setFiles(window.savedFiles??{});}}/>}createRoot(document.getElementById('root')).render(<App/>);`;
+const ids=${scope};const estimates=${JSON.stringify(estimates)};function App(){const[version,setVersion]=useState(1),[files,setFiles]=useState({});return <LiveBuilder accountId={ids.account} workspaceId={ids.workspace} artifactId={ids.artifact} version={version} history={[]} baseFiles={files} baseAssets={[]} estimates={estimates} onLive={v=>{window.live=v;}} onSaved={async()=>{setVersion(window.savedVersion??version);setFiles(window.savedFiles??{});}}/>}createRoot(document.getElementById('root')).render(<App/>);`;
 const stablePlanner=`const p={active:null,restored:null,operation:null,checking:false,recoveryNotice:'',ready:true,hasPrevious:false,recoverablePlan:null,run:async()=>{},edit:()=>{},markBuilt:()=>{},refreshOperation:async()=>null,recoverPlan:async()=>null};export function usePlanMode(){return p}`;
 async function main(){
  const output=await build({stdin:{contents:fixture,loader:'jsx',resolveDir:process.cwd()},write:false,bundle:true,platform:'browser',jsx:'automatic',define:{'process.env':'{}'},plugins:[{name:'fixture',setup(b){
@@ -31,6 +32,8 @@ async function main(){
    if(recovery){operation={...operation,recoverable:true,canContinue:true,pendingKind:'continuation'};}
    const body=()=>({operation,result:{runId:ids.run,version,charged:operation.chargedCredits,changed:true,finished:!operation.pendingKind},recovery});
    await page.route('**/api/credits',r=>r.fulfill({json:{available:500,unlimited:false}}));
+   // First builds ask brief questions first; an empty tailored set starts the build directly.
+   await page.route('**/api/build/questions',r=>r.fulfill({json:{questions:[]}}));
    await page.route('**/api/build/operations**',async r=>{
     const req=r.request(),data=req.postDataJSON();requests.push({path:'operation',method:req.method(),data});
     if(req.method()==='PATCH'){operation={...operation,revision:2,authorizedCredits:100,remainingCredits:100-operation.chargedCredits,status:'active'};}
@@ -39,6 +42,7 @@ async function main(){
    });
    await page.route('**/api/build',async r=>{
     const data=r.request().postDataJSON();requests.push({path:'build',method:r.request().method(),data});buildCount++;
+    if(mode==='fail'){await r.fulfill({headers:{'Content-Type':'text/event-stream'},body:['data: '+JSON.stringify({type:'operation',operation}),'data: '+JSON.stringify({type:'error',code:'BUILD_FAILED',message:'The builder stopped.',charged:0,operation})].join('\n\n')+'\n\n'});return;}
     if(mode==='review'&&buildCount===2){operation={...operation,status:'paused',pendingKind:'review',canContinue:true};await r.fulfill({status:409,json:{error:{code:'OPERATION_BUDGET_REACHED',message:'Approve more credits to review.'},operation}});return;}
     const first=buildCount===1,review=data.mode==='review';version++;
     operation={...operation,lastVersion:version,chargedCredits:mode==='cap'&&first?50:mode==='review'&&first?49:operation.chargedCredits+10};
@@ -51,6 +55,15 @@ async function main(){
    });
    if(mode==='recovery')await page.addInitScript(({ids})=>{sessionStorage.setItem(`makeborne:operation:v1:${ids.account}:${ids.workspace}:${ids.artifact}:build`,JSON.stringify({actionKey:'66666666-6666-4666-8666-666666666666',id:ids.operation}));},{ids});
    await page.goto(base);await page.getByText('Up to 50 credits for this request, including automatic refinements.',{exact:true}).waitFor();
+   // A first build shows the measured range, never an invented one.
+   await page.getByText('In testing, a first website at Medium used 16–45 credits (20 test websites, no AI images). You pay only for what is used.',{exact:true}).waitFor();
+   if(mode==='fail'){
+    await page.getByRole('textbox',{name:'Message the builder'}).fill('Build my bespoke site');await page.getByRole('button',{name:'Send',exact:true}).click();
+    const receipt=page.getByRole('region',{name:'Request receipt'});await receipt.waitFor();
+    assert.match(await receipt.innerText(),/Charged\s+0 credits/);assert.match(await receipt.innerText(),/No new version/);
+    await receipt.getByText('Nothing was saved, and this request was not charged.',{exact:true}).waitFor();
+    await page.close();console.log('PASS mounted LiveBuilder: fail receipt');return;
+   }
    if(mode==='recovery'){
     await page.getByRole('button',{name:'Preview retained draft',exact:true}).click();assert(await page.getByRole('textbox',{name:'Message the builder'}).isDisabled());
     assert.equal(await page.evaluate(()=>window.live.files['src/main.tsx']),source.files.find(f=>f.path==='src/main.tsx').content);
@@ -59,7 +72,12 @@ async function main(){
    }else{
     await page.getByRole('textbox',{name:'Message the builder'}).fill('Build my bespoke site');await page.getByRole('button',{name:'Send',exact:true}).click();
     if(mode==='chain'){
-     await page.getByText('30 / 50 credits',{exact:true}).waitFor();const builds=requests.filter(x=>x.path==='build');assert.equal(builds.length,3);assert(builds[0].data.operation.actionKey);assert.equal(builds[1].data.operation.id,ids.operation);assert.equal(builds[1].data.operation.kind,'continuation');assert.equal(builds[2].data.operation.kind,'review');assert.equal(requests.filter(x=>x.method==='PATCH').length,0);assert.equal(await page.evaluate(()=>window.captures),2,'Final repair is captured again without another model request');
+     await page.getByText('30 / 50 credits',{exact:true}).waitFor();
+     // Receipt: the three settled step charges, every file the run touched, the checks that ran.
+     const receipt=page.getByRole('region',{name:'Request receipt'});await receipt.waitFor();const text=await receipt.innerText();
+     assert.match(text,/Charged\s+30 credits/);assert.match(text,/Saved as version 4/);assert.match(text,/3 files/);
+     assert.match(text,/Project check passed/);assert.match(text,/Design review: 1 round/);assert.match(text,/Final render: no runtime errors/);
+     assert.doesNotMatch(text,/not charged/);const builds=requests.filter(x=>x.path==='build');assert.equal(builds.length,3);assert(builds[0].data.operation.actionKey);assert.equal(builds[1].data.operation.id,ids.operation);assert.equal(builds[1].data.operation.kind,'continuation');assert.equal(builds[2].data.operation.kind,'review');assert.equal(requests.filter(x=>x.method==='PATCH').length,0);assert.equal(await page.evaluate(()=>window.captures),2,'Final repair is captured again without another model request');
     }else{
      await page.getByRole('button',{name:'Approve allowance & continue',exact:true}).waitFor();assert.equal(requests.filter(x=>x.method==='PATCH').length,0);assert.equal(requests.filter(x=>x.path==='build').length,mode==='cap'?1:2);
      await page.getByRole('button',{name:'Approve allowance & continue',exact:true}).click();await page.waitForFunction(()=>document.querySelector('textarea')&&!document.querySelector('textarea').disabled);
@@ -69,7 +87,7 @@ async function main(){
    }
    await page.close();console.log(`PASS mounted LiveBuilder: ${mode}`);
   }
-  for(const mode of ['chain','cap','review','recovery'])await scenario(mode);
+  for(const mode of ['chain','cap','review','recovery','fail'])await scenario(mode);
  }finally{await browser.close();await new Promise(r=>server.close(r));}
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Play, X } from "lucide-react";
 import type { Deck, DocumentSource } from "@/lib/documents/schema";
 import { deckHtml } from "@/lib/documents/render-deck";
-import { bookHtml, chapterLabel } from "@/lib/documents/render-book";
+import { BOOK_TRIM, bookHtml, chapterLabel } from "@/lib/documents/render-book";
 import { wordCount } from "@/lib/documents/book-markup";
 
 /** About 230 words a minute, rounded for display. */
@@ -165,9 +165,29 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
     }, { passive: true });
   };
 
+  // Book pages are typeset at their real trim width (6 in = 576 CSS px plus the
+  // reader's 16px gutters). A narrower pane zooms the pages down to fit instead
+  // of scrolling sideways; the zoom never enlarges them. Decks are already fluid.
+  const fitPages = useCallback(() => {
+    const page = frame.current?.contentDocument, body = page?.body;
+    if (doc.kind !== "book" || !page || !body) return;
+    // The frame's own viewport width, excluding its scrollbar.
+    const scale = Math.min(1, page.documentElement.clientWidth / (BOOK_TRIM.width * 96 + 32));
+    if (scale < 0.999) body.style.setProperty("zoom", String(Math.max(0.3, Math.floor(scale * 1000) / 1000)));
+    else body.style.removeProperty("zoom");
+  }, [doc.kind]);
+  useEffect(() => {
+    const element = frame.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => fitPages());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [fitPages, html]);
+
   const onLoad = () => {
     const view = frame.current?.contentWindow, page = frame.current?.contentDocument;
     if (!view || !page) return;
+    fitPages();
     followScroll(view, page);
     const target = building && focus ? page.getElementById(doc.kind === "deck" ? `slide-${focus}` : `chapter-${focus}`) : null;
     if (target) target.scrollIntoView({ block: "start" });

@@ -8,12 +8,14 @@ import BillingPlans from "./billing-plans";
 import BillingTopupReturn from "./billing-topup-return";
 import CreditBalance, { creditExpiryLabel, type CreditBalanceData } from "./credit-balance";
 import { formatBillingCredits } from "./billing-amount";
+import BillingCreditCosts from "./billing-credit-costs";
+import type { BuilderEstimates } from "@/lib/builder/credit-estimate";
 import { readBillingView, filterBillingEntries, billingStatement, type BillingViewModel } from "@/lib/billing/view";
 export type { BillingEntry, BillingViewModel } from "@/lib/billing/view";
 
 const categories = ["All activity", "Creation", "Media", "Hosting", "Research"] as const;
 
-export default function BillingWorkspace({ summary: input, membershipRequired = false, accountPrivileges, trialCredits = null, signedIn = true, topupOrderId }: { summary: BillingViewModel; membershipRequired?: boolean; accountPrivileges?: { isAdmin: boolean; unlimitedCredits: boolean }; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null; /** Signed-out visitors see plans and a sign-in prompt instead of an empty balance. */ signedIn?: boolean; topupOrderId?: string }) {
+export default function BillingWorkspace({ summary: input, membershipRequired = false, accountPrivileges, trialCredits = null, signedIn = true, topupOrderId, costs = null }: { summary: BillingViewModel; /** Measured builder costs, in credits at the live rate. */ costs?: BuilderEstimates | null; membershipRequired?: boolean; accountPrivileges?: { isAdmin: boolean; unlimitedCredits: boolean }; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null; /** Signed-out visitors see plans and a sign-in prompt instead of an empty balance. */ signedIn?: boolean; topupOrderId?: string }) {
   const summary = readBillingView(input);
   const unlimitedCredits = accountPrivileges?.unlimitedCredits === true;
   const [category, setCategory] = useState<(typeof categories)[number]>("All activity");
@@ -45,7 +47,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
     <header className="billing-top"><Link href="/" className="billing-brand" aria-label="Makeborne home"><BrandMark size={27} /><span>Makeborne</span></Link><div className="billing-top-actions">{accountPrivileges?.isAdmin && <Link className="billing-admin-link" href="/admin"><ShieldCheck size={15} aria-hidden="true" />Administrator</Link>}<Link className="billing-back" href="/"><ArrowLeft size={15} aria-hidden="true" /> Back to home</Link></div></header>
     <main className="billing-main">
       <div className="billing-heading"><div><span className="billing-eyebrow">MAKEBORNE MEMBERSHIPS</span><h1>Plans &amp; credits.</h1><p>Room for your ideas. Clarity on what you spend.</p></div></div>
-      <nav className="billing-section-nav" aria-label="Billing sections"><a href="#plans">Plans</a>{!unlimitedCredits && <a href="#topups">Credit packs</a>}<a href="#credits">Your credits</a><a href="#billing-questions">Questions</a><a href="#support">Support us</a></nav>
+      <nav className="billing-section-nav" aria-label="Billing sections"><a href="#plans">Plans</a>{!unlimitedCredits && <a href="#topups">Credit packs</a>}<a href="#credits">Your credits</a><a href="#costs">What building costs</a><a href="#billing-questions">Questions</a><a href="#support">Support us</a></nav>
       {topupOrderId !== undefined && <BillingTopupReturn orderId={topupOrderId} />}
       {unlimitedCredits ? <div className="billing-membership-note"><ShieldCheck size={18} aria-hidden="true" /><div><strong>Unlimited credits · Administrator allowance</strong><p>No creation subscription or credit top-ups are required for this account.</p><Link className="billing-allowance-link" href="/studio">Open studio<ArrowUpRight size={13} aria-hidden="true" /></Link></div></div> : membershipRequired && <div className="billing-membership-note" role="status"><CircleHelp size={18} /><div><strong>Creation access isn&rsquo;t available for this account yet.</strong><p>{trialCredits ? `Confirmed accounts start free with ${trialCredits} trial credits while the free tier is open. ` : "Creation needs a creation plan. "}Coffee support is optional and does not include app access.</p></div></div>}
       <BillingPlans unlimitedCredits={unlimitedCredits} />
@@ -66,6 +68,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
         </div>
       </section>
       </> : <section id="credits" className="billing-signin" aria-labelledby="credits-heading"><Wallet size={20} aria-hidden="true" /><div><h2 id="credits-heading">Your credits and usage</h2><p>Sign in to see your balance, what is reserved for work in progress, and every charge by project.</p></div><Link className="billing-signin-button" href="/login?next=%2Fbilling%23credits">Sign in<ArrowUpRight size={14} aria-hidden="true" /></Link></section>}
+      <BillingCreditCosts estimates={costs} />
       <section className="billing-details" aria-labelledby="billing-questions"><h2 id="billing-questions">A few useful details.</h2>
         <details><summary>When can I buy a plan?</summary><p>Creation plans open at launch. We haven&rsquo;t announced a date yet; checkout appears on this page as soon as it opens. Prices are shown above in US dollars, before tax.</p></details>
         {unlimitedCredits && <details><summary>Do I need a creation subscription?</summary><p>No. This account has an unlimited administrator credit allowance, so no creation subscription or top-up is required. Generation depends on current service availability and safety limits. Buy us a coffee remains optional support.</p></details>}
@@ -74,7 +77,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
         {!unlimitedCredits && <details><summary>Do credits expire?</summary><p>Unused plan credits carry over for two months after their month ends, so you never lose a busy month&rsquo;s leftovers straight away. The oldest credits are always used first, and the exact expiry time is shown with your balance (in your time zone). Trial credits do not expire. Credit packs keep the terms shown when you buy them. If a run fails or is cancelled, its unused credits go back with their original expiry.</p></details>}
         
         <details><summary>Can I buy more credits without upgrading?</summary><p>{unlimitedCredits ? "You do not need additional credits with this account’s unlimited administrator allowance. Credit packs are intended for accounts with a limited creation membership." : "Yes, that is what one-time credit packs are for. Keep your existing creation membership and choose extra credits when you need them. There is no recurring top-up or automatic plan change. Packs are currently a preview; checkout will open when credit delivery is ready. Final pricing, expiry and refund terms will be shown before purchase."}</p></details>
-        <details><summary>How will credit usage work?</summary><p>You will see an estimate before paid generation. Credits will be reserved while work runs, then the final charge or release will be recorded. Reservations and completed charges will stay separate. Rates and refund rules will be published before paid generation opens.</p></details>
+        <details><summary>How does credit usage work?</summary><p>Before you send a request, the builder shows its credit limit and, where we have measured it, the usual range. Credits are reserved while work runs; afterwards you get a receipt with the credits actually charged, the files changed and the checks that ran, and the unused part of the reservation is released. The limits and what is never charged are listed under What building costs.</p></details>
         <details><summary>What affects the credit estimate?</summary><p>Thinking effort, output length, artwork, and media processing can affect usage. One credit is not one page, slide, or image. The estimate will describe the work you are about to start.</p></details>
         <details><summary>Where do I manage my coffee subscription?</summary><p>Whop handles checkout and billing for Buy us a coffee. Use your Whop account or the link in your confirmation email to find your subscription and receipts.</p></details>
       </section>
