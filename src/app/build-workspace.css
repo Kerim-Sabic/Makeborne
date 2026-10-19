@@ -1,5 +1,5 @@
 /* A project opens as a conversation beside its working canvas. */
-.studio-shell.is-project-open { display:block; background:#fff; min-height:100dvh; }
+.studio-shell.is-project-open { display:flow-root; background:#fff; min-height:100dvh; }
 .studio-shell.is-project-open > .sidebar,
 .studio-shell.is-project-open .studio-topbar { display:none; }
 .studio-shell.is-project-open .studio-main { width:100%; margin:0; padding:0; min-height:100dvh; background:#fff; }

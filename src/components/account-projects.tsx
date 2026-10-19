@@ -91,7 +91,8 @@ export default function AccountProjects({ search, filter, target, navigate, onCo
     } catch (error) { if (version === requestVersion.current) setMessage(error instanceof Error ? error.message : "Could not load your saved projects."); }
     finally { if (version === requestVersion.current) setBusy(false); }
   }
-  if (!accountId) return target ? <section className="account-projects" aria-label="Open saved project">
+  // A project link uses the open-project layout from its first paint, so the page does not move when the project loads.
+  if (!accountId) return target ? <section className={`account-projects${target.artifactId ? " account-project-open" : ""}`} aria-label="Open saved project">
     <h2>{authReady ? "Sign in to open this project" : "Checking your account…"}</h2>
     {authReady && <><p>Account projects are available to their workspace members.</p><Link className="button primary small" href={`/login?next=${encodeURIComponent(studioHref({ tab: "projects", projectId: null, clientId: null, account: target }))}`}>Sign in</Link></>}
   </section> : null;
@@ -99,7 +100,7 @@ export default function AccountProjects({ search, filter, target, navigate, onCo
   // A brand-new account has nothing saved yet: let the studio's single welcome state speak instead of two empty panels.
   if (snapshot && !busy && !message && !selected && !target?.artifactId && snapshot.artifacts.length === 0 && workspaces.length <= 1)
     return <PendingCloudWrites accountId={accountId} refresh={async () => { await load(snapshot.workspace.id); }} />;
-  return <section className={`account-projects${selected ? " account-project-open" : ""}`} aria-label={selected ? "Project workspace" : "Projects saved to your account"}>
+  return <section className={`account-projects${selected || target?.artifactId ? " account-project-open" : ""}`} aria-label={selected ? "Project workspace" : "Projects saved to your account"}>
     {!selected && !target?.artifactId && <div className="account-projects-heading"><div><span className="eyebrow">SAVED TO YOUR ACCOUNT</span><h2>Your saved projects</h2></div>
       {snapshot && <button type="button" className="button secondary small" disabled={busy} onClick={() => void load(snapshot.workspace.id)}><RefreshCw size={14} /> Refresh</button>}</div>}
     {!selected && workspaces.length > 1 && <label>Workspace<select disabled={busy} value={snapshot?.workspace.id ?? ""} onChange={event => navigate({ workspaceId: event.target.value, artifactId: null })}>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>}
