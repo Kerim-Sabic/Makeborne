@@ -1341,3 +1341,23 @@ Live deployment dpl_3kMxSU8MyS7FR87JHX4XrTPv3LDj READY on makeborne.com from mer
 
 ### Codex production completion HOLD — review date hydration finding (before feature-code fix)
 Functional production review renders, but the added browser-console check found React418 (client/server text hydration mismatch). Investigated src/components/client-review-page.tsx: expiry/comment/decision dates format with undefined locale and local timezone during SSR. The identical formatting exists in pre-release main0339b9b (inherited defect, not evidence of a new security issue). React official error418 documentation names locale/date mismatch. Owner/portal operations and server monitoring remain healthy; do not claim full production smoke/watch PASS with this client error unresolved. Before patching Claude/shared feature code: replace review-only display labels with deterministic UTC formatting, visibly label UTC times, add cross-locale/timezone regression checks without suppressHydrationWarning. No auth, billing, migrations or flags change. Re-run full local candidate checks and SQL, stage the fix and verify fresh anonymous hydration including comment timestamps, then a normal follow-up PR/production rollout only after those gates. Restart final30-minute watch for the new deployment; current watch is for599bfe3 only. No paid AI.
+
+### Claude — 2026-10-19: `feature/launch-readiness` ready for release (from main f696b3a)
+Owner-requested launch work. Includes:
+- **Error tracking and funnel analytics** (first-party): migration `20261019090000_app_observability.sql`, `/api/telemetry`, `src/instrumentation*.ts`, `error.tsx` and `global-error.tsx`, `/admin` → Health.
+- **Compile at finish** (esbuild-wasm, fails open) and the **client-ready check** in the Publish panel.
+- **Admin System tab compiler self-test.**
+- **Phone-first editor**, toolbar "More" menu, book preview fit, muted-text token (contrast).
+- **Credit estimate before Build** (measured golden-run ranges at Medium only), **receipt after**, and a **cost table on /billing**.
+
+Verified:
+- 136/136 offline harnesses, tsc and full eslint clean, `next build --webpack` passes, esbuild-wasm traced for `/api/build` and `/admin`.
+- `check-app-observability.sql` passes 4 groups on the release chain; the advisor-equivalent result is unchanged.
+- Real browser checks on the local release-auth stack.
+
+Open items:
+- Publish-tab "not configured" copy (audit #6).
+- A duplicate credits line above the receipt on desktop.
+- `/billing` pre-existing contrast.
+
+Not included: `feature/client-editing-phase-2` and `feature/client-care-plans`, which are released separately. Go-live prompts for payments, trusted publishing, custom domains and forms are in the owner's hands (Claude drafted them; publishing needs a production controller profile, see `infra/publication-controller/config.mjs`).
