@@ -1,0 +1,21 @@
+{"event":"builder_compile_unavailable","reason":"compile timed out","ms":20000}
+{
+  "scenario": "compiler timed out at finish",
+  "saves": 1,
+  "terminal": {
+    "type": "done",
+    "finished": true,
+    "build": null,
+    "changed": true
+  },
+  "statusMessages": [
+    "Reading your project…",
+    "Checking that the website builds…"
+  ],
+  "receiptChecks": [
+    {
+      "ok": true,
+      "label": "Project check passed: required files, imports, fonts and icons"
+    }
+  ]
+}

@@ -95,4 +95,22 @@ receipt = runReceipt(meter, { website: false, unlimited: false, now: 1 });
 assert.deepEqual(receipt.items, ["Wrote chapter 1"]); assert.deepEqual(receipt.checks, []);
 // No step reached the server: no receipt at all.
 assert.equal(runReceipt(newRunMeter(0), { website: true, unlimited: false }), null);
+
+// Build check: passed is shown as passed; a compiler that could not run is "needs attention", never a pass;
+// results stored before the build field existed add no build line (no claim either way).
+const buildChecks = build => {
+  const m = newRunMeter(0);
+  meterEvent(m, { type: "done", version: 2, changed: true, finished: true, charged: 5, ...(build === undefined ? {} : { build }) });
+  return runReceipt(m, { website: true, unlimited: false, now: 1 }).checks.filter(check => /build/i.test(check.label));
+};
+assert.deepEqual(buildChecks("passed").map(check => check.ok), [true]);
+assert.deepEqual(buildChecks("unverified").map(check => check.ok), [false]);
+assert.match(buildChecks("unverified")[0].label, /could not run.*not verified/);
+assert.deepEqual(buildChecks(undefined), []);
+assert.deepEqual(buildChecks("ok"), [], "unknown values are not read as a pass");
+// A later saving step replaces the earlier verdict.
+meter = newRunMeter(0);
+meterEvent(meter, { type: "done", version: 2, changed: true, finished: true, charged: 5, build: "passed" });
+meterEvent(meter, { type: "done", version: 3, changed: true, finished: true, charged: 5, build: "unverified" });
+assert.deepEqual(runReceipt(meter, { website: true, unlimited: false, now: 1 }).checks.filter(check => /build/i.test(check.label)).map(check => check.ok), [false]);
 console.log("PASS credit estimates and run receipts");

@@ -1,0 +1,27 @@
+{"event":"builder_compile_unavailable","reason":"compile timed out","ms":20000}
+{
+  "scenario": "compiler timed out at finish",
+  "api": "compileVerdict",
+  "saves": 1,
+  "terminal": {
+    "type": "done",
+    "finished": true,
+    "build": "unverified",
+    "changed": true
+  },
+  "statusMessages": [
+    "Reading your project…",
+    "Checking that the website builds…",
+    "The build check could not run. Saving this version as not yet verified…"
+  ],
+  "receiptChecks": [
+    {
+      "ok": true,
+      "label": "Project check passed: required files, imports, fonts and icons"
+    },
+    {
+      "ok": false,
+      "label": "Build check could not run, so this version is saved but not verified to build. Check the preview before publishing"
+    }
+  ]
+}

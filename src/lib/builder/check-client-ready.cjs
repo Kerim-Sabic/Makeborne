@@ -8,7 +8,7 @@ Module._load = function(name, parent, main) {
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true}}).outputText, filename);
 globalThis.fetch = async () => { throw new Error("Network forbidden"); };
 
-const {compileWebsite, compileProblems, compilerSelfTest} = require("./compile.ts");
+const {compileWebsite, compileVerdict, compilerSelfTest} = require("./compile.ts");
 const {clientReadyCheck, clientReadySummary, contrastRatio} = require("./client-ready.ts");
 const {ProjectFiles} = require("./files.ts");
 
@@ -65,7 +65,7 @@ const source = files => ({files: [...files].map(([path, content]) => ({path, con
     assert.equal(outcome.ok, true, JSON.stringify(outcome));
     assert.ok(outcome.bytes > 0);
     console.log(`     first compile, including the esbuild-wasm service start: ${outcome.ms} ms`);
-    assert.deepEqual(await compileProblems(clean()), []);
+    assert.deepEqual(await compileVerdict(clean()), {status: "passed"});
   });
 
   await check("a typical generated project compiles quickly (cold and warm)", async () => {
@@ -91,7 +91,9 @@ const source = files => ({files: [...files].map(([path, content]) => ({path, con
     const outcome = await compileWebsite(files);
     assert.equal(outcome.ok, false);
     assert.match(outcome.errors.join("\n"), /^src\/components\/Menu\.tsx:\d+:\d+: /m);
-    const problems = await compileProblems(files);
+    const verdict = await compileVerdict(files);
+    assert.equal(verdict.status, "failed");
+    const problems = verdict.problems;
     assert.equal(problems.length, 1);
     assert.match(problems[0], /does not compile/);
     assert.match(problems[0], /src\/components\/Menu\.tsx/);
@@ -125,11 +127,17 @@ const source = files => ({files: [...files].map(([path, content]) => ({path, con
     assert.deepEqual(await compileWebsite(files), {ok: false, ms: 0, errors: ["Missing src/main.tsx."]});
   });
 
-  await check("an unavailable compiler is logged and leaves the static checks in charge", async () => {
+  await check("an unavailable or timed-out compiler is unverified, never a pass, and is logged", async () => {
     const logged = [], original = console.error;
     console.error = line => logged.push(String(line));
     try {
-      assert.deepEqual(await compileProblems(clean(), async () => ({ok: null, ms: 3, reason: "spawn node ENOENT"})), []);
+      assert.deepEqual(await compileVerdict(clean(), async () => ({ok: null, ms: 3, reason: "spawn node ENOENT"})), {status: "unverified", reason: "spawn node ENOENT"});
+      // A real timeout from compileWebsite (1 ms budget) is infrastructure, not a project error and not a pass.
+      const timedOut = await compileWebsite(clean(), {timeoutMs: 1});
+      if (timedOut.ok === null) {
+        assert.match(timedOut.reason, /timed out/);
+        assert.equal((await compileVerdict(clean(), async () => timedOut)).status, "unverified");
+      } else assert.equal(timedOut.ok, true, "a warm engine may finish within 1 ms; it must still never report a failure for a valid project");
     } finally { console.error = original; }
     assert.match(logged.join("\n"), /builder_compile_unavailable/);
   });

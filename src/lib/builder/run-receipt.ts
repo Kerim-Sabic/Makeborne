@@ -18,6 +18,8 @@ export type RunMeter = {
   version: number | null;
   /** Whether the last step that saved passed the builder's finish check. */
   finished: boolean | null;
+  /** The last saving step's build check: passed, could not run (unverified), or not reported (older servers). */
+  build: "passed" | "unverified" | null;
   reviews: number;
   failed: boolean;
   /** The free final render check after automatic review rounds. */
@@ -38,10 +40,10 @@ export type RunReceipt = {
 };
 
 export function newRunMeter(now = Date.now()): RunMeter {
-  return { started: now, steps: 0, charged: 0, chargeKnown: true, files: new Set(), items: new Set(), saved: false, version: null, finished: null, reviews: 0, failed: false, render: null };
+  return { started: now, steps: 0, charged: 0, chargeKnown: true, files: new Set(), items: new Set(), saved: false, version: null, finished: null, build: null, reviews: 0, failed: false, render: null };
 }
 
-type StreamEvent = { type?: unknown; path?: unknown; label?: unknown; charged?: unknown; changed?: unknown; finished?: unknown; version?: unknown };
+type StreamEvent = { type?: unknown; path?: unknown; label?: unknown; charged?: unknown; changed?: unknown; finished?: unknown; build?: unknown; version?: unknown };
 const credits = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 
 /** Records one server-sent builder event. */
@@ -62,6 +64,7 @@ export function meterEvent(meter: RunMeter, event: StreamEvent) {
         const version = Number(event.version);
         if (Number.isSafeInteger(version) && version > 0) meter.version = version;
         meter.finished = event.finished !== false;
+        meter.build = event.build === "passed" || event.build === "unverified" ? event.build : null;
       }
       break;
     }
@@ -86,6 +89,9 @@ export function runReceipt(meter: RunMeter, options: { website: boolean; unlimit
   if (options.website && meter.saved && meter.finished !== null) checks.push(meter.finished
     ? { ok: true, label: "Project check passed: required files, imports, fonts and icons" }
     : { ok: false, label: "Stopped before the final project check. Progress so far was saved" });
+  if (options.website && meter.saved && meter.build) checks.push(meter.build === "passed"
+    ? { ok: true, label: "Build check passed: the website compiles" }
+    : { ok: false, label: "Build check could not run, so this version is saved but not verified to build. Check the preview before publishing" });
   if (meter.reviews) checks.push({ ok: true, label: `Design review: ${meter.reviews} round${meter.reviews === 1 ? "" : "s"} on desktop and mobile` });
   if (meter.render) checks.push(meter.render.ok
     ? { ok: true, label: "Final render: no runtime errors, broken images or sideways scrolling" }

@@ -10,7 +10,7 @@ import { aiStop } from "../ai/failure";
 import { holdIsActive, releaseRun, settleRun, type CreditHold } from "../credits/server";
 import { runBuilder, type BuilderEvent, type BuilderRun } from "./agent";
 import type { ProjectFiles } from "./files";
-import { compileProblems } from "./compile";
+import { compileVerdict } from "./compile";
 import { aiCostUsdPerCredit } from "./pricing";
 import { finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
 
@@ -54,7 +54,7 @@ export function logAiStop(reference: string, error: unknown) {
  */
 export function websiteBuildResponse(input: WebsiteBuildInput): Response {
   const { client, hold, spend, artifact, current, files, reviewing } = input;
-  const compile = input.compile ?? compileProblems;
+  const compile = input.compile ?? compileVerdict;
   const rate = input.operation ? input.operation.rateMicrousd / 1e6 : aiCostUsdPerCredit();
   const measured = () => spend.customerCredits(rate);
   const encoder = new TextEncoder();
@@ -83,7 +83,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
           if (!files.changed.size || (error as { code?: string }).code === "REFUSED" || aiStop(error)) throw error;
           try { files.toSource(); } catch { throw error; }
           emit({ type: "status", message: "Saving the work finished so far…" });
-          result = { summary: "Saved the progress made so far.", title: undefined, credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, stopped: spend.stopped };
+          result = { summary: "Saved the progress made so far.", title: undefined, credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, build: null, stopped: spend.stopped };
         }
         const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped };
         if (reviewing && !files.changed.size) {
@@ -100,8 +100,13 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         }
         let source;
         try { source = files.toSource(); } catch { source = null; }
-        // finish compiles; progress kept without it is compiled here. A version that does not build is never saved.
-        if (source && !result.finished && files.changed.size && (await compile(files.files)).length) source = null;
+        // finish compiles; progress kept without it is compiled here. A version that does not build is never saved;
+        // one whose build could not be checked is saved and reported as unverified.
+        let build = result.build;
+        if (source && !result.finished && files.changed.size) {
+          const verdict = await compile(files.files);
+          if (verdict.status === "failed") source = null; else build = verdict.status;
+        }
         if (!source || !files.changed.size && !result.finished) {
           if (input.operation) {
             emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "incomplete", { ...detail, code: "BUILD_INCOMPLETE", message: "The builder stopped before a usable change was ready. Your previous saved version is safe.", version: artifact.current_version, changed: false, finished: false })));
@@ -113,7 +118,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         }
         if (input.operation) {
           const summary = result.summary || (result.finished ? "Updated the website." : "Saved the progress made so far.");
-          emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished }, {
+          emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished, build }, {
             content: { schemaVersion: 1, kind: "website", title: ((reviewing ? "" : result.title) || current.content.title).slice(0, 200), sections: [], websiteSource: source },
             style: current.style, assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])],
             summary: `${reviewing ? "Design review" : input.message.slice(0, 600)} → ${summary}`.slice(0, 2000), expectedVersion: artifact.current_version,
@@ -141,13 +146,18 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
           return;
         }
         const settled = await settleRun(hold, measured(), { ...detail, kind: "saved" });
-        emit({ type: "done", version: saved.data.version.version_number ?? artifact.current_version + 1, summary, charged: settled.charged, changed: true, finished: result.finished });
+        emit({ type: "done", version: saved.data.version.version_number ?? artifact.current_version + 1, summary, charged: settled.charged, changed: true, finished: result.finished, build });
       } catch (error) {
         if (input.operation) {
           const stop = logAiStop(hold.reference, error);
           let candidate: OperationCandidate | undefined;
-          if (files.changed.size) try { const source = files.toSource(); if ((await compile(files.files)).length) throw new Error("does not compile"); candidate = { content: { schemaVersion: 1, kind: "website", title: current.content.title, sections: [], websiteSource: source }, style: current.style,
-            assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])], summary: "Recovered the work completed before the builder stopped.", expectedVersion: artifact.current_version }; } catch { /* Only validated source that builds is offered for recovery. */ }
+          if (files.changed.size) try {
+            const source = files.toSource(), verdict = await compile(files.files);
+            if (verdict.status === "failed") throw new Error("does not compile");
+            candidate = { content: { schemaVersion: 1, kind: "website", title: current.content.title, sections: [], websiteSource: source }, style: current.style,
+              assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])],
+              summary: verdict.status === "passed" ? "Recovered the work completed before the builder stopped." : "Recovered the work completed before the builder stopped. Its build could not be checked.", expectedVersion: artifact.current_version };
+          } catch { /* Only validated source that does not fail to build is offered for recovery. */ }
           emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false }, candidate));
           return;
         }

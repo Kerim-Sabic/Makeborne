@@ -5,7 +5,8 @@ import "server-only";
  * npm or output files: React and lucide-react stay external, library fonts
  * resolve to empty stylesheets, and anything else outside the project fails
  * exactly as it would in the preview. Used at `finish` (errors go back to the
- * model) and before any save, so a stored version always builds. */
+ * model) and before any save, so a stored version never fails to build. When
+ * the compiler cannot run, the version is saved as unverified (compileVerdict). */
 import type { Loader, Message, Plugin } from "esbuild-wasm";
 import { FONT_IMPORT, FONTS_BY_ID } from "./fonts";
 import { LUCIDE } from "./icons";
@@ -112,11 +113,19 @@ export async function compileWebsite(files: ReadonlyMap<string, string>, options
   }
 }
 
-/** Model-facing problems for a project that does not compile ([] when it builds).
- * If the compiler itself cannot run, the static checks stand and this is logged. */
-export async function compileProblems(files: ReadonlyMap<string, string>, compile: typeof compileWebsite = compileWebsite): Promise<string[]> {
+/** What the builder may say about a project's build. "unverified" means the
+ * compiler could not run or timed out: the work is kept, but it is never
+ * reported as a passed build. */
+export type CompileVerdict =
+  | { status: "passed" }
+  | { status: "failed"; problems: string[] }
+  | { status: "unverified"; reason: string };
+
+/** Model-facing problems for a project that does not compile; an unavailable compiler is logged and returned as unverified. */
+export async function compileVerdict(files: ReadonlyMap<string, string>, compile: typeof compileWebsite = compileWebsite): Promise<CompileVerdict> {
   const outcome = await compile(files);
-  if (outcome.ok === false) return [`The website does not compile. Fix these build errors:\n  ${outcome.errors.join("\n  ")}`];
-  if (outcome.ok === null) console.error(JSON.stringify({ event: "builder_compile_unavailable", reason: outcome.reason, ms: outcome.ms }));
-  return [];
+  if (outcome.ok === true) return { status: "passed" };
+  if (outcome.ok === false) return { status: "failed", problems: [`The website does not compile. Fix these build errors:\n  ${outcome.errors.join("\n  ")}`] };
+  console.error(JSON.stringify({ event: "builder_compile_unavailable", reason: outcome.reason, ms: outcome.ms }));
+  return { status: "unverified", reason: outcome.reason };
 }

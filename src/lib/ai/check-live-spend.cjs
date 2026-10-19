@@ -148,7 +148,7 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
   const response = websiteBuildResponse({ client: db.client, hold, spend, workspaceId: "22222222-2222-4222-8222-222222222222",
     artifact: { id: "33333333-3333-4333-8333-333333333333", project_id: "44444444-4444-4444-8444-444444444444", title: "T", current_version: 1 },
     current: { assetIds: [], content: { title: "T" }, style: {} }, files: extra.files ?? baseFiles(), reviewing: false, message: "Update the heading", effort: "medium",
-    request: "Update the heading", context: "<project/>", attachments: [], maxDuration: 300, anthropic, imageClient: extra.imageClient, storeImage, stepGuardMs: extra.stepGuardMs });
+    request: "Update the heading", context: "<project/>", attachments: [], maxDuration: 300, anthropic, imageClient: extra.imageClient, storeImage, stepGuardMs: extra.stepGuardMs, compile: extra.compile });
   return { db, response };
 }
 
@@ -355,6 +355,7 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
     const saved = db.saves[0].args.p_content.websiteSource.files.find(file => file.path === "src/App.tsx").content;
     assert.equal(saved, app);
     assert.equal(events.at(-1).type, "done"); assert.equal(events.at(-1).finished, true);
+    assert.equal(events.at(-1).build, "passed", "a compiled version is reported as a passed build");
   });
 
   await check("website run: progress cut off before finish is not saved when it does not compile", async () => {
@@ -369,6 +370,38 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
     const events = await sse(response);
     assert.equal(db.saves.length, 0, "a version that does not build is never saved");
     assert.equal(events.at(-1).code, "BUILD_INCOMPLETE");
+  });
+
+  await check("website run: a compiler that times out or cannot start is never reported as a passed build; the work is kept as unverified", async () => {
+    const { compileVerdict } = require("../builder/compile.ts");
+    const { newRunMeter, meterEvent, runReceipt } = require("../builder/run-receipt.ts");
+    const quiet = console.error; console.error = () => {};
+    try {
+      for (const reason of ["compile timed out", "Cannot find module 'esbuild-wasm'"]) {
+        const down = files => compileVerdict(files, async () => ({ ok: null, ms: 20_000, reason }));
+        // At finish.
+        let hold = billing.hold(50), { spend } = spendFor(hold);
+        let fake = fakeAnthropic([{ usage: { input_tokens: 5000, output_tokens: 900 }, content: [toolUse("write_file", { path: "src/App.tsx", content: app }), toolUse("finish", { summary: "Done.", title: "T" })] }]);
+        let { response, db } = websiteRun(hold, spend, fake.client, { compile: down });
+        let events = await sse(response);
+        assert.equal(db.saves.length, 1, "the customer's work is preserved");
+        assert.equal(events.at(-1).type, "done"); assert.equal(events.at(-1).build, "unverified", reason);
+        assert.ok(events.some(event => event.type === "status" && /could not run/.test(event.message)), "the run says the build check could not run");
+        const meter = newRunMeter(0); for (const event of events) meterEvent(meter, event);
+        const checks = runReceipt(meter, { website: true, unlimited: false, now: 1000 }).checks;
+        assert.ok(!checks.some(item => item.ok && /build/i.test(item.label)), JSON.stringify(checks));
+        assert.ok(checks.some(item => !item.ok && /could not run/.test(item.label) && /not verified/.test(item.label)), JSON.stringify(checks));
+        // Progress cut off before finish: kept, but unverified (a failed build would not be saved at all).
+        hold = billing.hold(50); ({ spend } = spendFor(hold));
+        fake = fakeAnthropic([{ started: true, partialOutput: 3000, error: midStreamError(), events: [
+          { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "tu_1", name: "write_file", input: {} } },
+          { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: JSON.stringify({ path: "src/App.tsx", content: app }) } },
+          { type: "content_block_stop", index: 0 }] }]);
+        ({ response, db } = websiteRun(hold, spend, fake.client, { compile: down }));
+        events = await sse(response);
+        assert.equal(db.saves.length, 1); assert.equal(events.at(-1).finished, false); assert.equal(events.at(-1).build, "unverified");
+      }
+    } finally { console.error = quiet; }
   });
 
   await check("website run: images budgeted per call; a failed image costs its bound but is not charged", async () => {

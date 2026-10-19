@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { EffortLevel } from "../routing/effort";
 import { WebsiteDesignDirectionSchema } from "../projects/website-source";
 import { FileToolError, ProjectFiles } from "./files";
-import { compileProblems } from "./compile";
+import { compileVerdict, type CompileVerdict } from "./compile";
 import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage } from "./images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
@@ -34,7 +34,7 @@ export type BuilderEvent =
   | { type: "image"; path: string; url: string; assetId: string }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
-  | { type: "done"; version: number; summary: string; charged: number; changed?: boolean; finished?: boolean }
+  | { type: "done"; version: number; summary: string; charged: number; changed?: boolean; finished?: boolean; build?: "passed" | "unverified" | null }
   | { type: "error"; code: string; message: string; retryable?: boolean };
 
 const name = z.string().regex(/^[a-z0-9][a-z0-9-]{1,48}$/, "Use a short kebab-case name like hero-portrait.");
@@ -94,11 +94,12 @@ export type BuilderRun = {
   imageClient?: ImageClientLike;
   storeImage?: (request: { name: string; prompt: string; model: string }, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
   /** Compile check at finish (tests inject one); production bundles with esbuild. */
-  compile?: (files: ReadonlyMap<string, string>) => Promise<string[]>;
+  compile?: (files: ReadonlyMap<string, string>) => Promise<CompileVerdict>;
 };
 
-/** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds. */
-export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; stopped: string | null };
+/** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds.
+ * build: the finish-time compile verdict when the run finished, null otherwise. */
+export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null };
 
 /** Agentic edit loop: Claude edits the in-memory project through tools until it
  * calls finish with a project that passes static checks and compiles, or the budget runs out. */
@@ -117,6 +118,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
   const storeImage = run.storeImage ?? ((request: { name: string; prompt: string; model: string }, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes));
   let imagesUsed = 0, summary = "", title: string | undefined, finished = false, malformedTurns = 0;
+  let build: BuilderResult["build"] = null;
   const system = [{ type: "text" as const, text: BUILDER_SYSTEM }];
   const toolList = tools(imageLimit > 0);
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
@@ -261,9 +263,16 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (input.design) run.files.design = input.design;
             if (!problems.length) { try { run.files.toSource(); } catch (error) { problems.push((error as Error).message); } }
             // A saved version must build: compile once the static checks pass.
-            if (!problems.length) { run.emit({ type: "status", message: "Checking that the website builds…" }); problems.push(...await (run.compile ?? compileProblems)(run.files.files)); }
+            let verdict: CompileVerdict | null = null;
+            if (!problems.length) {
+              run.emit({ type: "status", message: "Checking that the website builds…" });
+              verdict = await (run.compile ?? compileVerdict)(run.files.files);
+              if (verdict.status === "failed") problems.push(...verdict.problems);
+            }
             if (problems.length) { fail(`Not finished yet. Fix these problems, then call finish again:\n- ${problems.join("\n- ")}`); break; }
-            summary = input.summary; title = input.title; finished = true;
+            // An unavailable compiler is not the model's to fix: keep the work and report it as unverified.
+            if (verdict?.status === "unverified") run.emit({ type: "status", message: "The build check could not run. Saving this version as not yet verified…" });
+            summary = input.summary; title = input.title; finished = true; build = verdict?.status === "passed" ? "passed" : "unverified";
             results.push({ type: "tool_result", tool_use_id: use.id, content: "Saved." });
             break;
           }
@@ -284,7 +293,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
       messages.push({ role: "system", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }
   }
-  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, stopped: spend.stopped };
+  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped };
 }
 
 /** Provider HTTP errors and spending-control errors end the run; only malformed streams are retried as a turn. */
