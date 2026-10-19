@@ -148,7 +148,9 @@ test.describe('S1 funnel (isolated stack, AI off)', () => {
   test('build: AI is off on this stack, instructions are kept for later', async () => {
     test.info().annotations.push({ type: 'build', description: 'AI off on this stack; live build needs MAKEBORNE_LIVE_BUILDER_ENABLED not "false" plus ANTHROPIC_API_KEY (paid provider), so no generation ran' });
     const build = await appApi(page, 'GET', '/api/build');
-    expect(build.body, 'GET /api/build').toEqual({ available: false, configured: false, state: 'off' });
+    const { estimates, ...availability } = build.body ?? {};
+    expect(availability, 'GET /api/build').toEqual({ available: false, configured: false, state: 'off' });
+    expect(typeof estimates, 'GET /api/build estimates (credit ranges only)').toBe('object');
     const conversation = page.getByRole('complementary', { name: 'Project conversation' });
     const message = conversation.getByRole('textbox', { name: 'Message about your project' });
     await message.fill('Make the opening warmer and lead with the morning bake.');

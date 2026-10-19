@@ -109,7 +109,10 @@ export async function checkServerIdentity(origin, { timeoutMs = 60_000 } = {}) {
     const build = await get(`${origin}/api/build`, timeoutMs);
     const body = parse(build.text);
     facts.build = { status: build.status, body: body ?? build.text.slice(0, 80) };
-    if (!(build.ok && body && body.available === false && body.configured === false && body.state === 'off' && Object.keys(body).length === 3)) problems.push(`GET /api/build must answer {"available":false,"configured":false,"state":"off"} (builder off), got ${build.status} ${JSON.stringify(facts.build.body)}`);
+    // The availability keys are exact; `estimates` (measured credit ranges, no provider call) may accompany them.
+    const { estimates, ...availability } = body ?? {};
+    if (!(build.ok && body && availability.available === false && availability.configured === false && availability.state === 'off' && Object.keys(availability).length === 3 && (estimates === undefined || typeof estimates === 'object')))
+      problems.push(`GET /api/build must answer {"available":false,"configured":false,"state":"off"} (builder off), got ${build.status} ${JSON.stringify(facts.build.body)}`);
   } catch (error) {
     problems.push(`GET /api/build failed: ${error.message}`);
   }
