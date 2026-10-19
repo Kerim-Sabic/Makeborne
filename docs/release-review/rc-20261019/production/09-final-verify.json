@@ -1,0 +1,58 @@
+{
+  "at": "2026-10-19T12:59:27.327Z",
+  "ref": "rklojnmmsmhwnkbzuidp",
+  "migrations": 94,
+  "last": "20261019090000",
+  "tables": [
+    {
+      "relname": "app_error_days",
+      "relrowsecurity": false
+    },
+    {
+      "relname": "app_error_groups",
+      "relrowsecurity": false
+    },
+    {
+      "relname": "studio_visits",
+      "relrowsecurity": false
+    },
+    {
+      "relname": "telemetry_salts",
+      "relrowsecurity": false
+    }
+  ],
+  "functions": [
+    {
+      "proname": "makeborne_admin_health",
+      "anon": false,
+      "authed": false,
+      "service": true,
+      "config": "search_path=\"\""
+    },
+    {
+      "proname": "makeborne_record_app_error",
+      "anon": false,
+      "authed": false,
+      "service": true,
+      "config": "search_path=\"\",lock_timeout=2s"
+    },
+    {
+      "proname": "makeborne_record_studio_visit",
+      "anon": false,
+      "authed": false,
+      "service": true,
+      "config": "search_path=\"\",lock_timeout=2s"
+    }
+  ],
+  "clientTableGrants": 0,
+  "clientPrivileges": 0,
+  "exposedSchemas": [
+    "public",
+    "graphql_public"
+  ],
+  "switchesUnchanged": true,
+  "securityWarningsBefore": 9,
+  "securityWarningsNow": 9,
+  "newWarnings": 0,
+  "passed": true
+}

@@ -16,7 +16,10 @@ watch; keep every commercial capability off.
 | 12:26 | 2. Deploy | `dpl_BSTNcBDmzcEHDWSvoTV1pPpjq6cW` READY on `d14bf303`; `makeborne.com` and `www` point to it | `06-deployment.json` |
 | 12:27 | 3. Checks | Public pages 200 with no "print-ready"/"live in seconds" (both present before); `/api/build` = paused + estimates (was `available:true`); signed-out workspaces 401; telemetry 204 (was 404); 17 artifacts, all 7 with content beyond their title classify as saved formats | `07a-pre-deploy-baseline.json` (before), `07-post-deploy-checks.json` (after) |
 | 12:29 | 3. Telemetry | One verification visit (user agent `makeborne-release-verification/rc-20261019`) recorded as `home`; 0 error groups | this file |
-| 12:27–12:58 | 3. Watch | see `08-watch.json` | `08-watch.json` |
+| 12:27–12:58 | 3. Watch | **Passed**: 1,891 s, 28 samples of `/`, `/portal/login`, `/help`, `/sitemap.xml`, `/robots.txt`, `/api/workspaces` (401), `/api/build`, `makeborne.site` (308); 0 HTTP failures, 0 runtime error/fatal records, 0 requests ≥ 500, 0 log-query failures | `08-watch.json` |
+| 12:59 | Final read | Still `d14bf303`; 94 migrations; switches unchanged; 0 new security warnings; 0 error groups | `09-final-verify.json` |
+
+**Release status: complete for `d14bf303` (code = `a6e70c6`). All commercial capabilities remain off.**
 
 Commercial switches were not touched: provider scopes, `creation_enabled`, packs, access plans and publication settings
 read back unchanged after the migration.

@@ -113,10 +113,1443 @@
         "count": 0,
         "sample": []
       }
+    },
+    {
+      "at": "2026-10-19T12:29:27.479Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:30:34.988Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:31:42.391Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:32:49.896Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:33:56.917Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:35:04.503Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:36:11.352Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:37:18.660Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:38:26.123Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:39:33.486Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:40:40.630Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:41:47.950Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:42:55.185Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:44:02.231Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:45:09.117Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:46:17.062Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:47:24.374Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:48:32.105Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:49:39.655Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:50:47.106Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:51:54.660Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:53:02.070Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:54:09.305Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:55:16.663Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:56:23.715Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
+    },
+    {
+      "at": "2026-10-19T12:57:30.697Z",
+      "health": [
+        {
+          "path": "/",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/portal/login",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/help",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "/api/workspaces",
+          "status": 401,
+          "passed": true
+        },
+        {
+          "path": "/api/build",
+          "status": 200,
+          "passed": true
+        },
+        {
+          "path": "makeborne.site/",
+          "status": 308,
+          "passed": true
+        }
+      ],
+      "runtime": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      },
+      "requests": {
+        "ok": true,
+        "count": 0,
+        "sample": []
+      }
     }
   ],
   "runtimeErrorRecords": 0,
   "serverErrorRecords": 0,
   "httpFailures": 0,
-  "logQueryFailures": 0
+  "logQueryFailures": 0,
+  "end": "2026-10-19T12:58:38.884Z",
+  "elapsedSeconds": 1891,
+  "passed": true
 }
