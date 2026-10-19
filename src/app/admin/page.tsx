@@ -7,6 +7,7 @@ import { getAccountPrivileges } from "@/lib/account/privileges";
 import { adminCustomer, adminCustomers, adminHealth, adminOverview, CUSTOMER_FILTERS, type CustomerFilter } from "@/lib/admin/console";
 import { billingUser } from "@/lib/billing/access";
 import { getCapabilities } from "@/lib/capabilities/server";
+import { compilerSelfTest } from "@/lib/builder/compile";
 import CustomersTab from "./customers";
 import { CreditsTab, SubscriptionsTab } from "./money";
 import OverviewTab, { overviewAlerts } from "./overview";
@@ -42,14 +43,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const now = requestTime();
 
   type Loaded =
-    | { kind: "system" }
+    | { kind: "system"; compiler: Awaited<ReturnType<typeof compilerSelfTest>> }
     | { kind: "health"; data: Awaited<ReturnType<typeof adminHealth>> }
     | { kind: "customers"; page: Awaited<ReturnType<typeof adminCustomers>>; detail: Awaited<ReturnType<typeof adminCustomer>> }
     | { kind: "overview"; data: Awaited<ReturnType<typeof adminOverview>> }
     | { kind: "error" };
   let loaded: Loaded;
   try {
-    if (tab === "system") loaded = { kind: "system" };
+    if (tab === "system") loaded = { kind: "system", compiler: await compilerSelfTest() };
     else if (tab === "health") loaded = { kind: "health", data: await adminHealth(user.id, [7, 30, 90].includes(Number(one(params.days))) ? Number(one(params.days)) : 7) };
     else if (tab === "customers") {
       const [page, detail] = await Promise.all([adminCustomers(user.id, { search: state.q, filter: state.filter, page: state.page }), state.customer ? adminCustomer(user.id, state.customer) : Promise.resolve(null)]);
@@ -60,7 +61,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   }
   const alertCount = loaded.kind === "overview" ? overviewAlerts(loaded.data).length : 0;
   const generatedAt = loaded.kind === "overview" || loaded.kind === "health" ? loaded.data.generatedAt : null;
-  const content = loaded.kind === "system" ? <SystemTab operations={getCapabilities({ administrator: true }).operations} />
+  const content = loaded.kind === "system" ? <SystemTab operations={getCapabilities({ administrator: true }).operations} compiler={loaded.compiler} />
     : loaded.kind === "health" ? <HealthTab data={loaded.data} now={now} />
     : loaded.kind === "customers" ? <CustomersTab page={loaded.page} detail={loaded.detail} state={state} now={now} />
     : loaded.kind === "overview" ? (tab === "overview" ? <OverviewTab data={loaded.data} now={now} /> : tab === "subscriptions" ? <SubscriptionsTab data={loaded.data} now={now} /> : <CreditsTab data={loaded.data} />)

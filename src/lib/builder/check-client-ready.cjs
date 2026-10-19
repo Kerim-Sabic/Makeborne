@@ -8,7 +8,7 @@ Module._load = function(name, parent, main) {
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true}}).outputText, filename);
 globalThis.fetch = async () => { throw new Error("Network forbidden"); };
 
-const {compileWebsite, compileProblems} = require("./compile.ts");
+const {compileWebsite, compileProblems, compilerSelfTest} = require("./compile.ts");
 const {clientReadyCheck, clientReadySummary, contrastRatio} = require("./client-ready.ts");
 const {ProjectFiles} = require("./files.ts");
 
@@ -53,6 +53,13 @@ const source = files => ({files: [...files].map(([path, content]) => ({path, con
 
 (async () => {
   // ---- compile at finish ---------------------------------------------------
+  await check("the admin compiler self-test compiles (System tab shows it per deployment)", async () => {
+    const outcome = await compilerSelfTest();
+    assert.equal(outcome.ok, true, JSON.stringify(outcome));
+    const read = file => fs.readFileSync(require("node:path").join(__dirname, ...file), "utf8");
+    assert.ok(read(["..", "..", "app", "admin", "page.tsx"]).includes("compiler: await compilerSelfTest()"), "the System tab runs the self-test");
+    assert.ok(read(["..", "..", "..", "next.config.ts"]).includes('"/admin": ["./node_modules/esbuild-wasm/package.json"'), "the admin route traces the compiler files");
+  });
   await check("a valid project compiles in memory without network or npm", async () => {
     const outcome = await compileWebsite(clean());
     assert.equal(outcome.ok, true, JSON.stringify(outcome));

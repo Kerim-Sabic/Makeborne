@@ -17,6 +17,14 @@ export type CompileOutcome =
   | { ok: null; ms: number; reason: string };
 
 const ENTRY = "src/main.tsx";
+
+/** Admin self-test: compiles a two-file project so an operator can see the compiler runs in this deployment. Free, no model call. */
+export function compilerSelfTest() {
+  return compileWebsite(new Map([
+    [ENTRY, `import { createRoot } from "react-dom/client";\nimport App from "./App";\ncreateRoot(document.getElementById("root")!).render(<App />);\n`],
+    ["src/App.tsx", "export default function App() { return <h1>Compiler self-test</h1>; }\n"],
+  ]), { timeoutMs: 15_000 });
+}
 /** Packages the toolchain provides; the browser runtime supplies them. */
 const EXTERNAL = new Set(["react", "react-dom", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime", LUCIDE]);
 const LOADERS: Record<string, Loader> = { tsx: "tsx", ts: "ts", jsx: "jsx", js: "js", mjs: "js", css: "css", json: "json", svg: "dataurl", txt: "text", md: "text" };
