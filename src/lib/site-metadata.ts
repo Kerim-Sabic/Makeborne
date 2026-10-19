@@ -59,7 +59,7 @@ export const SITE_FACTS = {
   audience: "Freelancers, studios, agencies and small businesses who create for themselves or for clients.",
   makes: [
     "Websites: generated as editable React projects, previewed live, published on Makeborne hosting (unlimited websites, fair use).",
-    "Books: structured chapters with editorial typography, exported as print-ready PDF.",
+    "Books: structured chapters with editorial typography, exported as a typeset PDF.",
     "Presentations: designed slides with speaker notes and native charts, exported as PDF or editable PowerPoint (PPTX).",
   ],
   crm: [

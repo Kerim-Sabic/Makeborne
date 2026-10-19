@@ -90,24 +90,24 @@ const CORE_ARTICLES: HelpArticle[] = [
   },
   {
     slug: "make-a-book-with-ai", category: "create", updated: UPDATED, demo: "make-book",
-    title: "How to make a book with AI and export a print-ready PDF",
-    description: "Describe your book, attach your notes, review the chapter plan, and Makeborne writes and typesets it. Export a print-ready PDF.",
+    title: "How to make a book with AI and export it as a PDF",
+    description: "Describe your book, attach your notes, review the chapter plan, and Makeborne writes and typesets it. Export a typeset PDF.",
     keywords: ["book", "ebook", "e-book", "guide", "write a book", "pdf", "print", "chapters", "lead magnet", "workbook"],
-    answer: "Choose Book, describe the book and its reader, attach any notes or drafts, and choose Plan to review the chapters first. Approve the plan and Makeborne writes and typesets the book with editorial typography. Read it in the preview, ask for changes, and export a print-ready PDF.",
+    answer: "Choose Book, describe the book and its reader, attach any notes or drafts, and choose Plan to review the chapters first. Approve the plan and Makeborne writes and typesets the book with editorial typography. Read it in the preview, ask for changes, and export a typeset PDF.",
     steps: [
       { name: "Choose Book", text: "Switch the format to Book." },
       { name: "Describe the book", text: "Topic, reader, purpose and tone. For example: a practical guide for first-time café owners." },
       { name: "Attach your material", text: "Add notes, outlines or existing drafts so the book is built from your knowledge." },
       { name: "Choose Plan", text: "Review the proposed title and chapters, then approve or adjust them." },
       { name: "Read and refine", text: "Read the typeset pages in the preview and ask for changes to any chapter." },
-      { name: "Export a PDF", text: "Download a print-ready PDF for print, sale or as a lead magnet." },
+      { name: "Export a PDF", text: "Download a typeset PDF to share, sell as an ebook or use as a lead magnet." },
     ],
     sections: [
       { heading: "Good uses", list: ["Guides and handbooks for your clients.", "Lead magnets and e-books for your website.", "Course workbooks and internal playbooks."] },
     ],
     faqs: [
       { q: "Can I use my own writing?", a: "Yes. Attach it and say whether to keep your wording, improve it, or summarise it." },
-      { q: "What format is the export?", a: "A PDF laid out for reading and print, with chapters, contents and consistent typography." },
+      { q: "What format is the export?", a: "A 6 × 9 inch PDF laid out for reading, with chapters, contents and consistent typography. Paperback print files (bleed, cover wrap and printer preflight) are not included." },
     ],
     related: ["attach-files-to-your-brief", "plan-create-and-effort", "make-a-presentation-with-ai"],
   },
@@ -165,13 +165,13 @@ const CORE_ARTICLES: HelpArticle[] = [
   {
     slug: "publish-your-website", category: "create", updated: UPDATED, demo: "publish",
     title: "How to publish your website",
-    description: "Publish a finished website to a Makeborne web address in seconds, republish after changes, and remove the small Makeborne badge in Settings.",
+    description: "Publish a finished website to a Makeborne web address, republish after changes, and remove the small Makeborne badge in Settings.",
     keywords: ["publish", "go live", "hosting", "web address", "url", "domain", "badge", "republish", "launch site"],
-    answer: "Open the website, choose Publish, pick its web address and confirm. It is live in seconds on a Makeborne address. Republish after any change and the address stays the same. Every plan includes unlimited websites with fair use, and you can remove the small “Made with Makeborne” badge in Studio → Settings.",
+    answer: "Open the website, choose Publish, pick its web address and confirm. When publishing is available for your account, the reviewed version goes live on a Makeborne address; until then the Publish tab says so and your website stays saved. Republish after any change and the address stays the same. Every plan includes unlimited websites with fair use, and you can remove the small “Made with Makeborne” badge in Studio → Settings.",
     steps: [
       { name: "Open the website", text: "From Projects, open the website you want to publish." },
       { name: "Choose Publish", text: "Pick a web address for it." },
-      { name: "Confirm", text: "The site goes live in seconds." },
+      { name: "Confirm", text: "Publish the reviewed version. If publishing is still being prepared, the Publish tab says so." },
       { name: "Republish after changes", text: "Edits stay private until you republish; the address does not change." },
     ],
     faqs: [
