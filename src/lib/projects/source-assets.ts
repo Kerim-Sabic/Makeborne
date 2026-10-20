@@ -4,6 +4,7 @@ import type {SupabaseClient} from "@supabase/supabase-js";
 import {verifyStillRaster} from "../media/verified-raster";
 import {z} from "zod";
 import {RequestError} from "../server/http";
+import {downloadProjectAsset} from "../cloud/asset-storage";
 import {WebsiteProjectSourceSchema, SourceAssetSchema} from "./website-source";
 import {ArtifactContentSchema, StyleProfileSchema} from "../domain";
 
@@ -66,7 +67,7 @@ async function resolveOriginalAssets(client: SupabaseClient, scopeInput: unknown
       || /[\\%?#\u0000-\u001f\u007f]/.test(row.object_path)) throw unavailable();
     let blob: Blob;
     try {
-      const result = await client.storage.from("project-assets").download(row.object_path, {}, {signal: AbortSignal.timeout(15_000), cache: "no-store"});
+      const result = await downloadProjectAsset(client, {workspaceId: scope.workspaceId, projectId: scope.projectId}, row.object_path, {signal: AbortSignal.timeout(15_000), cache: "no-store"});
       if (result.error || !result.data) throw upstream();
       blob = result.data;
     } catch {throw upstream();}
