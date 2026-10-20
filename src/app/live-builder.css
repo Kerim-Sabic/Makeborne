@@ -28,6 +28,9 @@
 .lb-operation-consent { margin-top:8px; padding-top:7px; border-top:1px solid #e5dfeb; }
 .lb-operation-check { padding:3px 0; border:0; background:none; color:#65518a; font:inherit; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 .lb-operation-check:disabled { opacity:.5; cursor:default; }
+.lb-operation-phase strong { color:#3d3448; font-weight:600; }
+.lb-operation .lb-operation-note { margin:8px 0 0; color:#7c6f86; }
+.lb-action-effect { margin:6px 2px 0; color:#65566f; font-size:12px; line-height:1.45; }
 .lb-limit { margin:6px 2px 0; color:#71617f; font-size:12px; line-height:1.5; }
 .lb-estimate .lb-limit { margin-bottom:0; color:#4c3e57; font-weight:550; }
 .lb-estimate-detail { margin:2px 2px 0; color:var(--text-muted); font-size:12px; line-height:1.5; }
@@ -99,6 +102,22 @@
 .lp-stage iframe { display:block; height:100%; min-height:560px; max-width:100%; border:0; background:#fff; box-shadow:0 1px 0 #e3e0e8; }
 .lp-stage[data-device="tablet"] iframe, .lp-stage[data-device="mobile"] iframe { border-radius:14px; box-shadow:0 10px 40px #2a1d3518, 0 0 0 1px #e1dde6; }
 .lp-empty { display:grid; place-items:center; flex:1; color:var(--text-muted); font-size:12px; }
+.lp-stage iframe[hidden] { display:none; }
+.lp-bar .lp-page { flex:0 1 220px; }
+.lp-bar .lp-page:focus-visible, .lp-bar button:focus-visible, .lp-path input:focus-visible, .lp-missing button:focus-visible { outline:2px solid #765887; outline-offset:2px; }
+.lp-path { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; padding:8px 14px; border-bottom:1px solid #ebe8ef; background:#fbfafc; font-size:12px; }
+.lp-path label { font-weight:600; color:#4b3a59; }
+.lp-path input { flex:1 1 160px; min-width:0; height:30px; padding:0 9px; border:1px solid #d9d2e0; border-radius:7px; font:inherit; }
+.lp-path small { flex-basis:100%; color:var(--text-muted); }
+.lp-notice { margin:8px 14px 0; font-size:12px; color:#5b4a68; }
+.lp-missing { align-self:center; max-width:440px; margin:32px 16px; padding:22px 24px; border:1px solid #e3dde9; border-radius:14px; background:#fff; color:#3d3448; font-size:13px; line-height:1.5; }
+.lp-missing h2 { margin:0 0 6px; font-size:18px; }
+.lp-missing code { overflow-wrap:anywhere; }
+.lp-missing ul { margin:14px 0 0; padding:0; list-style:none; display:grid; gap:4px; }
+.lp-missing-link { display:flex; gap:8px; align-items:baseline; width:100%; padding:6px 8px; border:0; border-radius:7px; background:#f6f3f8; color:#4b3a59; font:inherit; text-align:left; cursor:pointer; }
+.lp-missing-link span { color:var(--text-muted); font-size:12px; }
+.lp:has(.lp-page) { container-type:inline-size; }
+@container (max-width:460px) { .lp-bar:has(.lp-page) { flex-wrap:wrap; row-gap:6px; } .lp-bar .lp-page { order:5; flex:1 1 100%; max-width:none; } .lp-bar:has(.lp-page) .lp-status { display:none; } }
 @media (max-width:760px) {
   /* The preview fills the screen; the builder is a compact bar under it (see build-workspace.css). */
   .lb { border-right:0; border-top:1px solid #e9e6ed; }
