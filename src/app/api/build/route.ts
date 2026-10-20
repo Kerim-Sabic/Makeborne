@@ -146,7 +146,7 @@ export async function POST(request: Request) {
       return response;
     }
 
-    const response = websiteBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing),
+    const response = websiteBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
       message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments,
       limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : undefined, maxDuration });
     reserved = null;

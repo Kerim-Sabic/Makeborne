@@ -10,6 +10,7 @@ import { api, setCloudAccount } from "./cloud-api";
 import { icons, kindLabel } from "./studio-model";
 import PendingCloudWrites from "./pending-cloud-writes";
 import { accountLibraryStatus, type AccountLibraryStatus } from "@/lib/projects/library-state";
+import { savedSourceMeta, shortDate } from "@/lib/projects/project-labels";
 
 const AccountEditor = dynamic(() => import("./cloud-studio").then(module => module.CloudEditor), { loading: () => <p role="status">Opening project…</p> });
 type Snapshot = CloudWorkspaceSnapshot & { pagination: { artifacts: { nextOffset: number | null; total: number } } };
@@ -131,8 +132,8 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
     {busy && <p role="status">Loading your account projects…</p>}
     {selected && snapshot ? <AccountEditor key={`${accountId}:${snapshot.workspace.id}:${selected.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} artifact={selected} project={snapshot.projects.find(project => project.id === selected.projectId)} role={snapshot.workspace.role}
       notify={setMessage} back={() => navigate({ workspaceId: snapshot.workspace.id, artifactId: null })} /> : <>
-      <div className="account-project-grid">{visible.map(artifact => { const Icon = icons[artifact.kind]; return <button type="button" className="account-project-card" key={artifact.id} disabled={busy} onClick={() => navigate({ workspaceId: snapshot!.workspace.id, artifactId: artifact.id })}>
-        <span className={`account-project-icon ${artifact.kind}`}><Icon size={22} /></span><span><strong>{artifact.title}</strong><small>{kindLabel[artifact.kind]} · {artifact.currentVersion ? `Version ${artifact.currentVersion}` : "New draft"}</small></span><ArrowRight size={16} /></button>; })}</div>
+      <div className="account-project-grid">{visible.map(artifact => { const Icon = icons[artifact.kind], meta = savedSourceMeta(artifact, shortDate); return <button type="button" className="account-project-card" key={artifact.id} disabled={busy} onClick={() => navigate({ workspaceId: snapshot!.workspace.id, artifactId: artifact.id })}>
+        <span className={`account-project-icon ${artifact.kind}`}><Icon size={22} /></span><span><strong>{artifact.title}</strong><small>{kindLabel[artifact.kind]} · <time dateTime={meta.at}>{meta.label}</time></small></span><ArrowRight size={16} /></button>; })}</div>
       {!busy && !visible.length && (snapshot || noWorkspace) && <p>{snapshot ? "No saved projects match this view." : "No account workspace was found. Your device projects remain below."}</p>}
       {snapshot?.pagination.artifacts.nextOffset != null && <button className="button secondary small" type="button" disabled={busy} onClick={() => void load(snapshot.workspace.id, true)}>Load more saved projects</button>}
       {snapshot && <p className="small-note">Search applies to loaded account projects. Load more to include earlier records.</p>}

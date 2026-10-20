@@ -62,6 +62,7 @@ import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
 import { studioSkipTargets } from "@/lib/studio-skip-links";
+import { creationTitle, fallbackProjectTitle, isPlaceholderTitle, placeholderTitle } from "@/lib/projects/project-title";
 import { libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
@@ -184,7 +185,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       window.history.pushState(window.history.state,"",url);
       unsentBrief.submitted();
     } catch {setNotice("This browser could not preserve your prompt. Keep a copy and free browser storage before creating.");return;}
-    setDirectStart(true);setCreationRequestId(requestId);setInitialBrief(draft.brief);setInitialTitle(`Untitled ${draftKind}`);
+    setDirectStart(true);setCreationRequestId(requestId);setInitialBrief(draft.brief);setInitialTitle(placeholderTitle(draftKind));
     setInitialStyle(AUTOMATIC_STYLE.id);setInitialClient("");setInitialWorkspaceId(null);setInitialAttachmentOwner(owner);
     setInitialGenerationConsent(consent);setHomeHandoff(false);setCreating(draftKind);
   }
@@ -292,7 +293,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
               setInitialAttachmentOwner(draft.data.attachmentOwner ?? null);
               setInitialGenerationConsent(draft.data.kind === "website" && draft.data.mode === "create" ? draft.data.generationConsent ?? null : null);
               setDirectStart(Boolean(draft.data.brief.trim()));
-              setInitialTitle(`Untitled ${draft.data.kind}`);
+              setInitialTitle(placeholderTitle(draft.data.kind));
               setDraftBrief(draft.data.brief);
               setDraftKind(draft.data.kind);
               if (draft.data.style) {
@@ -520,7 +521,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     }
     setDraftKind(kind);
     setInitialBrief(draftBrief);
-    setInitialTitle(`Untitled ${kind}`);
+    setInitialTitle(placeholderTitle(kind));
     setInitialStyle(styleId);
     setCreating(kind);
   }
@@ -1340,9 +1341,8 @@ function CreationWizard({
     wizardContent.current?.scrollTo({ top: 0, behavior: "instant" });
     wizardContent.current?.querySelector<HTMLElement>("h2")?.focus();
   }, [step]);
-  const [title, setTitle] = useState(
-    initialTitle || (initialBrief.trim() ? `Untitled ${kind}` : ""),
-  );
+  // Only a title the user gave is shown; the placeholder still names the draft seed, so open drafts keep restoring.
+  const [title, setTitle] = useState(() => isPlaceholderTitle(initialTitle) ? "" : initialTitle);
   const [brief, setBrief] = useState(initialBrief);
   const [content, setContent] = useState("");
   const [audience, setAudience] = useState("");
@@ -1382,7 +1382,7 @@ function CreationWizard({
 
           setMode(draft.mode); setRequirements(draft.requirements);
           setOutline(draft.outline);
-          setTitle(draft.title);
+          setTitle(isPlaceholderTitle(draft.title) ? "" : draft.title);
           setBrief(draft.brief);
           setContent(draft.content);
           setAudience(draft.audience);
@@ -1473,8 +1473,10 @@ function CreationWizard({
     savingRef.current = true; setSaving(true); setSaveError("");
     const controller = lifetime.current;
     const current = () => !!controller && !controller.signal.aborted;
-    const values = { effort, kind, title: title.trim() || `Untitled ${kind}`,
-      brief: mode === "plan" && !aiPlan ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n"),
+    const savedBrief = mode === "plan" && !aiPlan ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n");
+    // The user's own title is kept exactly; without one, a short title derived from the saved brief (never attachments or source text).
+    const values = { effort, kind, title: creationTitle(title, savedBrief, kind),
+      brief: savedBrief,
       audience, purpose, wording, styleId, clientId, content };
     try {
       if (!account.accountId) throw new Error("Sign in with an active creation plan to continue. Your draft and files are preserved.");
@@ -1580,7 +1582,7 @@ function CreationWizard({
         </details>
         <details className="prompt-options">
           <summary><span>Project details</span><span>Optional</span></summary>
-          <label>Project title<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} placeholder="Name it now or later" /></label>
+          <label>Project title<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} placeholder={`Name it now or later · “${fallbackProjectTitle(brief, kind)}”`} /></label>
           <label>Client<select value={clientId} onChange={e => setClient(e.target.value)}><option value="">For myself</option>{clientId && !clients.some(c => c.id === clientId) && <option value={clientId} disabled>Client unavailable — choose another</option>}{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
           <div className="form-grid"><label>Audience<input value={audience} onChange={e => setAudience(e.target.value)} maxLength={1000} placeholder="Who is it for?" /></label><label>Outcome<input value={purpose} onChange={e => setPurpose(e.target.value)} maxLength={2000} placeholder="What should it achieve?" /></label></div>
           <label>Requirements<textarea value={requirements} onChange={e => setRequirements(e.target.value)} maxLength={4000} rows={3} placeholder="Anything to include or avoid" /></label>
