@@ -61,6 +61,8 @@ export class RunSpend {
   get providerMicrousd() { return this.confirmedMicrousd + this.uncertainMicrousd; }
 
   cancel() { this.stopped = "CANCELLED"; }
+  /** A call produced more than its bound allowed (e.g. image output tokens): no further calls in this run. */
+  markOverrun() { if (this.stopped !== "CANCELLED") this.stopped = "OVERRUN"; }
 
   async begin(provider: ProviderName, model: string, boundMicrousd: number): Promise<CallTicket> {
     if (this.stopped === "CANCELLED") throw new SpendError("CANCELLED", "This request was stopped.");

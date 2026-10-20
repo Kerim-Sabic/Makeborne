@@ -88,8 +88,8 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
       "https://developers.openai.com/api/docs/guides/image-generation (checked 2026-10-20: both 2.5 models list text input $5, image input $8, image output $30, cached text input $1.25 and cached image input $2 per 1M, plus an output-token estimator)",
       "https://developers.openai.com/api/docs/deprecations (named, with the other 2.5 model, as gpt-image-1's replacement)"],
     components: { textInput: 5, textCachedInput: 1.25, imageInput: 8, imageCachedInput: 2, imageOutput: 30 },
-    notes: ["OpenAI now publishes token rates for 2.5 models and an estimator of output tokens by model, quality and size (image-generation guide, checked 2026-10-20), but no per-image price table and no guaranteed per-call maximum. An estimate is not a bound, so the cost of one image still cannot be capped from documentation.",
-      "Refused: MEASURED_IMAGE_OUTPUT_TOKENS stays empty and scripts/qualify-image-model.mjs is blocked (decision D8) until a documented or provider-enforced per-call maximum exists. Sample counts are not a bound.",
+    notes: ["OpenAI publishes no per-image price or output-token count for 2.5 models, so the cost of one image cannot be bounded from documentation.",
+      "D8 changed 2026-10-21 (owner, Kerim): bounded by MEASURED_IMAGE_OUTPUT_TOKENS (observed output tokens per size and quality x 1.5), from the owner-approved research run of 2026-10-20 (docs/release-review/design-quality-images-20261020.md). Sizes and qualities without a measurement stay refused. A call whose output tokens exceed the bound stops routing to the model (image-health.ts) and, when it exceeds the dollar bound, trips the provider scope's emergency stop.",
       variant === "sunburst" ? "OpenAI: the most capable image generation and editing model." : "OpenAI: the fastest model for high-quality, everyday image generation."],
   })),
 ]);
@@ -118,19 +118,36 @@ export type ImageSize = "1024x1024" | "1024x1536" | "1536x1024";
 /** Output tokens per image by quality and size, from the cited guide table. */
 export type ImagePrice = { textInput: number; imageInput: number; imageOutput: number; outputTokens: Partial<Record<ImageQuality, Partial<Record<ImageSize, number>>>> };
 type OutputTokens = ImagePrice["outputTokens"];
-/** Output-token bounds for models whose provider publishes token rates and an estimator but
- * no per-image maximum (the 2.5 models). Empty means refused: no bound, no call. It stays empty
- * until a documented or provider-enforced per-call maximum exists (decision D8); sample counts
- * from a live run are not a bound, and scripts/qualify-image-model.mjs is blocked. A call that
- * exceeds a recorded bound is an overrun, which stops the provider scope for review. */
-export const MEASURED_IMAGE_OUTPUT_TOKENS: Readonly<Record<string, { evidence: string; outputTokens: OutputTokens }>> = Object.freeze({});
+/**
+ * Observed output tokens per image for models whose provider publishes token rates but no
+ * per-image counts (the 2.5 models). D8, changed by the owner on 2026-10-21: these bound a
+ * call at observed x MEASURED_HEADROOM (rounded up), plus the prompt at the text rate. Evidence:
+ * 15 completed calls on 2026-10-20 (outputs/eval/image-research/20261020/results.jsonl,
+ * docs/release-review/design-quality-images-20261020.md): every (size, quality) cell measured on
+ * both models returned the same count on both, across prompts and opaque or transparent
+ * backgrounds, so a cell measured on either model applies to both. Cells not listed stay
+ * refused. The image call compares usage.output_tokens with the bound after every call
+ * (image-call.ts); an excess stops routing to that model until reviewed (image-health.ts).
+ * Partial images (+100 output tokens each) are never requested.
+ */
+export const MEASURED_IMAGE_OUTPUT_TOKENS: Readonly<Record<string, { evidence: string; observed: OutputTokens }>> = Object.freeze(Object.fromEntries(
+  ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"].map(model => [model, {
+    evidence: "outputs/eval/image-research/20261020/results.jsonl (owner-approved research, ledger kind openai-image-research)",
+    observed: {
+      low: { "1024x1024": 196, "1536x1024": 158 },
+      medium: { "1024x1024": 439, "1024x1536": 343, "1536x1024": 343 },
+      high: { "1536x1024": 1372 },
+    },
+  }])));
 export const MEASURED_HEADROOM = 1.5;
 /** Image models with evidence but no usable bound yet. */
 export const UNBOUNDED_IMAGE_MODELS = Object.freeze(PRICE_EVIDENCE
   .filter(item => item.provider === "openai" && item.model.startsWith("gpt-image-2.5-") && !MEASURED_IMAGE_OUTPUT_TOKENS[item.model])
   .map(item => item.model));
+const withHeadroom = (observed: OutputTokens): OutputTokens => Object.fromEntries(Object.entries(observed)
+  .map(([quality, sizes]) => [quality, Object.fromEntries(Object.entries(sizes ?? {}).map(([size, tokens]) => [size, Math.ceil(tokens! * MEASURED_HEADROOM)]))]));
 const measured = (model: string): ImagePrice => ({ textInput: evidence(model).components.textInput, imageInput: evidence(model).components.imageInput,
-  imageOutput: evidence(model).components.imageOutput, outputTokens: MEASURED_IMAGE_OUTPUT_TOKENS[model].outputTokens });
+  imageOutput: evidence(model).components.imageOutput, outputTokens: withHeadroom(MEASURED_IMAGE_OUTPUT_TOKENS[model].observed) });
 export const IMAGE_PRICES: Readonly<Record<string, ImagePrice>> = Object.freeze({
   ...Object.fromEntries(Object.keys(MEASURED_IMAGE_OUTPUT_TOKENS).map(model => [model, measured(model)])),
   "gpt-image-1": {
@@ -224,13 +241,41 @@ export function assertSupportedTextRequest(params: Record<string, unknown>) {
   if (output && Object.keys(output).some(key => key !== "effort")) throw new UnsupportedConfigurationError("output_config beyond effort");
 }
 
-/** Image requests the price card covers: priced model, medium quality, n=1, listed size, text prompt only. */
-export function assertSupportedImageRequest(request: { model: string; quality: string; size: string; n?: number; hasImageInput?: boolean }) {
+/**
+ * Models that return a real alpha channel for background "transparent" (with
+ * output_format png or webp). Same price card: the background does not change
+ * output tokens (2.5 cut-outs measured 439 tokens at medium 1024x1024, equal to
+ * opaque squares). Anything not listed true is refused before a reservation.
+ * - gpt-image-1: documented (image generation guide, transparency section).
+ * - gpt-image-2: refused live on 2026-10-20 with 400 invalid_value
+ *   "Transparent background is not supported for this model."
+ * - gpt-image-2.5-sunburst / -flare: documented ("either model") and verified
+ *   live on 2026-10-20 (outputs/eval/image-research/20261020/results.jsonl).
+ */
+export const TRANSPARENT_IMAGE_MODELS: Readonly<Record<string, boolean>> = Object.freeze({
+  "gpt-image-1": true, "gpt-image-2": false, "gpt-image-2.5-sunburst": true, "gpt-image-2.5-flare": true,
+});
+export const supportsTransparentImages = (model: string) => TRANSPARENT_IMAGE_MODELS[model] === true;
+export type ImageBackground = "opaque" | "transparent";
+
+/** Image requests the price card covers: priced model, medium quality, n=1, listed size, text prompt only,
+ * and a transparent background only on models that support it. */
+export function assertSupportedImageRequest(request: { model: string; quality: string; size: string; n?: number; hasImageInput?: boolean; background?: string; allowHigh?: boolean }) {
   const price = imagePrice(request.model);
-  if (request.quality !== "medium") throw new UnsupportedConfigurationError(`image quality "${request.quality}"`);
+  if (request.background !== undefined && request.background !== "opaque" && request.background !== "transparent") throw new UnsupportedConfigurationError(`image background "${request.background}"`);
+  if (request.background === "transparent" && !supportsTransparentImages(request.model)) throw new UnsupportedConfigurationError(`transparent background on "${request.model}"`);
+  // Low and medium; high only when the router asks for it (small text), never xhigh or max (no bound).
+  if (!(request.quality === "medium" || request.quality === "low" || (request.quality === "high" && request.allowHigh))) throw new UnsupportedConfigurationError(`image quality "${request.quality}"`);
   if ((request.n ?? 1) !== 1) throw new UnsupportedConfigurationError("more than one image per call");
   if (request.hasImageInput) throw new UnsupportedConfigurationError("image input");
-  if (!price.outputTokens.medium?.[request.size as ImageSize]) throw new UnsupportedConfigurationError(`image size "${request.size}"`);
+  if (!price.outputTokens[request.quality as ImageQuality]?.[request.size as ImageSize]) throw new UnsupportedConfigurationError(`image size "${request.size}" at quality "${request.quality}"`);
+}
+
+/** Output tokens one call may produce before it counts as an overrun (the bound's output part). */
+export function imageOutputTokenBound(model: string, quality: ImageQuality, size: ImageSize, now = Date.now()) {
+  const tokens = imagePrice(model, now).outputTokens[quality]?.[size];
+  if (!tokens) throw new UnpricedModelError(`${model} ${quality} ${size}`);
+  return tokens;
 }
 
 export function textPrice(model: string): TextPrice {

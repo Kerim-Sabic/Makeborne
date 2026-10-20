@@ -28,7 +28,11 @@ export type RunMeter = {
   sources: string[];
   /** The advisor brief this request came from ("Mira’s brief · revision 2"), when it carried one. */
   brief?: string;
+  /** Generated images: the model the router chose, its quality, size, reason and measured cost. */
+  images: ReceiptImage[];
 };
+
+export type ReceiptImage = { path: string; model: string | null; quality: string | null; size: string | null; reason: string | null; costMicrousd: number | null };
 
 export type RunReceipt = {
   charged: number | null;
@@ -43,15 +47,18 @@ export type RunReceipt = {
   /** The advisor brief recorded with this request, when there was one. */
   brief?: string;
   checks: { ok: boolean; label: string }[];
+  images: ReceiptImage[];
   /** This request saved nothing and the server settled it at zero credits. */
   notCharged: boolean;
 };
 
 export function newRunMeter(now = Date.now()): RunMeter {
-  return { started: now, steps: 0, charged: 0, chargeKnown: true, files: new Set(), items: new Set(), saved: false, version: null, finished: null, build: null, reviews: 0, failed: false, render: null, sources: [] };
+  return { started: now, steps: 0, charged: 0, chargeKnown: true, files: new Set(), items: new Set(), saved: false, version: null, finished: null, build: null, reviews: 0, failed: false, render: null, sources: [], images: [] };
 }
 
-type StreamEvent = { type?: unknown; path?: unknown; label?: unknown; charged?: unknown; changed?: unknown; finished?: unknown; build?: unknown; version?: unknown };
+type StreamEvent = { type?: unknown; path?: unknown; label?: unknown; charged?: unknown; changed?: unknown; finished?: unknown; build?: unknown; version?: unknown;
+  model?: unknown; quality?: unknown; size?: unknown; reason?: unknown; costMicrousd?: unknown };
+const text = (value: unknown) => typeof value === "string" && value ? value.slice(0, 300) : null;
 const credits = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 
 /** Records one server-sent builder event. */
@@ -59,6 +66,10 @@ export function meterEvent(meter: RunMeter, event: StreamEvent) {
   switch (event.type) {
     case "file": case "delete":
       if (typeof event.path === "string") meter.files.add(event.path);
+      break;
+    case "image":
+      if (typeof event.path === "string") meter.images.push({ path: event.path, model: text(event.model), quality: text(event.quality), size: text(event.size), reason: text(event.reason),
+        costMicrousd: typeof event.costMicrousd === "number" && Number.isSafeInteger(event.costMicrousd) && event.costMicrousd >= 0 ? event.costMicrousd : null });
       break;
     case "item":
       if (typeof event.label === "string") meter.items.add(event.label);
@@ -108,7 +119,7 @@ export function runReceipt(meter: RunMeter, options: { website: boolean; unlimit
   return {
     charged, unlimited: options.unlimited, saved: meter.saved, version: meter.version,
     durationMs: Math.max(0, (options.now ?? Date.now()) - meter.started),
-    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), checks,
+    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), checks, images: meter.images.map(image => ({ ...image })),
     notCharged: !options.unlimited && charged === 0 && !meter.saved && meter.failed,
   };
 }
