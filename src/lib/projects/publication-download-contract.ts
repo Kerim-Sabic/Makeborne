@@ -2,7 +2,7 @@ import "server-only";
 import {createHash, createHmac, timingSafeEqual} from "node:crypto";
 import {z} from "zod";
 import {publicationBrokerOriginAllowed} from "../../../infra/publication-controller/profiles.mjs";
-/** Operator-pinned deployment or stable team alias for this staging project.
+/** Operator-pinned origin for the selected deployment profile.
  * No default: the selected alias must be verified before broker activation. */
 export function assertPublicationAssetOrigin(origin: string, namespace?: "staging" | "production") {
   if (!(namespace ? publicationBrokerOriginAllowed(origin, namespace)
