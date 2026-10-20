@@ -12,7 +12,7 @@ import { runBuilder, type BuilderEvent, type BuilderRun } from "./agent";
 import type { ProjectFiles } from "./files";
 import { compileVerdict } from "./compile";
 import { aiCostUsdPerCredit } from "./pricing";
-import { finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
+import { watchOperationCancellation, finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
 import { builtTitle } from "../projects/project-title";
 
 export type WebsiteBuildInput = {
@@ -63,6 +63,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
   const encoder = new TextEncoder();
   // The run continues even if the browser disconnects, so paid work is saved.
   const controller = new AbortController();
+  const stopWatching = watchOperationCancellation(input.operation, spend, controller);
   const timeout = setTimeout(() => controller.abort(), (input.maxDuration - 20) * 1000);
   const stream = new ReadableStream<Uint8Array>({
     async start(output) {
@@ -170,7 +171,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         else emit({ type: "error", code: "BUILD_FAILED", message: (error as { code?: string }).code === "REFUSED" ? "This request can't be built. Try rephrasing it."
           : "The builder hit a problem and stopped. Your project is unchanged and no credits were charged." });
       } finally {
-        clearTimeout(timeout); clearInterval(heartbeat);
+        stopWatching(); clearTimeout(timeout); clearInterval(heartbeat);
         if (open) try { output.close(); } catch { /* client already gone */ }
       }
     },

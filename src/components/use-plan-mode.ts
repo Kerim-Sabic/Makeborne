@@ -65,7 +65,7 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
   const [state, setState] = useState<{ key: object; active: ActivePlan | null; restored: ActivePlan | null } | null>(null);
   const active = state?.key === key ? state.active : null;
   const restored = state?.key === key ? state.restored : null;
-  const { operation, recovery, checking, recoveryNotice, ready, hasPrevious, begin, observe, refresh, recover: recoverOperation } = useBuilderOperation({ accountId, workspaceId, artifactId, channel: "plan" });
+  const { operation, recovery, checking, recoveryNotice, ready, hasPrevious, begin, observe, refresh, recover: recoverOperation, cancel, cancelling, pendingCancel } = useBuilderOperation({ accountId, workspaceId, artifactId, channel: "plan" });
   const recoverablePlan = useMemo(() => recovery?.candidate && typeof recovery.candidate === "object"
     ? readPlanView({ ...recovery.candidate, persisted: false }, "recovered-plan") : null, [recovery]);
   const publish = useCallback((plan: ActivePlan | null, restore = false) => {
@@ -279,5 +279,5 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
     } finally { if (isCurrent()) session.running = false; }
   }, [accountId, workspaceId, artifactId, begin, observe, refresh, publish, restoreRecorded, key]);
 
-  return useMemo(() => ({ active, restored, run, edit, markBuilt, operation, checking, recoveryNotice, ready, hasPrevious, refreshOperation, recoverablePlan, recoverPlan }), [active, restored, run, edit, markBuilt, operation, checking, recoveryNotice, ready, hasPrevious, refreshOperation, recoverablePlan, recoverPlan]);
+  return useMemo(() => ({ active, restored, run, edit, markBuilt, operation, checking, recoveryNotice, ready, hasPrevious, refreshOperation, recoverablePlan, recoverPlan, cancel, cancelling, pendingCancel }), [active, restored, run, edit, markBuilt, operation, checking, recoveryNotice, ready, hasPrevious, refreshOperation, recoverablePlan, recoverPlan, cancel, cancelling, pendingCancel]);
 }

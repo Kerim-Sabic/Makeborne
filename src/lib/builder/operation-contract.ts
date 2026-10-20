@@ -12,7 +12,8 @@ export const OperationSnapshotSchema = z.object({
   kind: z.enum(["build", "review", "plan"]), effort: z.enum(["light", "medium", "high", "super_high", "ultra"]),
   authorizedCredits: credits, chargedCredits: credits, reservedCredits: credits, remainingCredits: credits,
   maximumAdditionalCredits: credits,
-  status: z.enum(["active", "running", "paused", "completed", "expired"]),
+  status: z.enum(["active", "running", "paused", "completed", "expired", "cancelled"]),
+  cancelRequested: z.boolean().optional(),
   pendingKind: z.enum(["continuation", "review", "plan"]).nullable(),
   lastVersion: credits, canContinue: z.boolean(), recoverable: z.boolean(), expiresAt: z.string(),
 });

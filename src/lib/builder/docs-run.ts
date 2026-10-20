@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ArtifactVersion } from "../domain";
 import type { EffortLevel } from "../routing/effort";
 import { holdIsActive, releaseRun, settleRun, type CreditHold } from "../credits/server";
-import { finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
+import { watchOperationCancellation, finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
 import type { RunSpend } from "../ai/run-spend";
 import type { AnthropicLike } from "../ai/anthropic-call";
 import type { ImageClientLike } from "../ai/image-call";
@@ -77,6 +77,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
   const context = [documentContext(input, editor, fresh), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n");
   const encoder = new TextEncoder();
   const controller = new AbortController();
+  const stopWatching = watchOperationCancellation(input.operation, spend, controller);
   const timeout = setTimeout(() => controller.abort(), (input.maxDuration - 20) * 1000);
   const stream = new ReadableStream<Uint8Array>({
     async start(output) {
@@ -156,7 +157,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         else emit({ type: "error", code: "BUILD_FAILED", message: (error as { code?: string }).code === "REFUSED" ? "This request can't be built. Try rephrasing it."
           : "The builder hit a problem and stopped. Your document is unchanged and no credits were charged." });
       } finally {
-        clearTimeout(timeout); clearInterval(heartbeat);
+        stopWatching(); clearTimeout(timeout); clearInterval(heartbeat);
         if (open) try { output.close(); } catch { /* client already gone */ }
       }
     },

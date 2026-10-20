@@ -20,7 +20,7 @@ export type SpendGate = {
   finish(id: string, outcome: { actualMicrousd: number | null; partialMicrousd: number; detail?: Record<string, unknown> }): Promise<void>;
 };
 
-export type SpendStop = "RUN_BUDGET" | "HOLD_EXPIRED" | "OVERRUN";
+export type SpendStop = "RUN_BUDGET" | "HOLD_EXPIRED" | "OVERRUN" | "CANCELLED";
 export class SpendError extends Error {
   constructor(readonly code: SpendStop | "PROVIDER_LIMIT" | "PROVIDER_DISABLED" | "SPEND_UNAVAILABLE", message: string) { super(message); }
   /** Stops that end a run gracefully (keep finished work) rather than failing it. */
@@ -60,7 +60,10 @@ export class RunSpend {
   /** Provider dollars this run has incurred or may have incurred. */
   get providerMicrousd() { return this.confirmedMicrousd + this.uncertainMicrousd; }
 
+  cancel() { this.stopped = "CANCELLED"; }
+
   async begin(provider: ProviderName, model: string, boundMicrousd: number): Promise<CallTicket> {
+    if (this.stopped === "CANCELLED") throw new SpendError("CANCELLED", "This request was stopped.");
     if (!Number.isSafeInteger(boundMicrousd) || boundMicrousd <= 0) throw new Error("A call needs a positive integer bound.");
     if (this.stopped === "OVERRUN") throw new SpendError("OVERRUN", "A call cost more than its bound; this run makes no further calls.");
     if (this.timeLeftMs() < (this.options.minCallMs ?? 30_000)) { this.stopped = "HOLD_EXPIRED"; throw new SpendError("HOLD_EXPIRED", "The run's time or credit hold is over; no further calls."); }
@@ -71,6 +74,7 @@ export class RunSpend {
       await this.options.gate.begin({ id: ticket.id, run: this.options.run, provider, model, boundMicrousd });
     } catch (error) {
       this.pendingMicrousd -= boundMicrousd;
+      if (error instanceof SpendError && error.code === "CANCELLED") this.cancel();
       throw error;
     }
     return ticket;

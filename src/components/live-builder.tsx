@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Check, ChevronDown, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, MessageSquare, Paperclip, ReceiptText, Sparkles, TriangleAlert } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, MessageSquare, Paperclip, ReceiptText, Sparkles, Square, TriangleAlert } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
 import type { SitePlan } from "@/lib/builder/plan";
 import type { DocumentSource } from "@/lib/documents/schema";
@@ -128,14 +128,17 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [chosenMode, setMode] = useState<"create" | "plan" | null>(null);
   const planner = usePlanMode({ accountId, workspaceId, artifactId });
   const { actionKey: buildActionKey, operation: buildOperation, recovery: buildRecovery, checking: checkingBuildOperation, recoveryNotice: buildRecoveryNotice, ready: operationReady, hasPrevious: hasPreviousOperation,
-    begin: beginOperation, observe: observeOperation, refresh: refreshOperation, authorize: authorizeOperation, recover: recoverOperation } = useBuilderOperation({ accountId, workspaceId, artifactId });
+    begin: beginOperation, observe: observeOperation, refresh: refreshOperation, authorize: authorizeOperation, recover: recoverOperation, cancel: cancelBuild, cancelling: cancellingBuild, pendingCancel: buildPendingCancel } = useBuilderOperation({ accountId, workspaceId, artifactId });
   // An open draft plan from an earlier session keeps the composer in Plan mode.
   const mode = !website ? "create" : chosenMode ?? (planner.restored ? "plan" : "create");
   const operation = mode === "plan" ? planner.operation : buildOperation;
   const checkingOperation = mode === "plan" ? planner.checking : checkingBuildOperation;
   const recoveryNotice = mode === "plan" ? planner.recoveryNotice : buildRecoveryNotice;
   const checkCurrentOperation = mode === "plan" ? planner.refreshOperation : refreshOperation;
-  const operationRunning = buildOperation?.status === "running" || planner.operation?.status === "running";
+  const operationRunning = buildOperation?.status === "running" || planner.operation?.status === "running" || buildPendingCancel || Boolean(planner.pendingCancel);
+  const cancelling = mode === "plan" ? planner.cancelling : cancellingBuild;
+  const pendingCancel = mode === "plan" ? planner.pendingCancel : buildPendingCancel;
+  const stop = mode === "plan" ? planner.cancel : cancelBuild;
   const draftPlan = planner.active && planner.active.stored.status === "draft" ? planner.active : null;
   const [prefilled, setPrefilled] = useState<string | null>(null);
   if (prefill && prefill.key !== prefilled) { setPrefilled(prefill.key); setDraft(prefill.text.slice(0, 8000)); }
@@ -631,8 +634,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(draft); } }} />
       <div className="lb-controls">
         {website && <div className="lb-mode" role="group" aria-label="Mode">
-          <button type="button" aria-pressed={mode === "create"} disabled={busy || Boolean(previewingRecovery)} onClick={() => setMode("create")} title="Build: edit the website directly"><Hammer size={12} />Build</button>
-          <button type="button" aria-pressed={mode === "plan"} disabled={busy || Boolean(previewingRecovery)} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
+          <button type="button" aria-pressed={mode === "create"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("create")} title="Build: edit the website directly"><Hammer size={12} />Build</button>
+          <button type="button" aria-pressed={mode === "plan"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
         </div>}
         <label className="lb-attach" aria-label="Attach files"><Paperclip size={15} /><input type="file" multiple accept={BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
         <select aria-label="Effort" value={effort} disabled={busy || operationRunning || Boolean(previewingRecovery)} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
@@ -640,12 +643,16 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         </select>
         {canReview && <button type="button" className="lb-review" aria-label={`Review design, up to ${reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} credits`} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} /><span className="lb-review-label">Review · {reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} max</span></button>}
         <span className="lb-balance">{balance ? balance.unlimited ? "Unlimited credits" : `${balance.available} credits` : ""}</span>
-        <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || readiness.checking || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>
+        {(busy || operationRunning) ? <button type="button" className="lb-stop" disabled={cancelling || operation?.cancelRequested === true}
+          onClick={() => void stop().catch(() => setNotice("Stop could not be confirmed. Check the recorded request before retrying."))}
+          aria-label={operation?.cancelRequested ? "Stopping" : pendingCancel ? "Retry Stop" : "Stop"}>
+          {cancelling || operation?.cancelRequested ? <Loader2 size={14} className="lb-spin" /> : <Square size={12} />}<span>{operation?.cancelRequested ? "Stopping..." : pendingCancel ? "Retry Stop" : "Stop"}</span>
+        </button> : <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || readiness.checking || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>}
       </div>
       <div className="lb-estimate">
         <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
-        {/* Only measured figures: the settlement charges what was used, and a plan that does not finish is released at zero. */}
-        <p className="lb-estimate-detail">{mode === "plan" ? "You pay only for what is used. A plan that doesn’t finish isn’t charged."
+        {/* Only measured figures: failed planning is released at zero; explicit Stop settles confirmed usage. */}
+        <p className="lb-estimate-detail">{mode === "plan" ? "A failed plan is not charged. If you choose Stop, confirmed usage is charged and unused credits are returned."
           : measured ? `In testing, a first ${kind} at ${EFFORT_PRESENTATION[effort].label} used ${measured.min}–${measured.max} credits (${measured.samples} test ${kind}s, no AI images). You pay only for what is used.`
           : `You pay only for what is used, never more than ${ceiling} credits without your approval.`}</p>
         {/* Phones: one line instead of the three above (limit, measured range, balance). */}

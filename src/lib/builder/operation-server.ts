@@ -40,8 +40,9 @@ const messages: Record<string, string> = {
   OPERATION_CONFLICT: "This request changed. Reload its status before continuing.",
   INSUFFICIENT_CREDITS: "There are not enough available credits to start the next step. Your saved work is safe.",
 };
-async function call(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { data, error } = await billingDatabase().rpc(name, args);
+async function call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const request = billingDatabase().rpc(name, args);
+  const { data, error } = await (signal ? request.abortSignal(signal) : request);
   if (error) {
     if (error.code === "42501") throw new OperationError("OPERATION_FORBIDDEN", "This request is unavailable to this account.", 403);
     if (error.code === "P0002") throw new OperationError("OPERATION_NOT_FOUND", "This request could not be found.", 404);
@@ -78,10 +79,45 @@ function attachmentFingerprint(request: unknown): string {
   return createHash("sha256").update(canonicalSourceJson(attachments)).digest("hex");
 }
 
-export async function readOperation(input: { actor: string; workspaceId: string; artifactId: string; id?: string; actionKey?: string }): Promise<OperationStatus> {
-  const data = await call("makeborne_ai_operation_read", { p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_operation: input.id ?? null, p_action: input.actionKey ?? null });
+export async function readOperation(input: { actor: string; workspaceId: string; artifactId: string; id?: string; actionKey?: string }, signal?: AbortSignal): Promise<OperationStatus> {
+  const data = await call("makeborne_ai_operation_read", { p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_operation: input.id ?? null, p_action: input.actionKey ?? null }, signal);
   checkRefusal(data);
   return publicStatus(data);
+}
+
+export async function cancelOperation(input: { actor: string; workspaceId: string; artifactId: string; id?: string; actionKey?: string; expectedRevision?: number }): Promise<OperationStatus> {
+  // Resolve within the authenticated workspace/artifact before the service-only
+  // RPC. An ID or action key from another project can never stop this request.
+  const current = await readOperation(input);
+  const data = await call("makeborne_ai_operation_cancel", { p_actor: input.actor, p_operation: current.operation.id,
+    p_expected_revision: input.expectedRevision ?? current.operation.revision });
+  checkRefusal(data);
+  return publicStatus(data);
+}
+
+/** Browser disconnects do not cancel paid work. Explicit durable Stop does.
+ * A sequential, bounded poll interrupts an in-flight provider stream; the SQL
+ * provider gate independently denies new calls immediately. An unavailable
+ * cancellation read stops the worker conservatively, never clears the marker. */
+export function watchOperationCancellation(run: OperationRun | undefined, spend: RunSpend, controller: AbortController, pollMs = 1000) {
+  if (!run) return () => undefined;
+  let disposed = false;
+  let timer: ReturnType<typeof setTimeout>;
+  const poll = async () => {
+    try {
+      const status = await readOperation({ actor: run.actor, workspaceId: run.workspaceId, artifactId: run.artifactId, id: run.operation.id }, AbortSignal.timeout(3000));
+      if (disposed) return;
+      if (status.operation.cancelRequested || status.operation.status === "cancelled") {
+        spend.cancel(); controller.abort(new SpendError("CANCELLED", "This request was stopped.")); return;
+      }
+    } catch {
+      if (!disposed) controller.abort(new SpendError("SPEND_UNAVAILABLE", "The operation could not be checked; the worker stopped."));
+      return;
+    }
+    if (!disposed && !controller.signal.aborted) { timer = setTimeout(() => void poll(), pollMs); timer.unref?.(); }
+  };
+  timer = setTimeout(() => void poll(), pollMs); timer.unref?.();
+  return () => { disposed = true; clearTimeout(timer); };
 }
 
 /** The server derives the cap, rate, actor and request digest. Client keys only identify replays. */
@@ -150,6 +186,7 @@ export function createOperationSpend(run: OperationRun, platformDeadline: number
         p_provider: ticket.provider, p_model: ticket.model, p_bound: ticket.boundMicrousd,
       });
       if (error) {
+        if (error.code === "MB499") throw new SpendError("CANCELLED", "This request was stopped.");
         if (error.code === "MB402") throw new SpendError("PROVIDER_LIMIT", "Today's AI capacity has been reached.");
         if (error.code === "MB423") throw new SpendError("PROVIDER_DISABLED", "AI generation is paused right now.");
         if (error.code === "MB409" || error.code === "PT409") throw new SpendError("HOLD_EXPIRED", "This operation step can no longer make paid calls.");

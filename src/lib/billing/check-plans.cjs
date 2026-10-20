@@ -65,7 +65,10 @@ for (const limit of ["10 credits", "20 credits", "50 credits", "90 credits", "14
 assert.ok(costs.includes("First website: 16–45 credits (20 test websites)"));
 assert.ok(costs.includes("Medium: 8–11 credits (20 test rounds)"));
 assert.equal((costs.match(/test websites/g) || []).length, 1, "measured ranges appear only at the measured effort");
-assert.match(costs, /a plan that doesn’t finish/);
+assert.match(costs, /a plan that fails to finish/);
+assert.match(costs, /If you choose Stop:/);
+assert.match(costs, /confirmed usage is charged once, unused reserved credits are returned/);
+assert.doesNotMatch(costs, /a plan that doesn’t finish/);
 assert.doesNotMatch(costs, /failed runs are free/i);
 const withoutMeasurements = renderToStaticMarkup(React.createElement(BillingCreditCosts, {estimates: null}));
 assert.doesNotMatch(withoutMeasurements, /test websites/);
