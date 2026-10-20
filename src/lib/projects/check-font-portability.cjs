@@ -137,7 +137,8 @@ function fixture() {
 
   if (process.env.MAKEBORNE_VERIFY_PORTABLE_RUNTIME === "true") {
     const {dockerCommand, localRuntimeFlags, removeLocalTemporary} = await import("../../../infra/project-runtime/local-adapter.mjs");
-    const image = await dockerCommand(["image", "inspect", "makeborne-react-vite:font-parity", "--format", "{{.Id}}"]);
+    // A qualification run can pin its own image without retagging a shared runtime.
+    const image = await dockerCommand(["image", "inspect", process.env.MAKEBORNE_PORTABLE_RUNTIME_IMAGE || "makeborne-react-vite:font-parity", "--format", "{{.Id}}"]);
     assert.equal(image.code, 0, image.output); const imageId = image.output.trim(); assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
     for (const candidate of [version, legacyVersion]) {
     const expectedHash = websiteProjectManifest(candidate.content.websiteSource).sourceHash;
