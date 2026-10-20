@@ -49,24 +49,23 @@ async function readVersion(client: Client, workspaceId: string, artifactId: stri
   return { artifact, row };
 }
 
-/** A stored capture for this exact version id and fingerprint, or an existing review copy of the same version. */
-async function storedWebsite(workspaceId: string, artifactId: string, versionId: string, versionNumber: number, hash: string): Promise<CardPreviewSource | null> {
+/** A stored capture for this exact version id and fingerprint, or an existing review copy of the same version.
+ * `storable` is false when the capture store is not configured or not migrated, so no editor compiles a capture that cannot be kept. */
+async function storedWebsite(workspaceId: string, artifactId: string, versionId: string, versionNumber: number, hash: string): Promise<{ source: CardPreviewSource | null; storable: boolean }> {
   let database: ReturnType<typeof billingDatabase>;
-  try { database = billingDatabase(); } catch { return null; }
+  try { database = billingDatabase(); } catch { return { source: null, storable: false }; }
   const { data: card, error } = await database.from("artifact_card_previews").select("outcome,html,content_hash,version_number")
     .eq("artifact_id", artifactId).eq("version_id", versionId).eq("workspace_id", workspaceId).maybeSingle();
   if (!error && card && card.content_hash === hash && card.version_number === versionNumber) {
-    if (card.outcome === "too_large") return { format: "unavailable", reason: "too-large" };
-    if (typeof card.html === "string" && bytes(card.html) <= CARD_LIMITS.cardHtmlBytes) return { format: "website-snapshot", html: card.html };
+    if (card.outcome === "too_large") return { source: { format: "unavailable", reason: "too-large" }, storable: true };
+    if (typeof card.html === "string" && bytes(card.html) <= CARD_LIMITS.cardHtmlBytes) return { source: { format: "website-snapshot", html: card.html }, storable: true };
   }
   // A client review copy is the same sanitized, script-free renderer, stored for this version number.
   const { data: review, error: reviewError } = await database.from("client_review_snapshots").select("html")
     .eq("artifact_id", artifactId).eq("version_number", versionNumber).eq("workspace_id", workspaceId).maybeSingle();
-  if (!reviewError && typeof review?.html === "string" && bytes(review.html) <= CARD_LIMITS.cardHtmlBytes) return { format: "website-snapshot", html: withCardCsp(review.html) };
-  return null;
+  if (!reviewError && typeof review?.html === "string" && bytes(review.html) <= CARD_LIMITS.cardHtmlBytes) return { source: { format: "website-snapshot", html: withCardCsp(review.html) }, storable: !error };
+  return { source: null, storable: !error };
 }
-
-function canStoreCaptures() { try { billingDatabase(); return true; } catch { return false; } }
 
 export async function GET(request: Request, context: Context) {
   try {
@@ -91,9 +90,10 @@ export async function GET(request: Request, context: Context) {
     }
     let source = cardPreviewSource(content, style, (title, website) => { try { return websiteDocument(title, website, true); } catch { return null; } });
     if (source.format === "website-source") {
-      source = await storedWebsite(workspaceId, artifactId, row.id, version, hash) ?? {
+      const stored = await storedWebsite(workspaceId, artifactId, row.id, version, hash);
+      source = stored.source ?? {
         format: "unavailable", reason: "not-captured",
-        capture: workspace!.role !== "reviewer" && version === artifact.current_version && websiteCaptureFits(content.websiteSource!) && canStoreCaptures(),
+        capture: stored.storable && workspace!.role !== "reviewer" && version === artifact.current_version && websiteCaptureFits(content.websiteSource!),
       };
     }
     return cloudJson({ preview: { ...identity, source } satisfies CardPreview });
