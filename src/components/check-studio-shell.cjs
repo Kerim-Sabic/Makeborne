@@ -55,4 +55,26 @@ check("open drawer makes the page behind it inert and closes on Escape and widen
   assert.doesNotMatch(studio, /window\.addEventListener\("keydown", closeNavigation\)/);
 });
 
+const { studioSkipTargets } = load("src/lib/studio-skip-links.ts");
+check("skip links follow the visible task", () => {
+  assert.deepEqual(studioSkipTargets({ loaded: true, tab: "projects", composerVisible: true }).map(target => target.id).join(), "studio-brief,studio-library");
+  assert.deepEqual(studioSkipTargets({ loaded: true, tab: "clients", composerVisible: false }).map(target => target.id).join(), "studio-content");
+  assert.deepEqual(studioSkipTargets({ loaded: false, tab: "projects", composerVisible: true }).map(target => target.id).join(), "studio-content", "no link to a composer that is not mounted yet");
+});
+check("every skip target exists, can take focus, and the shell has one main", () => {
+  assert.match(studio, /<textarea\n\s+id="studio-brief"/);
+  assert.match(studio, /<div className="list-toolbar" id="studio-library" tabIndex=\{-1\}>/);
+  const shell = studio.slice(studio.indexOf("export default function Studio("), studio.indexOf("\nfunction Empty("));
+  const mains = shell.match(/<main\b[^>]*>/g) ?? [];
+  assert.equal(mains.length, 2, "loading state and loaded tab content are alternatives, never both");
+  for (const main of mains) assert.match(main, /id="studio-content"\s+tabIndex=\{-1\}/);
+  assert.match(shell, /<main id="studio-content" tabIndex=\{-1\} className="loading-state">/);
+  // The device editor is not wrapped: its website preview renders its own main.
+  assert.match(shell, /\) : project \? \(\n\s+<ProjectEditor/);
+  assert.match(shell, /onClick=\{event => skipTo\(event, target\.id\)\}/);
+  assert.match(shell, /target\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(css, /\.studio-skip-link:not\(:focus\) \{[^}]*clip-path: inset\(50%\)/);
+  assert.match(css, /\.studio-skip-link:focus \{[^}]*position: fixed;/);
+});
+
 console.log(`${count} studio shell checks passed.`);

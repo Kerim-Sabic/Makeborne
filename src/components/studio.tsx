@@ -59,6 +59,7 @@ import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
+import { studioSkipTargets } from "@/lib/studio-skip-links";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
@@ -525,8 +526,20 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         />
       );
   if (directStart && creating) return <div className="studio-shell creation-route">{creationView}</div>;
+  // Open editors hide the navigation rail, so there is nothing to bypass there.
+  const projectOpen = Boolean(project || accountRoute?.artifactId || (!loaded && initialProjectOpen));
+  const skipTargets = studioSkipTargets({ loaded, tab, composerVisible: tab === "projects" && !accountRoute?.artifactId });
+  function skipTo(event: React.MouseEvent<HTMLAnchorElement>, id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    // Move keyboard focus itself, not just the scroll position, and keep the URL unchanged.
+    event.preventDefault();
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "center" });
+  }
   return (
-    <div className={`studio-shell ${project || accountRoute?.artifactId || (!loaded && initialProjectOpen) ? "is-project-open" : ""}`}>
+    <div className={`studio-shell ${projectOpen ? "is-project-open" : ""}`}>
+      {!projectOpen && skipTargets.map(target => <a key={target.id} className="studio-skip-link" href={`#${target.id}`} onClick={event => skipTo(event, target.id)}>{target.label}</a>)}
       {mobileNav && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
       <aside
         id="studio-navigation"
@@ -635,7 +648,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           </div>
         )}
         {!loaded ? (
-          <div className="loading-state">Opening your workspace…</div>
+          <main id="studio-content" tabIndex={-1} className="loading-state">Opening your workspace…</main>
         ) : project ? (
           <ProjectEditor
             key={project.id}
@@ -651,7 +664,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
             notify={toast}
           />
         ) : (
-          <div
+          // The tab's own content is the page's single main landmark (the device project editor keeps its own layout).
+          <main
+            id="studio-content"
+            tabIndex={-1}
             className={`workspace-content ${tab === "projects" && workspace.projects.length === 0 ? "fresh-workspace" : ""}`}
           >
             {tab === "projects" && (
@@ -759,7 +775,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     </button>
                   ))}
                 </div>
-                <div className="list-toolbar">
+                <div className="list-toolbar" id="studio-library" tabIndex={-1}>
                   <div className="filter-tabs">
                     {["all", "website", "book", "presentation"].map((f) => (
                       <button
@@ -1037,7 +1053,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                 </div>
               </>
             )}
-          </div>
+          </main>
         )}
       </div>
       {creationView}

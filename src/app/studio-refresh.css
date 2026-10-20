@@ -2626,6 +2626,13 @@
 .sidebar-device button:hover { color: #354ea5; }
 @media(prefers-reduced-transparency:reduce) { .studio-shell .sidebar { background: #f9fafc; } }
 @media(forced-colors:active) { .studio-shell .sidebar { background: Canvas; border-color: CanvasText; } .studio-shell .studio-nav button.active { outline: 1px solid Highlight; } }
+/* Keyboard bypass: hidden until focused, then shown above the rail and the drawer scrim. */
+.studio-skip-link:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.studio-skip-link:focus { position: fixed; top: 12px; left: 12px; z-index: 70; padding: 11px 16px; border-radius: 10px; background: #fff; color: #244da8; font-size: 13px; font-weight: 600; text-decoration: none; box-shadow: 0 6px 24px #24305a26; outline: 3px solid #315bd6; outline-offset: 2px; }
+.studio-shell #studio-library { scroll-margin-top: 24px; }
+.studio-shell #studio-library:focus { outline: none; }
+.studio-shell #studio-library:focus-visible { outline: 2px solid #315bd6; outline-offset: 6px; border-radius: 6px; }
+.studio-shell main#studio-content:focus { outline: none; }
 .sidebar-scrim,.studio-shell .sidebar-close { display: none; }
 @media(max-width:700px) {
   .sidebar-scrim { display: block; position: fixed; inset: 0; z-index: 29; border: 0; background: #1e294842; backdrop-filter: blur(3px); }
