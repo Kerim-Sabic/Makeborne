@@ -28,7 +28,7 @@ import LivePreview from "./live-preview";
 import WorkbenchMore from "./workbench-more";
 import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
-import { choosePreview, hasBuilderSource, savedFormat } from "@/lib/cloud/saved-preview";
+import { choosePreview, editorEntry, hasBuilderSource, savedFormat } from "@/lib/cloud/saved-preview";
 import { BUILDER_OFF, BUILDER_WAITING_COPY, parseBuilderAvailability, type BuilderAvailability } from "@/lib/builder/availability";
 import "@/app/live-builder.css";
 import { captureProjectPublication, captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
@@ -1545,6 +1545,7 @@ export function CloudEditor({
   const liveDocument = artifact.kind !== "website";
   // The preview follows the saved format, never the builder's availability: older saved work stays visible.
   const format = content ? savedFormat(content, expectedVersion) : null;
+  const editor = editorEntry(content ?? { kind: artifact.kind, website: undefined, websiteSource: undefined }, role === "reviewer");
   const preview = format ? choosePreview({ kind: artifact.kind, format, builder: useLiveBuilder, canBuild: builder.available, live, generatedVersion: Boolean(generatedVersionId) }) : null;
   const previewDocument = !liveDocument ? undefined : preview === "live" ? live?.document : preview === "document" ? content?.document : undefined;
   const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
@@ -1610,7 +1611,7 @@ export function CloudEditor({
             <div>
               {/* Under 960px the labels collapse to icons (still the accessible name); see cloud-workbench.css. */}
               <button type="button" aria-pressed={view === "preview"} title="Preview" onClick={() => setView("preview")}><Eye size={15} /><span className="workbench-tab-label">Preview</span></button>
-              <button type="button" aria-pressed={view === "edit"} title={content?.website || content?.websiteSource ? "Code" : "Edit"} onClick={() => setView("edit")}><PencilLine size={15} /><span className="workbench-tab-label">{content?.website || content?.websiteSource ? "Code" : "Edit"}</span></button>
+              <button type="button" aria-pressed={view === "edit"} title={editor.label} onClick={() => setView("edit")}><PencilLine size={15} /><span className="workbench-tab-label">{editor.label}</span></button>
               <button type="button" aria-pressed={view === "history"} title="History" onClick={() => setView("history")}><History size={15} /><span className="workbench-tab-label">History</span></button>
               {content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} title="Publish" onClick={() => setView("publish")}><Globe2 size={15} /><span className="workbench-tab-label">Publish</span></button>}
               <button type="button" aria-pressed={view === "review"} title="Client review" onClick={() => setView("review")}><MessageSquareText size={15} /><span className="workbench-tab-label">Client review</span></button>
@@ -1738,7 +1739,7 @@ export function CloudEditor({
         })()}
         {view === "preview" && style && (preview === "outline" || preview === "start-draft") && <div className="cloud-workbench-preview">
           {preview === "outline" && useLiveBuilder && <p className="cloud-workbench-format" role="note">
-            {format === "website-design" ? "This website is saved as a static design." : `This ${artifact.kind} is saved as an outline of its text.`} You can read and edit it as it is from the Edit tab, and download a copy of the draft there.
+            {format === "website-design" ? "This website is saved as a static design." : `This ${artifact.kind} is saved as an outline of its text.`} {editor.instruction}{" "}<button type="button" className="cloud-workbench-format-link" onClick={() => setView("edit")}>Open {editor.label}</button>
             {" "}A build in the chat saves a new {artifact.kind === "website" ? "website project" : `designed ${artifact.kind}`} as the next version; this version stays in History.
           </p>}
           {preview === "start-draft" ? <div className="cloud-workbench-empty">
