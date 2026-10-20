@@ -14,13 +14,14 @@ import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
 import { REVIEW_MAX_TURNS, reviewCreditCeiling } from "@/lib/builder/review-policy";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
-import { beginOperation, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
+import { OperationError, beginOperation, brandKitFingerprint, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
 import { documentBuildResponse } from "@/lib/builder/docs-run";
 import { websiteBuildResponse } from "@/lib/builder/website-run";
 import { providerCapacity, requireProviderCapacity } from "@/lib/ai/live-run";
 import { builderAvailability } from "@/lib/builder/availability";
 import { requirePricedModel } from "@/lib/ai/model-check";
-import { SitePlanSchema, planToBrief } from "@/lib/builder/plan";
+import { SitePlanSchema, StoredPlanSchema, planToBrief } from "@/lib/builder/plan";
+import { approvedMaximumIssue, approvedPlanIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { websiteBrandBlock } from "@/lib/brand/kit";
 import { ensureBrandLogo, projectBrandKit } from "@/lib/brand/server";
 import { importTheirPhotos, photosContext } from "@/lib/leads/redesign-server";
@@ -40,11 +41,16 @@ const BuildRequest = z.object({
   attachments: BuilderAttachmentsSchema.default([]),
   /** An approved Plan mode plan the build must follow. */
   plan: SitePlanSchema.optional(),
+  /** The saved plan revision the customer approved; required with `plan`. */
+  planRevision: z.number().int().positive().optional(),
   /** "review": look at client-captured screenshots of the current version and fix visual problems. */
   mode: z.enum(["build", "review"]).default("build"),
   review: ReviewInputSchema.optional(),
   operation: OperationRequestSchema.optional(),
-}).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review);
+  /** The maximum the customer saw before approving a new request; must equal the server-derived ceiling. */
+  approvedMaximum: z.number().int().positive().optional(),
+}).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review)
+  .refine(body => body.planRevision === undefined || Boolean(body.plan));
 
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -90,22 +96,40 @@ export async function POST(request: Request) {
     const policy = BUILDER_EFFORT[body.effort];
     // A review round is a focused pass with its own, smaller ceiling.
     const ceiling = reviewing ? reviewCreditCeiling(policy.ceilingCredits) : policy.ceilingCredits;
+    // A new billable request is bound to the maximum shown at approval; any difference is a new quote.
+    const quoteIssue = approvedMaximumIssue(body.operation, body.approvedMaximum, ceiling);
+    if (quoteIssue) throw new RequestError("QUOTE_CHANGED", quoteIssue, 409);
     // Unknown pricing fails closed before anything is reserved or sent.
     requirePricedModel(builderModel());
     // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
     await requireProviderCapacity("anthropic");
+    // An approved plan is bound to the exact saved revision the customer reviewed,
+    // checked before any operation or credit hold exists.
+    if (body.plan) {
+      const saved = await client.from("artifact_plans").select("plan").eq("workspace_id", body.workspaceId).eq("artifact_id", artifact.id).maybeSingle();
+      databaseError(saved.error);
+      const stored = StoredPlanSchema.safeParse(saved.data?.plan);
+      const issue = approvedPlanIssue(stored.success ? stored.data : null, { plan: body.plan, revision: body.planRevision });
+      if (issue) throw new RequestError("PLAN_REVISION_CONFLICT", issue, 409);
+    }
+    // The brand kit is resolved before admission and fingerprinted into the request, so a
+    // kit edited mid-request cannot silently change a started operation.
+    const brand = await projectBrandKit(client, body.workspaceId, project);
     const { operation: envelope, ...requestBody } = body;
     // SQL binds the stage to its original authorization and creates its hold atomically.
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
       expectedVersion: body.expectedVersion, effort: body.effort, kind: reviewing ? "review" : "build", ceiling,
-      envelope, request: requestBody });
+      envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) } }).catch(error => {
+      // SQL refuses a stale base version without saying so; name the versions instead.
+      if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
+        throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);
+      throw error;
+    });
     if (!admitted.run) return operationReplayResponse(admitted.status);
     const operation = admitted.run, hold = operation.hold;
     reserved = operation;
 
     const files = new ProjectFiles(current.content.websiteSource);
-    // The project's brand kit (the client's, or the workspace's own for projects without a client).
-    const brand = await projectBrandKit(client, body.workspaceId, project);
     const scope = { workspaceId: body.workspaceId, projectId: artifact.project_id };
     const logo = brand && artifact.kind === "website" ? await ensureBrandLogo(client, scope, brand, files) : null;
     // A redesign brief lists the client's own photos; they are downloaded once (no AI) and stored as project images.

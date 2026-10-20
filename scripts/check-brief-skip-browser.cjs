@@ -91,6 +91,32 @@ async function main() {
     result = await one();
     assert.equal(result.brief, "A bakery website.", "nothing answered, nothing added");
     pass("Next on an untouched question then a final Skip leaves the brief unchanged");
+    // Advancing is explicit for keyboard and screen-reader users; a pointer choice advances and is announced.
+    const kicker = () => page.locator(".bq-kicker").innerText();
+    await remount(2);
+    await page.getByRole("button", { name: "Warm" }).focus(); await page.keyboard.press("Enter");
+    await page.waitForTimeout(450);
+    assert.match(await kicker(), /1 of 2/, "keyboard choice stays on the question");
+    assert.equal(await page.getByRole("button", { name: "Warm" }).getAttribute("aria-pressed"), "true");
+    assert.match(await page.locator(".bq-announce").innerText(), /Chose Warm. Press Next when you are ready./);
+    await page.getByRole("button", { name: "Formal" }).focus(); await page.keyboard.press("Space");
+    await page.waitForTimeout(450);
+    assert.match(await kicker(), /1 of 2/, "Space does not advance either");
+    await page.getByRole("button", { name: "Next" }).click();
+    assert.match(await kicker(), /2 of 2/);
+    pass("keyboard choices never auto-advance; Next moves on");
+    await remount(2);
+    await page.getByRole("button", { name: "Warm" }).click();
+    await page.waitForFunction(() => document.querySelector(".bq-kicker")?.textContent?.includes("2 of 2"));
+    assert.match(await page.locator(".bq-announce").innerText(), /Chose Warm. Moved to question 2 of 2./);
+    pass("a pointer choice advances after showing it and announces the move");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await remount(2);
+    await page.getByRole("button", { name: "Warm" }).click();
+    await page.waitForTimeout(450);
+    assert.match(await kicker(), /1 of 2/, "reduced motion keeps the question in place");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    pass("prefers-reduced-motion disables auto-advance");
   } finally { await browser.close(); server.close(); }
   console.log(`${passed} mounted brief-question checks passed (Chromium, no network).`);
 }

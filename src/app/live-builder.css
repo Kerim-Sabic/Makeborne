@@ -31,10 +31,24 @@
 .lb-operation-phase strong { color:#3d3448; font-weight:600; }
 .lb-operation .lb-operation-note { margin:8px 0 0; color:#7c6f86; }
 .lb-action-effect { margin:6px 2px 0; color:#65566f; font-size:12px; line-height:1.45; }
+/* Explicit intent: what is being sent, the element it targets, and Undo for the last AI change. */
+.lb-undo { flex:0 0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; margin:0 12px 6px; padding:9px 12px; border:1px solid #e5dfeb; border-radius:12px; background:#fbf9fc; color:#4c3e57; font-size:12px; }
+.lb-undo p { margin:0; line-height:1.5; }
+.lb-undo small { flex-basis:100%; color:#65566f; line-height:1.45; }
+.lb-pending, .lb-target { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin:0 0 6px; color:#4c3e57; font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
+.lb-pending p { margin:0; flex-basis:100%; }
+.lb-pending button, .lb-target button { min-height:32px; padding:3px 10px; border:1px solid #d9d0e2; border-radius:8px; background:#fff; color:#65518a; font:inherit; font-weight:550; cursor:pointer; }
+.lb-pending > span { display:flex; flex-wrap:wrap; gap:6px; }
+.lb-pending > svg { flex:none; }
+.lb-pending > .lb-pending-text { display:block; flex:1 1 0; min-width:0; }
+.lb-pending button:disabled { opacity:.55; cursor:default; }
+.lb-target span { min-width:0; flex:1 1 auto; }
+.lb-unsent { margin:0 0 6px; }
 .lb-limit { margin:6px 2px 0; color:#71617f; font-size:12px; line-height:1.5; }
 .lb-estimate .lb-limit { margin-bottom:0; color:#4c3e57; font-weight:550; }
 .lb-estimate-detail { margin:2px 2px 0; color:var(--text-muted); font-size:12px; line-height:1.5; }
 .lb-estimate-compact { display:none; }
+.lb-brand { margin:2px 2px 0; color:var(--text-muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
 /* Receipt after a request: settled charge, changes, checks, time. */
 .lb-receipt { margin-top:4px; padding:11px 12px; border:1px solid #e5dfeb; border-radius:12px; background:#fbf9fc; color:#4c3e57; font-size:12px; }
 .lb-turn .lb-receipt-title { display:flex; align-items:center; gap:6px; margin:0 0 8px; font-size:12px; font-weight:600; color:#3d3448; }

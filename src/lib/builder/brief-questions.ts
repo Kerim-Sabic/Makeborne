@@ -130,6 +130,12 @@ const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp }[]> =
   ],
 };
 
+/** Ids of the standard questions this brief already answers (a tailored question with one of these ids is not asked again). */
+export function answeredQuestionIds(kind: BriefKind, brief: string, context: { attachments?: number } = {}): Set<string> {
+  const text = brief.toLowerCase().replace(/\s+/g, " ");
+  return new Set(BANK[kind].filter(item => item.answered.test(text) || (item.question.id === "brand" && (context.attachments ?? 0) > 0)).map(item => item.question.id));
+}
+
 /** Questions the brief leaves open, most important first. A detailed brief gets fewer. */
 export function briefQuestions(kind: BriefKind, brief: string, context: { attachments?: number } = {}): BriefQuestion[] {
   const text = brief.toLowerCase().replace(/\s+/g, " ");

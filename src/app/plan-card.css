@@ -83,6 +83,7 @@ li:hover > .pc-remove, .pc-section-head:hover .pc-remove, .pc-remove:focus-visib
 .pc-build:disabled { opacity:.4; cursor:default; }
 .pc-nofit { display:flex; gap:6px; align-items:flex-start; margin:8px 0 0 !important; padding:8px 10px; border:1px solid #efeaf3; border-radius:8px; background:#fbfafc; color:var(--ink); font-size:12px !important; line-height:1.45; }
 .pc-nofit svg { flex:none; margin-top:2px; }
+.pc-approval { margin:8px 0 0 !important; color:var(--ink); font-size:12px !important; line-height:1.45; text-align:center; }
 .pc-hint { margin-top:8px !important; color:var(--text-muted); font-size:12px !important; text-align:center; }
 .pc-link { padding:0; border:0; background:none; color:#765887; font:inherit; text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
 .pc :focus-visible { outline:2px solid #9c7fb0; outline-offset:2px; }

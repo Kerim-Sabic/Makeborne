@@ -39,7 +39,7 @@ async function main() {
       assert.match(await note.innerText(), /No effort level is sized to finish this plan in one build/);
       assert.match(await note.innerText(), /Remove pages or sections, or build the most important part first/);
       assert.equal(await page.getByRole("radio", { checked: true }).innerText().then(text => text.split("\n")[0]), "High", "the preselected fallback is unchanged");
-      assert.match(await page.locator(".pc-build span").innerText(), /^~90 credits$/, "an equal range is shown once");
+      assert.match(await page.locator(".pc-build span").innerText(), /^Estimated ~90 · At most 90 credits$/, "an equal range is shown once, beside the distinct authorized maximum");
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       assert.ok(overflow <= 0, `no horizontal overflow at ${width}px (${overflow})`);
       if (shots) await page.locator(".pc-foot").screenshot({ path: path.join(shots, `plan-nofit-${width}.png`) });

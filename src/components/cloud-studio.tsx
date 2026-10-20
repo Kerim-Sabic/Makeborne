@@ -23,6 +23,8 @@ import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
 import LiveBuilder, { type LiveUpdate } from "./live-builder";
+import type { AskTarget } from "./visual-editor-panel";
+import type { EditTarget } from "@/lib/builder/edit-intent";
 import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
 import WorkbenchMore from "./workbench-more";
@@ -1139,18 +1141,20 @@ export function CloudEditor({
   const liveVersion = useLiveVersion(accountId, workspaceId, artifact.id, view === "history" && artifact.kind === "website");
   // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
   const [brandColors, setBrandColors] = useState<{ label: string; value: string }[]>([]);
+  // The kit name the builder shows before sending (undefined until known; the server fingerprints the kit it actually uses).
+  const [brandKitName, setBrandKitName] = useState<string | null | undefined>(undefined);
   const brandClient = project?.clientId ?? null;
   useEffect(() => {
-    if (artifact.kind !== "website" || role === "reviewer") return;
+    if (role === "reviewer") return;
     let active = true;
     brandRequest<{ kits: { clientId: string | null; kit: unknown }[] }>(accountId, `/api/cloud/workspaces/${workspaceId}/brand-kits`).then(value => {
       const kit = parseBrandKit(value.kits.find(entry => entry.clientId === brandClient)?.kit);
-      if (active) setBrandColors(kit ? kitSwatches(kit) : []);
+      if (active) { setBrandColors(kit && artifact.kind === "website" ? kitSwatches(kit) : []); setBrandKitName(kit ? kit.name : null); }
     }, () => undefined);
     return () => { active = false; };
   }, [accountId, workspaceId, brandClient, artifact.kind, role]);
   // Client feedback placed in the builder composer for review. Never auto-sent.
-  const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string } | null>(null);
+  const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string; target?: EditTarget } | null>(null);
   useEffect(() => {
     queueMicrotask(() => { const text = takeReviewPrefill(artifact.id); if (text) setBuilderPrefill({ key: crypto.randomUUID(), text }); });
   }, [artifact.id]);
@@ -1500,6 +1504,15 @@ export function CloudEditor({
       notify(`Version ${version.number} restored into your editor. Saving it as a new version…`);
     } catch (error) { notify(error instanceof Error ? error.message : "This version could not be restored."); }
   }
+  /** Builder Undo: restore the AI change's base version as a new version through the normal restore and save path. */
+  function undoBuilderChange(change: { from: number; to: number }): string | null {
+    if (expectedVersion !== change.to) return `Version ${expectedVersion} was saved after this change. Restore an earlier version from History instead.`;
+    if (!content || dirty || busy || saveBusy.current || savePaused || uncertainSave || conflict || recovery || role === "reviewer") return "Save or resolve the current draft before undoing.";
+    const base = versions.find(version => version.number === change.from);
+    if (!base) return `Version ${change.from} isn't loaded. Open History to restore it.`;
+    restoreVersion(base);
+    return null;
+  }
   async function moreVersions() {
     if (nextOffset === null || busy) return;
     setBusy(true);
@@ -1554,7 +1567,8 @@ export function CloudEditor({
   const previewDocument = !liveDocument ? undefined : preview === "live" ? live?.document : preview === "document" ? content?.document : undefined;
   const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
     .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content])), [content?.websiteSource]);
-  // A project created from the home prompt starts building as soon as it opens, once the builder can run.
+  // A project created from the home prompt opens with its brief in the builder. The builder may ask its free
+  // questions, but paid work starts only from an explicit Send after the maximum is shown (audit M08).
   useEffect(() => {
     if (!useLiveBuilder || !builder.available || !format || hasBuilderSource(format) || !project?.brief.trim() || expectedVersion > 1) return;
     const scope = { workspaceId, projectId: artifact.projectId, artifactId: artifact.id };
@@ -1608,7 +1622,8 @@ export function CloudEditor({
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           defaultEffort={project?.effort} disabled={!content || !builder.available || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
           kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates}
-          onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
+          onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }}
+          brandKit={brandKitName} onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
@@ -1732,7 +1747,9 @@ export function CloudEditor({
               if (uncertainSave || conflict || recovery || lockChangePending) return;
               editRevision.current++; setContent(current => current ? { ...current, websiteSource: next } : current); setDirty(true); setNote(summary);
             },
-            onAsk: useLiveBuilder ? text => setBuilderPrefill({ key: crypto.randomUUID(), text }) : undefined,
+            // The request is bound to the saved file the element was picked from.
+            onAsk: useLiveBuilder ? (text: string, target?: AskTarget) => setBuilderPrefill({ key: crypto.randomUUID(), text,
+              ...(target && sourceFiles[target.path] !== undefined ? { target: { ...target, source: sourceFiles[target.path], version: expectedVersion } } : {}) }) : undefined,
             swatches: brandColors,
           } : undefined} />}
         {view === "preview" && preview === "start-builder" && !liveDocument && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}

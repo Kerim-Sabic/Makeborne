@@ -176,7 +176,7 @@ export default function ExpertChat() {
               <p className="advisor-eyebrow">Think it through with {expert.name}</p>
               <h1 id="advisor-title">{expert.introduction}</h1>
               <p className="advisor-description">{expert.description} {expert.name} advises on {expert.covers.slice(0, -1).join(", ").toLowerCase()} and {expert.covers.at(-1)!.toLowerCase()}.</p>
-              <div className="advisor-starters" aria-label="Suggested questions">{expert.starters.map(starter => <button key={starter} type="button" disabled={busy || signedOut} onClick={() => void send(starter)}>{starter}</button>)}</div>
+              <div className="advisor-starters" aria-label="Suggested questions">{expert.starters.map(starter => <button key={starter} type="button" disabled={busy || signedOut} onClick={() => { setDraft(starter); inputRef.current?.focus(); }}>{starter}</button>)}</div>
             </section>
           ) : (
             <section className="advisor-thread" aria-label={`Conversation with ${expert.name}`} aria-live="polite">
