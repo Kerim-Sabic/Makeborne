@@ -17,6 +17,7 @@ const NEW_MIGRATIONS = readdirSync("supabase/migrations").filter(f => f > "20261
 const RESIDUE = "select (select count(*) from auth.users)+(select count(*) from makeborne_private.credit_wallets)+(select count(*) from public.credit_ledger)+(select count(*) from public.clients)+(select count(*) from public.workspaces);";
 const filter = process.argv[2] ? new RegExp(process.argv[2]) : null;
 const files = readdirSync("supabase").filter(f => /^check-.*\.sql$/.test(f) && (!filter || filter.test(f))).sort();
+if (!files.length) throw new Error("SQL_SUITE_FILTER_MATCHED_NOTHING");
 const sha = text => createHash("sha256").update(text).digest("hex");
 const docker = (args, input) => spawnSync("docker", args, { input, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, MSYS_NO_PATHCONV: "1" } });
 const psql = (db, sql, user = "postgres") => docker(["exec", "-i", CONTAINER, "psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1", "-q"], sql);
@@ -93,3 +94,4 @@ const suffix = filter ? `-${process.argv[2].replace(/[^a-z0-9]+/gi, "_")}` : "";
 writeFileSync(`docs/release-review/launch-20261020/sql-suites${suffix}.json`, JSON.stringify(summary, null, 2));
 writeFileSync(`docs/release-review/launch-20261020/sql-suites${suffix}.log`, log.replace(/(sb_secret_|eyJ)[A-Za-z0-9._-]+/g, "[redacted]"));
 console.log(`${summary.passed}/${summary.total} suites passed; clean base: ${chainBefore} migrations, residue ${residueBefore}; every suite ran in its own dropped copy`);
+if (summary.failed.length) process.exitCode = 1;
