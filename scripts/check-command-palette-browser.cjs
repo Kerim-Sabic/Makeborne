@@ -77,7 +77,9 @@ async function main() {
   };
   const dialog = page => page.getByRole("dialog", { name: "Go to or start" });
   const combo = page => page.getByRole("combobox");
-  const studio = async page => { await page.goto(`${base}/?view=studio`); await page.locator("#studio-brief").waitFor({ timeout: 15000 }); };
+  // Shortcut listeners are attached in effects that run after the first paint (later in WebKit): let them attach before typing.
+  const effects = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))));
+  const studio = async page => { await page.goto(`${base}/?view=studio`); await page.locator("#studio-brief").waitFor({ timeout: 15000 }); await effects(page); };
   try {
     await scenario("studio-keyboard-navigation", async page => {
       await studio(page);
@@ -113,7 +115,7 @@ async function main() {
     });
     await scenario("client-list-keeps-its-shortcut", async page => {
       await page.goto(`${base}/?view=studio&tab=clients`);
-      await page.locator(".studio-nav button[aria-current='page']", { hasText: "Clients" }).waitFor({ timeout: 15000 });
+      await page.locator(".studio-nav button[aria-current='page']", { hasText: "Clients" }).waitFor({ timeout: 15000 }); await effects(page);
       await page.keyboard.press("Control+k");
       await page.getByRole("dialog", { name: "Find a client or action" }).waitFor();
       assert.equal(await dialog(page).count(), 0, "only the client palette opens on the client list");
@@ -121,7 +123,7 @@ async function main() {
       await dialog(page).waitFor();
     });
     await scenario("advisor-switch", async page => {
-      await page.goto(`${base}/?view=advisor`); await page.getByRole("textbox", { name: /Message Mira/ }).waitFor();
+      await page.goto(`${base}/?view=advisor`); await page.getByRole("textbox", { name: /Message Mira/ }).waitFor(); await effects(page);
       await page.keyboard.press("Control+k"); await dialog(page).waitFor();
       await page.keyboard.type("copy");
       assert.match(await page.getByRole("option").first().innerText(), /Ask Nova/);
