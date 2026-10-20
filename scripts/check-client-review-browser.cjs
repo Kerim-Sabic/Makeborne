@@ -34,7 +34,7 @@ fs.writeFileSync(path.join(out,"entry.tsx"), `import React from 'react'; import 
   for(const kind of ['deck','book']){
    const page=await browser.newPage({viewport:{width:1440,height:1100}});
    let release; const gate=new Promise(resolve=>{release=resolve;}); let requested=false;
-   await page.route('**/api/review/**',async route=>{assert.ok(route.request().url().endsWith(`/assets/${assetId}?version=4`));requested=true;await gate;await route.fulfill({status:200,contentType:'image/webp',body:image});});
+   await page.route('**/api/review/**',async route=>{if(!route.request().url().includes('/assets/'))return route.fulfill({status:204,body:''}); /* view beacon etc. (client-review-beacon.tsx): not part of this asset check */ assert.ok(route.request().url().endsWith(`/assets/${assetId}?version=4`));requested=true;await gate;await route.fulfill({status:200,contentType:'image/webp',body:image});});
    await page.goto(`${base}/?kind=${kind}`);
    await page.getByText('Loading the saved document and artwork…').waitFor();
    assert.ok(await page.getByRole('button',{name:'Approve',exact:true}).isDisabled());

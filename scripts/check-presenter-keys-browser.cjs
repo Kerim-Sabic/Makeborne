@@ -20,7 +20,7 @@ async function main() {
       b.onLoad({ filter: /book-markup$/, namespace: "mock" }, () => ({ contents: "export function wordCount() { return 0; }", loader: "js" }));
       b.onLoad({ filter: /cloud-api$/, namespace: "mock" }, () => ({ contents: "export async function readCloudImage() { throw new Error('no images'); }", loader: "js" }));
       b.onLoad({ filter: /\.css$/ }, () => ({ contents: "", loader: "js" }));
-      b.onResolve({ filter: /^@\// }, args => ({ path: path.resolve("src", args.path.slice(2) + ".ts") }));
+      b.onResolve({ filter: /^@\// }, args => ({ path: path.resolve("src", args.path.slice(2) + (args.path.endsWith(".css") ? "" : ".ts")) }));
     } }] });
   const server = createServer((req, res) => {
     res.setHeader("Permissions-Policy", "fullscreen=()");
