@@ -27,6 +27,9 @@ check("composers use --type-input on desktop and --type-input-touch on phones", 
     assert.match(text, phone, `${file} phone`);
   }
   assert.doesNotMatch(css("live-builder"), /\.lb-composer textarea \{[^}]*font-size:12\.5px/, "the 12.5px composer is gone");
+  // Pressing Send blurs the field; a focus-only height moved Send between press and release (scripts/check-composer-send-browser.cjs).
+  assert.doesNotMatch(css("live-builder"), /\.lb-composer textarea:focus \{[^}]*height/, "the phone composer does not resize on blur");
+  assert.match(css("live-builder"), /\.lb-composer textarea:not\(:placeholder-shown\) \{ height:88px; \}/, "it grows with content instead");
 });
 
 check("status text in the touched surfaces uses the state tokens", () => {

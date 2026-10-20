@@ -106,7 +106,9 @@
   .lb[data-chat-open] .lb-log { flex:1 1 auto; min-height:120px; padding:12px 14px 16px; }
   .lb-composer { margin:6px 10px 10px; padding:8px 10px 7px; }
   .lb-composer textarea { height:44px; min-height:44px; max-height:96px; font-size:var(--type-input-touch); }
-  .lb-composer textarea:focus { height:88px; }
+  /* Grows with content, never with focus: a focus-only height shrank the field on blur, which moved
+     Send between mouse press and release so the click was lost. Send is disabled while empty. */
+  .lb-composer textarea:not(:placeholder-shown) { height:88px; }
   .lb-composer .lb-source-formats { display:none; }
   .lb-controls { gap:4px; row-gap:6px; }
   .lb-mode button { padding:0 8px; }
