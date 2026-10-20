@@ -286,6 +286,8 @@ const config = { zoneId: "0123456789abcdef0123456789abcdef", token: "t".repeat(4
       assert.match(nested, /DNS zone <strong>mybakery\.com<\/strong>/);
       assert.doesNotMatch(nested, /<code>shop<\/code>/, "never only the first label");
       assert.match(article("d-expired"), /<code>www<\/code>[\s\S]*DNS zone <strong>ovenbird\.co\.uk<\/strong>/);
+      // Preferred-address policy (M17, docs/CUSTOM_DOMAINS.md): stated, and matching the Worker.
+      assert.match(html, /wd-policy">Both addresses show the same site, and neither one redirects to the other\. Your Makeborne address stays the main address for search engines: every page names it as the original, and only it lists a sitemap\./);
       // Polling follows inProgress, not the stored status.
       const ui = fs.readFileSync(uiPath, "utf8");
       assert.match(ui, /domains\.filter\(domain => domain\.inProgress\)/);

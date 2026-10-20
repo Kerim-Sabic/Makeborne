@@ -5,6 +5,7 @@ import { requireCreationAccess } from "@/lib/billing/access";
 import { ArtifactContentSchema } from "@/lib/domain";
 import { RequestError } from "@/lib/server/http";
 import { renderAssetPreview, MAX_PREVIEW_SOURCE_BYTES } from "@/lib/cloud/image-preview";
+import { downloadProjectAsset } from "@/lib/cloud/asset-storage";
 import { renderHostedSite } from "@/lib/hosting/render";
 import { HOSTING, siteAddress, validSiteSlug, type HostedSite } from "@/lib/hosting/config";
 import { PromotePublicationSchema } from "@/lib/projects/publication-contract";
@@ -84,7 +85,7 @@ export async function POST(request: Request, context: Context) {
         const {data: asset,error} = await client.from("assets").select("object_path,content_type").eq("workspace_id",workspaceId).eq("project_id",artifact.project_id).eq("id",id).maybeSingle();
         databaseError(error);
         if (!asset || !["image/png","image/jpeg","image/webp"].includes(asset.content_type) || !asset.object_path.startsWith(`${workspaceId}/`)) throw new RequestError("MISSING_IMAGE","A website image is missing or unavailable in this project.");
-        const {data:file,error:downloadError} = await client.storage.from("project-assets").download(asset.object_path);
+        const {data:file,error:downloadError} = await downloadProjectAsset(client, {workspaceId, projectId: artifact.project_id}, asset.object_path);
         if(downloadError || !file || file.size>MAX_PREVIEW_SOURCE_BYTES) throw new RequestError("INVALID_IMAGE","An image is unavailable or exceeds 8 MB.");
         const bytes = await renderAssetPreview(new Uint8Array(await file.arrayBuffer()));
         total += bytes.length;

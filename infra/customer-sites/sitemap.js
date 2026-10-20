@@ -1,5 +1,11 @@
 /** sitemap.xml and robots.txt for published sites. Page paths come from the
- * database (live sites only); the origin is the address the visitor used. */
+ * database (live sites only); the origin is the address the visitor used.
+ *
+ * Preferred-address policy (docs/CUSTOM_DOMAINS.md): every published page names
+ * its Makeborne address as rel=canonical and og:url. A sitemap should list only
+ * canonical URLs, so only the Makeborne address offers one. A custom domain
+ * serves the same pages, still allows crawling (so the canonical tag is read)
+ * and advertises no sitemap of its own. */
 
 const PAGE_PATH = /^\/(?:[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?$/;
 const xml = value => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -19,6 +25,7 @@ export function sitemapDocument(origin, paths, updated) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${paths.map(path => `  <url><loc>${xml(origin + path)}</loc>${lastmod}</url>`).join("\n")}\n</urlset>\n`;
 }
 
-export function robotsDocument(origin, indexable) {
-  return indexable ? `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n` : "User-agent: *\nDisallow: /\n";
+export function robotsDocument(origin, indexable, sitemap = true) {
+  if (!indexable) return "User-agent: *\nDisallow: /\n";
+  return sitemap ? `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n` : "User-agent: *\nAllow: /\n";
 }

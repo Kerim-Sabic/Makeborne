@@ -2,7 +2,7 @@
 const fs = require("node:fs"), ts = require("typescript"), assert = require("node:assert/strict"), crypto = require("node:crypto");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText, filename);
 const { REVIEW_TOKEN, ReviewAnchorSchema, ReviewCommentInputSchema, ReviewDecisionInputSchema, ReviewPayloadSchema, ReviewCreateSchema, linkState } = require("./contracts.ts");
-const { anchorLabel, builderRequestFromFeedback, reviewMailto } = require("./feedback.ts");
+const { REVIEW_IDENTITY_NOTE, anchorLabel, builderRequestFromFeedback, reviewDecisionLabel, reviewMailto } = require("./feedback.ts");
 const { mapReviewLink, mapReviewComment } = require("./mappers.ts");
 const { reviewDateLabel, reviewTimeLabel } = require("./date-format.ts");
 
@@ -123,6 +123,20 @@ check("review writes require the displayed immutable version", () => {
   assert.equal(ReviewCommentInputSchema.safeParse({ version, name: "Jane", body: "Hi", anchor: { kind: "general" } }).success, false);
   assert.equal(ReviewDecisionInputSchema.safeParse({ version, name: "Jane", decision: "approved" }).success, false);
  }
+});
+
+check("bearer-link decisions are labelled unverified and never as publication (M17)", () => {
+  assert.equal(reviewDecisionLabel("approved", "Jane"), "Approved by “Jane” (unverified)");
+  assert.equal(reviewDecisionLabel("changes_requested", "  "), "Changes requested by the link holder (unverified)");
+  assert.match(REVIEW_IDENTITY_NOTE, /not a verified account/); assert.match(REVIEW_IDENTITY_NOTE, /doesn't publish/);
+  const path = require("node:path");
+  for (const name of ["client-review-panel.tsx", "client-review-feed.tsx"]) {
+    const source = fs.readFileSync(path.join(__dirname, "../../components", name), "utf8");
+    assert.ok(source.includes("reviewDecisionLabel("), `${name} uses the unverified decision label`);
+    assert.ok(!source.includes("`Approved by ${") && !source.includes("approved version ${"), `${name} presents a typed name as a verified approver`);
+  }
+  const panel = fs.readFileSync(path.join(__dirname, "../../components/client-review-panel.tsx"), "utf8");
+  assert.match(panel, /names are as typed, not verified/);
 });
 
 console.log(`${count} client review checks passed.`);

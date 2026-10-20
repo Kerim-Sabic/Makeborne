@@ -102,6 +102,7 @@ export default function WebsiteDomains({ accountId, workspaceId, artifactId }: {
           <small>We recommend www. Most providers can&apos;t point a root domain (yourbusiness.com) straight at a website, so you can forward it to www.</small>
         </form>
         {!state.live && state.domains.length > 0 && <p className="wd-note">Your site isn&apos;t live right now. The domain will show it as soon as you publish.</p>}
+        {state.domains.length > 0 && <p className="wd-note wd-policy">Both addresses show the same site, and neither one redirects to the other. Your Makeborne address stays the main address for search engines: every page names it as the original, and only it lists a sitemap.</p>}
       </>}
     {error && <p className="wd-error" role="alert">{error}</p>}
     {state.domains.map(domain => <article key={domain.id} className="wd-domain" data-status={domain.status} data-phase={domain.phase}>
