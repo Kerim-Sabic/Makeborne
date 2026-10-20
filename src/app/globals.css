@@ -2957,3 +2957,10 @@ label input[type="color"] {
 .app-error h1 { margin: 0 0 8px; font-size: 24px; }
 .app-error p { margin: 0 0 20px; color: var(--muted); line-height: 1.55; }
 .app-error-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+
+/* Restored unsent brief: plain statement plus an explicit Discard. */
+.unsent-draft-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: #5d6880; }
+.unsent-draft-notice button { padding: 4px 10px; min-height: 32px; border: 1px solid #d5dcea; border-radius: 8px; background: #fff; color: #354ea5; font: inherit; font-weight: 550; cursor: pointer; }
+.unsent-draft-notice button:hover { background: #f1f4fb; }
+.unsent-draft-notice button:disabled { opacity: .6; cursor: default; }
+.mk-unsent-draft { justify-content: center; text-align: center; }

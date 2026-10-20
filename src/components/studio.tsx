@@ -10,6 +10,8 @@ import StudioAccount from "./studio-account";
 import BuildConversation from "./build-conversation";
 import { AttachmentList, useFileAttachments } from "./file-attachments";
 import ComposerControls from "./composer-controls";
+import { useUnsentDraft } from "./use-unsent-draft";
+import UnsentDraftNotice from "./unsent-draft-notice";
 import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
@@ -47,7 +49,7 @@ import {
   type ProjectTask,
   type Workspace,
 } from "./studio-model";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
@@ -59,6 +61,9 @@ import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
+import { studioSkipTargets } from "@/lib/studio-skip-links";
+import { projectsWelcome, sameLibraryStatus, type AccountLibraryStatus } from "@/lib/projects/library-state";
+import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
@@ -130,6 +135,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const immediateWebsite=draftKind==="website"&&creationMode==="create"&&composerPermissions.enabled;
   const [homeHandoff, setHomeHandoff] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // False until the opening URL is understood, so a home handoff or create link is never overwritten by an unsent draft.
+  const [routeSettled, setRouteSettled] = useState(false);
   const [tab, setTab] = useState(initialTab);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState<Kind | null>(null);
@@ -137,7 +144,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const [styleModal, setStyleModal] = useState(false);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [accountProjectCount, setAccountProjectCount] = useState<number | null>(null);
+  const [accountLibrary, setAccountLibrary] = useState<AccountLibraryStatus>({ state: "checking" });
+  // Keep the same object while nothing changed, so a re-render does not ripple through the page.
+  const reportAccountLibrary = useCallback((next: AccountLibraryStatus) => setAccountLibrary(current => sameLibraryStatus(current, next) ? current : next), []);
   const [notice, setNotice] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
   const [saveInvalid, setSaveInvalid] = useState(false);
@@ -145,6 +154,17 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const [clientDetail, setClientDetail] = useState<string | null>(null);
   const [opportunityClient, setOpportunityClient] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const navigationPanel = useRef<HTMLElement>(null);
+  const navigationToggle = useRef<HTMLButtonElement>(null);
+  // The Projects composer keeps its unsent brief and settings across reloads for this account only.
+  const unsentBrief = useUnsentDraft({
+    surface: "studio",
+    account: composerAccount.accountId ? { accountId: composerAccount.accountId } : composerAccount.ready ? { accountId: null } : null,
+    enabled: loaded && routeSettled && !creating && !directStart,
+    fields: { kind: draftKind, mode: creationMode, effort: creationEffort, text: draftBrief },
+    defaults: { kind: "website", mode: "create", effort: DEFAULT_EFFORT, text: "" },
+    apply: next => { setDraftKind(next.kind); setCreationMode(next.mode); setCreationEffort(next.effort); setDraftBrief(next.text); },
+  });
   function startStudioPrompt() {
     if(!draftBrief.trim()||!composerAccount.ready||!composerAccount.accountId||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent)return;
     const requestId=crypto.randomUUID(),owner=attachmentOwner(composerAccount.accountId);
@@ -155,18 +175,42 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       sessionStorage.setItem("makeborne.creation-draft.v1",JSON.stringify(draft));
       const url=new URL(window.location.href);url.search="";url.searchParams.set("create",draftKind);url.searchParams.set("from","home");
       window.history.pushState(window.history.state,"",url);
+      unsentBrief.submitted();
     } catch {setNotice("This browser could not preserve your prompt. Keep a copy and free browser storage before creating.");return;}
     setDirectStart(true);setCreationRequestId(requestId);setInitialBrief(draft.brief);setInitialTitle(`Untitled ${draftKind}`);
     setInitialStyle(AUTOMATIC_STYLE.id);setInitialClient("");setInitialWorkspaceId(null);setInitialAttachmentOwner(owner);
     setInitialGenerationConsent(consent);setHomeHandoff(false);setCreating(draftKind);
   }
+  // On phones the navigation is an opaque drawer over the page, so it behaves as a modal
+  // overlay: focus moves into it, Tab stays inside, the page behind is inert, and closing
+  // returns focus to the toggle. Widening past the drawer breakpoint closes it.
   useEffect(() => {
     if (!mobileNav) return;
-    const closeNavigation = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileNav(false);
+    const panel = navigationPanel.current, toggle = navigationToggle.current;
+    const drawer = window.matchMedia(DRAWER_NAVIGATION_QUERY);
+    if (!panel || !drawer.matches) { queueMicrotask(() => setMobileNav(false)); return; }
+    const focusable = () => Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(node =>
+      !node.matches(":disabled,[aria-disabled='true']") && node.tabIndex >= 0 && node.getClientRects().length > 0 && getComputedStyle(node).visibility !== "hidden");
+    (panel.querySelector<HTMLElement>("[aria-current='page']") ?? focusable()[0])?.focus({ preventScroll: true });
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // A popup inside the drawer closes first.
+        if (event.defaultPrevented) return;
+        event.preventDefault(); setMobileNav(false); return;
+      }
+      if (event.key !== "Tab") return;
+      const target = overlayTabTarget(focusable(), document.activeElement as HTMLElement | null, event.shiftKey);
+      if (target) { event.preventDefault(); target.focus(); }
     };
-    window.addEventListener("keydown", closeNavigation);
-    return () => window.removeEventListener("keydown", closeNavigation);
+    const widened = () => { if (!drawer.matches) setMobileNav(false); };
+    document.addEventListener("keydown", keydown);
+    drawer.addEventListener("change", widened);
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      drawer.removeEventListener("change", widened);
+      const active = document.activeElement;
+      if (shouldRestoreOverlayFocus(!!active && panel.contains(active), !active || active === document.body)) toggle?.focus({ preventScroll: true });
+    };
   }, [mobileNav]);
   useEffect(() => {
     queueMicrotask(async () => {
@@ -272,11 +316,13 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           setNotice(
             error instanceof Error ? error.message : "The saved creation brief could not be read. Continue from your original browser or start a new project.",
           );
+          setRouteSettled(true);
           return;
         }
       }
       if (kind === "book" || kind === "website" || kind === "presentation")
         setCreating(kind);
+      setRouteSettled(true);
     });
   }, []);
   const restoreHistory = useEffectEvent(() => {
@@ -499,11 +545,24 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         />
       );
   if (directStart && creating) return <div className="studio-shell creation-route">{creationView}</div>;
+  // Open editors hide the navigation rail, so there is nothing to bypass there.
+  const projectOpen = Boolean(project || accountRoute?.artifactId || (!loaded && initialProjectOpen));
+  const skipTargets = studioSkipTargets({ loaded, tab, composerVisible: tab === "projects" && !accountRoute?.artifactId });
+  function skipTo(event: React.MouseEvent<HTMLAnchorElement>, id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    // Move keyboard focus itself, not just the scroll position, and keep the URL unchanged.
+    event.preventDefault();
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "center" });
+  }
   return (
-    <div className={`studio-shell ${project || accountRoute?.artifactId || (!loaded && initialProjectOpen) ? "is-project-open" : ""}`}>
+    <div className={`studio-shell ${projectOpen ? "is-project-open" : ""}`}>
+      {!projectOpen && skipTargets.map(target => <a key={target.id} className="studio-skip-link" href={`#${target.id}`} onClick={event => skipTo(event, target.id)}>{target.label}</a>)}
       {mobileNav && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
       <aside
         id="studio-navigation"
+        ref={navigationPanel}
         className={`sidebar ${mobileNav ? "open" : ""}`}
       >
         <Link className="wordmark" href="/">
@@ -553,9 +612,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           </div>
         </div>
       </aside>
-      <div className="studio-main">
+      <div className="studio-main" inert={mobileNav || undefined}>
         <header className="studio-topbar">
           <button
+            ref={navigationToggle}
             className="icon-button mobile-toggle"
             aria-expanded={mobileNav}
             aria-controls="studio-navigation"
@@ -607,7 +667,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           </div>
         )}
         {!loaded ? (
-          <div className="loading-state">Opening your workspace…</div>
+          <main id="studio-content" tabIndex={-1} className="loading-state">Opening your workspace…</main>
         ) : project ? (
           <ProjectEditor
             key={project.id}
@@ -623,7 +683,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
             notify={toast}
           />
         ) : (
-          <div
+          // The tab's own content is the page's single main landmark (the device project editor keeps its own layout).
+          <main
+            id="studio-content"
+            tabIndex={-1}
             className={`workspace-content ${tab === "projects" && workspace.projects.length === 0 ? "fresh-workspace" : ""}`}
           >
             {tab === "projects" && (
@@ -693,6 +756,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                 <div className="composer-note">
                   {immediateWebsite?"Your website request starts after your brief is saved.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
                 </div>
+                <UnsentDraftNotice restoredAt={unsentBrief.restoredAt} storageRefused={unsentBrief.storageRefused} onDiscard={unsentBrief.discard} />
                 <div
                   className="brief-suggestions"
                   aria-label="Brief suggestions"
@@ -731,7 +795,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     </button>
                   ))}
                 </div>
-                <div className="list-toolbar">
+                <div className="list-toolbar" id="studio-library" tabIndex={-1}>
                   <div className="filter-tabs">
                     {["all", "website", "book", "presentation"].map((f) => (
                       <button
@@ -756,8 +820,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   </label>
                 </div>
                 </>}
-                <AccountProjects search={search} filter={filter} target={accountRoute} onCount={setAccountProjectCount} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
-                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (accountProjectCount ? null : (
+                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
+                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (projectsWelcome(workspace.projects.length, accountLibrary) !== "welcome" ? null : (
                   <Empty
                     icon={FolderOpen}
                     title="Your projects will live here."
@@ -1009,7 +1073,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                 </div>
               </>
             )}
-          </div>
+          </main>
         )}
       </div>
       {creationView}

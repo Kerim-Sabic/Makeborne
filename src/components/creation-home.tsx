@@ -16,6 +16,8 @@ import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
 import { useCreationAccount } from "./use-creation-account";
 import { attachmentOwner, saveCreationDraft } from "@/lib/attachments";
 import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop } from "./file-attachments";
+import { useUnsentDraft } from "./use-unsent-draft";
+import UnsentDraftNotice from "./unsent-draft-notice";
 import "@/app/home.css";
 
 type Kind = "website" | "book" | "presentation";
@@ -70,6 +72,16 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
   const owner = account.ready ? attachmentOwner(account.accountId) : null;
   const attachments = useFileAttachments(owner, "home");
   const drop = useFileDrop(attachments.add, !attachments.ready || attachments.busy || busy);
+  // The unsent brief and its settings survive a reload for this account (or this signed-out device) only.
+  // Attached files already persist separately with their owner; consent is never part of the draft.
+  const unsent = useUnsentDraft({
+    surface: "home",
+    account: account.accountId ? { accountId: account.accountId } : account.ready ? { accountId: null } : null,
+    enabled: !busy,
+    fields: { kind, mode, effort, text: brief },
+    defaults: { kind: "website", mode: "create", effort: DEFAULT_EFFORT, text: "" },
+    apply: next => { pickKind(next.kind); setMode(next.mode); setEffort(next.effort); setBrief(next.text); setError(""); },
+  });
   const starting = useRef(false);
   async function start() {
     if (starting.current || attachments.busy) return;
@@ -86,6 +98,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
       const draft = { kind, brief: brief.trim(), styleId: selectedStyle?.id ?? AUTOMATIC_STYLE.id, style: selectedStyle, mode, effort, requestId, attachmentOwner: owner, generationConsent };
       await saveCreationDraft(owner, requestId, nonce, draft);
       sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify(draft));
+      unsent.submitted();
       router.push(`/studio?create=${kind}&from=home&draft=${requestId}&claim=${nonce}`);
     } catch { setError("Your browser could not save this brief and its files. Keep a copy and try again."); starting.current = false; setBusy(false); }
   }
@@ -134,6 +147,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
               <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim() || !accessReady || immediateWebsite&&!permissions.consent} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
             </div>
           </form>
+          <UnsentDraftNotice restoredAt={unsent.restoredAt} storageRefused={unsent.storageRefused} onDiscard={unsent.discard} disabled={busy} className="mk-unsent-draft" />
           {immediateWebsite&&<GenerationPermissions value={permissions} disabled={busy}/>}
           {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
