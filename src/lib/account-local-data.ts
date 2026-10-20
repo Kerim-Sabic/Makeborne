@@ -9,6 +9,8 @@ function ownedByAccount(storage: KeyedStorage, key: string, accountId: string) {
     `makeborne.project-conversation.v1:${accountId}:`,
   ].some((prefix) => key.startsWith(prefix))) return true;
   if (key.startsWith("makeborne.wizard-draft.") && key.includes(`.account.${accountId}.`)) return true;
+  // Library layout preference (grid/list), per device and account.
+  if (key === `makeborne.library-view.v1.${accountId}`) return true;
   // Unsent composer briefs: makeborne.unsent-draft.v1.<surface>.account.<id>
   if (key.startsWith("makeborne.unsent-draft.") && key.endsWith(`.account.${accountId.toLowerCase()}`)) return true;
   if (!key.startsWith("makeborne.pending-write.")) return false;

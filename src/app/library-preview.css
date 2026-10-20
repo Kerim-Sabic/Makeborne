@@ -1,7 +1,9 @@
 /* Library card previews (audit M06). The card is a container: its one button
    covers the whole card (one tab stop, unchanged order) and the decorative
-   preview sits beside it at a fixed size, so loading never shifts the layout. */
-.account-project-card { position: relative; }
+   preview sits beside it at a fixed size, so loading never shifts the layout.
+   The card sizes its own contents: a narrow card (two columns beside the
+   sidebar, or a phone) puts the preview above the title instead of squeezing it. */
+.account-project-card { position: relative; flex-wrap: wrap; container-type: inline-size; }
 .account-project-card .account-project-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .account-project-card .account-project-open::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .account-project-card .account-project-open > span { flex: 1; min-width: 0; }
@@ -22,11 +24,41 @@
 .studio-shell .account-project-card .library-card-fallback small { font-size: 11px; }
 .library-card-thumb.loading .library-card-fallback small, .library-card-thumb.idle .library-card-fallback small { color: #77738a; }
 @keyframes library-card-in { from { opacity: 0; } to { opacity: 1; } }
-@media (max-width: 420px) {
-  .library-card-thumb { width: 96px; height: 64px; }
+@media (max-width: 420px) { .account-project-card { gap: 10px; padding: 14px; } }
+@container (max-width: 380px) {
+  .library-card-thumb { width: 96px; height: 60px; }
   .library-card-fallback { gap: 2px; }
   .library-card-fallback .account-project-icon { width: 26px; height: 26px; flex-basis: 26px; }
   .account-project-card .library-card-fallback small, .studio-shell .account-project-card .library-card-fallback small { font-size: 10px; }
-  .account-project-card { gap: 10px; padding: 14px; }
+}
+@container (max-width: 260px) {
+  .library-card-thumb { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+  .library-card-fallback .account-project-icon { width: 36px; height: 36px; flex-basis: 36px; }
+  .account-project-card .library-card-fallback small, .studio-shell .account-project-card .library-card-fallback small { font-size: 11px; }
+  .account-project-card .account-project-open { flex-basis: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .library-card-frame { animation: none; } }
+
+/* Library controls: client filter, sort and layout (whole-workspace scope). */
+.account-projects-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: -6px 0 16px; font-size: 13px; color: #555166; }
+.account-projects-controls label { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; margin: 0; }
+.account-projects-controls select { max-width: min(220px, 60vw); min-height: 32px; padding: 4px 8px; border: 1px solid #dedde8; border-radius: 8px; background: #fff; font: inherit; color: #26232f; }
+.account-projects-view { display: inline-flex; border: 1px solid #dedde8; border-radius: 8px; overflow: hidden; }
+.account-projects-view button { min-height: 32px; padding: 4px 12px; border: 0; background: #fff; font: inherit; color: #555166; cursor: pointer; }
+.account-projects-view button[aria-pressed="true"] { background: #f1eefb; color: #3f3683; font-weight: 600; }
+.account-projects-view button:focus-visible, .account-projects-controls select:focus-visible { outline: 2px solid #6860a4; outline-offset: 2px; }
+.account-projects-controls .small-note { flex-basis: 100%; margin: 0; }
+.account-project-card .account-project-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.account-project-state { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 600; background: #efeff3; color: #4a4757; }
+.account-project-state.live { background: #e3f4ea; color: #1e6a3f; }
+.account-project-state.live-behind { background: #fdf1dc; color: #7a5212; }
+.account-project-card .account-project-facts { gap: 4px 8px; }
+.account-project-sep { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Compact list: one column, small preview. */
+.account-project-grid.list { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.account-project-grid.list .account-project-card { padding: 10px 14px; gap: 12px; flex-wrap: nowrap; }
+.account-project-grid.list .library-card-thumb { width: 72px; height: 45px; aspect-ratio: auto; }
+.account-project-grid.list .library-card-fallback small { display: none; }
+.account-project-grid.list .library-card-fallback .account-project-icon { width: 26px; height: 26px; flex-basis: 26px; }
+.account-project-grid.list .account-project-card .account-project-open { flex-basis: 0; }

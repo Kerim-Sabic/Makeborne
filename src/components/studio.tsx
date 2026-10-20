@@ -66,6 +66,7 @@ import { creationTitle, fallbackProjectTitle, isPlaceholderTitle, placeholderTit
 import { libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
+import { DEFAULT_LIBRARY_SCOPE, readLibraryQuery, withLibraryQuery, type LibraryScope } from "@/lib/projects/library-card-meta";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
   ArrowDown,
@@ -145,6 +146,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const [styleModal, setStyleModal] = useState(false);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  // Library sort and client filter (account projects). Search, kind, client and sort are mirrored in the URL.
+  const [libraryScope, setLibraryScope] = useState<LibraryScope>(DEFAULT_LIBRARY_SCOPE);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const applyLibraryQuery = (search: string) => { const library = readLibraryQuery(search); setSearch(library.q); setFilter(library.kind); setLibraryScope({ sort: library.sort, client: library.client }); };
   const [accountLibrary, setAccountLibrary] = useState<AccountLibraryStatus>({ state: "checking" });
   // Keep the same object while nothing changed, so a re-render does not ripple through the page.
   // Whether this account had saved projects the last time this device loaded them (null: not known).
@@ -254,6 +259,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
         if (route.notice) setNotice(route.notice);
       }
+      applyLibraryQuery(window.location.search);
       const kind = parameters.get("create");
       if (parameters.get("from") === "home") {
         try {
@@ -339,6 +345,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       ? readStudioRoute(window.location.search, workspace)
       : { tab: "settings", projectId: null, clientId: null } as const;
     setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
+    applyLibraryQuery(window.location.search);
     // Keep unsaved client/style forms mounted when the underlying route changes.
     setCreating(null); setInitialAttachmentOwner(null); setInitialGenerationConsent(null); setInitialWorkspaceId(null); setInitialClient(""); setMobileNav(false);
     if ("notice" in route && route.notice) setNotice(route.notice);
@@ -348,6 +355,14 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);
+  // The library list's search, kind, client and sort replace the current history entry (typing never adds entries).
+  const libraryListShown = loaded && routeSettled && tab === "projects" && !accountRoute?.artifactId && !selected;
+  useEffect(() => {
+    if (!libraryListShown) return;
+    const here = window.location.pathname + window.location.search + window.location.hash;
+    const next = withLibraryQuery(here, { q: search, kind: filter as "all", client: libraryScope.client, sort: libraryScope.sort });
+    if (next !== here) window.history.replaceState(window.history.state, "", next);
+  }, [libraryListShown, search, filter, libraryScope]);
   useEffect(() => {
     if (loaded && persistenceAllowed)
       try {
@@ -825,6 +840,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   <label className="search-field">
                     <Search size={16} />
                     <input
+                      ref={searchInput}
                       aria-label="Search projects"
                       placeholder="Find a project…"
                       value={search}
@@ -835,7 +851,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                 </>}
                 {/* New users start with a brief; the account list keeps one position so it never reloads when the order changes. */}
                 {!accountRoute?.artifactId && !libraryFirst && <div className="studio-create">{creationEntry}</div>}
-                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
+                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} scope={libraryScope} onScopeChange={setLibraryScope}
+                  onClearSearch={() => { setSearch(""); searchInput.current?.focus(); }} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
                 {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (projectsWelcome(workspace.projects.length, accountLibrary) !== "welcome" ? null : (
                   <Empty
                     icon={FolderOpen}

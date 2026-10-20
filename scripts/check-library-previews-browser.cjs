@@ -27,18 +27,20 @@ const ids = {
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
 import AccountProjects from "./src/components/account-projects";
 function App() {
-  const [target, setTarget] = useState(null); const [filter, setFilter] = useState("all");
+  const [target, setTarget] = useState(null); const [filter, setFilter] = useState("all"); const [search, setSearch] = useState("");
   window.setFilter = setFilter; window.setTarget = setTarget;
-  return <main><button id="before">Before</button><AccountProjects search="" filter={filter} target={target} navigate={route => { window.navigations.push(route); setTarget(route && route.artifactId ? null : route); }} onStatus={() => {}} /><button id="after">After</button></main>;
+  return <main><button id="before">Before</button><input id="search" aria-label="Search projects" value={search} onChange={event => setSearch(event.target.value)} />
+    <AccountProjects search={search} filter={filter} onClearSearch={() => { setSearch(""); document.getElementById("search").focus(); }} target={target} navigate={route => { window.navigations.push(route); setTarget(route && route.artifactId ? null : route); }} onStatus={() => {}} /><button id="after">After</button></main>;
 }
-window.navigations = []; window.apiCalls = []; window.previewRequests = []; window.captureCalls = [];
+window.navigations = []; window.apiCalls = []; window.metaCalls = []; window.previewRequests = []; window.captureCalls = [];
 createRoot(document.getElementById("root")).render(<App />);`;
 
 const mocks = {
   // Supabase auth: the test decides who is signed in and can switch account.
   "supabase-client": `export function createClient() { return { auth: { onAuthStateChange(cb) { window.authCallback = cb; setTimeout(() => cb("INITIAL_SESSION", window.session), 0); return { data: { subscription: { unsubscribe() {} } } }; } } }; }`,
   "cloud-api": `export function setCloudAccount(id) { window.cloudAccount = id; }
-export async function api(path) { window.apiCalls.push({ account: window.cloudAccount, path }); await new Promise(r => setTimeout(r, 5)); const data = window.resolveApi(window.cloudAccount, path); if (!data) throw new Error("Not available"); return JSON.parse(JSON.stringify(data)); }
+export class CloudError extends Error { constructor(status, message) { super(message); this.status = status; } }
+export async function api(path) { window.apiCalls.push({ account: window.cloudAccount, path }); await new Promise(r => setTimeout(r, 5)); const data = window.resolveApi(window.cloudAccount, path); if (!data) throw new CloudError(404, "This workspace is unavailable."); return JSON.parse(JSON.stringify(data)); }
 export function cloudAccountGuard() { return () => {}; }
 export async function readCloudImage() { throw new Error("no images in this fixture"); }`,
   "pending-cloud-writes": `export default function PendingCloudWrites() { return null; }`,
@@ -53,7 +55,8 @@ export function readCardPreview(request, signal) { return new Promise((resolve, 
 }); }
 export async function readCardCaptureSource(request) { window.captureCalls.push({ kind: "source", request }); return window.captureSource(request); }
 export async function saveCardCapture(request, capture, result) { window.captureCalls.push({ kind: "save", request, capture, result }); return window.captureSaved(request, capture, result); }
-export async function readCardImage() { throw new Error("no images"); }`,
+export async function readCardImage() { throw new Error("no images"); }
+export async function readCardMeta(accountId, workspaceId, ids) { window.metaCalls.push({ accountId, workspaceId, ids }); const answer = await (window.cardMeta ? window.cardMeta(accountId, workspaceId, ids) : []); if (answer instanceof Error) throw answer; return answer; }`,
   "publish-snapshot": `export async function captureProjectSnapshot(source) { window.captureCalls.push({ kind: "compile", files: source.files.length }); return '<!doctype html><html><head><style>h1{font:60px serif}</style></head><body><h1>CAPTURED HOME PAGE</h1><script>parent.compromised=1</script></body></html>'; }`,
   "cloud-studio": `export function CloudEditor() { return null; }`,
   "next-dynamic": `export default function dynamic() { return function Editor() { return null; }; }`,
@@ -77,8 +80,13 @@ window.resolveApi = (account, path) => {
   if (path === "/api/workspaces") return { workspaces: mine.workspaces };
   const match = /^\\/api\\/cloud\\/workspaces\\/([^/?]+)/.exec(path); if (!match) return null;
   const ws = mine.workspaces.find(item => item.id === match[1]); if (!ws) return null;
-  const artifacts = mine.artifacts[ws.id] ?? [];
-  return { workspace: ws, clients: [], projects: [], artifacts, pagination: { clients: { offset: 0, total: 0, nextOffset: null }, projects: { offset: 0, total: 0, nextOffset: null }, artifacts: { offset: 0, total: artifacts.length, nextOffset: null } } };
+  const query = new URLSearchParams(path.split("?")[1] ?? "");
+  if (/\\/artifacts\\?/.test(path)) { const q = (query.get("q") ?? "").toLowerCase(); const found = (mine.artifacts[ws.id] ?? []).filter(item => item.title.toLowerCase().includes(q)); return { artifacts: found, pagination: { total: found.length, nextCursor: null } }; }
+  let artifacts = [...(mine.artifacts[ws.id] ?? [])];
+  const client = query.get("artifactsClient"), sort = query.get("artifactsSort");
+  if (client) artifacts = artifacts.filter(item => client === "none" ? !item.clientId : item.clientId === client);
+  if (sort === "title") artifacts.sort((a, b) => a.title.localeCompare(b.title));
+  return { workspace: ws, clients: (mine.clients ?? {})[ws.id] ?? [], projects: [], artifacts, pagination: { clients: { offset: 0, total: 0, nextOffset: null }, projects: { offset: 0, total: 0, nextOffset: null }, artifacts: { offset: 0, total: artifacts.length, nextOffset: null } } };
 };
 window.answer = (request, source, extra = {}) => ({ workspaceId: request.workspaceId, artifactId: request.artifactId, kind: extra.kind ?? "presentation", versionNumber: request.versionNumber,
   versionId: "cccccccc-0000-4000-8000-" + String(request.versionNumber).padStart(12, "0"), fingerprint: String(request.versionNumber % 10).repeat(64), source, ...extra });
@@ -262,6 +270,15 @@ async function main() {
       assert.equal(await page.evaluate(([n, id]) => window.previewRequests.slice(n).filter(entry => entry.request.artifactId === id).length, [before, SITE]), 0);
     });
 
+    await scenario("revoked access: Refresh removes the list and every preview, and says so", both(setupStandard, autoAnswers), async page => {
+      await waitCards(page, 4);
+      await page.waitForFunction(id => document.querySelector(`[data-card="${id}"] iframe`), SITE, { timeout });
+      await page.evaluate(i => { window.listings[i.A].workspaces = window.listings[i.A].workspaces.filter(item => item.id !== i.W1); }, ids);
+      await page.getByRole("button", { name: "Refresh" }).click();
+      await page.getByText("This workspace is unavailable. Your saved projects haven’t loaded, so this list may be incomplete.").waitFor({ timeout });
+      assert.equal(await page.locator(".account-project-card, iframe").count(), 0, "no card or preview of the revoked workspace stays visible");
+    });
+
     await scenario("previews load lazily near the viewport with at most two reads at once", () => {
       window.session = { user: { id: window.ids.A } };
       const many = Array.from({ length: 12 }, (_, n) => window.artifact(`e0000000-0000-4000-8000-${String(n).padStart(12, "0")}`, "website", `Site ${n}`, 1));
@@ -303,6 +320,85 @@ async function main() {
       assert.equal(await page.evaluate(() => window.captureCalls.length), 3, "reviewers never compile or store a capture");
     });
 
+    await scenario("a title search with no matches offers Clear search, which restores the list and focus", both(setupStandard, autoAnswers), async page => {
+      await waitCards(page, 4);
+      await page.fill("#search", "ZZ-NOTHING");
+      await page.getByRole("button", { name: "Clear search" }).waitFor({ timeout });
+      assert.equal(await page.locator(".account-project-card").count(), 0);
+      await page.getByRole("button", { name: "Clear search" }).click();
+      await waitCards(page, 4);
+      assert.equal(await page.inputValue("#search"), "");
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "search", "focus returns to the search field");
+    });
+
+    await scenario("cards show Draft, Live or Live · newer changes not published, and their client, from the authorized read", both(setupStandard, autoAnswers, `window.cardMeta = (account, ws, ids) => ids.flatMap(id => id === "${DECK}" ? [{ artifactId: id, currentVersion: 3, client: null, publication: { state: "live", liveVersion: 3 } }]
+      : id === "${SITE}" ? [{ artifactId: id, currentVersion: 5, client: { id: "c0000000-0000-4000-8000-000000000001", name: "Acme Clinic" }, publication: { state: "live-behind", liveVersion: 4 } }]
+      : id === "${BOOK}" ? [{ artifactId: id, currentVersion: 2, client: { id: "c0000000-0000-4000-8000-000000000002", name: "Moss Press" }, publication: { state: "draft", liveVersion: null } }]
+      : id === "${NEW}" ? [{ artifactId: id, currentVersion: 1, client: null, publication: { state: "live", liveVersion: 1 } }] : []);`), async page => {
+      await waitCards(page, 4);
+      await page.waitForFunction(() => document.querySelectorAll(".account-project-facts").length === 3, null, { timeout });
+      const facts = async id => (await page.locator(`[data-card="${id}"] .account-project-facts`).textContent()).replace(/\s+/g, " ").trim();
+      assert.equal(await facts(DECK), "Live");
+      assert.equal(await facts(SITE), "Live · newer changes not published, Client: Acme Clinic");
+      assert.equal(await facts(BOOK), "Draft, Client: Moss Press");
+      assert.equal(await page.locator(`[data-card="${NEW}"] .account-project-facts`).count(), 0, "facts for another version than the card names are not shown");
+      assert.match(await page.locator(`[data-card="${SITE}"] button`).innerText(), /Live · newer changes not published/, "part of the card's accessible name");
+      assert.deepEqual(await page.evaluate(() => window.metaCalls.map(call => [call.accountId, call.workspaceId])), [[ids.A, ids.W1]], "one read for the shown cards, scoped to account + workspace");
+    });
+
+    await scenario("late card facts for a previous account are dropped; a failed read says so and retries", () => {
+      window.session = { user: { id: window.ids.A } };
+      const shared = "d0000000-0000-4000-8000-0000000000aa";
+      window.cardTitles = { [shared]: "Shared Site" };
+      window.listings[window.ids.A] = { workspaces: [{ id: window.ids.W1, name: "Studio", role: "owner" }], artifacts: { [window.ids.W1]: [window.artifact(shared, "website", "Shared Site", 2)] } };
+      window.listings[window.ids.B] = { workspaces: [{ id: window.ids.WB, name: "B Studio", role: "owner" }], artifacts: { [window.ids.WB]: [window.artifact(shared, "website", "Shared Site", 2)] } };
+      window.autoPreview = request => window.answer(request, { format: "unavailable", reason: "unsupported" }, { kind: "website" });
+      window.metaRelease = [];
+      window.cardMeta = (account, ws, ids) => account === window.ids.A ? new Promise(resolve => window.metaRelease.push(() => resolve(ids.map(id => ({ artifactId: id, currentVersion: 2, client: { id: "c0000000-0000-4000-8000-000000000009", name: "A-ONLY CLIENT" }, publication: { state: "live", liveVersion: 2 } }))))) : window.fail(500);
+    }, async page => {
+      await page.waitForFunction(() => window.metaRelease.length === 1, null, { timeout });
+      await page.evaluate(i => window.authCallback("SIGNED_IN", { user: { id: i.B } }), ids);
+      await page.waitForFunction(() => window.metaCalls.some(call => call.accountId === window.ids.B), null, { timeout });
+      await page.evaluate(() => window.metaRelease[0]());
+      await page.getByText("Publication status and client names couldn’t load, so cards don’t show them.").waitFor({ timeout });
+      assert.equal(await page.getByText("A-ONLY CLIENT").count(), 0, "account A's facts never appear for account B");
+      await page.evaluate(() => { window.cardMeta = (account, ws, ids) => ids.map(id => ({ artifactId: id, currentVersion: 2, client: null, publication: { state: "draft", liveVersion: null } })); });
+      await page.getByRole("button", { name: "Retry" }).click();
+      await page.waitForFunction(() => document.querySelector(".account-project-facts")?.textContent === "Draft", null, { timeout });
+    });
+
+    await scenario("sort and client filter reload the whole workspace from the server", both(setupStandard, autoAnswers, `
+      window.listings[window.ids.A].clients = { [window.ids.W1]: [{ id: "c0000000-0000-4000-8000-000000000001", name: "Acme Clinic", company: "", email: "", website: "", notes: "", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z" }] };
+      window.listings[window.ids.A].artifacts[window.ids.W1][2].clientId = "c0000000-0000-4000-8000-000000000001";`), async page => {
+      await waitCards(page, 4);
+      await page.getByLabel("Sort").selectOption("title");
+      await page.waitForFunction(() => window.apiCalls.some(call => call.path.includes("artifactsSort=title")), null, { timeout });
+      await page.waitForFunction(() => [...document.querySelectorAll(".account-project-card strong")].map(node => node.textContent).join("|") === "Clinic Site|Fresh Draft|Harbour Pitch|Moss Book", null, { timeout });
+      await page.getByLabel("Client").selectOption("c0000000-0000-4000-8000-000000000001");
+      await page.waitForFunction(() => window.apiCalls.some(call => call.path.includes("artifactsClient=c0000000-0000-4000-8000-000000000001") && call.path.includes("artifactsSort=title")), null, { timeout });
+      await waitCards(page, 1);
+      assert.equal(await page.locator(".account-project-card strong").innerText(), "Clinic Site");
+      await page.getByLabel("Client").selectOption("none");
+      await waitCards(page, 3);
+      await page.fill("#search", "moss");
+      await page.getByText("Search covers every client and lists matches newest first.").waitFor({ timeout });
+      assert.equal(await page.getByLabel("Sort").isDisabled(), true, "search covers every client; sort and client are paused while searching");
+    });
+
+    await scenario("the list layout is remembered per device and account, never across accounts", both(setupStandard, autoAnswers), async page => {
+      await waitCards(page, 4);
+      await page.getByRole("button", { name: "List", exact: true }).click();
+      assert.equal(await page.locator(".account-project-grid.list").count(), 1);
+      assert.equal(await page.evaluate(i => localStorage.getItem("makeborne.library-view.v1." + i.A), ids), "list");
+      await page.evaluate(i => window.authCallback("SIGNED_IN", { user: { id: i.B } }), ids);
+      await page.waitForFunction(() => document.querySelectorAll(".account-project-card").length === 1, null, { timeout });
+      assert.equal(await page.locator(".account-project-grid.list").count(), 0, "account B starts in its own (default) layout");
+      assert.equal(await page.getByRole("button", { name: "Grid", exact: true }).getAttribute("aria-pressed"), "true");
+      await page.evaluate(i => window.authCallback("SIGNED_IN", { user: { id: i.A } }), ids);
+      await waitCards(page, 4);
+      assert.equal(await page.locator(".account-project-grid.list").count(), 1, "account A's choice is restored on this device");
+    });
+
     await scenario("one tab stop per card (the frame is never focusable); layout does not shift when a preview arrives", both(setupStandard, autoAnswers), async page => {
       await waitCards(page, 4);
       const box = async () => page.locator(`[data-card="${SITE}"]`).boundingBox();
@@ -311,7 +407,7 @@ async function main() {
       assert.deepEqual(await box(), first, "the card keeps its size when the preview paints");
       await page.focus("#before");
       const stops = [];
-      for (let n = 0; n < 9; n++) { await page.keyboard.press("Tab"); stops.push(await page.evaluate(() => { const e = document.activeElement; return e.id || e.className || e.tagName; })); if (stops.at(-1) === "after") break; }
+      for (let n = 0; n < 14; n++) { await page.keyboard.press("Tab"); stops.push(await page.evaluate(() => { const e = document.activeElement; return e.id || e.className || e.tagName; })); if (stops.at(-1) === "after") break; }
       assert.equal(stops.filter(stop => stop === "account-project-open").length, 4, `one stop per card: ${stops.join(" > ")}`);
       assert.ok(!stops.some(stop => /IFRAME|library-card/.test(stop)), "the preview frame is never focused");
       assert.equal(stops.at(-1), "after");

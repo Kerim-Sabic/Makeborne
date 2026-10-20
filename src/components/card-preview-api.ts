@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { WebsiteProjectSourceSchema } from "@/lib/projects/website-source";
 import { CardPreviewResponseSchema, cardPreviewPath, type CardPreview, type CardRequest } from "@/lib/projects/card-preview";
+import { CardMetaResponseSchema, cardMetaPath, type CardMetaItem } from "@/lib/projects/library-card-meta";
 import { cloudAccountGuard, readCloudImage } from "./cloud-api";
 
 /**
@@ -60,4 +61,17 @@ export async function readCardImage(request: CardRequest, assetId: string, signa
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
+}
+
+/** Publication state and client label for the cards shown, through the read-only card-meta route. */
+export async function readCardMeta(accountId: string, workspaceId: string, artifactIds: string[], signal?: AbortSignal): Promise<CardMetaItem[]> {
+  const assertAccount = cloudAccountGuard(accountId);
+  const response = await fetch(cardMetaPath(workspaceId, artifactIds), { headers: { "X-Makeborne-Account": accountId }, cache: "no-store", signal });
+  const data: unknown = await response.json().catch(() => null);
+  assertAccount();
+  if (!response.ok) throw new CardPreviewError(response.status, "Project details could not load.");
+  const parsed = CardMetaResponseSchema.safeParse(data);
+  const asked = new Set(artifactIds);
+  if (!parsed.success || parsed.data.workspaceId !== workspaceId || parsed.data.items.some(item => !asked.has(item.artifactId))) throw new CardPreviewError(502, "Project details could not be verified.");
+  return parsed.data.items;
 }
