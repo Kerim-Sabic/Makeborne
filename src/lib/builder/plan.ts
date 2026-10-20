@@ -120,10 +120,19 @@ export function estimatePlanCredits(plan: SitePlan): PlanEstimate {
 /** Lowest effort whose estimated maximum still fits under its own ceiling with
  * headroom; large plans need a level that can finish them in one run. */
 export function recommendedEffort(plan: SitePlan): EffortLevel {
+  return effortFit(plan).level;
+}
+
+export type EffortFit = { level: EffortLevel; fits: true } | { level: EffortLevel; fits: false; reason: "exceeds_every_level" };
+
+/** The recommendation with its reason. When no level has headroom the
+ * preselected fallback must not be presented as a "best fit" (audit effort/cost contract):
+ * the plan needs a smaller scope or staged steps, not a silently bigger allowance. */
+export function effortFit(plan: SitePlan): EffortFit {
   const estimate = estimatePlanCredits(plan);
   const fits = EFFORT_LEVELS.filter(level => level !== "light" || plan.kind === "edit")
     .find(level => estimate[level].max < BUILDER_EFFORT[level].ceilingCredits * 0.85);
-  return fits ?? "high";
+  return fits ? { level: fits, fits: true } : { level: "high", fits: false, reason: "exceeds_every_level" };
 }
 
 const bullet = (items: string[]) => items.map(item => `- ${item}`).join("\n");

@@ -2,7 +2,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, Check, CircleHelp, FileCode2, Hammer, LayoutTemplate, ListChecks, Palette, Plus, Sparkles, Type, X } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
-import type { PlanEstimate, SitePlan } from "@/lib/builder/plan";
+import { effortFit, type PlanEstimate, type SitePlan } from "@/lib/builder/plan";
 import "@/app/plan-card.css";
 
 type SaveState = "saved" | "saving" | "local" | "error";
@@ -51,6 +51,8 @@ export default function PlanCard({ plan, estimate, recommended, revision, built,
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const id = useId();
   const locked = built || superseded || busy;
+  // Recomputed from the plan as edited; "Best fit" only when some level has headroom for it.
+  const fit = effortFit(plan);
   const set = (change: Partial<SitePlan>) => onChange({ ...plan, ...change });
   const setPage = (index: number, change: Partial<SitePlan["pages"][number]>) => set({ pages: plan.pages.map((page, item) => item === index ? { ...page, ...change } : page) });
   const setDesign = (change: Partial<SitePlan["design"]>) => set({ design: { ...plan.design, ...change } });
@@ -147,12 +149,13 @@ export default function PlanCard({ plan, estimate, recommended, revision, built,
     <footer className="pc-foot">
       <div className="pc-effort" role="radiogroup" aria-label="Build effort and estimated credits">
         {EFFORT_LEVELS.map(level => <button key={level} type="button" role="radio" aria-checked={effort === level} disabled={locked} onClick={() => setEffort(level)} title={EFFORT_PRESENTATION[level].purpose}>
-          <span>{EFFORT_PRESENTATION[level].label}{level === recommended && <em>Best fit</em>}</span>
+          <span>{EFFORT_PRESENTATION[level].label}{fit.fits && level === recommended && <em>Best fit</em>}</span>
           <small>{estimate[level].min === estimate[level].max ? estimate[level].max : `${estimate[level].min}–${estimate[level].max}`} cr</small>
         </button>)}
       </div>
+      {!fit.fits && <p className="pc-nofit" role="note"><CircleHelp size={13} aria-hidden="true" />No effort level is sized to finish this plan in one build: its estimate reaches every level&apos;s limit, and a build is capped there. Remove pages or sections, or build the most important part first and add the rest later.</p>}
       <button type="button" className="pc-build" disabled={locked || save === "error"} onClick={build}>
-        <Hammer size={14} />Build this plan<span>~{estimate[effort].min}–{estimate[effort].max} credits</span><ArrowRight size={14} />
+        <Hammer size={14} />Build this plan<span>~{estimate[effort].min === estimate[effort].max ? estimate[effort].max : `${estimate[effort].min}–${estimate[effort].max}`} credits</span><ArrowRight size={14} />
       </button>
       <p className="pc-hint">Click any text to edit it, or <button type="button" className="pc-link" disabled={locked} onClick={onRevise}>reply in chat to revise</button>. No code is written until you build.</p>
     </footer>
