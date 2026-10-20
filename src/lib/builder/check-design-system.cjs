@@ -7,7 +7,7 @@ Module._load = function(name, parent, main) {
 };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true}}).outputText, filename);
 
-const {BUILDER_SYSTEM, MOTION_PATTERN, FORM_PATTERN, ROUTE_PATTERN, FONT_FILE_KB} = require("./prompt.ts");
+const {BUILDER_SYSTEM, MOTION_PATTERN, FORM_PATTERN, ROUTE_PATTERN, FONT_FILE_KB, FONT_FALLBACKS} = require("./prompt.ts");
 const {FONT_CATALOG} = require("./fonts.ts");
 const {ProjectFiles} = require("./files.ts");
 const {qualityProblems, withoutBlocks} = require("./quality-gates.ts");
@@ -212,8 +212,16 @@ check("font sizes in the prompt match the runtime files and drive a font budget"
       assert.ok(Math.abs(actual - kb[0]) <= Math.max(8, kb[0] * 0.25), `${font.family}: prompt ${kb[0]} KB, runtime ${actual.toFixed(0)} KB`);
     }
   }
+  for (const font of FONT_CATALOG) {
+    const [local, size, ascent, descent] = FONT_FALLBACKS[font.family] ?? [];
+    assert.ok(["Georgia", "Arial", "Courier New"].includes(local), `${font.family} fallback face`);
+    assert.ok(size > 60 && size < 150 && ascent > 60 && ascent < 140 && descent > 10 && descent < 50, `${font.family} metrics are plausible`);
+    assert.equal(local === "Georgia", font.category === "serif", `${font.family}: serif families fall back to Georgia`);
+    assert.ok(BUILDER_SYSTEM.includes(`Fallback: "${font.family} Fallback", `), `${font.family} stack names its fallback face`);
+  }
+  assert.match(BUILDER_SYSTEM, /@font-face \{ font-family: "Fraunces Fallback"; src: local\("Georgia"\); size-adjust: 116\.3%;/);
   assert.match(BUILDER_SYSTEM, /Font budget: about 100 KB/);
-  assert.match(BUILDER_SYSTEM, /any <em>, <i>, <cite> or font-style: italic anywhere in the project loads them/);
+  assert.match(BUILDER_SYSTEM, /any <em>, <i>, <cite>, <address>, <dfn>, <var> or font-style: italic anywhere in the project loads them/);
 });
 
 check("image cut-outs: transparency only on models that support it; 2.5 models stay unpriced (D8)", () => {

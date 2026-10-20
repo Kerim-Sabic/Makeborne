@@ -13,11 +13,30 @@ export const FONT_FILE_KB: Readonly<Record<string, readonly [normal: number, ita
   "Archivo": [87, 99], "Bricolage Grotesque": [75], "JetBrains Mono": [39, 41], "Syne": [33], "Unbounded": [49], "Bebas Neue": [13],
 });
 
+/** Size-matched fallback faces (local system font, size-adjust %, ascent-override %,
+ * descent-override %), computed like Next.js' adjusted fallbacks: the average
+ * advance width over English letter frequencies (hmtx + cmap of each catalogue
+ * WOFF2's default instance) against Georgia, Arial or Courier New, and the hhea
+ * ascent and descent divided by the size adjustment. Measured on the golden set:
+ * every CLS failure coincided with the web font swapping in; with these faces
+ * two of five failing sites dropped below 0.02 and vertical shifts disappeared
+ * (re-wrapping lines remain, hence the explicit-lines rule). */
+export const FONT_FALLBACKS: Readonly<Record<string, readonly [local: string, sizeAdjust: number, ascent: number, descent: number]>> = Object.freeze({
+  "Fraunces": ["Georgia", 116.3, 84.1, 21.9], "Instrument Serif": ["Georgia", 76.8, 129, 40.4], "Playfair Display": ["Georgia", 102.4, 105.7, 24.5],
+  "Newsreader": ["Georgia", 96, 76.5, 27.6], "Cormorant": ["Georgia", 88.3, 104.6, 32.5], "DM Serif Display": ["Georgia", 101, 102.6, 33.2],
+  "Inter": ["Arial", 107.3, 90.3, 22.5], "Geist": ["Arial", 105.5, 95.3, 28], "DM Sans": ["Arial", 105.6, 94, 29.4], "Manrope": ["Arial", 100, 106.7, 30],
+  "Space Grotesk": ["Arial", 110.9, 88.7, 26.3], "Sora": ["Arial", 113.8, 85.2, 25.5], "Outfit": ["Arial", 98.9, 101.1, 26.3], "Plus Jakarta Sans": ["Arial", 105, 98.9, 21.1],
+  "Archivo": ["Arial", 101.8, 86.2, 20.6], "Bricolage Grotesque": ["Arial", 100.8, 92.2, 26.8], "JetBrains Mono": ["Courier New", 100, 102, 30],
+  "Syne": ["Arial", 98.9, 93.5, 27.8], "Unbounded": ["Arial", 135.4, 73.5, 18.1], "Bebas Neue": ["Arial", 77.5, 116.2, 38.7],
+});
+
 const fontLines = FONT_CATALOG.map(font => {
   const weight = font.weight.includes(" ") ? font.weight.replace(" ", "–") : `${font.weight} only`;
   const kb = FONT_FILE_KB[font.family];
   const size = kb ? `, ~${kb[0]} KB${font.italic && kb[1] ? ` + ${kb[1]} KB italic` : ""}` : "";
-  return `- "${font.family}" (${font.category}, ${weight}${font.italic ? ", italic" : ""}${font.stretch ? `, width ${font.stretch.replace(" ", "–")}` : ""}${size}): ${font.voice}. Fallback: ${font.fallback}`;
+  const fallback = FONT_FALLBACKS[font.family];
+  const metrics = fallback ? ` (fallback face: local("${fallback[0]}"), size-adjust ${fallback[1]}%, ascent-override ${fallback[2]}%, descent-override ${fallback[3]}%)` : "";
+  return `- "${font.family}" (${font.category}, ${weight}${font.italic ? ", italic" : ""}${font.stretch ? `, width ${font.stretch.replace(" ", "–")}` : ""}${size}): ${font.voice}. Fallback: ${fallback ? `"${font.family} Fallback", ` : ""}${font.fallback}${metrics}`;
 }).join("\n");
 
 /** Reusable motion contract. Hidden starting states exist only under html.js
@@ -125,7 +144,8 @@ Required files: index.html (with <div id="root"></div> and <script type="module"
 
 FONTS: a curated, self-hosted library. Use a family by its exact name, quoted, with its fallback, ideally as tokens: --font-display: "Fraunces", Georgia, serif; --font-text: "DM Sans", system-ui, sans-serif; The builder embeds only the families you reference. Variable fonts take any weight in their range; never set a single-weight face ("400 only") bolder, as browsers fake the bold. No other web font exists: if a brief or style token names another font, use the closest family below. Sizes are what each visitor downloads before the page is final:
 ${fontLines}
-Font budget: about 100 KB of font files in total. Italics are a separate file for every family used, and any <em>, <i>, <cite> or font-style: italic anywhere in the project loads them, so use italic only when it is the concept's signature; emphasise with weight, size or colour otherwise. A single family in several weights and widths is a confident choice.
+Size-matched fallbacks: for every family you use, declare its fallback face once in the tokens stylesheet with the values listed above, e.g. @font-face { font-family: "Fraunces Fallback"; src: local("Georgia"); size-adjust: 116.3%; ascent-override: 84.1%; descent-override: 21.9%; line-gap-override: 0%; } and put it second in the stack: --font-display: "Fraunces", "Fraunces Fallback", Georgia, serif; so text keeps its size and line positions while the web font loads.
+Font budget: about 100 KB of font files in total. Italics are a separate file for every family used, and any <em>, <i>, <cite>, <address>, <dfn>, <var> or font-style: italic anywhere in the project loads them, so use italic only when it is the concept's signature; emphasise with weight, size or colour otherwise. A single family in several weights and widths is a confident choice.
 Pairings that work (display + text): Instrument Serif + Geist (architecture, premium B2B); Fraunces + DM Sans (food, hospitality, wellness); Newsreader + Manrope (law, consulting, finance); Playfair Display + Plus Jakarta Sans (luxury, beauty); Cormorant + Manrope (jewellery, hotels, weddings); DM Serif Display + DM Sans (cafes, bakeries, culture); Geist + JetBrains Mono (developer tools, AI); Sora + Geist (tech, mobility); Space Grotesk + Manrope (engineering, logistics); Syne + Space Grotesk (art, music, fashion); Instrument Serif + Space Grotesk (galleries, editorial tech); Bricolage Grotesque + Geist (creative studios, indie food and drink); Archivo condensed headlines (font-stretch 62–75%) + Archivo text (sport, industrial); Bebas Neue + Outfit (fitness, barbers, events); Unbounded + Manrope (events, gaming); Outfit alone (clinics, community). Use at most two families, plus JetBrains Mono for data or labels when the concept wants it. Inter is a safe body face, not a default: pick a text face with character when the concept allows.
 Typesetting: tight tracking (-0.02em to -0.045em) and leading (0.9–1.05) on large headlines; small uppercase labels at 0.72–0.8rem with +0.08em to +0.14em tracking; text-wrap: balance on headings and pretty on paragraphs; font-variant-numeric: tabular-nums for prices, stats and times.
 Stable display type: web fonts arrive after the first paint, and a headline that re-wraps when its font swaps in shifts the whole first screen (measured layout shifts of 0.2–0.35). Set a multi-line display headline as explicit lines (<span className="line">…</span> with display: block, a real space between words at each break) sized with clamp() so the longest line fits, and keep the hero's height independent of the headline's exact width.
@@ -212,7 +232,7 @@ If image generation is unavailable, build a strong typographic and graphic desig
 CONVERSION:
 - One primary action named for the outcome, shown in the header, the first screen and the closing section; at most one quieter secondary action.
 - Contact paths are real links: phone as <a href="tel:…">, email as <a href="mailto:…">, directions as an https maps link, booking as an anchor to the form or the client's https link. A bracketed placeholder detail is plain text, never a dead link (href="#" is not a destination).
-- Local businesses show name, address, phone and hours in visible HTML (an <address> element; hours as a list or table with tabular numerals) near the end and in the footer, identical everywhere; trades add their service area. The platform writes the page title, description and canonical URL on publish and discards other <head> tags and scripts, so do not rely on meta tags or JSON-LD.
+- Local businesses show name, address, phone and hours in visible HTML (a contact block with the address as plain lines; hours as a list or table with tabular numerals) near the end and in the footer, identical everywhere; trades add their service area. Use the <address> element only when the site already uses italics, because it loads every italic font file. The platform writes the page title, description and canonical URL on publish and discards other <head> tags and scripts, so do not rely on meta tags or JSON-LD.
 
 PROGRESSIVE ENHANCEMENT: published sites first paint as a prerendered static HTML/CSS snapshot (the DOM after the first render), then run your React code on their own domain under a strict policy (one same-origin script: no inline scripts, eval, remote resources or third-party network calls). Owners can also publish with JavaScript off, so core navigation and content must work without it. Build the mobile menu with <details>/<summary> (or a CSS-only pattern), keep FAQs and accordions as <details>, and prefer CSS (scroll-snap carousels, :hover, :focus-within, :target, sticky positioning, CSS animation) for interaction; JavaScript tabs or sliders must show sensible content in their initial state. For reveal-on-scroll, the useReveal hook adds the js class and the hidden initial state is scoped under .js, so content is visible without it (the MOTION AND INTERACTION pattern above). CSS keyframe entrances keep the element's resting style visible and animate from the hidden state.
 RESPONSIVE: 360px to 1440px+. Compose each section at 390, 820 and 1280+ (820 is where two-column splits get cramped). Recompose layouts at breakpoints instead of shrinking them, keep display type dramatic but unclipped on phones (check long words), mobile navigation that works, touch targets of at least 44px. No horizontal overflow at any width: wrap marquees, rotated bands, oversized wordmarks, cut-outs and bleeding decoration in a parent with overflow: clip.
