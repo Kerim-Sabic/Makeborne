@@ -11,7 +11,7 @@ const LOCAL={...PROD,SITE_NAMESPACE:'local',SUPABASE_URL:'http://127.0.0.1:55321
 // good-dog and down publish per-route pages; legacy-dog predates per-route output (only "/" is listed).
 const SITES=new Map([['good-dog',{paths:['/visit','/','/menu','/menu'],updated_at:'2026-10-14T09:30:00+00:00'}],['broken',{paths:'nope'}],['legacy-dog',{paths:['/'],updated_at:null}],['release-check',{paths:['/','/menu'],updated_at:null}]]);
 const ROUTED=new Map([['good-dog',['/','/menu','/visit']],['down',['/','/menu']],['release-check',['/','/menu']]]);
-const HTML='<!doctype html><html><head><title>Sitemap fixture</title></head><body><main>Sitemap fixture</main></body></html>';
+const HTML='<!doctype html><html><head><title>Sitemap fixture</title><link rel="canonical" href="https://good-dog.makeborne.site/"><meta property="og:url" content="https://good-dog.makeborne.site/"></head><body><main>Sitemap fixture</main></body></html>';
 let groups=0;
 const check=async(name,fn)=>{await fn();groups++;console.log('PASS '+name);};
 
@@ -46,19 +46,22 @@ await check('pure helpers: paths are validated, deduplicated and sorted; XML is 
   for(const bad of [{},{paths:[]},{paths:['../x']},{paths:Array.from({length:101},(_,i)=>`/p${i}`)},'x'])assert.throws(()=>sitePaths(bad),/invalid_sitemap/);
   assert.match(sitemapDocument('https://a.example',['/a&b'],null),/<loc>https:\/\/a\.example\/a&amp;b<\/loc>/);
   assert.equal(robotsDocument('https://www.gooddog.co.uk',true),'User-agent: *\nAllow: /\nSitemap: https://www.gooddog.co.uk/sitemap.xml\n');
+  assert.equal(robotsDocument('https://www.gooddog.co.uk',true,false),'User-agent: *\nAllow: /\n','a non-canonical host allows crawling but names no sitemap');
   assert.equal(robotsDocument('https://x',false),'User-agent: *\nDisallow: /\n');
 });
 
-await check('production slug and custom hosts serve a sitemap at their own origin, and robots points to it',async()=>{
+await check('preferred address: only the Makeborne address serves a sitemap; a custom host allows crawling and names none',async()=>{
   await mocked(PROD,async({request,calls})=>{
     const slug=await request('https://good-dog.makeborne.site/sitemap.xml');
     assert.equal(slug.status,200);assert.equal(slug.headers.get('Content-Type'),'application/xml; charset=utf-8');
     const xml=await slug.text();
     assert.equal((xml.match(/<url>/g)??[]).length,3);
     assert.match(xml,/<loc>https:\/\/good-dog\.makeborne\.site\/menu<\/loc><lastmod>2026-10-14<\/lastmod>/);
-    const custom=await (await request('https://www.gooddog.co.uk/sitemap.xml')).text();
-    assert.match(custom,/<loc>https:\/\/www\.gooddog\.co\.uk\/<\/loc>/,'the custom domain is the address in its own sitemap');
-    assert.match(await (await request('https://www.gooddog.co.uk/robots.txt')).text(),/Sitemap: https:\/\/www\.gooddog\.co\.uk\/sitemap\.xml/);
+    const before=calls.length;
+    for(const method of ['GET','HEAD'])assert.equal((await request('https://www.gooddog.co.uk/sitemap.xml',{method})).status,404,'custom host '+method+' sitemap');
+    assert.ok(!calls.slice(before).some(call=>call.path.endsWith('read_site_paths')),'a custom-host sitemap request never reads the page list');
+    assert.equal(await (await request('https://www.gooddog.co.uk/robots.txt')).text(),'User-agent: *\nAllow: /\n');
+    assert.match(await (await request('https://good-dog.makeborne.site/robots.txt')).text(),/Sitemap: https:\/\/good-dog\.makeborne\.site\/sitemap\.xml/);
     assert.equal((await request('https://good-dog.makeborne.site/sitemap.xml',{method:'HEAD'})).status,200);
     assert.ok(calls.filter(call=>call.path.endsWith('read_site_paths')).every(call=>call.body.p_slug==='good-dog'&&Object.keys(call.body).length===1));
   });
@@ -81,10 +84,10 @@ await check('no sitemap where indexing is off (staging)',async()=>{
   });
 });
 
-await check('every page in the sitemap is indexable: root and nested, slug and custom host, GET, HEAD and 304',async()=>{
+await check('every page in the Makeborne sitemap is indexable on both addresses (custom copies stay crawlable so their canonical is read): root and nested, GET, HEAD and 304',async()=>{
   await mocked(PROD,async({request})=>{
     for(const origin of ['https://good-dog.makeborne.site','https://www.gooddog.co.uk']) {
-      const listed=listedPaths(await (await request(origin+'/sitemap.xml')).text());
+      const listed=listedPaths(await (await request('https://good-dog.makeborne.site/sitemap.xml')).text());
       assert.deepEqual(listed,['/','/menu','/visit']);
       for(const path of listed) {
         const page=await request(origin+path);
@@ -134,6 +137,20 @@ await check('pages outside the sitemap, errors, disabled indexing, staging and l
   });
   await mocked(LOCAL,async({request})=>{
     for(const path of ['/','/menu'])await noindex(request,'http://good-dog.localhost:8787'+path,200);
+  });
+});
+
+await check('preferred address: both hosts serve identical pages with no redirect; the stored Makeborne canonical is served unchanged on the custom host',async()=>{
+  await mocked(PROD,async({request})=>{
+    for(const path of ['/','/menu']) {
+      const slug=await request('https://good-dog.makeborne.site'+path),custom=await request('https://www.gooddog.co.uk'+path);
+      for(const response of [slug,custom]){assert.equal(response.status,200);assert.equal(response.headers.get('Location'),null,'no redirect between addresses');}
+      const [a,b]=[await slug.text(),await custom.text()];assert.equal(b,a,'the custom host serves the same bytes');
+      assert.match(b,/<link rel="canonical" href="https:\/\/good-dog\.makeborne\.site\/">/);assert.match(b,/<meta property="og:url" content="https:\/\/good-dog\.makeborne\.site\/">/);
+      assert.ok(!/www\.gooddog\.co\.uk/.test(b),'no host rewriting');
+    }
+    const insecure=await request('http://www.gooddog.co.uk/menu?x=1');
+    assert.equal(insecure.status,308);assert.equal(insecure.headers.get('Location'),'https://www.gooddog.co.uk/menu?x=1','HTTPS upgrade keeps the custom host');
   });
 });
 

@@ -250,6 +250,10 @@ try {
       const conditional=await request('https://www.customer.com/pricing',{headers:{'If-None-Match':second.headers.get('ETag')}});
       assert.equal(conditional.status,304);assert.equal(conditional.headers.get('X-Robots-Tag'),null);await conditional.arrayBuffer();
       const unlisted=await request('https://www.customer.com/not-listed');assert.equal(unlisted.headers.get('X-Robots-Tag'),'noindex');await unlisted.arrayBuffer();
+      // Preferred-address policy under workerd: the custom host is a non-canonical copy with no sitemap.
+      const customSitemap=await request('https://www.customer.com/sitemap.xml');assert.equal(customSitemap.status,404,'no sitemap on a custom host');await customSitemap.arrayBuffer();
+      const customRobots=await request('https://www.customer.com/robots.txt');assert.equal(await customRobots.text(),'User-agent: *\nAllow: /\n','custom host robots names no sitemap');
+      const slugSitemap=await request('https://good-dog.makeborne.site/sitemap.xml');assert.equal(slugSitemap.status,200);assert.match(await slugSitemap.text(),/<loc>https:\/\/good-dog\.makeborne\.site\/about<\/loc>/);
       assert.equal(resolveCalls(),1,'positive resolution served from the Cache API');
       const missing=await request('https://unknown.customer.com/');assert.equal(missing.status,404);await missing.arrayBuffer();
       await settle();
