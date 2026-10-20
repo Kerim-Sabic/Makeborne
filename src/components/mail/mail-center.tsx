@@ -1,7 +1,8 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Inbox, Mail, Pause, Play, Plus, RefreshCw, Square, Trash2, Workflow, FileText } from "lucide-react";
 import Modal from "./modal";
+import { connectedMessage } from "@/lib/mail/connected-message";
 import { mailApi, MANUAL_MAIL_NOTICE, providerLabel, TOKEN_HELP, type Enrollment, type MailOverview, type MailSequence, type MailTemplate, type SequenceStep } from "./mail-api";
 
 /** A proven starting point: every touch adds something; replies stop the sequence automatically. */
@@ -16,20 +17,25 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
   accountId: string; workspaceId: string; canEdit: boolean; connectResult: { result: string; detail: string } | null; onOpenClient: (id: string) => void;
 }) {
   const [overview, setOverview] = useState<MailOverview | null>(null);
-  const [message, setMessage] = useState(connectResult?.result === "connected" ? `Connected ${connectResult.detail}. You can now send and automate emails from it.` : connectResult?.result === "error" ? connectResult.detail : connectResult?.result === "cancelled" ? "Connection cancelled." : "");
+  const [message, setMessage] = useState(connectResult?.result === "error" ? connectResult.detail : connectResult?.result === "cancelled" ? "Connection cancelled." : "");
+  // A just-connected mailbox is acknowledged until the next action; what it can do comes from the loaded overview.
+  const [justConnected, setJustConnected] = useState(connectResult?.result === "connected" ? connectResult.detail : null);
   const [running, setRunning] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [editing, setEditing] = useState<{ kind: "sequence"; value: Partial<MailSequence> } | { kind: "template"; value: Partial<MailTemplate> } | null>(null);
   const [openSequence, setOpenSequence] = useState<string | null>(null);
   const base = `/api/cloud/workspaces/${workspaceId}/mail`;
+  const loadError = useRef("");
   const load = useCallback(async () => {
-    try { setOverview(await mailApi<MailOverview>(accountId, base)); setLoadFailed(false); } catch (error) { setLoadFailed(true); setMessage(error instanceof Error ? error.message : "Email is unavailable."); }
+    // A successful reload clears its own earlier load error (not other messages).
+    try { setOverview(await mailApi<MailOverview>(accountId, base)); setLoadFailed(false); setMessage(current => current === loadError.current ? "" : current); }
+    catch (error) { setLoadFailed(true); loadError.current = error instanceof Error ? error.message : "Email is unavailable."; setMessage(loadError.current); }
   }, [accountId, base]);
   // Load after mount (from a callback, so the effect itself never sets state).
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
   async function run() {
-    setRunning(true); setMessage("");
+    setRunning(true); setMessage(""); setJustConnected(null);
     try {
       const result = await mailApi<{ replies: number; sent: number; waiting?: number; note?: string; replyCheckErrors?: number }>(accountId, `${base}/run`, "POST", {});
       setMessage(result.note ?? `Checked: ${result.replies} new repl${result.replies === 1 ? "y" : "ies"}, ${result.sent} email${result.sent === 1 ? "" : "s"} sent${result.waiting ? `, ${result.waiting} waiting` : ""}.${result.replyCheckErrors ? " Some reply checks could not finish; those mailboxes' follow-ups are waiting." : ""}`);
@@ -38,12 +44,12 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
     finally { setRunning(false); }
   }
   async function act(action: () => Promise<unknown>, done: string) {
-    setMessage("");
+    setMessage(""); setJustConnected(null);
     try { await action(); setMessage(done); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "That didn't work. Try again."); }
   }
 
   // A failed first load gets a clear, retryable state instead of an endless placeholder.
-  if (!overview && loadFailed) return <div className="mc-unavailable" role="alert"><Mail size={22} /><div><strong>Email isn’t available right now</strong><p>We couldn’t load your mailboxes and sequences. Your clients and notes are unaffected; try again in a moment.</p></div><button type="button" className="button secondary" onClick={() => { setLoadFailed(false); void load(); }}><RefreshCw size={15} />Try again</button></div>;
+  if (!overview && loadFailed) return <div className="mc-unavailable" role="alert"><Mail size={22} /><div><strong>Email isn’t available right now</strong>{justConnected && <p>{connectedMessage(justConnected, null, true)}</p>}<p>We couldn’t load your mailboxes and sequences. Your clients and notes are unaffected; try again in a moment.</p></div><button type="button" className="button secondary" onClick={() => { setLoadFailed(false); void load(); }}><RefreshCw size={15} />Try again</button></div>;
   if (!overview) return <div className="ac-skeleton ac-skeleton-detail" role="status" aria-label="Loading email"><span /><span /><span /></div>;
   const mine = overview.accounts.filter(account => account.mine && account.status !== "disconnected");
   const canCheck = mine.some(account => account.canTrackReplies);
@@ -52,7 +58,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
       <div><h2>Email</h2><p>Send reviewed emails from your own Gmail or Outlook. Mailboxes with reply tracking can also run follow-up sequences. <strong className="mc-free">Sending is free.</strong> Only AI writing uses credits.</p></div>
       {canCheck && <button type="button" className="button secondary" disabled={running} onClick={() => void run()}><RefreshCw size={15} className={running ? "ac-spin" : undefined} />Check now</button>}
     </header>
-    {message && <p className="mc-message" role="status">{message}</p>}
+    {(justConnected || message) && <p className="mc-message" role="status">{justConnected && !message ? connectedMessage(justConnected, overview, loadFailed) : message}</p>}
     {overview.googleMode === "send_only" && <p className="mc-note">Gmail sends only: read replies in Gmail and update client stages yourself. Gmail reply tracking and automatic sequences are unavailable.</p>}
     {!overview.automation && canCheck && <p className="mc-note"><AlertTriangle size={14} /> For mailboxes with reply tracking, automatic sending runs once the schedule is enabled. Until then, <strong>Check now</strong> sends due emails and checks replies.</p>}
 
