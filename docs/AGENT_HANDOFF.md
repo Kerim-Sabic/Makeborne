@@ -1466,3 +1466,7 @@ Both handoff histories retained. Application files merged automatically; review 
 
 ### Combined rehearsal: exact migration bytes
 The staging preflight correctly refused ACL-repair and Stop-compatibility raw hashes after Windows checkout converted LF to CRLF. Compared both files against the qualified checkout: normalized SQL text is identical. Restored the qualified LF bytes and pinned those two paths with eol=lf in .gitattributes; no SQL tokens or existing staging migration history changed. The strict raw-hash preflight now passes. Production remains untouched.
+
+### Combined rehearsal: mounted publishing recovery and portable migration bytes
+Six mounted publication scenarios now pass. The stale fixture expected the error text exactly, while the UI correctly appends a status-confirmation sentence after its read-only reconciliation. Test now asserts the status region, the confirmation, retained live URL and exactly one POST. No runtime behaviour changed. Stop5, top-up9, readiness9 and attachment flow13 mounted scenarios also pass.
+Pinned all seven new migration paths to their reviewed byte format: two existing staged CRLF originals retain CRLF; two existing LF repairs retain LF; three not-yet-staged billing migrations freeze LF. This preserves raw staging checksums on Windows and Linux without rewriting staged SQL/history. The final frozen candidate receives fresh full gates and SQL replay before cloud application. Production untouched.
