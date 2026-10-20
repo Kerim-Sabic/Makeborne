@@ -52,6 +52,7 @@ function upstream(url,body,record) {
   }
   if(parsed.pathname==='/rest/v1/rpc/makeborne_read_hosted_site_file')return {status:200,value:{content_type:'image/webp',sha256:HASH,body:IMAGE.toString('base64')}};
   if(parsed.pathname==='/rest/v1/rpc/makeborne_record_site_view')return record(body);
+  if(parsed.pathname==='/rest/v1/rpc/makeborne_read_site_paths')return {status:200,value:body.p_slug==='good-dog'?{paths:['/','/about','/pricing'],updated_at:null}:null};
   assert.fail('UNEXPECTED_UPSTREAM '+url);
 }
 function memoryCache() {
@@ -118,6 +119,9 @@ await check('one signed view per 200 GET document; payload has only contract fie
     assert.deepEqual(Object.keys(body).sort(),[...FIELDS].sort());
     assert.deepEqual(call.init.headers,{apikey:KEY,'Content-Type':'application/json'},'publishable key only; no cookies or visitor headers forwarded');
     assert.equal(call.init.method,'POST');assert.equal(call.init.redirect,'manual');
+    const list=calls.find(item=>item.url.endsWith('/rpc/makeborne_read_site_paths'));
+    assert.deepEqual([list.body,list.init.headers],[{p_slug:'good-dog'},{apikey:KEY,'Content-Type':'application/json'}],'the page-list read forwards nothing from the visitor');
+    assert.equal(response.headers.get('X-Robots-Tag'),null,'a listed nested page is indexable');
     assert.ok(Number.isInteger(body.p_stamp)&&body.p_stamp>=before&&body.p_stamp<=after,'stamp is the request time in ms');
     assert.equal(body.p_slug,'good-dog');assert.equal(body.p_path,'/about','query and fragment stripped');
     assert.equal(body.p_referrer,'www.google.com');assert.equal(body.p_country,'DE');assert.equal(body.p_device,'desktop');

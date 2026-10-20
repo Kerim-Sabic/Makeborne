@@ -75,7 +75,25 @@ function decodeBase64(text) {
 const hex = buffer => [...new Uint8Array(buffer)].map(byte => byte.toString(16).padStart(2, "0")).join("");
 const notModified = (request, headers) => request.headers.get("If-None-Match") === headers.ETag ? new Response(null, { status: 304, headers }) : null;
 
+/** Whether a successful document may be indexed: the namespace allows it and
+ * the page is one the site's sitemap lists. "/" is always listed. Sites published
+ * before per-route output answer every path with their home snapshot and list
+ * only "/", so those copies stay noindex. If the page list can't be read, the
+ * page is still served, only without permission to index it. */
+function documentIndexable(config, slug, pathname) {
+  if (!config.indexable) return Promise.resolve(false);
+  if (pathname === "/") return Promise.resolve(true);
+  return rpc(config, "makeborne_read_site_paths", { p_slug: slug }, 20_000)
+    .then(value => sitePaths(value)?.paths.includes(pathname) ?? false)
+    .catch(error => {
+      console.error(JSON.stringify({ event: "site_index_paths_error", type: error instanceof Error ? error.message.slice(0, 40) : "unknown" }));
+      return false;
+    });
+}
+
 async function serveDocument(request, config, slug, pathname, secure) {
+  // Read in parallel with the document so nested pages add no round trip.
+  const indexable = documentIndexable(config, slug, pathname);
   const site = await rpc(config, "makeborne_read_hosted_site_v3", { p_slug: slug, p_path: pathname }, 24_000_100);
   if (site === null) return failure(404, secure, request.method === "HEAD");
   if (typeof site !== "object" || typeof site.html !== "string" || typeof site.interactive !== "boolean" || !Number.isInteger(site.revision)
@@ -85,7 +103,7 @@ async function serveDocument(request, config, slug, pathname, secure) {
   const interactive = site.interactive && site.script !== null;
   // The owner can remove the badge in Settings; older readers omit the flag, so it stays on.
   const branding = site.branding !== false;
-  const headers = siteDocumentHeaders({ interactive, secure, indexable: config.indexable && pathname === "/", etag: `"${WORKER_VERSION}-${site.revision}-${interactive ? 1 : 0}${branding ? "" : "-u"}"` });
+  const headers = siteDocumentHeaders({ interactive, secure, indexable: await indexable, etag:`"${WORKER_VERSION}-${site.revision}-${interactive ? 1 : 0}${branding ? "" : "-u"}"` });
   const cached = notModified(request, headers);
   if (cached) return cached;
   const html = composeSiteDocument(site.html, { script: site.script, interactive, branding });

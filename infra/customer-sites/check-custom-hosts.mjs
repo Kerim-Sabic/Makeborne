@@ -36,6 +36,8 @@ function upstream(url,body) {
     assert.equal(body.p_slug,'good-dog','only the resolved slug is read');return {status:200,value:{html:HTML,script:null,interactive:false,revision:3}};
   }
   if(parsed.pathname==='/rest/v1/rpc/makeborne_read_hosted_site_file')return {status:200,value:{content_type:'image/webp',sha256:HASH,body:IMAGE.toString('base64')}};
+  // The page list behind sitemap.xml; nested documents are indexable only when listed.
+  if(parsed.pathname==='/rest/v1/rpc/makeborne_read_site_paths'){assert.deepEqual(body,{p_slug:'good-dog'});return {status:200,value:{paths:['/','/about','/pricing'],updated_at:null}};}
   if(parsed.pathname==='/api/hosting/enquiries')return {status:200,value:{accepted:true}};
   assert.fail('UNEXPECTED_UPSTREAM '+url);
 }
@@ -128,7 +130,10 @@ await check('production custom host resolves once, serves the site and caches 60
     assert.deepEqual(cache.puts.map(put=>[put.url,put.cacheControl]),[[key,`public, max-age=${CUSTOM_HOST_CACHE_SECONDS.found}`]]);
     assert.deepEqual(JSON.parse(cache.puts[0].body),{host:'www.customer.com',slug:'good-dog'});
     // Cached: further documents, files and robots skip resolution.
-    assert.equal((await request('https://www.customer.com/about')).status,200);
+    const nested=await request('https://www.customer.com/about');
+    assert.equal(nested.status,200);assert.equal(nested.headers.get('X-Robots-Tag'),null,'a listed nested page on a custom host is indexable');
+    const unlisted=await request('https://www.customer.com/not-listed');
+    assert.equal(unlisted.status,200);assert.equal(unlisted.headers.get('X-Robots-Tag'),'noindex','a page outside the sitemap is not');
     const asset=await request('https://www.customer.com/images/hero.webp');
     assert.equal(asset.status,200);assert.deepEqual(Buffer.from(await asset.arrayBuffer()),IMAGE);
     assert.equal(asset.headers.get('Strict-Transport-Security'),'max-age=31536000');
@@ -240,7 +245,11 @@ try {
       const first=await request('https://www.customer.com/',{headers:{Host:'evil.example'}});
       assert.equal(first.status,200);assert.match(await first.text(),/Custom host fixture/);
       await settle();
-      const second=await request('https://www.customer.com/pricing');assert.equal(second.status,200);await second.arrayBuffer();
+      const second=await request('https://www.customer.com/pricing');assert.equal(second.status,200);assert.equal(second.headers.get('X-Robots-Tag'),null,'listed nested page indexable under workerd');await second.arrayBuffer();
+      const head=await request('https://www.customer.com/pricing',{method:'HEAD'});assert.equal(head.status,200);assert.equal(head.headers.get('X-Robots-Tag'),null);await head.arrayBuffer();
+      const conditional=await request('https://www.customer.com/pricing',{headers:{'If-None-Match':second.headers.get('ETag')}});
+      assert.equal(conditional.status,304);assert.equal(conditional.headers.get('X-Robots-Tag'),null);await conditional.arrayBuffer();
+      const unlisted=await request('https://www.customer.com/not-listed');assert.equal(unlisted.headers.get('X-Robots-Tag'),'noindex');await unlisted.arrayBuffer();
       assert.equal(resolveCalls(),1,'positive resolution served from the Cache API');
       const missing=await request('https://unknown.customer.com/');assert.equal(missing.status,404);await missing.arrayBuffer();
       await settle();
