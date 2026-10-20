@@ -177,7 +177,8 @@ check("design seed: deterministic, fitted to the industry and spread across proj
     const brief = JSON.parse(fs.readFileSync(`scripts/eval/briefs/${id}.json`, "utf8"));
     if (brief.format !== "website") continue;
     total++;
-    if (detectIndustry(brief.brief) === expected[brief.direction]) matched++;
+    const got = detectIndustry(brief.brief);
+    if (got === expected[brief.direction] || (brief.direction === "events" && got === "weddings")) matched++;
   }
   assert.ok(total >= 20 && matched / total >= 0.85, `industry detection ${matched}/${total}`);
   const one = designSeed({ seed: "project-a", brief: "A sourdough bakery in Leith", images: true });

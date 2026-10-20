@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
  * requested style or a brand kit always win.
  */
 
-export type Industry = "food" | "saas" | "professional" | "creator" | "commerce" | "wellness" | "trades" | "property" | "events" | "civic" | "general";
+export type Industry = "food" | "saas" | "professional" | "creator" | "commerce" | "wellness" | "trades" | "property" | "events" | "weddings" | "civic" | "general";
 type Weighted<T> = readonly (readonly [T, number])[];
 type Pairing = readonly [display: string, text: string];
 
@@ -24,7 +24,9 @@ const INDUSTRY_PATTERNS: readonly (readonly [Industry, RegExp])[] = [
   ["wellness", /\b(?:dental|dentist|clinic|physio\w*|therap\w*|yoga|pilates|gym|climbing|bouldering|fitness|spa|salon|beauty|wellness|health|massage|osteopath\w*|induction|memberships?)\b/i],
   ["trades", /\b(?:plumb\w*|heating|hvac|electric\w*|roof\w*|garage|auto repair|mechanic|builder|carpent\w*|landscap\w*|cleaning|removals?|locksmith|repair shop|contractor|brakes|diagnostics|warranty|bays?)\b/i],
   ["property", /\b(?:architect\w*|interior\w*|real estate|estate agent|property|apartments?|homes?|hotel|guesthouse|villa|holiday let|renovat\w*|rooms?|check-in|check-out|farmhouse)\b/i],
-  ["events", /\b(?:events?|club night|venue|gig|concert|festival|wedding\w*|tickets?|line-?up|dj|band|nightlife|party)\b/i],
+  ["events", /\b(?:events?|club night|venue|gig|concert|festival|tickets?|line-?up|dj|band|nightlife|party)\b/i],
+  // Weddings want elegance, not poster energy: a wedding planner seeded as "events" read like a club night.
+  ["weddings", /\b(?:wedding\w*|elopements?|bridal|brides?|grooms?|ceremon(?:y|ies)|honeymoon|engagements?)\b/i],
   ["civic", /\b(?:charity|non-?profit|volunteer\w*|pantry|food bank|community|school|club for|council|library|donat\w*|mutual aid|church|association)\b/i],
 ];
 
@@ -53,6 +55,7 @@ const ARCHETYPE_WEIGHTS: Record<Industry, Weighted<Archetype>> = {
   trades: [["Poster", 3], ["Photographic", 3], ["Editorial split", 2], ["Index", 2]],
   property: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Type as image", 1]],
   events: [["Poster", 4], ["Index", 3], ["Photographic", 2], ["Type as image", 1]],
+  weddings: [["Photographic", 4], ["Editorial split", 3], ["Type as image", 2], ["Index", 1]],
   civic: [["Editorial split", 3], ["Photographic", 3], ["Poster", 2], ["Index", 2]],
   general: [["Editorial split", 3], ["Photographic", 2], ["Poster", 2], ["Index", 2], ["Product stage", 1], ["Type as image", 1]],
 };
@@ -76,6 +79,7 @@ const PAIRINGS: Record<Industry, readonly Pairing[]> = {
   trades: [["Archivo", "Archivo"], ["Bebas Neue", "Outfit"], ["Space Grotesk", "Manrope"], ["Sora", "DM Sans"], ["Unbounded", "Geist"]],
   property: [["Instrument Serif", "Geist"], ["Cormorant", "Manrope"], ["Newsreader", "Space Grotesk"], ["Playfair Display", "Plus Jakarta Sans"], ["Syne", "Geist"]],
   events: [["Bebas Neue", "Space Grotesk"], ["Unbounded", "Manrope"], ["Syne", "Geist"], ["Archivo", "JetBrains Mono"], ["Cormorant", "Outfit"]],
+  weddings: [["Cormorant", "Manrope"], ["Playfair Display", "Plus Jakarta Sans"], ["Instrument Serif", "Geist"], ["Fraunces", "DM Sans"], ["DM Serif Display", "Outfit"]],
   civic: [["Bricolage Grotesque", "Manrope"], ["Fraunces", "Geist"], ["Sora", "DM Sans"], ["DM Serif Display", "Plus Jakarta Sans"], ["Outfit", "Newsreader"]],
   general: [["Instrument Serif", "Geist"], ["Space Grotesk", "Manrope"], ["Syne", "DM Sans"], ["Newsreader", "Outfit"], ["Bricolage Grotesque", "Geist"]],
 };
@@ -99,6 +103,7 @@ const GROUNDS: Record<Industry, Weighted<Ground>> = {
   trades: [["dark", 3], ["colour flood", 2], ["cool light", 2], ["photographic", 1]],
   property: [["photographic", 3], ["mid-tone", 2], ["cool light", 2], ["dark", 1]],
   events: [["dark", 3], ["colour flood", 3], ["photographic", 1]],
+  weddings: [["photographic", 3], ["warm light", 2], ["mid-tone", 2], ["cool light", 2], ["dark", 1]],
   civic: [["colour flood", 2], ["cool light", 2], ["mid-tone", 2], ["photographic", 1]],
   general: [["cool light", 2], ["mid-tone", 2], ["dark", 2], ["colour flood", 1]],
 };
