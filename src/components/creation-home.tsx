@@ -15,12 +15,14 @@ import { templateDirections } from "@/lib/template-directions";
 import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
 import { useCreationAccount } from "./use-creation-account";
 import { attachmentOwner, saveCreationDraft } from "@/lib/attachments";
-import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop } from "./file-attachments";
+import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop, useSourceReadiness } from "./file-attachments";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
 import "@/app/home.css";
 
 type Kind = "website" | "book" | "presentation";
+/** The home brief has no per-request exclusions: a file is either attached or removed. */
+const NO_EXCLUSIONS: ReadonlySet<string> = new Set();
 const formats = [
   { id: "website" as const, label: "Website", icon: Globe2 },
   { id: "book" as const, label: "Book", icon: BookOpen },
@@ -71,6 +73,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
   const immediateWebsite=kind==="website"&&mode==="create"&&permissions.enabled;
   const owner = account.ready ? attachmentOwner(account.accountId) : null;
   const attachments = useFileAttachments(owner, "home");
+  const readiness = useSourceReadiness(attachments.files, NO_EXCLUSIONS);
   const drop = useFileDrop(attachments.add, !attachments.ready || attachments.busy || busy);
   // The unsent brief and its settings survive a reload for this account (or this signed-out device) only.
   // Attached files already persist separately with their owner; consent is never part of the draft.
@@ -133,7 +136,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
           <div className="mk-format-switch" data-slide={slide} style={{ "--format-index": formatIndex } as CSSProperties} role="group" aria-label="What would you like to create?"><span className="mk-format-indicator" aria-hidden="true" />{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { pickKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
           <form className={`mk-composer${drop.dragging ? " is-file-dragging" : ""}`} {...drop.handlers} onSubmit={event => { event.preventDefault(); void start(); }}>
             {drop.dragging && <p className="attachment-drop-hint">Drop files to attach</p>}
-            <AttachmentList files={attachments.files} onRemove={id => void attachments.remove(id)} disabled={attachments.busy || busy} />
+            <AttachmentList files={attachments.files} readiness={readiness} onRetry={readiness.retry} readPrefix="When your project builds · " onRemove={id => void attachments.remove(id)} removeLabel={name => `Remove ${name} and delete its saved copy from this device`} disabled={attachments.busy || busy} note="Saved on this device until your project opens. × removes a file and deletes its saved copy." />
             {selectedStyle && <div className="mk-selected-style" role="status">
               {selectedConcept && <Image src={`/gallery/${selectedConcept.id}.png`} alt="" width={32} height={32} />}
               <span><small>Style</small>{selectedStyle.name}</span>
