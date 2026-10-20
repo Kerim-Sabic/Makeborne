@@ -60,13 +60,18 @@ export type RouteReport = {
 };
 const pathOf = (url: string) => { try { return new URL(url).pathname.replace(/\/+$/, "") || "/"; } catch { return null; } };
 
-export function publishReport(routes: readonly { path: string; html: string }[], policy: IndexingPolicy): RouteReport[] {
+/** `address`: the site's own address (it may carry a path, such as https://sites.makeborne.com/slug).
+ * A canonical is right when its path is the route's path under that address, or the route's
+ * path at a domain root (a connected custom domain); its host isn't judged here. */
+export function publishReport(routes: readonly { path: string; html: string }[], policy: IndexingPolicy, address?: string): RouteReport[] {
+  const base = address ? pathOf(address) ?? "/" : "/";
+  const join = (path: string) => (base === "/" ? path : `${base}${path === "/" ? "" : path}`).replace(/\/+$/, "") || "/";
   return routes.map(route => {
     const head = readPreparedHead(route.html), problems: string[] = [];
     if (!head.title) problems.push("No page title");
     if (!head.description) problems.push("No description");
     if (!head.canonical) problems.push("No canonical address");
-    else if (pathOf(head.canonical) !== (route.path.replace(/\/+$/, "") || "/")) problems.push(`Canonical points to ${pathOf(head.canonical) ?? "an invalid address"}`);
+    else if (![route.path.replace(/\/+$/, "") || "/", join(route.path)].includes(pathOf(head.canonical) ?? "")) problems.push(`Canonical points to ${pathOf(head.canonical) ?? "an invalid address"}`);
     if (head.h1 !== 1) problems.push(head.h1 ? `${head.h1} main headings` : "No main heading");
     const pageNoindex = !!head.robots && /\bnoindex\b|\bnone\b/i.test(head.robots);
     return { path: route.path, status: problems.length ? "check" : "ready", problems, title: head.title, description: head.description, canonical: head.canonical,

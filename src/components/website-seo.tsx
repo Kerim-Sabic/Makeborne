@@ -90,6 +90,7 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, ve
         for (const { path, head } of heads) {
           const where = path === "/" ? "The home page" : `The page ${path}`;
           if (!head.title) results.unshift({ id: `prepared-title:${path}`, level: "fail", path, title: `${where} has no title in the prepared output`, detail: "Prepare the website again. If it stays missing, set a title for this page above." });
+          if (!head.description) results.unshift({ id: `prepared-description:${path}`, level: "warn", path, title: `${where} has no description in the prepared output`, detail: "Search results will make one up from the page. Write one or two sentences for this page above, save, and prepare again." });
           if (!head.canonical) results.unshift({ id: `prepared-canonical:${path}`, level: "warn", path, title: `${where} has no canonical address`, detail: "Prepare the website again so search engines know this page's own address." });
         }
         setHomeHtml(prepared.find(route => route.path === "/")?.html ?? null);

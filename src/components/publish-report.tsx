@@ -5,8 +5,8 @@ import { audienceLine, INDEX_LABELS, publishReport, type IndexingPolicy } from "
 
 /** Per-page report of the prepared (or just published) output: title, canonical,
  * indexing and share image as visitors and search engines will get them. */
-export default function PublishReport({ routes, policy, version, published }: { routes: readonly { path: string; html: string }[]; policy: IndexingPolicy; version: number; published: boolean }) {
-  const report = useMemo(() => publishReport(routes, policy), [routes, policy]);
+export default function PublishReport({ routes, policy, version, published, address }: { routes: readonly { path: string; html: string }[]; policy: IndexingPolicy; version: number; published: boolean; address?: string }) {
+  const report = useMemo(() => publishReport(routes, policy, address), [routes, policy, address]);
   const problems = report.filter(route => route.status === "check").length;
   return <section className="publish-report" aria-label="Publish report">
     <div className="publish-report-heading">
@@ -14,7 +14,8 @@ export default function PublishReport({ routes, policy, version, published }: { 
       <strong>{published ? `Published version ${version}` : `Prepared version ${version}`} · {report.length === 1 ? "1 page" : `${report.length} pages`}</strong>
       <span className="publish-report-summary" data-state={problems ? "check" : "ready"}>{problems ? `${problems} to look at` : "Every page has its details"}</span>
     </div>
-    <p className="publish-report-audience">{audienceLine(policy)}</p>
+    {/* Before publishing, the same line sits next to the consent instead. */}
+    {published && <p className="publish-report-audience">{audienceLine(policy)}</p>}
     <ul className="publish-report-list">{report.map(route => <li key={route.path} data-status={route.status}>
       <div className="publish-report-route"><code>{route.path}</code>
         <span>{route.status === "ready" ? <><CheckCircle2 size={13} aria-hidden="true" />Ready</> : <><AlertTriangle size={13} aria-hidden="true" />{route.problems.join(" · ")}</>}</span></div>

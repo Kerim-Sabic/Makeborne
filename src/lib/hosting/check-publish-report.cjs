@@ -30,6 +30,9 @@ check("per-page report: every route, problems named, indexing follows the hostin
   assert.equal(publicReport[0].socialImage, null);
   const custom = publishReport([{path: "/", html: page("Ovenbird", "Bread", "https://www.ovenbird.co.uk/")}], indexingPolicy({testAddresses: false, localHosting: false}));
   assert.equal(custom[0].status, "ready", "a custom primary domain in the canonical is fine; only the path must match");
+  const legacy = publishReport([{path: "/", html: page("Ovenbird", "Bread", "https://sites.makeborne.com/ovenbird-test")}, {path: "/menu", html: page("Menu", "Bread", "https://sites.makeborne.com/ovenbird-test/menu")}, {path: "/about", html: page("About", "Us", "https://sites.makeborne.com/ovenbird-test")}],
+    indexingPolicy({testAddresses: false, localHosting: false}), "https://sites.makeborne.com/ovenbird-test");
+  assert.deepEqual(legacy.map(route => route.problems), [[], [], ["Canonical points to /ovenbird-test"]], "a path-based site address is the canonical base");
   for (const policy of [indexingPolicy({testAddresses: true, localHosting: false}), indexingPolicy({testAddresses: false, localHosting: true})])
     assert.ok(publishReport(routes, policy).every(route => route.index === "noindex-policy"), policy.reason);
   assert.equal(INDEX_LABELS["noindex-policy"], "Not indexed (test or local address)");
@@ -74,7 +77,7 @@ check("wiring: header facts, History 'Checked', Copy link, report, audience line
   assert.equal((studio.match(/onPublished=\{\(\) => setLiveRefresh\(value => value \+ 1\)\}/g) ?? []).length, 2, "both publish panels refresh the header");
   const trusted = read("components/trusted-website-publish.tsx");
   assert.ok(trusted.includes("<Copy size={13}/>Copy link</button>") && trusted.includes("navigator.clipboard.writeText(address)"));
-  assert.ok(trusted.includes('<PublishReport routes={preparation.previewRoutes} policy={policy} version={preparation.version} published={false}/>') && trusted.includes("matches&&!dirty&&preparation.previewRoutes.length>0&&<PublishReport"), "the report describes only the matching saved version");
+  assert.ok(trusted.includes('<PublishReport routes={preparation.previewRoutes} policy={policy} version={preparation.version} published={false} address={siteAddress(preparation.slug)}/>') && trusted.includes("matches&&!dirty&&preparation.previewRoutes.length>0&&<PublishReport"), "the report describes only the matching saved version");
   assert.ok(trusted.includes("setPublishedReport({version:preparation.version,routes:preparation.previewRoutes})") && trusted.includes("site.version_number===publishedReport.version"), "after publishing, the report stays for the published version");
   assert.ok(trusted.includes('<p className="website-publish-audience">{audienceLine(policy)}</p><label className="website-publish-consent">'), "audience line sits next to the consent");
   assert.ok(trusted.includes('testAddresses:addressPolicy.enabled&&addressPolicy.allowedSlugs!==null,localHosting:HOSTING.domain==="localhost"'));
