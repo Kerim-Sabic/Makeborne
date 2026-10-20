@@ -58,10 +58,17 @@ export function Presenter({ deck, images, onClose }: { deck: Deck; images: Recor
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
+  // Focus moves into the presenter when it opens and back to the control that
+  // opened it when it closes (once per presentation, whatever onClose is).
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    root.current?.focus();
+    return () => { if (opener?.isConnected) opener.focus({ preventScroll: true }); };
+  }, []);
+
   // Full screen when the browser allows it; leaving full screen ends the presentation.
   useEffect(() => {
     const element = root.current;
-    element?.focus();
     void element?.requestFullscreen?.().then(() => { entered.current = true; }).catch(() => undefined);
     const change = () => { if (entered.current && !document.fullscreenElement) onClose(); };
     document.addEventListener("fullscreenchange", change);
