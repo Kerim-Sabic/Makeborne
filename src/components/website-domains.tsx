@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { AlertTriangle, Check, Copy, ExternalLink, Globe, HelpCircle, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { cloudAccountGuard } from "./cloud-api";
-import type { DomainView } from "@/lib/hosting/custom-domain-view";
+import { checkTimes, type CheckAttempt, type DomainView } from "@/lib/hosting/custom-domain-view";
 import "@/app/website-domains.css";
 
 type State = { configured: boolean; target: string | null; published: boolean; live: boolean; domains: DomainView[] };
@@ -26,6 +26,8 @@ export default function WebsiteDomains({ accountId, workspaceId, artifactId }: {
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
   const [copied, setCopied] = useState("");
+  // Attempts made from this page; the server keeps only the last successful check.
+  const [attempts, setAttempts] = useState<Record<string, CheckAttempt>>({});
   const startedPolling = useRef(0);
   const path = `/api/cloud/workspaces/${workspaceId}/artifacts/${artifactId}/domains`;
 
@@ -46,8 +48,8 @@ export default function WebsiteDomains({ accountId, workspaceId, artifactId }: {
   const replace = (domain: DomainView) => setState(current => current && { ...current, domains: current.domains.map(item => item.id === domain.id ? domain : item) });
   const check = useCallback(async (id: string, quiet = false) => {
     if (!quiet) { setBusy(`check:${id}`); setError(""); }
-    try { replace((await request(`${path}/${id}`, { method: "POST" })).domain as DomainView); }
-    catch (cause) { if (!quiet) setError(cause instanceof Error ? cause.message : "The status couldn't be checked."); }
+    try { replace((await request(`${path}/${id}`, { method: "POST" })).domain as DomainView); setAttempts(current => ({ ...current, [id]: { at: new Date().toISOString(), ok: true } })); }
+    catch (cause) { setAttempts(current => ({ ...current, [id]: { at: new Date().toISOString(), ok: false } })); if (!quiet) setError(cause instanceof Error ? cause.message : "The status couldn't be checked."); }
     finally { if (!quiet) setBusy(null); }
   }, [path, request]);
 
@@ -127,7 +129,7 @@ export default function WebsiteDomains({ accountId, workspaceId, artifactId }: {
       </div>}
       <footer className="wd-actions">
         {domain.status !== "active" && <button type="button" className="button secondary small" disabled={Boolean(busy)} onClick={() => void check(domain.id)} aria-describedby={`wd-detail-${domain.id}`}>{busy === `check:${domain.id}` ? <Loader2 size={14} className="wd-spin" /> : <RefreshCw size={14} />}Check now</button>}
-        {domain.lastCheckedAt && <small>Checked {new Date(domain.lastCheckedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</small>}
+        {(() => { const times = checkTimes(domain.lastCheckedAt, attempts[domain.id] ?? null); return <span className="wd-times"><small className="wd-checked">{times.success}</small>{times.attempt && <small className="wd-attempt" role="status">{times.attempt}</small>}</span>; })()}
         {confirm === domain.id
           ? <span className="wd-confirm" role="group" aria-label={`Confirm removing ${domain.hostname}`}><span>Disconnect {domain.hostname}?</span><button type="button" className="wd-danger" disabled={Boolean(busy)} onClick={() => void remove(domain.id)}>Disconnect</button><button type="button" className="wd-link" onClick={() => setConfirm(null)}>Keep</button></span>
           : <button type="button" className="wd-link wd-remove" disabled={Boolean(busy)} onClick={() => setConfirm(domain.id)}><Trash2 size={13} />Remove</button>}
