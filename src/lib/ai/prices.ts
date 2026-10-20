@@ -223,9 +223,29 @@ export function assertSupportedTextRequest(params: Record<string, unknown>) {
   if (output && Object.keys(output).some(key => key !== "effort")) throw new UnsupportedConfigurationError("output_config beyond effort");
 }
 
-/** Image requests the price card covers: priced model, medium quality, n=1, listed size, text prompt only. */
-export function assertSupportedImageRequest(request: { model: string; quality: string; size: string; n?: number; hasImageInput?: boolean }) {
+/**
+ * Models that return a real alpha channel for background "transparent" (with
+ * output_format png or webp). Same price card: the background does not change
+ * output tokens (2.5 cut-outs measured 439 tokens at medium 1024x1024, equal to
+ * opaque squares). Anything not listed true is refused before a reservation.
+ * - gpt-image-1: documented (image generation guide, transparency section).
+ * - gpt-image-2: refused live on 2026-10-20 with 400 invalid_value
+ *   "Transparent background is not supported for this model."
+ * - gpt-image-2.5-sunburst / -flare: documented ("either model") and verified
+ *   live on 2026-10-20 (outputs/eval/image-research/20261020/results.jsonl).
+ */
+export const TRANSPARENT_IMAGE_MODELS: Readonly<Record<string, boolean>> = Object.freeze({
+  "gpt-image-1": true, "gpt-image-2": false, "gpt-image-2.5-sunburst": true, "gpt-image-2.5-flare": true,
+});
+export const supportsTransparentImages = (model: string) => TRANSPARENT_IMAGE_MODELS[model] === true;
+export type ImageBackground = "opaque" | "transparent";
+
+/** Image requests the price card covers: priced model, medium quality, n=1, listed size, text prompt only,
+ * and a transparent background only on models that support it. */
+export function assertSupportedImageRequest(request: { model: string; quality: string; size: string; n?: number; hasImageInput?: boolean; background?: string }) {
   const price = imagePrice(request.model);
+  if (request.background !== undefined && request.background !== "opaque" && request.background !== "transparent") throw new UnsupportedConfigurationError(`image background "${request.background}"`);
+  if (request.background === "transparent" && !supportsTransparentImages(request.model)) throw new UnsupportedConfigurationError(`transparent background on "${request.model}"`);
   if (request.quality !== "medium") throw new UnsupportedConfigurationError(`image quality "${request.quality}"`);
   if ((request.n ?? 1) !== 1) throw new UnsupportedConfigurationError("more than one image per call");
   if (request.hasImageInput) throw new UnsupportedConfigurationError("image input");

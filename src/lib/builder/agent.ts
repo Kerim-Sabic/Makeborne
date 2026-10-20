@@ -8,13 +8,14 @@ import type { EffortLevel } from "../routing/effort";
 import { WebsiteDesignDirectionSchema } from "../projects/website-source";
 import { FileToolError, ProjectFiles } from "./files";
 import { compileVerdict, type CompileVerdict } from "./compile";
-import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage } from "./images";
+import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage, type GeneratedImageRequest } from "./images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
-import { UnpricedModelError, imageCallBoundMicrousd } from "../ai/prices";
+import { UnpricedModelError, imageCallBoundMicrousd, supportsTransparentImages } from "../ai/prices";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
+import { qualityProblems } from "./quality-gates";
 
 /** Conservative streaming output rate used to size steps to the time left. */
 const OUTPUT_TOKENS_PER_SECOND = 50;
@@ -37,12 +38,14 @@ export type BuilderEvent =
   | { type: "done"; version: number; summary: string; charged: number; changed?: boolean; finished?: boolean; build?: "passed" | "unverified" | null }
   | { type: "error"; code: string; message: string; retryable?: boolean };
 
+/** What an image is for; "cutout" asks for a transparent background (models that support it). */
+export const IMAGE_KINDS = ["photo", "illustration", "cutout", "texture"] as const;
 const name = z.string().regex(/^[a-z0-9][a-z0-9-]{1,48}$/, "Use a short kebab-case name like hero-portrait.");
 const ToolInputs = {
   write_file: z.object({ path: z.string(), content: z.string() }).strict(),
   edit_file: z.object({ path: z.string(), old_string: z.string(), new_string: z.string(), replace_all: z.boolean().optional() }).strict(),
   delete_file: z.object({ path: z.string() }).strict(),
-  generate_image: z.object({ name, prompt: z.string().min(20).max(3000), aspect: z.enum(["landscape", "portrait", "square"]) }).strict(),
+  generate_image: z.object({ name, prompt: z.string().min(20).max(3000), aspect: z.enum(["landscape", "portrait", "square"]), kind: z.enum(IMAGE_KINDS).optional() }).strict(),
   finish: z.object({
     summary: z.string().min(1).max(2000),
     title: z.string().min(1).max(200).optional(),
@@ -51,7 +54,7 @@ const ToolInputs = {
   }).strict(),
 };
 
-function tools(images: boolean): BetaToolUnion[] {
+function tools(images: boolean, cutouts = false): BetaToolUnion[] {
   const list: BetaToolUnion[] = [
     { name: "write_file", description: "Create a new file or replace an entire file in the project.", eager_input_streaming: true,
       input_schema: { type: "object", properties: { path: { type: "string", description: "Relative path, e.g. src/components/Hero.tsx" }, content: { type: "string", description: "Complete file content" } }, required: ["path", "content"], additionalProperties: false } },
@@ -66,8 +69,8 @@ function tools(images: boolean): BetaToolUnion[] {
         design: { type: "object", properties: { positioning: { type: "string" }, composition: { type: "string" }, typography: { type: "string" }, palette: { type: "string" }, imagery: { type: "string" }, motion: { type: "string" } }, required: ["positioning", "composition", "typography", "palette", "imagery", "motion"], additionalProperties: false },
       }, required: ["summary", "title"], additionalProperties: false } },
   ];
-  if (images) list.splice(3, 0, { name: "generate_image", description: "Generate one original, art-directed image for the website and register it in the project. Returns the URL to use in code (e.g. /images/hero-portrait.webp). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood. Never request text, logos or watermarks in images.",
-    input_schema: { type: "object", properties: { name: { type: "string", description: "kebab-case file name without extension" }, prompt: { type: "string" }, aspect: { type: "string", enum: ["landscape", "portrait", "square"] } }, required: ["name", "prompt", "aspect"], additionalProperties: false } });
+  if (images) list.splice(3, 0, { name: "generate_image", description: `Generate one original, art-directed image for the website and register it in the project. Returns the URL and pixel size to use in code (e.g. /images/hero-portrait.webp, width 1536, height 1024). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood, then the house style. Never request text, logos or watermarks in images. kind: photo (default), illustration, texture, or cutout: one subject on a transparent background, trimmed to the subject, for layering over colour fields, shapes or other images${cutouts ? "" : " (cut-outs are unavailable with the configured image model)"}.`,
+    input_schema: { type: "object", properties: { name: { type: "string", description: "kebab-case file name without extension" }, prompt: { type: "string" }, aspect: { type: "string", enum: ["landscape", "portrait", "square"] }, kind: { type: "string", enum: [...IMAGE_KINDS] } }, required: ["name", "prompt", "aspect"], additionalProperties: false } });
   return list;
 }
 
@@ -92,7 +95,7 @@ export type BuilderRun = {
   /** Injected providers (tests). Production uses the SDKs with retries disabled. */
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
-  storeImage?: (request: { name: string; prompt: string; model: string }, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
+  storeImage?: (request: GeneratedImageRequest, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
   /** Compile check at finish (tests inject one); production bundles with esbuild. */
   compile?: (files: ReadonlyMap<string, string>) => Promise<CompileVerdict>;
 };
@@ -116,17 +119,20 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const imageBound = imageModelId ? imageCallBoundMicrousd(imageModelId, "medium", IMAGE_SIZES.portrait, "x".repeat(3000)) : Infinity;
   const imageLimit = imageModelId ? Math.min(policy.maxImages, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
   const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
-  const storeImage = run.storeImage ?? ((request: { name: string; prompt: string; model: string }, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes));
+  const storeImage = run.storeImage ?? ((request: GeneratedImageRequest, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes));
+  const cutouts = imageModelId ? supportsTransparentImages(imageModelId) : false;
   let imagesUsed = 0, summary = "", title: string | undefined, finished = false, malformedTurns = 0;
+  // Quality gates block a finish once per distinct problem; a repeat is accepted, so a false positive can never strand the work.
+  const qualityReported = new Set<string>();
   let build: BuilderResult["build"] = null;
   const system = [{ type: "text" as const, text: BUILDER_SYSTEM }];
-  const toolList = tools(imageLimit > 0);
+  const toolList = tools(imageLimit > 0, cutouts);
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
 
   const messages: BetaMessageParam[] = [{ role: "user", content: [
     ...run.attachments,
-    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run)` : "unavailable — use typography, CSS and inline SVG"}.\n\n<request>\n${run.request}\n</request>` },
+    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${cutouts ? ", transparent cut-outs included" : "; transparent cut-outs unavailable"})` : "unavailable — use typography, CSS and inline SVG"}.\n\n<request>\n${run.request}\n</request>` },
   ] }];
 
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
@@ -239,20 +245,23 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Use CSS, typography and inline SVG."); break; }
             if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             if (run.files.assets.has(`public/images/${input.name}.webp`)) { fail(`An image named ${input.name} already exists at /images/${input.name}.webp. Reuse it or choose a new name.`); break; }
+            const kind = input.kind ?? "photo";
+            if (kind === "cutout" && !cutouts) { fail("Transparent cut-outs are unavailable with the configured image model. Use a photo whose background matches its frame, or CSS/SVG artwork."); break; }
             let job: { done: Promise<Buffer> };
             try {
               // The image's bound is reserved before the provider is contacted.
-              job = await startBudgetedImage({ client: imageClient, spend, model: imageModelId, prompt: input.prompt, size: IMAGE_SIZES[input.aspect], quality: "medium", signal: run.signal });
+              job = await startBudgetedImage({ client: imageClient, spend, model: imageModelId, prompt: input.prompt, size: IMAGE_SIZES[input.aspect], quality: "medium", signal: run.signal,
+                ...(kind === "cutout" ? { background: "transparent" as const } : {}) });
             } catch (error) {
               fail(error instanceof SpendError && !error.graceful ? `${error.message} Continue without this image (use CSS/SVG artwork).` : "Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork.");
               break;
             }
             imagesUsed++;
             run.emit({ type: "image_start", name: input.name, prompt: input.prompt });
-            imageJobs.push(job.done.then(bytes => storeImage({ name: input.name, prompt: input.prompt, model: imageModelId }, bytes)).then(asset => {
+            imageJobs.push(job.done.then(bytes => storeImage({ name: input.name, prompt: input.prompt, model: imageModelId, kind, transparent: kind === "cutout" }, bytes)).then(asset => {
               run.files.addAsset({ id: asset.id, path: asset.path, sha256: asset.sha256, bytes: asset.bytes, mediaType: asset.mediaType });
               run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id });
-              results.push({ type: "tool_result", tool_use_id: use.id, content: `Image ready. Use src="${asset.url}" (${input.aspect}).` });
+              results.push({ type: "tool_result", tool_use_id: use.id, content: imageReadyMessage(asset, input.aspect, kind) });
             }, () => fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).")));
             break;
           }
@@ -261,6 +270,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const problems = run.files.problems();
             if (input.routes?.length) run.files.routes = input.routes.some(route => route.path === "/") ? input.routes : [{ path: "/", title: "Home" }, ...input.routes];
             if (input.design) run.files.design = input.design;
+            if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes })) {
+              if (!qualityReported.has(problem)) { qualityReported.add(problem); problems.push(problem); }
+            }
             if (!problems.length) { try { run.files.toSource(); } catch (error) { problems.push((error as Error).message); } }
             // A saved version must build: compile once the static checks pass.
             let verdict: CompileVerdict | null = null;
@@ -294,6 +306,15 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     }
   }
   return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped };
+}
+
+/** Tool result for a stored image: the URL, its real pixel size (for width/height, so nothing shifts) and, for cut-outs, whether the alpha survived. */
+export function imageReadyMessage(asset: { url: string; width?: number; height?: number; transparent?: boolean }, aspect: string, kind: string) {
+  const size = asset.width && asset.height ? ` width="${asset.width}" height="${asset.height}"` : "";
+  const note = kind === "cutout"
+    ? (asset.transparent ? " Transparent cut-out trimmed to the subject: layer it over a colour field, shape or image; do not put it in a boxed card." : " The image came back opaque: frame it like a photo on a matching background.")
+    : "";
+  return `Image ready. Use src="${asset.url}"${size} (${kind}, ${aspect}).${note}`;
 }
 
 /** Provider HTTP errors and spending-control errors end the run; only malformed streams are retried as a turn. */

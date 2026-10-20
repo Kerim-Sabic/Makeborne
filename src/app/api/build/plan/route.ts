@@ -10,6 +10,8 @@ import { ProjectFiles } from "@/lib/builder/files";
 import { blankVersion } from "@/lib/builder/blank-version";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
+import { designSeedBlock } from "@/lib/builder/design-seed";
+import { imageConfiguration } from "@/lib/builder/images";
 import { BRAND_LOGO_URL, websiteBrandBlock } from "@/lib/brand/kit";
 import { projectBrandKit } from "@/lib/brand/server";
 import { briefPhotos } from "@/lib/leads/redesign";
@@ -158,11 +160,17 @@ export async function POST(request: Request) {
     const snapshot = files.files.size ? files.snapshot() : "";
     const outline = current.content.websiteSource ? "" : current.content.sections.map(section => [section.title, ...section.blocks.map(block => block.text)].filter(Boolean).join("\n")).join("\n\n").slice(0, 12_000);
     const history = versions.filter(version => version.number <= artifact.current_version).reverse().map(version => `v${version.number}: ${version.changeSummary}`).join("\n");
+    const direction = styleDirection(project.styleId, current.style);
+    // A new site without a preset gets the same per-project art-direction starting points as a direct build.
+    const seed = !direction && !files.files.size && !current.content.website && !body.previousPlan
+      ? designSeedBlock({ seed: artifact.project_id, brief: [project.brief, project.audience, project.purpose, artifact.title].filter(Boolean).join("\n"), images: Boolean(imageConfiguration().model), brand: Boolean(brand) })
+      : "";
     const context = [
       `<project title="${artifact.title.replace(/"/g, "'")}">`,
       `Brief: ${project.brief || "(none)"}`,
       project.audience ? `Audience: ${project.audience}` : "", project.purpose ? `Purpose: ${project.purpose}` : "",
-      `Visual direction: ${styleDirection(project.styleId, current.style) || "No preset — choose the best direction for this business."}`,
+      `Visual direction: ${direction || "No preset — choose the best direction for this business."}`,
+      seed,
       brand ? websiteBrandBlock(brand, brand.logo ? { url: BRAND_LOGO_URL, width: 0, height: 0 } : null) : "",
       briefPhotos(project.brief).length ? `The client's own photos listed in the brief will be uploaded as /images/photo-1.webp to /images/photo-${briefPhotos(project.brief).length}.webp when the site is built; plan the imagery around them.` : "",
       outline ? `Existing outline content:\n${outline}` : "",

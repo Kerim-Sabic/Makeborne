@@ -1,4 +1,4 @@
-import { assertSupportedImageRequest, imageCallBoundMicrousd, imageUsageMicrousd, type ImageQuality, type ImageSize, type ImageUsageLike } from "./prices";
+import { assertSupportedImageRequest, imageCallBoundMicrousd, imageUsageMicrousd, type ImageBackground, type ImageQuality, type ImageSize, type ImageUsageLike } from "./prices";
 import type { RunSpend } from "./run-spend";
 
 export type ImageClientLike = { images: {
@@ -9,18 +9,20 @@ export type ImageClientLike = { images: {
  * Reserves one image's bound now (so the run's budget is checked before any
  * provider contact) and returns the running generation as `done`. No SDK retries.
  * Usage reported by the API is the actual cost; without it the bound is spent.
+ * background "transparent" asks for an alpha cut-out (WebP keeps the alpha
+ * channel); models without it are refused before the reservation.
  */
 export async function startBudgetedImage(input: {
-  client: ImageClientLike; spend: RunSpend; model: string; prompt: string; size: ImageSize; quality: ImageQuality; signal: AbortSignal;
+  client: ImageClientLike; spend: RunSpend; model: string; prompt: string; size: ImageSize; quality: ImageQuality; signal: AbortSignal; background?: ImageBackground;
 }): Promise<{ done: Promise<Buffer> }> {
-  assertSupportedImageRequest({ model: input.model, quality: input.quality, size: input.size });
+  assertSupportedImageRequest({ model: input.model, quality: input.quality, size: input.size, background: input.background });
   const bound = imageCallBoundMicrousd(input.model, input.quality, input.size, input.prompt);
   const ticket = await input.spend.begin("openai", input.model, bound);
   const timeout = Math.max(1, Math.min(180_000, input.spend.timeLeftMs()));
   const done = (async () => {
     let response;
     try {
-      response = await input.client.images.generate({ model: input.model, prompt: input.prompt, n: 1, size: input.size, quality: input.quality, output_format: "webp", output_compression: 90 },
+      response = await input.client.images.generate({ model: input.model, prompt: input.prompt, n: 1, size: input.size, quality: input.quality, output_format: "webp", output_compression: 90, ...(input.background === "transparent" ? { background: "transparent" } : {}) },
         { signal: AbortSignal.any([input.signal, AbortSignal.timeout(timeout)]), maxRetries: 0, timeout });
     } catch (error) {
       const status = typeof (error as { status?: unknown }).status === "number" ? (error as { status: number }).status : undefined;

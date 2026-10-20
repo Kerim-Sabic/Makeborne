@@ -9,6 +9,8 @@ import { EffortLevelSchema } from "@/lib/routing/effort";
 import { ProjectFiles } from "@/lib/builder/files";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
+import { designSeedBlock } from "@/lib/builder/design-seed";
+import { imageConfiguration } from "@/lib/builder/images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
@@ -114,11 +116,18 @@ export async function POST(request: Request) {
     const history = versions.filter(version => version.number <= artifact.current_version).slice(0, 6).reverse()
       .map(version => `v${version.number}: ${version.changeSummary}`).join("\n");
     const approvedPlan = body.plan ?? operation.originalPlan;
+    const direction = styleDirection(project.styleId, current.style);
+    // First builds without a preset, plan or prior design get per-project art-direction starting points.
+    const seed = artifact.kind === "website" && !reviewing && !approvedPlan && !direction && !files.files.size && !current.content.website
+      ? designSeedBlock({ seed: artifact.project_id, brief: [project.brief, project.audience, project.purpose, artifact.title].filter(Boolean).join("\n"),
+        images: BUILDER_EFFORT[body.effort].maxImages > 0 && Boolean(imageConfiguration().model), brand: Boolean(brand) })
+      : "";
     const context = [
       `<project title="${artifact.title.replace(/"/g, "'")}">`,
       `Brief: ${project.brief || "(none)"}`,
       project.audience ? `Audience: ${project.audience}` : "", project.purpose ? `Purpose: ${project.purpose}` : "",
-      `Visual direction: ${styleDirection(project.styleId, current.style) || "No preset — choose the best direction for this business."}`,
+      `Visual direction: ${direction || "No preset — choose the best direction for this business."}`,
+      seed,
       brand ? websiteBrandBlock(brand, logo) : "",
       photosContext(photos),
       // Client sites get client-editable content (owner default); sites that already declare content keep the contract.
