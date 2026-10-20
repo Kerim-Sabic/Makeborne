@@ -103,3 +103,27 @@ All tasks: work from the named branch, no production action without Kerim's expl
 ## Rollback
 
 Nothing is deployed, so rollback is "do not merge". After a merge, every finding is its own commit: `git revert <sha>` (revert F09 `f669393` before F02 `0c26a6f`, both touch `studio.tsx`). Two new migrations, both additive functions only: `20261020110000_usage_history_read.sql` (billing branch; drop statements in its header) and `20261020120000_artifact_title_search.sql` (`drop function public.makeborne_artifact_title_search(uuid,text,text,timestamptz,uuid);`). Neither was applied anywhere except the isolated local stack (title search) or inside a rolled-back transaction (usage history). Revert M05 `853fac1` before M04 `5efe9c8` before M03 `d88381a`; M09 is `6eeea77`, `732e14f`. No dependency was added. The Worker change (F05) needs a Worker redeploy to roll back.
+
+## Round 2 (after Codex's qualification branch)
+
+At Kerim's request, M06, the rest of M07/M08/M10, M17, a row-by-row reconciliation of all 35 research chapters, the gaps it found, and the optional M11/M12/M14 were implemented. They are merged into **`feature/lovable-integration`** (head `2b0f088`), based on Codex's `feature/lovable-qualification` `6b78269`. The merged branches are previews, m07-live, continuity, intent, scopes, trust-copy, publish-output, compare-search and advisor-handoff.
+
+Final gates:
+- `npx tsc --noEmit -p .` ✓, `npx eslint .` ✓;
+- `npm test` 171/171 ✓;
+- 26 mounted Chromium checks ✓ (each new one fails on its base);
+- Worker checks ✓, `npx next build --webpack` ✓;
+- an integrated real-app pass on the local stack at 1440/800/375/320 (no overflow, no page errors, no external requests, no unexpected writes; real previews render).
+
+New migrations, all additive, none applied anywhere but the local stack:
+- `20261020203000_scope_revocation_boundaries.sql`: deploy app code `381c96f` **before** it.
+- `20261020210000_artifact_card_previews.sql`.
+
+The reconciliation tables and the resolution of every missed item are in `docs/release-review/lovable-reconciliation-20261020/` (`part-1..3.md` and `DISPOSITION.md`), together with the Codex assignments, owner decisions and local-state cleanup.
+
+Behaviour changes to note:
+- briefs handed over from project creation wait for an explicit Send;
+- the advisor can draft a brief, a new paid call capped at 3 credits;
+- the editor preview blocks network and form submission (CSP).
+
+Design quality (`feature/design-quality`, Kerim's +$100 Claude / +$2 OpenAI test budget) is reported separately.
