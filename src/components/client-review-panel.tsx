@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowUpRight, Check, Copy, Link2, LoaderCircle, Mail, MessageSquare, RefreshCw, RotateCcw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import { cloudAccountGuard } from "./cloud-api";
 import { linkState, type ReviewLink, type StudioReviewComment } from "@/lib/client-review/contracts";
-import { anchorLabel, builderRequestFromFeedback, reviewMailto } from "@/lib/client-review/feedback";
+import { REVIEW_IDENTITY_NOTE, anchorLabel, builderRequestFromFeedback, reviewDecisionLabel, reviewMailto } from "@/lib/client-review/feedback";
 import { deliveryStageLabels, type ProjectDeliveryStage } from "@/lib/project-delivery";
 import type { ReviewViews } from "@/lib/client-review/views";
 import LinkViewStats from "./client-review-views";
@@ -116,13 +116,13 @@ export default function ClientReviewPanel({ accountId, workspaceId, artifactId, 
   return <section className="crp" aria-labelledby={`crp-${artifactId}`}>
     <header className="crp-head">
       <span className="crp-icon"><ShieldCheck size={18} /></span>
-      <div><h3 id={`crp-${artifactId}`}>Client review</h3><p>A private link for your client: no account, comments on the page, approve or request changes.</p></div>
+      <div><h3 id={`crp-${artifactId}`}>Client review</h3><p>A private link for your client: no account, comments on the page, approve or request changes. Anyone who has the link can do this, so names are as typed, not verified.</p></div>
       <button type="button" className="crp-icon-button" aria-label="Refresh client review" onClick={() => void load()}><RefreshCw size={15} /></button>
     </header>
     {decisions.map(decision => <div key={decision.id} className={`crp-decision is-${decision.kind}`} role="status">
       {decision.kind === "approved" ? <Check size={16} /> : <RotateCcw size={16} />}
-      <div><strong>{decision.kind === "approved" ? `${decision.authorName} approved version ${decision.version}` : `${decision.authorName} requested changes on version ${decision.version}`}</strong>
-        <p>{moment(decision.createdAt)}{decision.kind === "approved" ? " · Project marked Delivered" : " · Project marked Changes requested"}</p>
+      <div><strong>{reviewDecisionLabel(decision.kind === "approved" ? "approved" : "changes_requested", decision.authorName)} · version {decision.version}</strong>
+        <p>{moment(decision.createdAt)}{decision.kind === "approved" ? " · Project marked Delivered" : " · Project marked Changes requested"} · {REVIEW_IDENTITY_NOTE}</p>
         {decision.body && <blockquote>{decision.body}</blockquote>}</div>
     </div>)}
     <div className="crp-client">{data.client ? <>For <strong>{data.client.name}</strong></> : <>Delivery</>}<span className="crp-pill">{deliveryStageLabels[data.deliveryStage ?? "active"]}</span><small>Sending a link marks this project In review; the client&rsquo;s decision marks it Delivered or Changes requested.{data.client ? " Their sales stage stays as you set it." : ""}</small></div>
@@ -184,7 +184,7 @@ export default function ClientReviewPanel({ accountId, workspaceId, artifactId, 
         const state = linkState(link);
         return <li key={link.id}>
           <div><span className={`crp-state is-${state}`}>{state === "active" ? "Active" : state === "expired" ? "Expired" : "Off"}</span>
-            {link.decision && <span className={`crp-state is-${link.decision}`}>{link.decision === "approved" ? "Approved" : "Changes requested"}</span>}
+            {link.decision && <span className={`crp-state is-${link.decision}`} title={REVIEW_IDENTITY_NOTE}>{reviewDecisionLabel(link.decision, link.decisionName)}</span>}
             <strong>{link.recipientName || "Client"}</strong></div>
           <small>{link.version === null ? "Latest version" : `Version ${link.version}`} · sent {day(link.createdAt)} · {state === "active" ? `expires ${day(link.expiresAt)}` : state === "expired" ? `expired ${day(link.expiresAt)}` : `off since ${day(link.revokedAt!)}`}{views?.available ? "" : ` · ${link.viewCount} ${link.viewCount === 1 ? "view" : "views"}`}</small>
           {views?.available && <LinkViewStats summary={views.byLink[link.id] ?? null} kind={data.kind} linkLabel={link.recipientName || "this link"} />}
