@@ -4,7 +4,8 @@
 import { z } from "zod";
 
 export type DomainStatus = "pending" | "active" | "failed";
-export type DnsRecord = { type: "CNAME" | "TXT" | "ALIAS"; name: string; value: string; purpose: string };
+/** `name` is relative to `zone` (what most DNS providers ask for); `fqdn` is the exact full record name. */
+export type DnsRecord = { type: "CNAME" | "TXT" | "ALIAS"; name: string; value: string; purpose: string; fqdn?: string; zone?: string };
 export type HostnameCheck = { ok: true; hostname: string; apex: boolean } | { ok: false; message: string };
 
 /** Two-label public suffixes common among our customers (so "bakery.co.uk" counts as a root domain). */
@@ -36,12 +37,31 @@ export function checkHostname(input: string, options: { allowTest?: boolean } = 
   return { ok: true, hostname: host, apex };
 }
 
+/** The DNS zone a hostname most likely lives in: its registrable domain
+ * ("shop.eu.bakery.co.uk" → "bakery.co.uk"). A customer may have delegated a
+ * deeper zone, so the UI always shows the exact full name as well. */
+export function dnsZone(hostname: string) {
+  const labels = hostname.split(".");
+  return labels.slice(-(MULTI_SUFFIX.has(labels.slice(-2).join(".")) ? 3 : 2)).join(".");
+}
+
+/** A record name relative to the zone: "@" for the zone itself, otherwise every label before it. */
+export function relativeName(fqdn: string, zone: string) {
+  const name = fqdn.replace(/\.$/, "").toLowerCase();
+  if (name === zone) return "@";
+  return name.endsWith(`.${zone}`) ? name.slice(0, -(zone.length + 1)) : name;
+}
+
 /** The records the customer adds at their DNS provider. */
 export function dnsRecords(hostname: string, apex: boolean, target: string, extra: readonly DnsRecord[] = []): DnsRecord[] {
+  const zone = apex ? hostname : dnsZone(hostname);
   const main: DnsRecord = apex
-    ? { type: "ALIAS", name: "@", value: target, purpose: "Points your root domain to your Makeborne site. If your provider has no ALIAS, ANAME or CNAME flattening, connect www instead and forward the root domain to it." }
-    : { type: "CNAME", name: hostname.split(".")[0], value: target, purpose: "Points this address to your Makeborne site." };
-  return [main, ...extra.filter(record => record.name && record.value)];
+    ? { type: "ALIAS", name: "@", fqdn: hostname, zone, value: target, purpose: "Points your root domain to your Makeborne site. If your provider has no ALIAS, ANAME or CNAME flattening, connect www instead and forward the root domain to it." }
+    : { type: "CNAME", name: relativeName(hostname, zone), fqdn: hostname, zone, value: target, purpose: "Points this address to your Makeborne site." };
+  return [main, ...extra.filter(record => record.name && record.value).map(record => {
+    const fqdn = (record.fqdn ?? record.name).replace(/\.$/, "").toLowerCase();
+    return { ...record, name: relativeName(fqdn, zone), fqdn, zone };
+  })];
 }
 
 // ----------------------------------------------------------------- Cloudflare
@@ -106,11 +126,21 @@ export function cloudflareHostnames(config: DomainConfig, fetchImpl: typeof fetc
 
 const FAILED_HOSTNAME = new Set(["blocked", "moved", "deleted", "pending_blocked", "test_failed"]);
 
-/** Our status, the SSL state and any message, from Cloudflare's hostname record. */
+/** Cloudflare custom-hostname statuses we know; anything else is reported as unrecognised. */
+const KNOWN_HOSTNAME = new Set(["active", "pending", "active_redeploying", "moved", "pending_deletion", "deleted", "pending_blocked", "pending_migration", "provisioned", "test_pending", "test_active", "test_active_apex", "test_blocked", "test_failed", "blocked"]);
+/** A provider status shown to people only when it is a plain identifier. */
+const providerWord = (value: string | null | undefined) => typeof value === "string" && /^[a-z][a-z0-9_]{0,39}$/.test(value) ? value : null;
+
+/** Our status, the SSL state and any message, from Cloudflare's hostname record.
+ * Only "active" for both the hostname and its certificate makes a domain live. */
 export function domainState(result: CloudflareHostname): { status: DomainStatus; sslStatus: string | null; error: string | null; extra: DnsRecord[] } {
   const sslStatus = result.ssl?.status ?? null;
   const errors = [...(result.verification_errors ?? []), ...(result.ssl?.validation_errors ?? []).map(item => item.message)].map(message => message.slice(0, 240));
   const status: DomainStatus = result.status === "active" && sslStatus === "active" ? "active" : FAILED_HOSTNAME.has(result.status ?? "") ? "failed" : "pending";
+  if (status !== "active" && result.status && !KNOWN_HOSTNAME.has(result.status)) {
+    const word = providerWord(result.status);
+    errors.push(`Cloudflare reported a domain status we don't recognise${word ? ` (“${word}”)` : ""}. The domain isn't live; check again later or contact support if it stays like this.`);
+  }
   // Optional pre-validation records: lets a site go live before its CNAME switches over (e.g. moving from another host).
   const extra: DnsRecord[] = [];
   if (result.ownership_verification?.name && result.ownership_verification.value)
@@ -118,10 +148,38 @@ export function domainState(result: CloudflareHostname): { status: DomainStatus;
   return { status, sslStatus, error: status === "active" ? null : errors[0] ?? null, extra };
 }
 
+/** What a not-yet-live domain is doing, from our status and Cloudflare's certificate status:
+ * live; expected progress (waiting for DNS, securing); stopped and needing the owner
+ * (timed out, expired, removed, failed); or a status we don't recognise. */
+export type DomainPhase = "live" | "waiting" | "securing" | "timed_out" | "expiring" | "expired" | "removed" | "failed" | "unknown";
+const SSL_WAITING = new Set(["initializing", "pending_validation"]);
+const SSL_SECURING = new Set(["pending_issuance", "pending_deployment", "staging_deployment", "staging_active", "holding_deployment", "backup_issued"]);
+const SSL_TIMED_OUT = new Set(["initializing_timed_out", "validation_timed_out", "issuance_timed_out", "deployment_timed_out"]);
+const SSL_REMOVED = new Set(["deleted", "pending_deletion", "deletion_timed_out", "pending_cleanup", "deactivating", "inactive", "revoked"]);
+/** "Check now" only re-reads the status; it never restarts or recreates anything. */
+const RECHECK = "Check now only reads the latest status; it doesn't restart certificate setup.";
+const RECONNECT = "If it doesn't recover, remove the domain and connect it again to start certificate setup afresh, or contact support.";
+
+export type DomainStatusLabel = { phase: DomainPhase; label: string; detail: string; /** Expected to change on its own: show progress and keep polling. */ inProgress: boolean };
+
 /** Plain-words label for the UI. */
-export function statusLabel(status: DomainStatus, sslStatus: string | null): { label: string; detail: string } {
-  if (status === "active") return { label: "Live", detail: "Your site is live on this domain, with a secure https certificate." };
-  if (status === "failed") return { label: "Needs attention", detail: "Cloudflare couldn't connect this domain. Check the records below, or remove and add it again." };
-  if (sslStatus && sslStatus !== "initializing" && sslStatus !== "pending_validation") return { label: "Securing", detail: "DNS is connected. The https certificate is being issued, which usually takes a few minutes." };
-  return { label: "Waiting for DNS", detail: "Add the record below at your domain provider. Changes usually show up within minutes, sometimes up to a day." };
+export function statusLabel(status: DomainStatus, sslStatus: string | null): DomainStatusLabel {
+  if (status === "active") return { phase: "live", inProgress: false, label: "Live", detail: "Your site is live on this domain, with a secure https certificate." };
+  if (status === "failed") return { phase: "failed", inProgress: false, label: "Needs attention", detail: "Cloudflare couldn't connect this domain. Check the records below, or remove and add it again." };
+  if (!sslStatus || SSL_WAITING.has(sslStatus))
+    return { phase: "waiting", inProgress: true, label: "Waiting for DNS", detail: "Add the record below at your domain provider. Changes usually show up within minutes, sometimes up to a day." };
+  if (sslStatus === "active")
+    return { phase: "waiting", inProgress: true, label: "Waiting for DNS", detail: "The https certificate is ready. Cloudflare is still confirming that the record below points this domain to your site." };
+  if (SSL_SECURING.has(sslStatus))
+    return { phase: "securing", inProgress: true, label: "Securing", detail: "DNS is connected. The https certificate is being issued, which usually takes a few minutes." };
+  if (SSL_TIMED_OUT.has(sslStatus))
+    return { phase: "timed_out", inProgress: false, label: "Certificate setup stopped", detail: `Cloudflare stopped trying to issue the https certificate because it couldn't confirm this domain in time. Make sure the record below is in place exactly as shown (with any proxy turned off), then select Check now. ${RECHECK} ${RECONNECT}` };
+  if (sslStatus === "pending_expiration")
+    return { phase: "expiring", inProgress: false, label: "Certificate expiring", detail: `The https certificate is about to expire and hasn't renewed, usually because the record below no longer points here. Fix the record, then select Check now. ${RECONNECT}` };
+  if (sslStatus === "expired")
+    return { phase: "expired", inProgress: false, label: "Certificate expired", detail: `The https certificate expired and couldn't be renewed, usually because the record below no longer points here. Fix the record, then select Check now. ${RECONNECT}` };
+  if (SSL_REMOVED.has(sslStatus))
+    return { phase: "removed", inProgress: false, label: "Certificate removed", detail: "Cloudflare no longer has an https certificate for this domain. Remove the domain and connect it again to set it up afresh." };
+  const word = providerWord(sslStatus);
+  return { phase: "unknown", inProgress: false, label: "Status unknown", detail: `Cloudflare reported a certificate status we don't recognise${word ? ` (“${word}”)` : ""}, so we can't say what happens next. The domain isn't live. Select Check now later, and contact support if it doesn't change.` };
 }
