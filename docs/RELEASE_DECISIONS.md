@@ -43,7 +43,7 @@ the decision.
 | D5 Replacement | No plan switching at launch; cancel and rebuy only | Yes: no switch path exists |
 | D6 Credit packs | Closed at launch | Yes: route returns 503 |
 | D7 Refunds | Keep the current terms; add a support rule for credits | Support policy, needed before any payment |
-| D8 Image model | `gpt-image-2.5-sunburst` after a measured qualification | Yes: images off |
+| D8 Image model | Routed per image (2.5 flare/sunburst for text and cut-outs, cheapest bounded model otherwise); 2.5 bounded by measured tokens × 1.5 (changed 2026-10-21) | Yes: images off |
 
 ## D1. Founding offer
 
@@ -110,7 +110,9 @@ the decision.
 - **Implications:** without the rule, a refunded customer keeps unspent credits until the month ends, but loses creation access when the membership ends.
 - **Disabled at launch:** no. Needed before any payment is taken, as a support procedure.
 
-## D8. Image model (owner direction 2026-10-13: use the newest model)
+## D8. Image model (owner direction 2026-10-13: use the newest model; changed 2026-10-21)
+
+**2026-10-21 change (owner, Kerim):** the 2.5 models are bounded by the measured output tokens of the 2026-10-20 research run × 1.5, and the builder routes each image to a model by its needs (text, transparency, cost). Details, evidence and the overrun stop: `docs/AI_SPENDING.md`, "D8 changed". The text below is the earlier position, kept for the record.
 
 Target: **`gpt-image-2.5-sunburst`** (snapshot 2026-09-08). OpenAI calls it its most capable image model and names it, with `gpt-image-2.5-flare` (fastest, same token rates), as gpt-image-1's replacement.
 

@@ -173,7 +173,9 @@ export function siteErrorPage(status) {
 export function composeSiteDocument(html, { script, interactive, branding = false }) {
   if (typeof html !== "string" || !html.startsWith("<!doctype html>")) throw new Error("invalid_document");
   if (branding) {
-    const footer = '<footer data-makeborne-attribution style="position:relative;display:flex;justify-content:center;padding:18px 24px;font:12px/1.5 system-ui,sans-serif"><a href="https://makeborne.com/" rel="nofollow noopener" target="_blank" aria-label="Made with Makeborne, opens in a new tab" style="display:inline-flex;align-items:center;gap:7px;color:#575766;background:#ffffff;border:1px solid #e8e8ef;border-radius:999px;padding:7px 12px;text-decoration:none;box-shadow:0 2px 8px #16162408"><span aria-hidden="true" style="font-weight:800;color:#303041">m</span>Made with Makeborne</a></footer>';
+    // The accessible name is the visible text plus a visually hidden suffix (no aria-label), so the
+    // name contains what sighted users read (WCAG 2.5.3; axe label-content-name-mismatch).
+    const footer = '<footer data-makeborne-attribution style="position:relative;display:flex;justify-content:center;padding:18px 24px;font:12px/1.5 system-ui,sans-serif"><a href="https://makeborne.com/" rel="nofollow noopener" target="_blank" style="position:relative;display:inline-flex;align-items:center;gap:7px;color:#575766;background:#ffffff;border:1px solid #e8e8ef;border-radius:999px;padding:7px 12px;text-decoration:none;box-shadow:0 2px 8px #16162408"><span aria-hidden="true" style="font-weight:800;color:#303041">m</span>Made with Makeborne<span style="position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0">, opens in a new tab</span></a></footer>';
     html = html.replace(/<\/body>/i, () => `${footer}</body>`);
   }
   if (!interactive || !script) return html;
