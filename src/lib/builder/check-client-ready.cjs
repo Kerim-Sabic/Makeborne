@@ -217,5 +217,105 @@ const source = files => ({files: [...files].map(([path, content]) => ({path, con
     assert.equal(findings.filter(finding => finding.locations.some(location => location.startsWith("page /about"))).length, 0);
   });
 
+  await check("malformed percent-encoding in links becomes a located finding; every other check still runs", async () => {
+    const files = clean();
+    files.set("src/components/Broken.tsx", [
+      'const NAV = [{ label: "Odd", href: "#%" }, { label: "Odd page", href: "/about#%" }];',
+      "export default function Broken() {",
+      "  return <nav>{NAV.map(item => <a key={item.label} href={item.href}>{item.label}</a>)}",
+      '    <a href="#%">Percent</a>',
+      '    <a href="/about#broken%E0%A4%A">Truncated</a>',
+      '    <a href="#bad%ZZ">Not hex</a>',
+      '    <a href="/about%">Bad path</a>',
+      '    <a href="#">Book now</a>',
+      "    <p>Lorem ipsum dolor sit amet.</p>",
+      "  </nav>;",
+      "}",
+    ].join("\n"));
+    let findings;
+    assert.doesNotThrow(() => { findings = clientReadyCheck(source(files)); }, "a malformed link must not stop the check");
+    const by = rule => findings.find(finding => finding.rule === rule);
+    const unreadable = by("unreadable-link");
+    assert.ok(unreadable, JSON.stringify(findings.map(finding => finding.rule)));
+    assert.equal(unreadable.severity, "warning");
+    assert.deepEqual(unreadable.locations, [
+      "src/components/Broken.tsx:4 (#%)", "src/components/Broken.tsx:5 (/about#broken%E0%A4%A)", "src/components/Broken.tsx:6 (#bad%ZZ)",
+      "src/components/Broken.tsx:7 (/about%)", "src/components/Broken.tsx:1 (#%)", "src/components/Broken.tsx:1 (/about#%)",
+    ]);
+    assert.equal(unreadable.count, 6);
+    assert.match(unreadable.detail, /%25/, "says how to write a literal percent sign");
+    assert.ok(!by("missing-anchor"), "a malformed fragment is not also reported as a missing section");
+    assert.ok(!by("dead-route"), "or as a missing page");
+    assert.deepEqual(by("empty-link").locations, ["src/components/Broken.tsx:8"], "other link findings are still reported");
+    assert.deepEqual(by("placeholder-text").locations, ["src/components/Broken.tsx:9"], "other rules still run");
+  });
+
+  await check("valid encoded and Unicode links are preserved, in code and in prepared pages", async () => {
+    const files = clean();
+    files.set("src/components/Sections.tsx", [
+      "export default function Sections() {",
+      '  return <main><section id="features" /><section id="pricing-details" /><section id="café" /><section id="100%" /><section id="naïve-sauce" />',
+      '    <a href="#features">Features</a> <a href="#pricing%2Ddetails">Prices</a> <a href="#caf%C3%A9">Café</a> <a href="#café">Café again</a>',
+      '    <a href="#100%25">Percent</a> <a href="#na%C3%AFve-sauce">Sauce</a> <a href="/about#caf%C3%A9">About café</a> <a href="/about">About</a>',
+      "  </main>;",
+      "}",
+    ].join("\n"));
+    const findings = clientReadyCheck(source(files));
+    assert.deepEqual(findings, [], JSON.stringify(findings, null, 2));
+    const pages = [{path: "/", html: '<!doctype html><html lang="en"><body><main id="top"><h2 id="ünïcode">Ü</h2><a href="#%C3%BCn%C3%AFcode">Jump</a><a href="#%">Bad</a><a href="/about#%E0%A4%A">Bad too</a><a href="#%">Bad again</a></main></body></html>'}];
+    const rendered = clientReadyCheck({...source(clean()), pages});
+    assert.deepEqual(rendered.map(finding => [finding.rule, finding.locations, finding.count]), [["unreadable-link", ["page / (#%)", "page / (/about#%E0%A4%A)"], 2]], "repeats at one location count once; valid Unicode passes");
+  });
+
+  await check("unreadable links are bounded: very long values are reported and shortened, empty input checks cleanly", async () => {
+    const long = `#${"a%".repeat(3000)}`, longValid = `#${"b".repeat(5000)}`;
+    const files = clean();
+    files.set("src/components/Long.tsx", `export default function Long() {\n  return <div><a href="${long}">Long</a>\n<a href="${longValid}">Long valid</a></div>;\n}`);
+    const findings = clientReadyCheck(source(files));
+    const unreadable = findings.find(finding => finding.rule === "unreadable-link");
+    assert.equal(unreadable.count, 2, "over-long fragments are not decoded");
+    for (const location of unreadable.locations) assert.ok(location.length < 140, location.length);
+    assert.match(unreadable.locations[0], /^src\/components\/Long\.tsx:2 \(#a%a%.*…\)$/);
+    assert.ok(!findings.some(finding => finding.rule === "missing-anchor" && finding.locations.some(location => location.length > 140)), "no unbounded location text");
+    assert.deepEqual(clientReadyCheck({files: []}), []);
+    assert.deepEqual(clientReadyCheck({files: [], pages: [{path: "/", html: ""}]}), []);
+  });
+
+  await check("the real card renders malformed links as a finding, never fails to green, and states its static scope", async () => {
+    const React = require("react");
+    const { renderToStaticMarkup } = require("react-dom/server");
+    const path = require("node:path"), src = path.join(__dirname, "..", "..");
+    const cardPath = path.join(src, "components", "client-ready-check.tsx");
+    const previousTsx = require.extensions[".tsx"], previousLoad = Module._load;
+    require.extensions[".tsx"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true}}).outputText, filename);
+    let override = null;
+    Module._load = function(name, parent, main) {
+      if (name === "@/lib/builder/client-ready") {
+        const real = previousLoad.call(this, path.join(src, "lib", "builder", "client-ready.ts"), parent, main);
+        return override ? {...real, clientReadyCheck: override} : real;
+      }
+      return previousLoad.call(this, name, parent, main);
+    };
+    const render = props => { delete require.cache[cardPath]; return renderToStaticMarkup(React.createElement(require(cardPath).default, props)); };
+    try {
+      const files = clean();
+      files.set("src/components/Broken.tsx", 'export default function Broken() {\n  return <nav><a href="#%">Percent</a><a href="/about#%">About</a></nav>;\n}');
+      let html;
+      assert.doesNotThrow(() => { html = render({source: source(files), pages: [{path: "/", html: '<!doctype html><html lang="en"><body><a href="/about#broken%E0%A4%A">x</a></body></html>'}]}); });
+      assert.match(html, /data-state="warning"/); assert.match(html, /1 to review/);
+      assert.match(html, /Links with broken encoding/);
+      assert.match(html, /<code>src\/components\/Broken\.tsx:2 \(#%\)<\/code>/); assert.match(html, /<code>page \/ \(\/about#broken%E0%A4%A\)<\/code>/);
+      assert.doesNotMatch(html, /Nothing to fix|No issues found/);
+      const clean_ = render({source: source(clean())});
+      assert.match(clean_, /No issues found by these checks/);
+      assert.doesNotMatch(clean_, /Nothing to fix before you share/, "a static pass is not a promise the site is ready");
+      assert.match(clean_, /not a full visual, accessibility or security review/);
+      override = () => { throw new URIError("URI malformed"); };
+      const failed = render({source: source(clean())});
+      assert.match(failed, /data-state="error"/); assert.match(failed, /Check couldn’t finish/);
+      assert.doesNotMatch(failed, /No issues found|data-state="clean"/, "a failed check never shows as clean");
+    } finally { Module._load = previousLoad; require.extensions[".tsx"] = previousTsx; delete require.cache[cardPath]; }
+  });
+
   console.log(`${count} compile and client-ready checks passed`);
 })().catch(error => { console.error(error); process.exit(1); });

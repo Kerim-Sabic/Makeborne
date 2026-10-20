@@ -18,6 +18,7 @@
 .wd-chip.is-pending { background:#fff6e5; color:#8a5a00; }
 .wd-chip.is-active { background:#e2f2e9; color:#1d6f46; }
 .wd-chip.is-failed { background:#fbe7e5; color:#9a2f2a; }
+.wd-chip.is-unknown { background:#eef0f4; color:#4a5468; }
 .wd-open { display:inline-flex; align-items:center; gap:4px; margin-left:auto; font-size:12px; font-weight:600; color:#5b3f8c; }
 .wd-detail { margin:0; font-size:12.5px; color:#5b4d67; line-height:1.45; }
 .wd-records { display:grid; gap:0; border:1px solid #ece8f0; border-radius:10px; overflow:hidden; }
@@ -25,6 +26,9 @@
 .wd-row-head { border-top:0; background:#faf9fb; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#8a7f93; }
 .wd-row code { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px; overflow-wrap:anywhere; }
 .wd-copyable { display:flex; align-items:center; gap:6px; min-width:0; }
+.wd-name { display:grid; gap:4px; min-width:0; }
+.wd-fqdn small { flex:none; color:#8a7f93; font-size:11px; }
+.wd-zone code { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap:anywhere; }
 .wd-copyable button { flex:none; display:grid; place-items:center; width:24px; height:24px; padding:0; border:1px solid #e3dde9; border-radius:6px; background:#fff; color:#6f6478; cursor:pointer; }
 .wd-copyable button:focus-visible, .wd-link:focus-visible, .wd-danger:focus-visible { outline:2px solid #7d5fb0; outline-offset:1px; }
 .wd-purpose { margin:0; padding:8px 10px; border-top:1px solid #f1eef4; font-size:11.5px; color:#6f6478; background:#fcfbfd; }

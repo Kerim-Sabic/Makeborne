@@ -7,7 +7,7 @@
 export type ClientReadySeverity = "error" | "warning" | "info";
 export type ClientReadyRule =
   | "placeholder-text" | "placeholder-contact" | "placeholder-image" | "unfinished-note"
-  | "empty-link" | "dead-route" | "missing-anchor" | "missing-image"
+  | "empty-link" | "dead-route" | "missing-anchor" | "unreadable-link" | "missing-image"
   | "image-alt" | "image-size" | "low-contrast" | "link-name"
   | "page-title" | "meta-description" | "html-lang";
 export type ClientReadyFinding = {
@@ -35,6 +35,7 @@ const RULES: Record<ClientReadyRule, { severity: ClientReadySeverity; title: str
   "empty-link": { severity: "error", title: "Links that go nowhere", detail: "These links use href=\"#\", an empty address or an empty mailto:/tel:. Point each one at a real page, section, phone number or email, or make it plain text." },
   "dead-route": { severity: "error", title: "Links to pages that don’t exist", detail: "These links point at pages or files the website doesn’t have. Fix the address or add the page." },
   "missing-anchor": { severity: "warning", title: "Links to missing sections", detail: "These in-page links point at a section id that isn’t on the site, so clicking them does nothing." },
+  "unreadable-link": { severity: "warning", title: "Links with broken encoding", detail: "These links contain a % that isn’t a complete escape (such as a lone %, %ZZ or a cut-off %E0%A4), or are too long to check, so browsers can’t match them to a page or section. Write the address in plain words, or write a literal percent sign as %25." },
   "missing-image": { severity: "error", title: "Images that don’t exist", detail: "These image paths are not among the project’s images, so they show as broken." },
   "image-alt": { severity: "warning", title: "Images without a description", detail: "Add alt text that describes each image (use alt=\"\" only for purely decorative images). Screen readers and search engines rely on it." },
   "image-size": { severity: "warning", title: "Images without width and height", detail: "Images without width and height make the page jump while it loads. Add both attributes with the image’s proportions." },
@@ -160,6 +161,15 @@ const solidBackground = (value: string) => /\b(?:url|gradient)\(/i.test(value) ?
 // ------------------------------------------------------------------ check
 
 const routeKey = (path: string) => (path.replace(/\/+$/, "") || "/");
+/** Longest link part that is decoded; anything longer is reported rather than processed. */
+const MAX_DECODE = 2_000;
+/** decodeURIComponent that never throws: null for a malformed escape or an over-long value. */
+export function safeDecode(value: string): string | null {
+  if (value.length > MAX_DECODE) return null;
+  try { return decodeURIComponent(value); } catch { return null; }
+}
+/** A link as shown in a finding's location: the original text, shortened when long. */
+const shown = (value: string) => value.length > 80 ? `${value.slice(0, 79)}…` : value;
 const plain = (html: string) => html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/g, " ").replace(/&amp;/g, "&").replace(/&[a-z#0-9]+;/gi, " ");
 
 export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] {
@@ -188,17 +198,21 @@ export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] 
     const value = href.trim();
     if (value === "" || value === "#" || /^javascript:/i.test(value) || /^(?:mailto|tel|sms):\s*$/i.test(value)) { add("empty-link", where); return; }
     if (/^(?:mailto|tel|sms):/i.test(value)) { if (CONTACT.some(pattern => pattern.test(value))) add("placeholder-contact", where); return; }
+    // Malformed escapes are a finding about this link; the rest of the check carries on.
     if (value.startsWith("#")) {
-      const id = decodeURIComponent(value.slice(1));
+      const id = safeDecode(value.slice(1));
+      if (id === null) { add("unreadable-link", `${where} (${shown(value)})`); return; }
       // "#top" scrolls to the top in every browser even without an element.
-      if (id !== "top" && !id.startsWith("/") && !id.startsWith("!") && !ids.has(id)) add("missing-anchor", `${where} (${value})`);
+      if (id !== "top" && !id.startsWith("/") && !id.startsWith("!") && !ids.has(id)) add("missing-anchor", `${where} (${shown(value)})`);
       return;
     }
     if (!value.startsWith("/") || value.startsWith("//")) return;
     const [path, hash = ""] = value.split("#");
-    const clean = routeKey(path.split("?")[0]);
-    if (/\.[a-z0-9]{2,5}$/i.test(clean) ? !assets.has(clean) : !routes.has(clean)) add("dead-route", `${where} (${value})`);
-    else if (hash && !hash.startsWith("/") && !ids.has(decodeURIComponent(hash))) add("missing-anchor", `${where} (${value})`);
+    const pathOnly = path.split("?")[0], id = hash ? safeDecode(hash) : "";
+    if (safeDecode(pathOnly) === null || id === null) { add("unreadable-link", `${where} (${shown(value)})`); return; }
+    const clean = routeKey(pathOnly);
+    if (/\.[a-z0-9]{2,5}$/i.test(clean) ? !assets.has(clean) : !routes.has(clean)) add("dead-route", `${where} (${shown(value)})`);
+    else if (hash && !hash.startsWith("/") && !ids.has(id)) add("missing-anchor", `${where} (${shown(value)})`);
   };
   const checkImage = (tag: Tag, where: string) => {
     const src = tag.attrs.get("src");

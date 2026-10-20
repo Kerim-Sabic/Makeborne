@@ -1,12 +1,14 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Check, Copy, ExternalLink, Globe, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, Copy, ExternalLink, Globe, HelpCircle, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { cloudAccountGuard } from "./cloud-api";
 import type { DomainView } from "@/lib/hosting/custom-domain-view";
 import "@/app/website-domains.css";
 
 type State = { configured: boolean; target: string | null; published: boolean; live: boolean; domains: DomainView[] };
 const POLL_MS = 20_000, POLL_LIMIT_MS = 30 * 60_000;
+/** Chip tone: live, expected progress, stopped and needing the owner, or not recognised. */
+const tone = (domain: DomainView) => domain.status === "active" ? "active" : domain.inProgress ? "pending" : domain.phase === "unknown" ? "unknown" : "failed";
 
 const PROVIDERS: [string, string][] = [
   ["Cloudflare", "DNS → Records → Add record. Choose CNAME, enter the name and target, and set Proxy status to “DNS only” (grey cloud). Root domains work directly: Cloudflare flattens a CNAME at the root."],
@@ -49,8 +51,9 @@ export default function WebsiteDomains({ accountId, workspaceId, artifactId }: {
     finally { if (!quiet) setBusy(null); }
   }, [path, request]);
 
-  // While a domain is waiting, check quietly every 20 s for up to 30 minutes (only while the tab is visible).
-  const waiting = state?.domains.filter(domain => domain.status === "pending").map(domain => domain.id).join(",") ?? "";
+  // While a domain is expected to progress on its own, check quietly every 20 s for up to 30 minutes
+  // (only while the tab is visible). Stopped, expired or unrecognised states wait for the owner.
+  const waiting = state?.domains.filter(domain => domain.inProgress).map(domain => domain.id).join(",") ?? "";
   useEffect(() => {
     if (!waiting) return;
     if (!startedPolling.current) startedPolling.current = Date.now();
@@ -101,25 +104,29 @@ export default function WebsiteDomains({ accountId, workspaceId, artifactId }: {
         {!state.live && state.domains.length > 0 && <p className="wd-note">Your site isn&apos;t live right now. The domain will show it as soon as you publish.</p>}
       </>}
     {error && <p className="wd-error" role="alert">{error}</p>}
-    {state.domains.map(domain => <article key={domain.id} className="wd-domain" data-status={domain.status}>
+    {state.domains.map(domain => <article key={domain.id} className="wd-domain" data-status={domain.status} data-phase={domain.phase}>
       <header className="wd-domain-head">
         <strong>{domain.hostname}</strong>
-        <span className={`wd-chip is-${domain.status}`}>{domain.status === "active" ? <Check size={12} /> : domain.status === "pending" ? <Loader2 size={12} className="wd-spin" /> : null}{domain.label}</span>
+        <span className={`wd-chip is-${tone(domain)}`}>{tone(domain) === "active" ? <Check size={12} aria-hidden="true" /> : tone(domain) === "pending" ? <Loader2 size={12} className="wd-spin" aria-hidden="true" /> : tone(domain) === "unknown" ? <HelpCircle size={12} aria-hidden="true" /> : <AlertTriangle size={12} aria-hidden="true" />}{domain.label}</span>
         {domain.status === "active" && <a className="wd-open" href={domain.url} target="_blank" rel="noopener noreferrer">Open<ExternalLink size={12} /></a>}
       </header>
-      <p className="wd-detail">{domain.detail}</p>
+      <p className="wd-detail" id={`wd-detail-${domain.id}`}>{domain.detail}</p>
       {domain.error && domain.status !== "active" && <p className="wd-error">{domain.error}</p>}
       {domain.status !== "active" && domain.records.length > 0 && <div className="wd-records" role="table" aria-label={`DNS records for ${domain.hostname}`}>
         <div className="wd-row wd-row-head" role="row"><span role="columnheader">Type</span><span role="columnheader">Name</span><span role="columnheader">Value</span></div>
         {domain.records.map((record, index) => <div className="wd-row" role="row" key={index} title={record.purpose}>
           <span role="cell"><code>{record.type}</code></span>
-          <span role="cell" className="wd-copyable"><code>{record.name}</code><button type="button" onClick={() => void copy(record.name, `${domain.id}:${index}:n`)} aria-label={`Copy name ${record.name}`}>{copied === `${domain.id}:${index}:n` ? <Check size={12} /> : <Copy size={12} />}</button></span>
+          <span role="cell" className="wd-name">
+            <span className="wd-copyable"><code>{record.name}</code><button type="button" onClick={() => void copy(record.name, `${domain.id}:${index}:n`)} aria-label={`Copy name ${record.name}${record.zone ? ` (in the ${record.zone} zone)` : ""}`}>{copied === `${domain.id}:${index}:n` ? <Check size={12} /> : <Copy size={12} />}</button></span>
+            {record.fqdn && record.fqdn !== record.name && <span className="wd-copyable wd-fqdn"><small>Full name</small><code>{record.fqdn}</code><button type="button" onClick={() => void copy(record.fqdn!, `${domain.id}:${index}:f`)} aria-label={`Copy full name ${record.fqdn}`}>{copied === `${domain.id}:${index}:f` ? <Check size={12} /> : <Copy size={12} />}</button></span>}
+          </span>
           <span role="cell" className="wd-copyable"><code>{record.value}</code><button type="button" onClick={() => void copy(record.value, `${domain.id}:${index}:v`)} aria-label={`Copy value ${record.value}`}>{copied === `${domain.id}:${index}:v` ? <Check size={12} /> : <Copy size={12} />}</button></span>
         </div>)}
         <p className="wd-purpose">{domain.records[0].purpose}</p>
+        {domain.records[0].zone && <p className="wd-purpose wd-zone">The name is for the DNS zone <strong>{domain.records[0].zone}</strong>{domain.records[0].name === "@" ? " (@ means the zone itself)" : ""}. If your provider manages a different zone for this domain, or asks for the whole name, enter the full name <code>{domain.records[0].fqdn}</code> instead.</p>}
       </div>}
       <footer className="wd-actions">
-        {domain.status !== "active" && <button type="button" className="button secondary small" disabled={Boolean(busy)} onClick={() => void check(domain.id)}>{busy === `check:${domain.id}` ? <Loader2 size={14} className="wd-spin" /> : <RefreshCw size={14} />}Check now</button>}
+        {domain.status !== "active" && <button type="button" className="button secondary small" disabled={Boolean(busy)} onClick={() => void check(domain.id)} aria-describedby={`wd-detail-${domain.id}`}>{busy === `check:${domain.id}` ? <Loader2 size={14} className="wd-spin" /> : <RefreshCw size={14} />}Check now</button>}
         {domain.lastCheckedAt && <small>Checked {new Date(domain.lastCheckedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</small>}
         {confirm === domain.id
           ? <span className="wd-confirm" role="group" aria-label={`Confirm removing ${domain.hostname}`}><span>Disconnect {domain.hostname}?</span><button type="button" className="wd-danger" disabled={Boolean(busy)} onClick={() => void remove(domain.id)}>Disconnect</button><button type="button" className="wd-link" onClick={() => setConfirm(null)}>Keep</button></span>

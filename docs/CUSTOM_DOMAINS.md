@@ -63,7 +63,8 @@ Work through these steps in order. None of them has been done.
    - `CLOUDFLARE_SAAS_API_TOKEN`: an API token scoped to **that zone only**, with the single permission **Zone → SSL and Certificates → Edit**. That permission covers creating, reading and deleting custom hostnames. Do not use a global API key or an account-wide token. Store it only as an encrypted Vercel variable for the environment that needs it, and never put it in the repository or in Worker variables.
    - `MAKEBORNE_CUSTOM_DOMAIN_TARGET`: the CNAME target from step 2, for example `customers.makeborne.site`.
 5. **Customer DNS instructions shown by the app.**
-   - A subdomain such as `www` uses `CNAME www → customers.makeborne.site`.
+   - A subdomain such as `www` uses `CNAME www → customers.makeborne.site`. A nested hostname shows its whole zone-relative name and the exact full name (`shop.eu.example.com` → name `shop.eu` in the zone `example.com`, full name `shop.eu.example.com`); both can be copied. The zone is the registrable domain as far as the app can tell, so a customer with a delegated zone (for example `eu.example.com`) uses the full name.
+   - Certificate states are shown as they are: `validation_timed_out` and the other `*_timed_out` states, `expired`/`pending_expiration`, removed certificates and unrecognised values stop the progress spinner and polling and say what to do. "Check now" only re-reads the status; the app never restarts validation or recreates a hostname on its own. A provider error while checking returns 503 and leaves the stored row unchanged.
    - An apex domain needs a DNS provider that supports CNAME flattening or ALIAS records. Recommend `www` plus a registrar redirect from the apex.
    - Customers also add the ownership and certificate-validation records stored in `verification`. Cloudflare activates the hostname and issues the certificate only after those records validate.
 

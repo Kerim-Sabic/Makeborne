@@ -92,8 +92,43 @@ export function sitemapXml(origin: string, paths: readonly string[], lastModifie
 
 // ------------------------------------------------------------------ checklist
 
-export type SeoCheck = { id: string; level: "pass" | "warn" | "fail"; title: string; detail: string; path?: string };
+/** "info" is context, not a problem: it never stops the checklist from passing. */
+export type SeoCheck = { id: string; level: "pass" | "info" | "warn" | "fail"; title: string; detail: string; path?: string };
 export type SeoPage = { path: string; routeTitle?: string; html: string };
+
+/** How one rendered <img> is described to people who can't see it:
+ * informative (non-empty alt), decorative (alt="" or hidden from assistive
+ * technology), missing (no alt at all) or unassessed (the markup or its
+ * description looks unfinished, so the checker can't tell). */
+export type ImageAlt = "informative" | "decorative" | "missing" | "unassessed";
+/** Opening <img> tags, quote aware (a ">" inside an attribute value doesn't end the tag). */
+const IMAGE_TAG = /<img\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi;
+const ATTRIBUTE = /[\s/]*([^\s"'=<>/`]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?[\s/]*/y;
+export function imageAlt(tag: string): ImageAlt {
+  const body = /^<img\b([\s\S]*)>$/i.exec(tag)?.[1];
+  if (body === undefined) return "unassessed";
+  const attrs = new Map<string, string>();
+  ATTRIBUTE.lastIndex = 0;
+  let at = body.length - body.trimStart().length;
+  while (at < body.length) {
+    ATTRIBUTE.lastIndex = at;
+    const match = ATTRIBUTE.exec(body);
+    // Anything that isn't a well-formed attribute (a stray quote, template syntax) can't be read reliably.
+    if (!match || !match[0]) return "unassessed";
+    const name = match[1].toLowerCase();
+    if (!attrs.has(name)) attrs.set(name, decode(match[2] ?? match[3] ?? match[4] ?? ""));
+    at = ATTRIBUTE.lastIndex;
+  }
+  const alt = attrs.get("alt");
+  if (alt === undefined) return attrs.get("aria-hidden")?.trim().toLowerCase() === "true" || /^(?:presentation|none)$/i.test(attrs.get("role")?.trim() ?? "") ? "decorative" : "missing";
+  const text = alt.trim();
+  if (!text) return "decorative";
+  return /\{\{|\}\}|\$\{|^\{[\s\S]*\}$|^(?:undefined|null|NaN|\[object Object\])$/.test(text) ? "unassessed" : "informative";
+}
+
+/** Pages whose job is usually done in a few words: contact, booking, galleries, legal notices. */
+const SHORT_BY_DESIGN = /\b(?:contact|get in touch|find us|visit|location|directions|book(?:ing)?|reserv(?:e|ations?)|gallery|portfolio|photos|thank(?:s| you)|privacy|terms|legal|imprint|cookies)\b/i;
+const SHORT_PAGE_WORDS = 100;
 
 /** Plain-language checks before publishing; warnings never block publishing. */
 export function seoChecklist(input: { siteTitle: string; pages: SeoPage[]; seo?: SiteSeo; images?: readonly string[] }): SeoCheck[] {
@@ -103,22 +138,33 @@ export function seoChecklist(input: { siteTitle: string; pages: SeoPage[]; seo?:
     const meta = pageMeta({ path: page.path, routeTitle: page.routeTitle, siteTitle: input.siteTitle, html: page.html, seo: input.seo });
     titles.set(meta.title, [...(titles.get(meta.title) ?? []), page.path]);
     const where = page.path === "/" ? "the home page" : page.path, Where = page.path === "/" ? "The home page" : `The page ${page.path}`;
-    const h1 = headings(page.html, 1).length;
-    if (h1 !== 1) checks.push({ id: `h1:${page.path}`, level: "warn", path: page.path, title: h1 ? `${Where} has ${h1} main headings` : `${Where} has no main heading`, detail: "Each page should have exactly one main heading that says what it's about. Ask the builder to fix it." });
+    const h1Text = headings(page.html, 1), h1 = h1Text.length;
+    if (h1 !== 1) checks.push({ id: `h1:${page.path}`, level: "warn", path: page.path, title: h1 ? `${Where} has ${h1} main headings` : `${Where} has no main heading`, detail: "One clear main heading tells visitors, and people using screen readers, what the page is about. Ask the builder to fix it." });
     if (meta.description.length < 70) checks.push({ id: `description:${page.path}`, level: "warn", path: page.path, title: `${Where} needs a longer description`, detail: "Search results show about 150 characters under your link. Write one or two sentences about this page." });
-    const images = [...page.html.matchAll(/<img\b[^>]*>/gi)].map(match => match[0]);
-    const missingAlt = images.filter(tag => !/\balt\s*=\s*"[^"]+"/i.test(tag)).length;
-    if (missingAlt) checks.push({ id: `alt:${page.path}`, level: "warn", path: page.path, title: `${missingAlt} image${missingAlt === 1 ? "" : "s"} on ${where} ${missingAlt === 1 ? "has" : "have"} no description`, detail: "Image descriptions help Google Images and people using screen readers. Click the image in Edit mode to add one." });
+    const images = [...page.html.matchAll(IMAGE_TAG)].map(match => imageAlt(match[0]));
+    const count = (kind: ImageAlt) => images.filter(image => image === kind).length;
+    const imagesOn = (n: number) => `${n} image${n === 1 ? "" : "s"} on ${where}`, verb = (n: number, one: string, many: string) => n === 1 ? one : many;
+    const missingAlt = count("missing"), unassessedAlt = count("unassessed"), decorativeAlt = count("decorative");
+    if (missingAlt) checks.push({ id: `alt:${page.path}`, level: "warn", path: page.path, title: `${imagesOn(missingAlt)} ${verb(missingAlt, "has", "have")} no alt text`, detail: "Describe each image that shows something visitors need in a few words; screen readers read it out and Google Images uses it. If an image is only decoration, give it an empty description (alt=\"\") so screen readers skip it. Click the image in Edit mode to change it." });
+    if (unassessedAlt) checks.push({ id: `alt-unknown:${page.path}`, level: "warn", path: page.path, title: `${imagesOn(unassessedAlt)} couldn't be checked`, detail: "Their description looks like unfinished code (such as “undefined” or text in {braces}), so it isn't clear what screen readers will say. Check them in Edit mode." });
+    if (decorativeAlt) checks.push({ id: `alt-decorative:${page.path}`, level: "info", path: page.path, title: `${imagesOn(decorativeAlt)} ${verb(decorativeAlt, "is", "are")} marked decorative`, detail: "An empty description (alt=\"\") is right for ornaments, dividers and background pictures: screen readers skip them. If one shows something visitors need, such as a product or a menu, describe it instead." });
     const broken = [...new Set([...page.html.matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*)/gi)].map(match => match[1].replace(/\/$/, "") || "/").filter(path => !routes.has(path) && !/\.[a-z0-9]{2,5}$/i.test(path)))];
     if (broken.length) checks.push({ id: `links:${page.path}`, level: "fail", path: page.path, title: `${Where} links to ${broken.length === 1 ? "a page" : "pages"} that don't exist`, detail: `Fix or remove links to ${broken.slice(0, 3).join(", ")}${broken.length > 3 ? "…" : ""}.` });
     const words = plain(page.html.replace(/<(script|style|nav|footer)\b[\s\S]*?<\/\1>/gi, " ")).split(" ").filter(Boolean).length;
-    if (words < 150) checks.push({ id: `thin:${page.path}`, level: "warn", path: page.path, title: `${Where} has very little text`, detail: `About ${words} words. Pages with a few useful paragraphs rank better.` });
+    // An editorial hint, not a search rule: there is no word count to reach, and contact,
+    // booking or gallery pages often do their job in a few words, so they get no hint at all.
+    const shortByDesign = SHORT_BY_DESIGN.test(`${page.path.replace(/[/_-]+/g, " ")} ${page.routeTitle ?? ""} ${h1Text[0] ?? ""}`)
+      || /<(?:form|iframe)\b|\bhref=["'](?:tel|mailto):/i.test(page.html) || images.length >= 4;
+    if (words < SHORT_PAGE_WORDS && !shortByDesign) checks.push({ id: `thin:${page.path}`, level: "info", path: page.path, title: `${Where} has only a little text`, detail: `About ${words} words. That's fine if the page's job is simple. If people come here to learn about something, a few sentences in your own words about what you offer help them decide, and help search engines understand the page. There's no word count to reach.` });
     if (/\[[^\]]{2,40}\]/.test(plain(page.html))) checks.push({ id: `placeholder:${page.path}`, level: "fail", path: page.path, title: `${Where} still has placeholders`, detail: "Replace the text in [square brackets] with real details before publishing." });
   }
   for (const [title, paths] of titles) if (paths.length > 1) checks.push({ id: `duplicate:${title}`, level: "warn", title: "Some pages share the same title", detail: `${paths.join(", ")} are all called “${title}”. Give each page its own title.` });
   if (!input.seo?.business) checks.push({ id: "business", level: "warn", title: "Add your business details", detail: "Your address, phone and opening hours help you appear in Google's local results and on Maps." });
   else if (input.seo.business.type !== "Organization" && !(input.seo.business.street && input.seo.business.city)) checks.push({ id: "business-address", level: "warn", title: "Add your street address", detail: "Local results need a full address." });
   if (!input.seo?.shareImage && (input.images?.length ?? 0) > 0) checks.push({ id: "share-image", level: "warn", title: "Choose a share image", detail: "It appears when your link is shared on WhatsApp, Facebook or LinkedIn." });
-  if (!checks.length || checks.every(check => check.level === "pass")) checks.push({ id: "ready", level: "pass", title: "Ready for search", detail: "Every page has a title, a description and one main heading." });
+  if (input.pages.length && checks.every(check => check.level === "pass" || check.level === "info")) {
+    const scope = input.pages.length === 1 ? input.pages[0].path === "/" ? "The home page has" : `The page ${input.pages[0].path} has` : `All ${input.pages.length} checked pages have`;
+    checks.push({ id: "ready", level: "pass", title: "No problems found by these checks", detail: `${scope} a title, a description, one main heading, image descriptions (or images marked decorative), links to existing pages and no placeholders. Search engines decide what to show and how to rank it; these checks can't predict that.` });
+  }
   return checks;
 }
