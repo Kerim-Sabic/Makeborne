@@ -2724,6 +2724,11 @@
 /* Until its editor mounts (or if the link fails), an opening project's text sits where "Opening your workspace…" was, not in the corner. Padding, not margin, so the section itself never moves. */
 .account-projects.account-project-open > :is(h2, p, label, .button, .account-project-grid) { margin-left: 60px; margin-right: 60px; }
 .account-projects.account-project-open > :first-child:is(h2, p, label) { margin-top: 0; padding-top: 60px; }
+/* Loading and failed account loads are stated plainly instead of looking like an empty library. */
+.account-projects-checking { margin: 24px 0 30px; color: #687184; font-size: 13px; }
+.account-projects-error, .account-projects-failed { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.account-projects-error { margin-bottom: 16px; padding: 14px 16px; border: 1px solid #eedcc0; border-radius: 12px; background: #fff8eb; color: #725526; }
+.account-projects-error p, .account-projects-failed p { margin: 0; flex: 1 1 240px; font-size: 13px; line-height: 1.6; }
 .account-projects-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .account-projects-heading h2 { font-size: 20px; letter-spacing: -.5px; margin: 6px 0 0; }
 .account-project-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }

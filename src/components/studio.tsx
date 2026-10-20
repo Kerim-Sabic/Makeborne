@@ -47,7 +47,7 @@ import {
   type ProjectTask,
   type Workspace,
 } from "./studio-model";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
@@ -60,6 +60,7 @@ import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
 import { studioSkipTargets } from "@/lib/studio-skip-links";
+import { projectsWelcome, sameLibraryStatus, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
@@ -139,7 +140,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const [styleModal, setStyleModal] = useState(false);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [accountProjectCount, setAccountProjectCount] = useState<number | null>(null);
+  const [accountLibrary, setAccountLibrary] = useState<AccountLibraryStatus>({ state: "checking" });
+  // Keep the same object while nothing changed, so a re-render does not ripple through the page.
+  const reportAccountLibrary = useCallback((next: AccountLibraryStatus) => setAccountLibrary(current => sameLibraryStatus(current, next) ? current : next), []);
   const [notice, setNotice] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
   const [saveInvalid, setSaveInvalid] = useState(false);
@@ -800,8 +803,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   </label>
                 </div>
                 </>}
-                <AccountProjects search={search} filter={filter} target={accountRoute} onCount={setAccountProjectCount} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
-                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (accountProjectCount ? null : (
+                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
+                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (projectsWelcome(workspace.projects.length, accountLibrary) !== "welcome" ? null : (
                   <Empty
                     icon={FolderOpen}
                     title="Your projects will live here."
