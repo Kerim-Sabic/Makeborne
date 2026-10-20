@@ -11,7 +11,7 @@ const LABELS = { error: "Fix before sharing", warning: "Worth fixing", info: "Go
  * (and the prepared pages when they exist). No AI, no credits; never blocks.
  * A static read of the code, so a clean result is "nothing found by these
  * checks", and a check that can't finish never shows as clean. */
-export default function ClientReadyCheck({ source, pages }: { source: ClientReadyInput; pages?: ClientReadyInput["pages"] }) {
+export default function ClientReadyCheck({ source, pages, scope }: { source: ClientReadyInput; pages?: ClientReadyInput["pages"]; /** Which version was read, e.g. "Checked saved version 4". */ scope?: string }) {
   const result = useMemo((): { findings: ClientReadyFinding[] } | { failed: true } => {
     try { return { findings: clientReadyCheck({ ...source, pages }) }; }
     catch { return { failed: true }; }
@@ -24,6 +24,7 @@ export default function ClientReadyCheck({ source, pages }: { source: ClientRead
       <span className="client-ready-summary" data-state="error">Check couldn’t finish</span>
     </div>
     {intro}
+    {scope && <p className="client-ready-scope">{scope}{pages?.length ? " and its prepared pages" : ""}.</p>}
     <p className="client-ready-failed" role="status"><XCircle size={15} aria-hidden="true" />The check stopped on something in this website’s code, so it has no results. Nothing here means the site is ready: look through it yourself before sharing.</p>
   </section>;
   const { findings } = result;
@@ -37,6 +38,7 @@ export default function ClientReadyCheck({ source, pages }: { source: ClientRead
       <span className="client-ready-summary" data-state={summary.error ? "error" : summary.warning ? "warning" : "clean"}>{headline}</span>
     </div>
     {intro}
+    {scope && <p className="client-ready-scope">{scope}{pages?.length ? " and its prepared pages" : ""}.</p>}
     {findings.length === 0 ? <p className="client-ready-clean"><CheckCircle2 size={15} aria-hidden="true" />These checks found nothing to fix. Look through the site yourself too: layout, colours set in separate rules and how forms behave aren’t covered.</p>
       : <ul className="client-ready-list">{findings.map(finding => {
         const Icon = ICONS[finding.severity];

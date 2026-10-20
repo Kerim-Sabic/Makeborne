@@ -1751,7 +1751,7 @@ export function CloudEditor({
         </div>}
         {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
           capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} source={content.websiteSource} />
-          {role === "owner" && <WebsiteSeo key={`seo:${accountId}:${workspaceId}:${artifact.id}`} source={content.websiteSource!} siteTitle={content.title} seo={content.seo}
+          {role === "owner" && <WebsiteSeo key={`seo:${accountId}:${workspaceId}:${artifact.id}`} source={content.websiteSource!} siteTitle={content.title} seo={content.seo} version={expectedVersion} dirty={dirty}
             disabled={uncertainSave || conflict || !!recovery || Boolean(live)} scope={{ accountId, workspaceId, artifactId: artifact.id }}
             onChange={seo => { if (uncertainSave || conflict || recovery) return; editRevision.current++; setContent(current => current ? { ...current, seo } : current); setDirty(true); setNote("Updated search and sharing details"); }} />}
           {role === "owner" && <WebsiteAnalytics key={`analytics:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} />}
@@ -1878,6 +1878,7 @@ export function CloudEditor({
               <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />
               {role !== "reviewer" && inspectedVersion.number < expectedVersion && <>
                 <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
+                {artifact.kind === "website" && <p className="small-note">Restoring saves a new version in the editor. Your live website doesn&apos;t change until you publish again.</p>}
                 {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
               </>}
             </section>}

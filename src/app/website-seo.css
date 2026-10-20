@@ -47,3 +47,6 @@
 @keyframes ws-spin { to { transform:rotate(360deg); } }
 @media (max-width:560px) { .ws-grid { grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce) { .ws-spin { animation:none; } }
+.ws-checked { margin:8px 0 0; font-size:12px; color:#5b4d67; }
+.ws-checked[data-current="false"] { color:#7a5a12; font-weight:550; }
+.ws-results[data-stale] { opacity:.6; }

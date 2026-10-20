@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, Plus, Search, Trash2, XCirc
 import { BUSINESS_TYPES, SiteSeoSchema, pageMeta, seoChecklist, type SeoCheck, type SiteSeo } from "@/lib/hosting/seo";
 import type { WebsiteProjectSource } from "@/lib/projects/website-source";
 import { captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
+import { checkedFingerprint, checkedLabel, checkIsCurrent, type CheckedScope } from "@/lib/hosting/checked-version";
 import "@/app/website-seo.css";
 
 type Business = NonNullable<SiteSeo["business"]>;
@@ -22,13 +23,17 @@ function compact(seo: SiteSeo): SiteSeo {
   return (clean(seo) ?? {}) as SiteSeo;
 }
 
-export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, onChange }: {
-  source: WebsiteProjectSource; siteTitle: string; seo: SiteSeo | undefined; disabled: boolean;
+export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, version, dirty, onChange }: {
+  source: WebsiteProjectSource; siteTitle: string; seo: SiteSeo | undefined; disabled: boolean; version: number; dirty: boolean;
   scope: { accountId: string; workspaceId: string; artifactId: string }; onChange: (next: SiteSeo | undefined) => void;
 }) {
   const [draft, setDraft] = useState<SiteSeo>(seo ?? {});
   const [problem, setProblem] = useState("");
   const [checks, setChecks] = useState<SeoCheck[] | null>(null);
+  // The content these results describe; edits or saves after the check mark them out of date.
+  const [checked, setChecked] = useState<CheckedScope | null>(null);
+  const fingerprint = useMemo(() => checkedFingerprint(source, [siteTitle, compact(draft)]), [source, siteTitle, draft]);
+  const current = checkIsCurrent(checked, fingerprint, version, dirty);
   const [homeHtml, setHomeHtml] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const images = useMemo(() => source.assets.map(asset => `/${asset.path.replace(/^public\//, "")}`), [source.assets]);
@@ -53,6 +58,7 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, on
 
   async function runChecks() {
     setChecking(true);
+    const scopeAtStart: CheckedScope = { fingerprint, version, dirty };
     try {
       const html = await captureProjectSnapshot(source, scope);
       setHomeHtml(html);
@@ -62,8 +68,8 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, on
       if (new Set(titles).size < titles.length) results.push({ id: "duplicate-titles", level: "warn", title: "Some pages share the same title", detail: "Give each page its own title below." });
       const others = source.routes.filter(route => route.path !== "/").length;
       if (others) results.push({ id: "other-pages", level: "info", title: `${others === 1 ? "1 other page was" : `${others} other pages were`} checked for titles only`, detail: "Their text, images and links aren't checked here. Open them in the preview to look them over before you share the site." });
-      setChecks(results);
-    } catch (cause) { setChecks([{ id: "error", level: "fail", title: "The site couldn't be checked", detail: cause instanceof Error ? cause.message : "Try again in a moment." }]); }
+      setChecks(results); setChecked(scopeAtStart);
+    } catch (cause) { setChecked(scopeAtStart); setChecks([{ id: "error", level: "fail", title: "The site couldn't be checked", detail: cause instanceof Error ? cause.message : "Try again in a moment." }]); }
     finally { setChecking(false); }
   }
 
@@ -128,7 +134,8 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, on
     </fieldset>
     <div className="ws-check">
       <button type="button" className="button secondary small" disabled={checking} onClick={() => void runChecks()}>{checking ? <Loader2 size={14} className="ws-spin" /> : <Search size={14} />}Check my site</button>
-      {checks && <ul className="ws-results" aria-label="Search checklist">{checks.map(check => <li key={check.id} data-level={check.level}>
+      {checks && checked && <p className="ws-checked" role="status" data-current={current}>{checkedLabel(checked)}{current ? "." : ". Your site changed after this check, so these results may be out of date. Check again."}</p>}
+      {checks && <ul className="ws-results" aria-label="Search checklist" data-stale={!current || undefined}>{checks.map(check => <li key={check.id} data-level={check.level}>
         {check.level === "pass" ? <CheckCircle2 size={15} aria-hidden="true" /> : check.level === "fail" ? <XCircle size={15} aria-hidden="true" /> : check.level === "info" ? <Info size={15} aria-hidden="true" /> : <AlertTriangle size={15} aria-hidden="true" />}
         <div><strong>{check.title}</strong><span>{check.detail}</span></div>
       </li>)}</ul>}
