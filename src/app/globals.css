@@ -11,6 +11,17 @@
   --blue-hover: #2845aa;
   --serif: var(--font-serif), Georgia, serif;
   --sans: var(--font-inter), Arial, sans-serif;
+  /* App type scale. Text people type into is at least --type-input, and --type-input-touch
+     (16px) on phones so iOS Safari does not zoom the page when the field is focused. */
+  --type-caption: 12px;
+  --type-control: 14px;
+  --type-body: 15px;
+  --type-input: 15px;
+  --type-input-touch: 16px;
+  /* Status text colours: one shade per meaning instead of a per-component red, green or amber. */
+  --state-error: #9a2f2a;
+  --state-success: #1f6b45;
+  --state-warning: #7a5a2e;
 }
 * {
   box-sizing: border-box;
