@@ -9,6 +9,8 @@ function ownedByAccount(storage: KeyedStorage, key: string, accountId: string) {
     `makeborne.project-conversation.v1:${accountId}:`,
   ].some((prefix) => key.startsWith(prefix))) return true;
   if (key.startsWith("makeborne.wizard-draft.") && key.includes(`.account.${accountId}.`)) return true;
+  // Unsent composer briefs: makeborne.unsent-draft.v1.<surface>.account.<id>
+  if (key.startsWith("makeborne.unsent-draft.") && key.endsWith(`.account.${accountId.toLowerCase()}`)) return true;
   if (!key.startsWith("makeborne.pending-write.")) return false;
   try {
     const saved: unknown = JSON.parse(storage.getItem(key) ?? "null");

@@ -10,6 +10,8 @@ import StudioAccount from "./studio-account";
 import BuildConversation from "./build-conversation";
 import { AttachmentList, useFileAttachments } from "./file-attachments";
 import ComposerControls from "./composer-controls";
+import { useUnsentDraft } from "./use-unsent-draft";
+import UnsentDraftNotice from "./unsent-draft-notice";
 import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
@@ -133,6 +135,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const immediateWebsite=draftKind==="website"&&creationMode==="create"&&composerPermissions.enabled;
   const [homeHandoff, setHomeHandoff] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // False until the opening URL is understood, so a home handoff or create link is never overwritten by an unsent draft.
+  const [routeSettled, setRouteSettled] = useState(false);
   const [tab, setTab] = useState(initialTab);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState<Kind | null>(null);
@@ -152,6 +156,15 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const importRef = useRef<HTMLInputElement>(null);
   const navigationPanel = useRef<HTMLElement>(null);
   const navigationToggle = useRef<HTMLButtonElement>(null);
+  // The Projects composer keeps its unsent brief and settings across reloads for this account only.
+  const unsentBrief = useUnsentDraft({
+    surface: "studio",
+    account: composerAccount.accountId ? { accountId: composerAccount.accountId } : composerAccount.ready ? { accountId: null } : null,
+    enabled: loaded && routeSettled && !creating && !directStart,
+    fields: { kind: draftKind, mode: creationMode, effort: creationEffort, text: draftBrief },
+    defaults: { kind: "website", mode: "create", effort: DEFAULT_EFFORT, text: "" },
+    apply: next => { setDraftKind(next.kind); setCreationMode(next.mode); setCreationEffort(next.effort); setDraftBrief(next.text); },
+  });
   function startStudioPrompt() {
     if(!draftBrief.trim()||!composerAccount.ready||!composerAccount.accountId||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent)return;
     const requestId=crypto.randomUUID(),owner=attachmentOwner(composerAccount.accountId);
@@ -162,6 +175,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       sessionStorage.setItem("makeborne.creation-draft.v1",JSON.stringify(draft));
       const url=new URL(window.location.href);url.search="";url.searchParams.set("create",draftKind);url.searchParams.set("from","home");
       window.history.pushState(window.history.state,"",url);
+      unsentBrief.submitted();
     } catch {setNotice("This browser could not preserve your prompt. Keep a copy and free browser storage before creating.");return;}
     setDirectStart(true);setCreationRequestId(requestId);setInitialBrief(draft.brief);setInitialTitle(`Untitled ${draftKind}`);
     setInitialStyle(AUTOMATIC_STYLE.id);setInitialClient("");setInitialWorkspaceId(null);setInitialAttachmentOwner(owner);
@@ -302,11 +316,13 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           setNotice(
             error instanceof Error ? error.message : "The saved creation brief could not be read. Continue from your original browser or start a new project.",
           );
+          setRouteSettled(true);
           return;
         }
       }
       if (kind === "book" || kind === "website" || kind === "presentation")
         setCreating(kind);
+      setRouteSettled(true);
     });
   }, []);
   const restoreHistory = useEffectEvent(() => {
@@ -740,6 +756,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                 <div className="composer-note">
                   {immediateWebsite?"Your website request starts after your brief is saved.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
                 </div>
+                <UnsentDraftNotice restoredAt={unsentBrief.restoredAt} storageRefused={unsentBrief.storageRefused} onDiscard={unsentBrief.discard} />
                 <div
                   className="brief-suggestions"
                   aria-label="Brief suggestions"
