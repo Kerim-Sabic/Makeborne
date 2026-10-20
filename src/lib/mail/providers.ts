@@ -1,12 +1,13 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { buildMime, replySubject } from "./compose";
-import { GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE, googleMailMode, parseGrantedScopes, type MailProvider } from "./config";
+import { GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE, MICROSOFT_READWRITE_SCOPE, MICROSOFT_SEND_SCOPE, googleMailMode, hasMicrosoftScope, microsoftMailMode, parseGrantedScopes, type MailProvider } from "./config";
 
 /** Network access is injected so the engine can be tested without real mailboxes. */
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 export type TokenSet = { accessToken: string; refreshToken?: string; expiresAt: Date; grantedScopes?: string[] };
-export type SentMessage = { providerMessageId: string; threadId: string; rfcMessageId: string | null };
+/** Ids are null when the provider returns none (Outlook send-only: /me/sendMail answers 202 with no body). */
+export type SentMessage = { providerMessageId: string | null; threadId: string | null; rfcMessageId: string | null };
 export type InboundMessage = { providerMessageId: string; threadId: string; from: string; subject: string; snippet: string; receivedAt: Date };
 export type OutgoingEmail = { from: string; fromName: string; to: string; toName: string; subject: string; text: string;
   /** Reply in this thread when present. */ replyTo?: { threadId: string; rfcMessageId: string | null; subject: string } | null };
@@ -48,7 +49,8 @@ export type ProviderClient = {
 };
 
 const googleScopes = () => ["openid", "email", "profile", GMAIL_SEND_SCOPE, ...(googleMailMode() === "full" ? [GMAIL_READ_SCOPE] : [])];
-const MICROSOFT_SCOPES = ["openid", "email", "profile", "offline_access", "User.Read", "Mail.Send", "Mail.ReadWrite"];
+/** Send-only asks for sending and identity only; full mode adds the mailbox access reply tracking uses. */
+export const microsoftScopes = () => ["openid", "email", "profile", "offline_access", "User.Read", MICROSOFT_SEND_SCOPE, ...(microsoftMailMode() === "full" ? [MICROSOFT_READWRITE_SCOPE] : [])];
 const sameAddress = (header: string, self: string) => header.toLowerCase().includes(self.toLowerCase());
 const addressIn = (header: string) => /<([^>]+)>/.exec(header)?.[1] ?? header.trim();
 
@@ -100,22 +102,27 @@ export function googleClient(fetcher: Fetch = fetch, options: { allowRead?: bool
   };
 }
 
-export function microsoftClient(fetcher: Fetch = fetch): ProviderClient {
+export function microsoftClient(fetcher: Fetch = fetch, options: { allowRead?: boolean } = {}): ProviderClient {
   const authority = "https://login.microsoftonline.com/common/oauth2/v2.0";
   const graph = "https://graph.microsoft.com/v1.0";
+  // Mailbox reads and drafts only when the server mode and this mailbox's recorded grant both allow them.
+  const readWrite = () => microsoftMailMode() === "full" && options.allowRead === true;
   const token = async (values: Record<string, string>) => {
-    const result = await json<{ access_token: string; refresh_token?: string; expires_in: number }>(await guarded(fetcher, `${authority}/token`,
-      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form({ ...values, scope: MICROSOFT_SCOPES.join(" ") }) }, "other"), "other");
-    return { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + (result.expires_in - 60) * 1000) };
+    const result = await json<{ access_token: string; refresh_token?: string; expires_in: number; scope?: string }>(await guarded(fetcher, `${authority}/token`,
+      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form({ ...values, scope: microsoftScopes().join(" ") }) }, "other"), "other");
+    if (result.scope !== undefined && typeof result.scope !== "string") throw new Error("The provider returned invalid mailbox permissions.");
+    return { accessToken: result.access_token, refreshToken: result.refresh_token, expiresAt: new Date(Date.now() + (result.expires_in - 60) * 1000),
+      ...(result.scope === undefined ? {} : { grantedScopes: parseGrantedScopes(result.scope) }) };
   };
   const api = (accessToken: string) => ({ Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" });
   type GraphMessage = { id: string; conversationId: string; internetMessageId?: string; subject?: string; bodyPreview?: string; receivedDateTime?: string; from?: { emailAddress?: { address?: string } } };
   return {
     authUrl: ({ clientId, redirectUri, state, loginHint }) => `${authority}/authorize?${new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: "code",
-      response_mode: "query", scope: MICROSOFT_SCOPES.join(" "), state, prompt: "select_account", ...(loginHint ? { login_hint: loginHint } : {}) })}`,
+      response_mode: "query", scope: microsoftScopes().join(" "), state, prompt: "select_account", ...(loginHint ? { login_hint: loginHint } : {}) })}`,
     async exchange({ clientId, clientSecret, redirectUri, code }) {
       const result = await token({ client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, code, grant_type: "authorization_code" });
       if (!result.refreshToken) throw new MailAuthError("Microsoft did not grant offline access. Connect again and accept all permissions.");
+      if (!result.grantedScopes || !hasMicrosoftScope(result.grantedScopes, MICROSOFT_SEND_SCOPE)) throw new MailAuthError("Microsoft did not confirm permission to send email. Connect again and accept the permissions.");
       return { ...result, refreshToken: result.refreshToken };
     },
     refresh: ({ clientId, clientSecret, refreshToken }) => token({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: "refresh_token" })
@@ -126,6 +133,13 @@ export function microsoftClient(fetcher: Fetch = fetch): ProviderClient {
     },
     async send(accessToken, email) {
       const body = { contentType: "Text", content: email.text };
+      if (!readWrite()) {
+        // Send-only (Mail.Send): one call, no draft and no mailbox reads. Graph returns no ids, so the
+        // message cannot be threaded or tracked; a follow-up goes out as a new "Re:" email.
+        await json(await guarded(fetcher, `${graph}/me/sendMail`, { method: "POST", headers: api(accessToken), body: JSON.stringify({ saveToSentItems: true, message: {
+          subject: email.replyTo ? replySubject(email.replyTo.subject) : email.subject, body, toRecipients: [{ emailAddress: { address: email.to, name: email.toName } }] } }) }, "send"), "send");
+        return { providerMessageId: null, threadId: null, rfcMessageId: null };
+      }
       let draft: GraphMessage;
       if (email.replyTo?.rfcMessageId) {
         // Reply in the thread: find the sent message by its Internet Message-ID, then reply to it.
@@ -144,6 +158,7 @@ export function microsoftClient(fetcher: Fetch = fetch): ProviderClient {
       return { providerMessageId: draft.id, threadId: draft.conversationId, rfcMessageId: draft.internetMessageId ?? null };
     },
     async replies(accessToken, threadId, self) {
+      if (!readWrite()) throw new Error("Reply tracking is unavailable for this Outlook connection.");
       const list = await json<{ value: GraphMessage[] }>(await guarded(fetcher, `${graph}/me/messages?$filter=${encodeURIComponent(`conversationId eq '${threadId.replace(/'/g, "''")}'`)}&$select=id,conversationId,subject,bodyPreview,receivedDateTime,from&$top=50`,
         { headers: api(accessToken) }, "other"), "other");
       return list.value.flatMap(message => {
@@ -155,4 +170,4 @@ export function microsoftClient(fetcher: Fetch = fetch): ProviderClient {
   };
 }
 
-export const providerClient = (provider: MailProvider, fetcher?: Fetch, options?: { allowRead?: boolean }) => provider === "google" ? googleClient(fetcher, options) : microsoftClient(fetcher);
+export const providerClient = (provider: MailProvider, fetcher?: Fetch, options?: { allowRead?: boolean }) => provider === "google" ? googleClient(fetcher, options) : microsoftClient(fetcher, options);

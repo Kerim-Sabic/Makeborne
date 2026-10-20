@@ -1,5 +1,5 @@
 import { cloudError, cloudJson, databaseError } from "@/lib/cloud/server";
-import { automationEnabled, googleMailMode, mailAvailability, mailCapabilities } from "@/lib/mail/config";
+import { automationEnabled, googleMailMode, mailAvailability, mailCapabilities, microsoftMailMode } from "@/lib/mail/config";
 import { dailyQuota, utcDayStart } from "@/lib/mail/throttle";
 import { mailContext } from "@/lib/mail/server";
 
@@ -28,7 +28,7 @@ export async function GET(_request: Request, context: Context) {
     databaseError(names.error);
     const nameOf = new Map((names.data ?? []).map(row => [row.id, row.name]));
     return cloudJson({
-      availability: mailAvailability(), automation: automationEnabled(), googleMode: googleMailMode(),
+      availability: mailAvailability(), automation: automationEnabled(), googleMode: googleMailMode(), microsoftMode: microsoftMailMode(),
       accounts: (accounts.data ?? []).map(account => ({ id: account.id, provider: account.provider, email: account.email, displayName: account.display_name, status: account.status,
         lastError: account.last_error, mine: account.user_id === user.id, dailyLimit: account.daily_limit, lastSyncedAt: account.last_synced_at, ...mailCapabilities(account),
         todayQuota: dailyQuota(new Date(account.warmup_started_at), account.daily_limit, new Date()), sentToday: sends.get(account.id) ?? 0 })),

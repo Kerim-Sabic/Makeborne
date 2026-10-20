@@ -74,6 +74,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
     </header>
     {(justConnected || message) && <p className="mc-message" role="status">{justConnected && !message ? connectedMessage(justConnected, overview, loadFailed) : message}</p>}
     {overview.googleMode === "send_only" && <p className="mc-note">Gmail sends only: read replies in Gmail and update client stages yourself. Gmail reply tracking and automatic sequences are unavailable.</p>}
+    {overview.microsoftMode === "send_only" && overview.availability.microsoft && <p className="mc-note">Outlook sends only: Makeborne asks Microsoft for permission to send, not to read your mailbox. Read replies in Outlook and update client stages yourself; Outlook reply tracking and automatic sequences are unavailable.</p>}
     {!overview.automation && canCheck && <p className="mc-note"><AlertTriangle size={14} /> For mailboxes with reply tracking, automatic sending runs once the schedule is enabled. Until then, <strong>Check now</strong> sends due emails and checks replies.</p>}
 
     <div className="mc-grid">
