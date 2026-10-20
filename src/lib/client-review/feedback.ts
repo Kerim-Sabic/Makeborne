@@ -2,6 +2,16 @@ import type { ReviewAnchor } from "./contracts";
 
 type Feedback = { authorName: string; body: string; anchor: ReviewAnchor; kind?: string; version?: number };
 
+/** Review links are bearer links: whoever holds one can comment or decide and types
+ * their own name. Nothing records an account, so the studio never presents a
+ * reviewer's name, approval or request as verified identity, and a client decision
+ * is a delivery record only: it neither resolves feedback nor publishes. */
+export const REVIEW_IDENTITY_NOTE = "Name as typed on the review link, not a verified account. Approval doesn't publish.";
+export function reviewDecisionLabel(decision: "approved" | "changes_requested", name: string | null) {
+  const who = name?.trim() ? `“${name.trim()}”` : "the link holder";
+  return `${decision === "approved" ? "Approved" : "Changes requested"} by ${who} (unverified)`;
+}
+
 /** Short human label for where a comment was left. */
 export function anchorLabel(anchor: ReviewAnchor, kind: "website" | "book" | "presentation") {
   if (anchor.kind === "general") return "General";

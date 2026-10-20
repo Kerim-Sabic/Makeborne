@@ -3,6 +3,7 @@
  * sandboxed iframe that cannot reach Makeborne cookies, storage or APIs. */
 import { FONT_IMPORT, FONTS_BY_ID, detectFonts, fontFaceRule, fontFileName, fontSubsets, type FontEntry } from "./fonts";
 import { LUCIDE, LUCIDE_CORE, lucideIconFile, lucideImports, unknownLucideIcons } from "./icons";
+import { PREVIEW_START_MARKER } from "./preview-route";
 
 type Esbuild = typeof import("esbuild-wasm");
 type Loader = import("esbuild-wasm").Loader;
@@ -23,11 +24,13 @@ const VENDOR: Record<string, string> = {
 const LOADERS: Record<string, Loader> = { tsx: "tsx", ts: "ts", jsx: "jsx", js: "js", mjs: "js", css: "css", json: "json", svg: "dataurl", txt: "text", md: "text" };
 const extension = (path: string) => path.slice(path.lastIndexOf(".") + 1).toLowerCase();
 const vendorCache = new Map<string, Promise<string>>();
+const RUNTIME_UNAVAILABLE = "Runtime file unavailable";
 const vendorSource = (url: string) => {
-  if (!vendorCache.has(url)) vendorCache.set(url, fetch(url, { cache: "force-cache" }).then(response => {
-    if (!response.ok) throw new Error(`Runtime file unavailable: ${url}`);
+  // A failed fetch is not cached: Try again must reach the network again.
+  if (!vendorCache.has(url)) vendorCache.set(url, fetch(url, { cache: "force-cache" }).catch(() => { throw new Error(`${RUNTIME_UNAVAILABLE}: ${url}`); }).then(response => {
+    if (!response.ok) throw new Error(`${RUNTIME_UNAVAILABLE}: ${url}`);
     return response.text();
-  }));
+  }).catch(error => { vendorCache.delete(url); throw error; }));
   return vendorCache.get(url)!;
 };
 
@@ -100,7 +103,10 @@ function resolveRelative(files: Map<string, string>, importer: string, specifier
   return null;
 }
 
-export type BundleResult = { ok: true; html: string } | { ok: false; error: string };
+/** "transport": the preview runtime could not be fetched or started (try the
+ * same saved files again); "code": the project itself needs a change. */
+export type BundleFailure = { ok: false; error: string; kind: "code" | "transport" };
+export type BundleResult = { ok: true; html: string } | BundleFailure;
 
 /** Escape text so it can sit inside an inline <script> element. */
 const scriptSafe = (code: string) => code.replace(/<\/(script)/gi, "<\\/$1").replace(/<!--/g, "<\\!--");
@@ -112,6 +118,10 @@ const scriptSafe = (code: string) => code.replace(/<\/(script)/gi, "<\\/$1").rep
  * computed style instead of letting the click reach the site. */
 const PREVIEW_SHIM = `<script>(function(){
 var post=function(m){try{parent.postMessage(Object.assign({source:"makeborne-preview"},m),"*")}catch(e){}};
+var START=${PREVIEW_START_MARKER},own=false,rawReplace=history.replaceState;
+// A srcdoc document resolves "#x" against the editor URL: fragments are applied to its own URL instead.
+var at=function(u){return typeof u==="string"&&u.charAt(0)==="#"?location.href.split("#")[0]+u:u};
+try{if(START&&typeof START.hash==="string"&&START.hash&&location.hash!==START.hash)rawReplace.call(history,null,"",at(START.hash))}catch(e){}
 addEventListener("error",function(e){post({type:"runtime-error",message:String(e.message||e.error||"Script error"),stack:e.error&&e.error.stack?String(e.error.stack).slice(0,2000):""})});
 addEventListener("unhandledrejection",function(e){post({type:"runtime-error",message:"Unhandled promise rejection: "+String(e.reason&&e.reason.message||e.reason)})});
 var LOC="data-mb-loc",editing=false,hover=null,box=null,chosen=null,scrollWait=0;
@@ -137,13 +147,51 @@ if(d.y)scrollTo(0,d.y);if(el)select(el);else if(d.loc)post({type:"deselect"})})(
 else if(d.type==="select-parent"&&chosen){var p=within(chosen.parentElement);if(p)select(p)}
 else if(d.type==="deselect")clear()});
 document.addEventListener("click",function(e){if(editing)return;var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a)return;var h=a.getAttribute("href")||"";
-if(h.charAt(0)==="#"){e.preventDefault();if(h.length>1){location.hash=h;var t=document.getElementById(decodeURIComponent(h.slice(1)));if(t)t.scrollIntoView({behavior:"smooth"});}else{scrollTo({top:0,behavior:"smooth"});}}
+if(h.charAt(0)==="#"){e.preventDefault();if(h.length>1){go(h,"push");var t=document.getElementById(decodeURIComponent(h.slice(1)));if(t)t.scrollIntoView({behavior:"smooth"});}else{scrollTo({top:0,behavior:"smooth"});}}
 else if(h.charAt(0)==="/"||h.indexOf("about:")===0){e.preventDefault();post({type:"navigation-blocked",href:h});}
 else if(!a.target){a.target="_blank";a.rel="noopener noreferrer";}},true);
 addEventListener("message",function(e){if(e.source!==parent||!e.data||e.data.source!=="makeborne-host"||e.data.type!=="snapshot")return;
 var h=document.documentElement.scrollHeight,y=0;(function step(){scrollTo(0,y);y+=Math.max(300,innerHeight*.6);if(y<h+innerHeight){setTimeout(step,60);return;}
 scrollTo(0,0);setTimeout(function(){var c=document.documentElement.cloneNode(true);c.querySelectorAll("script,noscript,template,iframe,object,embed").forEach(function(n){n.remove()});
 c.classList.remove("js");post({type:"snapshot",html:"<!doctype html>"+c.outerHTML});},900);})();});
+var scrolls={},drafts={},restoring=false,pending="",reportWait=0;
+function settle(test,delay){var tries=0;setTimeout(function again(){var done=false;try{done=test()}catch(e){done=true}if(!done&&tries++<40)setTimeout(again,75)},delay||0)}
+function focusOf(el){if(!el||el===document.body||el===document.documentElement)return"";var s=el.tagName.toLowerCase();if(el.id)s+="#"+el.id;else if(el.getAttribute("name"))s+="[name="+el.getAttribute("name")+"]";return s.slice(0,80)}
+function report(kind){if(!/^(push|native|replace)$/.test(pending))pending=kind;clearTimeout(reportWait);reportWait=setTimeout(function(){var k=pending;pending="";
+post({type:"location",kind:k,hash:location.hash.slice(0,400),title:String(document.title||"").slice(0,200),y:Math.max(0,Math.round(scrollY)),focus:focusOf(document.activeElement)})},kind==="scroll"?150:40)}
+function toTarget(id){var el=document.getElementById(id);if(!el)return false;el.scrollIntoView({block:"start",behavior:"instant"});report("target");return true}
+function draftable(el){if(!el||!el.tagName)return false;var t=el.tagName;if(t!=="INPUT"&&t!=="TEXTAREA"&&t!=="SELECT")return false;return !/^(password|hidden|file|submit|button|reset|image)$/i.test(el.type||"")&&!!(el.name||el.id)}
+function fieldKey(el){return(el.form?Array.prototype.indexOf.call(document.forms,el.form):-1)+":"+(el.name||el.id)}
+function remember(e){var el=e.target;if(restoring||!draftable(el))return;var page=drafts[location.hash]||(drafts[location.hash]={}),key=fieldKey(el);if(!(key in page)&&Object.keys(page).length>=60)return;
+page[key]=/^(checkbox|radio)$/i.test(el.type)?(el.checked?"1:":"0:")+el.value:String(el.value).slice(0,5000)}
+function initial(el){if(el.tagName!=="SELECT")return el.defaultValue;var o=Array.prototype.filter.call(el.options,function(x){return x.defaultSelected})[0]||el.options[0];return o?o.value:""}
+function setValue(el,value){var proto=el.tagName==="TEXTAREA"?HTMLTextAreaElement.prototype:el.tagName==="SELECT"?HTMLSelectElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,"value").set.call(el,value);
+el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}))}
+function restoreDrafts(){var page=drafts[location.hash];if(!page)return true;var fields=document.querySelectorAll("input,textarea,select"),found=0;if(!fields.length)return false;restoring=true;
+try{Array.prototype.forEach.call(fields,function(el){if(!draftable(el))return;var v=page[fieldKey(el)];if(v===undefined)return;
+if(/^checkbox$/i.test(el.type)){if(el.checked!==(v.charAt(0)==="1")){el.click();found++}return}
+if(/^radio$/i.test(el.type)){if(v.charAt(0)==="1"&&v.slice(2)===el.value&&!el.checked){el.click();found++}return}
+if(el.value===v||(el.value&&el.value!==initial(el)))return;setValue(el,v);found++})}finally{restoring=false}
+if(found)post({type:"form-draft",restored:found});return true}
+function restoreY(y){if(y>0&&document.documentElement.scrollHeight<y+innerHeight)return false;scrollTo(0,y);return true}
+function arrived(){var y=scrolls[location.hash];settle(function(){restoreDrafts();return typeof y==="number"?restoreY(y):true},60)}
+function go(h,kind){var old=location.href;if(location.hash!==h){rawReplace.call(history,history.state,"",at(h));own=true;try{dispatchEvent(new PopStateEvent("popstate",{state:history.state}))}finally{own=false}
+try{dispatchEvent(new HashChangeEvent("hashchange",{oldURL:old,newURL:location.href}))}catch(e){}}report(kind)}
+document.addEventListener("input",remember,true);document.addEventListener("change",remember,true);
+document.addEventListener("submit",function(e){if(editing)return;var form=e.target,page=drafts[location.hash];if(page&&form&&form.elements)Array.prototype.forEach.call(form.elements,function(el){if(draftable(el))delete page[fieldKey(el)]});post({type:"form-blocked"})},true);
+addEventListener("securitypolicyviolation",function(e){if(/connect-src|form-action/.test(e.effectiveDirective||e.violatedDirective||""))post({type:"request-blocked",directive:String(e.effectiveDirective||e.violatedDirective).slice(0,40)})});
+history.pushState=function(state,title,url){rawReplace.call(history,state,title,at(url));report("push")};
+history.replaceState=function(state,title,url){var result=rawReplace.call(history,state,title,at(url));report("replace");return result};
+addEventListener("popstate",function(){if(own){settle(restoreDrafts,60);return}arrived();report("native")});
+addEventListener("hashchange",function(){report("hash")});
+addEventListener("scroll",function(){scrolls[location.hash]=scrollY;report("scroll")},{passive:true});
+document.addEventListener("focusin",function(){report("focus")});
+try{new MutationObserver(function(){report("title")}).observe(document.head||document.documentElement,{subtree:true,childList:true,characterData:true})}catch(e){}
+addEventListener("message",function(e){if(e.source!==parent||!e.data||e.data.source!=="makeborne-host"||e.data.type!=="navigate"||typeof e.data.hash!=="string")return;
+var target=typeof e.data.target==="string"?e.data.target.slice(0,200):"",replace=e.data.mode==="replace",y=Number(e.data.y);go(e.data.hash.slice(0,400),replace?"replace":"push");
+settle(function(){if(target)return toTarget(target);if(replace&&isFinite(y)&&y>0)return restoreY(Math.round(y));scrollTo(0,0);return true},60)});
+addEventListener("load",function(){report("load");settle(function(){var text=document.body?document.body.innerText.trim().length:0;if(!text)return false;post({type:"rendered",text:text});return true},0);
+if(START)settle(function(){if(START.target)return toTarget(START.target);if(!START.y)return true;if(document.documentElement.scrollHeight<START.y+innerHeight)return false;scrollTo(0,START.y);return true},0)});
 post({type:"ready"});})();</script>`;
 
 /** Design-review capture runtime (only in "capture" bundles, after the
@@ -177,7 +225,7 @@ addEventListener("message",function(e){if(e.source!==parent||!e.data||e.data.sou
 if(typeof modernScreenshot==="undefined"){post({type:"capture-error",message:"capture runtime missing"});return}
 capture(e.data).catch(function(err){post({type:"capture-error",message:String(err&&err.message||err).slice(0,300)})})});})();</script>`;
 
-type CompileResult = { ok: true; js: string; css: string } | { ok: false; error: string };
+type CompileResult = { ok: true; js: string; css: string } | BundleFailure;
 
 /** Compile src/main.tsx with React inlined from the same-origin runtime.
  * Preview keeps readable output; publish minifies. Neither includes the shim.
@@ -190,7 +238,7 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
     const normalized = path.replace(/^\//, "");
     if (!normalized || normalized.split("/").some(part => !part || part === "." || part === "..") || files.has(normalized)
       || url.length > 12_000_000 || !/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(url)) {
-      return { ok: false, error: "Project artwork must have a unique project path and a supported embedded raster image." };
+      return { ok: false, error: "Project artwork must have a unique project path and a supported embedded raster image.", kind: "code" };
     }
     artwork.set(normalized, url);
     // Resolution shares the project's path rules; image bytes remain separate
@@ -198,17 +246,17 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
     files.set(normalized, "");
   }
   const importedFonts = new Set<string>();
-  if (!files.has("src/main.tsx")) return { ok: false, error: "The project has no src/main.tsx entry yet." };
+  if (!files.has("src/main.tsx")) return { ok: false, error: "The project has no src/main.tsx entry yet.", kind: "code" };
   const origin = typeof location === "undefined" ? "" : location.origin;
   let build: Esbuild;
   // The JSX parser for click-to-edit loads only for inspect builds.
   let instrument: ((path: string, code: string) => string) | null = null;
   if (inspect && mode === "preview") {
     try { instrument = (await import("./visual-edit")).instrumentSource; }
-    catch { return { ok: false, error: "Click-to-edit could not start in this browser." }; }
+    catch { return { ok: false, error: "Click-to-edit could not start in this browser.", kind: "transport" }; }
   }
   try { build = await esbuild(); }
-  catch { return { ok: false, error: "The preview engine could not start in this browser." }; }
+  catch { return { ok: false, error: "The preview engine could not start in this browser.", kind: "transport" }; }
   let result;
   try {
     result = await build.build({
@@ -271,7 +319,8 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
   } catch (error) {
     const failure = error as { errors?: { text: string; location?: { file: string; line: number } | null }[] };
     const messages = failure.errors?.slice(0, 5).map(item => item.location ? `${item.location.file.replace(/^project:/, "")}:${item.location.line}: ${item.text}` : item.text);
-    return { ok: false, error: messages?.join("\n") || "The project could not be bundled." };
+    const transport = Boolean(failure.errors?.some(item => item.text.includes(RUNTIME_UNAVAILABLE)));
+    return { ok: false, error: messages?.join("\n") || "The project could not be bundled.", kind: transport ? "transport" : "code" };
   }
   // Every output (preview, review capture, static snapshot, hosted bundle)
   // carries the used fonts as embedded @font-face rules at the top of its CSS.
@@ -304,7 +353,7 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
   if (mode === "capture") {
     const origin = typeof location === "undefined" ? "" : location.origin;
     try { capture = `<script>${scriptSafe(await vendorSource(`${origin}/builder-runtime/vendor/modern-screenshot.js`))}</script>${CAPTURE_SHIM}`; }
-    catch { return { ok: false, error: "The screenshot runtime could not be loaded." }; }
+    catch { return { ok: false, error: "The screenshot runtime could not be loaded.", kind: "transport" }; }
   }
   const head = `${mode === "publish" ? "" : PREVIEW_SHIM}${capture}<style data-makeborne-bundle>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`;
   html = html.replace(/<\/head>/i, () => head);

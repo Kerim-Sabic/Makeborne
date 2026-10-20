@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { cloudContext, cloudError, cloudJson, databaseError, validId } from "@/lib/cloud/server";
 import { renderAssetPreview } from "@/lib/cloud/image-preview";
 import { RequestError, sameOrigin } from "@/lib/server/http";
+import { readPendingUpload } from "@/lib/cloud/asset-storage";
 
 export const runtime = "nodejs";
 export async function POST(request: Request, context: { params: Promise<{ workspaceId: string; artifactId: string }> }) {
@@ -45,7 +46,7 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const uploaded = await client.storage.from("project-assets").upload(objectPath, bytes, { contentType, upsert: false, cacheControl: "0" });
     if (uploaded.error) {
       // An interrupted first attempt may have stored the object before registration.
-      const stored = await client.storage.from("project-assets").download(objectPath);
+      const stored = await readPendingUpload({ workspaceId, projectId: artifact.project_id }, objectPath);
       if (!stored.data || stored.error || stored.data.size !== bytes.length || createHash("sha256").update(Buffer.from(await stored.data.arrayBuffer())).digest("hex") !== sha256) throw new RequestError("UPLOAD_UNCONFIRMED", "Upload could not be confirmed. Keep the file and retry the same image.", 503);
     }
     const inserted = await client.from("assets").insert({ id, workspace_id: workspaceId, project_id: artifact.project_id, object_path: objectPath, content_type: contentType, sha256, provenance: { kind: "user_upload", byteLength: bytes.length } });

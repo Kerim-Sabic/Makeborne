@@ -24,8 +24,12 @@ export const fontFileName = portableFonts.runtimeFontFile as (font: FontEntry, s
 /** Declaration order for @font-face rules: latin-ext, then latin. */
 export const FONT_SUBSETS = portableFonts.FONT_SUBSETS as readonly FontSubset[];
 export const UNICODE_RANGES = portableFonts.UNICODE_RANGES as Record<FontSubset, string>;
-/** Subsets a self-contained output must embed so this text renders in the chosen face. */
-export const fontSubsets = portableFonts.fontSubsets as (texts: Iterable<string>) => FontSubset[];
+/** Subsets a self-contained output must embed so this text renders in the chosen face.
+ * Text is NFC-normalised first, so a letter typed as "c" + U+030C (combining caron)
+ * counts as "č" and embeds the Latin Extended file, like the precomposed letter. */
+export function fontSubsets(texts: Iterable<string>): FontSubset[] {
+  return (portableFonts.fontSubsets as (texts: Iterable<string>) => FontSubset[])(Array.from(texts, text => text.normalize("NFC")));
+}
 
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Shared with portable exports and the verified isolated runtime. */

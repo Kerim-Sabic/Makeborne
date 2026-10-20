@@ -5,7 +5,7 @@ const fixture = `import React, { useState } from "react"; import { createRoot } 
 import { Presenter } from "./src/components/document-preview";
 const deck = { kind: "deck", title: "Fixture deck", slides: [{}, {}, {}] };
 function App() { const [open, setOpen] = useState(true); window.reopen = () => setOpen(true); window.isOpen = open;
-  return open ? <Presenter deck={deck} images={{}} onClose={() => setOpen(false)} /> : <p id="closed">closed</p>; }
+  return <><button type="button" id="opener" onClick={() => setOpen(true)}>Present</button>{open ? <Presenter deck={deck} images={{}} onClose={() => setOpen(false)} /> : <p id="closed">closed</p>}</>; }
 createRoot(document.getElementById("root")).render(<App />);`;
 // Three inert slides; slide 2 has a link and selectable text to test click-to-advance.
 const renderDeck = `export function deckHtml() { return '<!doctype html><body><div class="deck">' +
@@ -20,7 +20,7 @@ async function main() {
       b.onLoad({ filter: /book-markup$/, namespace: "mock" }, () => ({ contents: "export function wordCount() { return 0; }", loader: "js" }));
       b.onLoad({ filter: /cloud-api$/, namespace: "mock" }, () => ({ contents: "export async function readCloudImage() { throw new Error('no images'); }", loader: "js" }));
       b.onLoad({ filter: /\.css$/ }, () => ({ contents: "", loader: "js" }));
-      b.onResolve({ filter: /^@\// }, args => ({ path: path.resolve("src", args.path.slice(2) + ".ts") }));
+      b.onResolve({ filter: /^@\// }, args => ({ path: path.resolve("src", args.path.slice(2) + (args.path.endsWith(".css") ? "" : ".ts")) }));
     } }] });
   const server = createServer((req, res) => {
     res.setHeader("Permissions-Policy", "fullscreen=()");
@@ -87,6 +87,21 @@ async function main() {
 
     await page.keyboard.press("Escape");
     assert.equal(await open(), false); pass("Escape closes the presenter (fullscreen denied by the page: modal fallback)");
+
+    // Focus enters the presenter on open and returns to the control that opened it on close.
+    const focused = () => page.evaluate(() => document.activeElement?.id || document.activeElement?.className || document.activeElement?.tagName);
+    for (const close of ["Escape", "Exit"]) {
+      await page.locator("#opener").focus(); await page.keyboard.press("Enter");
+      await page.locator(".dp-present").waitFor();
+      assert.equal(await focused(), "dp-present", "opening moves focus into the presenter");
+      await page.getByRole("button", { name: "Next slide" }).click();
+      assert.equal(await counter(), "2 / 3", "presenting works after opening from the control");
+      if (close === "Escape") { await page.locator(".dp-present").focus(); await page.keyboard.press("Escape"); }
+      else { await page.getByRole("button", { name: "Exit presentation" }).focus(); await page.keyboard.press("Enter"); }
+      assert.equal(await open(), false);
+      assert.equal(await focused(), "opener", `closing with ${close} returns focus to the opener`);
+    }
+    pass("focus moves into the presenter on open and back to its opener on Escape or Exit");
   } finally { await browser.close(); server.close(); }
   console.log(`${passed} mounted presenter checks passed (Chromium, inert slides, no network).`);
 }

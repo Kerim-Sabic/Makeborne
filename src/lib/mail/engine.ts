@@ -37,7 +37,7 @@ export async function accessToken(deps: EngineDeps, account: MailAccountRow): Pr
   if (data.access_token && data.access_expires_at && new Date(data.access_expires_at).getTime() > nowOf(deps).getTime() + 60_000) return openSecret(data.access_token, account.id);
   try {
     const refreshed = await providerFor(deps, account).refresh({ ...config, refreshToken: openSecret(data.refresh_token, account.id) });
-    if (account.provider === "google" && refreshed.grantedScopes !== undefined) {
+    if (refreshed.grantedScopes !== undefined) {
       failure((await deps.db.from("mail_accounts").update({ granted_scopes: refreshed.grantedScopes }).eq("id", account.id)).error);
       account.granted_scopes = refreshed.grantedScopes;
     }

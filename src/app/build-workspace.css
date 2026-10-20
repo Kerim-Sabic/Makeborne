@@ -49,7 +49,7 @@ p.build-state-card { display:block; }
 .build-system-message.is-compact .build-quick-actions button { padding:6px 9px; }
 .build-composer { padding:12px 11px 9px; border:1px solid #ded5e6; border-radius:15px; background:#fff; box-shadow:0 4px 18px #48325907; }
 .build-composer:focus-within { border-color:#a68ab8; box-shadow:0 0 0 3px #7c6cf040; }
-.build-composer textarea { width:100%; min-height:48px; max-height:120px; margin:0 0 8px; padding:0 2px; outline:none; border:0; border-radius:0; background:transparent; resize:none; font-family:inherit; font-size:12px; line-height:21px; color:#4c3e57; box-shadow:none; }
+.build-composer textarea { width:100%; min-height:48px; max-height:120px; margin:0 0 8px; padding:0 2px; outline:none; border:0; border-radius:0; background:transparent; resize:none; font-family:inherit; font-size:var(--type-input); line-height:22px; color:#4c3e57; box-shadow:none; }
 .build-composer textarea:focus-visible { outline:none; }
 .build-composer textarea::placeholder { color:var(--text-muted); }
 .build-composer-tools { display:flex; align-items:center; gap:5px; }
@@ -95,6 +95,7 @@ p.build-state-card { display:block; }
   .build-messages { padding-right:16px; padding-left:16px; }
 }
 @media (max-width:760px) {
+  .build-composer textarea { font-size:var(--type-input-touch); }
   /* Phones: the preview comes first and fills the screen under the project
      heading. The conversation becomes a compact bar (toggle + composer) at the
      bottom; opening it grows the bar upwards like a sheet. */

@@ -24,6 +24,10 @@ export type RunMeter = {
   failed: boolean;
   /** The free final render check after automatic review rounds. */
   render: { ok: boolean } | null;
+  /** Names of the source files sent with the request (the "Will be read" set); empty when none were sent. */
+  sources: string[];
+  /** The advisor brief this request came from ("Mira’s brief · revision 2"), when it carried one. */
+  brief?: string;
 };
 
 export type RunReceipt = {
@@ -34,13 +38,17 @@ export type RunReceipt = {
   durationMs: number;
   files: string[];
   items: string[];
+  /** Source files that were sent with this request. */
+  sources: string[];
+  /** The advisor brief recorded with this request, when there was one. */
+  brief?: string;
   checks: { ok: boolean; label: string }[];
   /** This request saved nothing and the server settled it at zero credits. */
   notCharged: boolean;
 };
 
 export function newRunMeter(now = Date.now()): RunMeter {
-  return { started: now, steps: 0, charged: 0, chargeKnown: true, files: new Set(), items: new Set(), saved: false, version: null, finished: null, build: null, reviews: 0, failed: false, render: null };
+  return { started: now, steps: 0, charged: 0, chargeKnown: true, files: new Set(), items: new Set(), saved: false, version: null, finished: null, build: null, reviews: 0, failed: false, render: null, sources: [] };
 }
 
 type StreamEvent = { type?: unknown; path?: unknown; label?: unknown; charged?: unknown; changed?: unknown; finished?: unknown; build?: unknown; version?: unknown };
@@ -100,7 +108,7 @@ export function runReceipt(meter: RunMeter, options: { website: boolean; unlimit
   return {
     charged, unlimited: options.unlimited, saved: meter.saved, version: meter.version,
     durationMs: Math.max(0, (options.now ?? Date.now()) - meter.started),
-    files: [...meter.files].sort(), items: [...meter.items], checks,
+    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), checks,
     notCharged: !options.unlimited && charged === 0 && !meter.saved && meter.failed,
   };
 }

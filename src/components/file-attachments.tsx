@@ -132,6 +132,7 @@ export function AttachmentList({ files, onRemove, disabled, compact = false, not
   if (!files.length) return null;
   const entries = new Map(readiness?.entries.map(entry => [entry.file.id, entry]));
   return <div className={`attachment-section${compact ? " is-compact" : ""}${readiness ? " has-readiness" : ""}`}>
+    {readiness && <p className="attachment-heading">Source files <small>your uploads · AI reads them, never changes them</small></p>}
     {readiness && <div className="attachment-readiness" role="status" aria-live="polite" aria-atomic="true">
       <p className="attachment-read">{readPrefix}{readiness.readSummary}</p>
       {readiness.skippedSummary && <p className="attachment-skipped">{readiness.skippedSummary}</p>}

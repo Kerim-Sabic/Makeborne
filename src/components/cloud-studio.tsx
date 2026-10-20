@@ -13,6 +13,8 @@ import { takeReviewPrefill } from "@/lib/client-review/prefill";
 import WebsiteGithub from "./website-github";
 import WebsiteSourceDownload from "./website-source-download";
 import VersionCompare from "./version-compare";
+import { CheckpointControl, useVersionCheckpoints } from "./version-checkpoints";
+import { placeCheckpoints } from "@/lib/cloud/version-checkpoints";
 import WebsiteDomains from "./website-domains";
 import WebsiteAnalytics from "./website-analytics";
 import WebsiteSeo from "./website-seo";
@@ -23,6 +25,10 @@ import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
 import LiveBuilder, { type LiveUpdate } from "./live-builder";
+import { useProjectAdvisorHandoff } from "./advisor-handoff";
+import type { AskTarget } from "./visual-editor-panel";
+import type { EditTarget } from "@/lib/builder/edit-intent";
+import type { EffortLevel } from "@/lib/routing/effort";
 import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
 import WorkbenchMore from "./workbench-more";
@@ -37,10 +43,14 @@ const WebsiteSourceEditor = dynamic(() => import("./website-source-editor"), {ss
 import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
 import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
+import { restoreEffect } from "@/lib/builder/action-semantics";
 import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
+import { useLiveVersion } from "./use-live-version";
+import { useCheckRecord } from "./use-check-record";
+import VersionFactsBar from "./version-facts";
 import { useCallback, useEffect, useEffectEvent, useMemo, useState, useRef } from "react";
 import {
   ArrowLeft,
@@ -151,7 +161,7 @@ export default function CloudStudio() {
         if (!c.cloudWorkspace?.available) {
           setState("unavailable");
           setMessage(
-            c.cloudWorkspace?.reason || "Cloud workspace is not enabled.",
+            c.cloudWorkspace?.reason || "Saving to your account isn’t available yet.",
           );
           return;
         }
@@ -177,7 +187,7 @@ export default function CloudStudio() {
             setMessage(
               error instanceof Error
                 ? error.message
-                : "Cloud access could not be verified.",
+                : "Your account access could not be verified.",
             );
           }
         }
@@ -185,7 +195,7 @@ export default function CloudStudio() {
       .catch(() => {
         if (active) {
           setState("unavailable");
-          setMessage("Could not verify cloud availability.");
+          setMessage("Could not check whether saving to your account is available.");
         }
       });
     return () => {
@@ -432,13 +442,13 @@ export default function CloudStudio() {
       }).success
     ) {
       setMessage(
-        "This local project exceeds supported cloud brief limits. Shorten its audience or purpose before importing. Nothing has been transferred.",
+        "This local project exceeds the brief limits for account projects. Shorten its audience or purpose before importing. Nothing has been transferred.",
       );
       return;
     }
     if (local.blocks.some((b) => b.type === "image")) {
       setMessage(
-        "This project contains inline artwork. Cloud artwork upload must be enabled before importing it; nothing has been imported.",
+        "This project contains inline artwork. Artwork upload to your account must be available before importing it; nothing has been imported.",
       );
       return;
     }
@@ -448,7 +458,7 @@ export default function CloudStudio() {
       ).byteLength > 1_800_000
     ) {
       setMessage(
-        "This project exceeds the cloud import size limit. Nothing has been transferred.",
+        "This project exceeds the import size limit. Nothing has been transferred.",
       );
       return;
     }
@@ -459,7 +469,7 @@ export default function CloudStudio() {
       const reviewKey = `makeborne.import.${overview.workspace.id}.${local.id}`;
       if (localStorage.getItem(reviewKey)) {
         throw new Error(
-          "This project already has an import record on this device. Review the recorded cloud project before importing again.",
+          "This project already has an import record on this device. Review the project already saved to your account before importing again.",
         );
       }
       localStorage.setItem(
@@ -523,7 +533,7 @@ export default function CloudStudio() {
           completed: false,
         }),
       );
-      log.push(`Created cloud project: ${project.title}`);
+      log.push(`Saved to your account: ${project.title}`);
       setImportLog([...log]);
       const { artifact } = await api<{ artifact: CloudArtifact }>(
         `/api/cloud/workspaces/${overview.workspace.id}/projects/${project.id}/artifacts`,
@@ -583,7 +593,7 @@ export default function CloudStudio() {
       );
       setImportLog([...log]);
       setMessage(
-        "Import stopped. Completed cloud records are shown below; check them before taking another action.",
+        "Import stopped. Records already saved to your account are shown below; check them before taking another action.",
       );
     } finally {
       setBusy(false);
@@ -597,7 +607,7 @@ export default function CloudStudio() {
           Makeborne
         </Link>
         <nav>
-          <Link href="/studio">Local studio</Link>
+          <Link href="/studio">Studio</Link>
           {state === "ready" ? (
             <button
               className="button secondary small"
@@ -612,17 +622,18 @@ export default function CloudStudio() {
         </nav>
       </header>
       <main className="cloud-content">
-        <span className="eyebrow">YOUR CLOUD WORKSPACE</span>
+        <span className="eyebrow">SAVED TO YOUR ACCOUNT</span>
         <div className="page-heading">
           <div>
             <h1>Work that stays connected.</h1>
             <p>
-              Cloud projects are separate from the work saved on this device.
+              Projects saved to your account are separate from the drafts kept
+              on this device.
             </p>
           </div>
           <span className="local-pill">
             <Cloud size={14} />{" "}
-            {state === "ready" ? "Account connected" : "Cloud setup"}
+            {state === "ready" ? "Account connected" : "Account setup"}
           </span>
         </div>
         {message && (
@@ -631,11 +642,11 @@ export default function CloudStudio() {
           </div>
         )}
         {state === "checking" ? (
-          <p>Verifying cloud availability and your account…</p>
+          <p>Checking your account and whether saving to it is available…</p>
         ) : state === "unavailable" ? (
           <div className="empty-state">
             <Cloud size={32} />
-            <h2>Cloud setup is still in progress.</h2>
+            <h2>Saving to your account isn’t available yet.</h2>
             <p>{message} No local projects have been uploaded.</p>
             <Link className="button primary" href="/studio">
               Continue locally <ArrowRight size={16} />
@@ -646,8 +657,8 @@ export default function CloudStudio() {
             <Cloud size={32} />
             <h2>Open your connected workspace.</h2>
             <p>
-              Sign in to access your cloud projects. Local work stays on this
-              device until you explicitly import it.
+              Sign in to open the projects saved to your account. Drafts on
+              this device stay here until you explicitly import them.
             </p>
             <Link className="button primary" href="/login">
               Sign in <ArrowRight size={16} />
@@ -673,7 +684,7 @@ export default function CloudStudio() {
                 <h3>The last creation needs a review.</h3>
                 <p>
                   The server may have completed it. Your inputs remain on this
-                  screen. Check the cloud records before creating anything else.
+                  screen. Check your saved records before creating anything else.
                 </p>
                 <button
                   className="button secondary"
@@ -696,7 +707,7 @@ export default function CloudStudio() {
                       setMessage(
                         error instanceof Error
                           ? error.message
-                          : "Cloud records could not be reviewed.",
+                          : "Your saved records could not be reviewed.",
                       );
                     } finally {
                       setBusy(false);
@@ -981,7 +992,7 @@ export default function CloudStudio() {
                     saved={async () => {
                       setEditingClient(null);
                       await choose(overview.workspace.id);
-                      setMessage("Client details saved to the cloud.");
+                      setMessage("Client details saved to your account.");
                     }}
                     notify={setMessage}
                   />
@@ -1009,12 +1020,12 @@ export default function CloudStudio() {
                 {importPreview && (
                   <section className="import-review">
                     <span className="eyebrow">EXPLICIT IMPORT REVIEW</span>
-                    <h2>Choose what moves to the cloud.</h2>
+                    <h2>Choose what to save to your account.</h2>
                     <p>
                       This imports one project’s current text, linked client
                       details, brief, and style. Local outreach tracking, history and internal
                       activity remain on this device. Projects with inline
-                      artwork are blocked until cloud asset upload is supported.
+                      artwork are blocked until artwork upload to your account is supported.
                       The local workspace is never removed.
                     </p>
                     <label>
@@ -1095,7 +1106,7 @@ export default function CloudStudio() {
               <div className="empty-state">
                 <h2>Make room for your work.</h2>
                 <p>
-                  Create or select a cloud workspace to begin. Your device’s
+                  Create or select a workspace to begin. Your device’s
                   drafts remain separate.
                 </p>
               </div>
@@ -1133,23 +1144,32 @@ export function CloudEditor({
   notify: (s: string) => void;
 }) {
   const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
+  // Which saved version is public (websites only; audit M07): read on open, on each view change and after publishing.
+  const [liveRefresh, setLiveRefresh] = useState(0);
+  const liveVersion = useLiveVersion(accountId, workspaceId, artifact.id, artifact.kind === "website", `${view}:${liveRefresh}`);
+  // The latest explicit check of a saved version in this tab, for the header and History.
+  const checkRecord = useCheckRecord({ accountId, workspaceId, artifactId: artifact.id });
   // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
   const [brandColors, setBrandColors] = useState<{ label: string; value: string }[]>([]);
+  // The kit name the builder shows before sending (undefined until known; the server fingerprints the kit it actually uses).
+  const [brandKitName, setBrandKitName] = useState<string | null | undefined>(undefined);
   const brandClient = project?.clientId ?? null;
   useEffect(() => {
-    if (artifact.kind !== "website" || role === "reviewer") return;
+    if (role === "reviewer") return;
     let active = true;
     brandRequest<{ kits: { clientId: string | null; kit: unknown }[] }>(accountId, `/api/cloud/workspaces/${workspaceId}/brand-kits`).then(value => {
       const kit = parseBrandKit(value.kits.find(entry => entry.clientId === brandClient)?.kit);
-      if (active) setBrandColors(kit ? kitSwatches(kit) : []);
+      if (active) { setBrandColors(kit && artifact.kind === "website" ? kitSwatches(kit) : []); setBrandKitName(kit ? kit.name : null); }
     }, () => undefined);
     return () => { active = false; };
   }, [accountId, workspaceId, brandClient, artifact.kind, role]);
   // Client feedback placed in the builder composer for review. Never auto-sent.
-  const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string } | null>(null);
+  const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string; target?: EditTarget; mode?: "create" | "plan"; effort?: EffortLevel } | null>(null);
   useEffect(() => {
     queueMicrotask(() => { const text = takeReviewPrefill(artifact.id); if (text) setBuilderPrefill({ key: crypto.randomUUID(), text }); });
   }, [artifact.id]);
+  // An advisor brief chosen for this project waits in the composer with its mode and effort; its provenance is recorded with the next request.
+  const advisorBrief = useProjectAdvisorHandoff({ accountId, workspaceId, artifactId: artifact.id, kind: artifact.kind, canBuild: role !== "reviewer", apply: setBuilderPrefill, notify });
   const [generatedVersionId,setGeneratedVersionId]=useState<string|null>(null);
   const [builder, setBuilder] = useState<BuilderAvailability>(BUILDER_OFF);
   const [builderEstimates, setBuilderEstimates] = useState<BuilderEstimates | null>(null);
@@ -1174,6 +1194,13 @@ export function CloudEditor({
   const [removedBlock, setRemovedBlock] = useState<RemovedAccountBlock | null>(null);
   const [inspectedVersion, setInspectedVersion] = useState<ArtifactVersion | null>(null);
   const [comparing, setComparing] = useState<{ from: number; to: number } | null>(null);
+  // Personal checkpoints (labels only) and a request to open a file at a line in Code (audit M11).
+  const checkpoints = useVersionCheckpoints({ accountId, workspaceId, artifactId: artifact.id });
+  const [checkpointsOnly, setCheckpointsOnly] = useState(false);
+  const filteringCheckpoints = checkpointsOnly && checkpoints.list.length > 0;
+  const [sourceReveal, setSourceReveal] = useState<{ path: string; line: number; key: string } | null>(null);
+  // A comparison opens Code at a line once; reopening Code later starts from the usual file.
+  useEffect(() => { if (view !== "edit" && sourceReveal) queueMicrotask(() => setSourceReveal(null)); }, [view, sourceReveal]);
   const [style, setStyle] = useState<StyleProfile | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(
     artifact.currentVersion,
@@ -1243,7 +1270,7 @@ export function CloudEditor({
         }
       } catch {
         notify(
-          "Recovery storage could not be read. Your saved cloud content remains available.",
+          "Recovery storage could not be read. The content saved to your account remains available.",
         );
       }
       return true;
@@ -1443,13 +1470,13 @@ export function CloudEditor({
         if (!current) {
           setConflict(true);
           notify(
-            "The original save was confirmed, but the latest cloud content could not be loaded. Review it before editing.",
+            "The original save was confirmed, but the latest saved content could not be loaded. Review it before editing.",
           );
         } else
           notify(
-            "The original save was confirmed and the latest cloud content has been loaded.",
+            "The original save was confirmed and the latest saved content has been loaded.",
           );
-      } else notify("Content version saved to the cloud.");
+      } else notify("Content version saved to your account.");
     } catch (error) {
       setSavePaused(true);
       if (error instanceof CloudError && error.uncertain) {
@@ -1496,6 +1523,15 @@ export function CloudEditor({
       notify(`Version ${version.number} restored into your editor. Saving it as a new version…`);
     } catch (error) { notify(error instanceof Error ? error.message : "This version could not be restored."); }
   }
+  /** Builder Undo: restore the AI change's base version as a new version through the normal restore and save path. */
+  function undoBuilderChange(change: { from: number; to: number }): string | null {
+    if (expectedVersion !== change.to) return `Version ${expectedVersion} was saved after this change. Restore an earlier version from History instead.`;
+    if (!content || dirty || busy || saveBusy.current || savePaused || uncertainSave || conflict || recovery || role === "reviewer") return "Save or resolve the current draft before undoing.";
+    const base = versions.find(version => version.number === change.from);
+    if (!base) return `Version ${change.from} isn't loaded. Open History to restore it.`;
+    restoreVersion(base);
+    return null;
+  }
   async function moreVersions() {
     if (nextOffset === null || busy) return;
     setBusy(true);
@@ -1534,7 +1570,7 @@ export function CloudEditor({
     );
     const a = document.createElement("a");
     a.href = url;
-    a.download = "makeborne-cloud-draft.json";
+    a.download = "makeborne-unsaved-draft.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -1550,7 +1586,8 @@ export function CloudEditor({
   const previewDocument = !liveDocument ? undefined : preview === "live" ? live?.document : preview === "document" ? content?.document : undefined;
   const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
     .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content])), [content?.websiteSource]);
-  // A project created from the home prompt starts building as soon as it opens, once the builder can run.
+  // A project created from the home prompt opens with its brief in the builder. The builder may ask its free
+  // questions, but paid work starts only from an explicit Send after the maximum is shown (audit M08).
   useEffect(() => {
     if (!useLiveBuilder || !builder.available || !format || hasBuilderSource(format) || !project?.brief.trim() || expectedVersion > 1) return;
     const scope = { workspaceId, projectId: artifact.projectId, artifactId: artifact.id };
@@ -1574,7 +1611,7 @@ export function CloudEditor({
             if (
               !dirty ||
               window.confirm(
-                "Leave this unsaved cloud draft? Download it first if you need to preserve changes.",
+                "Leave this unsaved draft? Download it first if you need to preserve changes.",
               )
             )
               back();
@@ -1588,6 +1625,7 @@ export function CloudEditor({
             Version {expectedVersion} ·{" "}
             {savePaused || conflict || uncertainSave ? "Saving paused — review required" : busy && dirty ? "Saving…" : dirty ? "Waiting to save…" : "Saved"}
           </p>
+          {artifact.kind === "website" && <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} />}
         </div>
         <button
           className={dirty || savePaused || uncertainSave ? "button primary" : "button secondary"}
@@ -1603,8 +1641,10 @@ export function CloudEditor({
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           defaultEffort={project?.effort} disabled={!content || !builder.available || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
+          provenance={advisorBrief.provenance} onProvenance={advisorBrief.update}
           kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates}
-          onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }} />
+          onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }}
+          brandKit={brandKitName} onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
@@ -1640,8 +1680,8 @@ export function CloudEditor({
           <PendingCloudWrites accountId={accountId} refresh={async () => { setConflict(true); notify("The pending request is confirmed. Download any recovery draft before loading the latest version."); }} />
           <h3>An unsaved draft is available.</h3>
           <p>
-            Saved on this device from cloud version {recovery.basedOnVersion}.
-            It has not replaced the latest cloud content.
+            Saved on this device from saved version {recovery.basedOnVersion}.
+            It has not replaced the latest content saved to your account.
           </p>
           <div className="button-row">
             <button
@@ -1665,7 +1705,7 @@ export function CloudEditor({
               onClick={() => {
                 if (
                   window.confirm(
-                    "Discard the recovery draft on this device? Saved cloud versions are unaffected.",
+                    "Discard the recovery draft on this device? Versions saved to your account are unaffected.",
                   )
                 ) {
                   localStorage.removeItem(recoveryKey);
@@ -1682,7 +1722,7 @@ export function CloudEditor({
         <div className="cloud-conflict" role="alert">
           <h3>Your draft needs a review.</h3>
           <p>
-            The cloud has a newer version. This draft will not overwrite it.
+            Your account has a newer saved version. This draft will not overwrite it.
           </p>
           <div className="button-row">
             <button className="button secondary" onClick={backup}>
@@ -1693,13 +1733,13 @@ export function CloudEditor({
               onClick={() => {
                 if (
                   window.confirm(
-                    "Load the newest cloud content and replace this on-screen draft?",
+                    "Load the newest saved content and replace this on-screen draft?",
                   )
                 )
                   void load();
               }}
             >
-              Load latest cloud version
+              Load latest saved version
             </button>
           </div>
         </div>
@@ -1720,6 +1760,7 @@ export function CloudEditor({
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
+          routes={!live ? content.websiteSource?.routes : undefined} syncUrl
           visualEdit={content.websiteSource && role !== "reviewer" && !live ? {
             source: content.websiteSource,
             disabledReason: uncertainSave || conflict || recovery ? "Resolve the save notice above before editing." : lockChangePending ? "Saving content protection…" : undefined,
@@ -1727,7 +1768,9 @@ export function CloudEditor({
               if (uncertainSave || conflict || recovery || lockChangePending) return;
               editRevision.current++; setContent(current => current ? { ...current, websiteSource: next } : current); setDirty(true); setNote(summary);
             },
-            onAsk: useLiveBuilder ? text => setBuilderPrefill({ key: crypto.randomUUID(), text }) : undefined,
+            // The request is bound to the saved file the element was picked from.
+            onAsk: useLiveBuilder ? (text: string, target?: AskTarget) => setBuilderPrefill({ key: crypto.randomUUID(), text,
+              ...(target && sourceFiles[target.path] !== undefined ? { target: { ...target, source: sourceFiles[target.path], version: expectedVersion } } : {}) }) : undefined,
             swatches: brandColors,
           } : undefined} />}
         {view === "preview" && preview === "start-builder" && !liveDocument && <div className="lp-empty">Describe your website in the chat to start building. It will appear here live.</div>}
@@ -1749,7 +1792,7 @@ export function CloudEditor({
             <button type="button" onClick={() => setView("edit")} className="button secondary small"><PencilLine size={14} />Open editor</button>
           </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} /></>}
         </div>}
-        {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
+        {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"} onPublished={() => setLiveRefresh(value => value + 1)}
           capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} source={content.websiteSource} />
           {role === "owner" && <WebsiteSeo key={`seo:${accountId}:${workspaceId}:${artifact.id}`} source={content.websiteSource!} siteTitle={content.title} seo={content.seo} version={expectedVersion} dirty={dirty}
             disabled={uncertainSave || conflict || !!recovery || Boolean(live)} scope={{ accountId, workspaceId, artifactId: artifact.id }}
@@ -1763,7 +1806,7 @@ export function CloudEditor({
           capture={content.websiteSource ? () => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id }) : undefined}
           onSendToBuilder={role === "reviewer" ? undefined : text => { setBuilderPrefill({ key: crypto.randomUUID(), text }); if (useLiveBuilder) setView("preview"); }} /></div>}
         <div className="cloud-workbench-edit" hidden={view !== "edit"}>
-        {content.websiteSource ? (view === "edit" && <WebsiteSourceEditor source={content.websiteSource} readOnly={role === "reviewer" || uncertainSave || conflict || !!recovery || lockChangePending} onChange={(next, summary) => {
+        {content.websiteSource ? (view === "edit" && <WebsiteSourceEditor source={content.websiteSource} subject={{ artifactId: artifact.id, version: expectedVersion, dirty }} reveal={sourceReveal} readOnly={role === "reviewer" || uncertainSave || conflict || !!recovery || lockChangePending} onChange={(next, summary) => {
           if (role === "reviewer" || uncertainSave || conflict || recovery || lockChangePending) return;
           editRevision.current++; setContent({...content, websiteSource: next}); setDirty(true); setNote(summary);
         }} />) : <div className="cloud-edit-grid account-visual-editor">
@@ -1838,7 +1881,7 @@ export function CloudEditor({
             <button className="button secondary" onClick={backup}>
               <FileText size={16} /> Download draft
             </button>
-            {content.kind === "website" && !content.websiteSource && <WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} />}
+            {content.kind === "website" && !content.websiteSource && <WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} onPublished={() => setLiveRefresh(value => value + 1)} />}
             {content.kind === "website" && !content.websiteSource && <WebsiteGithub key={`github:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} />}
             {content.document && <p className="small-note">This {artifact.kind} was made with the live builder. Download PDF{artifact.kind === "presentation" ? " or editable PPTX" : ""} from the Preview tab; the outline below is generated from it and is updated on every build.</p>}
             {style && !content.document && <AccountExport key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
@@ -1856,29 +1899,48 @@ export function CloudEditor({
                 setComparing(comparing ? null : { from: numbers[1], to: numbers[0] });
               }}><GitCompareArrows size={14} />{comparing ? "Close comparison" : "Compare versions"}</button>}
             </div>
-            {comparing && <VersionCompare key={`${comparing.from}:${comparing.to}`} versions={versions} from={comparing.from} to={comparing.to} onClose={() => setComparing(null)} />}
+            {artifact.kind === "website" && liveVersion === "offline" && <p className="small-note cloud-history-live" role="status">Not live: no version of this website is published.</p>}
+            {artifact.kind === "website" && liveVersion === "error" && <p className="small-note cloud-history-live" role="status">Couldn&apos;t check which version is live. Open Publish to see its status.</p>}
+            {comparing && <VersionCompare key={`${comparing.from}:${comparing.to}`} versions={versions} from={comparing.from} to={comparing.to} onClose={() => setComparing(null)}
+              labels={Object.fromEntries(checkpoints.list.filter(item => versions.some(version => version.id === item.versionId)).map(item => [item.versionNumber, item.name]))}
+              currentVersion={expectedVersion} dirty={dirty}
+              onOpenInCode={content.websiteSource ? (path, line) => { setSourceReveal({ path, line, key: crypto.randomUUID() }); setView("edit"); } : undefined}
+              onPreview={number => { const target = versions.find(version => version.number === number); if (target) { setInspectedVersion(target); requestAnimationFrame(() => document.querySelector(".account-version-review")?.scrollIntoView({ block: "nearest" })); } }} />}
+            {checkpoints.list.length > 0 && <div className="cloud-history-filter">
+              <button type="button" className="button secondary small" aria-pressed={filteringCheckpoints} onClick={() => setCheckpointsOnly(!filteringCheckpoints)}>Checkpoints only ({checkpoints.list.length})</button>
+              {filteringCheckpoints && <span className="small-note" role="status">Showing checkpoints among the {versions.length} loaded {versions.length === 1 ? "version" : "versions"}.</span>}
+            </div>}
+            {filteringCheckpoints && (() => {
+              const away = placeCheckpoints(checkpoints.list, versions, nextOffset !== null).filter(place => place.state !== "loaded");
+              return away.length > 0 && <ul className="cloud-checkpoint-orphans">{away.map(place => <li key={place.checkpoint.versionId}>
+                “{place.checkpoint.name}” (version {place.checkpoint.versionNumber}) {place.state === "not-loaded" ? "is in an earlier page of History. Load earlier versions to see it." : "isn’t in this project’s history any more. Its label is kept until you remove it."}
+                {place.state === "missing" && <> <button type="button" className="button secondary small" onClick={() => checkpoints.remove(place.checkpoint.versionId)}>Remove label</button></>}
+              </li>)}</ul>;
+            })()}
+            {!checkpoints.available && <p className="small-note">Checkpoints need browser storage, which isn&apos;t available here.</p>}
             {versions.length === 0 ? (
               <p>No saved versions yet.</p>
             ) : (
               [...versions]
                 .sort((a, b) => b.number - a.number)
+                .filter(v => !filteringCheckpoints || checkpoints.list.some(item => item.versionId === v.id))
                 .map((v) => (
                   <div className="cloud-version" key={v.id}>
-                    <strong>Version {v.number}</strong>
+                    <strong>Version {v.number}{v.number === liveVersion && <span className="cloud-version-live">Live</span>}{artifact.kind === "website" && v.number === checkRecord?.version && <span className="cloud-version-checked" title="The latest check in this tab ran on this version">Checked</span>}{v.number === expectedVersion && <span className="cloud-version-current">Current</span>}</strong>
                     <p>{v.changeSummary}</p>
                     <small>{new Date(v.createdAt).toLocaleString()}</small>
                     <button type="button" className="button secondary small" aria-expanded={inspectedVersion?.id === v.id} onClick={() => setInspectedVersion(inspectedVersion?.id === v.id ? null : v)}> {inspectedVersion?.id === v.id ? "Close preview" : `Preview version ${v.number}`}</button>
                     {v.number < Math.max(...versions.map(version => version.number)) && <button type="button" className="button secondary small" onClick={() => setComparing({ from: v.number, to: Math.max(...versions.map(version => version.number)) })}>Compare with latest</button>}
+                    <CheckpointControl version={v} checkpoint={checkpoints.list.find(item => item.versionId === v.id)} onSave={(name, note) => checkpoints.save(v, name, note)} onRemove={() => checkpoints.remove(v.id)} />
                   </div>
                 ))
             )}
             {inspectedVersion && <section className="account-version-review" aria-label={`Saved version ${inspectedVersion.number}`}>
               <h3>Version {inspectedVersion.number}</h3>
-              <p className="small-note">This is a saved snapshot. Restoring creates a new version and keeps your history.</p>
+              <p className="small-note" id={`restore-effect-${inspectedVersion.id}`}>This is a saved snapshot.{role !== "reviewer" && inspectedVersion.number < expectedVersion ? ` ${restoreEffect(inspectedVersion.number, expectedVersion, artifact.kind === "website")}` : ""}</p>
               <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />
               {role !== "reviewer" && inspectedVersion.number < expectedVersion && <>
-                <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
-                {artifact.kind === "website" && <p className="small-note">Restoring saves a new version in the editor. Your live website doesn&apos;t change until you publish again.</p>}
+                <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} aria-describedby={`restore-effect-${inspectedVersion.id}`} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
                 {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
               </>}
             </section>}

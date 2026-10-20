@@ -2782,3 +2782,11 @@
 .studio-shell .mbg-kind{font-size:12px}
 .studio-shell .mbg-filter{font-size:13px}
 .studio-shell .mbg-card-details p{line-height:1.55}
+/* Brief handed over from an advisor (audit M14): shown above the composer with its maximum; nothing is sent from here. */
+.studio-shell .advisor-handoff-banner{display:flex;align-items:flex-start;gap:9px;margin:0 0 10px;padding:9px 10px 9px 12px;border:1px solid #d8cfe8;border-radius:12px;background:#f8f5fd;color:#3f3352;font-size:13px;line-height:1.5}
+.studio-shell .advisor-handoff-banner svg{flex-shrink:0;margin-top:3px;color:#6a4f93}
+.studio-shell .advisor-handoff-banner p{margin:0;flex:1;min-width:0;overflow-wrap:anywhere}
+.studio-shell .advisor-handoff-banner strong{display:block;font-weight:620}
+.studio-shell .advisor-handoff-banner span{color:#5f5470}
+.studio-shell .advisor-handoff-banner button{display:grid;place-items:center;flex-shrink:0;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:#6a4f93;cursor:pointer}
+.studio-shell .advisor-handoff-banner button:hover{background:#efe8f8}

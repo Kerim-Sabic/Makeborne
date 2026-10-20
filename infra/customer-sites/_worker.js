@@ -205,11 +205,13 @@ async function serveSite(request, env, context, config, url, slug, secure, head,
   if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
   if (url.pathname.length > 240) return failure(404, secure, head);
   if (url.pathname === "/robots.txt") {
-    return new Response(head ? null : robotsDocument(url.origin, config.indexable), { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+    // A custom host serves copies whose canonical is the Makeborne address, so it names no sitemap.
+    return new Response(head ? null : robotsDocument(url.origin, config.indexable, !custom), { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
   }
-  // Pages of the live site for search engines; not offered where indexing is off (staging, local).
+  // Pages of the live site for search engines; not offered where indexing is off (staging, local),
+  // nor on a custom host: its pages name the Makeborne address as canonical, and a sitemap lists canonical URLs only.
   if (url.pathname === "/sitemap.xml") {
-    if (!config.indexable) return failure(404, secure, head);
+    if (!config.indexable || custom) return failure(404, secure, head);
     try {
       const site = sitePaths(await rpc(config, "makeborne_read_site_paths", { p_slug: slug }, 20_000));
       if (!site) return failure(404, secure, head);
