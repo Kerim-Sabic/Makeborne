@@ -16,6 +16,7 @@ import { DEFAULT_LIBRARY_SCOPE, libraryListPath } from "@/lib/projects/library-c
 import type { CloudArtifact, CloudWorkspace } from "@/lib/cloud/contracts";
 import { api, setCloudAccount } from "./cloud-api";
 import AdvisorBriefCard, { type HandoffChoice, type HandoffProject } from "./advisor-brief-card";
+import GlobalCommandPalette, { type PaletteCommand } from "./global-command-palette";
 import "@/app/expert-chat.css";
 
 type Message = { role: "user" | "assistant"; content: string; mode?: ChatMode; credits?: number; truncated?: boolean };
@@ -221,6 +222,15 @@ export default function ExpertChat() {
     try { await navigator.clipboard.writeText(text); setCopied(index); setTimeout(() => setCopied(current => current === index ? null : current), 1600); } catch { /* clipboard blocked */ }
   }
 
+  // Ctrl/⌘+K: switch advisor or go to the studio. Nothing here asks a question or drafts a brief.
+  const paletteCommands: PaletteCommand[] = [
+    ...EXPERT_PERSONAS.map(person => ({ id: `advisor-${person.id}`, group: "Advisors" as const, label: `Ask ${person.name}`, hint: person.specialty, keywords: [...person.covers],
+      run: () => { setSelected(person.id); setError(null); requestAnimationFrame(() => inputRef.current?.focus()); } })),
+    ...([["projects", "Projects"], ["clients", "Clients"], ["styles", "Styles"], ["settings", "Settings"]] as const).map(([tab, label]) => ({ id: `go-${tab}`, group: "Go to" as const, label,
+      run: () => router.push(studioHref({ tab, projectId: null, clientId: null })) })),
+    { id: "start-project", group: "Start", label: "New project", hint: "Opens the studio composer. Nothing is sent.", keywords: ["website", "book", "presentation"], run: () => router.push("/studio") },
+    { id: "go-billing", group: "Go to", label: "Plan & credits", keywords: ["billing"], run: () => router.push("/billing") },
+  ];
   const live = streaming?.expert === selected ? streaming : null;
   const brief = threads[selected]?.brief ?? null;
   const canDraft = !!account && messages.some(message => message.role === "assistant") && !live;
@@ -230,6 +240,7 @@ export default function ExpertChat() {
       <aside className="advisor-sidebar" aria-label="Advisors">
         <Link href="/" className="advisor-brand"><BrandMark size={25} /><span>Makeborne</span></Link>
         <Link href="/studio" className="advisor-back"><ArrowLeft size={15} />Back to studio</Link>
+        <GlobalCommandPalette commands={paletteCommands} triggerClassName="gp-trigger advisor-palette-trigger" />
         <div className="advisor-sidebar-label">Your advisors</div>
         <div className="advisor-picker" role="group" aria-label="Choose an advisor">
           {EXPERT_PERSONAS.map(person => (

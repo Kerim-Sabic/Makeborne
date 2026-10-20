@@ -2,6 +2,7 @@
 import "@/app/studio-refresh.css";
 import { z } from "zod";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { creationStyles, styleConcept } from "@/lib/creation-styles";
 import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
@@ -14,6 +15,7 @@ import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
 import { AdvisorHandoffBanner, bindCreationHandoff, forgetCreationHandoff, forgetHandoffParameter, rememberCreationHandoff } from "./advisor-handoff";
 import { readAdvisorHandoff, type AdvisorHandoff } from "@/lib/experts/advisor-brief";
+import GlobalCommandPalette, { type PaletteCommand } from "./global-command-palette";
 import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
@@ -120,6 +122,7 @@ function date(value: string) {
 }
 
 export default function Studio({ isAdmin = false, unlimitedCredits = false, initialTab = "projects", initialProjectOpen = false }: { isAdmin?: boolean; unlimitedCredits?: boolean; initialTab?: string; initialProjectOpen?: boolean }) {
+  const router = useRouter();
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [accountClientRoute, setAccountClientRoute] = useState<AccountClientRoute | null>(null);
   const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
@@ -714,6 +717,24 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: "center" });
   }
+  // Ctrl/⌘+K: places and starting points. Starting only opens the composer; nothing is sent.
+  const go = (run: () => void) => () => { setMobileNav(false); run(); };
+  const startWith = (kind: Kind) => go(() => {
+    if (tab !== "projects" || accountRoute?.artifactId || selected) navigate("projects");
+    setDraftKind(kind);
+    requestAnimationFrame(() => { const input = document.getElementById("studio-brief"); input?.scrollIntoView({ block: "center" }); input?.focus({ preventScroll: true }); });
+  });
+  const paletteCommands: PaletteCommand[] = [
+    { id: "go-projects", group: "Go to", label: "Projects", keywords: ["library", "home"], run: go(() => navigate("projects")) },
+    { id: "go-clients", group: "Go to", label: "Clients", keywords: ["crm", "leads"], run: go(() => navigate("clients")) },
+    { id: "go-styles", group: "Go to", label: "Styles", keywords: ["brand", "palette"], run: go(() => navigate("styles")) },
+    { id: "go-settings", group: "Go to", label: "Settings", keywords: ["backup", "recovery"], run: go(() => navigate("settings")) },
+    { id: "go-chat", group: "Go to", label: "Expert chat", hint: "Advisors for positioning, copy, sales and more", keywords: ["advisor", "advice"], run: go(() => router.push("/chat")) },
+    { id: "go-billing", group: "Go to", label: unlimitedCredits ? "Unlimited credits" : "Plan & credits", keywords: ["billing", "top up"], run: go(() => router.push("/billing")) },
+    { id: "go-help", group: "Go to", label: "Help & guides", keywords: ["support", "docs"], run: go(() => router.push("/help")) },
+    ...(["website", "book", "presentation"] as Kind[]).map(kind => ({ id: `start-${kind}`, group: "Start" as const, label: `New ${kindLabel[kind].toLowerCase()}`, hint: "Opens the composer. Nothing is sent until you create it.", keywords: ["create", "new project"], run: startWith(kind) })),
+    ...workspace.projects.slice(0, 40).map(item => ({ id: `project-${item.id}`, group: "Projects" as const, label: item.title || "Untitled project", hint: `${kindLabel[item.kind]} on this device`, run: go(() => openRoute({ tab: "projects", projectId: item.id, clientId: null })) })),
+  ];
   return (
     <div className={`studio-shell ${projectOpen ? "is-project-open" : ""}`}>
       {!projectOpen && skipTargets.map(target => <a key={target.id} className="studio-skip-link" href={`#${target.id}`} onClick={event => skipTo(event, target.id)}>{target.label}</a>)}
@@ -731,6 +752,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         <Link className="button create-button" href="/">
           <Plus size={18} /> New project
         </Link>
+        <GlobalCommandPalette commands={paletteCommands} triggerClassName="gp-trigger" shortcut={tab !== "clients"} />
         <div className="nav-label">My workspace</div>
         <nav className="studio-nav" aria-label="Workspace">
           {[
