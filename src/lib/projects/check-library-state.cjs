@@ -63,18 +63,66 @@ check("status identity only changes when its meaning does", () => {
   assert.equal(sameLibraryStatus({ state: "unavailable", reason: "cloud-off" }, { state: "unavailable", reason: "signed-out" }), false);
 });
 
+// M03: returning users get their library first; new users keep the prompt-first entry.
+const { libraryLayout, readLibraryHint, writeLibraryHint, LIBRARY_HINT_KEY } = context.exports;
+check("saved projects put the library first; known-empty and local-only stay prompt-first", () => {
+  assert.equal(libraryLayout(0, { state: "loaded", count: 3 }, null), "library-first");
+  assert.equal(libraryLayout(2, { state: "loading" }, false), "library-first", "device projects are known immediately");
+  assert.equal(libraryLayout(2, { state: "unavailable", reason: "signed-out" }, null), "library-first");
+  assert.equal(libraryLayout(0, { state: "loaded", count: 0 }, true), "prompt-first", "loaded data beats the remembered answer");
+  assert.equal(libraryLayout(0, { state: "unavailable", reason: "cloud-off" }, true), "prompt-first");
+  assert.equal(libraryLayout(0, { state: "unavailable", reason: "signed-out" }, true), "prompt-first", "a signed-out page never uses an account's memory");
+});
+check("unknown states never flip the page: they keep this account's last answer, and a first visit stays prompt-first", () => {
+  for (const status of [{ state: "checking" }, { state: "loading" }, { state: "failed" }]) {
+    assert.equal(libraryLayout(0, status, true), "library-first", `${status.state} keeps a returning layout (refresh, load more, failed reload)`);
+    assert.equal(libraryLayout(0, status, false), "prompt-first");
+    assert.equal(libraryLayout(0, status, null), "prompt-first", "no memory: prompt-first, as before");
+  }
+});
+check("layout memory holds one account's yes/no only and tolerates blocked storage", () => {
+  const data = new Map();
+  const storage = () => ({ getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) });
+  const other = "22222222-2222-4222-8222-222222222222";
+  assert.equal(readLibraryHint(storage, account), null);
+  writeLibraryHint(storage, account, true);
+  assert.deepEqual(JSON.parse(data.get(LIBRARY_HINT_KEY)), { accountId: account, returning: true }, "no titles, counts or project IDs");
+  assert.equal(readLibraryHint(storage, account), true);
+  assert.equal(readLibraryHint(storage, undefined), true, "account not known yet: the device's last account");
+  assert.equal(readLibraryHint(storage, other), null, "another account never inherits it");
+  assert.equal(readLibraryHint(storage, null), null, "signed out");
+  data.set(LIBRARY_HINT_KEY, "{not json"); assert.equal(readLibraryHint(storage, account), null);
+  data.set(LIBRARY_HINT_KEY, JSON.stringify({ accountId: account, returning: "yes" })); assert.equal(readLibraryHint(storage, account), null);
+  const blocked = () => { throw new Error("SecurityError"); };
+  assert.equal(readLibraryHint(blocked, account), null);
+  assert.doesNotThrow(() => writeLibraryHint(blocked, account, true));
+});
+
 // Wiring: the studio decides with the status, never with a truthy count.
 const studio = fs.readFileSync("src/components/studio.tsx", "utf8");
 const projects = fs.readFileSync("src/components/account-projects.tsx", "utf8");
 check("studio and list are wired through the status, with Retry on failure", () => {
   assert.doesNotMatch(studio, /accountProjectCount/);
   assert.match(studio, /projectsWelcome\(workspace\.projects\.length, accountLibrary\) !== "welcome"/);
-  assert.match(projects, /onStatus\?\.\(status\)/);
+  assert.match(projects, /onStatus\?\.\(status, accountId\)/);
   assert.match(projects, /setLoadAttempt\(attempt => attempt \+ 1\)/);
   assert.match(projects, /\}, \[accountId, target, loadAttempt\]\);/, "retry re-runs the guarded load");
   assert.match(projects, /version !== requestVersion\.current/, "request-version guard kept");
   assert.match(projects, /role="alert">\{message\} Your saved projects haven/);
   assert.match(projects, /setCloud\("error"\)/);
+});
+
+check("studio orders the page by the layout without remounting the account list", () => {
+  assert.match(studio, /const libraryFirst = libraryLayout\(workspace\.projects\.length, accountLibrary, libraryHint\) === "library-first";/);
+  assert.equal((studio.match(/<AccountProjects /g) ?? []).length, 1, "one account list position: changing the order never refetches it");
+  assert.match(studio, /!libraryFirst && <div className="studio-create">\{creationEntry\}<\/div>\}\s*<AccountProjects /, "new users: creation above the list");
+  const after = studio.slice(studio.indexOf("<AccountProjects "));
+  assert.match(after, /libraryFirst && <div className="studio-create">\{creationEntry\}<\/div>\}\s*\{!accountRoute\?\.artifactId && workspace\.projects\.length === 0 && \(\s*<TemplateGallery/, "returning users: creation stays on the page, below their projects");
+  assert.match(studio, /libraryFirst \? "returning-workspace" : "fresh-workspace"/);
+  assert.match(studio, /writeLibraryHint\(\(\) => localStorage, accountId, next\.count > 0\)/, "memory only changes on loaded data");
+  // Explicit creation links are untouched: New project still goes to the prompt-first home.
+  assert.match(studio, /<Link className="button primary" href="\/">\s*<Plus size=\{17\} \/> New project/);
+  assert.match(studio, /<Link className="button create-button" href="\/">/);
 });
 
 console.log(`${count} project library state checks passed.`);

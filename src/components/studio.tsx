@@ -62,7 +62,7 @@ import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
 import { studioSkipTargets } from "@/lib/studio-skip-links";
-import { projectsWelcome, sameLibraryStatus, type AccountLibraryStatus } from "@/lib/projects/library-state";
+import { libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
@@ -146,7 +146,14 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const [search, setSearch] = useState("");
   const [accountLibrary, setAccountLibrary] = useState<AccountLibraryStatus>({ state: "checking" });
   // Keep the same object while nothing changed, so a re-render does not ripple through the page.
-  const reportAccountLibrary = useCallback((next: AccountLibraryStatus) => setAccountLibrary(current => sameLibraryStatus(current, next) ? current : next), []);
+  // Whether this account had saved projects the last time this device loaded them (null: not known).
+  const [libraryHint, setLibraryHint] = useState<boolean | null>(null);
+  const reportAccountLibrary = useCallback((next: AccountLibraryStatus, accountId: string | null) => {
+    setAccountLibrary(current => sameLibraryStatus(current, next) ? current : next);
+    if (next.state === "loaded" && accountId) { writeLibraryHint(() => localStorage, accountId, next.count > 0); setLibraryHint(next.count > 0); return; }
+    // An unknown account (still checking, or the check failed) may use the last account's answer; signed out uses none.
+    setLibraryHint(readLibraryHint(() => localStorage, accountId ?? (next.state === "unavailable" ? null : undefined)));
+  }, []);
   const [notice, setNotice] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
   const [saveInvalid, setSaveInvalid] = useState(false);
@@ -547,7 +554,105 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   if (directStart && creating) return <div className="studio-shell creation-route">{creationView}</div>;
   // Open editors hide the navigation rail, so there is nothing to bypass there.
   const projectOpen = Boolean(project || accountRoute?.artifactId || (!loaded && initialProjectOpen));
-  const skipTargets = studioSkipTargets({ loaded, tab, composerVisible: tab === "projects" && !accountRoute?.artifactId });
+  // Returning users see their library first; new users (and unknown first visits) keep the prompt-first entry.
+  const libraryFirst = libraryLayout(workspace.projects.length, accountLibrary, libraryHint) === "library-first";
+  const skipTargets = studioSkipTargets({ loaded, tab, composerVisible: tab === "projects" && !accountRoute?.artifactId, library: libraryFirst ? "first" : "none" });
+  // One creation entry: above the library for new users, below it for returning users.
+  const creationEntry = <>
+    <section
+      className="studio-composer"
+      aria-label="Start with a brief"
+    >
+      <div className="composer-format-tabs">
+        {(["website", "book", "presentation"] as Kind[]).map(
+          (k) => {
+            const Icon = icons[k];
+            return (
+              <button
+                key={k}
+                className={draftKind === k ? "active" : ""}
+                onClick={() => setDraftKind(k)}
+              >
+                <Icon size={16} />
+                {kindLabel[k]}
+              </button>
+            );
+          },
+        )}
+        <span>Your next project starts here</span>
+      </div>
+      <label className="composer-input-label">
+        <span className="sr-only">Describe your next project</span>
+        <textarea
+          id="studio-brief"
+          value={draftBrief}
+          maxLength={20000}
+          onChange={(e) => setDraftBrief(e.target.value)}
+          placeholder={
+            draftKind === "website"
+              ? "Describe the website you want to create…"
+              : draftKind === "book"
+                ? "What knowledge do you want to turn into a book?"
+                : "What would you like your presentation to say?"
+          }
+        />
+      </label>
+      <div className="composer-bottom">
+        <ComposerControls mode={creationMode} onMode={setCreationMode} effort={creationEffort} onEffort={setCreationEffort} />
+        <button
+          className="button primary"
+          disabled={!draftBrief.trim()||!composerAccount.ready||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent}
+          aria-label={creationMode === "plan" ? "Plan this project" : "Create this project"}
+          onClick={startStudioPrompt}
+        >
+          <ArrowUp size={19} />
+        </button>
+      </div>
+      {immediateWebsite&&<GenerationPermissions value={composerPermissions}/>}
+    </section>
+    <div className="composer-note">
+      {immediateWebsite?"Your website request starts after your brief is saved.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
+    </div>
+    <UnsentDraftNotice restoredAt={unsentBrief.restoredAt} storageRefused={unsentBrief.storageRefused} onDiscard={unsentBrief.discard} />
+    <div
+      className="brief-suggestions"
+      aria-label="Brief suggestions"
+    >
+      {[
+        {
+          label: "A website for a client",
+          kind: "website" as Kind,
+          brief:
+            "Help me plan a website for a client. I will provide their business, services, brand direction, and approved content.",
+        },
+        {
+          label: "Turn knowledge into a book",
+          kind: "book" as Kind,
+          brief:
+            "Help me shape my knowledge into a practical book. I will provide the topic, intended reader, and source material.",
+        },
+        {
+          label: "Present an idea clearly",
+          kind: "presentation" as Kind,
+          brief:
+            "Help me structure a presentation that explains my idea clearly. I will provide the audience, purpose, and key points.",
+        },
+      ].map((suggestion) => (
+        <button
+          type="button"
+          key={suggestion.kind}
+          onClick={() => {
+            setDraftKind(suggestion.kind);
+            setDraftBrief(suggestion.brief);
+            document.getElementById("studio-brief")?.focus();
+          }}
+        >
+          {suggestion.label}
+          <ArrowUpRight size={14} />
+        </button>
+      ))}
+    </div>
+  </>;
   function skipTo(event: React.MouseEvent<HTMLAnchorElement>, id: string) {
     const target = document.getElementById(id);
     if (!target) return;
@@ -687,7 +792,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           <main
             id="studio-content"
             tabIndex={-1}
-            className={`workspace-content ${tab === "projects" && workspace.projects.length === 0 ? "fresh-workspace" : ""}`}
+            className={`workspace-content ${tab === "projects" ? libraryFirst ? "returning-workspace" : "fresh-workspace" : ""}`}
           >
             {tab === "projects" && (
               <>
@@ -702,100 +807,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     <Plus size={17} /> New project
                   </Link>
                 </div>
-                <section
-                  className="studio-composer"
-                  aria-label="Start with a brief"
-                >
-                  <div className="composer-format-tabs">
-                    {(["website", "book", "presentation"] as Kind[]).map(
-                      (k) => {
-                        const Icon = icons[k];
-                        return (
-                          <button
-                            key={k}
-                            className={draftKind === k ? "active" : ""}
-                            onClick={() => setDraftKind(k)}
-                          >
-                            <Icon size={16} />
-                            {kindLabel[k]}
-                          </button>
-                        );
-                      },
-                    )}
-                    <span>Your next project starts here</span>
-                  </div>
-                  <label className="composer-input-label">
-                    <span className="sr-only">Describe your next project</span>
-                    <textarea
-                      id="studio-brief"
-                      value={draftBrief}
-                      maxLength={20000}
-                      onChange={(e) => setDraftBrief(e.target.value)}
-                      placeholder={
-                        draftKind === "website"
-                          ? "Describe the website you want to create…"
-                          : draftKind === "book"
-                            ? "What knowledge do you want to turn into a book?"
-                            : "What would you like your presentation to say?"
-                      }
-                    />
-                  </label>
-                  <div className="composer-bottom">
-                    <ComposerControls mode={creationMode} onMode={setCreationMode} effort={creationEffort} onEffort={setCreationEffort} />
-                    <button
-                      className="button primary"
-                      disabled={!draftBrief.trim()||!composerAccount.ready||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent}
-                      aria-label={creationMode === "plan" ? "Plan this project" : "Create this project"}
-                      onClick={startStudioPrompt}
-                    >
-                      <ArrowUp size={19} />
-                    </button>
-                  </div>
-                  {immediateWebsite&&<GenerationPermissions value={composerPermissions}/>}
-                </section>
-                <div className="composer-note">
-                  {immediateWebsite?"Your website request starts after your brief is saved.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
-                </div>
-                <UnsentDraftNotice restoredAt={unsentBrief.restoredAt} storageRefused={unsentBrief.storageRefused} onDiscard={unsentBrief.discard} />
-                <div
-                  className="brief-suggestions"
-                  aria-label="Brief suggestions"
-                >
-                  {[
-                    {
-                      label: "A website for a client",
-                      kind: "website" as Kind,
-                      brief:
-                        "Help me plan a website for a client. I will provide their business, services, brand direction, and approved content.",
-                    },
-                    {
-                      label: "Turn knowledge into a book",
-                      kind: "book" as Kind,
-                      brief:
-                        "Help me shape my knowledge into a practical book. I will provide the topic, intended reader, and source material.",
-                    },
-                    {
-                      label: "Present an idea clearly",
-                      kind: "presentation" as Kind,
-                      brief:
-                        "Help me structure a presentation that explains my idea clearly. I will provide the audience, purpose, and key points.",
-                    },
-                  ].map((suggestion) => (
-                    <button
-                      type="button"
-                      key={suggestion.kind}
-                      onClick={() => {
-                        setDraftKind(suggestion.kind);
-                        setDraftBrief(suggestion.brief);
-                        document.getElementById("studio-brief")?.focus();
-                      }}
-                    >
-                      {suggestion.label}
-                      <ArrowUpRight size={14} />
-                    </button>
-                  ))}
-                </div>
-                <div className="list-toolbar" id="studio-library" tabIndex={-1}>
+                {libraryFirst && <div className="list-toolbar" id="studio-library" tabIndex={-1}>
                   <div className="filter-tabs">
                     {["all", "website", "book", "presentation"].map((f) => (
                       <button
@@ -818,8 +830,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                       onChange={(e) => setSearch(e.target.value)}
                     />
                   </label>
-                </div>
+                </div>}
                 </>}
+                {/* New users start with a brief; the account list keeps one position so it never reloads when the order changes. */}
+                {!accountRoute?.artifactId && !libraryFirst && <div className="studio-create">{creationEntry}</div>}
                 <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
                 {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (projectsWelcome(workspace.projects.length, accountLibrary) !== "welcome" ? null : (
                   <Empty
@@ -880,6 +894,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                       })}
                   </div>
                 ))}
+                {!accountRoute?.artifactId && libraryFirst && <div className="studio-create">{creationEntry}</div>}
                 {!accountRoute?.artifactId && workspace.projects.length === 0 && (
                   <TemplateGallery onChoose={chooseDirection} />
                 )}

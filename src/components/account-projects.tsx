@@ -15,7 +15,7 @@ const AccountEditor = dynamic(() => import("./cloud-studio").then(module => modu
 type Snapshot = CloudWorkspaceSnapshot & { pagination: { artifacts: { nextOffset: number | null; total: number } } };
 
 /** Account records are read independently: device drafts are never uploaded implicitly. */
-export default function AccountProjects({ search, filter, target, navigate, onStatus }: { search: string; filter: string; target: AccountProjectRoute | null; /** What this list knows (checking, loading, loaded, failed or unavailable), so the studio never shows an empty state that contradicts it. */ onStatus?: (status: AccountLibraryStatus) => void; navigate: (route: AccountProjectRoute | null) => void }) {
+export default function AccountProjects({ search, filter, target, navigate, onStatus }: { search: string; filter: string; target: AccountProjectRoute | null; /** What this list knows (checking, loading, loaded, failed or unavailable) and for which account, so the studio never shows an empty state that contradicts it. */ onStatus?: (status: AccountLibraryStatus, accountId: string | null) => void; navigate: (route: AccountProjectRoute | null) => void }) {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [cloud, setCloud] = useState<"unknown" | "available" | "off" | "error">("unknown");
@@ -31,7 +31,7 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
   const loadedCount = snapshot ? snapshot.artifacts.length : null;
   const failed = Boolean(message) && !snapshot;
   const status = useMemo(() => accountLibraryStatus({ cloud, authReady, accountId, busy, loadedCount, noWorkspace, failed }), [cloud, authReady, accountId, busy, loadedCount, noWorkspace, failed]);
-  useEffect(() => { onStatus?.(status); }, [status, onStatus]);
+  useEffect(() => { onStatus?.(status, accountId); }, [status, accountId, onStatus]);
   const requestVersion = useRef(0);
   const currentAccount = useRef<string | null>(null);
   useEffect(() => {

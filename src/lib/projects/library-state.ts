@@ -51,6 +51,45 @@ export function projectsWelcome(deviceProjectCount: number, status: AccountLibra
   }
 }
 
+/**
+ * Projects page order. Returning users (saved projects on this device or in
+ * the account) get their library first and creation below it; new users keep
+ * the prompt-first entry. While the account list is still unknown (checking,
+ * loading, failed) the page keeps what this account showed last time on this
+ * device, so a returning user's page does not jump on every visit and a
+ * refresh or failed reload never flips it. A first visit stays prompt-first.
+ */
+export type LibraryLayout = "library-first" | "prompt-first";
+export function libraryLayout(deviceProjectCount: number, status: AccountLibraryStatus, remembered: boolean | null): LibraryLayout {
+  if (deviceProjectCount > 0) return "library-first";
+  switch (status.state) {
+    case "loaded": return status.count > 0 ? "library-first" : "prompt-first";
+    case "unavailable": return "prompt-first";
+    case "checking":
+    case "loading":
+    case "failed": return remembered ? "library-first" : "prompt-first";
+  }
+}
+
+/** Device-local layout memory: only the last account and whether it had saved projects. Never titles, counts or IDs of projects. */
+export const LIBRARY_HINT_KEY = "makeborne.library-layout.v1";
+/** Read lazily: merely touching `localStorage` throws where site data is blocked. */
+type HintStorage = () => Pick<Storage, "getItem" | "setItem">;
+/** The remembered answer for this account; `undefined` accepts the last account on this device while the signed-in account is not known yet. */
+export function readLibraryHint(storage: HintStorage, accountId: string | null | undefined): boolean | null {
+  if (accountId === null) return null;
+  try {
+    const value: unknown = JSON.parse(storage().getItem(LIBRARY_HINT_KEY) ?? "null");
+    if (!value || typeof value !== "object") return null;
+    const hint = value as { accountId?: unknown; returning?: unknown };
+    if (typeof hint.accountId !== "string" || typeof hint.returning !== "boolean") return null;
+    return accountId === undefined || hint.accountId === accountId ? hint.returning : null;
+  } catch { return null; }
+}
+export function writeLibraryHint(storage: HintStorage, accountId: string, returning: boolean) {
+  try { storage().setItem(LIBRARY_HINT_KEY, JSON.stringify({ accountId, returning })); } catch { /* Layout memory is a convenience; the page still decides from loaded data. */ }
+}
+
 export function sameLibraryStatus(a: AccountLibraryStatus, b: AccountLibraryStatus) {
   return a.state === b.state && (a.state !== "loaded" || b.state === "loaded" && a.count === b.count)
     && (a.state !== "unavailable" || b.state === "unavailable" && a.reason === b.reason);
