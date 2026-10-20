@@ -14,13 +14,14 @@ import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
 import { REVIEW_MAX_TURNS, reviewCreditCeiling } from "@/lib/builder/review-policy";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
-import { beginOperation, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
+import { OperationError, beginOperation, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
 import { documentBuildResponse } from "@/lib/builder/docs-run";
 import { websiteBuildResponse } from "@/lib/builder/website-run";
 import { providerCapacity, requireProviderCapacity } from "@/lib/ai/live-run";
 import { builderAvailability } from "@/lib/builder/availability";
 import { requirePricedModel } from "@/lib/ai/model-check";
-import { SitePlanSchema, planToBrief } from "@/lib/builder/plan";
+import { SitePlanSchema, StoredPlanSchema, planToBrief } from "@/lib/builder/plan";
+import { approvedPlanIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { websiteBrandBlock } from "@/lib/brand/kit";
 import { ensureBrandLogo, projectBrandKit } from "@/lib/brand/server";
 import { importTheirPhotos, photosContext } from "@/lib/leads/redesign-server";
@@ -40,11 +41,14 @@ const BuildRequest = z.object({
   attachments: BuilderAttachmentsSchema.default([]),
   /** An approved Plan mode plan the build must follow. */
   plan: SitePlanSchema.optional(),
+  /** The saved plan revision the customer approved; required with `plan`. */
+  planRevision: z.number().int().positive().optional(),
   /** "review": look at client-captured screenshots of the current version and fix visual problems. */
   mode: z.enum(["build", "review"]).default("build"),
   review: ReviewInputSchema.optional(),
   operation: OperationRequestSchema.optional(),
-}).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review);
+}).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review)
+  .refine(body => body.planRevision === undefined || Boolean(body.plan));
 
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -94,11 +98,25 @@ export async function POST(request: Request) {
     requirePricedModel(builderModel());
     // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
     await requireProviderCapacity("anthropic");
+    // An approved plan is bound to the exact saved revision the customer reviewed,
+    // checked before any operation or credit hold exists.
+    if (body.plan) {
+      const saved = await client.from("artifact_plans").select("plan").eq("workspace_id", body.workspaceId).eq("artifact_id", artifact.id).maybeSingle();
+      databaseError(saved.error);
+      const stored = StoredPlanSchema.safeParse(saved.data?.plan);
+      const issue = approvedPlanIssue(stored.success ? stored.data : null, { plan: body.plan, revision: body.planRevision });
+      if (issue) throw new RequestError("PLAN_REVISION_CONFLICT", issue, 409);
+    }
     const { operation: envelope, ...requestBody } = body;
     // SQL binds the stage to its original authorization and creates its hold atomically.
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
       expectedVersion: body.expectedVersion, effort: body.effort, kind: reviewing ? "review" : "build", ceiling,
-      envelope, request: requestBody });
+      envelope, request: requestBody }).catch(error => {
+      // SQL refuses a stale base version without saying so; name the versions instead.
+      if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
+        throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);
+      throw error;
+    });
     if (!admitted.run) return operationReplayResponse(admitted.status);
     const operation = admitted.run, hold = operation.hold;
     reserved = operation;

@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, Check, CircleHelp, FileCode2, Hammer, LayoutTemplate, ListChecks, Palette, Plus, Sparkles, Type, X } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
 import { effortFit, type PlanEstimate, type SitePlan } from "@/lib/builder/plan";
+import { BUILDER_EFFORT } from "@/lib/builder/pricing";
 import "@/app/plan-card.css";
 
 type SaveState = "saved" | "saving" | "local" | "error";
@@ -61,13 +62,15 @@ export default function PlanCard({ plan, estimate, recommended, revision, built,
   if (built) return <div className="pc pc-collapsed pc-built"><Check size={14} /><span>Built from plan v{revision} · <strong>{plan.title}</strong></span></div>;
 
   function build() {
-    // Answered questions become decisions the builder must follow.
+    // Answered questions become decisions the builder must follow. The builder
+    // saves them as a new plan revision first and builds only that saved revision.
     const answered = plan.questions.flatMap((question, index) => answers[index]?.trim() ? [`${question} → ${answers[index].trim()}`] : []);
     const open = plan.questions.filter((_, index) => !answers[index]?.trim());
     const final = answered.length ? { ...plan, questions: open, assumptions: [...answered, ...plan.assumptions].slice(0, 12) } : plan;
-    if (answered.length) onChange(final);
     onBuild(final, effort);
   }
+  // Approval is bound to the saved revision: an edit that is still saving (or failed) must save first.
+  const unsaved = save === "saving" ? "Saving your edits… Build waits for the saved plan." : save === "local" ? "This plan isn't saved yet, so it can't be built." : save === "error" ? "Fix the highlighted fields so the plan can be saved, then build." : null;
 
   const sections = plan.pages.reduce((total, page) => total + page.sections.length, 0);
   return <article className="pc" aria-labelledby={`${id}-title`}>
@@ -154,9 +157,10 @@ export default function PlanCard({ plan, estimate, recommended, revision, built,
         </button>)}
       </div>
       {!fit.fits && <p className="pc-nofit" role="note"><CircleHelp size={13} aria-hidden="true" />No effort level is sized to finish this plan in one build: its estimate reaches every level&apos;s limit, and a build is capped there. Remove pages or sections, or build the most important part first and add the rest later.</p>}
-      <button type="button" className="pc-build" disabled={locked || save === "error"} onClick={build}>
+      <button type="button" className="pc-build" disabled={locked || save !== "saved"} onClick={build} aria-describedby={`${id}-approval`}>
         <Hammer size={14} />Build this plan<span>~{estimate[effort].min === estimate[effort].max ? estimate[effort].max : `${estimate[effort].min}–${estimate[effort].max}`} credits</span><ArrowRight size={14} />
       </button>
+      <p className="pc-approval" id={`${id}-approval`} role="status">{unsaved ?? <>Builds saved plan v{revision} at {EFFORT_PRESENTATION[effort].label} effort: estimated ~{estimate[effort].min === estimate[effort].max ? estimate[effort].max : `${estimate[effort].min}–${estimate[effort].max}`} credits, never more than {BUILDER_EFFORT[effort].ceilingCredits} without your approval. Editing the plan or changing effort replaces this quote.</>}</p>
       <p className="pc-hint">Click any text to edit it, or <button type="button" className="pc-link" disabled={locked} onClick={onRevise}>reply in chat to revise</button>. No code is written until you build.</p>
     </footer>
   </article>;

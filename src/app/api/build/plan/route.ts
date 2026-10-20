@@ -16,7 +16,8 @@ import { briefPhotos } from "@/lib/leads/redesign";
 import { PLAN_CEILING_CREDITS, SitePlanSchema, StoredPlanSchema, estimatePlanCredits, recommendedEffort, type StoredPlan } from "@/lib/builder/plan";
 import { planStreamResponse } from "@/lib/builder/plan-run";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
-import { beginOperation, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
+import { OperationError, beginOperation, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
+import { staleBaseMessage } from "@/lib/builder/edit-intent";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
 import { requirePricedModel } from "@/lib/ai/model-check";
 
@@ -145,7 +146,12 @@ export async function POST(request: Request) {
     await requireProviderCapacity("anthropic");
     const { operation: envelope, ...requestBody } = body;
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
-      expectedVersion: body.expectedVersion, effort: body.effort, kind: "plan", ceiling: PLAN_CEILING_CREDITS, envelope, request: requestBody });
+      expectedVersion: body.expectedVersion, effort: body.effort, kind: "plan", ceiling: PLAN_CEILING_CREDITS, envelope, request: requestBody }).catch(error => {
+      // SQL refuses a stale base version without saying so; name the versions instead.
+      if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
+        throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);
+      throw error;
+    });
     if (!admitted.run) return operationReplayResponse(admitted.status);
     const operation = admitted.run, hold = operation.hold;
     reserved = operation;

@@ -19,7 +19,8 @@ const KINDS = ["website", "book", "presentation"] as const;
 const MODES = ["create", "plan"] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type UnsentDraftSurface = "home" | "studio";
+/** A builder composer is scoped to one project: `builder.<workspace>.<artifact>`. */
+export type UnsentDraftSurface = "home" | "studio" | `builder.${string}.${string}`;
 export type UnsentDraftFields<Effort extends string = string> = {
   kind: (typeof KINDS)[number];
   mode: (typeof MODES)[number];
