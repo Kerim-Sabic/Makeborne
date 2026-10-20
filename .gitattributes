@@ -11,3 +11,5 @@ supabase/migrations/20261020174011_ai_operation_cancellation.sql text eol=crlf
 supabase/migrations/20261020090000_payment_funding_and_refunds.sql text eol=lf
 supabase/migrations/20261020100000_credit_autotopup_authorization.sql text eol=lf
 supabase/migrations/20261020110000_usage_history_read.sql text eol=lf
+
+supabase/migrations/20261019134828_trusted_publication_production_profile.sql text eol=lf

@@ -4,16 +4,18 @@ import {z} from "zod";
 import {WebsiteProjectSourceSchema} from "./website-source";
 import {assertPublicationAssetOrigin, assertPublicationBrokerSecret, PUBLICATION_ASSET_PATH, PublicationDownloadContextSchema,
   type PublicationDownloadContext, publicationAssetWait, readPublicationAsset, verifyPublicationAssetSignature} from "./publication-download-contract";
-import {STAGING_SUPABASE_URL} from "../../../infra/customer-sites/namespace-policy.js";
+import {publicationProfile, publicationWorkspaces} from "../../../infra/publication-controller/profiles.mjs";
 
 const RecordSchema = z.object({id: z.string().uuid(), workspace_id: z.string().uuid(), project_id: z.string().uuid(),
   object_path: z.string().min(1).max(1024), content_type: z.enum(["image/png", "image/jpeg", "image/webp"]),
   sha256: z.string().regex(/^[a-f0-9]{64}$/)}).strict();
-function locate(value: unknown, context: PublicationDownloadContext, workspaceId: string) {
+function locate(value: unknown, context: PublicationDownloadContext, workspaceIds: readonly string[]) {
   const loaded = z.object({id: z.literal(context.preparationId), state: z.literal("running"), versionId: z.string().uuid(),
-    scope: z.object({workspaceId: z.literal(workspaceId), projectId: z.string().uuid(), artifactId: z.string().uuid()}),
+    scope: z.object({workspaceId: z.string().uuid(), projectId: z.string().uuid(), artifactId: z.string().uuid()}),
     content: z.object({websiteSource: WebsiteProjectSourceSchema}), assetRecords: z.array(RecordSchema).max(100),
   }).parse(value);
+  const workspaceId = loaded.scope.workspaceId;
+  if (!workspaceIds.includes(workspaceId)) throw new Error("PUBLICATION_ASSET_IDENTITY_INVALID");
   const descriptor = loaded.content.websiteSource.assets.find(asset => asset.id === context.assetId);
   const records = loaded.assetRecords.filter(asset => asset.id === context.assetId), record = records[0];
   if (!descriptor || records.length !== 1 || record.workspace_id !== workspaceId || record.project_id !== loaded.scope.projectId
@@ -26,12 +28,13 @@ function locate(value: unknown, context: PublicationDownloadContext, workspaceId
 
 /** Only the application process constructs this closure. New Supabase secret
  * keys go in apikey; they are not JWTs or controller credentials. */
-export function publicationStorageReader(secret: string, transport: typeof fetch = fetch) {
+export function publicationStorageReader(secret: string, transport: typeof fetch = fetch, namespace: "staging" | "production" = "staging") {
   if (!secret.startsWith("sb_secret_")) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
+  const profile = publicationProfile(namespace);
   return async (objectPath: string, maximum: number, signal: AbortSignal) => {
     if (/[\\%?#\u0000-\u001f\u007f]/.test(objectPath) || objectPath.split("/").some(part => !part || part === "." || part === ".."))
       throw new Error("PUBLICATION_ASSET_IDENTITY_INVALID");
-    const url = `${STAGING_SUPABASE_URL}/storage/v1/object/authenticated/project-assets/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
+    const url = `https://${profile.projectRef}.supabase.co/storage/v1/object/authenticated/project-assets/${objectPath.split("/").map(encodeURIComponent).join("/")}`;
     const response = await publicationAssetWait(() => transport(url, {method: "GET", redirect: "error", cache: "no-store", credentials: "omit", signal,
       headers: {apikey: secret, "accept-encoding": "identity"}}), signal, response => {void response.body?.cancel().catch(() => {});});
     if (response.status !== 200 || !response.body || response.headers.has("content-length") && response.headers.get("content-length") !== String(maximum)
@@ -42,11 +45,15 @@ export function publicationStorageReader(secret: string, transport: typeof fetch
   };
 }
 
-export function publicationAssetBroker(deps: {secret: string; origin: string; workspaceId: string; now?: () => number;
+export function publicationAssetBroker(deps: {secret: string; origin: string; namespace?: "staging" | "production"; workspaceId?: string; workspaceIds?: readonly string[]; now?: () => number;
   load(context: PublicationDownloadContext, signal: AbortSignal): PromiseLike<unknown>;
   read(objectPath: string, maximum: number, signal: AbortSignal): Promise<Uint8Array>}) {
-  const {secret, origin, workspaceId} = deps;
-  assertPublicationBrokerSecret(secret); assertPublicationAssetOrigin(origin);
+  const {secret, origin} = deps;
+  const namespace = deps.namespace ?? "staging";
+  if (deps.workspaceId !== undefined && deps.workspaceIds !== undefined) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
+  const workspaceIds = publicationWorkspaces(deps.workspaceIds ?? [deps.workspaceId]);
+  if (namespace === "staging" && workspaceIds.length !== 1) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
+  assertPublicationBrokerSecret(secret); assertPublicationAssetOrigin(origin, namespace);
   return async (request: Request): Promise<Response> => {
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]);
     try {
@@ -58,11 +65,11 @@ export function publicationAssetBroker(deps: {secret: string; origin: string; wo
       verifyPublicationAssetSignature(secret, origin, request.headers.get("x-makeborne-asset-time") ?? "",
         request.headers.get("x-makeborne-asset-signature") ?? "", body, deps.now?.() ?? Date.now());
       const context = PublicationDownloadContextSchema.parse(JSON.parse(body));
-      const before = locate(await publicationAssetWait(() => deps.load(context, signal), signal), context, workspaceId);
+      const before = locate(await publicationAssetWait(() => deps.load(context, signal), signal), context, workspaceIds);
       const bytes = await publicationAssetWait(() => deps.read(before.record.object_path, before.descriptor.bytes, signal), signal);
       if (bytes.length !== before.descriptor.bytes || createHash("sha256").update(bytes).digest("hex") !== before.descriptor.sha256)
         throw new Error("PUBLICATION_ASSET_BYTES_INVALID");
-      const after = locate(await publicationAssetWait(() => deps.load(context, signal), signal), context, workspaceId);
+      const after = locate(await publicationAssetWait(() => deps.load(context, signal), signal), context, workspaceIds);
       if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("PUBLICATION_ASSET_IDENTITY_CHANGED");
       signal.throwIfAborted();
       // Verify and reauthorize before emitting any bytes. A real response stream

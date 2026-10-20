@@ -1,10 +1,12 @@
 import "server-only";
 import {createHash, createHmac, timingSafeEqual} from "node:crypto";
 import {z} from "zod";
+import {publicationBrokerOriginAllowed} from "../../../infra/publication-controller/profiles.mjs";
 /** Operator-pinned deployment or stable team alias for this staging project.
  * No default: the selected alias must be verified before broker activation. */
-export function assertPublicationAssetOrigin(origin: string) {
-  if (!/^https:\/\/makeborne-release-staging(?:-[a-z0-9]{9})?-kerimsabic-6594s-projects\.vercel\.app$/.test(origin))
+export function assertPublicationAssetOrigin(origin: string, namespace?: "staging" | "production") {
+  if (!(namespace ? publicationBrokerOriginAllowed(origin, namespace)
+    : publicationBrokerOriginAllowed(origin, "staging") || publicationBrokerOriginAllowed(origin, "production")))
     throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
 }
 export const PUBLICATION_ASSET_PATH = "/api/hosting/publication-assets";
