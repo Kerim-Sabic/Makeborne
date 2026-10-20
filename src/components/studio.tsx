@@ -8,7 +8,7 @@ import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
 import BuildConversation from "./build-conversation";
-import { AttachmentList, useFileAttachments } from "./file-attachments";
+import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-attachments";
 import ComposerControls from "./composer-controls";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
@@ -1246,6 +1246,8 @@ function Modal({
     </div>
   );
 }
+/** The creation modal shows each source file's AI state (audit M09); files are left out only in the builder. */
+const NO_SOURCE_EXCLUSIONS: ReadonlySet<string> = new Set();
 const WizardDraftSchema = z
   .object({
     effort: EffortLevelSchema.default(DEFAULT_EFFORT),
@@ -1323,6 +1325,7 @@ function CreationWizard({
   const permissions=useGenerationConsent(account.accountId,initialGenerationConsent);
   const willGenerate=kind==="website"&&(permissions.enabled||!!initialGenerationConsent);
   const sourceAttachments = useFileAttachments(initialAttachmentOwner, `draft:${requestId}`);
+  const sourceReadiness = useSourceReadiness(sourceAttachments.files, NO_SOURCE_EXCLUSIONS);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState("");
@@ -1540,7 +1543,7 @@ function CreationWizard({
   return (
     <Frame close={() => { if (!savingRef.current) close(); }} title="Create a project">
       <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
-      <AttachmentList files={sourceAttachments.files} />
+      <AttachmentList files={sourceAttachments.files} readiness={sourceReadiness} onRetry={sourceReadiness.retry} readPrefix="When your project builds · " note="Saved on this device with your idea. They’re copied to the project when it opens." />
       {saveError && <p role="alert" className="small-note">{saveError}</p>}
       <div className="wizard-content" ref={wizardContent} inert={saving || uncertain || !account.ready}>
         <h2 tabIndex={-1}>{directStart ? mode === "plan" ? "Let’s shape your idea" : "Opening your project" : "What would you like to make?"}</h2>
