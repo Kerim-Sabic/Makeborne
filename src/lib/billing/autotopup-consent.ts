@@ -3,7 +3,7 @@ import { usd } from "./plans";
 /** Automatic top-up offer as stored (makeborne_autotopup_status). priceCents is null until the owner approves a price. */
 export type AutotopupOffer = { chargingEnabled: boolean; termsVersion: string; credits: number; priceCents: number | null; maxMonthlyCharges: number; maxDailyCharges: number; thresholds: number[] };
 export type AutotopupAuthorization = { id: number; termsVersion: string; credits: number; priceCents: number; thresholdCredits: number; monthlyLimitCharges: number; dailyLimitCharges: number; authorizedAt: string };
-export type AutotopupStatus = { offer: AutotopupOffer; authorization: AutotopupAuthorization | null; attempts: { state: string; credits: number; priceCents: number; createdAt: string; resolvedAt: string | null; failureCode: string | null }[] };
+export type AutotopupStatus = { /** Always sent by the current server; optional for older cached clients. */ setupEnabled?: boolean; offer: AutotopupOffer; authorization: AutotopupAuthorization | null; attempts: { state: string; credits: number; priceCents: number; createdAt: string; resolvedAt: string | null; failureCode: string | null }[] };
 
 /**
  * The exact authorization the customer confirms. The server rebuilds it from the

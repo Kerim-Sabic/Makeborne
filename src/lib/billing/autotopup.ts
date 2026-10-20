@@ -25,26 +25,33 @@ const rpcFailure = (error: { code?: string } | null) => {
 };
 
 export async function autotopupStatus(userId: string) {
-  requireSetup();
   const { data, error } = await billingDatabase().rpc("makeborne_autotopup_status", { p_user: userId });
   if (error || !data) throw rpcFailure(error);
-  return data as AutotopupStatus;
+  return { ...data as AutotopupStatus, setupEnabled: autotopupSetupEnabled() };
+}
+
+/** Hiding new setup must never hide an existing customer's right to revoke.
+ * On an uncertain read, show the retryable panel instead of assuming no consent. */
+export async function autotopupPanelVisible(userId: string): Promise<boolean> {
+  if (autotopupSetupEnabled()) return true;
+  try { return Boolean((await autotopupStatus(userId)).authorization); }
+  catch { return true; }
 }
 
 export async function authorizeAutotopup(userId: string, choice: { termsVersion: string; priceCents: number; threshold: number; monthlyLimit: number }) {
+  requireSetup();
   // The consent text names the current daily limit, so read the offer the customer saw.
   const { offer } = await autotopupStatus(userId);
-  const consent = autotopupConsentText({ termsVersion: choice.termsVersion, credits: 100 }, choice.priceCents, choice.threshold, choice.monthlyLimit, offer.maxDailyCharges);
+  const consent = autotopupConsentText(offer, choice.priceCents, choice.threshold, choice.monthlyLimit, offer.maxDailyCharges);
   const { data, error } = await billingDatabase().rpc("makeborne_autotopup_authorize", { p_user: userId, p_terms_version: choice.termsVersion,
     p_price_cents: choice.priceCents, p_threshold: choice.threshold, p_monthly_limit: choice.monthlyLimit,
     p_consent_sha256: createHash("sha256").update(consent, "utf8").digest("hex") });
   if (error || !data) throw rpcFailure(error);
-  return data as AutotopupStatus;
+  return { ...data as AutotopupStatus, setupEnabled: autotopupSetupEnabled() };
 }
 
 export async function revokeAutotopup(userId: string) {
-  requireSetup();
   const { data, error } = await billingDatabase().rpc("makeborne_autotopup_revoke", { p_user: userId, p_reason: "Turned off by the customer" });
   if (error || !data) throw rpcFailure(error);
-  return data as AutotopupStatus;
+  return { ...data as AutotopupStatus, setupEnabled: autotopupSetupEnabled() };
 }

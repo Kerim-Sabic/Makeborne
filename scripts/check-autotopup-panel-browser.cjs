@@ -53,6 +53,21 @@ async function main() {
     assert.match(await page.locator(".billing-autotopup").innerText(), /being prepared\. Their price has not been set/);
     pass("price null: authorization shown, Turn off reachable and keyboard-operable; afterwards the pending offer is shown");
 
+    state = { ...status(offer({ termsVersion: "v2" }), authorization()), setupEnabled: false };
+    await mount(() => ({ body: state }), body => {
+      assert.equal(body.action, "disable");
+      state = { ...state, authorization: null };
+      return { body: state };
+    });
+    assert.equal(await page.getByRole("button", { name: "Review the new terms" }).count(), 0);
+    assert.equal(await page.getByRole("checkbox").count(), 0);
+    await page.getByRole("button", { name: "Turn off automatic top-ups" }).click();
+    await page.getByRole("status").filter({ hasText: "Automatic top-ups are off" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Enable automatic top-ups" }).count(), 0);
+    assert.match(await page.locator(".billing-autotopup").innerText(), /New automatic top-up authorizations are unavailable/);
+    assert.deepEqual(log, ["GET", "POST disable"], "no enable or extra mutation when setup is disabled");
+    pass("setup disabled: old authorization remains revocable; no new or replacement consent is offered");
+
     // 2. Initial load failure: Try again reads only.
     let failures = 1;
     await mount(() => (failures-- > 0 ? { status: 503, body: { error: { message: "Automatic top-up settings could not be loaded." } } } : { body: status(offer(), null) }));

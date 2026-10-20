@@ -89,7 +89,8 @@ export default function BillingAutotopup() {
     {unconfirmed && <button type="button" className="billing-autotopup-secondary" onClick={() => void checkStatus()} disabled={busy}>Check current status</button>}
   </>;
   const priced = offer.priceCents;
-  const showForm = priced !== null && (!authorization || reviewing);
+  const setupEnabled = status.setupEnabled !== false;
+  const showForm = setupEnabled && priced !== null && (!authorization || reviewing);
   const text = threshold === null || priced === null ? "" : autotopupConsentText(offer, priced, threshold, limit, offer.maxDailyCharges);
 
   return <section className="billing-autotopup" aria-labelledby="autotopup-heading">
@@ -100,10 +101,11 @@ export default function BillingAutotopup() {
       {changed && <p className="billing-autotopup-note" role="status">{priced === null
         ? "This offer is not available right now, so no automatic charge happens under your authorization. You can still turn it off."
         : "The offer changed since you agreed to it. No automatic charge happens until you review and confirm the new terms."}</p>}
-      {changed && priced !== null && !reviewing && <button type="button" onClick={() => { setReviewing(true); setConfirmed(false); }} disabled={busy}>Review the new terms</button>}
+      {setupEnabled && changed && priced !== null && !reviewing && <button type="button" onClick={() => { setReviewing(true); setConfirmed(false); }} disabled={busy}>Review the new terms</button>}
       <button type="button" className="billing-autotopup-secondary" onClick={() => void submit("disable")} disabled={busy}>{busy ? "Working…" : "Turn off automatic top-ups"}</button>
     </>}
-    {!authorization && priced === null && <p>Automatic {offer.credits}-credit top-ups are being prepared. Their price has not been set, so they cannot be turned on yet.</p>}
+    {!setupEnabled && <p>New automatic top-up authorizations are unavailable right now. {authorization ? "You can still turn your existing authorization off." : "Your automatic top-ups are off."}</p>}
+    {setupEnabled && !authorization && priced === null && <p>Automatic {offer.credits}-credit top-ups are being prepared. Their price has not been set, so they cannot be turned on yet.</p>}
     {showForm && <>
       {reviewing ? <p><strong>New terms.</strong> Confirming replaces your current authorization; until then nothing changes.</p>
         : <p>Add {offer.credits} credits for {usd(priced)} when your balance runs low, within a monthly limit you choose. Recommended if you build often, so work in progress does not stop; it stays off unless you turn it on.</p>}
