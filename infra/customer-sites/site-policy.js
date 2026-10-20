@@ -129,10 +129,14 @@ export function siteDocumentHeaders({ interactive, secure, indexable = true, eta
 }
 
 /** Content-addressed bundles are immutable; project images may change on republish. */
-export function siteFileCacheControl(pathname) {
+export function immutableSiteFile(pathname) {
   return SITE_SCRIPT_PATH.test(pathname) || SITE_STYLE_PATH.test(pathname)
+    || (SITE_VITE_PATH.test(pathname) && /-[A-Za-z0-9_-]{8,}\.(?:js|css|woff2)$/.test(pathname));
+}
+export function siteFileCacheControl(pathname) {
+  return immutableSiteFile(pathname)
     ? "public, max-age=31536000, immutable"
-    : "public, max-age=300, stale-while-revalidate=3600";
+    : "public, max-age=0, must-revalidate";
 }
 
 export function siteFileHeaders({ pathname, contentType, secure, etag }) {

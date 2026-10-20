@@ -81,7 +81,7 @@ check("document, file and error headers carry isolation, caching and HSTS rules"
   assert.match(script["Content-Security-Policy"], /sandbox/);
   assert.match(script["Content-Security-Policy"], /default-src 'none'/);
   const image = policy.siteFileHeaders({pathname: "/images/hero.webp", contentType: "image/webp", secure: true});
-  assert.equal(image["Cache-Control"], "public, max-age=300, stale-while-revalidate=3600");
+  assert.equal(image["Cache-Control"], "public, max-age=0, must-revalidate");
   const missing = policy.siteErrorHeaders({secure: true, status: 404});
   assert.equal(missing["X-Robots-Tag"], "noindex");
   assert.match(policy.siteErrorPage(404), /Page not found/);

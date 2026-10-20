@@ -4,7 +4,7 @@ import { submitEnquiry } from "./forms.js";
 import { siteNamespacePolicy, classifySiteNamespaceRequest, STAGING_SITE_LABELS } from "./namespace-policy.js";
 import {
   composeSiteDocument, siteDocumentHeaders, siteDocumentPath, siteErrorHeaders, siteErrorPage, siteFileHeaders, siteFilePath,
-  siteOrigin, SITE_CONTENT_TYPES, SITE_LIMITS, siteScriptPath, siteFileContentType, validSiteLabel,
+  siteOrigin, SITE_CONTENT_TYPES, SITE_LIMITS, siteScriptPath, siteFileContentType, validSiteLabel, immutableSiteFile,
 } from "./site-policy.js";
 
 /** Cloudflare Worker for published customer websites.
@@ -155,17 +155,10 @@ function forCustomHost(response) {
 }
 
 async function serveFile(request, context, config, slug, url, secure, custom = false) {
-  const cache = typeof caches === "undefined" ? null : caches.default;
-  // Namespace-partitioned keys cannot reuse old production bytes on a QA URL
-  // when exact staging routes take over. Request query flags do not select it.
-  // Custom hosts also bind the resolved slug, so a hostname moved to another
-  // site never serves the previous site's cached files.
-  const key = new Request(`${url.origin}${url.pathname}?__mb_namespace=${config.namespace}-v1${custom ? `&__mb_site=${slug}` : ""}`, { method: "GET" });
-  const hit = cache ? await cache.match(key) : null;
-  if (hit) {
-    if (request.headers.get("If-None-Match") === hit.headers.get("ETag")) return new Response(null, { status: 304, headers: hit.headers });
-    return request.method === "HEAD" ? new Response(null, { headers: hit.headers }) : hit;
-  }
+  // Always consult the existing authoritative file read before the edge cache.
+  // It checks live state, hosting access, current manifest and JavaScript consent.
+  // A cache hit must never bypass Take offline or serve a retired script. Reusing
+  // this RPC avoids a second query or a weaker, separately maintained ACL.
   const file = await rpc(config, "makeborne_read_hosted_site_file", { p_slug: slug, p_path: url.pathname }, 3_000_000);
   if (file === null) return failure(404, secure, request.method === "HEAD");
   if (typeof file !== "object" || !ALLOWED_TYPES.has(file.content_type) || typeof file.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(file.sha256)
@@ -173,9 +166,21 @@ async function serveFile(request, context, config, slug, url, secure, custom = f
   // Legacy publishers normalized all raster bytes to WebP while retaining paths.
   if (file.content_type !== siteFileContentType(url.pathname)
     && !(file.content_type === SITE_CONTENT_TYPES.image && /\.(?:png|jpe?g)$/i.test(url.pathname))) throw new Error("invalid_file_type");
+  const headers = siteFileHeaders({ pathname: url.pathname, contentType: file.content_type, secure, etag: `"${file.sha256}"` });
+  const cache = immutableSiteFile(url.pathname) && typeof caches !== "undefined" ? caches.default : null;
+  // v2 ignores all old path-only entries; digest, namespace and site identity
+  // partition byte caches even if a publisher reuses a supposedly hashed path.
+  const key = new Request(`${url.origin}${url.pathname}?__mb_namespace=${config.namespace}-v2&__mb_site=${slug}&sha=${file.sha256}${custom ? "&custom=1" : ""}`, { method: "GET" });
+  const hit = cache ? await cache.match(key) : null;
+  if (hit && hit.headers.get("ETag") === headers.ETag && hit.headers.get("Content-Type") === file.content_type) {
+    const conditional = notModified(request, headers);
+    if (conditional) { await hit.body?.cancel(); return conditional; }
+    if (request.method === "HEAD") { await hit.body?.cancel(); return new Response(null, { headers }); }
+    return new Response(hit.body, { headers });
+  }
+  await hit?.body?.cancel();
   const bytes = decodeBase64(file.body);
   if (hex(await crypto.subtle.digest("SHA-256", bytes)) !== file.sha256) throw new Error("digest_mismatch");
-  const headers = siteFileHeaders({ pathname: url.pathname, contentType: file.content_type, secure, etag: `"${file.sha256}"` });
   const cached = notModified(request, headers);
   if (cached) return cached;
   const response = new Response(bytes, { headers });

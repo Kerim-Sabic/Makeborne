@@ -137,7 +137,7 @@ await check('production custom host resolves once, serves the site and caches 60
     const asset=await request('https://www.customer.com/images/hero.webp');
     assert.equal(asset.status,200);assert.deepEqual(Buffer.from(await asset.arrayBuffer()),IMAGE);
     assert.equal(asset.headers.get('Strict-Transport-Security'),'max-age=31536000');
-    assert.ok(cache.puts.some(put=>put.url==='https://www.customer.com/images/hero.webp?__mb_namespace=production-v1&__mb_site=good-dog'),'file key binds origin and slug');
+    assert.ok(!cache.puts.some(put=>put.url.includes('/images/hero.webp')),'mutable project images are never edge cached');
     const robots=await request('https://www.customer.com/robots.txt');assert.equal(robots.status,200);assert.match(await robots.text(),/Allow: \//);
     assert.equal(resolves().length,1,'resolution cached');
     assert.equal((await request('https://www.customer.com/',{method:'OPTIONS'})).status,405);
