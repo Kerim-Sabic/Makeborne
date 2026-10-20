@@ -11,6 +11,7 @@ const readingTime = (words: number) => {
   const minutes = Math.max(1, Math.round(words / 230));
   return minutes < 60 ? `${minutes} min read` : `${Math.floor(minutes / 60)} h ${minutes % 60 ? `${minutes % 60} min ` : ""}read`;
 };
+import { advancesOnClick, presenterShortcut } from "@/lib/documents/presenter-keys";
 import { readCloudImage } from "./cloud-api";
 
 const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
@@ -20,13 +21,10 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(blob);
 });
 
-const NEXT_KEYS = new Set(["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"]);
-const PREVIOUS_KEYS = new Set(["ArrowLeft", "ArrowUp", "PageUp", "Backspace"]);
-
 /** Full-screen presenter for decks. The slides are the same script-free HTML in
  * "present" mode; this host only toggles which slide is current, and CSS in the
  * frame provides the transition and builds (instant under reduced motion). */
-function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<string, string>; onClose: () => void }) {
+export function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<string, string>; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null), frame = useRef<HTMLIFrameElement>(null), entered = useRef(false);
   const [index, setIndex] = useState(0);
   const total = deck.slides.length, current = Math.max(0, Math.min(index, total - 1));
@@ -43,14 +41,16 @@ function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<strin
   }, [current]);
   useEffect(sync, [sync]);
 
+  // Shortcuts belong to the slide canvas; a focused button or field keeps its own keys (presenter-keys.ts).
   const onKey = useCallback((event: KeyboardEvent) => {
-    if (NEXT_KEYS.has(event.key)) { event.preventDefault(); go(current + 1); }
-    else if (PREVIOUS_KEYS.has(event.key)) { event.preventDefault(); go(current - 1); }
-    else if (event.key === "Home") { event.preventDefault(); go(0); }
-    else if (event.key === "End") { event.preventDefault(); go(total - 1); }
-    else if (event.key === "Escape") onClose();
+    const action = presenterShortcut(event);
+    if (!action) return;
+    event.preventDefault();
+    if (action === "close") onClose();
+    else go(action === "next" ? current + 1 : action === "previous" ? current - 1 : action === "first" ? 0 : total - 1);
   }, [current, go, onClose, total]);
-  const keyHandler = useRef(onKey);
+  const keyHandler = useRef(onKey), currentRef = useRef(current);
+  useEffect(() => { currentRef.current = current; }, [current]);
   useEffect(() => { keyHandler.current = onKey; }, [onKey]);
   useEffect(() => {
     const listener = (event: KeyboardEvent) => keyHandler.current(event);
@@ -75,10 +75,10 @@ function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<strin
     sync();
     const view = frame.current?.contentWindow;
     view?.addEventListener("keydown", event => keyHandler.current(event));
-    view?.document.addEventListener("click", () => keyHandler.current(new KeyboardEvent("keydown", { key: "ArrowRight" })));
+    view?.document.addEventListener("click", event => { if (advancesOnClick(event.target, view.getSelection()?.toString() ?? "")) go(currentRef.current + 1); });
   };
 
-  return <div ref={root} className="dp-present" role="dialog" aria-modal="true" aria-label={`Presenting ${deck.title}`} tabIndex={-1}>
+  return <div ref={root} className="dp-present" data-presenter-root="" role="dialog" aria-modal="true" aria-label={`Presenting ${deck.title}`} tabIndex={-1}>
     <iframe ref={frame} title={`Slide ${current + 1} of ${total}`} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={onLoad} />
     <div className="dp-present-bar">
       <button type="button" aria-label="Previous slide" disabled={current === 0} onClick={() => go(current - 1)}><ChevronLeft size={16} /></button>
