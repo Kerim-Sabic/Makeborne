@@ -22,7 +22,7 @@ Module._load = function(name, parent, main) {
   if (name === "@/lib/builder/website-run") return { websiteBuildResponse: input => { builds.push(input); return new Response(`data: ${JSON.stringify({ type: "done", version: 2 })}\n\n`, { headers: { "Content-Type": "text/event-stream" } }); } };
   if (name === "@/lib/builder/docs-run") return { documentBuildResponse: () => { throw Error("Unexpected document build"); } };
   if (name === "@/lib/builder/availability") return { builderAvailability: async () => ({}) };
-  if (name === "@/lib/brand/server") return { projectBrandKit: async () => null, ensureBrandLogo: async () => null };
+  if (name === "@/lib/brand/server") return { projectBrandKit: async () => db.brand, ensureBrandLogo: async () => null };
   if (name === "@/lib/leads/redesign-server") return { importTheirPhotos: async () => [], photosContext: () => "" };
   if (name === "@/lib/ai/model-check") return { requirePricedModel: () => undefined };
   if (name === "@/lib/ai/live-run") return { ...load.call(this, path.join(root, "lib/ai/live-run"), parent, main), requireProviderCapacity: async () => undefined, providerCapacity: async () => ({}) };
@@ -59,6 +59,7 @@ function rpc(name, args) {
     model.runs.set(args.p_step, created); model.holds++; op.reserved = 50;
     return { data: { operation: snapshot(op), result: null, recovery: null, requestContext: op.context, replayed: false, run: shape(created) }, error: null };
   }
+  if (name === "makeborne_ai_operation_read") return { data: { operation: snapshot(op), result: null, recovery: null, requestContext: op.context }, error: null };
   if (name === "makeborne_ai_operation_finish") {
     model.finishes++;
     return { data: { operation: { ...snapshot(op), reservedCredits: 0, status: "active" }, result: { charged: 0, code: "REQUEST_FAILED" }, recovery: null, charged: 0, outcome: "failed" }, error: null };
@@ -82,12 +83,12 @@ function reset({ currentVersion = 1, stored = { plan, status: "draft", basedOnVe
   db = { artifact: { id: artifactId, project_id: projectId, kind: "website", title: "Fictional", current_version: currentVersion },
     project: { brief: "A fictional studio", styleId: "", clientId: null },
     versions: [{ number: currentVersion, content: { title: "Fictional", sections: [], websiteSource: files() }, style: {}, changeSummary: "Fixture" }],
-    plan: stored };
+    plan: stored, brand: null };
   model = { ops: new Map(), runs: new Map(), holds: 0, finishes: 0 };
   builds = []; rpcCalls = [];
 }
 const post = (body, route) => route.POST(new Request("http://127.0.0.1/api/build", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
-const approval = (extra = {}) => ({ workspaceId, artifactId, expectedVersion: 1, message: "Build the approved plan: Fictional Atelier", effort: "medium", attachments: [], plan, planRevision: 3, operation: { actionKey, stepKey }, ...extra });
+const approval = (extra = {}) => ({ workspaceId, artifactId, expectedVersion: 1, message: "Build the approved plan: Fictional Atelier", effort: "medium", attachments: [], plan, planRevision: 3, approvedMaximum: 50, operation: { actionKey, stepKey }, ...extra });
 
 let passed = 0;
 async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}`); }
@@ -198,14 +199,50 @@ async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}
   });
   await check("route: a request written for an older version is refused with both versions named, without a hold", async () => {
     reset({ currentVersion: 2 });
-    const response = await post({ workspaceId, artifactId, expectedVersion: 1, message: "Make the hero bolder", effort: "light", attachments: [], operation: { actionKey, stepKey } }, route);
+    const response = await post({ workspaceId, artifactId, expectedVersion: 1, message: "Make the hero bolder", effort: "light", attachments: [], approvedMaximum: 20, operation: { actionKey, stepKey } }, route);
     const value = await response.json();
     assert.equal(response.status, 409); assert.equal(value.error.code, "VERSION_CONFLICT");
     assert.equal(value.error.message, intent.staleBaseMessage(1, 2));
     assert.equal(model.holds, 0); assert.equal(builds.length, 0);
     reset({ currentVersion: 2 });
-    const current = await post({ workspaceId, artifactId, expectedVersion: 2, message: "Make the hero bolder", effort: "light", attachments: [], operation: { actionKey, stepKey } }, route);
+    const current = await post({ workspaceId, artifactId, expectedVersion: 2, message: "Make the hero bolder", effort: "light", attachments: [], approvedMaximum: 20, operation: { actionKey, stepKey } }, route);
     assert.equal(current.status, 200); assert.equal(model.holds, 1);
+  });
+  await check("route: a new request must name the maximum it showed; a changed or missing maximum is refused before any hold", async () => {
+    for (const [approvedMaximum, pattern] of [[20, /changed from 20 to 50 credits/], [undefined, /shows its maximum charge/]]) {
+      reset();
+      const response = await post(approval({ approvedMaximum }), route);
+      const value = await response.json();
+      assert.equal(response.status, 409); assert.equal(value.error.code, "QUOTE_CHANGED"); assert.match(value.error.message, pattern);
+      assert.equal(rpcCalls.length, 0, "no operation or hold"); assert.equal(builds.length, 0);
+    }
+    assert.equal(intent.approvedMaximumIssue({ id: actionKey }, undefined, 50), null, "automatic stages of an approved request carry no new quote");
+  });
+  await check("route: the brand kit is resolved before admission, fingerprinted into the request, and pinned for later stages", async () => {
+    const kit = require("../brand/kit.ts").parseBrandKit({ name: "Fictional Co", colors: { primary: "#112233" } });
+    assert.ok(kit, "fixture kit is valid");
+    reset(); db.brand = kit;
+    assert.equal((await post(approval(), route)).status, 200);
+    const created = rpcCalls.find(call => call.name === "makeborne_ai_operation_create").args;
+    assert.match(created.p_context.brandKit, /^sha256:[a-f0-9]{64}$/);
+    const withKit = created.p_input_hash;
+    reset(); db.brand = null;
+    await post(approval(), route);
+    assert.equal(rpcCalls[0].args.p_context.brandKit, "none"); assert.notEqual(rpcCalls[0].args.p_input_hash, withKit, "the kit is part of the request identity");
+    // A continuation after the kit was edited mid-request is refused before any new hold.
+    reset(); db.brand = kit;
+    await post(approval(), route);
+    const opId = [...model.ops.values()][0].id;
+    model.runs.clear(); [...model.ops.values()][0].reserved = 0;
+    db.brand = { ...kit, colors: { primary: "#445566" } };
+    const holds = model.holds;
+    const continued = await post({ workspaceId, artifactId, expectedVersion: 1, message: "Continue", effort: "medium", attachments: [], operation: { id: opId, stepKey: ids[5], kind: "continuation" } }, route);
+    const value = await continued.json();
+    assert.equal(continued.status, 409); assert.equal(value.error.code, "OPERATION_BRAND_CHANGED");
+    assert.equal(model.holds, holds, "no hold for the refused stage");
+    db.brand = kit;
+    const same = await post({ workspaceId, artifactId, expectedVersion: 1, message: "Continue", effort: "medium", attachments: [], operation: { id: opId, stepKey: ids[5], kind: "continuation" } }, route);
+    assert.equal(same.status, 200, "the unchanged kit continues");
   });
   console.log(`${passed} edit-intent checks passed; no provider, database or paid call.`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

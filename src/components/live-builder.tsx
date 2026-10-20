@@ -55,6 +55,7 @@ function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "bo
       <div><dt>Charged</dt><dd>{receipt.charged === null ? "Being confirmed. Use Check saved result & charge below." : `${receipt.charged} credit${receipt.charged === 1 ? "" : "s"}${receipt.unlimited ? " · unlimited allowance" : ""}`}</dd></div>
       <div><dt>Result</dt><dd>{receipt.saved ? receipt.version ? `Saved as version ${receipt.version}` : "Saved" : "No new version"}</dd></div>
       <div><dt>Time</dt><dd>{formatDuration(receipt.durationMs)}</dd></div>
+      <div><dt>Sources sent</dt><dd>{receipt.sources.length ? receipt.sources.join(", ") : "None"}</dd></div>
       <div><dt>{kind === "website" ? "Files changed" : "Changes"}</dt><dd>{changes.length ? <details><summary>{changes.length} {noun}{changes.length === 1 ? "" : "s"}</summary><ul>{changes.slice(0, 40).map(item => <li key={item}>{item}</li>)}{changes.length > 40 && <li>and {changes.length - 40} more</li>}</ul></details> : "None"}</dd></div>
     </dl>
     {!!receipt.checks.length && <ul className="lb-receipt-checks">{receipt.checks.map(check => <li key={check.label} data-ok={check.ok}>{check.ok ? <Check size={13} aria-label="Passed" /> : <TriangleAlert size={13} aria-label="Needs attention" />}<span>{check.label}</span></li>)}</ul>}
@@ -87,7 +88,7 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, onLive, onSaved, onUndo, undoBlocked = null, kind = "website", baseDocument, estimates = null }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback. Never sent automatically. */
   prefill?: { key: string; text: string; target?: EditTarget } | null;
@@ -95,6 +96,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   onUndo?: (change: { from: number; to: number }) => string | null;
   /** Why Undo must wait (unsaved draft, save in progress, conflict). */
   undoBlocked?: string | null;
+  /** The brand kit the next request will use: its name, null for none, undefined while unknown. */
+  brandKit?: string | null;
   history: { number: number; summary: string }[];
   baseFiles: Record<string, string>; baseAssets: { id: string; path: string }[];
   defaultEffort?: EffortLevel; disabled?: boolean;
@@ -187,6 +190,19 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [lastChange, setLastChange] = useState<{ from: number; to: number } | null>(null);
   const [undoing, setUndoing] = useState<{ from: number; to: number } | null>(null);
   const approvals = useRef(new Map<string, { actionKey: string; stepKey: string }>());
+  // The source files included in the current request (the "Will be read" set at sending).
+  const [sentSources, setSentSources] = useState<{ names: string[]; operationId: string | null } | null>(null);
+  // After a reload, a build request's retained source snapshot still names its files.
+  const [retainedSources, setRetainedSources] = useState<{ operationId: string; names: string[] } | null>(null);
+  const buildOperationId = buildOperation?.id ?? null;
+  useEffect(() => {
+    if (!buildOperationId || sentSources) return;
+    let current = true;
+    readBuilderAttachmentSnapshot(sourceOwner, sourceContext, buildOperationId)
+      .then(files => { if (current) setRetainedSources({ operationId: buildOperationId, names: files.map(file => file.name) }); })
+      .catch(() => undefined);
+    return () => { current = false; };
+  }, [buildOperationId, sentSources, sourceContext, sourceOwner]);
   const approvingRef = useRef(false);
   const [approving, setApproving] = useState(false);
   useEffect(() => { if (prefilled) composer.current?.focus(); }, [prefilled]);
@@ -343,6 +359,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         label: `Captured ${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}${errors.length ? ` · ${errors.length} runtime error${errors.length === 1 ? "" : "s"}` : ""}` }] }));
     const reviewed = await stream({ expectedVersion: base.version, message: "Design review", effort: base.effort, mode: "review",
       operation: base.operation ? { id: base.operation.id, stepKey: newId(), kind: "review" } : beginOperation(),
+      // A manual review is a new request: it carries the maximum shown on the Review button.
+      ...(base.operation ? {} : { approvedMaximum: reviewCreditCeiling(BUILDER_EFFORT[base.effort].ceilingCredits) }),
       review: { round: base.round, screenshots, viewports, errors } }, reply.id, live, meter);
     if (reviewed && meter) meter.reviews++;
     return reviewed;
@@ -362,7 +380,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     if (receipt) setTurns(current => [...current, { id: newId(), role: "assistant", text: "", activity: [], state: "done", receipt }]);
   }, [unlimited, website]);
 
-  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string }): Promise<Outcome | undefined> => {
+  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
     setBusy(true); setNotice(""); setDraft(""); setLastChange(null); setUndoing(null);
     // A continuation re-runs the saved request; only a new request holds its own text.
@@ -375,6 +393,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     const live: Live = { files: { ...baseFiles }, assets: [...baseAssets], document: baseDocument };
     onLive({ ...live, building: true });
     const meter = newRunMeter();
+    meter.sources = files.map(file => file.name);
+    setSentSources({ names: meter.sources, operationId: options?.operation?.id ?? null });
     try {
       const level = options?.effort ?? effort;
       const requestOperation: OperationRequest = options?.operation ? { id: options.operation.id, stepKey: newId(), kind: "continuation" } : beginOperation(options?.approval);
@@ -382,6 +402,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       if (!sourceSession.active) return;
       let result = await stream({ expectedVersion: version, message: text.trim(), effort: level,
         operation: requestOperation,
+        // A new request is bound to the maximum shown before sending (the composer limit or the plan approval).
+        ...("actionKey" in requestOperation ? { approvedMaximum: options?.approvedMaximum ?? BUILDER_EFFORT[level].ceilingCredits } : {}),
         attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan, planRevision: options.planRevision } : {}) }, reply.id, live, meter);
       outcome = result ? "done" : lastRefusal.current ? "refused" : "uncertain";
       if (request) releaseRequest(request, outcome, !options?.plan);
@@ -471,7 +493,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     holdRequest(request);
     let ended = false;
     const end = (outcome: Outcome) => { if (!ended) { ended = true; releaseRequest(request, outcome); } };
-    await planner.run({ turnId: reply.id, message: text.trim(), effort, expectedVersion: version, revise,
+    setSentSources({ names: files.map(file => file.name), operationId: null });
+    await planner.run({ turnId: reply.id, message: text.trim(), effort, expectedVersion: version, revise, approvedMaximum: PLAN_CEILING_CREDITS,
       attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })) }, {
       onText: delta => update(reply.id, turn => ({ ...turn, text: turn.text + delta })),
       onStatus: message => update(reply.id, turn => ({ ...turn, activity: [{ id: "status", kind: "note", label: message, done: false }] })),
@@ -484,7 +507,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     setBusy(false);
     refreshBalance();
   }, [busy, disabled, draftPlan, effort, holdRequest, operationRunning, planner, previewingRecovery, refreshBalance, releaseRequest, version]);
-  const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; target?: string }): Promise<Outcome | undefined> => {
+  const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; target?: string }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
     if (!sources.ready || sources.busy) { setNotice("Wait for your source files to finish loading or saving."); return; }
     sourceLock.current = true; setPreparingSources(true); setNotice("");
@@ -520,7 +543,10 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
   }, [accountId, artifactId, kind, workspaceId]);
   // The first request on an empty project asks what the brief leaves open.
   const firstBuild = !turns.length && !history.length && !planner.restored && version <= 1 && (website ? Object.keys(baseFiles).length === 0 : !baseDocument);
-  const startOrAsk = useCallback((text: string, requestMode: "create" | "plan", target?: string) => {
+  /** `prepared` is a brief handed over from another screen (project creation): it may ask the free
+   * questions, but paid work starts only from an explicit Send or Start after the maximum is shown. */
+  const startOrAsk = useCallback((text: string, requestMode: "create" | "plan", target?: string, prepared = false) => {
+    const hold = () => { setDraft(text.trim()); if (website) setMode(requestMode); setNotice(`Your brief is ready below. Review it and the maximum, then choose ${requestMode === "plan" ? "Plan" : "Send"} to start. Nothing has been sent.`); };
     const issue = sourceIntentIssue(readiness);
     if (issue) { setNotice(issue); setDraft(text); return; }
     if (asking) { setNotice("Answer the questions above, or choose Skip questions."); return; }
@@ -532,13 +558,14 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       // Tailored questions when the AI is available; otherwise the on-device set.
       void tailoredQuestions(brief, attachments).then(tailored => {
         const questions = tailored ?? local;
-        if (!questions.length) { setAsking(null); void submitSources(brief, requestMode); return; }
+        if (!questions.length) { setAsking(null); if (prepared) hold(); else void submitSources(brief, requestMode); return; }
         setAsking(current => current && current.text === brief && !current.questions ? { ...current, questions } : current);
       });
       return;
     }
+    if (prepared) { hold(); return; }
     void submitSources(text, requestMode, target ? { target } : undefined);
-  }, [asking, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions]);
+  }, [asking, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
   const answerQuestions = (answers: BriefAnswers | null) => {
     if (!asking) return;
     const { text, mode: requestMode, questions } = asking;
@@ -555,7 +582,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
   };
   /** Builds exactly the saved plan revision shown, at the effort shown. Unsaved edits save first;
    * a repeated click for the same approval reuses its request identity, so the server joins it. */
-  const buildPlan = async (approved: SitePlan, level: EffortLevel) => {
+  const buildPlan = async (approved: SitePlan, level: EffortLevel, maximum: number) => {
     if (approvingRef.current || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
     approvingRef.current = true; setApproving(true); setNotice("");
     try {
@@ -565,7 +592,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       const approval = approvals.current.get(identity) ?? { actionKey: newId(), stepKey: newId() };
       approvals.current.set(identity, approval);
       setMode("create"); setEffort(level);
-      const outcome = await submitSources(`Build the approved plan: ${saved.plan.title}`, "create", { plan: saved.plan, planRevision: saved.revision, effort: level, approval,
+      const outcome = await submitSources(`Build the approved plan: ${saved.plan.title}`, "create", { plan: saved.plan, planRevision: saved.revision, effort: level, approval, approvedMaximum: maximum,
         target: `saved plan v${saved.revision} · ${EFFORT_PRESENTATION[level].label} effort` });
       // Only an unknown outcome keeps the identity: building it again then joins the recorded request.
       if (outcome !== "uncertain") approvals.current.delete(identity);
@@ -573,6 +600,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       if (sourceSession.active) setNotice(error instanceof Error ? error.message : "The plan could not be approved.");
     } finally { approvingRef.current = false; if (sourceSession.active) setApproving(false); }
   };
+  const shownSources = sentSources?.names ?? (retainedSources && retainedSources.operationId === operation?.id ? retainedSources.names : null);
   const undoReason = undoIssue(lastChange, { version, available: Boolean(onUndo),
     blocked: busy || approving || operationRunning ? "Wait for the current request to finish." : previewingRecovery ? "Return to the saved version first." : undoBlocked });
   const undo = () => {
@@ -636,13 +664,13 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     finally { authorizing.current = false; setBusy(false); }
   };
   const planCard = (active: NonNullable<typeof planner.active>) => <PlanCard key={`${active.turnId}:${active.stored.revision}`} plan={active.stored.plan} estimate={active.estimate} recommended={active.recommended}
-    revision={active.stored.revision} built={active.stored.status === "built"} save={active.save} busy={busy || approving || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
-    onChange={planner.edit} onBuild={(approved, level) => void buildPlan(approved, level)} onRevise={revisePlan} />;
+    revision={active.stored.revision} built={active.stored.status === "built"} save={active.save} brandKit={brandKit} busy={busy || approving || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
+    onChange={planner.edit} onBuild={(approved, level, maximum) => void buildPlan(approved, level, maximum)} onRevise={revisePlan} />;
 
   useEffect(() => {
     if (!autoStart || started.current || disabled || !sources.ready || sources.busy || readiness.checking || turns.length || version > 1 || !operationReady || !planner.ready || hasPreviousOperation || planner.hasPrevious) return;
     started.current = true;
-    startOrAsk(autoStart, autoStartMode === "plan" && website ? "plan" : "create");
+    startOrAsk(autoStart, autoStartMode === "plan" && website ? "plan" : "create", undefined, true);
   }, [autoStart, autoStartMode, disabled, hasPreviousOperation, operationReady, planner.hasPrevious, planner.ready, readiness.checking, sources.busy, sources.ready, startOrAsk, turns.length, version, website]);
 
 
@@ -663,8 +691,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     <div className="lb-log" id={`lb-log-${artifactId}`} ref={log} aria-live="polite">
       {empty && !asking && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {asking && <><div className="lb-turn lb-user"><p>{asking.text}</p></div>
-        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask…</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>Skip</button></div>
+        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</button></div>
           : <BriefQuestionsCard questions={asking.questions} kind={kind} planning={asking.mode === "plan"} busy={busy || preparingSources || Boolean(disabled)}
+          limit={`Starting ${asking.mode === "plan" ? "the plan" : "the build"} uses up to ${asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits, with ${sources.files.length ? `your source files: ${sources.files.filter(file => !leftOut.has(file.id)).map(file => file.name).join(", ") || "none"}` : "no source files"}. You pay only for what is used.`}
           onStart={answers => answerQuestions(answers)} onSkip={() => answerQuestions(null)} />}</div></>}
       {!!history.length && <details className="lb-history"><summary>{history.length} earlier change{history.length === 1 ? "" : "s"}</summary>
         <ol>{history.map(item => <li key={item.number}><strong>v{item.number}</strong> {item.summary}</li>)}</ol></details>}
@@ -698,7 +727,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     </section>}
     {(operation || recoveryNotice || previewingRecovery) && <section className="lb-operation" aria-label="Request allowance">
       {operation && <><div className="lb-operation-total"><strong>{operation.chargedCredits} / {operation.authorizedCredits} credits</strong><span>{operation.reservedCredits > 0 ? `${operation.reservedCredits} reserved` : "Total request maximum"}</span></div>
-        <p>This allowance covers the request and its automatic refinements.</p></>}
+        <p>This allowance covers the request and its automatic refinements.</p>
+        {shownSources && <p className="lb-operation-sources">{shownSources.length ? `Sources sent with this request: ${shownSources.join(", ")}` : "No source files were sent with this request."}</p>}</>}
       {recoveryNotice && <p role="status">{recoveryNotice}</p>}
       {mode === "plan" && planner.recoverablePlan && <div className="lb-operation-consent">
         <details className="lb-retained-plan"><summary>Review retained plan · {planner.recoverablePlan.stored.plan.title}</summary>
@@ -765,6 +795,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         </button> : <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || readiness.checking || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>}
       </div>
       <div className="lb-estimate">
+        {brandKit !== undefined && <p className="lb-brand">{brandKit ? `Brand kit: ${brandKit}` : "No brand kit"} · used for this request</p>}
         <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
         {/* Only measured figures: failed planning is released at zero; explicit Stop settles confirmed usage. */}
         <p className="lb-estimate-detail">{mode === "plan" ? "A failed plan is not charged. If you choose Stop, confirmed usage is charged and unused credits are returned."

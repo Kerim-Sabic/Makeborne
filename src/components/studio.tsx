@@ -612,7 +612,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       {immediateWebsite&&<GenerationPermissions value={composerPermissions}/>}
     </section>
     <div className="composer-note">
-      {immediateWebsite?"Your website request starts after your brief is saved.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
+      {immediateWebsite?"Your brief is saved and waits in the builder. Nothing is sent or charged until you press Send there.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
     </div>
     <UnsentDraftNotice restoredAt={unsentBrief.restoredAt} storageRefused={unsentBrief.storageRefused} onDiscard={unsentBrief.discard} />
     <div

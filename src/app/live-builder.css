@@ -45,6 +45,7 @@
 .lb-estimate .lb-limit { margin-bottom:0; color:#4c3e57; font-weight:550; }
 .lb-estimate-detail { margin:2px 2px 0; color:var(--text-muted); font-size:12px; line-height:1.5; }
 .lb-estimate-compact { display:none; }
+.lb-brand { margin:2px 2px 0; color:var(--text-muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
 /* Receipt after a request: settled charge, changes, checks, time. */
 .lb-receipt { margin-top:4px; padding:11px 12px; border:1px solid #e5dfeb; border-radius:12px; background:#fbf9fc; color:#4c3e57; font-size:12px; }
 .lb-turn .lb-receipt-title { display:flex; align-items:center; gap:6px; margin:0 0 8px; font-size:12px; font-weight:600; color:#3d3448; }

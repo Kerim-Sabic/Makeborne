@@ -58,7 +58,7 @@ async function main(){
    page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.message));
    await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/,route=>route.abort());
    try{
-    await page.goto(base);const stop=page.getByRole('button',{name:'Stop',exact:true});await stop.waitFor();
+    await page.goto(base);await page.getByText(/Your brief is ready below/).waitFor();assert.equal(current.builds.length,0,'a handed-over brief is never sent on load');await page.locator('form.lb-composer button[type=submit]').click();const stop=page.getByRole('button',{name:'Stop',exact:true});await stop.waitFor();
     if(name!=='before-id')await page.getByText('0 / 20 credits',{exact:true}).waitFor();
     if(name==='mid-run-double-stop')await stop.dblclick();else await stop.click();
     if(name==='late-operation-event'){await page.waitForTimeout(100);assert.equal(current.staleDelivered,true);assert.equal(await page.getByRole('button',{name:'Stopping',exact:true}).isDisabled(),true,'late initial SSE cannot undo acknowledged Stop');}

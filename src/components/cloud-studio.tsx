@@ -1137,13 +1137,15 @@ export function CloudEditor({
   const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
   // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
   const [brandColors, setBrandColors] = useState<{ label: string; value: string }[]>([]);
+  // The kit name the builder shows before sending (undefined until known; the server fingerprints the kit it actually uses).
+  const [brandKitName, setBrandKitName] = useState<string | null | undefined>(undefined);
   const brandClient = project?.clientId ?? null;
   useEffect(() => {
-    if (artifact.kind !== "website" || role === "reviewer") return;
+    if (role === "reviewer") return;
     let active = true;
     brandRequest<{ kits: { clientId: string | null; kit: unknown }[] }>(accountId, `/api/cloud/workspaces/${workspaceId}/brand-kits`).then(value => {
       const kit = parseBrandKit(value.kits.find(entry => entry.clientId === brandClient)?.kit);
-      if (active) setBrandColors(kit ? kitSwatches(kit) : []);
+      if (active) { setBrandColors(kit && artifact.kind === "website" ? kitSwatches(kit) : []); setBrandKitName(kit ? kit.name : null); }
     }, () => undefined);
     return () => { active = false; };
   }, [accountId, workspaceId, brandClient, artifact.kind, role]);
@@ -1561,7 +1563,8 @@ export function CloudEditor({
   const previewDocument = !liveDocument ? undefined : preview === "live" ? live?.document : preview === "document" ? content?.document : undefined;
   const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
     .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content])), [content?.websiteSource]);
-  // A project created from the home prompt starts building as soon as it opens, once the builder can run.
+  // A project created from the home prompt opens with its brief in the builder. The builder may ask its free
+  // questions, but paid work starts only from an explicit Send after the maximum is shown (audit M08).
   useEffect(() => {
     if (!useLiveBuilder || !builder.available || !format || hasBuilderSource(format) || !project?.brief.trim() || expectedVersion > 1) return;
     const scope = { workspaceId, projectId: artifact.projectId, artifactId: artifact.id };
@@ -1616,7 +1619,7 @@ export function CloudEditor({
           defaultEffort={project?.effort} disabled={!content || !builder.available || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
           kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }}
-          onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />
+          brandKit={brandKitName} onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">

@@ -227,7 +227,7 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
   }, [operation, recovery, recoverablePlan, recoverOperation, restoreRecorded, key]);
 
   /** Runs one planning call. Revises the active draft plan when there is one. */
-  const run = useCallback(async (input: { turnId: string; message: string; effort: EffortLevel; expectedVersion: number; attachments: PlanAttachment[]; revise: SitePlan | null }, on: PlanCallbacks) => {
+  const run = useCallback(async (input: { turnId: string; message: string; effort: EffortLevel; expectedVersion: number; attachments: PlanAttachment[]; revise: SitePlan | null; approvedMaximum: number }, on: PlanCallbacks) => {
     let finished = false;
     const session = sessionRef.current;
     if (!session?.live || session.key !== key || session.running) return;
@@ -265,7 +265,7 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
     };
     try {
       const response = await fetch("/api/build/plan", { method: "POST", headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
-        body: serializeBuilderRequest({ workspaceId, artifactId, expectedVersion: input.expectedVersion, expectedRevision: session.revision, message: input.message, effort: input.effort,
+        body: serializeBuilderRequest({ workspaceId, artifactId, expectedVersion: input.expectedVersion, expectedRevision: session.revision, message: input.message, effort: input.effort, approvedMaximum: input.approvedMaximum,
           operation: requestOperation,
           attachments: input.attachments, ...(input.revise ? { previousPlan: input.revise } : {}) }) });
       if (!isCurrent()) return;

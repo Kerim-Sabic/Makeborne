@@ -16,7 +16,7 @@ function Host() {
     <button type="button" onClick={() => setVersion(value => value + 1)}>Save elsewhere</button>
     <button type="button" onClick={() => pick("export default function App() { return <h1>Old</h1>; }")}>Pick stale element</button>
     <button type="button" onClick={() => pick(SOURCE)}>Pick current element</button>
-    <LiveBuilder accountId="${ids.actor}" workspaceId="${ids.workspace}" artifactId="${ids.artifact}" version={version} history={[]} baseFiles={{ "src/App.tsx": SOURCE }} baseAssets={[]} defaultEffort="light" kind="website" prefill={prefill}
+    <LiveBuilder accountId="${ids.actor}" workspaceId="${ids.workspace}" artifactId="${ids.artifact}" version={version} history={[]} baseFiles={{ "src/App.tsx": SOURCE }} baseAssets={[]} defaultEffort="light" kind="website" prefill={prefill} brandKit="Fictional Co" autoStart={new URLSearchParams(location.search).get("auto")}
       onLive={() => {}} onSaved={async () => { const value = await fetch("/fixture/version").then(response => response.json()); setVersion(value.version); }}
       undoBlocked={dirty ? "Save or resolve the current draft before undoing." : null}
       onUndo={change => { if (version !== change.to) return "Newer version"; window.__undo = [...(window.__undo ?? []), change]; fetch("/fixture/restore", { method: "POST", body: JSON.stringify(change) }).then(response => response.json()).then(value => setVersion(value.version)); return null; }} />
@@ -75,13 +75,13 @@ async function main() {
   const base = `http://127.0.0.1:${server.address().port}`, browser = await chromium.launch({ headless: true });
   const failures = [];
   let passed = 0;
-  const scenario = async (name, setup, run, viewport = { width: 1100, height: 1000 }) => {
+  const scenario = async (name, setup, run, viewport = { width: 1100, height: 1000 }, query = "") => {
     state = { version: 1, builds: [], planSaves: [], restores: [], errors: [], plan: null, operation: null, reply: () => ({}), ...setup };
     const current = state, context = await browser.newContext({ viewport }), page = await context.newPage(), errors = [];
     page.setDefaultTimeout(8000); page.on("pageerror", error => errors.push(error.message));
     await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/, route => route.abort());
     try {
-      await page.goto(base); await page.getByRole("textbox", { name: "Message the builder" }).waitFor();
+      await page.goto(base + query); await page.getByRole("textbox", { name: "Message the builder" }).waitFor();
       await run(page, current);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "no horizontal page scroll");
       assert.deepEqual(errors, []); assert.deepEqual(current.errors, []);
@@ -102,6 +102,11 @@ async function main() {
       await page.getByRole("button", { name: "Send", exact: true }).click();
       await page.getByText("Saved as version 3, from version 2.").waitFor();
       assert.deepEqual(current.builds.map(build => build.expectedVersion), [1, 2], "the resend is an explicit new request on the current version");
+      assert.deepEqual(current.builds.map(build => build.approvedMaximum), [20, 20], "each new request names the maximum shown in the composer");
+      await page.getByText("Brand kit: Fictional Co · used for this request").waitFor();
+      const receipt = page.getByRole("region", { name: "Request receipt" }).last();
+      assert.match(await receipt.innerText(), /Sources sent\s+None/, "the receipt names the sources sent (none here)");
+      await page.getByText("No source files were sent with this request.").waitFor();
     });
     await scenario("pending-survives-reload-no-resend", { reply: () => ({ hold: true }) }, async (page, current) => {
       await send(page, "Add an FAQ section");
@@ -159,6 +164,7 @@ async function main() {
     await scenario("plan-approval-binds-saved-revision-once", { plan: { plan, status: "draft", basedOnVersion: 1, revision: 3, charged: 1 } }, async (page, current) => {
       await page.getByText("Here is the plan we left off with.", { exact: false }).waitFor();
       await page.getByText(/Builds saved plan v3 at .* effort/).waitFor();
+      assert.match(await page.locator(".pc-build span").innerText(), /^Estimated ~\d+(–\d+)? · At most 20 credits$/, "estimate and maximum are labelled distinctly");
       // An edit must save before Build is possible; the quote then names the new revision.
       await page.getByRole("button", { name: "Edit site title" }).click();
       await page.getByRole("textbox", { name: "site title" }).fill("Fictional Atelier, edited");
@@ -167,7 +173,8 @@ async function main() {
       assert.equal(await page.getByRole("button", { name: /Build this plan/ }).isDisabled(), true, "unsaved edits cannot be built");
       await page.getByText(/Builds saved plan v4 at /).waitFor();
       await page.getByRole("radio", { name: /^Medium/ }).click();
-      await page.getByText(/Builds saved plan v4 at Medium effort: .*never more than 50/).waitFor();
+      await page.getByText(/Builds saved plan v4 at Medium effort\. Estimated ~\d+(–\d+)? credits .*At most 50 credits/).waitFor();
+      assert.match(await page.locator(".pc-approval").innerText(), /Brand kit: Fictional Co./, "the approval names the brand kit");
       await page.getByPlaceholder(/Your answer/).fill("Lisbon");
       current.saveDelay = 150;
       await page.getByRole("button", { name: /Build this plan/ }).dblclick();
@@ -177,6 +184,7 @@ async function main() {
       const [buildBody] = current.builds;
       assert.equal(buildBody.planRevision, 5, "the build names the saved revision that includes the answer");
       assert.equal(buildBody.effort, "medium", "the build uses the effort shown in the approval");
+      assert.equal(buildBody.approvedMaximum, 50, "the approval is bound to the maximum it showed");
       assert.equal(buildBody.plan.title, "Fictional Atelier, edited");
       assert.ok(buildBody.plan.assumptions.includes("Which city do you work in? → Lisbon"), "the answer is part of the approved plan");
       assert.deepEqual(current.planSaves.slice(0, 2).map(save => save.expectedRevision), [3, 4], "edit and answer were saved before the build");
@@ -192,6 +200,17 @@ async function main() {
       await page.getByText(/· saved plan v3 · .* effort/).waitFor();
       assert.equal(current.builds.length, 2); assert.notEqual(current.builds[0].operation.actionKey, current.builds[1].operation.actionKey, "a refused approval is not reused");
     });
+    await scenario("handed-over-brief-waits-for-send", {}, async (page, current) => {
+      await page.getByText(/Your brief is ready below\. Review it and the maximum, then choose Send to start\. Nothing has been sent\./).waitFor();
+      assert.equal(await composer(page).inputValue(), "A fictional bakery site");
+      await page.waitForTimeout(400);
+      assert.equal(current.builds.length, 0, "a brief handed over from project creation is never sent on load");
+      await page.reload(); await composer(page).waitFor(); await page.waitForTimeout(400);
+      assert.equal(current.builds.length, 0, "nor on reload");
+      await page.getByRole("button", { name: "Send", exact: true }).click();
+      await page.getByText("Saved as version 2, from version 1.").waitFor();
+      assert.equal(current.builds.length, 1);
+    }, undefined, "?auto=A%20fictional%20bakery%20site");
     await scenario("phone-width-intent-controls-fit", { reply: () => ({ hold: true }) }, async page => {
       await page.getByRole("button", { name: "Pick current element" }).click();
       await page.getByText(/Editing the <h1>/).waitFor();

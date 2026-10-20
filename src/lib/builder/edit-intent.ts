@@ -46,6 +46,18 @@ export function approvedPlanIssue(stored: StoredPlan | null, approved: { plan: S
   return null;
 }
 
+/**
+ * A new billable request names the maximum the customer saw. Null when it equals the
+ * server-derived ceiling. Automatic stages of an approved request (an existing operation id)
+ * spend within that request's recorded allowance and carry no new quote.
+ */
+export function approvedMaximumIssue(operation: { actionKey: string } | { id: string } | undefined, approved: number | undefined, ceiling: number): string | null {
+  if (!operation || !("actionKey" in operation)) return null;
+  if (approved === undefined) return "Reload the builder so the request shows its maximum charge before you send it.";
+  if (approved !== ceiling) return `The maximum for this request changed from ${approved} to ${ceiling} credits. Nothing was sent or charged. Review the new maximum and send again.`;
+  return null;
+}
+
 /** One approval of one saved plan revision at one effort on one base version. A repeat of the same approval reuses its request identity. */
 export const planApprovalIdentity = (input: { revision: number; effort: string; version: number }) => `${input.revision}:${input.effort}:${input.version}`;
 
