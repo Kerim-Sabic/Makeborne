@@ -19,6 +19,7 @@ import { recoveryPreview } from "@/lib/builder/recovery-preview";
 import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest, prepareBuilderAttachments, type BuilderAttachment } from "@/lib/builder/attachments";
 import { attachmentOwner, projectAttachmentKey, retainBuilderAttachmentSnapshot, bindBuilderAttachmentSnapshot, readBuilderAttachmentSnapshot, type Attachment as StoredAttachment } from "@/lib/attachments";
 import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-attachments";
+import { sourceIntentIssue } from "@/lib/builder/source-readiness";
 import BriefQuestionsCard from "./brief-questions-card";
 import { briefQuestions, briefWithAnswers, isBriefQuestion, type BriefAnswers, type BriefQuestion } from "@/lib/builder/brief-questions";
 
@@ -418,10 +419,11 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     if (!sources.ready || sources.busy) { setNotice("Wait for your source files to finish loading or saving."); return; }
     sourceLock.current = true; setPreparingSources(true); setNotice("");
     try {
-      // Bind exactly the files listed as "Will be read"; unsupported, over-limit, damaged,
-      // duplicate and left-out files stay saved and unsent instead of failing the request.
+      // Bind exactly the readable selection; unresolved files require an explicit
+      // fix or Leave out decision. Duplicate references are still sent only once.
       const decided = await settleSources();
-      if (decided.blocking.length) throw new Error(`Retry or leave out ${decided.blocking.map(entry => entry.file.name).join(", ")} before sending. Your message is kept.`);
+      const issue = sourceIntentIssue(decided);
+      if (issue) throw new Error(issue);
       const originals = decided.ready;
       const files = await prepareBuilderAttachments(originals);
       if (!sourceSession.active) return;
@@ -448,6 +450,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
   // The first request on an empty project asks what the brief leaves open.
   const firstBuild = !turns.length && !history.length && !planner.restored && version <= 1 && (website ? Object.keys(baseFiles).length === 0 : !baseDocument);
   const startOrAsk = useCallback((text: string, requestMode: "create" | "plan") => {
+    const issue = sourceIntentIssue(readiness);
+    if (issue) { setNotice(issue); setDraft(text); return; }
     if (asking) { setNotice("Answer the questions above, or choose Skip questions."); return; }
     if (firstBuild && !asked.current && text.trim()) {
       asked.current = true;
@@ -463,7 +467,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       return;
     }
     void submitSources(text, requestMode);
-  }, [asking, firstBuild, kind, sources.files.length, submitSources, tailoredQuestions]);
+  }, [asking, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions]);
   const answerQuestions = (answers: BriefAnswers | null) => {
     if (!asking) return;
     const { text, mode: requestMode, questions } = asking;
@@ -534,10 +538,10 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     onChange={planner.edit} onBuild={buildPlan} onRevise={revisePlan} />;
 
   useEffect(() => {
-    if (!autoStart || started.current || disabled || !sources.ready || sources.busy || turns.length || version > 1 || !operationReady || !planner.ready || hasPreviousOperation || planner.hasPrevious) return;
+    if (!autoStart || started.current || disabled || !sources.ready || sources.busy || readiness.checking || turns.length || version > 1 || !operationReady || !planner.ready || hasPreviousOperation || planner.hasPrevious) return;
     started.current = true;
     startOrAsk(autoStart, autoStartMode === "plan" && website ? "plan" : "create");
-  }, [autoStart, autoStartMode, disabled, hasPreviousOperation, operationReady, planner.hasPrevious, planner.ready, sources.busy, sources.ready, startOrAsk, turns.length, version, website]);
+  }, [autoStart, autoStartMode, disabled, hasPreviousOperation, operationReady, planner.hasPrevious, planner.ready, readiness.checking, sources.busy, sources.ready, startOrAsk, turns.length, version, website]);
 
 
   const empty = !turns.length && !history.length && !planner.restored;

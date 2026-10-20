@@ -101,7 +101,9 @@ function FileChip({ file, entry, onRemove, removeLabel, onExclude, onInclude, on
   const Icon = /\.(pdf|txt|md|docx?|rtf)$/i.test(file.name) ? FileText : File;
   const StateIcon = entry ? STATE_ICONS[entry.state] : null;
   const label = removeLabel ? removeLabel(file.name) : `Remove ${file.name}`;
-  const canRetry = entry?.state === "failed" && !!onRetry, canExclude = entry?.state === "ready" && !!onExclude, canInclude = !!entry?.excluded && !!onInclude;
+  const canRetry = entry?.state === "failed" && !!onRetry;
+  const canExclude = Boolean(entry && !entry.excluded && !entry.duplicateOf && entry.state !== "checking" && onExclude);
+  const canInclude = !!entry?.excluded && !!onInclude;
   return <li className={`attachment-chip${entry ? " has-state" : ""}`} data-state={entry?.state}>
     <div className="attachment-row">
       <a className="attachment-download" href={downloadUrl || undefined} download={file.name} aria-label={`Download ${file.name}`} title={`Download ${file.name}`}>

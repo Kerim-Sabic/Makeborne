@@ -8,7 +8,7 @@ Module._load = function(name, parent, main) {
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 const server = require('./attachments.ts');
 const { BuilderAttachmentsSchema, prepareBuilderAttachments, builderSourceMediaType, BUILDER_ATTACHMENT_LIMITS } = server;
-const { analyzeSource, decideSources, classifySources, SOURCE_STATE_LABELS } = require('./source-readiness.ts');
+const { analyzeSource, decideSources, classifySources, sourceIntentIssue, SOURCE_STATE_LABELS } = require('./source-readiness.ts');
 
 let serial = 0;
 const source = (name, content, type = '', id = `file-${++serial}`) => { const bytes = Buffer.from(content); return { id, name, type, owner: 'account:fixture', blob: new Blob([bytes]), size: bytes.length, previewType: null }; };
@@ -52,6 +52,7 @@ async function main() {
     assert.equal(stateOf(report, 'renamed.png').mediaType, 'image/jpeg', 'real bytes win over the name, exactly as the server does');
     assert.equal(report.readSummary, 'Will be read: brief.txt, notes.md, logo.png, design.pdf, renamed.png');
     assert.equal(report.skippedSummary, '');
+    assert.equal(sourceIntentIssue(report), null);
     await assertParity(files, report);
   });
   await check('Office, CSV, SVG, JSON and archives are unsupported, naming the type and what AI can read', async () => {
@@ -64,11 +65,13 @@ async function main() {
     assert.match(stateOf(report, 'brief.docx').reason, /^Word documents/);
     assert.match(stateOf(report, 'deck.pptx').reason, /^PowerPoint presentations/);
     assert.equal(report.ready.length, 0);
+    assert.match(sourceIntentIssue(report), /before generation/);
+    assert.equal(sourceIntentIssue(await classifySources(files, new Set(files.map(file => file.id)))), null, 'explicit exclusions permit proceeding');
     assert.equal(report.readSummary, 'No files will be read by AI with this request.');
     assert.match(report.skippedSummary, /^Not sent: table\.csv \(type AI can’t read\), sheet\.xlsx/);
     await assertParity(files, report);
   });
-  await check('damaged, mis-encoded, binary and empty files fail with a reason and never block', async () => {
+  await check('damaged, mis-encoded, binary and empty files have explicit reasons and require a decision before generation', async () => {
     const files = [source('broken.pdf', 'not really a pdf', 'application/pdf'), source('fake.png', 'plain words', 'image/png'), source('latin1.txt', Buffer.from([0x63, 0x61, 0x66, 0xe9])),
       source('binary.txt', '\x00\x01binary'), source('empty.txt', ''), source('ok.txt', 'still read')];
     const report = await classifySources(files);
@@ -76,7 +79,8 @@ async function main() {
     assert.match(stateOf(report, 'broken.pdf').reason, /valid PDF file/);
     assert.match(stateOf(report, 'latin1.txt').reason, /UTF-8/);
     assert.match(stateOf(report, 'empty.txt').reason, /empty/);
-    assert.equal(report.blocking.length, 0, 'deterministic content failures are shown, not blocking');
+    assert.equal(report.blocking.length, 0, 'blocking tracks retryable storage failures separately from deterministic content failures');
+    assert.match(sourceIntentIssue(report), /before generation/, 'the intent gate blocks unresolved deterministic failures too');
     await assertParity(files, report);
   });
   await check('limits are reported with the amount over; text is never trimmed', async () => {

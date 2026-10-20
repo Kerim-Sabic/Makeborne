@@ -135,6 +135,16 @@ export function decideSources(files: readonly Attachment[], analyses: ReadonlyMa
   };
 }
 
+/** An unreadable selection requires an explicit fix or Leave out decision before
+ * any AI request, including automatic home-page handoff and tailored questions. */
+export function sourceIntentIssue(report: SourceReadiness): string | null {
+  if (report.checking) return "Wait for your source files to finish checking. Your message is kept.";
+  const unresolved = report.entries.filter(entry => entry.state !== "ready" && !entry.excluded && !entry.duplicateOf);
+  return unresolved.length
+    ? `Resolve ${unresolved.map(entry => entry.file.name).join(", ")} before generation: retry, replace, or explicitly leave the file out. Your message is kept; this request has not started.`
+    : null;
+}
+
 /** Analyses every file (reusing a cache keyed by the immutable stored id) and decides. */
 export async function classifySources(files: readonly Attachment[], excluded: ReadonlySet<string> = new Set(), cache: Map<string, SourceAnalysis> = new Map()) {
   for (const file of files) if (!cache.has(file.id) && !excluded.has(file.id)) cache.set(file.id, await analyzeSource(file));

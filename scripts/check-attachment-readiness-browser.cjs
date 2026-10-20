@@ -88,7 +88,8 @@ async function main() {
     await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
     let count = 0, operation = { id: ids.operation, revision: 1, kind: 'build', effort: 'light', authorizedCredits: 20, chargedCredits: 0, reservedCredits: 0, remainingCredits: 20, maximumAdditionalCredits: 20, status: 'active', pendingKind: null, lastVersion: 1, canContinue: false, recoverable: false, expiresAt: '2030-01-01T00:00:00Z' };
     await page.route('**/api/credits', route => route.fulfill({ json: { available: 500, unlimited: false } }));
-    await page.route('**/api/build/questions', route => route.fulfill({ json: { questions: [] } }));
+    builds.questions = [];
+    await page.route('**/api/build/questions', route => { builds.questions.push(route.request().postDataJSON()); return route.fulfill({ json: { questions: [] } }); });
     await page.route('**/api/build/operations**', route => route.fulfill({ json: { operation, result: null, recovery: null } }));
     await page.route('**/api/build', async route => {
       builds.push(route.request().postDataJSON()); count++;
@@ -131,8 +132,15 @@ async function main() {
       assert.match(shown[4].text, /^Saved · not sent\. Same name, size and contents as another brief\.txt/);
       assert(await page.getByRole('button', { name: 'Retry reading broken.pdf' }).isVisible(), 'failed files offer Retry');
       if (shots) await page.screenshot({ path: path.join(shots, 'builder-states-1100.png'), fullPage: true });
+      await send(page, 'Build from my sources');
+      await page.locator('.lb-notice').filter({ hasText: 'before generation' }).waitFor();
+      assert.equal(builds.length, 0, 'unreadable files stop generation until explicitly resolved');
+      assert.equal(builds.questions.length, 0, 'no tailored-question provider request before the source decision');
+      for (const name of ['table.csv', 'huge.png', 'broken.pdf']) {
+        await page.getByRole('button', { name: `Leave ${name} out of this request (the saved file is kept)`, exact: true }).click();
+      }
       await send(page, 'Build from my sources'); await settled(page);
-      assert.equal(builds.length, 1, 'unsupported, over-limit, damaged and duplicate files do not stop the request');
+      assert.equal(builds.length, 1, 'explicitly excluded files do not block the readable selection');
       assert.deepEqual(builds[0].attachments.map(file => file.name), ['brief.txt', 'notes.md'], 'the request binds exactly the listed files, duplicate once');
       assert.equal(decoded(builds[0].attachments[0]), 'Use exactly 123 customers.');
       await page.locator('.lb-user', { hasText: '📎 brief.txt, notes.md' }).waitFor();
@@ -167,7 +175,7 @@ async function main() {
       await page.getByText('Retry or leave out flaky.txt before sending.', { exact: true }).waitFor();
       assert.equal((await states(page))[0].state, 'failed');
       await send(page, 'Try with the flaky file');
-      await page.getByText('Retry or leave out flaky.txt before sending. Your message is kept.', { exact: true }).waitFor();
+      await page.locator('.lb-notice').filter({ hasText: 'Resolve flaky.txt before generation' }).waitFor();
       assert.equal(builds.length, 0, 'nothing is sent while an unread file is unresolved');
       assert.equal(await page.getByRole('textbox', { name: 'Message the builder' }).inputValue(), 'Try with the flaky file');
       await page.getByRole('button', { name: 'Retry reading flaky.txt' }).click();
@@ -176,13 +184,20 @@ async function main() {
       assert.deepEqual(builds[0].attachments.map(file => file.name), ['flaky.txt', 'ok.txt']);
       assert.equal(decoded(builds[0].attachments[0]), 'x'.repeat(77), 'the retried bytes are the same stored copy');
     });
-    await scenario('a home-approved request with an unsupported file starts without it instead of failing', async (page, builds) => {
+    await scenario('a home request with an unreadable file stops before any AI call until explicitly resolved', async (page, builds) => {
       await page.evaluate(async () => { await window.seedHomeDraft([{ name: 'brief.zip', text: 'PK\u0003\u0004', type: 'application/zip' }, { name: 'brief.txt', text: 'Use exactly 123 customers.', type: 'text/plain' }]); window.mountBuilder({ auto: true }); });
       await page.waitForFunction(() => document.querySelector('.lb-turn.lb-assistant[data-state="done"]') || document.querySelector('.lb-notice'));
       const refused = await page.locator('.lb-notice').allInnerTexts();
-      assert.equal(builds.length, 1, `the whole request was refused for one unreadable file: ${refused.join(' ')}`);
-      assert.deepEqual(builds[0].attachments.map(file => file.name), ['brief.txt']);
+      assert.equal(builds.length, 0, 'home handoff does not silently omit the unreadable file');
+      assert.equal(builds.questions.length, 0, 'home handoff also blocks tailored questions');
+      assert.match(refused.join(' '), /Resolve brief.zip before generation/);
+      assert.equal(await page.getByRole('textbox', { name: 'Message the builder' }).inputValue(), 'Build from my source');
       assert.deepEqual((await states(page)).map(item => item.state), ['unsupported', 'ready']);
+      await page.getByRole('button', { name: 'Leave brief.zip out of this request (the saved file is kept)' }).click();
+      assert.equal(builds.length, 0, 'resolving the source never automatically resends the prompt');
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await settled(page);
+      assert.deepEqual(builds[0].attachments.map(file => file.name), ['brief.txt']);
     });
     await scenario('home composer states what will be read and that removal deletes the saved copy', async page => {
       await page.evaluate(() => window.mountHome());
