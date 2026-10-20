@@ -132,3 +132,6 @@
 .private-website-preview:fullscreen .private-preview-canvas{height:calc(100vh - 100px)}
 .private-preview-loading{position:absolute;z-index:1;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;padding:10px 16px;border:1px solid #e5e7ee;border-radius:10px;background:#fff;font-size:12px;color:#606579;white-space:nowrap}
 @media(max-width:600px){.private-preview-toolbar{gap:6px;padding:8px}.private-preview-canvas{padding:6px;height:560px}.private-preview-label{font-size:12px}}
+.cloud-version-live, .cloud-version-current { display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; vertical-align:middle; }
+.cloud-version-live { background:#e6f4ea; color:#1e6b34; }
+.cloud-version-current { background:#eef0f8; color:#3b4470; }

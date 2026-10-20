@@ -41,6 +41,7 @@ import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type Removed
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
+import { useLiveVersion } from "./use-live-version";
 import { useCallback, useEffect, useEffectEvent, useMemo, useState, useRef } from "react";
 import {
   ArrowLeft,
@@ -1133,6 +1134,8 @@ export function CloudEditor({
   notify: (s: string) => void;
 }) {
   const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
+  // Which saved version is public, read when History opens (websites only; audit M07).
+  const liveVersion = useLiveVersion(accountId, workspaceId, artifact.id, view === "history" && artifact.kind === "website");
   // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
   const [brandColors, setBrandColors] = useState<{ label: string; value: string }[]>([]);
   const brandClient = project?.clientId ?? null;
@@ -1856,6 +1859,8 @@ export function CloudEditor({
                 setComparing(comparing ? null : { from: numbers[1], to: numbers[0] });
               }}><GitCompareArrows size={14} />{comparing ? "Close comparison" : "Compare versions"}</button>}
             </div>
+            {artifact.kind === "website" && liveVersion === "offline" && <p className="small-note cloud-history-live" role="status">Not live: no version of this website is published.</p>}
+            {artifact.kind === "website" && liveVersion === "error" && <p className="small-note cloud-history-live" role="status">Couldn&apos;t check which version is live. Open Publish to see its status.</p>}
             {comparing && <VersionCompare key={`${comparing.from}:${comparing.to}`} versions={versions} from={comparing.from} to={comparing.to} onClose={() => setComparing(null)} />}
             {versions.length === 0 ? (
               <p>No saved versions yet.</p>
@@ -1864,7 +1869,7 @@ export function CloudEditor({
                 .sort((a, b) => b.number - a.number)
                 .map((v) => (
                   <div className="cloud-version" key={v.id}>
-                    <strong>Version {v.number}</strong>
+                    <strong>Version {v.number}{v.number === liveVersion && <span className="cloud-version-live">Live</span>}{v.number === expectedVersion && <span className="cloud-version-current">Current</span>}</strong>
                     <p>{v.changeSummary}</p>
                     <small>{new Date(v.createdAt).toLocaleString()}</small>
                     <button type="button" className="button secondary small" aria-expanded={inspectedVersion?.id === v.id} onClick={() => setInspectedVersion(inspectedVersion?.id === v.id ? null : v)}> {inspectedVersion?.id === v.id ? "Close preview" : `Preview version ${v.number}`}</button>
