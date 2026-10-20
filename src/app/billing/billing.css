@@ -249,6 +249,7 @@
 .billing-autotopup-choices{display:flex;flex-wrap:wrap;gap:12px}.billing-autotopup-choices label{display:grid;gap:4px;font-size:13px}
 .billing-autotopup select{height:36px;padding:0 10px;border:1px solid #d9d2e4;border-radius:10px;background:#fff;font-size:14px;color:#211c2a}
 .billing-autotopup-consent{padding:12px 14px;border-radius:12px;background:#f7f5fb;font-size:13px}.billing-autotopup-note{font-size:13px;color:#7a5a12}
+.billing-autotopup-actions{display:flex;flex-wrap:wrap;gap:8px}
 .billing-autotopup-confirm{display:flex;gap:8px;align-items:center;justify-content:flex-start;font-size:14px;color:#211c2a}
 .billing-autotopup-confirm input{flex:none;width:18px;height:18px;margin:0;padding:0;accent-color:#211c2a}
 .billing-autotopup button{justify-self:start;height:38px;padding:0 16px;border:0;border-radius:10px;background:#211c2a;color:#fff;font-size:14px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
