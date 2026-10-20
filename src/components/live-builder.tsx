@@ -16,6 +16,7 @@ import { usePlanMode } from "./use-plan-mode";
 import { useBuilderOperation } from "./use-builder-operation";
 import type { OperationRequest, OperationSnapshot } from "@/lib/builder/operation-contract";
 import { recoveryPreview } from "@/lib/builder/recovery-preview";
+import { CHECK_EFFECT, continueEffect, operationPhase, recoverEffect, stopEffect } from "@/lib/builder/action-semantics";
 import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest, prepareBuilderAttachments, type BuilderAttachment } from "@/lib/builder/attachments";
 import { attachmentOwner, projectAttachmentKey, retainBuilderAttachmentSnapshot, bindBuilderAttachmentSnapshot, readBuilderAttachmentSnapshot, type Attachment as StoredAttachment } from "@/lib/attachments";
 import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-attachments";
@@ -592,7 +593,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     </div>
     {(operation || recoveryNotice || previewingRecovery) && <section className="lb-operation" aria-label="Request allowance">
       {operation && <><div className="lb-operation-total"><strong>{operation.chargedCredits} / {operation.authorizedCredits} credits</strong><span>{operation.reservedCredits > 0 ? `${operation.reservedCredits} reserved` : "Total request maximum"}</span></div>
-        <p>This allowance covers the request and its automatic refinements.</p></>}
+        <p>This allowance covers the request and its automatic refinements.</p>
+        {(() => { const phase = operationPhase(operation, { recovery: mode === "create" ? Boolean(buildRecovery) : Boolean(planner.recoverablePlan), pendingCancel }); return phase && <p className="lb-operation-phase" data-phase={phase.label}><strong>{phase.label}.</strong> {phase.detail}</p>; })()}</>}
       {recoveryNotice && <p role="status">{recoveryNotice}</p>}
       {mode === "plan" && planner.recoverablePlan && <div className="lb-operation-consent">
         <details className="lb-retained-plan"><summary>Review retained plan · {planner.recoverablePlan.stored.plan.title}</summary>
@@ -608,16 +610,17 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         <button type="button" className="button small" disabled={busy || disabled || planner.checking} onClick={() => void saveRecoveredPlan()}>Save reviewed plan</button>
       </div>}
       {mode === "create" && buildRecovery && <div className="lb-operation-consent">
-        <p>A retained draft is available. Previewing and saving it does not make another AI call. Saving adds a new version after checking that version {version} is still current.</p>
+        <p>A retained draft is available. {recoverEffect(version)}</p>
         {!previewingRecovery ? <button type="button" className="button small" disabled={busy || disabled} onClick={previewRecovery}>Preview retained draft</button>
           : <button type="button" className="button small" disabled={busy || disabled || previewingRecovery.version !== version} onClick={() => void saveRecovery()}>Save reviewed draft</button>}
       </div>}
       {previewingRecovery && <button type="button" className="lb-operation-check" disabled={busy} onClick={() => { onLive(null); setPreviewingRecovery(null); setNotice(""); }}>Return to saved version</button>}
       {operation?.kind === "build" && operation.canContinue && operation.status !== "running" && operation.maximumAdditionalCredits > 0 && <div className="lb-operation-consent">
-        <p>Add up to {operation.maximumAdditionalCredits} credits. The total maximum becomes {operation.authorizedCredits + operation.maximumAdditionalCredits} credits.</p>
-        <button type="button" className="button small" disabled={busy || disabled || checkingOperation || Boolean(previewingRecovery)} onClick={() => void continueOperation()}>Approve allowance & continue</button>
+        <p id={`lb-continue-effect-${artifactId}`}>{continueEffect(operation, version)}</p>
+        <button type="button" className="button small" disabled={busy || disabled || checkingOperation || Boolean(previewingRecovery)} aria-describedby={`lb-continue-effect-${artifactId}`} onClick={() => void continueOperation()}>Approve allowance & continue</button>
       </div>}
-      <button type="button" className="lb-operation-check" disabled={busy || checkingOperation} onClick={() => void checkCurrentOperation().then(() => onSaved()).catch(() => setNotice("The saved result could not be refreshed. Try checking again."))}>{checkingOperation ? "Checking…" : "Check saved result & charge"}</button>
+      <p className="lb-operation-note" id={`lb-check-effect-${artifactId}`}>{CHECK_EFFECT}</p>
+      <button type="button" className="lb-operation-check" aria-describedby={`lb-check-effect-${artifactId}`} disabled={busy || checkingOperation} onClick={() => void checkCurrentOperation().then(() => onSaved()).catch(() => setNotice("The saved result could not be refreshed. Try checking again."))}>{checkingOperation ? "Checking…" : "Check saved result & charge"}</button>
     </section>}
     <form className="lb-composer" data-mode={mode} onSubmit={event => { event.preventDefault(); submit(draft); }}>
       {mode === "plan" && <p className="lb-plan-note"><ListChecks size={12} />{draftPlan ? "Plan mode — your reply revises the plan above." : "Plan mode — I'll study your project and propose a plan. No code is written."}</p>}
@@ -643,12 +646,13 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         </select>
         {canReview && <button type="button" className="lb-review" aria-label={`Review design, up to ${reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} credits`} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} /><span className="lb-review-label">Review · {reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} max</span></button>}
         <span className="lb-balance">{balance ? balance.unlimited ? "Unlimited credits" : `${balance.available} credits` : ""}</span>
-        {(busy || operationRunning) ? <button type="button" className="lb-stop" disabled={cancelling || operation?.cancelRequested === true}
+        {(busy || operationRunning) ? <button type="button" className="lb-stop" disabled={cancelling || operation?.cancelRequested === true} aria-describedby={`lb-stop-effect-${artifactId}`}
           onClick={() => void stop().catch(() => setNotice("Stop could not be confirmed. Check the recorded request before retrying."))}
           aria-label={operation?.cancelRequested ? "Stopping" : pendingCancel ? "Retry Stop" : "Stop"}>
           {cancelling || operation?.cancelRequested ? <Loader2 size={14} className="lb-spin" /> : <Square size={12} />}<span>{operation?.cancelRequested ? "Stopping..." : pendingCancel ? "Retry Stop" : "Stop"}</span>
         </button> : <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || readiness.checking || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>}
       </div>
+      {(busy || operationRunning) && <p className="lb-action-effect" id={`lb-stop-effect-${artifactId}`}>{stopEffect(operation, version, pendingCancel && !operation?.cancelRequested)}</p>}
       <div className="lb-estimate">
         <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
         {/* Only measured figures: failed planning is released at zero; explicit Stop settles confirmed usage. */}
