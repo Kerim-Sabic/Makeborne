@@ -8,7 +8,7 @@ Module._load = function(name, parent, main) {
   return load.call(this, name, parent, main);
 };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
-const { pageMeta, pageSummary, clip, structuredData, sitemapXml, seoChecklist, SiteSeoSchema } = require("./seo.ts");
+const { pageMeta, pageSummary, clip, structuredData, sitemapXml, seoChecklist, imageAlt, SiteSeoSchema } = require("./seo.ts");
 const { renderHostedSnapshot } = require("./snapshot.ts");
 
 let passed = 0;
@@ -81,6 +81,72 @@ check("the checklist catches real problems in plain words", () => {
   const good = page(`<h1>Supper for the street</h1><p>${"A neighbourhood restaurant cooking with the seasons. ".repeat(30)}</p><img src="/images/a.webp" alt="Risotto"><a href="/menu">Menu</a>`);
   const clean = seoChecklist({ siteTitle: "Saffron Table", pages: [{ path: "/", html: good }, { path: "/menu", routeTitle: "Menu", html: good.replace("Supper for the street", "Menu") }], seo });
   assert.deepEqual(clean.map(item => item.level), ["pass"]);
+});
+
+check("image descriptions: informative, intentionally decorative, missing and unassessed are told apart", () => {
+  const cases = [
+    ['<img src="/a.webp" alt="Risotto with leeks">', "informative"], ["<img src='/a.webp' alt='Bread & butter'>", "informative"], ['<img alt=Loaves src=/a.webp>', "informative"],
+    ['<img src="/a.webp" alt="">', "decorative"], ["<img src='/a.webp' alt=''>", "decorative"], ['<img src="/a.webp" alt>', "decorative"], ['<img src="/a.webp" alt="  ">', "decorative"],
+    ['<img src="/a.webp" aria-hidden="true">', "decorative"], ['<img src="/a.webp" role="presentation">', "decorative"], ['<IMG SRC="/a.webp" ALT="" />', "decorative"],
+    ['<img src="/a.webp">', "missing"], ["<img>", "missing"], ['<img src="/a.webp" title="Risotto">', "missing"], ['<img src="/a.webp" data-alt="Risotto">', "missing"],
+    ['<img src="/a.webp" alt="undefined">', "unassessed"], ['<img src="/a.webp" alt="{photo.alt}">', "unassessed"], ['<img src="/a.webp" alt="${name}">', "unassessed"],
+    ['<img src="/a.webp" alt={alt}>', "unassessed"], ['<img src="/a.webp" alt="Risotto>', "unassessed"],
+  ];
+  for (const [tag, kind] of cases) assert.equal(imageAlt(tag), kind, tag);
+  assert.equal(imageAlt('<img alt="Plates &gt; 2 people" src="/a.webp">'), "informative");
+});
+
+check("the checklist reports missing alt, accepts decorative alt=\"\" and flags unreadable descriptions", () => {
+  const body = `<h1>Supper for the street</h1><p>${"A neighbourhood restaurant cooking with the seasons. ".repeat(30)}</p>`;
+  const mixed = page(`${body}<img src="/images/a.webp" alt="Risotto"><img src="/images/rule.webp" alt=""><img src="/images/b.webp"><img src="/images/c.webp" alt="undefined"><img src="/images/d.webp" alt="Plates > 2">`);
+  const results = seoChecklist({ siteTitle: "Saffron Table", pages: [{ path: "/", html: mixed }], seo });
+  const byId = Object.fromEntries(results.map(item => [item.id, item]));
+  assert.equal(byId["alt:/"].title, "1 image on the home page has no alt text");
+  assert.equal(byId["alt:/"].level, "warn"); assert.match(byId["alt:/"].detail, /alt=""/, "explains the decorative option");
+  assert.equal(byId["alt-unknown:/"].level, "warn"); assert.equal(byId["alt-unknown:/"].title, "1 image on the home page couldn't be checked");
+  assert.equal(byId["alt-decorative:/"].level, "info"); assert.equal(byId["alt-decorative:/"].title, "1 image on the home page is marked decorative");
+  assert.equal(byId.ready, undefined, "an unassessed or missing description never shows as a pass");
+  const decorativeOnly = page(`${body}<img src="/images/a.webp" alt="Risotto"><img src="/images/rule.webp" alt=""><img src="/images/dots.webp" alt="">`);
+  const clean = seoChecklist({ siteTitle: "Saffron Table", pages: [{ path: "/", html: decorativeOnly }], seo });
+  assert.deepEqual(clean.map(item => [item.id, item.level]), [["alt-decorative:/", "info"], ["ready", "pass"]], "decorative images are intentional, not missing");
+  assert.equal(clean.find(item => item.id === "alt-decorative:/").title, "2 images on the home page are marked decorative");
+});
+
+check("page length is a contextual hint: never a ranking claim, never a reason to pad contact or gallery pages", () => {
+  const run = (path, routeTitle, body) => seoChecklist({ siteTitle: "Saffron Table", pages: [{ path, routeTitle, html: page(body) }], seo });
+  const short = "<p>We are a small family bakery in Leith, baking sourdough and rye every morning. Come and see us soon.</p>";
+  for (const [path, title, body] of [
+    ["/contact", "Contact", `<h1>Contact us</h1>${short}`],
+    ["/visit", "Visit", `<h1>Find us</h1>${short}`],
+    ["/gallery", "Gallery", `<h1>Our loaves</h1>${short}`],
+    ["/booking", "Book a table", `<h1>Book</h1>${short}`],
+    ["/private-dining", "Private dining", `<h1>Private dining</h1>${short}<form><input name="email"></form>`],
+    ["/team", "Team", `<h1>Team</h1>${short}<a href="tel:+441315550123">Call</a>`],
+    ["/kitchen", "Kitchen", `<h1>Kitchen</h1>${short}${'<img src="/images/k.webp" alt="Oven">'.repeat(4)}`],
+    ["/thank-you", "Thanks", `<h1>Thanks</h1>${short}`],
+  ]) assert.equal(run(path, title, body).some(item => item.id === `thin:${path}`), false, `${path} does its job in a few words`);
+  const about = run("/about", "About", `<h1>Our story</h1>${short}`).find(item => item.id === "thin:/about");
+  assert.equal(about.level, "info", "a hint, not a warning");
+  assert.match(about.detail, /^About \d{2} words\./); assert.match(about.detail, /no word count to reach/);
+  const long = run("/about", "About", `<h1>Our story</h1><p>${"We bake sourdough in a wood-fired oven every morning. ".repeat(12)}</p>`);
+  assert.equal(long.some(item => item.id === "thin:/about"), false);
+  const everything = seoChecklist({ siteTitle: "S", pages: [{ path: "/", html: page("<h1>Hi</h1><h1>Again</h1><img src=\"/a.webp\"><a href=\"/missing\">x</a><p>[Address]</p>") }, { path: "/about", html: page(`<h1>About</h1>${short}`) }], images: ["/a.webp"] });
+  for (const item of everything) assert.doesNotMatch(`${item.title} ${item.detail}`, /\brank(?:s|ed|ing)? (?:better|higher)|\bboosts?\b|\bguarantee/i, item.id);
+  assert.equal(run("/about", "About", `<h1>Our story</h1>${short}`).find(item => item.id === "ready").title, "No problems found by these checks", "a hint alone doesn't fail the page");
+});
+
+check("a pass says what was checked and makes no ranking promise; the panel says other pages were only title-checked", () => {
+  const good = page(`<h1>Supper for the street</h1><p>${"A neighbourhood restaurant cooking with the seasons. ".repeat(30)}</p>`);
+  const ready = seoChecklist({ siteTitle: "Saffron Table", pages: [{ path: "/", html: good }], seo }).find(item => item.id === "ready");
+  assert.match(ready.detail, /^The home page has a title, a description, one main heading/);
+  assert.match(ready.detail, /can't predict/);
+  assert.equal(seoChecklist({ siteTitle: "x", pages: [], seo }).some(item => item.id === "ready"), false, "nothing checked is never a pass");
+  const ui = fs.readFileSync(path.join(src, "components", "website-seo.tsx"), "utf8");
+  assert.match(ui, /id: "other-pages", level: "info"/);
+  assert.match(ui, /checked for titles only/);
+  assert.match(ui, /check\.level === "info" \? <Info /, "info hints get their own icon, not the warning triangle");
+  assert.doesNotMatch(ui, /full content is checked when publishing/, "no claim the publisher re-checks content");
+  assert.match(fs.readFileSync(path.join(src, "app", "website-seo.css"), "utf8"), /data-level="info"/);
 });
 
 check("publishing never uses internal design notes as the description", () => {

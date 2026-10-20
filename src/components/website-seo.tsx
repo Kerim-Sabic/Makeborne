@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Plus, Search, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, Loader2, Plus, Search, Trash2, XCircle } from "lucide-react";
 import { BUSINESS_TYPES, SiteSeoSchema, pageMeta, seoChecklist, type SeoCheck, type SiteSeo } from "@/lib/hosting/seo";
 import type { WebsiteProjectSource } from "@/lib/projects/website-source";
 import { captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
@@ -57,9 +57,11 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, on
       const html = await captureProjectSnapshot(source, scope);
       setHomeHtml(html);
       const results = seoChecklist({ siteTitle, pages: [{ path: "/", routeTitle: source.routes.find(route => route.path === "/")?.title, html }], seo: compact(draft), images });
-      // Other pages are checked from their titles here; their full content is checked when publishing renders every page.
+      // Only the home page is rendered here. Other pages are compared by title only; their text, images and links are not checked.
       const titles = source.routes.map(route => pageMeta({ path: route.path, routeTitle: route.title, siteTitle, html: "", seo: compact(draft) }).title);
       if (new Set(titles).size < titles.length) results.push({ id: "duplicate-titles", level: "warn", title: "Some pages share the same title", detail: "Give each page its own title below." });
+      const others = source.routes.filter(route => route.path !== "/").length;
+      if (others) results.push({ id: "other-pages", level: "info", title: `${others === 1 ? "1 other page was" : `${others} other pages were`} checked for titles only`, detail: "Their text, images and links aren't checked here. Open them in the preview to look them over before you share the site." });
       setChecks(results);
     } catch (cause) { setChecks([{ id: "error", level: "fail", title: "The site couldn't be checked", detail: cause instanceof Error ? cause.message : "Try again in a moment." }]); }
     finally { setChecking(false); }
@@ -127,7 +129,7 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, on
     <div className="ws-check">
       <button type="button" className="button secondary small" disabled={checking} onClick={() => void runChecks()}>{checking ? <Loader2 size={14} className="ws-spin" /> : <Search size={14} />}Check my site</button>
       {checks && <ul className="ws-results" aria-label="Search checklist">{checks.map(check => <li key={check.id} data-level={check.level}>
-        {check.level === "pass" ? <CheckCircle2 size={15} /> : check.level === "fail" ? <XCircle size={15} /> : <AlertTriangle size={15} />}
+        {check.level === "pass" ? <CheckCircle2 size={15} aria-hidden="true" /> : check.level === "fail" ? <XCircle size={15} aria-hidden="true" /> : check.level === "info" ? <Info size={15} aria-hidden="true" /> : <AlertTriangle size={15} aria-hidden="true" />}
         <div><strong>{check.title}</strong><span>{check.detail}</span></div>
       </li>)}</ul>}
     </div>

@@ -38,6 +38,7 @@
 .ws-results li > svg { flex:none; margin-top:1px; }
 .ws-results li[data-level="pass"] { background:#f1f8f3; color:#1d6f46; }
 .ws-results li[data-level="warn"] > svg { color:#a86b00; }
+.ws-results li[data-level="info"] > svg { color:#5b6b8a; }
 .ws-results li[data-level="fail"] { background:#fdf3f2; }
 .ws-results li[data-level="fail"] > svg { color:#9a2f2a; }
 .ws-results strong { display:block; color:#2f2637; }
