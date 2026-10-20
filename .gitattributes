@@ -13,3 +13,7 @@ supabase/migrations/20261020100000_credit_autotopup_authorization.sql text eol=l
 supabase/migrations/20261020110000_usage_history_read.sql text eol=lf
 
 supabase/migrations/20261019134828_trusted_publication_production_profile.sql text eol=lf
+
+supabase/migrations/20261020203000_scope_revocation_boundaries.sql text eol=lf
+supabase/migrations/20261020210000_artifact_card_previews.sql text eol=lf
+supabase/migrations/20261020231225_billing_ux_details_and_limits.sql text eol=lf
