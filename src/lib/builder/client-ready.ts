@@ -4,12 +4,15 @@
  * source and, when available, on the prepared static pages. Findings warn and
  * never block publishing. */
 
+import { detectFonts } from "./fonts";
+import { describeTyped, fontCoverage } from "./font-fallback";
+
 export type ClientReadySeverity = "error" | "warning" | "info";
 export type ClientReadyRule =
   | "placeholder-text" | "placeholder-contact" | "placeholder-image" | "unfinished-note"
   | "empty-link" | "dead-route" | "missing-anchor" | "unreadable-link" | "missing-image"
   | "image-alt" | "image-size" | "low-contrast" | "link-name"
-  | "page-title" | "meta-description" | "html-lang";
+  | "page-title" | "meta-description" | "html-lang" | "font-fallback" | "decomposed-text";
 export type ClientReadyFinding = {
   rule: ClientReadyRule; severity: ClientReadySeverity; title: string; detail: string;
   /** Where it was found ("src/components/Footer.tsx:12", "page /menu"), at most MAX_LOCATIONS. */
@@ -44,6 +47,8 @@ const RULES: Record<ClientReadyRule, { severity: ClientReadySeverity; title: str
   "page-title": { severity: "warning", title: "The page title is missing or generic", detail: "Set a <title> in index.html with the business name. It appears in browser tabs and in exported or downloaded code." },
   "meta-description": { severity: "info", title: "No meta description in index.html", detail: "Published pages get descriptions from Search & sharing; downloaded source and GitHub exports use the one in index.html." },
   "html-lang": { severity: "info", title: "The page language isn’t set", detail: "Add lang to <html> (for example lang=\"en\") so screen readers pronounce the text correctly." },
+  "font-fallback": { severity: "warning", title: "Some characters aren’t in the website’s fonts", detail: "The website embeds the Latin and Latin Extended parts of its fonts. These characters are outside them, so each visitor’s device draws them in its own fallback font, which may look different. Check them on the prepared pages, or choose wording without them. (Compared with the fonts’ declared character ranges; emoji and icons aren’t counted.)" },
+  "decomposed-text": { severity: "info", title: "Letters typed with separate accent marks", detail: "These letters are stored as a base letter plus a combining accent (for example c + U+030C instead of č). Makeborne chooses fonts for the joined letter, but browsers don’t always join them: in Chromium a lone “c + U+030C” was drawn in a system font. Retype them as single letters to be safe." },
 };
 const ORDER: ClientReadySeverity[] = ["error", "warning", "info"];
 
@@ -68,8 +73,27 @@ function segments(path: string, content: string): Segment[] {
   }
   const code = stripComments(content), found: Segment[] = [];
   for (const match of code.matchAll(STRING)) found.push({ text: match[0].slice(1, -1).replace(/\$\{[^}]*\}/g, " "), index: match.index! + 1 });
-  if (/\.[jt]sx$/i.test(path)) for (const match of code.matchAll(/>([^<>{}]*[A-Za-z][^<>{}]*)</g)) found.push({ text: match[1], index: match.index! + 1 });
+  // Any letter, not only A–Z: text such as "Добро пожаловать" is visible too.
+  if (/\.[jt]sx$/i.test(path)) for (const match of code.matchAll(/>([^<>{}]*\p{L}[^<>{}]*)</gu)) found.push({ text: match[1], index: match.index! + 1 });
   return found;
+}
+
+/** Text a visitor could see in one file, each piece with its "path:line" location. */
+function fileTexts(path: string, content: string): { text: string; where: string }[] {
+  const found: { text: string; where: string }[] = [];
+  for (const segment of segments(path, content)) {
+    if (/\.html?$/i.test(path) || CODE.test(path)) found.push({ text: segment.text, where: `${path}:${lineAt(content, segment.index)}` });
+    else if (/\.(?:json|md|txt)$/i.test(path)) for (const [index, line] of segment.text.split("\n").entries()) found.push({ text: line, where: `${path}:${index + 1}` });
+  }
+  return found;
+}
+const SKIPPED_FILES = /(?:^|\/)(?:package(?:-lock)?\.json|tsconfig[^/]*|vite\.config[^/]*)$/i;
+/** Visible text of the website (string literals and JSX text in code, HTML text,
+ * data files line by line, and the prepared pages' text), with locations. A static
+ * read: text assembled at runtime from parts may be split or missed. */
+export function visibleText(input: ClientReadyInput): { text: string; where: string }[] {
+  return [...input.files.filter(file => !SKIPPED_FILES.test(file.path)).flatMap(file => fileTexts(file.path, file.content)),
+    ...(input.pages ?? []).map(page => ({ text: plain(page.html), where: `page ${page.path}` }))];
 }
 
 const PLACEHOLDER: RegExp[] = [
@@ -181,7 +205,7 @@ export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] 
     if (entry.locations.length < MAX_LOCATIONS) entry.locations.push(location);
     found.set(rule, entry);
   };
-  const files = input.files.filter(file => !/(?:^|\/)(?:package(?:-lock)?\.json|tsconfig[^/]*|vite\.config[^/]*)$/i.test(file.path));
+  const files = input.files.filter(file => !SKIPPED_FILES.test(file.path));
   const routes = new Set((input.routes?.length ? input.routes : [{ path: "/" }]).map(route => routeKey(route.path)));
   const assets = new Set((input.assets ?? []).map(asset => `/${asset.path.replace(/^public\//, "")}`));
 
@@ -245,10 +269,7 @@ export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] 
     const { path, content } = file;
     const code = CODE.test(path) ? stripComments(content) : /\.css$/i.test(path) ? content.replace(/\/\*[\s\S]*?\*\//g, blank) : content;
     const at = (index: number) => `${path}:${lineAt(content, index)}`;
-    for (const segment of segments(path, content)) {
-      if (/\.html?$/i.test(path) || CODE.test(path)) checkText(segment.text, at(segment.index));
-      else if (/\.(?:json|md|txt)$/i.test(path)) for (const [index, line] of segment.text.split("\n").entries()) checkText(line, `${path}:${index + 1}`);
-    }
+    for (const piece of fileTexts(path, content)) checkText(piece.text, piece.where);
     if (/\.css$/i.test(path)) {
       for (const rule of code.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         if (/::selection|:disabled|::placeholder/.test(rule[1])) continue;
@@ -301,6 +322,13 @@ export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] 
       else if (!tag.attrs.has("data-makeborne-attribution")) checkLink(tag.attrs.get("href"), where);
     }
     checkText(plain(page.html), where);
+  }
+
+  // Embedded catalogue fonts carry Latin and Latin Extended only; other characters fall back.
+  if (detectFonts(files.map(file => [file.path, file.content] as [string, string])).fonts.length) {
+    const coverage = fontCoverage(visibleText({ ...input, files }), MAX_LOCATIONS);
+    for (const item of coverage.uncovered) for (const where of item.locations) add("font-fallback", `${where} (${item.char})`);
+    for (const item of coverage.decomposed) for (const where of item.locations) add("decomposed-text", `${where} (${describeTyped(item.typed)} → ${item.letter})`);
   }
 
   return [...found.entries()]

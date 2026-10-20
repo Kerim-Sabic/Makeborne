@@ -1,0 +1,7 @@
+/* Publishing and output facts (audit reconciliation): version facts, publish report,
+   unconfirmed claims, rendered-state contrast and font coverage notes.
+   Text colours meet 4.5:1 on their backgrounds. */
+
+/* Document preview: characters outside the embedded font subsets. */
+.dp-font-note{display:grid;gap:4px;margin:0;padding:8px 14px;border-bottom:1px solid #ebe8ef;background:#fdf8ec;color:#5a3d00;font-size:12px;line-height:1.5}
+.dp-font-note p{margin:0;overflow-wrap:anywhere}
