@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Check, ChevronLeft, ChevronRight, Clock3, Crosshair, Link2Off, MessageSquare, Monitor, RotateCcw, Smartphone, X } from "lucide-react";
 import BrandMark from "./brand-mark";
 import AccountPreview, { PreviewBlock, previewPalette } from "./account-preview";
@@ -13,6 +13,7 @@ import { anchorLabel } from "@/lib/client-review/feedback";
 import { discardReviewDraft, hasReviewDraftText, readReviewDraft, reviewDraftScope, saveReviewDraft } from "@/lib/client-review/unsent-feedback";
 import { reviewDateLabel as dateLabel, reviewTimeLabel as timeLabel } from "@/lib/client-review/date-format";
 import type { ActiveReview, ReviewAnchor, ReviewComment, ReviewDecision, ReviewPayload } from "@/lib/client-review/contracts";
+import { frameListenersRun, watchFrameScroll } from "@/lib/frame-events";
 import "@/app/account-preview.css";
 
 type Identity = { name: string; email: string };
@@ -357,13 +358,31 @@ function viewInFrame(doc: Document, documentKind?: "deck" | "book"): ViewLocatio
   return best ?? (documentKind ? null : { ref: "page", label: "Website" });
 }
 
+/** Where a click at (pageX, pageY) in the frame document pins a comment. */
+function framePin(doc: Document, target: Element | null, pageX: number, pageY: number, documentKind?: "deck" | "book"): Pin {
+  const root = doc.documentElement;
+  const width = Math.max(root.scrollWidth, 1), height = Math.max(root.scrollHeight, 1);
+  const sections = [...doc.querySelectorAll("header, section, footer, main > div, [id]")].filter(element => element.parentElement?.closest("section, header, footer") == null);
+  const section = target?.closest?.("section, header, footer") ?? target?.closest?.("[id]") ?? null;
+  const index = section ? Math.max(0, sections.indexOf(section)) : -1;
+  const heading = (section?.querySelector("h1, h2, h3") as HTMLElement | null)?.innerText?.replace(/\s+/g, " ").trim().slice(0, 70);
+  const name = section?.tagName === "HEADER" ? "Header" : section?.tagName === "FOOTER" ? "Footer" : heading ? `“${heading}”` : section?.id ? section.id.replace(/[-_]/g, " ") : "";
+  return { x: pageX / width, y: pageY / height, ref: index >= 0 ? `section:${index}` : "page", label: documentKind ? section?.getAttribute("aria-label") || name || "Document" : name ? `Section ${name}` : "Website" };
+}
+
 /** The published-snapshot style website: sanitized, script-free HTML in a
  * sandbox without allow-scripts. Same-origin lets this page (not the site)
- * measure clicks and draw pins; the document itself can never run code. */
+ * measure clicks and draw pins; the document itself can never run code.
+ * Safari runs no listener on such a frame (frame-events.ts), so there the
+ * pin click is taken by a host-page layer over the frame instead. */
 function WebsiteFrame({ html, title, documentKind, onReady, onView, pinning, pins, draft, active, onPick, onPin }: Surface & { html: string; title: string; documentKind?: "deck" | "book"; onReady?: () => void; onView?: (view: ViewLocation) => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [mobile, setMobile] = useState(false);
   const [loaded, setLoaded] = useState(0);
+  // False where the browser ignores listeners on the script-free frame (Safari): the host takes pin clicks.
+  const [listeners, setListeners] = useState(true);
+  const stopScroll = useRef<() => void>(() => {});
+  useEffect(() => () => stopScroll.current(), []);
   const state = useRef({ pinning, onPick, onPin, documentKind, onReady, onView });
   useEffect(() => { state.current = { pinning, onPick, onPin, documentKind, onReady, onView }; }, [pinning, onPick, onPin, documentKind, onReady, onView]);
   const attached = useRef<Document | null>(null);
@@ -375,20 +394,15 @@ function WebsiteFrame({ html, title, documentKind, onReady, onView, pinning, pin
     style.setAttribute("data-mb-review", "");
     style.textContent = `[data-mb-pin]{position:absolute;z-index:2147483646;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50% 50% 50% 4px;display:grid;place-items:center;background:#3358d4;color:#fff;font:600 12px/1 Arial,sans-serif;box-shadow:0 0 0 3px #fff,0 6px 18px #1a1f3a55;cursor:pointer;border:0;padding:0}[data-mb-pin].is-active{background:#16181d;transform:scale(1.15)}[data-mb-pin].is-resolved{background:#8b8f9c}[data-mb-pin].is-draft{background:#f76f53}html.mb-pinning,html.mb-pinning *{cursor:crosshair!important}`;
     doc.head?.appendChild(style);
+    const live = frameListenersRun(doc);
+    setListeners(live);
     doc.addEventListener("click", event => {
       const target = event.target as Element | null;
       const pinElement = target?.closest?.("[data-mb-pin]");
       if (pinElement) { event.preventDefault(); const id = pinElement.getAttribute("data-mb-pin"); if (id && id !== "draft") state.current.onPin(id); return; }
       if (state.current.pinning) {
         event.preventDefault(); event.stopPropagation();
-        const root = doc.documentElement;
-        const width = Math.max(root.scrollWidth, 1), height = Math.max(root.scrollHeight, 1);
-        const sections = [...doc.querySelectorAll("header, section, footer, main > div, [id]")].filter(element => element.parentElement?.closest("section, header, footer") == null);
-        const section = target?.closest?.("section, header, footer") ?? target?.closest?.("[id]") ?? null;
-        const index = section ? Math.max(0, sections.indexOf(section)) : -1;
-        const heading = (section?.querySelector("h1, h2, h3") as HTMLElement | null)?.innerText?.replace(/\s+/g, " ").trim().slice(0, 70);
-        const name = section?.tagName === "HEADER" ? "Header" : section?.tagName === "FOOTER" ? "Footer" : heading ? `“${heading}”` : section?.id ? section.id.replace(/[-_]/g, " ") : "";
-        state.current.onPick({ x: event.pageX / width, y: event.pageY / height, ref: index >= 0 ? `section:${index}` : "page", label: state.current.documentKind ? section?.getAttribute("aria-label") || name || "Document" : name ? `Section ${name}` : "Website" });
+        state.current.onPick(framePin(doc, target, event.pageX, event.pageY, state.current.documentKind));
         return;
       }
       const link = target?.closest?.("a");
@@ -407,7 +421,8 @@ function WebsiteFrame({ html, title, documentKind, onReady, onView, pinning, pin
       const view = viewInFrame(doc, state.current.documentKind);
       if (view && view.ref !== shown) { shown = view.ref; state.current.onView?.(view); }
     };
-    doc.defaultView?.addEventListener("scroll", () => { if (!pending) pending = window.setTimeout(report, 300); }, { passive: true });
+    stopScroll.current();
+    stopScroll.current = doc.defaultView ? watchFrameScroll(doc.defaultView, () => { if (!pending) pending = window.setTimeout(report, 300); }, live) : () => {};
     report();
     setLoaded(value => value + 1);
     void doc.fonts.ready.then(() => { if (frame.current?.contentDocument === doc) { state.current.onReady?.(); report(); } });
@@ -444,6 +459,20 @@ function WebsiteFrame({ html, title, documentKind, onReady, onView, pinning, pin
       if (pin) doc.defaultView?.scrollTo({ top: Math.max(0, pin.anchor.y * root.scrollHeight - 160), behavior: "smooth" });
     }
   }, [pins, draft, active, pinning, loaded, mobile]);
+  // Host-page pin layer for browsers that ignore the frame's own listeners: the click is mapped into the
+  // frame document (same origin, read only), and the wheel still scrolls the frame underneath.
+  const capture = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    const element = frame.current, doc = element?.contentDocument, view = element?.contentWindow;
+    if (!element || !doc?.documentElement || !view) return;
+    const rect = element.getBoundingClientRect();
+    const x = event.clientX - rect.left - element.clientLeft, y = event.clientY - rect.top - element.clientTop;
+    if (x < 0 || y < 0 || x > element.clientWidth || y > element.clientHeight) return;
+    const target = doc.elementFromPoint(x, y);
+    const pinElement = target?.closest?.("[data-mb-pin]");
+    const id = pinElement?.getAttribute("data-mb-pin");
+    if (id && id !== "draft") { onPin(id); return; }
+    onPick(framePin(doc, target, x + view.scrollX, y + view.scrollY, documentKind));
+  };
   return <section className="cr-website">
     <div className="cr-website-bar">
       <span className="cr-dots" aria-hidden="true"><i /><i /><i /></span>
@@ -455,6 +484,8 @@ function WebsiteFrame({ html, title, documentKind, onReady, onView, pinning, pin
     </div>
     <div className={`cr-website-viewport${mobile ? " is-mobile" : ""}`}>
       <iframe ref={frame} key={mobile ? "mobile" : "desktop"} title={`${title} ${documentKind === "deck" ? "presentation" : documentKind === "book" ? "book" : "website"} preview`} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={attach} />
+      {pinning && !listeners && <button type="button" className="cr-pin-capture" aria-label={`Pin a comment on the ${documentKind === "deck" ? "presentation" : documentKind === "book" ? "book" : "website"}`}
+        onClick={capture} onWheel={event => frame.current?.contentWindow?.scrollBy(event.deltaX, event.deltaY)} />}
     </div>
   </section>;
 }
