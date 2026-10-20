@@ -21,7 +21,8 @@ check("history wiring: read-only, scoped, websites only", () => {
   assert.ok(hook.includes('cache: "no-store"') && !/method:\s*"(POST|PATCH|DELETE)"/.test(hook), "GET only");
   assert.ok(hook.includes("state?.scope === scope ? state.value : undefined"), "a value for another project is never shown");
   const studio = fs.readFileSync(path.join(__dirname, "cloud-studio.tsx"), "utf8");
-  assert.ok(studio.includes('useLiveVersion(accountId, workspaceId, artifact.id, view === "history" && artifact.kind === "website")'));
+  assert.ok(studio.includes('useLiveVersion(accountId, workspaceId, artifact.id, artifact.kind === "website", `${view}:${liveRefresh}`)'), "websites only; re-read on view changes and after publishing");
+  assert.ok(hook.includes("[enabled, scope, accountId, workspaceId, artifactId, refreshKey]"), "the refresh key re-reads the status");
   assert.ok(studio.includes('{v.number === liveVersion && <span className="cloud-version-live">Live</span>}'));
   assert.ok(studio.includes("Couldn&apos;t check which version is live."), "a failed check is not shown as 'not live'");
 });
