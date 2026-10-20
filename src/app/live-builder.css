@@ -179,3 +179,8 @@
 .dp-present-bar span { min-width:54px; text-align:center; }
 @media (prefers-reduced-motion:reduce) { .dp-present-bar { transition:none; } }
 .dp-empty { min-height:60vh; }
+/* Advisor brief provenance (audit M14): recorded with the next new request, never sent by itself. */
+.lb-provenance { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin:0 0 6px; color:#4c3e57; font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
+.lb-provenance span { min-width:0; flex:1 1 auto; }
+.lb-provenance button { min-height:32px; padding:3px 10px; border:1px solid #d9d0e2; border-radius:8px; background:#fff; color:#65518a; font:inherit; font-weight:550; cursor:pointer; }
+.lb-provenance[data-status="sent"] { color:#6d6478; }

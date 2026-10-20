@@ -20,6 +20,7 @@ import { OperationError, beginOperation, brandKitFingerprint, createOperationSpe
 import { approvedMaximumIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
 import { requirePricedModel } from "@/lib/ai/model-check";
+import { AdvisorProvenanceSchema } from "@/lib/experts/advisor-brief";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -37,6 +38,8 @@ const PlanRequest = z.object({
   operation: OperationRequestSchema.optional(),
   /** The planning maximum the customer saw before sending; must equal the server ceiling. */
   approvedMaximum: z.number().int().positive().optional(),
+  /** Which advisor conversation and brief revision this plan request came from (ids only; recorded with the operation). */
+  provenance: AdvisorProvenanceSchema.optional(),
 }).strict();
 const SavePlan = z.object({
   workspaceId: z.string().uuid(),

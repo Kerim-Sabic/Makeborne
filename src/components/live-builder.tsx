@@ -27,6 +27,7 @@ import { briefQuestions, briefWithAnswers, isBriefQuestion, type BriefAnswers, t
 import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendingRequest, savePendingRequest, targetIssue, targetReference, undoIssue, type EditTarget, type PendingRequest } from "@/lib/builder/edit-intent";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
+import { provenanceLabel, type ProjectProvenance } from "@/lib/experts/advisor-brief";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
@@ -58,6 +59,7 @@ function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "bo
       <div><dt>Result</dt><dd>{receipt.saved ? receipt.version ? `Saved as version ${receipt.version}` : "Saved" : "No new version"}</dd></div>
       <div><dt>Time</dt><dd>{formatDuration(receipt.durationMs)}</dd></div>
       <div><dt>Sources sent</dt><dd>{receipt.sources.length ? receipt.sources.join(", ") : "None"}</dd></div>
+      {receipt.brief && <div><dt>Brief</dt><dd>From {receipt.brief}</dd></div>}
       <div><dt>{kind === "website" ? "Files changed" : "Changes"}</dt><dd>{changes.length ? <details><summary>{changes.length} {noun}{changes.length === 1 ? "" : "s"}</summary><ul>{changes.slice(0, 40).map(item => <li key={item}>{item}</li>)}{changes.length > 40 && <li>and {changes.length - 40} more</li>}</ul></details> : "None"}</dd></div>
     </dl>
     {!!receipt.checks.length && <ul className="lb-receipt-checks">{receipt.checks.map(check => <li key={check.label} data-ok={check.ok}>{check.ok ? <Check size={13} aria-label="Passed" /> : <TriangleAlert size={13} aria-label="Needs attention" />}<span>{check.label}</span></li>)}</ul>}
@@ -90,10 +92,13 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
-  /** Text placed in the composer for the user to review, e.g. client feedback. Never sent automatically. */
-  prefill?: { key: string; text: string; target?: EditTarget } | null;
+  /** Text placed in the composer for the user to review, e.g. client feedback or an advisor brief (with its mode and effort). Never sent automatically. */
+  prefill?: { key: string; text: string; target?: EditTarget; mode?: "create" | "plan"; effort?: EffortLevel } | null;
+  /** The advisor brief this project was handed: pending until the next new request records it, then sent. */
+  provenance?: ProjectProvenance | null;
+  onProvenance?: (next: ProjectProvenance | null) => void;
   /** Restores `from` as a new version after checking `to` is still current. Returns why it could not, or null. Never deletes history or publishes. */
   onUndo?: (change: { from: number; to: number }) => string | null;
   /** Why Undo must wait (unsaved draft, save in progress, conflict). */
@@ -159,7 +164,14 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [prefilled, setPrefilled] = useState<string | null>(null);
   // The element picked in the preview, bound to the saved file it was picked from.
   const [target, setTarget] = useState<EditTarget | null>(null);
-  if (prefill && prefill.key !== prefilled) { setPrefilled(prefill.key); setDraft(prefill.text.slice(0, 8000)); setTarget(prefill.target ?? null); }
+  if (prefill && prefill.key !== prefilled) {
+    setPrefilled(prefill.key); setDraft(prefill.text.slice(0, 8000)); setTarget(prefill.target ?? null);
+    if (prefill.effort) setEffort(prefill.effort);
+    if (website && prefill.mode) setMode(prefill.mode);
+  }
+  // A handed-over advisor brief is recorded with the next new request (build or plan), never with a continuation.
+  const pendingBrief = provenance?.status === "pending" ? provenance : null;
+  const briefSent = useCallback((used: ProjectProvenance) => { onProvenance?.({ ...used, status: "sent", sentAt: Date.now() }); }, [onProvenance]);
   // The composer's unsent text survives a reload for this account and project only; restoring never sends.
   const draftDefaults = useMemo(() => ({ kind, mode: "create" as const, effort: defaultEffort ?? "medium", text: "" }), [defaultEffort, kind]);
   const unsent = useUnsentDraft({ surface: `builder.${workspaceId}.${artifactId}`, account: { accountId }, enabled: true,
@@ -396,6 +408,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     onLive({ ...live, building: true });
     const meter = newRunMeter();
     meter.sources = files.map(file => file.name);
+    const brief = options?.operation ? null : pendingBrief;
+    if (brief) meter.brief = provenanceLabel(brief.provenance);
     setSentSources({ names: meter.sources, operationId: options?.operation?.id ?? null });
     try {
       const level = options?.effort ?? effort;
@@ -406,8 +420,10 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         operation: requestOperation,
         // A new request is bound to the maximum shown before sending (the composer limit or the plan approval).
         ...("actionKey" in requestOperation ? { approvedMaximum: options?.approvedMaximum ?? BUILDER_EFFORT[level].ceilingCredits } : {}),
-        attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan, planRevision: options.planRevision } : {}) }, reply.id, live, meter);
+        attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan, planRevision: options.planRevision } : {}),
+        ...(brief ? { provenance: brief.provenance } : {}) }, reply.id, live, meter);
       outcome = result ? "done" : lastRefusal.current ? "refused" : "uncertain";
+      if (brief && outcome === "done") briefSent(brief);
       if (request) releaseRequest(request, outcome, !options?.plan);
       if (outcome === "done" && options?.target) setTarget(null);
       let savedTo = result?.changed ? result.version : null;
@@ -469,7 +485,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       if (sourceSession.active) { addReceipt(meter); await finishRun(); }
     }
     return outcome;
-  }, [accountId, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, busy, disabled, effort, finishRun, holdRequest, onLive, operationRunning, pendingScope, planner, previewingRecovery, refreshBalance, releaseRequest, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
+  }, [accountId, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, briefSent, busy, disabled, effort, finishRun, holdRequest, onLive, operationRunning, pendingBrief, pendingScope, planner, previewingRecovery, refreshBalance, releaseRequest, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
 
   /** Manual "Review design" for the current saved version. */
   const review = useCallback(async () => {
@@ -496,19 +512,20 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     let ended = false;
     const end = (outcome: Outcome) => { if (!ended) { ended = true; releaseRequest(request, outcome); } };
     setSentSources({ names: files.map(file => file.name), operationId: null });
-    await planner.run({ turnId: reply.id, message: text.trim(), effort, expectedVersion: version, revise, approvedMaximum: PLAN_CEILING_CREDITS,
+    const brief = pendingBrief;
+    await planner.run({ turnId: reply.id, message: text.trim(), effort, expectedVersion: version, revise, approvedMaximum: PLAN_CEILING_CREDITS, ...(brief ? { provenance: brief.provenance } : {}),
       attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })) }, {
       onText: delta => update(reply.id, turn => ({ ...turn, text: turn.text + delta })),
       onStatus: message => update(reply.id, turn => ({ ...turn, activity: [{ id: "status", kind: "note", label: message, done: false }] })),
       onCredits: credits => update(reply.id, turn => ({ ...turn, credits })),
       onPlan: active => update(reply.id, turn => ({ ...turn, plan: { title: active.stored.plan.title, revision: active.stored.revision } })),
-      onDone: charged => { end("done"); update(reply.id, turn => ({ ...turn, state: "done", credits: charged, activity: [] })); },
+      onDone: charged => { end("done"); if (brief) briefSent(brief); update(reply.id, turn => ({ ...turn, state: "done", credits: charged, activity: [] })); },
       onError: message => { end("uncertain"); update(reply.id, turn => ({ ...turn, state: "error", plan: undefined, text: `${turn.text.trim() ? `${turn.text.trim()}\n\n` : ""}${message}`, activity: [] })); },
     });
     end("uncertain");
     setBusy(false);
     refreshBalance();
-  }, [busy, disabled, draftPlan, effort, holdRequest, operationRunning, planner, previewingRecovery, refreshBalance, releaseRequest, version]);
+  }, [briefSent, busy, disabled, draftPlan, effort, holdRequest, operationRunning, pendingBrief, planner, previewingRecovery, refreshBalance, releaseRequest, version]);
   const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; target?: string }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
     if (!sources.ready || sources.busy) { setNotice("Wait for your source files to finish loading or saving."); return; }
@@ -770,6 +787,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       </div>}
       {target && draft.includes(targetReference(target)) && <p className="lb-target"><span>Editing {target.label} · {targetReference(target)} · selected in version {target.version}</span>
         <button type="button" onClick={() => setTarget(null)}>Clear target</button></p>}
+      {provenance && <p className="lb-provenance" data-status={provenance.status}><span>{provenance.status === "pending" ? `From ${provenanceLabel(provenance.provenance)} · recorded with your next request. The advice itself changed nothing here.` : `Started from ${provenanceLabel(provenance.provenance)}`}</span>
+        {provenance.status === "pending" && onProvenance && <button type="button" disabled={busy} onClick={() => onProvenance(null)}>Don’t record</button>}</p>}
       <UnsentDraftNotice restoredAt={unsent.restoredAt} storageRefused={unsent.storageRefused} onDiscard={unsent.discard} disabled={busy} className="lb-unsent" />
       <AttachmentList files={sources.files} readiness={readiness} onRetry={readiness.retry}
         onExclude={id => setLeftOut(current => new Set(current).add(id))} onInclude={id => setLeftOut(current => { const next = new Set(current); next.delete(id); return next; })}

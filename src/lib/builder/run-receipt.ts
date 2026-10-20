@@ -26,6 +26,8 @@ export type RunMeter = {
   render: { ok: boolean } | null;
   /** Names of the source files sent with the request (the "Will be read" set); empty when none were sent. */
   sources: string[];
+  /** The advisor brief this request came from ("Mira’s brief · revision 2"), when it carried one. */
+  brief?: string;
 };
 
 export type RunReceipt = {
@@ -38,6 +40,8 @@ export type RunReceipt = {
   items: string[];
   /** Source files that were sent with this request. */
   sources: string[];
+  /** The advisor brief recorded with this request, when there was one. */
+  brief?: string;
   checks: { ok: boolean; label: string }[];
   /** This request saved nothing and the server settled it at zero credits. */
   notCharged: boolean;
@@ -104,7 +108,7 @@ export function runReceipt(meter: RunMeter, options: { website: boolean; unlimit
   return {
     charged, unlimited: options.unlimited, saved: meter.saved, version: meter.version,
     durationMs: Math.max(0, (options.now ?? Date.now()) - meter.started),
-    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], checks,
+    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), checks,
     notCharged: !options.unlimited && charged === 0 && !meter.saved && meter.failed,
   };
 }
