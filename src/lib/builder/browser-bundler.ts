@@ -1,7 +1,7 @@
 /** In-browser bundler for Makeborne React/Vite projects. Runs only trusted
  * esbuild code in the app; the generated site executes solely inside an opaque
  * sandboxed iframe that cannot reach Makeborne cookies, storage or APIs. */
-import { FONT_IMPORT, FONTS_BY_ID, detectFonts, fontFaceRule, fontFileName, type FontEntry } from "./fonts";
+import { FONT_IMPORT, FONTS_BY_ID, detectFonts, fontFaceRule, fontFileName, fontSubsets, type FontEntry } from "./fonts";
 import { LUCIDE, LUCIDE_CORE, lucideIconFile, lucideImports, unknownLucideIcons } from "./icons";
 
 type Esbuild = typeof import("esbuild-wasm");
@@ -45,12 +45,21 @@ const fontDataUrl = (url: string) => {
   return fontCache.get(url)!;
 };
 
-/** @font-face rules (with embedded woff2) for the catalogue fonts a project uses. */
+/** @font-face rules (with embedded woff2) for the catalogue fonts a project uses.
+ * Text with letters beyond the latin file (ć, Ł, ğ, ő...) also embeds the
+ * complementary latin-ext file; each rule carries its unicode-range. A latin-ext
+ * file that cannot load is left out, so only those letters use the stack. */
 export async function projectFontCss(files: Map<string, string>, origin: string) {
   const { fonts, italic } = detectFonts(files);
+  if (!fonts.length) return "";
+  const subsets = fontSubsets(files.values());
   const rules = await Promise.all(fonts.flatMap((font: FontEntry) => (italic && font.italic ? ["normal", "italic"] as const : ["normal"] as const)
-    .map(async style => fontFaceRule(font, style, await fontDataUrl(`${origin}/builder-runtime/fonts/${fontFileName(font, style)}`)))));
-  return rules.join("\n");
+    .flatMap(style => subsets.map(async subset => {
+      const url = fontDataUrl(`${origin}/builder-runtime/fonts/${fontFileName(font, style, subset)}`);
+      if (subset === "latin") return fontFaceRule(font, style, await url, subset);
+      return url.then(source => fontFaceRule(font, style, source, subset), () => "");
+    }))));
+  return rules.filter(Boolean).join("\n");
 }
 
 /** Virtual "lucide-react" module that re-exports only the icons the project

@@ -40,7 +40,7 @@ export async function websiteProjectSourceBundle(input: unknown, artwork: Awaite
   if (portable.fonts.length || toolchain.compatibility !== "current") entries.push({path: ".makeborne/original-source.json", bytes: Buffer.from(`${canonicalSourceJson(source)}\n`)});
   const manifest = {schemaVersion: 1, adapter: "makeborne-full-source-archive-v2", artifactId: version.artifactId,
     revisionId: version.id, version: version.number, sourceHash, source: sourceManifest,
-    materialization: "makeborne-portable-fonts-v1", compatibility: toolchain.compatibility,
+    materialization: "makeborne-portable-fonts-v2", compatibility: toolchain.compatibility,
     toolchainHash: createHash("sha256").update(canonicalSourceJson({id: source.toolchainId, package: projectPackage, lock: projectLock})).digest("hex"),
     fonts: portable.styles.map(({font, style}) => ({id: font.id, family: font.family, style})),
     files: entries.map(file => ({path: file.path, bytes: file.bytes.length, sha256: createHash("sha256").update(file.bytes).digest("hex")})).sort((a, b) => a.path < b.path ? -1 : 1)};

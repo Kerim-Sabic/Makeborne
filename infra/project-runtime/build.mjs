@@ -74,7 +74,7 @@ try {
     oxc: {jsx: {runtime: "automatic"}}, css: {postcss: {plugins: []}},
     build: {outDir: output, emptyOutDir: true, sourcemap: false, assetsInlineLimit: 0, target: "es2022"}});
   // This trusted record is itself covered by the final output/build hash.
-  await writeFile(`${output}/makeborne-materialization.json`, JSON.stringify({schemaVersion: 1, materialization: "makeborne-portable-fonts-v1",
+  await writeFile(`${output}/makeborne-materialization.json`, JSON.stringify({schemaVersion: 1, materialization: "makeborne-portable-fonts-v2",
     compatibility: toolchain.compatibility, sourceHash: request.sourceHash, toolchainHash: request.toolchainHash, runtimeImageId,
     files: [...portable.files, ...licenses].map(file => ({path: file.path, bytes: Buffer.byteLength(file.content), sha256: digest(file.content)})),
     fonts: portable.styles.map(({font, style}) => ({id: font.id, family: font.family, style}))}));
