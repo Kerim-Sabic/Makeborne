@@ -88,7 +88,7 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
       "https://developers.openai.com/api/docs/guides/image-generation (checked 2026-10-20: both 2.5 models list text input $5, image input $8, image output $30, cached text input $1.25 and cached image input $2 per 1M, plus an output-token estimator)",
       "https://developers.openai.com/api/docs/deprecations (named, with the other 2.5 model, as gpt-image-1's replacement)"],
     components: { textInput: 5, textCachedInput: 1.25, imageInput: 8, imageCachedInput: 2, imageOutput: 30 },
-    notes: ["OpenAI publishes no per-image price or output-token count for 2.5 models, so the cost of one image cannot be bounded from documentation.",
+    notes: ["OpenAI publishes token rates for the 2.5 models and an estimator of output tokens by model, quality and size (image-generation guide, checked 2026-10-20), but no per-image price table and no guaranteed per-call maximum. An estimate is not a bound, so the cost of one image cannot be bounded from documentation alone.",
       "D8 changed 2026-10-21 (owner, Kerim): bounded by MEASURED_IMAGE_OUTPUT_TOKENS (observed output tokens per size and quality x 1.5), from the owner-approved research run of 2026-10-20 (docs/release-review/design-quality-images-20261020.md). Sizes and qualities without a measurement stay refused. A call whose output tokens exceed the bound stops routing to the model (image-health.ts) and, when it exceeds the dollar bound, trips the provider scope's emergency stop.",
       variant === "sunburst" ? "OpenAI: the most capable image generation and editing model." : "OpenAI: the fastest model for high-quality, everyday image generation."],
   })),

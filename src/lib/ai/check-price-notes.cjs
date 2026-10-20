@@ -41,17 +41,19 @@ check("Image 2 note cites the single recorded live run and its usage reproduces 
   assert.equal(prices.imageUsageMicrousd("gpt-image-2", { input_tokens: 68, output_tokens: 1756 }), 53_020);
 });
 
-check("2.5 evidence carries the 2026-10-20 published rates and stays refused", () => {
+check("2.5 evidence carries the 2026-10-20 published rates; D8 (changed by the owner 2026-10-21) bounds them by measured tokens", () => {
   for (const model of ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"]) {
     const item = evidence(model);
     assert.equal(item.verifiedAt, "2026-10-20");
     assert.deepEqual(item.components, { textInput: 5, textCachedInput: 1.25, imageInput: 8, imageCachedInput: 2, imageOutput: 30 });
     assert.ok(item.priceSources.some(source => source.startsWith("https://developers.openai.com/api/docs/guides/image-generation (checked 2026-10-20")));
-    assert.match(item.notes.join(" "), /An estimate is not a bound/);
-    assert.ok(prices.UNBOUNDED_IMAGE_MODELS.includes(model));
-    assert.throws(() => prices.imagePrice(model), prices.UnpricedModelError);
+    const notes = item.notes.join(" ");
+    assert.match(notes, /An estimate is not a bound/, "the published estimator is not treated as a maximum");
+    assert.match(notes, /D8 changed 2026-10-21/, "the owner decision and its evidence are recorded");
+    const measured = prices.MEASURED_IMAGE_OUTPUT_TOKENS[model];
+    assert.ok(measured && measured.observed.medium["1536x1024"] > 0, "a measured cell exists for the router's default size and quality");
+    assert.ok(!prices.UNBOUNDED_IMAGE_MODELS.includes(model), "measured 2.5 models are no longer unbounded");
   }
-  assert.deepEqual(prices.MEASURED_IMAGE_OUTPUT_TOKENS, {});
 });
 
 console.log(`${passed}/4 price note checks passed.`);
