@@ -1,7 +1,10 @@
 /**
- * Error text and routes are scrubbed before they leave the browser or reach the database:
- * no emails, ids, tokens, long numbers or query strings. Grouping uses the scrubbed text,
- * so "Order 4512 failed" and "Order 9921 failed" are one kind of error. Client-safe.
+ * Error text and routes are pattern-scrubbed before they leave the browser or reach the
+ * database: emails, UUIDs, long token-like strings, numbers of four or more digits and URL
+ * query strings are replaced. This is a best-effort filter, not a guarantee: a name, a short
+ * secret or other personal text that matches none of the patterns is kept. Grouping uses the
+ * scrubbed text, so "Order 4512 failed" and "Order 9921 failed" are one kind of error.
+ * The privacy notice (src/app/privacy/page.tsx) describes these fields. Client-safe.
  */
 
 export type TelemetryPage = "home" | "pricing" | "login" | "studio" | "portal" | "help";
@@ -13,7 +16,7 @@ const TOKEN = /\b[A-Za-z0-9_-]{24,}\b/g;
 const NUMBER = /\b\d{4,}\b/g;
 const URL_QUERY = /(https?:\/\/[^\s?#]+)[?#][^\s]*/g;
 
-/** A message safe to store: no personal data or secrets, at most 300 characters. */
+/** The message with the patterns above replaced, whitespace collapsed, at most 300 characters. */
 export function scrubMessage(value: unknown) {
   const text = typeof value === "string" ? value : value instanceof Error ? value.message : "";
   return text.replace(URL_QUERY, "$1").replace(EMAIL, "<email>").replace(UUID, "<id>").replace(TOKEN, "<token>").replace(NUMBER, "<n>")
