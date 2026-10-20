@@ -26,6 +26,7 @@ The combined candidate passes the staging journeys described below. **It is not 
 | Staging migration preflight and application | Only three pending billing migrations; existing settings unchanged |
 | Staging security advisors | 11 warnings before and after; identical results, none new |
 | Combined real staged app/API journey | Pass, zero browser page errors, zero provider-build submissions |
+| Actual staged HTTP/SSE AI edit and settlement | Pass; one real provider call, saved revision 2, unrelated slides preserved |
 | Real cloud compiler/controller/renderers and actual publish API | Pass; one compiler and two renderer sessions |
 | Public QA website versus approved preview | Both routes at 1,440px and 375px; content/headings/fonts agree; no overflow, failed images or page errors |
 | Phone enquiry → gateway → correct inbox → CRM lead/activity | Pass; disposable enquiry and client deleted |
@@ -47,6 +48,7 @@ Migration recovery fingerprint: `9487c5177a9d890ad93cbf55c3d7a3044c7fbea2a9dc021
 7. The billing page loaded on phone. No checkout or automatic charge was submitted.
 8. The actual supervised Linux controller built both website routes from this candidate, retained their preview and promoted the approved preparation through the real app API. The public QA site advanced from revision 3 to 4. Mobile menus and entrance animations worked.
 9. A public phone form reached the correct staging site inbox and converted to the correct CRM client with its original activity. Temporary form-gateway access was removed after the test.
+10. After the no-generation journey, one separately reserved real staged AI edit changed only slide 1’s requested heading and preserved the other four slides exactly. The actual HTTP/SSE route saved revision 2 and recorded one settled provider call ($0.096806; zero uncertain usage/overrun). The admin fixture was credit-exempt, not a customer-payment test. Staging global/Anthropic limits were temporarily bounded by the existing day spend plus $0.61 and restored exactly afterward; actual day spend was retained. The disposable user/workspace were removed. Published [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing) was checked before the call; the configured model’s card still matched.
 
 PDF pages were rendered and visually inspected. There is no observed clipping in these samples. The book is intentionally sparse in places, including a quote-only page; this sample and the deck do not establish image-generation quality, all fonts/languages or all business designs. Native PowerPoint/Keynote behavior remains unqualified.
 
@@ -65,7 +67,7 @@ The weekly sandbox probe's next renewal is due **21 October 2026, 00:08:59 UTC**
 
 ## Spending and cleanup
 
-Same owner-authorized **$5 total**, never reset: conservative accounted/reserved **$3.716071**. This includes $1.767315 measured AI, $0.348756 uncertain stopped-call bound, and $1.60 cloud/function bounds retained. Remaining conservative room: **$1.283929**. There were no new paid AI calls in this combined rehearsal. These are conservative ledger bounds, not a provider invoice.
+Same owner-authorized **$5 total**, never reset: conservative accounted/reserved **$3.812877**. This includes $1.864121 measured AI, $0.348756 uncertain stopped-call bound, and $1.60 cloud/function bounds retained. Remaining conservative room: **$1.187123**. The one new real cloud edit cost $0.096806; no other new paid AI calls were made in this combined rehearsal. These are conservative ledger bounds, not a provider invoice.
 
 All three new cloud VMs were independently read back as stopped, with exactly one session each. Staging controller stopped/disabled; production controller remains inactive. Temporary host environment/override and temporary staging gateway token removed. Both new private registry repositories and temporary Docker authentication removed. Disposable app accounts/workspaces, review data, form enquiry and converted client are removed. Staging billing flags match their before snapshot. Public QA revision 4 is intentionally retained.
 
@@ -76,6 +78,6 @@ All three new cloud VMs were independently read back as stopped, with exactly on
 3. Prepare an exact production migration list against a fresh read-only baseline, backup/restore path, flag/env differences, bounded provider limits and operator monitoring. Existing production approval is still held for this task.
 4. Ask Kerim for the concrete production go. Until then: no main merge/push, production deployment, production migration/settings/DNS/Worker changes or checkout activation.
 
-Before release rollback means leaving the branch unreleased. Staging recovery can repoint its QA alias to the previous qualified preview and restore its previous Worker; do not widen access or rewrite staged migration history. A later separately approved production release uses a normal revert and prior Worker/runtime, with additive schema retained unless a reviewed recovery requires otherwise.
+Before release rollback means leaving the branch unreleased. A staging alias rollback to the previous qualified preview and recovery to the combined preview was actually exercised: both app versions read the migrated database and retained public revision 4. This is a read/recovery check, not a full old-app mutation rehearsal. Staging recovery can restore its previous Worker; do not widen access or rewrite staged migration history. A later separately approved production release uses a normal revert and prior Worker/runtime, with additive schema retained unless a reviewed recovery requires otherwise.
 
 Private evidence is under ignored `work/lovable-qualification-20261020`: frozen inventory, exact migration application, final gates, SQL suite results, recovery fingerprint, before/after advisors, staged app screenshots/exports, independent sandbox readback, public preview comparison, form receipt/cleanup audit and budget ledger. Never commit the credentials, review tokens, inbox addresses or raw private receipts. Shared coordination is recorded in `docs/AGENT_HANDOFF.md`; Claude acknowledgement is not assumed.
