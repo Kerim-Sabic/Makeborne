@@ -74,6 +74,21 @@ Still required before release: final compatibility preview/PR review, large-ledg
 
 ### Branch release order
 
+### Final qualification checkpoint
+
+Application and migration candidate `ecaddaf7a6beb96396f3469f7f2275307d1ec3c0` is deployed only to staging preview `dpl_9GJkTj5P7FCvUEvADS1fCnSUT9ek`:
+https://makeborne-release-staging-kbhk0gcfe-kerimsabic-6594s-projects.vercel.app . The existing staging QA alias points there. Vercel reports READY and target preview. No production alias changed.
+
+The complete compatibility-chain SQL rerun finished: 57 passed, zero failed, three documented skips (CRM mail upgrade, local pilot lock, mail granted-scopes upgrade). It ran before the compatibility commit was made, with exactly the same migration/check files subsequently committed; its metadata therefore records the previous HEAD plus the two dirty SQL paths. Do not describe that metadata as a clean frozen-commit rehearsal. Hosted advisor comparison is 11 before, 11 after, zero differences in name/level/detail. Pattern secret scan at ecaddaf covered 127 changed paths with zero findings; this is not a complete credential-discovery guarantee.
+
+Actual final-preview sign-in, 50+11 title-search pages, foreign-workspace 404, mismatched-account 409, Stop acknowledgement, reload and settled Stop status passed. There were zero page errors and zero provider-build requests. All disposable accounts/workspaces were removed. The first attempt timed out waiting for the email field; an independent inspection then loaded the same screen, and a fresh complete run passed without changing application code. Cause not established; retain the failure in private evidence rather than presenting an uninterrupted first-attempt pass.
+
+The $0.50 supervised-publication reservation is now completed with its full conservative bound retained. All test VMs are stopped; temporary host environment/override, scoped staging gateway secret, Docker registry authentication file and four new private registry repositories are removed. Total accounted remains **$2.866071 / $5**; no additional AI calls or production changes were made.
+
+Draft pull requests: [original fixes #9](https://github.com/Kerim-Sabic/Makeborne/pull/9), [billing UX #10](https://github.com/Kerim-Sabic/Makeborne/pull/10), [qualification and forward repairs #11](https://github.com/Kerim-Sabic/Makeborne/pull/11). Billing #10 depends on the existing billing provenance base #8. Qualification #11 already contains #9's history; review the combined changes and merge in order, without duplicating history. Remote CI was pending when these drafts were opened; local results do not substitute for its eventual result. No merges are authorized by this checkpoint.
+
+Claude follow-up: port zero-filter refusal and nonzero-on-suite-failure from the private SQL runner to the tracked operator runner; finish the explicit remaining gates above; investigate the transient auth-provider loading timeout before treating sign-in resilience as fully qualified. Coordinate through AGENT_HANDOFF and preserve the owner's production hold.
+
 1. Keep `feature/billing-refunds-provenance` as the billing base; do not rewrite its history.
 2. `feature/billing-audit-ux` includes consent safety checkpoint `6aa2dc1` and the real payment-history SQL regression.
 3. `feature/lovable-audit-fixes` remains Claude's original implementation head `94f824d`.
