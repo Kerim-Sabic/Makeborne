@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Inbox, Mail, Pause, Play, Plus, RefreshCw, Square, Trash2, Workflow, FileText } from "lucide-react";
 import Modal from "./modal";
 import { connectedMessage } from "@/lib/mail/connected-message";
-import { mailApi, MANUAL_MAIL_NOTICE, providerLabel, TOKEN_HELP, type Enrollment, type MailOverview, type MailSequence, type MailTemplate, type SequenceStep } from "./mail-api";
+import { disconnectedMessage, disconnectQuestion, mailboxUse, PROVIDER_PERMISSION_PAGES, sequenceUseCounts } from "@/lib/mail/connection-copy";
+import { mailApi, MANUAL_MAIL_NOTICE, providerLabel, TOKEN_HELP, type Enrollment, type MailAccount, type MailOverview, type MailSequence, type MailTemplate, type SequenceStep } from "./mail-api";
 
 /** A proven starting point: every touch adds something; replies stop the sequence automatically. */
 const STARTER_STEPS: SequenceStep[] = [
@@ -83,12 +84,13 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
         <ul className="mc-list">{overview.accounts.map(account => <li key={account.id}>
           <div><strong>{account.email}</strong><small>{providerLabel(account.provider)} · {account.status === "active" ? `${account.sentToday}/${account.todayQuota} sent today${account.todayQuota < account.dailyLimit ? " (warming up)" : ""}` : account.status === "error" ? "Needs reconnecting" : "Disconnected"}{account.mine ? "" : " · connected by a teammate"}</small>
             {!account.canSend ? <small className="mc-error">Reconnect to confirm sending permission.</small> : !account.canTrackReplies ? <small>{MANUAL_MAIL_NOTICE}</small> : <small>Reply tracking and sequences available.</small>}
-            {account.lastError && account.status !== "active" && <small className="mc-error">{account.lastError}</small>}</div>
+            {account.lastError && account.status !== "active" && <small className="mc-error">{account.lastError}</small>}
+            <MailboxUse account={account} /></div>
           {account.mine && canEdit && <div className="mc-row-actions">
             {(account.status !== "active" || !account.canSend) && <a className="button secondary small" href={`/api/mail/connect?provider=${account.provider}&workspace=${workspaceId}`}>Reconnect</a>}
             {account.status === "active" && <select aria-label={`Daily limit for ${account.email}`} value={account.dailyLimit} onChange={event => void act(() => mailApi(accountId, `${base}/accounts`, "PATCH", { id: account.id, dailyLimit: Number(event.target.value) }), "Daily limit updated.")}>
               {[10, 20, 30, 50, 80, 120].map(limit => <option key={limit} value={limit}>{limit}/day max</option>)}</select>}
-            {account.status !== "disconnected" && <button type="button" className="button ghost small" onClick={() => { if (window.confirm(`Disconnect ${account.email}? Running sequences on it will pause.`)) void act(() => mailApi(accountId, `${base}/accounts`, "DELETE", { id: account.id }), "Mailbox disconnected. Sent history is kept."); }}>Disconnect</button>}
+            {account.status !== "disconnected" && <button type="button" className="button ghost small" onClick={() => { if (window.confirm(disconnectQuestion(account))) void act(() => mailApi(accountId, `${base}/accounts`, "DELETE", { id: account.id }), disconnectedMessage(account)); }}>Disconnect</button>}
           </div>}
         </li>)}</ul>
         {canEdit && <div className="mc-connect">
@@ -98,6 +100,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
           {!overview.availability.google && !overview.availability.microsoft && <small>Mailbox connections need to be set up by the Makeborne administrator first.</small>}
         </div>}
         <small className="mc-fine">New mailboxes warm up: 10 emails a day at first, rising gradually, with at least two minutes between automatic sends.</small>
+        {overview.accounts.length > 0 && <small className="mc-fine">Disconnecting stops Makeborne from using a mailbox and deletes its stored access. The permission itself stays with the provider until you remove Makeborne in your <a href={PROVIDER_PERMISSION_PAGES.google} target="_blank" rel="noopener noreferrer">Google account</a>, your <a href={PROVIDER_PERMISSION_PAGES.microsoftPersonal} target="_blank" rel="noopener noreferrer">personal Microsoft account</a> or your <a href={PROVIDER_PERMISSION_PAGES.microsoftWork} target="_blank" rel="noopener noreferrer">work or school Microsoft account</a>.</small>}
       </section>
 
       <section className="mc-card" aria-labelledby="mc-replies"><h3 id="mc-replies"><Inbox size={16} />Recent replies</h3>
@@ -139,6 +142,17 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
       await mailApi(accountId, `${base}/templates`, template.id ? "PATCH" : "POST", template); setEditing(null); setMessage("Template saved."); await load();
     }} />}
   </section>;
+}
+
+/** Where a mailbox is used, when it last sent, and how to stop its automatic emails. */
+function MailboxUse({ account }: { account: MailAccount }) {
+  const use = mailboxUse(account);
+  if (!use) return null;
+  return <>
+    <small className="mc-use">{use.lastSentAt ? <>Last sent <time dateTime={use.lastSentAt}>{new Date(use.lastSentAt).toLocaleString()}</time></> : "Nothing sent from it yet"}</small>
+    <small className="mc-use">{use.sequences.length ? <>Used by {use.sequences.map((item, index) => <span key={item.sequenceId}>{index ? " · " : ""}<strong>{item.name}</strong> ({sequenceUseCounts(item)})</span>)}</> : use.unused}</small>
+    {use.stop && <small className="mc-use">{use.stop}</small>}
+  </>;
 }
 
 function SequenceEnrollments({ accountId, workspaceId, sequenceId, canEdit, automaticAccountIds, onOpenClient }: { accountId: string; workspaceId: string; sequenceId: string; canEdit: boolean; automaticAccountIds: string[]; onOpenClient: (id: string) => void }) {

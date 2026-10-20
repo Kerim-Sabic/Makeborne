@@ -214,6 +214,9 @@
 .mc-list > li > div:first-child { display: grid; gap: 3px; min-width: 0; }
 .mc-list strong { font-size: 13.5px; font-weight: 560; color: #2a2335; overflow-wrap: anywhere; }
 .mc-list small { font-size: 12px; color: #857d92; }
+.mc-list small.mc-use { line-height: 1.5; overflow-wrap: anywhere; }
+.mc-list .mc-use strong { font-size: inherit; font-weight: 600; color: #5d5568; }
+.mc-fine a { color: inherit; text-decoration: underline; }
 .mc-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mc-row-actions select { border: 1px solid #e6e1ee; border-radius: 9px; background: #fff; font: inherit; font-size: 12px; padding: 6px 8px; color: #5d5568; }
 .mc-connect { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }

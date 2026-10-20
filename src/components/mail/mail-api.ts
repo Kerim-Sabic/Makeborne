@@ -1,7 +1,10 @@
 "use client";
 
 export type MailAccount = { id: string; provider: "google" | "microsoft"; email: string; displayName: string; status: "active" | "error" | "disconnected"; lastError: string | null;
-  mine: boolean; dailyLimit: number; lastSyncedAt: string | null; todayQuota: number; sentToday: number; canSend: boolean; canTrackReplies: boolean; canAutomate: boolean };
+  mine: boolean; dailyLimit: number; lastSyncedAt: string | null; todayQuota: number; sentToday: number; canSend: boolean; canTrackReplies: boolean; canAutomate: boolean;
+  /** Last confirmed provider send from this mailbox. */ lastSentAt?: string | null;
+  /** Sequences with running or paused clients on this mailbox. */ sequences?: MailboxSequenceUse[] };
+export type MailboxSequenceUse = { sequenceId: string; name: string; active: number; paused: number };
 export type MailTemplate = { id: string; name: string; subject: string; body: string; updatedAt: string };
 export type SequenceStep = { delayDays: number; subject: string; body: string };
 export type MailSequence = { id: string; name: string; steps: SequenceStep[]; stopOnReply: boolean; updatedAt: string; counts: Record<string, number> };
