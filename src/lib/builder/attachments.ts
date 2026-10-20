@@ -11,9 +11,17 @@ export function serializeBuilderRequest(body: unknown): string {
   return serialized;
 }
 export const BUILDER_ATTACHMENT_ACCEPT = "image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,.md,.txt";
+/** The exact list of types AI reads, for explanations shown before Send. */
+export const BUILDER_SOURCE_TYPES_LABEL = "PNG, JPEG, WebP, GIF, PDF, TXT and Markdown";
 const mediaTypes = ["image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf", "text/plain", "text/markdown"] as const;
 type MediaType = typeof mediaTypes[number];
+export type BuilderMediaType = MediaType;
 export type BuilderAttachment = { name: string; mediaType: MediaType; data: string };
+/** A typed refusal from the shared byte rules. Messages are the server's own wording. */
+export type BuilderSourceProblem = "empty" | "file-too-large" | "encoding" | "binary" | "text-too-long" | "signature";
+export class BuilderSourceError extends Error {
+  constructor(readonly problem: BuilderSourceProblem, message: string, readonly characters?: number) { super(message); this.name = "BuilderSourceError"; }
+}
 
 function decode(data: string) {
   if (!data.length || data.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data)) throw new Error("The file encoding is invalid.");
@@ -33,16 +41,23 @@ function signature(bytes: Uint8Array): MediaType | null {
 function textContent(bytes: Uint8Array) {
   let text: string;
   try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
-  catch { throw new Error("Use a UTF-8 text file."); }
-  if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text)) throw new Error("This file contains binary data. Use a UTF-8 text file.");
-  if (text.length > BUILDER_ATTACHMENT_LIMITS.textCharacters) throw new Error("Text files can contain up to 200,000 characters. Split or shorten this file.");
+  catch { throw new BuilderSourceError("encoding", "Use a UTF-8 text file."); }
+  if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text)) throw new BuilderSourceError("binary", "This file contains binary data. Use a UTF-8 text file.");
+  if (text.length > BUILDER_ATTACHMENT_LIMITS.textCharacters) throw new BuilderSourceError("text-too-long", "Text files can contain up to 200,000 characters. Split or shorten this file.", text.length);
   return text;
 }
-function validateBytes(bytes: Uint8Array, mediaType: MediaType) {
-  if (!bytes.length) throw new Error("This file is empty.");
-  if (bytes.length > BUILDER_ATTACHMENT_LIMITS.fileBytes) throw new Error("Each AI source file can be up to 3 MB (3,000,000 bytes).");
+/** The one byte check used by browser preparation, pre-Send readiness and the route schema. */
+export function checkBuilderSourceBytes(bytes: Uint8Array, mediaType: MediaType) {
+  if (!bytes.length) throw new BuilderSourceError("empty", "This file is empty.");
+  if (bytes.length > BUILDER_ATTACHMENT_LIMITS.fileBytes) throw new BuilderSourceError("file-too-large", "Each AI source file can be up to 3 MB (3,000,000 bytes).");
   if (mediaType.startsWith("text/")) { textContent(bytes); return; }
-  if (signature(bytes) !== mediaType) throw new Error("The file contents do not match its image or PDF type.");
+  if (signature(bytes) !== mediaType) throw new BuilderSourceError("signature", "The file contents do not match its image or PDF type.");
+}
+const validateBytes = checkBuilderSourceBytes;
+/** Media type from real bytes first; TXT/Markdown only by declared type or extension. */
+export function builderSourceMediaType(bytes: Uint8Array, name: string, type: string): MediaType | null {
+  return signature(bytes) ?? (type === "text/markdown" || /\.md$/i.test(name) ? "text/markdown"
+    : type === "text/plain" || /\.txt$/i.test(name) ? "text/plain" : null);
 }
 
 export const BuilderAttachmentSchema = z.object({
@@ -72,9 +87,8 @@ export async function prepareBuilderAttachments(files: readonly Attachment[]): P
     try {
       if (file.blob.size > BUILDER_ATTACHMENT_LIMITS.fileBytes) throw new Error("Each AI source file can be up to 3 MB (3,000,000 bytes).");
       const bytes = new Uint8Array(await file.blob.arrayBuffer());
-      const mediaType = signature(bytes) ?? (file.type === "text/markdown" || /\.md$/i.test(file.name) ? "text/markdown"
-        : file.type === "text/plain" || /\.txt$/i.test(file.name) ? "text/plain" : null);
-      if (!mediaType) throw new Error("AI can read PNG, JPEG, WebP, GIF, PDF, TXT and Markdown files. Convert this file or remove it before sending.");
+      const mediaType = builderSourceMediaType(bytes, file.name, file.type);
+      if (!mediaType) throw new Error(`AI can read ${BUILDER_SOURCE_TYPES_LABEL} files. Convert this file or remove it before sending.`);
       validateBytes(bytes, mediaType);
       let binary = "";
       for (let offset = 0; offset < bytes.length; offset += 16_384) binary += String.fromCharCode(...bytes.subarray(offset, offset + 16_384));
