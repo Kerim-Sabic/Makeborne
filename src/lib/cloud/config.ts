@@ -9,6 +9,6 @@ export function getCloudStatus() {
   const enabled = configured && migrationsVerified && process.env.MAKEBORNE_CLOUD_ENABLED === "true";
   return {
     enabled, configured, migrationsVerified,
-    reason: enabled ? null : !configured ? "Cloud account storage is not configured." : !migrationsVerified ? "Cloud database activation awaits migration and permission verification." : "Cloud account storage has not been enabled.",
+    reason: enabled ? null : !configured ? "Saving to your account isn’t set up on this server." : !migrationsVerified ? "Saving to your account is waiting for its database check." : "Saving to your account hasn’t been turned on yet.",
   };
 }

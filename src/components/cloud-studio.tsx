@@ -155,7 +155,7 @@ export default function CloudStudio() {
         if (!c.cloudWorkspace?.available) {
           setState("unavailable");
           setMessage(
-            c.cloudWorkspace?.reason || "Cloud workspace is not enabled.",
+            c.cloudWorkspace?.reason || "Saving to your account isn’t available yet.",
           );
           return;
         }
@@ -181,7 +181,7 @@ export default function CloudStudio() {
             setMessage(
               error instanceof Error
                 ? error.message
-                : "Cloud access could not be verified.",
+                : "Your account access could not be verified.",
             );
           }
         }
@@ -189,7 +189,7 @@ export default function CloudStudio() {
       .catch(() => {
         if (active) {
           setState("unavailable");
-          setMessage("Could not verify cloud availability.");
+          setMessage("Could not check whether saving to your account is available.");
         }
       });
     return () => {
@@ -436,13 +436,13 @@ export default function CloudStudio() {
       }).success
     ) {
       setMessage(
-        "This local project exceeds supported cloud brief limits. Shorten its audience or purpose before importing. Nothing has been transferred.",
+        "This local project exceeds the brief limits for account projects. Shorten its audience or purpose before importing. Nothing has been transferred.",
       );
       return;
     }
     if (local.blocks.some((b) => b.type === "image")) {
       setMessage(
-        "This project contains inline artwork. Cloud artwork upload must be enabled before importing it; nothing has been imported.",
+        "This project contains inline artwork. Artwork upload to your account must be available before importing it; nothing has been imported.",
       );
       return;
     }
@@ -452,7 +452,7 @@ export default function CloudStudio() {
       ).byteLength > 1_800_000
     ) {
       setMessage(
-        "This project exceeds the cloud import size limit. Nothing has been transferred.",
+        "This project exceeds the import size limit. Nothing has been transferred.",
       );
       return;
     }
@@ -463,7 +463,7 @@ export default function CloudStudio() {
       const reviewKey = `makeborne.import.${overview.workspace.id}.${local.id}`;
       if (localStorage.getItem(reviewKey)) {
         throw new Error(
-          "This project already has an import record on this device. Review the recorded cloud project before importing again.",
+          "This project already has an import record on this device. Review the project already saved to your account before importing again.",
         );
       }
       localStorage.setItem(
@@ -527,7 +527,7 @@ export default function CloudStudio() {
           completed: false,
         }),
       );
-      log.push(`Created cloud project: ${project.title}`);
+      log.push(`Saved to your account: ${project.title}`);
       setImportLog([...log]);
       const { artifact } = await api<{ artifact: CloudArtifact }>(
         `/api/cloud/workspaces/${overview.workspace.id}/projects/${project.id}/artifacts`,
@@ -587,7 +587,7 @@ export default function CloudStudio() {
       );
       setImportLog([...log]);
       setMessage(
-        "Import stopped. Completed cloud records are shown below; check them before taking another action.",
+        "Import stopped. Records already saved to your account are shown below; check them before taking another action.",
       );
     } finally {
       setBusy(false);
@@ -601,7 +601,7 @@ export default function CloudStudio() {
           Makeborne
         </Link>
         <nav>
-          <Link href="/studio">Local studio</Link>
+          <Link href="/studio">Studio</Link>
           {state === "ready" ? (
             <button
               className="button secondary small"
@@ -616,17 +616,18 @@ export default function CloudStudio() {
         </nav>
       </header>
       <main className="cloud-content">
-        <span className="eyebrow">YOUR CLOUD WORKSPACE</span>
+        <span className="eyebrow">SAVED TO YOUR ACCOUNT</span>
         <div className="page-heading">
           <div>
             <h1>Work that stays connected.</h1>
             <p>
-              Cloud projects are separate from the work saved on this device.
+              Projects saved to your account are separate from the drafts kept
+              on this device.
             </p>
           </div>
           <span className="local-pill">
             <Cloud size={14} />{" "}
-            {state === "ready" ? "Account connected" : "Cloud setup"}
+            {state === "ready" ? "Account connected" : "Account setup"}
           </span>
         </div>
         {message && (
@@ -635,11 +636,11 @@ export default function CloudStudio() {
           </div>
         )}
         {state === "checking" ? (
-          <p>Verifying cloud availability and your account…</p>
+          <p>Checking your account and whether saving to it is available…</p>
         ) : state === "unavailable" ? (
           <div className="empty-state">
             <Cloud size={32} />
-            <h2>Cloud setup is still in progress.</h2>
+            <h2>Saving to your account isn’t available yet.</h2>
             <p>{message} No local projects have been uploaded.</p>
             <Link className="button primary" href="/studio">
               Continue locally <ArrowRight size={16} />
@@ -650,8 +651,8 @@ export default function CloudStudio() {
             <Cloud size={32} />
             <h2>Open your connected workspace.</h2>
             <p>
-              Sign in to access your cloud projects. Local work stays on this
-              device until you explicitly import it.
+              Sign in to open the projects saved to your account. Drafts on
+              this device stay here until you explicitly import them.
             </p>
             <Link className="button primary" href="/login">
               Sign in <ArrowRight size={16} />
@@ -677,7 +678,7 @@ export default function CloudStudio() {
                 <h3>The last creation needs a review.</h3>
                 <p>
                   The server may have completed it. Your inputs remain on this
-                  screen. Check the cloud records before creating anything else.
+                  screen. Check your saved records before creating anything else.
                 </p>
                 <button
                   className="button secondary"
@@ -700,7 +701,7 @@ export default function CloudStudio() {
                       setMessage(
                         error instanceof Error
                           ? error.message
-                          : "Cloud records could not be reviewed.",
+                          : "Your saved records could not be reviewed.",
                       );
                     } finally {
                       setBusy(false);
@@ -985,7 +986,7 @@ export default function CloudStudio() {
                     saved={async () => {
                       setEditingClient(null);
                       await choose(overview.workspace.id);
-                      setMessage("Client details saved to the cloud.");
+                      setMessage("Client details saved to your account.");
                     }}
                     notify={setMessage}
                   />
@@ -1013,12 +1014,12 @@ export default function CloudStudio() {
                 {importPreview && (
                   <section className="import-review">
                     <span className="eyebrow">EXPLICIT IMPORT REVIEW</span>
-                    <h2>Choose what moves to the cloud.</h2>
+                    <h2>Choose what to save to your account.</h2>
                     <p>
                       This imports one project’s current text, linked client
                       details, brief, and style. Local outreach tracking, history and internal
                       activity remain on this device. Projects with inline
-                      artwork are blocked until cloud asset upload is supported.
+                      artwork are blocked until artwork upload to your account is supported.
                       The local workspace is never removed.
                     </p>
                     <label>
@@ -1099,7 +1100,7 @@ export default function CloudStudio() {
               <div className="empty-state">
                 <h2>Make room for your work.</h2>
                 <p>
-                  Create or select a cloud workspace to begin. Your device’s
+                  Create or select a workspace to begin. Your device’s
                   drafts remain separate.
                 </p>
               </div>
@@ -1251,7 +1252,7 @@ export function CloudEditor({
         }
       } catch {
         notify(
-          "Recovery storage could not be read. Your saved cloud content remains available.",
+          "Recovery storage could not be read. The content saved to your account remains available.",
         );
       }
       return true;
@@ -1451,13 +1452,13 @@ export function CloudEditor({
         if (!current) {
           setConflict(true);
           notify(
-            "The original save was confirmed, but the latest cloud content could not be loaded. Review it before editing.",
+            "The original save was confirmed, but the latest saved content could not be loaded. Review it before editing.",
           );
         } else
           notify(
-            "The original save was confirmed and the latest cloud content has been loaded.",
+            "The original save was confirmed and the latest saved content has been loaded.",
           );
-      } else notify("Content version saved to the cloud.");
+      } else notify("Content version saved to your account.");
     } catch (error) {
       setSavePaused(true);
       if (error instanceof CloudError && error.uncertain) {
@@ -1551,7 +1552,7 @@ export function CloudEditor({
     );
     const a = document.createElement("a");
     a.href = url;
-    a.download = "makeborne-cloud-draft.json";
+    a.download = "makeborne-unsaved-draft.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -1592,7 +1593,7 @@ export function CloudEditor({
             if (
               !dirty ||
               window.confirm(
-                "Leave this unsaved cloud draft? Download it first if you need to preserve changes.",
+                "Leave this unsaved draft? Download it first if you need to preserve changes.",
               )
             )
               back();
@@ -1659,8 +1660,8 @@ export function CloudEditor({
           <PendingCloudWrites accountId={accountId} refresh={async () => { setConflict(true); notify("The pending request is confirmed. Download any recovery draft before loading the latest version."); }} />
           <h3>An unsaved draft is available.</h3>
           <p>
-            Saved on this device from cloud version {recovery.basedOnVersion}.
-            It has not replaced the latest cloud content.
+            Saved on this device from saved version {recovery.basedOnVersion}.
+            It has not replaced the latest content saved to your account.
           </p>
           <div className="button-row">
             <button
@@ -1684,7 +1685,7 @@ export function CloudEditor({
               onClick={() => {
                 if (
                   window.confirm(
-                    "Discard the recovery draft on this device? Saved cloud versions are unaffected.",
+                    "Discard the recovery draft on this device? Versions saved to your account are unaffected.",
                   )
                 ) {
                   localStorage.removeItem(recoveryKey);
@@ -1701,7 +1702,7 @@ export function CloudEditor({
         <div className="cloud-conflict" role="alert">
           <h3>Your draft needs a review.</h3>
           <p>
-            The cloud has a newer version. This draft will not overwrite it.
+            Your account has a newer saved version. This draft will not overwrite it.
           </p>
           <div className="button-row">
             <button className="button secondary" onClick={backup}>
@@ -1712,13 +1713,13 @@ export function CloudEditor({
               onClick={() => {
                 if (
                   window.confirm(
-                    "Load the newest cloud content and replace this on-screen draft?",
+                    "Load the newest saved content and replace this on-screen draft?",
                   )
                 )
                   void load();
               }}
             >
-              Load latest cloud version
+              Load latest saved version
             </button>
           </div>
         </div>

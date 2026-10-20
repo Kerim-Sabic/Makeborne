@@ -38,6 +38,7 @@ Add these as secrets in the hosting environment. Never put them in the repo.
 | `MAKEBORNE_GOOGLE_MAIL_CLIENT_ID` / `_SECRET` | Google Cloud OAuth client (Web application) |
 | `MAKEBORNE_GOOGLE_MAIL_MODE` | Explicitly `send_only` for this launch. Unset preserves legacy full mode; unknown nonempty values fail closed to sending only. |
 | `MAKEBORNE_MICROSOFT_MAIL_CLIENT_ID` / `_SECRET` | Microsoft Entra app registration |
+| `MAKEBORNE_MICROSOFT_MAIL_MODE` | `send_only` requests only `Mail.Send`, `User.Read`, `offline_access` and OpenID identity, and sends with one `POST /me/sendMail` (no drafts, no mailbox reads, no reply tracking or sequences). Unset or `full` keeps `Mail.ReadWrite`, which the threaded draft-then-send and reply tracking use. Unknown nonempty values fail closed to sending only. Outlook capabilities follow the provider-returned grant recorded at connect and on each token refresh. |
 | `MAKEBORNE_MAIL_AUTOMATION_ENABLED` | `true` to let the scheduled job send sequences |
 
 **Google**
@@ -53,7 +54,7 @@ Add these as secrets in the hosting environment. Never put them in the repo.
 Deferred for first launch; leave its credentials unset until a separately qualified release.
 1. Create an Entra app registration with the account type "Accounts in any organizational directory and personal Microsoft accounts".
 2. Set the Web redirect URI to `https://<app domain>/api/mail/callback/microsoft`.
-3. Add the delegated permissions `Mail.Send`, `Mail.ReadWrite`, `User.Read` and `offline_access`, and create a client secret.
+3. Add the delegated permissions `Mail.Send`, `User.Read` and `offline_access` (plus `Mail.ReadWrite` only for full mode), and create a client secret.
 4. Work accounts may need tenant admin consent.
 
 **Schedule:** call `GET /api/cron/mail` every 10 minutes with `Authorization: Bearer $CRON_SECRET`, for example from Vercel Cron. It is not added to `vercel.json` until reviewed. Without the schedule, users can press **Check now** in Email.

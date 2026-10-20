@@ -59,7 +59,7 @@
 .advisor-composer textarea{grid-column:1;grid-row:1;min-height:24px;height:24px;max-height:144px;resize:none;overflow-y:auto;box-sizing:content-box;font-size:14px;line-height:24px;margin:4px 0;padding:0;border-radius:0}
 .advisor-composer>.advisor-send{grid-column:2;grid-row:1;align-self:end;width:32px;height:32px;border-radius:10px}
 .advisor-composer-actions{grid-column:1/-1;margin-top:0;padding-top:5px;border-top:1px solid #f3eff7}.advisor-composer-actions>div{gap:5px}.advisor-composer-actions>span{font-size:11px}.advisor-copy{font-size:12px;padding:5px}.advisor-draft-note{font-size:11px;margin-top:9px}.advisor-feedback:empty{display:none}
-@media(max-width:600px){.advisor-person .advisor-avatar{height:33px;width:33px;border-radius:9px}.advisor-avatar-large{height:72px;width:72px;border-radius:18px}.advisor-conversation{padding:26px 20px;gap:23px;justify-content:flex-start}.advisor-welcome h1{font-size:27px}.advisor-description{font-size:13px}.advisor-composer{padding:11px 12px}.advisor-availability p{font-size:11px}}
+@media(max-width:600px){.advisor-composer textarea{font-size:var(--type-input-touch)}.advisor-person .advisor-avatar{height:33px;width:33px;border-radius:9px}.advisor-avatar-large{height:72px;width:72px;border-radius:18px}.advisor-conversation{padding:26px 20px;gap:23px;justify-content:flex-start}.advisor-welcome h1{font-size:27px}.advisor-description{font-size:13px}.advisor-composer{padding:11px 12px}.advisor-availability p{font-size:11px}}
 
 .advisor-page .advisor-avatar{background:transparent;border-radius:0;overflow:visible}.advisor-page .advisor-avatar img{object-fit:contain;border-radius:0}
 

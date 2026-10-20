@@ -214,12 +214,15 @@
 .mc-list > li > div:first-child { display: grid; gap: 3px; min-width: 0; }
 .mc-list strong { font-size: 13.5px; font-weight: 560; color: #2a2335; overflow-wrap: anywhere; }
 .mc-list small { font-size: 12px; color: #857d92; }
+.mc-list small.mc-use { line-height: 1.5; overflow-wrap: anywhere; }
+.mc-list .mc-use strong { font-size: inherit; font-weight: 600; color: #5d5568; }
+.mc-fine a { color: inherit; text-decoration: underline; }
 .mc-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mc-row-actions select { border: 1px solid #e6e1ee; border-radius: 9px; background: #fff; font: inherit; font-size: 12px; padding: 6px 8px; color: #5d5568; }
 .mc-connect { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .mc-connect small { font-size: 12px; color: #8a8199; }
 .mc-fine { display: block; font-size: 11.5px; color: #9089a0; margin-top: 10px; line-height: 1.55; }
-.mc-error { display: block; color: #a03a31; font-size: 12px; margin: 4px 0 0; }
+.mc-error { display: block; color: var(--state-error); font-size: 12px; margin: 4px 0 0; }
 .mc-link { display: inline-flex; align-items: center; gap: 3px; border: 0; background: none; padding: 0; font: inherit; color: #5b44a0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .mc-reply { display: grid; gap: 3px; width: 100%; text-align: left; border: 0; background: transparent; font: inherit; padding: 0; cursor: pointer; color: inherit; }
 .mc-reply:disabled { cursor: default; }
@@ -556,3 +559,6 @@ a.lf-chip:hover { border-color: #cfc3e3; color: #2c2240; }
 /* The dialog sheet takes focus on open (for screen readers and Escape); it needs no visible ring itself. */
 .mc-sheet:focus { outline: none; }
 .ac-heading-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Phones: typed fields are 16px so iOS Safari does not zoom on focus (app type scale in globals.css). */
+@media (max-width: 760px) { .mc-sheet input, .mc-sheet textarea, .ce-compose input, .ce-compose textarea { font-size: var(--type-input-touch); } }

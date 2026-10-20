@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useState} from "react";
 import {GitBranch,ArrowUpRight,LoaderCircle} from "lucide-react";
 import {cloudAccountGuard} from "./cloud-api";
+import {GITHUB_AUTHORIZATIONS_URL,GITHUB_DISCONNECT_CONFIRM,GITHUB_DISCONNECTED,GITHUB_INSTALLATIONS_URL} from "@/lib/github/disconnect-copy";
 import "./website-publish.css";
 type Connection={configured:boolean;connected?:boolean;login?:string;installUrl?:string;repositories?:{id:number;name:string;private:boolean}[]};
 type Link={repository_id:number;repository_name:string;branch:string;version_number:number|null;commit_sha:string|null};
@@ -11,7 +12,7 @@ const reconnectCodes=new Set(["GITHUB_RECONNECT","GITHUB_IDENTITY"]);
 /** One-way GitHub export. `source` projects push the saved version's complete
  * React project; static websites push their published HTML snapshot. */
 export default function WebsiteGithub({accountId,workspaceId,artifactId,version,dirty,owner,source=false}:{accountId:string;workspaceId:string;artifactId:string;version:number;dirty:boolean;owner:boolean;source?:boolean}) {
-  const [connection,setConnection]=useState<Connection|null>(null),[status,setStatus]=useState<Status>({link:null}),[repository,setRepository]=useState(0),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[code,setCode]=useState(""),[agreed,setAgreed]=useState(false);
+  const [connection,setConnection]=useState<Connection|null>(null),[status,setStatus]=useState<Status>({link:null}),[repository,setRepository]=useState(0),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[code,setCode]=useState(""),[agreed,setAgreed]=useState(false),[disconnected,setDisconnected]=useState(false);
   const link=status.link;
   const path=`/api/cloud/workspaces/${workspaceId}/artifacts/${artifactId}/github`;
   const call=useCallback(async(url:string,options?:RequestInit)=>{
@@ -22,11 +23,13 @@ export default function WebsiteGithub({accountId,workspaceId,artifactId,version,
   const refresh=useCallback(async()=>{const next=await call("/api/github/connection");setConnection(next);if(next.configured){const data=await call(path);setStatus(data);if(data.link)setRepository(data.link.repository_id);}},[call,path]);
   useEffect(()=>{let active=true;queueMicrotask(()=>{if(active&&owner)void refresh().catch(e=>{if(active){setMessage(e.message);setCode(e instanceof GithubError?e.code:"");}});});return()=>{active=false;};},[refresh,owner]);
   async function act(action:"connect"|"sync"|"disconnect"|"refresh") {
-    if(busy)return;setBusy(true);setMessage("");setCode("");
+    if(busy)return;
+    if(action==="disconnect"&&!window.confirm(GITHUB_DISCONNECT_CONFIRM))return;
+    setBusy(true);setMessage("");setCode("");setDisconnected(false);
     try {
       if(action==="connect"){const data=await call("/api/github/connect",{method:"POST",body:JSON.stringify({workspaceId,artifactId})});window.location.assign(data.url);return;}
       if(action==="sync"){const data=await call(path,{method:"POST",body:JSON.stringify({repositoryId:repository,version,acknowledged:true})});setStatus(data);setAgreed(false);setMessage(data.alreadySynced?`Version ${data.link.version_number} is already on GitHub.`:source?`Pushed version ${data.link.version_number} to GitHub.`:`Version ${data.link.version_number} synced to GitHub.`);}
-      if(action==="disconnect"){await call("/api/github/connection",{method:"DELETE"});setConnection(null);setMessage("Disconnected. Your repository and exported code stay in GitHub.");}
+      if(action==="disconnect"){await call("/api/github/connection",{method:"DELETE"});setConnection(null);setMessage(GITHUB_DISCONNECTED);setDisconnected(true);}
       if(action!=="sync")await refresh();
     }catch(error){
       setMessage(error instanceof Error?error.message:"GitHub is unavailable.");
@@ -56,6 +59,7 @@ export default function WebsiteGithub({accountId,workspaceId,artifactId,version,
       <p className="website-publish-note">{source?"One-way export of the full source, original images and a README with run instructions. Nothing is force-pushed, and changes made in GitHub aren’t imported. Your GitHub connection renews itself; you only reconnect if GitHub asks you to.":"One-way export of the published HTML, styles, and images. External edits aren’t imported. Your GitHub connection renews itself; you only reconnect if GitHub asks you to."}</p>
     </>}
     {message&&<p className="website-publish-message" role="status">{message}</p>}
+    {disconnected&&<><a className="website-publish-text-button" href={GITHUB_AUTHORIZATIONS_URL} target="_blank" rel="noopener noreferrer">Revoke the app in GitHub settings <ArrowUpRight size={13}/></a><a className="website-publish-text-button" href={GITHUB_INSTALLATIONS_URL} target="_blank" rel="noopener noreferrer">Remove its repository access <ArrowUpRight size={13}/></a></>}
     {code==="BRANCH_CHANGED"&&link&&<a className="website-publish-text-button" href={status.branchUrl??`https://github.com/${link.repository_name}/tree/${link.branch}`} target="_blank" rel="noopener noreferrer">Review the branch in GitHub <ArrowUpRight size={13}/></a>}
   </section>;
 }

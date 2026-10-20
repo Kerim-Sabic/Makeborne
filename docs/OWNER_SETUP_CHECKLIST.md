@@ -64,7 +64,7 @@ Evidence: screenshots in `work/owner-cloud-setup-20261014/`, plus `work/gmail-se
    - Name: Makeborne.
    - Supported account types: **Accounts in any organizational directory and personal Microsoft accounts**.
    - Redirect URI (Web): `https://makeborne.com/api/mail/callback/microsoft`.
-2. **API permissions:** Microsoft Graph → Delegated: `Mail.Send`, `Mail.ReadWrite`, `User.Read`, `offline_access`, `openid`, `email`, `profile`.
+2. **API permissions:** Microsoft Graph → Delegated: `Mail.Send`, `User.Read`, `offline_access`, `openid`, `email`, `profile`. Add `Mail.ReadWrite` only if Outlook reply tracking and sequences are enabled (`MAKEBORNE_MICROSOFT_MAIL_MODE` unset or `full`); for manual sending set `MAKEBORNE_MICROSOFT_MAIL_MODE=send_only`.
 3. **Certificates & secrets:** create a New client secret (24 months), and set a reminder to rotate it.
 4. Set `MAKEBORNE_MICROSOFT_MAIL_CLIENT_ID` (the Application (client) ID) and `MAKEBORNE_MICROSOFT_MAIL_CLIENT_SECRET` (the secret value).
 5. Optional but recommended: Branding & properties → set the publisher domain and complete **Publisher verification** (removes the "unverified" label). Some company tenants require admin consent before their staff can connect.
