@@ -106,6 +106,7 @@ the decision.
   - Refunds are support actions in Whop, and the sandbox refund was observed (`whop-evidence-matrix.json`).
   - The app never treats a refunded payment as allocation evidence, but credits already granted are not clawed back.
 - **Recommendation:** keep the terms. Add an internal support rule: when refunding a period, also lapse that period's unspent included credits with an audited `adjust` entry. This is an operator SQL function to be built when decided; not built yet.
+- **Update 2026-10-20 (branch `feature/billing-refunds-provenance`, not released):** the owner's launch brief sets a voluntary refund policy: a payment is refundable only while none of the credits it supplied were used. Terms `2026-10-20-standard-v7` say so. Refunds reconcile automatically: a refunded period's unused credits are withheld and its creation access revoked (migration `20261020090000`, `docs/BILLING_PLAN_CREDITS.md`). The superseded wording above stays live until that release.
 - **Implications:** without the rule, a refunded customer keeps unspent credits until the month ends, but loses creation access when the membership ends.
 - **Disabled at launch:** no. Needed before any payment is taken, as a support procedure.
 

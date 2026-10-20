@@ -8,6 +8,7 @@ import { activeMembership, retrieveMembership, retrievePaymentMembership } from 
 import { creditRuleFor } from "./plan-credits";
 import { recordPlanObservation } from "@/lib/credits/server";
 import { deliverTopupPayment, topupEventPaymentId } from "./topup-delivery";
+import { eventPaymentId, reconcilePlanPayment, retrieveVerifiedPlanPayment } from "./plan-payments";
 
 const eventSchema = z.object({ id: z.string().min(1).max(200), type: z.string().min(1).max(100), account_id: z.string().optional(), company_id: z.string().optional(), data: z.record(z.string(), z.unknown()) });
 
@@ -92,10 +93,19 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
     if (boundError) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Membership storage is unavailable.", 503);
     if (!bound) return;
   }
+  if (!creditRuleFor(membership.plan.id)) return;
+  // Payment, refund and dispute events: record the payment's verified state first.
+  // Whop keeps a membership active after a refund, so the payment (not the
+  // membership status) decides that period's credits and creation access.
+  const paymentId = eventPaymentId(event);
+  if (paymentId) {
+    const payment = await retrieveVerifiedPlanPayment(paymentId);
+    if (payment.membershipId === membership.id) await reconcilePlanPayment(checkout.user_id, membership, payment);
+  }
   // Record Whop's current state (paid or not) so plan credits follow billing
-  // history; the database grants owed allocations. A failure returns 503 so the
-  // provider retries; the retry skips recording and repeats only this call.
-  if (creditRuleFor(membership.plan.id))
-    await recordPlanObservation(checkout.user_id, { membershipId: membership.id, planId: membership.plan.id, status: membership.status,
-      paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "webhook" });
+  // history; the database grants owed allocations (never for a refunded period).
+  // A failure returns 503 so the provider retries; the retry skips recording and
+  // repeats only these idempotent calls.
+  await recordPlanObservation(checkout.user_id, { membershipId: membership.id, planId: membership.plan.id, status: membership.status,
+    paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "webhook" });
 }
