@@ -1,4 +1,5 @@
 "use client";
+import { closeSheetOnEscape } from "@/lib/overlay-focus";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, Check, ChevronDown, ChevronRight, FileText, History, MessageSquare, PowerOff } from "lucide-react";
 import BrandMark from "./brand-mark";
@@ -77,7 +78,7 @@ function Conversation({ projectKey, brief, kind, onOpenEditor, onOpenHistory, ef
     if (!persist("", next)) return;
     setInstructions(next); setDraft(""); setError(""); input.current?.focus();
   }
-  return <aside className="build-conversation" aria-label="Project conversation" data-chat-open={chatOpen || undefined}>
+  return <aside className="build-conversation" aria-label="Project conversation" data-chat-open={chatOpen || undefined} onKeyDown={event => closeSheetOnEscape(event, chatOpen, () => setChatOpen(false), ".build-messages")}>
     <button type="button" className="workbench-chat-toggle" aria-expanded={chatOpen} aria-controls={`build-messages-${projectKey}`} onClick={() => setChatOpen(open => !open)}>
       <MessageSquare size={14} /><span>{instructions.length ? `Project notes · ${instructions.length}` : "Brief & project notes"}</span><ChevronDown size={15} className="workbench-chat-chevron" />
     </button>

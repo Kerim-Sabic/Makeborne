@@ -1,4 +1,5 @@
 "use client";
+import { closeSheetOnEscape } from "@/lib/overlay-focus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Check, ChevronDown, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, MessageSquare, Paperclip, ReceiptText, Sparkles, Square, TriangleAlert } from "lucide-react";
 import { EFFORT_LEVELS, EFFORT_PRESENTATION, type EffortLevel } from "@/lib/routing/effort";
@@ -558,7 +559,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
   const measured = estimates && effort === estimates.effort && firstBuild ? estimates.firstBuild[kind] : null;
   const ceiling = BUILDER_EFFORT[effort].ceilingCredits;
   const canReview = website && Object.keys(baseFiles).length > 0;
-  return <aside className="lb" aria-label="Builder chat" data-chat-open={chatOpen || undefined}>
+  return <aside className="lb" aria-label="Builder chat" data-chat-open={chatOpen || undefined} onKeyDown={event => closeSheetOnEscape(event, chatOpen, () => setChatOpen(false), ".lb-log")}>
     <button type="button" className="workbench-chat-toggle" aria-expanded={chatOpen} aria-controls={`lb-log-${artifactId}`} onClick={() => setChatOpen(open => !open)}>
       {busy ? <Loader2 size={14} className="lb-spin" /> : <MessageSquare size={14} />}<span aria-live="polite">{chatSummary}</span><ChevronDown size={15} className="workbench-chat-chevron" />
     </button>

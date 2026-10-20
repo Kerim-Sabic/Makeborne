@@ -340,6 +340,33 @@ async function main() {
         } finally { await context.close(); }
       });
     }
+    for (const width of [375, 320]) {
+      await check(`${width}px phone conversation sheet: Escape collapses it and returns focus to its toggle; the preview stays usable`, async () => {
+        builderState = { operation: states.paused.operation, result: null, recovery: null, requests: [] };
+        const context = await browser.newContext({ viewport: { width, height: 760 } });
+        const page = await context.newPage(), errors = []; page.setDefaultTimeout(8000); page.on("pageerror", error => errors.push(error.message));
+        await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/, route => { foreign.push(route.request().url()); return route.abort(); });
+        try {
+          await page.goto(`${base}/builder`);
+          const toggle = page.locator(".workbench-chat-toggle");
+          await toggle.focus(); await page.keyboard.press("Enter");
+          assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+          assert.equal(await page.evaluate(() => document.querySelectorAll("[inert]").length), 0, "an inline sheet makes nothing inert");
+          await page.keyboard.press("Escape");
+          assert.equal(await toggle.getAttribute("aria-expanded"), "false", "Escape collapses the sheet");
+          assert.equal(await toggle.evaluate(element => element === document.activeElement), true, "focus returns to the toggle");
+          assert.equal(await toggle.evaluate(element => getComputedStyle(element).outlineStyle !== "none"), true, "returned focus is visible");
+          await page.keyboard.press("Enter");
+          const composer = page.getByRole("textbox", { name: "Message the builder" });
+          await composer.focus(); await composer.fill("draft"); await page.keyboard.press("Escape");
+          assert.equal(await toggle.getAttribute("aria-expanded"), "true", "Escape while typing never collapses the sheet");
+          assert.equal(await composer.inputValue(), "draft");
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+          await shot(page, `${width}-builder-sheet`);
+          assert.deepEqual(errors, []);
+        } finally { await context.close(); }
+      });
+    }
     assert.deepEqual(foreign.filter(item => !/\/api\/build\/(questions|plan)/.test(item)), [], "no non-local request was attempted");
   } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 
