@@ -29,7 +29,7 @@ export default function BillingControls() {
       <label>Low-balance alert<input aria-label="Low-balance alert" type="text" inputMode="numeric" value={alert} onChange={e=>setAlert(e.target.value)} disabled={!value||busy} placeholder="Off" aria-describedby="credit-alert-help"/><small id="credit-alert-help">Shows an alert here when your balance is low. No email or purchase. Blank turns it off.</small></label>
       <label>Monthly usage limit<input aria-label="Monthly usage limit" type="text" inputMode="numeric" value={limit} onChange={e=>setLimit(e.target.value)} disabled={!value||busy} placeholder="No extra limit" aria-describedby="credit-limit-help"/><small id="credit-limit-help">Credits used and reserved per UTC month. The server blocks work that would exceed it, even after a top-up. Blank removes this extra limit.</small></label>
       <div className="billing-control-actions"><button disabled={!value||busy} type="submit">{busy?"Saving…":"Save credit settings"}</button><button type="button" disabled={busy} onClick={()=>{setBusy(true);setError("");setMessage("");void load().catch(()=>setError("Credit settings could not be loaded.")).finally(()=>setBusy(false));}}>Reload saved settings</button></div>
-    </form>{value&&<p>{value.used} used · {value.reserved} reserved this month. Automatic top-up has separate consent and daily/monthly purchase caps below; it cannot bypass your usage limit.</p>}
+    </form>{value&&<p>{value.used} used · {value.reserved} reserved this month. Automatic top-up, when available, needs separate consent and daily/monthly purchase caps. It cannot bypass your usage limit.</p>}
     {message&&<p role="status">{message}</p>}{error&&<p role="alert">{error}</p>}
   </section>;
 }
