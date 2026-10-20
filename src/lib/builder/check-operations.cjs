@@ -287,5 +287,14 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
     const stream=await events(planStreamResponse({hold:run.hold,operation:run,spend,context:"",message:"Plan",previousPlan:null,attachments:[],effort:"medium",basedOnVersion:1,previousRevision:0,maxDuration:300,persist:()=>{throw Error("Partial plan saved");}}));
     assert.equal(stream.at(-1).operation.status,"cancelled");assert.equal(finishCall().args.p_measured_microusd,45000);assert.equal(finishCall().args.p_candidate,null);
   });
+  await check("settled Stop remains readable after an old-app rollback and new app renders Stopped", async () => {
+    const raw=snapshot({status:"completed",cancelRequested:true,reservedCredits:0,canContinue:false,maximumAdditionalCredits:0});
+    const legacy=contract.OperationSnapshotSchema.omit({cancelRequested:true}).extend({status:require("zod").z.enum(["active","running","paused","completed","expired"])});
+    assert.equal(legacy.parse(raw).status,"completed");assert.equal(legacy.parse(raw).canContinue,false);
+    handler=()=>({data:status({runId,charged:2,changed:false,finished:true},{operation:raw}),error:null});
+    const current=await api.readOperation({actor,workspaceId,artifactId,id:operationId});assert.equal(current.operation.status,"cancelled");assert.equal(current.result.charged,2);assert.equal(calls.length,1);
+    const unchanged=snapshot({status:"completed",reservedCredits:0});handler=()=>({data:status(null,{operation:unchanged}),error:null});
+    assert.equal((await api.readOperation({actor,workspaceId,artifactId,id:operationId})).operation.status,"completed","successful completion cannot be relabelled Stop");
+  });
   console.log(`${passed} operation integration groups passed. Database and providers mocked; no network or paid calls.`);
 })().catch(error => { console.error(error); process.exit(1); });

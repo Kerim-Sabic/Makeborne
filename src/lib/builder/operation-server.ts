@@ -57,7 +57,13 @@ async function call(name: string, args: Record<string, unknown>, signal?: AbortS
 function snapshot(value: unknown): OperationSnapshot {
   const parsed = OperationSnapshotSchema.safeParse(value);
   if (!parsed.success) throw unavailable();
-  return parsed.data;
+  return normalizedSnapshot(parsed.data);
+}
+/** Settled Stops use the legacy wire status so an application rollback can
+ * still read their receipt. Only an explicit, validated marker means Stop. */
+function normalizedSnapshot(value: OperationSnapshot): OperationSnapshot {
+  return value.status === "completed" && value.cancelRequested === true && value.reservedCredits === 0
+    ? { ...value, status: "cancelled" } : value;
 }
 function checkRefusal(data: Record<string, unknown>) {
   if (!data.error) return;
@@ -68,7 +74,7 @@ function checkRefusal(data: Record<string, unknown>) {
 function publicStatus(data: Record<string, unknown>): OperationStatus {
   const parsed = OperationStatusSchema.safeParse({ operation: data.operation, result: data.result ?? null, recovery: data.recovery ?? null });
   if (!parsed.success) throw unavailable();
-  return parsed.data;
+  return { ...parsed.data, operation: normalizedSnapshot(parsed.data.operation) };
 }
 
 /** Bind reference bytes without retaining private uploads in SQL or returning

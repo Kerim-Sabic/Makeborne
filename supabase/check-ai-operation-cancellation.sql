@@ -26,9 +26,10 @@ begin
   begin perform public.makeborne_ai_operation_provider_begin(u,(run->>'id')::uuid,(run->>'fence')::uuid,gen_random_uuid(),'anthropic','fixture',1000);raise exception 'Paid call admitted after Stop';exception when sqlstate 'MB499' then null;end;
   assert not exists(select 1 from makeborne_private.live_provider_calls where run_reference=run->>'reference'),'no provider call reserved';
   x:=public.makeborne_ai_operation_finish(u,(run->>'id')::uuid,(run->>'fence')::uuid,0,'failed','{}',null);
-  assert x->>'outcome'='cancelled' and (x->>'charged')::int=0 and x->'operation'->>'status'='cancelled','zero-cost finalization';
+  assert x->>'outcome'='cancelled' and (x->>'charged')::int=0 and x->'operation'->>'status'='completed' and (x->'operation'->>'cancelRequested')::boolean,'zero-cost finalization with a legacy-readable public status';
+  assert (select status from makeborne_private.ai_operations where id=(op->>'id')::uuid)='cancelled','durable internal Stop remains cancelled';
   assert (x->'operation'->>'reservedCredits')::int=0 and not (x->'operation'->>'canContinue')::boolean,'hold released, no continuation';
-  assert (public.makeborne_ai_operation_read(u,w,a,(op->>'id')::uuid,null)->'operation'->>'status')='cancelled','reload sees durable final result';
+  assert (public.makeborne_ai_operation_read(u,w,a,(op->>'id')::uuid,null)->'operation'->>'status')='completed','legacy reload can read the durable final result';
   raise notice 'PASS cancellation A: ownership, revision, before-call zero charge, double Stop, provider refusal, reload and released hold';
 
   -- Mid-run confirmed usage: settle once; do not save the racing candidate.
