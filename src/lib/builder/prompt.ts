@@ -169,16 +169,16 @@ FIRST SCREEN ARCHETYPES (choose the one this business earns; the h1, one line of
 - Poster: one colour-flooded field, condensed or wide display type, a single bold graphic.
 - Product stage: a crafted product UI mock or product shot (a transparent cut-out works well) on a tinted plinth.
 - Index: the services, menu or works listed as large linked rows that are the hero.
-Fill the 1440px first screen with intent: no large dead zones, body copy at least 1.125rem, and the primary action large enough to find at a glance.
+Fill the 1440px first screen with intent: no large dead zones, body copy at least 1.125rem, and the primary action large enough to find at a glance. When the brief names the one thing visitors must do or see first (call the phone number, see the prices, check a date, read the deadline), make that thing itself one of the two largest elements of the first screen (the number or prices set as display type), not only a small button; then add the art direction around it.
 
 INDUSTRY DIRECTION (starting points; the concept and the brief always win):
 - Restaurant, cafe, bakery, bar: appetite first. Big food, bake or room photography, a palette from the cuisine and materials, the menu typeset like print (columns, dotted leaders, tabular prices), hours, address and the order or booking action easy to find.
-- SaaS, AI, developer tools: the product is the hero. Build a crisp product UI mock in HTML/CSS (plausible data, states, a highlight), a bento grid of features each with a small UI fragment, a near-neutral palette with one saturated accent, mono details, honest pricing with bracketed placeholders.
+- SaaS, AI, developer tools: the product is the hero; if the brief mentions plans or a free tier, show pricing (with placeholders) within the first three sections. Build a crisp product UI mock in HTML/CSS (plausible data, states, a highlight), a bento grid of features each with a small UI fragment, a near-neutral palette with one saturated accent, mono details, honest pricing with bracketed placeholders.
 - Law, finance, consulting: calm authority. Deep ink on paper or a deep ground with paper text, one muted accent (oxblood, bottle green, navy, brass), numbered practice areas, editorial asymmetric splits, credentials as plain text, the consultation action and phone always one tap away.
 - Creator, portfolio, studio, agency: the work is the interface. An oversized name or statement, an index of projects with large numerals and hover previews, varied crops, a bold monochrome or a single colour flood.
 - E-commerce, product brand: product cut-outs or photography on backgrounds tinted from the product, cards with price and variant swatches, an editorial lookbook band, shipping and returns as quiet small print, an honest "checkout coming soon".
 - Health, wellness, beauty: soft natural palette (clay, sage, stone, ink) at real contrast, generous air, gentle radii, calm motion, clear services, durations and prices, a booking action.
-- Trades and local services: trust and speed. Phone and service area above the fold, a bold grotesk or condensed headline, a utility palette (navy, signal orange, safety yellow), services in plain words, process steps, coverage area.
+- Trades and local services: trust and speed. The phone number as display type and the service area above the fold, a bold grotesk or condensed headline, a utility palette (navy, signal orange, safety yellow), services in plain words, process steps, coverage area.
 - Real estate, architecture, hotels: large photography, thin rules, numbered specifications, lots of air, a precise sans with a fine serif.
 - Events, music, nightlife: poster energy. Unbounded, Syne or Bebas Neue, a dark ground with one acid accent, dates and line-up typography as the hero.
 - Non-profit, education, public sector: warm, human and plain-spoken; impact told in concrete words; a strong donate, apply or join action.
