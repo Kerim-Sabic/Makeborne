@@ -310,7 +310,13 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
   html = html.replace(/<\/head>/i, () => head);
   const script = `<script type="module">${scriptSafe(js)}</script>`;
   html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, () => `${script}</body>`) : `${html}${script}`;
-  for (const [path, url] of Object.entries(assets)) html = html.split(path).join(url);
+  for (const [path, url] of Object.entries(assets)) {
+    const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Replace complete quoted/URL references, never a matching byte sequence
+    // inside an already embedded image (e.g. a short path /9 in JPEG base64).
+    const reference = new RegExp("([\"'(])" + escaped + "(?=\\\\?[\"')])", "g");
+    html = html.replace(reference, (_match, before: string) => before + url);
+  }
   return { ok: true, html };
 }
 
