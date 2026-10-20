@@ -451,6 +451,14 @@
 .studio-shell .filter-tabs {
   gap: 3px;
 }
+/* On the narrowest phones the format filters wrap onto a second row instead of
+   widening the page: every format stays visible, readable and reachable. Wider
+   toolbars keep the row on one line and let the search field give way. */
+.studio-shell .list-toolbar > .filter-tabs {
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  max-width: 100%;
+}
 .studio-shell .filter-tabs button {
   font-size: 12px;
   color: var(--text-muted);
