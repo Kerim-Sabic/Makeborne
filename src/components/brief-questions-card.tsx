@@ -30,7 +30,15 @@ export default function BriefQuestionsCard({ questions, kind, planning, busy, on
     // Choosing an option moves on, briefly showing the choice first.
     if (option && !last) advance.current = window.setTimeout(() => setStep(current => Math.min(current + 1, questions.length - 1)), 280);
   };
-  const skipThis = () => { setAnswers(current => ({ ...current, [question.id]: {} })); next(); };
+  // Skipping clears this answer. On the last question the start callback must
+  // receive the cleared answers themselves: a scheduled state update is not yet
+  // visible to `next`, which would otherwise send the discarded answer.
+  const skipThis = () => {
+    const cleared: BriefAnswers = { ...answers, [question.id]: {} };
+    window.clearTimeout(advance.current);
+    setAnswers(cleared);
+    if (last) onStart(cleared); else setStep(step + 1);
+  };
 
   return <section className="bq" aria-label="Questions before we start">
     <header className="bq-head">
