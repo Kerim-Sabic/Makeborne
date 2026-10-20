@@ -78,7 +78,7 @@ check("loaded matches use the same query, type filter and newest-created order a
 });
 
 // The SQL function: one readable workspace, titles only, least privilege, stable keyset pages.
-const sql = fs.readFileSync("supabase/migrations/20261020100000_artifact_title_search.sql", "utf8").replace(/\r\n/g, "\n");
+const sql = fs.readFileSync("supabase/migrations/20261020120000_artifact_title_search.sql", "utf8").replace(/\r\n/g, "\n");
 const body = sql.slice(sql.indexOf("as $$"), sql.indexOf("end $$;"));
 check("the migration is a security-invoker function with a fixed search path and authenticated-only execute", () => {
   assert.match(sql, /returns jsonb language plpgsql stable security invoker set search_path=''/);
