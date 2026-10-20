@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted MailCenter in Chromium: after a mailbox connects, the message names only the capabilities the overview confirms (audit capability states). The mail API is answered by Playwright routes with fictional data; no OAuth, no send. Local only. Run: node scripts/check-mail-connected-browser.cjs */
 const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
 
-const fixture = `import React from "react"; import { createRoot } from "react-dom/client";
+// The workspace can be switched in place (same component instance) to test late answers from the previous context.
+const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
 import MailCenter from "./src/components/mail/mail-center";
-createRoot(document.getElementById("root")).render(<MailCenter accountId="acct-1" workspaceId="w1" canEdit={true}
-  connectResult={{ result: "connected", detail: "owner@example.test" }} onOpenClient={() => {}} />);`;
+function App() { const [workspace, setWorkspace] = useState("w1"); window.switchTo = setWorkspace;
+  return <MailCenter accountId="acct-1" workspaceId={workspace} canEdit={true} connectResult={{ result: "connected", detail: "owner@example.test" }} onOpenClient={() => {}} />; }
+createRoot(document.getElementById("root")).render(<App />);`;
 const account = extra => ({ id: "m1", provider: "google", email: "owner@example.test", displayName: "Owner", status: "active", lastError: null, mine: true, dailyLimit: 50, lastSyncedAt: null, todayQuota: 20, sentToday: 0, canSend: true, canTrackReplies: true, canAutomate: true, ...extra });
 const overview = (accounts, extra) => ({ availability: { google: true, microsoft: true }, automation: true, googleMode: "full", accounts, templates: [], sequences: [], replies: [], ...extra });
 
@@ -49,6 +51,22 @@ async function main() {
     await page.getByRole("heading", { name: "Email" }).waitFor();
     assert.match(await status(), /^Connected owner@example\.test\. You can send reviewed emails; read replies in Gmail/, "the stale load error is cleared after a successful retry");
     pass("failed check keeps the acknowledgement and Retry; a successful retry replaces the stale error");
+
+    // Context switch while the first workspace's overview is pending: its late answer must not unlock the new one.
+    let release; const held = new Promise(resolve => { release = resolve; });
+    await page.route("**/api/cloud/workspaces/w2/mail", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(overview([account({ canTrackReplies: false, canAutomate: false })], { googleMode: "send_only" })) }));
+    reply = () => ({ status: 200, body: overview([account()], { automation: false }) });
+    await page.unroute("**/api/cloud/workspaces/w1/mail");
+    await page.route("**/api/cloud/workspaces/w1/mail", async route => { await held; return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(overview([account()], { automation: false })) }); });
+    await page.goto(url);
+    await page.locator('[aria-label="Loading email"]').waitFor({ state: "attached" });
+    await page.evaluate(() => window.switchTo("w2"));
+    await page.getByRole("heading", { name: "Email" }).waitFor();
+    release(); await page.waitForTimeout(400);
+    assert.equal(await page.getByRole("button", { name: "Check now" }).count(), 0, "w1's reply-tracking capability does not appear in w2");
+    assert.match(await status(), /read replies in Gmail/);
+    assert.match(await page.locator(".mc").innerText(), /Gmail sends only/);
+    pass("a late overview from the previous workspace is ignored; the new workspace's capabilities stay");
   } finally { await browser.close(); server.close(); }
   console.log(`${passed} mounted mail connection checks passed (Chromium, routed API, no network).`);
 }

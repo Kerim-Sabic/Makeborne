@@ -499,7 +499,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
       </div>
     </section>}
     {adding && <form className="ac-add" onSubmit={add}><h2>Add a client</h2><p>Start with their name. You can add details and outreach history next.</p><label>Name<input required autoFocus maxLength={120} value={name} disabled={busy || uncertain} onChange={event => setName(event.target.value)} /></label><label>Email (optional)<input type="email" value={email} disabled={busy || uncertain} onChange={event => setEmail(event.target.value)} /></label><div className="button-row"><button className="button primary" disabled={busy || uncertain || !name.trim()}>{busy ? "Saving…" : "Save client"}</button><button className="button secondary" type="button" disabled={busy} onClick={() => setAdding(false)}>Cancel</button></div></form>}
-    {snapshot && layout === "email" && !adding ? <MailCenter accountId={accountId} workspaceId={snapshot.workspace.id} canEdit={canEdit} connectResult={connectResult} onOpenClient={id => { open(id); setView("email"); }} />
+    {snapshot && layout === "email" && !adding ? <MailCenter key={`${accountId}:${snapshot.workspace.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} canEdit={canEdit} connectResult={connectResult} onOpenClient={id => { open(id); setView("email"); }} />
     : snapshot && layout === "board" && !adding ? <ClientBoard accountId={accountId} workspaceId={snapshot.workspace.id} search={search} today={today} canEdit={canEdit} refreshKey={refreshKey} onOpen={open}
       onChanged={client => saved(client)} onError={setMessage} />
     : (busy && !snapshot) || directory.loading ? <ListSkeleton label="Loading clients" /> : !adding && <>

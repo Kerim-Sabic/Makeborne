@@ -16,21 +16,35 @@ const STARTER_STEPS: SequenceStep[] = [
 export default function MailCenter({ accountId, workspaceId, canEdit, connectResult, onOpenClient }: {
   accountId: string; workspaceId: string; canEdit: boolean; connectResult: { result: string; detail: string } | null; onOpenClient: (id: string) => void;
 }) {
-  const [overview, setOverview] = useState<MailOverview | null>(null);
+  // The overview belongs to the account and workspace it was loaded for; a late answer for another context is never shown here.
+  const scope = `${accountId}:${workspaceId}`;
+  const [loaded, setLoaded] = useState<{ scope: string; value: MailOverview } | null>(null);
+  const overview = loaded?.scope === scope ? loaded.value : null;
   const [message, setMessage] = useState(connectResult?.result === "error" ? connectResult.detail : connectResult?.result === "cancelled" ? "Connection cancelled." : "");
   // A just-connected mailbox is acknowledged until the next action; what it can do comes from the loaded overview.
   const [justConnected, setJustConnected] = useState(connectResult?.result === "connected" ? connectResult.detail : null);
   const [running, setRunning] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [failedScope, setFailedScope] = useState<string | null>(null);
+  const loadFailed = failedScope === scope;
   const [editing, setEditing] = useState<{ kind: "sequence"; value: Partial<MailSequence> } | { kind: "template"; value: Partial<MailTemplate> } | null>(null);
   const [openSequence, setOpenSequence] = useState<string | null>(null);
   const base = `/api/cloud/workspaces/${workspaceId}/mail`;
   const loadError = useRef("");
+  const latest = useRef(scope);
+  useEffect(() => { latest.current = scope; }, [scope]);
   const load = useCallback(async () => {
     // A successful reload clears its own earlier load error (not other messages).
-    try { setOverview(await mailApi<MailOverview>(accountId, base)); setLoadFailed(false); setMessage(current => current === loadError.current ? "" : current); }
-    catch (error) { setLoadFailed(true); loadError.current = error instanceof Error ? error.message : "Email is unavailable."; setMessage(loadError.current); }
-  }, [accountId, base]);
+    const requested = `${accountId}:${workspaceId}`;
+    try {
+      const value = await mailApi<MailOverview>(accountId, base);
+      if (latest.current !== requested) return;
+      setLoaded({ scope: requested, value });
+      setFailedScope(null); setMessage(current => current === loadError.current ? "" : current);
+    } catch (error) {
+      if (latest.current !== requested) return;
+      setFailedScope(requested); loadError.current = error instanceof Error ? error.message : "Email is unavailable."; setMessage(loadError.current);
+    }
+  }, [accountId, workspaceId, base]);
   // Load after mount (from a callback, so the effect itself never sets state).
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
@@ -49,7 +63,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
   }
 
   // A failed first load gets a clear, retryable state instead of an endless placeholder.
-  if (!overview && loadFailed) return <div className="mc-unavailable" role="alert"><Mail size={22} /><div><strong>Email isn’t available right now</strong>{justConnected && <p>{connectedMessage(justConnected, null, true)}</p>}<p>We couldn’t load your mailboxes and sequences. Your clients and notes are unaffected; try again in a moment.</p></div><button type="button" className="button secondary" onClick={() => { setLoadFailed(false); void load(); }}><RefreshCw size={15} />Try again</button></div>;
+  if (!overview && loadFailed) return <div className="mc-unavailable" role="alert"><Mail size={22} /><div><strong>Email isn’t available right now</strong>{justConnected && <p>{connectedMessage(justConnected, null, true)}</p>}<p>We couldn’t load your mailboxes and sequences. Your clients and notes are unaffected; try again in a moment.</p></div><button type="button" className="button secondary" onClick={() => { setFailedScope(null); void load(); }}><RefreshCw size={15} />Try again</button></div>;
   if (!overview) return <div className="ac-skeleton ac-skeleton-detail" role="status" aria-label="Loading email"><span /><span /><span /></div>;
   const mine = overview.accounts.filter(account => account.mine && account.status !== "disconnected");
   const canCheck = mine.some(account => account.canTrackReplies);

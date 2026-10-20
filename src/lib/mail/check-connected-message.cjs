@@ -45,4 +45,12 @@ check("MailCenter uses the helper instead of the unconditional automation claim"
   assert.ok(source.includes("connectedMessage(justConnected, overview, loadFailed)") && source.includes("connectedMessage(justConnected, null, true)"));
 });
 
+check("capabilities belong to one account and workspace (no stale context after a switch)", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "components", "mail", "mail-center.tsx"), "utf8");
+  assert.ok(source.includes("const overview = loaded?.scope === scope ? loaded.value : null;"), "an overview from another context is not shown");
+  assert.ok(/if \(latest\.current !== requested\) return;\r?\n\s*setLoaded\(/.test(source), "a late answer is dropped before it is stored");
+  const parent = fs.readFileSync(path.join(__dirname, "..", "..", "components", "account-clients.tsx"), "utf8");
+  assert.ok(parent.includes("<MailCenter key={`${accountId}:${snapshot.workspace.id}`}"), "switching account/workspace remounts MailCenter, resetting editors too");
+});
+
 console.log(`\n${passed} connected-mailbox message checks passed.`);
