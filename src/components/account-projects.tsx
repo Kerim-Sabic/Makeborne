@@ -7,8 +7,10 @@ import { ArrowRight, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { CloudArtifact, CloudWorkspace, CloudWorkspaceSnapshot } from "@/lib/cloud/contracts";
 import { api, setCloudAccount } from "./cloud-api";
-import { icons, kindLabel } from "./studio-model";
+import { kindLabel } from "./studio-model";
 import PendingCloudWrites from "./pending-cloud-writes";
+import LibraryCardPreview from "./library-card-preview";
+import { clearCardPreviews, retainCardPreviews, setCardPreviewScope } from "./card-preview-store";
 import { accountLibraryStatus, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { savedSourceMeta, shortDate } from "@/lib/projects/project-labels";
 import { currentMatches, failedSearch, firstPage, idleTitleSearch, loadedTitleMatches, nextPage, normalizeTitleQuery, titleSearchKey, titleSearchNotice, titleSearchPath, type TitleSearch, type TitleSearchPage } from "@/lib/projects/title-search";
@@ -60,6 +62,8 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
           const next = session?.user.id ?? null;
           if (currentAccount.current !== next) {
             currentAccount.current = next; requestVersion.current++;
+            // Another account (or none): no preview from the previous one stays visible or cached.
+            clearCardPreviews();
             setSnapshot(null); setSelected(null); setWorkspaces([]); setMessage("");
             setCloudAccount(next); setAccountId(next);
           }
@@ -102,6 +106,8 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
   }, [accountId, target, loadAttempt]);
   async function load(workspaceId: string, append = false) {
     const version = ++requestVersion.current;
+    // Refresh re-authorizes every preview; Load more keeps the ones already shown.
+    if (!append) clearCardPreviews();
     setBusy(true); setMessage("");
     const offset = append ? snapshot?.pagination.artifacts.nextOffset : 0;
     try {
@@ -111,6 +117,12 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
     } catch (error) { if (version === requestVersion.current) setMessage(error instanceof Error ? error.message : "Could not load your saved projects."); }
     finally { if (version === requestVersion.current) setBusy(false); }
   }
+  // Previews are cached for one account + workspace only, and only for projects still listed.
+  useEffect(() => {
+    setCardPreviewScope(accountId, snapshot?.workspace.id ?? null);
+    if (snapshot) retainCardPreviews(snapshot.artifacts.map(artifact => artifact.id));
+  }, [accountId, snapshot]);
+  useEffect(() => () => clearCardPreviews(), []);
   const query = normalizeTitleQuery(search);
   const searchWorkspace = snapshot?.workspace.id ?? null;
   const searchKey = accountId && searchWorkspace && query ? titleSearchKey(accountId, searchWorkspace, filter, query) : null;
@@ -171,8 +183,10 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
           <button type="button" className="button secondary small" onClick={retrySearch}><RefreshCw size={14} /> Retry</button></div>}
         {searchReady && <p role="status">{searchReady.total === 0 ? `No saved project titles in ${snapshot.workspace.name} contain “${query}”.` : `${searchReady.total} saved ${searchReady.total === 1 ? "project" : "projects"} in ${snapshot.workspace.name} with “${query}” in the title.`}</p>}
       </div>}
-      <div className="account-project-grid">{visible.map(artifact => { const Icon = icons[artifact.kind], meta = savedSourceMeta(artifact, shortDate); return <button type="button" className="account-project-card" key={artifact.id} disabled={busy} onClick={() => navigate({ workspaceId: snapshot!.workspace.id, artifactId: artifact.id })}>
-        <span className={`account-project-icon ${artifact.kind}`}><Icon size={22} /></span><span><strong>{artifact.title}</strong><small>{kindLabel[artifact.kind]} · <time dateTime={meta.at}>{meta.label}</time></small></span><ArrowRight size={16} /></button>; })}</div>
+      <div className="account-project-grid">{visible.map(artifact => { const meta = savedSourceMeta(artifact, shortDate), described = `card-preview-${artifact.id}`; return <div className="account-project-card" key={artifact.id}>
+        <LibraryCardPreview accountId={accountId} workspaceId={snapshot!.workspace.id} artifact={artifact} canCapture={snapshot!.workspace.role !== "reviewer"} descriptionId={described} />
+        <button type="button" className="account-project-open" aria-describedby={described} disabled={busy} onClick={() => navigate({ workspaceId: snapshot!.workspace.id, artifactId: artifact.id })}>
+          <span><strong>{artifact.title}</strong><small>{kindLabel[artifact.kind]} · <time dateTime={meta.at}>{meta.label}</time></small></span><ArrowRight size={16} /></button></div>; })}</div>
       {!busy && !query && !visible.length && (snapshot || noWorkspace) && <p>{snapshot ? "No saved projects match this view." : "No account workspace was found. Your device projects remain below."}</p>}
       {searchReady?.more === "error" && <p role="alert">More matches couldn’t load. Try again.</p>}
       {searchReady?.nextCursor && <button className="button secondary small" type="button" disabled={searchReady.more === "loading"} onClick={() => void moreMatches()}>{searchReady.more === "loading" ? "Loading more matches…" : "Show more matches"}</button>}
