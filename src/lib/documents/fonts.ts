@@ -1,13 +1,15 @@
 /** Open-licensed (OFL-1.1) faces for presentations and books, taken from the
- * Fontsource packages already installed for generated websites (latin subset;
- * see infra/project-runtime/font-catalog.json). They are declared with
- * @font-face so the live preview, the client review and every PDF render the
+ * Fontsource packages already installed for generated websites (the latin file
+ * plus its complementary latin-ext file; see infra/project-runtime/font-catalog.json).
+ * They are declared with @font-face so the live preview, the client review and every PDF render the
  * same type on any OS. This matters most for the PDF exporter: the serverless
  * Chromium ships only Open Sans, so without embedded faces every exported
  * book and deck was set in Open Sans whatever its theme said.
  *
  * PPTX cannot embed fonts, so every pairing also names Office faces for the
  * editable file, and slide layout is fitted against the wider of the two. */
+import { FONT_SUBSETS, UNICODE_RANGES, type FontSubset } from "../builder/fonts";
+
 export type DocumentFace = { id: string; family: string; pkg: "@fontsource" | "@fontsource-variable"; axis: string; weight: string; italic: boolean; stretch?: string };
 
 export const DOCUMENT_FACES = {
@@ -32,23 +34,28 @@ export const DOCUMENT_FACES = {
 export type FaceId = keyof typeof DOCUMENT_FACES;
 export type FaceStyle = "normal" | "italic";
 
-/** `${id}:${style}` → font URL (a data: URL for the offline PDF printer). */
+/** `${id}:${style}` (latin) or `${id}:${style}:latin-ext` → font URL (a data: URL for the offline PDF printer). */
 export type FontSources = Partial<Record<string, string>>;
-export const faceKey = (id: FaceId, style: FaceStyle) => `${id}:${style}`;
+export type { FontSubset };
+/** Declaration order: latin-ext, then the latin base, each limited to its unicode-range. */
+export const FACE_SUBSETS = FONT_SUBSETS;
+export const faceKey = (id: FaceId, style: FaceStyle, subset: FontSubset = "latin") => subset === "latin" ? `${id}:${style}` : `${id}:${style}:${subset}`;
 export const faceStyles = (id: FaceId): FaceStyle[] => DOCUMENT_FACES[id].italic ? ["normal", "italic"] : ["normal"];
 /** File inside node_modules/<pkg>/<id>/files/ (copied to public by prepare-builder-runtime). */
-export const faceFile = (id: FaceId, style: FaceStyle) => `${id}-latin-${DOCUMENT_FACES[id].axis}-${style}.woff2`;
+export const faceFile = (id: FaceId, style: FaceStyle, subset: FontSubset = "latin") => `${id}-${subset}-${DOCUMENT_FACES[id].axis}-${style}.woff2`;
 /** Same-origin copy served with the app (scripts/prepare-builder-runtime.mjs). */
-export const facePublicUrl = (id: FaceId, style: FaceStyle) => `/builder-runtime/fonts/${id}-${style}.woff2`;
+export const facePublicUrl = (id: FaceId, style: FaceStyle, subset: FontSubset = "latin") => `/builder-runtime/fonts/${id}-${subset === "latin" ? "" : `${subset}-`}${style}.woff2`;
 
-/** @font-face rules for the given faces. Without explicit sources the preview
- * uses the app's same-origin copies; a face whose explicit source is missing is
- * omitted so the stack's next family applies instead of a blocked request. */
+/** @font-face rules for the given faces: per style, the latin-ext and latin
+ * files with their unicode-ranges, so names such as Ćevapčići or Łódź keep the
+ * chosen face. Without explicit sources the preview uses the app's same-origin
+ * copies; a subset whose explicit source is missing is omitted so the stack's
+ * next family applies (for those characters only) instead of a blocked request. */
 export function fontFaceCss(ids: readonly FaceId[], sources?: FontSources) {
-  return [...new Set(ids)].flatMap(id => faceStyles(id).map(style => {
-    const face = DOCUMENT_FACES[id], src = sources ? sources[faceKey(id, style)] : facePublicUrl(id, style);
+  return [...new Set(ids)].flatMap(id => faceStyles(id).flatMap(style => FACE_SUBSETS.map(subset => {
+    const face = DOCUMENT_FACES[id], src = sources ? sources[faceKey(id, style, subset)] : facePublicUrl(id, style, subset);
     if (!src || !/^(data:font\/woff2;base64,[A-Za-z0-9+/]+=*|\/builder-runtime\/fonts\/[a-z0-9-]+\.woff2)$/.test(src)) return "";
     const stretch = "stretch" in face ? `font-stretch:${face.stretch};` : "";
-    return `@font-face{font-family:"${face.family}";font-style:${style};font-weight:${face.weight};${stretch}font-display:block;src:url(${src}) format("woff2")}`;
-  })).join("");
+    return `@font-face{font-family:"${face.family}";font-style:${style};font-weight:${face.weight};${stretch}font-display:block;src:url(${src}) format("woff2");unicode-range:${UNICODE_RANGES[subset]}}`;
+  }))).join("");
 }

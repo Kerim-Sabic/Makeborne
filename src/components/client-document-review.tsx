@@ -4,22 +4,28 @@ import type { DocumentSource } from "@/lib/documents/schema";
 import { reviewDocumentAssets, reviewDocumentHtml } from "@/lib/client-review/document";
 import { FONTS } from "@/lib/documents/theme";
 import { faceKey, facePublicUrl, faceStyles, type FontSources } from "@/lib/documents/fonts";
+import { fontSubsets } from "@/lib/builder/fonts";
+import { deckFaces } from "@/lib/documents/render-deck";
 
 /** The review frame only accepts data: fonts, so the document's open-licensed
- * faces are read from the app's own static copies and inlined. A face that
+ * faces are read from the app's own static copies and inlined: the latin file,
+ * plus latin-ext when the document's text needs it (ć, Ł, ğ, ő...). A file that
  * fails to load is skipped; its CSS stack falls back to the Office face. */
 async function documentFonts(doc: DocumentSource, signal: AbortSignal): Promise<FontSources> {
   const fonts: FontSources = {};
-  await Promise.all(FONTS[doc.theme.fonts].faces.flatMap(id => faceStyles(id).map(async style => {
+  const subsets = fontSubsets([JSON.stringify(doc)]);
+  // The same faces as the PDF: a deck's art direction may add a monospaced face.
+  const faces = doc.kind === "deck" ? deckFaces(doc) : FONTS[doc.theme.fonts].faces;
+  await Promise.all(faces.flatMap(id => faceStyles(id).flatMap(style => subsets.map(async subset => {
     try {
-      const response = await fetch(facePublicUrl(id, style), { credentials: "omit", signal });
+      const response = await fetch(facePublicUrl(id, style, subset), { credentials: "omit", signal });
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (!response.ok || bytes.length > 400_000) return;
       let binary = "";
       for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
-      fonts[faceKey(id, style)] = `data:font/woff2;base64,${btoa(binary)}`;
+      fonts[faceKey(id, style, subset)] = `data:font/woff2;base64,${btoa(binary)}`;
     } catch { /* fall back to the stack */ }
-  })));
+  }))));
   return fonts;
 }
 
