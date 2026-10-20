@@ -251,10 +251,11 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
         {outline.map(item => <option key={item.anchor} value={item.anchor}>{item.label.length > 70 ? `${item.label.slice(0, 68)}…` : item.label}</option>)}
       </select>}
       <span className="lp-status" role="status">{building ? "Writing live…" : message || "Live preview"}</span>
-      <div className="dp-actions">
-        <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pdf")} title={canExport ? "Download the saved version as PDF" : "Save the document first"}>
+      <div className="dp-actions" role="group" aria-label={`Generated outputs from saved version ${savedVersion}`}>
+        <span className="dp-outputs-label" aria-hidden="true" title="Made by Makeborne from the saved version; your uploaded source files are listed with the builder">Generated · v{savedVersion}</span>
+        <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pdf")} title={canExport ? `Generated output: download saved version ${savedVersion} as PDF` : "Save the document first"}>
           {exporting === "pdf" ? <Loader2 size={13} className="lb-spin" /> : <Download size={13} />}PDF</button>
-        {doc.kind === "deck" && <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pptx")} title="Download an editable PowerPoint file">
+        {doc.kind === "deck" && <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pptx")} title={`Generated output: download saved version ${savedVersion} as an editable PowerPoint file`}>
           {exporting === "pptx" ? <Loader2 size={13} className="lb-spin" /> : <Download size={13} />}PPTX</button>}
         {doc.kind === "deck" && doc.slides.length > 0 && <button type="button" aria-label="Present" title="Present: arrow keys move, Esc exits" onClick={() => setPresenting(true)}><Play size={15} /></button>}
         <button type="button" aria-label="Full screen preview" onClick={() => void frame.current?.requestFullscreen?.().catch(() => undefined)}><Maximize2 size={15} /></button>

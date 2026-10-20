@@ -5,7 +5,10 @@ import type { Attachment } from "../attachments";
  * ready: AI reads it with this request. local-only: kept, deliberately not sent (left out, or a duplicate).
  * unsupported: a type AI cannot read. too-large: over a per-file, text, count or combined limit (never trimmed).
  * failed: the bytes could not be read or are damaged; Retry re-reads the same saved copy.
- * checking is transient: Send waits until every file has a final state. */
+ * checking is transient: Send waits until every file has a final state.
+ * There is no "partial" state: text is never trimmed (an over-limit file is refused whole), and AI
+ * returns no page-by-page report for PDFs or images, so a partly understood page (a scan, a chart)
+ * can't be detected or shown. Ready PDFs say so instead of implying every page was read. */
 export type SourceState = "ready" | "local-only" | "unsupported" | "too-large" | "failed" | "checking";
 /** Facts about one stored file on its own, independent of the rest of the selection. */
 export type SourceAnalysis =
@@ -36,6 +39,8 @@ const SHORT: Record<SourceState, string> = {
   ready: "read", "local-only": "not sent", unsupported: "type AI can’t read", "too-large": "over the limit", failed: "couldn’t be read", checking: "checking",
 };
 
+/** Honest limit: no per-page result comes back, so partial reading can't be shown. */
+export const PDF_PAGES_NOTE = "The whole PDF is sent, but Makeborne doesn’t receive a page-by-page report, so it can’t show whether a page (such as a scan or a chart) was only partly understood. Mention the pages that matter in your message.";
 const number = (value: number) => value.toLocaleString("en-US");
 const count = (value: number, unit: string) => `${number(value)} ${unit}${value === 1 ? "" : "s"}`;
 const extension = (name: string) => /\.([a-z0-9]{1,8})$/i.exec(name)?.[1]?.toLowerCase() ?? "";
@@ -123,7 +128,8 @@ export function decideSources(files: readonly Attachment[], analyses: ReadonlyMa
     total += analysis.bytes;
     const sameName = names.get(file.name) ?? 0;
     names.set(file.name, sameName + 1);
-    entries.push(entry("ready", sameName ? "Shares a name with another file but its contents differ, so both are read." : "AI reads this file with your next request.", { mediaType: analysis.mediaType }));
+    const pdf = analysis.mediaType === "application/pdf" ? ` ${PDF_PAGES_NOTE}` : "";
+    entries.push(entry("ready", (sameName ? "Shares a name with another file but its contents differ, so both are read." : "AI reads this file with your next request.") + pdf, { mediaType: analysis.mediaType }));
     ready.push(file);
   }
   const skipped = entries.filter(item => item.state !== "ready" && item.state !== "checking");

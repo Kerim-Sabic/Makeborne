@@ -15,3 +15,7 @@
 .version-facts li[data-fact="checked"][data-state="older"]{background:#fdf4e3;color:#7a4a00}
 .version-facts-notice{margin:0;font-size:12px;line-height:1.45;color:#7a4a00}.version-facts-notice:empty{display:none}
 .cloud-version-checked{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;vertical-align:middle;background:#eef3fd;color:#244f9e}
+
+/* Document preview: exports are generated outputs, distinct from uploaded source files. */
+.dp-outputs-label{font-size:11px;color:#55556a;white-space:nowrap}
+@container (max-width:600px){.dp-outputs-label{display:none}}
