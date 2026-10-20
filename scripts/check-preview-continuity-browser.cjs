@@ -4,7 +4,7 @@
 // --baseline mounts live-preview.tsx, browser-bundler.ts and live-builder.tsx from <git-ref> instead, to show which audited cases the old code fails.
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs"), Module = require("node:module"), ts = require("typescript");
 const { execFileSync, spawnSync } = require("node:child_process");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const root = path.resolve(__dirname, "..");
 const argument = name => { const at = process.argv.indexOf(name); return at > 0 ? process.argv[at + 1] : null; };
@@ -118,7 +118,7 @@ async function main() {
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const editor = `${base}/studio?tab=projects&workspace=${ids.workspace}&artifact=${ids.artifact}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   const results = [];
   if (shots) fs.mkdirSync(shots, { recursive: true });
 

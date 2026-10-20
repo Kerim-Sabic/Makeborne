@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { browserType } = require("./browser-engine.cjs");
 
 const ORDER_A = "abcdefab-1234-4234-8234-123456789abc";
 const ORDER_B = "abcdefab-1234-4234-8234-123456789def";
@@ -69,7 +69,7 @@ const results = [];
   const base = `http://127.0.0.1:${server.address().port}`;
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await browserType.launch({ headless: true });
     const fresh = async (replies = [{ body: order() }], options = {}) => {
       const p = await browser.newPage({ viewport: options.viewport || { width: 1200, height: 800 }, reducedMotion: "reduce" });
       const errors = [];

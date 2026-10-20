@@ -3,7 +3,7 @@ const fs = require("node:fs"), path = require("node:path"), ts = require("typesc
 const load = Module._load;
 Module._load = function(name, parent, main) { return name === "server-only" ? {} : load.call(this, name, parent, main); };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
-const { chromium } = require("playwright"), sharp = require("sharp");
+const { browserType } = require("./browser-engine.cjs"), sharp = require("sharp");
 const { fixtures, text } = require("../src/lib/documents/fixtures/authored-covers.cjs");
 const { DocumentSourceSchema } = require("../src/lib/documents/schema.ts");
 const { bookHtml } = require("../src/lib/documents/render-book.ts"), { deckHtml } = require("../src/lib/documents/render-deck.ts"), { deckPptx } = require("../src/lib/documents/pptx.ts");
@@ -17,7 +17,7 @@ async function inspectText(page, selector) {
   }));
 }
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   try {
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1, serviceWorkers: "block" });
     await context.route("**/*", route => { report.externalRequests++; return route.abort(); });

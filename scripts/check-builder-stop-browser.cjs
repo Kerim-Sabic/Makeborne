@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Real mounted builder/hooks, local HTTP/SSE and sessionStorage; fictional operation service, no provider/database/cloud calls. */
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
-const {build}=require('esbuild'),{chromium}=require('playwright'),{createServer}=require('node:http');
+const {build}=require('esbuild'),{ browserType } = require('./browser-engine.cjs'),{createServer}=require('node:http');
 const ids={actor:'11111111-1111-4111-8111-111111111111',workspace:'22222222-2222-4222-8222-222222222222',artifact:'33333333-3333-4333-8333-333333333333',operation:'44444444-4444-4444-8444-444444444444',run:'55555555-5555-4555-8555-555555555555'};
 const fixture=`import React from'react';import{createRoot}from'react-dom/client';import LiveBuilder from'./src/components/live-builder';
 createRoot(document.getElementById('root')).render(<LiveBuilder accountId="${ids.actor}" workspaceId="${ids.workspace}" artifactId="${ids.artifact}" version={1} history={[]} baseFiles={{}} baseAssets={[]} defaultEffort="light" autoStart="A fictional book about a lighthouse cat" kind="book" onLive={()=>{}} onSaved={()=>{}}/>);`;
@@ -48,7 +48,7 @@ async function main(){
    current.result={runId:ids.run,version:1,summary:'Stopped fixture',charged:current.charge,changed:false,finished:true};
    emit({...current.result,type:'done',operation:current.operation});if(!res.destroyed&&!res.writableEnded)res.end();};
  }catch(error){state?.errors.push(String(error.message));if(!res.headersSent)json(res,{error:{message:'Fixture failed'}},500);else res.destroy();}});
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`,browser=await chromium.launch({headless:true});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`,browser=await browserType.launch({headless:true});
  let passed=0;
  try{
   for(const name of ['before-id','mid-run-double-stop','reload-during-stop','lost-stop-reply','late-operation-event']){

@@ -7,7 +7,7 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const { emptyDocument } = require("../src/lib/documents/editor.ts");
 const { DocumentSourceSchema } = require("../src/lib/documents/schema.ts");
 const { projectDocument } = require("../src/lib/documents/project.ts");
-const { chromium } = require("playwright");
+const { browserType } = require("./browser-engine.cjs");
 const out = path.resolve("work/client-review-browser"); fs.mkdirSync(out, { recursive: true });
 const assetId = "11111111-1111-4111-8111-111111111111", token = "b".repeat(43);
 const docs = {};
@@ -30,7 +30,7 @@ fs.writeFileSync(path.join(out,"entry.tsx"), `import React from 'react'; import 
  const base=`http://127.0.0.1:${server.address().port}`;
  let browser;
  try {
-  browser=await chromium.launch({headless:true});
+  browser=await browserType.launch({headless:true});
   for(const kind of ['deck','book']){
    const page=await browser.newPage({viewport:{width:1440,height:1100}});
    let release; const gate=new Promise(resolve=>{release=resolve;}); let requested=false;

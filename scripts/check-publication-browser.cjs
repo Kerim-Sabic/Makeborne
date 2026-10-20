@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Local real-browser qualification, no providers. */
 require('../src/lib/generation/check-website-worker.cjs');
 const {publicationSourcePreflight,publicationEntries}=require('../src/lib/projects/publication-compiler.ts');
-const {createHash}=require('node:crypto'),assert=require('node:assert/strict');
+const {createHash}=require('node:crypto'),assert=require('node:assert/strict'),{engine}=require('./browser-engine.cjs');
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function file(path,contentType,text){const body=Buffer.from(text);return {path,contentType,body,sha256:hash(body)};}
 const js='text/javascript; charset=utf-8',css='text/css; charset=utf-8';
@@ -37,6 +37,8 @@ async function main(){
   const controller=new AbortController();controller.abort();await assert.rejects(renderLocalPublication({...base,signal:controller.signal,files:[]}));
  });
  console.log(`${count} publication compiler/browser groups passed.`);
+ // The publication renderer is the server's own headless Chromium worker, so it is the same in every engine run.
+ if(engine!=='chromium')console.log(`NOTE --engine ${engine} does not apply: publication renders in the server-side Chromium worker by design.`);
 }
 if(require.main===module)main().catch(error=>{console.error(error);process.exitCode=1;});
 module.exports={file,index};

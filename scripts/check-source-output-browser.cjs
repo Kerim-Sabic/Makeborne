@@ -2,7 +2,7 @@
  * Run: node scripts/check-source-output-browser.cjs [--baseline=<git rev>]  (SHOTS_DIR=<dir> saves 1440/375/320 screenshots)
  * --baseline bundles every src/ file from that revision instead (files new since then come from the working copy). studio.tsx's internal CreateModal is exported for the fixture by the bundler only. */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs"), { execFileSync } = require("node:child_process");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 const fixtures = require("../src/lib/documents/fixtures/design-quality.cjs");
 
 const baseline = process.argv.find(arg => arg.startsWith("--baseline="))?.slice("--baseline=".length) ?? null;
@@ -66,7 +66,7 @@ async function main() {
   const server = createServer((req, res) => { const script = req.url === "/fixture.js"; res.setHeader("Content-Type", script ? "text/javascript" : "text/html"); res.end(script ? js : html); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   if (shots) fs.mkdirSync(shots, { recursive: true });
   const results = [];
   const tag = baseline ? `baseline-${baseline}` : "current";
@@ -145,7 +145,7 @@ assert.match(text, /Letters typed with separate accent marks: c \+ U\+030C â†’ Ä
       await capture(page, "9-creation-modal", ".attachment-section");
     });
   } finally { await browser.close(); server.close(); }
-  console.log(`\n${results.filter(result => result.pass).length}/${results.length} mounted source/output checks passed${baseline ? ` against baseline ${baseline}` : ""} (Chromium, real IndexedDB, routed API, no AI).`);
+  console.log(`\n${results.filter(result => result.pass).length}/${results.length} mounted source/output checks passed${baseline ? ` against baseline ${baseline}` : ""} (${engineLabel}, real IndexedDB, routed API, no AI).`);
   if (!baseline && results.some(result => !result.pass)) process.exitCode = 1;
 }
 main().catch(error => { console.error(error); process.exit(1); });

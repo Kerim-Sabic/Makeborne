@@ -2,10 +2,10 @@
  * Run: node scripts/check-composer-send-browser.cjs [--old-css] [screenshot-dir]
  * --old-css re-adds the previous focus-only height rule to show the lost click it caused (expected to report the click as lost). */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, engineLabel, args: engineArgs } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const oldCss = process.argv.includes("--old-css");
-const shotsArg = process.argv.slice(2).find(arg => !arg.startsWith("--"));
+const shotsArg = engineArgs.find(arg => !arg.startsWith("--"));
 const shots = shotsArg ? path.resolve(shotsArg) : null;
 const ids = { account: "11111111-1111-4111-8111-111111111111", workspace: "22222222-2222-4222-8222-222222222222", artifact: "33333333-3333-4333-8333-333333333333", operation: "44444444-4444-4444-8444-444444444444" };
 const fixture = `import React from "react"; import { createRoot } from "react-dom/client"; import LiveBuilder from "./src/components/live-builder";
@@ -44,7 +44,7 @@ async function main() {
   const { js, html } = await bundle();
   const server = createServer((req, res) => { const script = req.url === "/fixture.js"; res.setHeader("Content-Type", script ? "text/javascript" : "text/html"); res.end(script ? js : html); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0;
   try {
     for (const width of [375, 320]) {
@@ -90,6 +90,6 @@ async function main() {
       await context.close();
     }
   } finally { await browser.close(); server.close(); }
-  if (!oldCss) console.log(`${passed} mounted composer Send checks passed (Chromium, routed APIs, no network).`);
+  if (!oldCss) console.log(`${passed} mounted composer Send checks passed (${engineLabel}, routed APIs, no network).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

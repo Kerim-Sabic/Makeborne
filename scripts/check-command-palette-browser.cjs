@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted global command palette (P2) in Chromium: Ctrl+K opens an accessible combobox in the Studio and the advisor page, arrows/Enter go to a place, Escape closes and restores focus, Start opens the composer without sending, the client list keeps its own Ctrl+K, and 320 px fits. Routed APIs with fictional data; no network, no AI.
  * Run: node scripts/check-command-palette-browser.cjs [screenshot-dir] */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, args: engineArgs } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
-const shots = process.argv[2] ? path.resolve(process.argv[2]) : null;
+const shots = engineArgs[0] ? path.resolve(engineArgs[0]) : null;
 const actor = "11111111-1111-4111-8111-111111111111";
 const fixture = `import React from "react"; import { createRoot } from "react-dom/client";
 import ExpertChat from "./src/components/expert-chat";
@@ -58,7 +58,7 @@ async function main() {
     res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}*{box-sizing:border-box}${styles}</style><div id="root"></div><script src="/fixture.js"></script>`);
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const base = `http://127.0.0.1:${server.address().port}`, browser = await chromium.launch({ headless: true });
+  const base = `http://127.0.0.1:${server.address().port}`, browser = await browserType.launch({ headless: true });
   let passed = 0; const failures = [];
   const scenario = async (name, run, viewport = { width: 1280, height: 900 }) => {
     const page = await browser.newPage({ viewport }), errors = [];

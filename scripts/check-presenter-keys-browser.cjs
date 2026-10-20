@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted deck Presenter in Chromium (audit F14): native buttons keep Enter/Space; canvas shortcuts, Escape and click-to-advance still work. The slide renderer is replaced by three inert slides (host keyboard routing only, not renderer fidelity); fullscreen is denied by the page. Local only. Run: node scripts/check-presenter-keys-browser.cjs */
-const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
 import { Presenter } from "./src/components/document-preview";
@@ -28,7 +28,7 @@ async function main() {
     res.end(req.url === "/fixture.js" ? output.outputFiles[0].contents : '<!doctype html><div id="root"></div><script src="/fixture.js"></script>');
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
     const page = await browser.newPage();
@@ -103,6 +103,6 @@ async function main() {
     }
     pass("focus moves into the presenter on open and back to its opener on Escape or Exit");
   } finally { await browser.close(); server.close(); }
-  console.log(`${passed} mounted presenter checks passed (Chromium, inert slides, no network).`);
+  console.log(`${passed} mounted presenter checks passed (${engineLabel}, inert slides, no network).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

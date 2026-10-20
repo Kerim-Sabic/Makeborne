@@ -2,7 +2,7 @@
  * Run: node scripts/check-library-previews-browser.cjs            (current component)
  *      node scripts/check-library-previews-browser.cjs --baseline 6b78269   (pre-change component; expected to fail) */
 const fs = require("node:fs"), path = require("node:path"), assert = require("node:assert/strict"), { execFileSync } = require("node:child_process");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http"), ts = require("typescript"), Module = require("node:module");
+const { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http"), ts = require("typescript"), Module = require("node:module");
 
 const root = path.join(__dirname, "..");
 const baseline = process.argv.includes("--baseline") ? process.argv[process.argv.indexOf("--baseline") + 1] : null;
@@ -119,7 +119,7 @@ async function main() {
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   const results = [];
   async function scenario(name, setup, run, options = {}) {
     const context = await browser.newContext({ viewport: options.viewport ?? { width: 1100, height: 900 }, reducedMotion: "reduce" });
@@ -421,7 +421,7 @@ async function main() {
   } finally { await browser.close(); server.close(); }
   const failed = results.filter(([, ok]) => !ok);
   if (baseline) { console.log(`Baseline ${baseline}: ${failed.length} of ${results.length} scenarios fail (expected: the pre-change library has no artifact previews).`); process.exit(failed.length ? 0 : 1); }
-  console.log(`${results.length - failed.length}/${results.length} mounted library preview scenarios passed (Chromium, mocked API, no network).`);
+  console.log(`${results.length - failed.length}/${results.length} mounted library preview scenarios passed (${engineLabel}, mocked API, no network).`);
   if (failed.length) process.exit(1);
 }
 main().catch(error => { console.error(error); process.exit(1); });
