@@ -75,6 +75,7 @@ check("every skip target exists, can take focus, and the shell has one main", ()
   assert.match(shell, /target\.focus\(\{ preventScroll: true \}\)/);
   assert.match(css, /\.studio-skip-link:not\(:focus\) \{[^}]*clip-path: inset\(50%\)/);
   assert.match(css, /\.studio-skip-link:focus \{[^}]*position: fixed;/);
+  assert.match(css, /@media \(max-width: 700px\) \{ \.studio-skip-link:focus \{ top: 68px; \} \}/, "on phones the focused link sits below the 60px top bar, not over the menu toggle");
 });
 
 console.log(`${count} studio shell checks passed.`);
