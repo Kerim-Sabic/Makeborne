@@ -21,6 +21,8 @@ import { useCreationAccount, type CreationAccount } from "./use-creation-account
 import GettingStarted from "./onboarding/getting-started";
 import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import SiteBadgeSetting from "./site-badge-setting";
+import StorageLabel from "./storage-label";
+import { SETTINGS_STORAGE } from "@/lib/settings-storage";
 import { createClient } from "@/lib/supabase/client";
 import { buildCreationPayload } from "@/lib/cloud/creation-payload";
 import { continueProjectCreation, creationReferenceKey, readCreationReference } from "@/lib/cloud/creation-reference";
@@ -995,18 +997,30 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     <div className="eyebrow">MAKE YOURSELF AT HOME</div>
                     <h1>Workspace settings.</h1>
                     <p>
-                      Keep your local work safe and control how the studio
-                      feels.
+                      Each setting says where it is stored: on this device
+                      only, or saved to your account.
                     </p>
                   </div>
                 </div>
                 <div className="settings-panel">
                   <section>
-                    <h2>Workspace storage</h2>
+                    <h2>Account projects <StorageLabel where={SETTINGS_STORAGE.accountProjects} /></h2>
                     <p>
-                      This preview stores projects and client details in this
-                      browser on this device. It does not sync to the cloud.
-                      Clearing browser data will remove this workspace.
+                      Projects you create while signed in are saved to your
+                      account and save automatically as you edit. Open them
+                      from Projects on any device where you sign in.
+                    </p>
+                    <Link className="text-link" href="/studio/cloud">Previously saved account records <ArrowUpRight size={14} /></Link>
+                  </section>
+                  <section>
+                    <h2>Drafts on this device <StorageLabel where={SETTINGS_STORAGE.deviceWorkspace} /></h2>
+                    <p>
+                      Drafts and client details stored in this browser, such
+                      as work made while signed out, stay only here. They are not saved to your
+                      account or other devices, and clearing browser data
+                      removes them. Download a backup to keep a copy, or import
+                      them into your account from Previously saved account
+                      records.
                     </p>
                     <div className="button-row">
                       {!persistenceAllowed && (
@@ -1059,10 +1073,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     </div>
                   </section>
                   <section>
-                    <h2>Studio sounds</h2>
+                    <h2>Studio sounds <StorageLabel where={SETTINGS_STORAGE.studioSounds} /></h2>
                     <p>
                       A gentle confirmation when you save a version. Always
-                      optional.
+                      optional. This choice applies to this browser only.
                     </p>
                     <button
                       className={`toggle ${workspace.sound ? "enabled" : ""}`}
@@ -1076,16 +1090,6 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     </button>
                   </section>
                   <SiteBadgeSetting />
-                  <section>
-                    <h2>Account storage</h2>
-                    <p>
-                      New projects created while signed in save to your account.
-                      Open them in Projects to edit with automatic saving.
-                      Existing device drafts remain on this browser until you
-                      explicitly import them. Client and import tools remain available below during this transition.
-                    </p>
-                    <Link className="text-link" href="/studio/cloud">Previously saved account records <ArrowUpRight size={14} /></Link>
-                  </section>
                 </div>
               </>
             )}
@@ -2386,8 +2390,8 @@ function ProjectEditor({
             />}
             {view === "preview" && (
               <div className="preview-disclaimer">
-                This is a local content preview. Publishing, live forms, and
-                client access require configured cloud services.
+                This previews a draft kept on this device. Publishing, live
+                forms and client access need a project saved to your account.
               </div>
             )}
           </div>
