@@ -52,6 +52,9 @@ function schemaFor(path: string, method: string) {
     return method === "GET"
       ? z.object({ workspaces: z.array(workspace) })
       : z.object({ workspace, mutation });
+  // Library title search: one workspace, titles only, opaque keyset cursor.
+  if (/^\/api\/cloud\/workspaces\/[a-f0-9-]+\/artifacts$/.test(base) && method === "GET")
+    return z.object({ artifacts: z.array(ArtifactSchema).max(50), pagination: z.object({ total: z.number().int().nonnegative(), nextCursor: z.string().min(1).max(200).nullable() }) });
   if (/\/versions$/.test(base))
     return z.object({
       artifact: ArtifactSchema,
