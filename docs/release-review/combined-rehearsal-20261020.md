@@ -61,7 +61,7 @@ PDF pages were rendered and visually inspected. There is no observed clipping in
 
 Read-only sandbox scan: eight memberships, ten payments, no new renewal yet. Local-signature route tests at this exact combined candidate prove bad-signature refusal before provider reads, missing-binding refusal, delayed-binding retry, duplicate receipt idempotency and no allowance from a refunded subscription. A historical direct-provider failed-cycle probe has no app checkout binding and correctly remains refused; do not invent one.
 
-The weekly sandbox probe's next renewal is due **21 October 2026, 00:08:59 UTC**. A one-time follow-up is scheduled for 02:20 Europe/Warsaw (00:20 UTC). It must inspect actual provider evidence and distinguish provider-signed dispatch from local replay. Existing sandbox key expires at 00:00 UTC and needs a same-scope refresh. The weekly probe cannot by itself prove monthly/yearly catalogue eligibility or account-bound credit delivery. No new purchases, refunds or real charges were made here.
+The weekly sandbox probe's next renewal is due **21 October 2026, 00:08:59 UTC**. A one-time follow-up is scheduled for 01:50 Europe/Warsaw (23:50 UTC on 20 October), before the renewal, to prepare access and the isolated receiver before observing the cycle. It must inspect actual provider evidence and distinguish provider-signed dispatch from local replay. Existing sandbox key expires at 00:00 UTC and needs a same-scope refresh. A fresh provider read also confirms that this active weekly probe has no app checkout reference, just like the failed-cycle probe. Its renewal cannot prove monthly/yearly catalogue eligibility or account-bound credit delivery. No new purchases, refunds or real charges were made here.
 
 ## Spending and cleanup
 
