@@ -16,6 +16,7 @@ import { describeTyped, documentTexts, fontCoverage } from "@/lib/builder/font-f
 import "@/app/publish-output.css";
 import { frameListenersRun, watchFrameScroll } from "@/lib/frame-events";
 import { readCloudImage } from "./cloud-api";
+import { focusReturnTarget } from "@/lib/focus-return";
 
 const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
@@ -66,7 +67,7 @@ export function Presenter({ deck, images, onClose }: { deck: Deck; images: Recor
   // Focus moves into the presenter when it opens and back to the control that
   // opened it when it closes (once per presentation, whatever onClose is).
   useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    const opener = focusReturnTarget();
     root.current?.focus();
     return () => { if (opener?.isConnected) opener.focus({ preventScroll: true }); };
   }, []);
