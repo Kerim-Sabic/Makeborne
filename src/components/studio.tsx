@@ -65,6 +65,7 @@ import { studioSkipTargets } from "@/lib/studio-skip-links";
 import { creationTitle, fallbackProjectTitle, isPlaceholderTitle, placeholderTitle } from "@/lib/projects/project-title";
 import { libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
+import { PREVIEW_HISTORY_KEY } from "@/lib/builder/preview-route";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
@@ -333,18 +334,23 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       setRouteSettled(true);
     });
   }, []);
-  const restoreHistory = useEffectEvent(() => {
+  const restoreHistory = useEffectEvent((event: PopStateEvent) => {
     if (!loaded) return;
     const route = persistenceAllowed
       ? readStudioRoute(window.location.search, workspace)
       : { tab: "settings", projectId: null, clientId: null } as const;
+    // A step between pages of the open project's website preview is the
+    // preview's own history: the project, its editor and any draft stay put.
+    const account = "account" in route ? route.account ?? null : null;
+    if (event.state?.[PREVIEW_HISTORY_KEY] !== undefined && !creating && route.tab === tab && route.projectId === selected && route.clientId === clientDetail
+      && account?.workspaceId === accountRoute?.workspaceId && account?.artifactId === accountRoute?.artifactId && Boolean(accountRoute?.artifactId)) return;
     setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
     // Keep unsaved client/style forms mounted when the underlying route changes.
     setCreating(null); setInitialAttachmentOwner(null); setInitialGenerationConsent(null); setInitialWorkspaceId(null); setInitialClient(""); setMobileNav(false);
     if ("notice" in route && route.notice) setNotice(route.notice);
   });
   useEffect(() => {
-    const restore = () => restoreHistory();
+    const restore = (event: PopStateEvent) => restoreHistory(event);
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);

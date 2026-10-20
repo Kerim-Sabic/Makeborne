@@ -37,6 +37,7 @@ const WebsiteSourceEditor = dynamic(() => import("./website-source-editor"), {ss
 import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
 import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
+import { restoreEffect } from "@/lib/builder/action-semantics";
 import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
@@ -1720,6 +1721,7 @@ export function CloudEditor({
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
+          routes={!live ? content.websiteSource?.routes : undefined} syncUrl
           visualEdit={content.websiteSource && role !== "reviewer" && !live ? {
             source: content.websiteSource,
             disabledReason: uncertainSave || conflict || recovery ? "Resolve the save notice above before editing." : lockChangePending ? "Saving content protection…" : undefined,
@@ -1874,11 +1876,10 @@ export function CloudEditor({
             )}
             {inspectedVersion && <section className="account-version-review" aria-label={`Saved version ${inspectedVersion.number}`}>
               <h3>Version {inspectedVersion.number}</h3>
-              <p className="small-note">This is a saved snapshot. Restoring creates a new version and keeps your history.</p>
+              <p className="small-note" id={`restore-effect-${inspectedVersion.id}`}>This is a saved snapshot.{role !== "reviewer" && inspectedVersion.number < expectedVersion ? ` ${restoreEffect(inspectedVersion.number, expectedVersion, artifact.kind === "website")}` : ""}</p>
               <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />
               {role !== "reviewer" && inspectedVersion.number < expectedVersion && <>
-                <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
-                {artifact.kind === "website" && <p className="small-note">Restoring saves a new version in the editor. Your live website doesn&apos;t change until you publish again.</p>}
+                <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} aria-describedby={`restore-effect-${inspectedVersion.id}`} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
                 {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
               </>}
             </section>}
