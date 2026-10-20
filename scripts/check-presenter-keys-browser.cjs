@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted deck Presenter in Chromium (audit F14): native buttons keep Enter/Space; canvas shortcuts, Escape and click-to-advance still work. The slide renderer is replaced by three inert slides (host keyboard routing only, not renderer fidelity); fullscreen is denied by the page. Local only. Run: node scripts/check-presenter-keys-browser.cjs */
-const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
+const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engine, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
 import { Presenter } from "./src/components/document-preview";
@@ -32,9 +32,17 @@ async function main() {
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
     const page = await browser.newPage();
+    // The page denies full screen with Permissions-Policy (fullscreen=()), which WebKit does not implement: deny it there
+    // the way a browser refusal looks to the page, so every engine checks the same modal fallback.
+    if (engine === "webkit") await page.addInitScript(() => { Element.prototype.requestFullscreen = function () { return Promise.reject(new DOMException("Full screen is not allowed.", "NotAllowedError")); }; });
     await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    const counter = async () => (await page.locator(".dp-present-bar span").innerText()).trim();
+    // Let React commit the key or click first (WebKit commits a frame later than Chromium), so "unchanged" is a real result.
+    const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0))));
+    const counter = async () => { await settle(); return (await page.locator(".dp-present-bar span").innerText()).trim(); };
+    // A real pointer click at an element of the slide: it lands in the frame where the browser runs the presenter's
+    // frame listeners (Chromium, Firefox) and on the presenter itself where it doesn't (WebKit). Same rule either way.
+    const clickInSlide = async locator => { await locator.scrollIntoViewIfNeeded(); const box = await locator.boundingBox(); await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); };
     const open = async () => (await page.locator(".dp-present").count()) === 1;
     const reopen = async () => { await page.evaluate(() => window.reopen()); await page.locator(".dp-present").waitFor(); await page.locator("iframe").evaluate(frame => new Promise(resolve => frame.contentDocument?.readyState === "complete" ? resolve() : frame.addEventListener("load", resolve, { once: true }))); };
     await page.locator("iframe").evaluate(frame => new Promise(resolve => frame.contentDocument?.readyState === "complete" ? resolve() : frame.addEventListener("load", resolve, { once: true })));
@@ -77,12 +85,12 @@ async function main() {
     // A srcdoc frame resolves "#x" against the host URL; keep the fixture frame in place.
     // (attached from the host realm, like the presenter's own listener: the sandbox has no allow-scripts).
     await page.locator("iframe").evaluate(frame => frame.contentDocument.getElementById("link").addEventListener("click", event => event.preventDefault()));
-    await slide.locator("#link").click(); assert.equal(await counter(), "2 / 3", "clicking a link in a slide does not advance");
+    await clickInSlide(slide.locator("#link")); assert.equal(await counter(), "2 / 3", "clicking a link in a slide does not advance");
     await slide.locator("#text").selectText();
     await slide.locator("#text").dispatchEvent("click");
     assert.equal(await counter(), "2 / 3", "ending a text selection does not advance");
     await page.locator("iframe").evaluate(frame => frame.contentWindow.getSelection().removeAllRanges());
-    await slide.locator("h1").nth(1).click(); assert.equal(await counter(), "3 / 3", "clicking the slide itself advances");
+    await clickInSlide(slide.locator("h1").nth(1)); assert.equal(await counter(), "3 / 3", "clicking the slide itself advances");
     pass("in the slide frame: keys navigate once; links and selections don't advance; a plain click does");
 
     await page.keyboard.press("Escape");
