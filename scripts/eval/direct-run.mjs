@@ -8,6 +8,8 @@
 //
 //   EVAL_SPEND_APPROVED=yes [EVAL_ENV_LOCAL=<abs path>/.env.local] node scripts/eval/direct-run.mjs --run <runId> --approval "<who/when>"
 //     --effort medium|high --only w01,w02 [--repo <another checkout whose app code to run, e.g. an extracted base commit>]
+//     [--images gpt-image-2.5-flare,gpt-image-2.5-sunburst,gpt-image-2]  (image routing on: OPENAI_API_KEY from the same .env.local;
+//      a second, OpenAI ledger reservation per brief covers its images under the OpenAI sub-cap; bytes land in <item>/assets/)
 // Outputs land in this harness's outputs/eval/runs/<runId>/ in the run.mjs layout (source.json etc.), so measure.mjs works
 // on them; item.json says origin.stack "none (direct runBuilder)". Report these runs as direct-agent, not app-route, runs.
 import path from 'node:path';
@@ -18,7 +20,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' } } });
+const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' } } });
 // This harness: the ledger, the run outputs and the secret scan always go through it.
 const DQ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPO = path.resolve(values.repo ?? DQ);
@@ -45,7 +47,9 @@ if (!path.isAbsolute(envFile) || path.basename(envFile) !== '.env.local') throw 
 const envText = fs.readFileSync(envFile, 'utf8');
 const key = /^ANTHROPIC_API_KEY\s*=\s*(.*)$/m.exec(envText)?.[1]?.trim().replace(/^["']|["']$/g, '');
 if (!key) throw new Error('ANTHROPIC_API_KEY missing');
-Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_CREDIT: '0.03', MAKEBORNE_BUILDER_FALLBACK_MODELS: '', OPENAI_API_KEY: '', MAKEBORNE_IMAGE_MODEL: '' });
+const openaiKey = values.images ? /^OPENAI_API_KEY\s*=\s*(.*)$/m.exec(envText)?.[1]?.trim().replace(/^["']|["']$/g, '') : '';
+if (values.images && !openaiKey) throw new Error('--images needs OPENAI_API_KEY in the .env.local');
+Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_CREDIT: '0.03', MAKEBORNE_BUILDER_FALLBACK_MODELS: '', OPENAI_API_KEY: openaiKey, MAKEBORNE_IMAGE_MODEL: '', MAKEBORNE_IMAGE_MODELS: values.images ?? '' });
 delete process.env.MAKEBORNE_BUILDER_MODEL;
 
 const { runBuilder } = loadApp('src/lib/builder/agent.ts');
@@ -55,6 +59,9 @@ const { BUILDER_EFFORT } = loadApp('src/lib/builder/pricing.ts');
 const { reviewCreditCeiling, REVIEW_MAX_TURNS, autoReviewRounds } = loadApp('src/lib/builder/review-policy.ts');
 const { reviewRequest, reviewAttachments, ReviewInputSchema } = loadApp('src/lib/builder/review.ts');
 const { compileVerdict } = loadApp('src/lib/builder/compile.ts');
+const imagesModule = values.images ? loadApp('src/lib/builder/images.ts') : null;
+const prices = loadApp('src/lib/ai/prices.ts');
+const { createHash } = await import('node:crypto');
 let seedBlock = null;
 try { seedBlock = values.seedless ? null : loadApp('src/lib/builder/design-seed.ts').designSeedBlock; } catch { seedBlock = null; }
 
@@ -71,7 +78,7 @@ const save = () => fs.writeFileSync(runJsonFile, JSON.stringify(runJson, null, 2
 save();
 
 function context({ brief, files, history }) {
-  const seed = !files.files.size && seedBlock ? seedBlock({ seed: brief.projectSeed, brief: brief.brief, images: false, brand: false }) : '';
+  const seed = !files.files.size && seedBlock ? seedBlock({ seed: brief.projectSeed, brief: brief.brief, images: Boolean(values.images), brand: false }) : '';
   return [`<project title="${brief.title.replace(/"/g, "'")}">`, `Brief: ${brief.brief}`, 'Visual direction: No preset — choose the best direction for this business.', seed,
     history.length ? `Recent revisions:\n${history.join('\n')}` : '', '</project>',
     files.files.size ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: none` : '<current_files>(empty — build the complete website from scratch)</current_files>',
@@ -90,12 +97,32 @@ try {
     fs.mkdirSync(itemDir, { recursive: true });
     const boundUsd = operationCapMicrousd / 1e6;
     const reservation = await budget.reserve({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. ${values.effort}` });
+    // Images: the run's whole image allowance (max images x the dearest allowed medium bound) reserved under the OpenAI sub-cap.
+    const imageModels = imagesModule ? imagesModule.imageConfiguration().models : [];
+    const imageBoundUsd = imageModels.length ? policy.maxImages * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
+    const imageReservation = imageBoundUsd ? await budget.reserve({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
+    let openaiMicrousd = 0, openaiUncertain = false;
+    const imageBytes = new Map();
+    const images = [];
     const started = Date.now();
     const stages = [], events = [];
     let spentMicrousd = 0, uncertain = false;
     const files = new ProjectFiles();
     const history = [];
     const message = brief.brief.trim().length > 8000 ? `${brief.brief.trim().slice(0, 7400).replace(/\s+\S*$/, '')}…` : brief.brief.trim();
+    const storeImage = async (request, bytes) => {
+      const prepared = await imagesModule.prepareImageBytes(bytes, { transparent: request.transparent, quality: request.transparent ? undefined : imagesModule.GENERATED_PHOTO_QUALITY });
+      const sha256 = createHash('sha256').update(prepared.bytes).digest('hex');
+      fs.mkdirSync(path.join(itemDir, 'assets'), { recursive: true });
+      fs.writeFileSync(path.join(itemDir, 'assets', `${request.name}.webp`), prepared.bytes);
+      const { default: sharpLib } = await import(pathToFileURL(require.resolve('sharp', { paths: [REPO] })).href).catch(() => ({ default: null }));
+      const meta = sharpLib ? await sharpLib(prepared.bytes).metadata() : {};
+      const digest = createHash('sha256').update(`eval:${brief.projectSeed}:${sha256}`).digest('hex');
+      const assetId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+      imageBytes.set(`/images/${request.name}.webp`, prepared.bytes);
+      images.push({ name: request.name, kind: request.kind, route: request.route, transparent: prepared.transparent, width: meta.width, height: meta.height, bytes: prepared.bytes.length });
+      return { id: assetId, path: `public/images/${request.name}.webp`, sha256, bytes: prepared.bytes.length, mediaType: 'image/webp', url: `/images/${request.name}.webp`, width: meta.width, height: meta.height, transparent: prepared.transparent };
+    };
     const stage = async (name, request, extra = {}) => {
       const remaining = operationCapMicrousd - spentMicrousd;
       const cap = Math.min(remaining, extra.capMicrousd ?? remaining);
@@ -109,10 +136,11 @@ try {
       try {
         result = await runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history }),
           attachments: extra.attachments ?? [], emit: event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300) }); },
-          signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits });
+          signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits, ...(imagesModule ? { storeImage } : {}) });
       } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; }
       finally { clearTimeout(timer); }
       spentMicrousd += spend.providerMicrousd;
+      for (const call of spend.calls.filter(item => item.provider === 'openai')) { if (call.actualMicrousd === null) { openaiUncertain = true; openaiMicrousd += call.boundMicrousd; } else openaiMicrousd += call.actualMicrousd; }
       if (spend.uncertainMicrousd > 0) uncertain = true;
       let changed = [...files.changed], reverted = null;
       // Like website-run.ts: unfinished work is kept only if it compiles; otherwise the previous saved files stand.
@@ -136,7 +164,8 @@ try {
       }
       if (files.files.size && autoReviewRounds(values.effort, { firstBuild: true, filesTouched: touched }) > 0) {
         const source = files.toSource();
-        const capture = await captureForReview({ browser, origin: runtime.url, files: source });
+        const assetUrls = Object.fromEntries([...imageBytes].map(([url, bytes]) => [url, `data:image/webp;base64,${bytes.toString('base64')}`]));
+        const capture = await captureForReview({ browser, origin: runtime.url, files: source, assets: assetUrls });
         fs.writeFileSync(path.join(itemDir, 'review-1-capture.json'), JSON.stringify(describeCapture(capture), null, 2));
         await saveShots(capture, path.join(itemDir, 'review-1-shots'));
         if (capture.coverageIssue) stages.push({ name: 'review', skipped: capture.coverageIssue });
@@ -147,15 +176,17 @@ try {
       }
     } catch (error) { outcome = `error: ${String(error.message).slice(0, 200)}`; }
     finally {
-      const actualUsd = spentMicrousd / 1e6;
+      const actualUsd = (spentMicrousd - openaiMicrousd) / 1e6;
+      if (imageReservation) await budget.settle(imageReservation, openaiUncertain ? { unknown: true, detail: { images: images.length } } : { actualUsd: openaiMicrousd / 1e6, detail: { images: images.map(image => ({ name: image.name, ...image.route })) } });
+      if (images.length) fs.writeFileSync(path.join(itemDir, 'images.json'), JSON.stringify(images, null, 2));
       await budget.settle(reservation, uncertain ? { unknown: true, detail: { stages: stages.length } } : { actualUsd, detail: { stages: stages.map(item => ({ name: item.name, usd: (item.providerMicrousd ?? 0) / 1e6 })) } });
       let sourceOk = false;
       try { const source = files.toSource(); fs.writeFileSync(path.join(itemDir, 'source.json'), JSON.stringify(source)); sourceOk = true; } catch (error) { outcome = `no source: ${error.message}`; }
       fs.writeFileSync(path.join(itemDir, 'brief.json'), JSON.stringify(brief, null, 2));
       fs.writeFileSync(path.join(itemDir, 'item.json'), JSON.stringify({ id, kind: 'website', title: brief.title, direction: brief.direction, briefId: id, brief: brief.brief, briefSha256: null,
-        origin: { type: 'live', stack: 'none (direct runBuilder)', artifactId: null, version: null, path: null }, generation: { effort: values.effort, styleId: 'automatic', mode: 'create (direct)', images: 'off', seed: Boolean(seedBlock) } }, null, 2));
+        origin: { type: 'live', stack: 'none (direct runBuilder)', artifactId: null, version: null, path: null }, generation: { effort: values.effort, styleId: 'automatic', mode: 'create (direct)', images: values.images ? `on (${values.images})` : 'off', seed: Boolean(seedBlock) } }, null, 2));
       fs.writeFileSync(path.join(itemDir, 'events.jsonl'), events.map(event => JSON.stringify(event)).join('\n'));
-      fs.writeFileSync(path.join(itemDir, 'cost.json'), JSON.stringify({ boundUsd, reservationId: reservation, actualUsd: uncertain ? null : actualUsd, stages, ms: Date.now() - started }, null, 2));
+      fs.writeFileSync(path.join(itemDir, 'cost.json'), JSON.stringify({ boundUsd, reservationId: reservation, actualUsd: uncertain ? null : actualUsd, images: imageReservation ? { boundUsd: imageBoundUsd, reservationId: imageReservation, actualUsd: openaiUncertain ? null : openaiMicrousd / 1e6, count: images.length } : null, stages, ms: Date.now() - started }, null, 2));
       fs.writeFileSync(path.join(itemDir, 'status.json'), JSON.stringify({ ok: sourceOk && outcome === 'ok', outcome }, null, 2));
       runJson.items = runJson.items.filter(item => item.id !== id).concat({ id, kind: 'website', status: sourceOk ? 'generated' : 'failed', costUsd: uncertain ? null : actualUsd });
       save();
@@ -165,6 +196,6 @@ try {
 } finally {
   await browser.close(); await runtime.close();
   runJson.finishedAt = new Date().toISOString(); save();
-  const scan = scanForSecrets(runDir, [{ name: 'ANTHROPIC_API_KEY', value: key }]);
+  const scan = scanForSecrets(runDir, [{ name: 'ANTHROPIC_API_KEY', value: key }, ...(openaiKey ? [{ name: 'OPENAI_API_KEY', value: openaiKey }] : [])]);
   console.log(`secret scan: ${scan.ok ? 'clean' : `HITS ${scan.hits.map(hit => `${hit.file}: ${hit.secret}`).join('; ')}`} (${scan.files} files)`);
 }
