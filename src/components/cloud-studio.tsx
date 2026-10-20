@@ -25,8 +25,10 @@ import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
 import BuildConversation from "./build-conversation";
 import LiveBuilder, { type LiveUpdate } from "./live-builder";
+import { useProjectAdvisorHandoff } from "./advisor-handoff";
 import type { AskTarget } from "./visual-editor-panel";
 import type { EditTarget } from "@/lib/builder/edit-intent";
+import type { EffortLevel } from "@/lib/routing/effort";
 import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
 import WorkbenchMore from "./workbench-more";
@@ -1162,10 +1164,12 @@ export function CloudEditor({
     return () => { active = false; };
   }, [accountId, workspaceId, brandClient, artifact.kind, role]);
   // Client feedback placed in the builder composer for review. Never auto-sent.
-  const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string; target?: EditTarget } | null>(null);
+  const [builderPrefill, setBuilderPrefill] = useState<{ key: string; text: string; target?: EditTarget; mode?: "create" | "plan"; effort?: EffortLevel } | null>(null);
   useEffect(() => {
     queueMicrotask(() => { const text = takeReviewPrefill(artifact.id); if (text) setBuilderPrefill({ key: crypto.randomUUID(), text }); });
   }, [artifact.id]);
+  // An advisor brief chosen for this project waits in the composer with its mode and effort; its provenance is recorded with the next request.
+  const advisorBrief = useProjectAdvisorHandoff({ accountId, workspaceId, artifactId: artifact.id, kind: artifact.kind, canBuild: role !== "reviewer", apply: setBuilderPrefill, notify });
   const [generatedVersionId,setGeneratedVersionId]=useState<string|null>(null);
   const [builder, setBuilder] = useState<BuilderAvailability>(BUILDER_OFF);
   const [builderEstimates, setBuilderEstimates] = useState<BuilderEstimates | null>(null);
@@ -1637,6 +1641,7 @@ export function CloudEditor({
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           defaultEffort={project?.effort} disabled={!content || !builder.available || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
+          provenance={advisorBrief.provenance} onProvenance={advisorBrief.update}
           kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }}
           brandKit={brandKitName} onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />

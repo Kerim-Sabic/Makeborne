@@ -27,6 +27,7 @@ import { ensureBrandLogo, projectBrandKit } from "@/lib/brand/server";
 import { importTheirPhotos, photosContext } from "@/lib/leads/redesign-server";
 import { CONTENT_CONTRACT } from "@/lib/builder/content-prompt";
 import { MANIFEST_PATH } from "@/lib/portal/content-model";
+import { AdvisorProvenanceSchema } from "@/lib/experts/advisor-brief";
 
 export const runtime = "nodejs";
 // Vercel Hobby allows 300s; raise to 800 on Pro for long Ultra runs.
@@ -49,8 +50,12 @@ const BuildRequest = z.object({
   operation: OperationRequestSchema.optional(),
   /** The maximum the customer saw before approving a new request; must equal the server-derived ceiling. */
   approvedMaximum: z.number().int().positive().optional(),
+  /** Which advisor conversation and brief revision a new request came from (ids only; recorded with the operation). */
+  provenance: AdvisorProvenanceSchema.optional(),
 }).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review)
-  .refine(body => body.planRevision === undefined || Boolean(body.plan));
+  .refine(body => body.planRevision === undefined || Boolean(body.plan))
+  // Provenance belongs to the request that starts an operation, never to an automatic stage or review.
+  .refine(body => !body.provenance || (body.mode === "build" && (!body.operation || "actionKey" in body.operation)));
 
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 

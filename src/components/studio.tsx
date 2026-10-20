@@ -2,6 +2,7 @@
 import "@/app/studio-refresh.css";
 import { z } from "zod";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { creationStyles, styleConcept } from "@/lib/creation-styles";
 import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
@@ -12,6 +13,9 @@ import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-a
 import ComposerControls from "./composer-controls";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
+import { AdvisorHandoffBanner, bindCreationHandoff, forgetCreationHandoff, forgetHandoffParameter, rememberCreationHandoff } from "./advisor-handoff";
+import { readAdvisorHandoff, type AdvisorHandoff } from "@/lib/experts/advisor-brief";
+import GlobalCommandPalette, { type PaletteCommand } from "./global-command-palette";
 import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
@@ -68,7 +72,7 @@ import { creationTitle, fallbackProjectTitle, isPlaceholderTitle, placeholderTit
 import { libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { PREVIEW_HISTORY_KEY } from "@/lib/builder/preview-route";
-import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
+import { opensAccountProject, readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { DEFAULT_LIBRARY_SCOPE, readLibraryQuery, withLibraryQuery, type LibraryScope } from "@/lib/projects/library-card-meta";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
@@ -118,6 +122,7 @@ function date(value: string) {
 }
 
 export default function Studio({ isAdmin = false, unlimitedCredits = false, initialTab = "projects", initialProjectOpen = false }: { isAdmin?: boolean; unlimitedCredits?: boolean; initialTab?: string; initialProjectOpen?: boolean }) {
+  const router = useRouter();
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [accountClientRoute, setAccountClientRoute] = useState<AccountClientRoute | null>(null);
   const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
@@ -139,6 +144,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const composerPermissions=useGenerationConsent(composerAccount.accountId);
   const immediateWebsite=draftKind==="website"&&creationMode==="create"&&composerPermissions.enabled;
   const [homeHandoff, setHomeHandoff] = useState(false);
+  // A brief from an advisor ("Use this brief"): pending until the account is known, then shown above the composer.
+  const [advisorHandoff, setAdvisorHandoff] = useState<{ pending: string } | { applied: AdvisorHandoff } | null>(null);
+  const appliedHandoff = advisorHandoff && "applied" in advisorHandoff ? advisorHandoff.applied : null;
   const [loaded, setLoaded] = useState(false);
   // False until the opening URL is understood, so a home handoff or create link is never overwritten by an unsent draft.
   const [routeSettled, setRouteSettled] = useState(false);
@@ -176,7 +184,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const unsentBrief = useUnsentDraft({
     surface: "studio",
     account: composerAccount.accountId ? { accountId: composerAccount.accountId } : composerAccount.ready ? { accountId: null } : null,
-    enabled: loaded && routeSettled && !creating && !directStart,
+    enabled: loaded && routeSettled && !creating && !directStart && !(advisorHandoff && "pending" in advisorHandoff),
     fields: { kind: draftKind, mode: creationMode, effort: creationEffort, text: draftBrief },
     defaults: { kind: "website", mode: "create", effort: DEFAULT_EFFORT, text: "" },
     apply: next => { setDraftKind(next.kind); setCreationMode(next.mode); setCreationEffort(next.effort); setDraftBrief(next.text); },
@@ -184,6 +192,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   function startStudioPrompt() {
     if(!draftBrief.trim()||!composerAccount.ready||!composerAccount.accountId||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent)return;
     const requestId=crypto.randomUUID(),owner=attachmentOwner(composerAccount.accountId);
+    if(appliedHandoff)rememberCreationHandoff(requestId,draftKind,appliedHandoff.provenance);else forgetCreationHandoff();
     const consent=immediateWebsite?composerPermissions.consent:null;
     const draft={kind:draftKind,brief:draftBrief.trim(),mode:creationMode,effort:creationEffort,
       styleId:AUTOMATIC_STYLE.id,requestId,attachmentOwner:owner,generationConsent:consent??undefined};
@@ -197,6 +206,24 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     setInitialStyle(AUTOMATIC_STYLE.id);setInitialClient("");setInitialWorkspaceId(null);setInitialAttachmentOwner(owner);
     setInitialGenerationConsent(consent);setHomeHandoff(false);setCreating(draftKind);
   }
+  useEffect(() => {
+    if (!advisorHandoff || !("pending" in advisorHandoff) || !composerAccount.ready) return;
+    const id = advisorHandoff.pending;
+    queueMicrotask(() => {
+      forgetHandoffParameter();
+      let read: ReturnType<typeof readAdvisorHandoff>;
+      try { read = readAdvisorHandoff(sessionStorage, { id, accountId: composerAccount.accountId, now: Date.now() }); }
+      catch { read = { issue: "This browser could not read the brief. Nothing was sent." }; }
+      if ("issue" in read || read.handoff.target.type !== "new") {
+        setAdvisorHandoff(null); setNotice("issue" in read ? read.issue : "This brief was prepared for a saved project. Open that project to use it.");
+        return;
+      }
+      const { handoff } = read;
+      setDraftKind(handoff.format); setCreationMode(handoff.mode); setCreationEffort(handoff.effort); setDraftBrief(handoff.text.slice(0, 20000));
+      setAdvisorHandoff({ applied: handoff });
+      requestAnimationFrame(() => { const input = document.getElementById("studio-brief"); input?.scrollIntoView({ block: "center" }); input?.focus({ preventScroll: true }); });
+    });
+  }, [advisorHandoff, composerAccount.ready, composerAccount.accountId]);
   // On phones the navigation is an opaque drawer over the page, so it behaves as a modal
   // overlay: focus moves into it, Tab stays inside, the page behind is inert, and closing
   // returns focus to the toggle. Widening past the drawer breakpoint closes it.
@@ -263,6 +290,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         if (route.notice) setNotice(route.notice);
       }
       applyLibraryQuery(window.location.search);
+      // A saved project opened with a brief takes it in its own editor; the new-project composer takes the rest.
+      const handoffId = parameters.get("handoff");
+      if (handoffId && !opensAccountProject(window.location.search)) setAdvisorHandoff({ pending: handoffId });
       const kind = parameters.get("create");
       if (parameters.get("from") === "home") {
         try {
@@ -570,6 +600,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           accountCreated={(workspaceId, artifact, generationStaged) => {
             setCreating(null); setInitialAttachmentOwner(null); setInitialGenerationConsent(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief("");
             try { sessionStorage.removeItem("makeborne.creation-draft.v1"); } catch { /* Saved project takes precedence. */ } setInitialTitle(""); setDraftBrief("");
+            bindCreationHandoff({ requestId: creationRequestId, accountId: composerAccount.accountId, workspaceId, artifactId: artifact.id, kind: artifact.kind });
             openRoute({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId: artifact.id } }, directStart || homeHandoff);
             toast(generationStaged ? "Brief saved. Follow your website request in the workspace." : "Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
           }}
@@ -587,6 +618,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       className="studio-composer"
       aria-label="Start with a brief"
     >
+      {appliedHandoff && <AdvisorHandoffBanner handoff={appliedHandoff} format={draftKind} mode={creationMode} effort={creationEffort} onRemove={() => setAdvisorHandoff(null)} />}
       <div className="composer-format-tabs">
         {(["website", "book", "presentation"] as Kind[]).map(
           (k) => {
@@ -685,6 +717,24 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: "center" });
   }
+  // Ctrl/⌘+K: places and starting points. Starting only opens the composer; nothing is sent.
+  const go = (run: () => void) => () => { setMobileNav(false); run(); };
+  const startWith = (kind: Kind) => go(() => {
+    if (tab !== "projects" || accountRoute?.artifactId || selected) navigate("projects");
+    setDraftKind(kind);
+    requestAnimationFrame(() => { const input = document.getElementById("studio-brief"); input?.scrollIntoView({ block: "center" }); input?.focus({ preventScroll: true }); });
+  });
+  const paletteCommands: PaletteCommand[] = [
+    { id: "go-projects", group: "Go to", label: "Projects", keywords: ["library", "home"], run: go(() => navigate("projects")) },
+    { id: "go-clients", group: "Go to", label: "Clients", keywords: ["crm", "leads"], run: go(() => navigate("clients")) },
+    { id: "go-styles", group: "Go to", label: "Styles", keywords: ["brand", "palette"], run: go(() => navigate("styles")) },
+    { id: "go-settings", group: "Go to", label: "Settings", keywords: ["backup", "recovery"], run: go(() => navigate("settings")) },
+    { id: "go-chat", group: "Go to", label: "Expert chat", hint: "Advisors for positioning, copy, sales and more", keywords: ["advisor", "advice"], run: go(() => router.push("/chat")) },
+    { id: "go-billing", group: "Go to", label: unlimitedCredits ? "Unlimited credits" : "Plan & credits", keywords: ["billing", "top up"], run: go(() => router.push("/billing")) },
+    { id: "go-help", group: "Go to", label: "Help & guides", keywords: ["support", "docs"], run: go(() => router.push("/help")) },
+    ...(["website", "book", "presentation"] as Kind[]).map(kind => ({ id: `start-${kind}`, group: "Start" as const, label: `New ${kindLabel[kind].toLowerCase()}`, hint: "Opens the composer. Nothing is sent until you create it.", keywords: ["create", "new project"], run: startWith(kind) })),
+    ...workspace.projects.slice(0, 40).map(item => ({ id: `project-${item.id}`, group: "Projects" as const, label: item.title || "Untitled project", hint: `${kindLabel[item.kind]} on this device`, run: go(() => openRoute({ tab: "projects", projectId: item.id, clientId: null })) })),
+  ];
   return (
     <div className={`studio-shell ${projectOpen ? "is-project-open" : ""}`}>
       {!projectOpen && skipTargets.map(target => <a key={target.id} className="studio-skip-link" href={`#${target.id}`} onClick={event => skipTo(event, target.id)}>{target.label}</a>)}
@@ -702,6 +752,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         <Link className="button create-button" href="/">
           <Plus size={18} /> New project
         </Link>
+        <GlobalCommandPalette commands={paletteCommands} triggerClassName="gp-trigger" shortcut={tab !== "clients"} />
         <div className="nav-label">My workspace</div>
         <nav className="studio-nav" aria-label="Workspace">
           {[

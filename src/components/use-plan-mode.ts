@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AdvisorProvenance } from "@/lib/experts/advisor-brief";
 import type { EffortLevel } from "@/lib/routing/effort";
 import { estimatePlanCredits, parsePlan, recommendedEffort, StoredPlanSchema, type PlanEstimate, type SitePlan, type StoredPlan } from "@/lib/builder/plan";
 import { useBuilderOperation } from "./use-builder-operation";
@@ -227,7 +228,7 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
   }, [operation, recovery, recoverablePlan, recoverOperation, restoreRecorded, key]);
 
   /** Runs one planning call. Revises the active draft plan when there is one. */
-  const run = useCallback(async (input: { turnId: string; message: string; effort: EffortLevel; expectedVersion: number; attachments: PlanAttachment[]; revise: SitePlan | null; approvedMaximum: number }, on: PlanCallbacks) => {
+  const run = useCallback(async (input: { turnId: string; message: string; effort: EffortLevel; expectedVersion: number; attachments: PlanAttachment[]; revise: SitePlan | null; approvedMaximum: number; provenance?: AdvisorProvenance }, on: PlanCallbacks) => {
     let finished = false;
     const session = sessionRef.current;
     if (!session?.live || session.key !== key || session.running) return;
@@ -267,7 +268,7 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
       const response = await fetch("/api/build/plan", { method: "POST", headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
         body: serializeBuilderRequest({ workspaceId, artifactId, expectedVersion: input.expectedVersion, expectedRevision: session.revision, message: input.message, effort: input.effort, approvedMaximum: input.approvedMaximum,
           operation: requestOperation,
-          attachments: input.attachments, ...(input.revise ? { previousPlan: input.revise } : {}) }) });
+          attachments: input.attachments, ...(input.revise ? { previousPlan: input.revise } : {}), ...(input.provenance ? { provenance: input.provenance } : {}) }) });
       if (!isCurrent()) return;
       if (!response.ok || !response.body) {
         const failure = await response.json().catch(() => null);

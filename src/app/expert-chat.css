@@ -119,3 +119,56 @@
 .advisor-avatar-juno.is-initial{background:linear-gradient(140deg,#e6b54a,#c07a1f)}
 .advisor-avatar-theo.is-initial{background:linear-gradient(140deg,#47b38e,#1f7a63)}
 .advisor-avatar-sage.is-initial{background:linear-gradient(140deg,#8f7bd6,#5a4aa6)}
+/* Advisor brief and handoff (audit M14): read-only until Edit; Use this brief only opens a composer. */
+.advisor-brief-offer{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px 10px;margin:0 0 10px}
+.advisor-brief-offer button{display:inline-flex;align-items:center;gap:7px;min-height:36px;border:1px solid #ddd3ea;background:#fff;color:#4f3f66;border-radius:10px;padding:7px 12px;font:inherit;font-size:13px;font-weight:550;cursor:pointer}
+.advisor-brief-offer button:hover:not(:disabled){background:#f8f5fc}
+.advisor-brief-offer button:disabled{opacity:.55;cursor:default}
+.advisor-brief-offer span{font-size:12px;color:#857b91;text-align:center}
+.advisor-spin{animation:advisor-spin 1s linear infinite}
+@keyframes advisor-spin{to{transform:rotate(360deg)}}
+.advisor-brief{width:100%;max-width:650px;margin:0 auto;border:1px solid #e3dcec;border-radius:16px;background:#fcfbfe;padding:16px 18px;display:grid;gap:12px;overflow-wrap:anywhere}
+.advisor-brief-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;color:#5a4a72}
+.advisor-brief-head h2{margin:0;font-size:15px;font-weight:620;color:#2b2335}
+.advisor-brief-head span{font-size:12px;color:#8a8096;margin-left:auto}
+.advisor-brief-note{margin:0;font-size:12.5px;line-height:1.55;color:#6f6680}
+.advisor-brief-fields{margin:0;display:grid;gap:8px}
+.advisor-brief-fields>div{display:grid;grid-template-columns:128px minmax(0,1fr);gap:4px 14px;border-top:1px solid #eee9f3;padding-top:8px}
+.advisor-brief-fields dt{font-size:12px;font-weight:600;color:#6d6380}
+.advisor-brief-fields dd{margin:0;font-size:13.5px;line-height:1.6;color:#2e2938}
+.advisor-brief-fields ul{margin:0;padding-left:18px;list-style:disc}
+.advisor-brief-fields small{display:block;font-size:11.5px;color:#8a8096;margin-top:2px}
+.advisor-brief-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.advisor-brief-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;border-radius:10px;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.advisor-brief-secondary{border:1px solid #ddd3ea;background:#fff;color:#4f3f66}
+.advisor-brief-primary{border:1px solid #5b3f86;background:#5b3f86;color:#fff}
+.advisor-brief-actions button:disabled{opacity:.5;cursor:default}
+.advisor-brief-form,.advisor-handoff{display:grid;gap:10px}
+.advisor-brief-form label,.advisor-handoff label{display:grid;gap:4px;font-size:12px;font-weight:600;color:#5d5170}
+.advisor-brief-form small{font-weight:400;color:#8a8096}
+.advisor-brief-form input,.advisor-brief-form textarea,.advisor-brief-form select,.advisor-handoff select{width:100%;min-height:38px;border:1px solid #dcd4e6;border-radius:9px;background:#fff;padding:8px 10px;font:inherit;font-size:var(--type-input,15px);font-weight:400;color:#2e2938;line-height:1.5}
+.advisor-brief-form textarea{resize:vertical}
+.advisor-brief-sources{border:1px solid #e6e0ee;border-radius:10px;padding:8px 10px 10px;margin:0;display:grid;gap:8px;min-width:0}
+.advisor-brief-sources legend{font-size:12px;font-weight:600;color:#5d5170;padding:0 4px}
+.advisor-brief-sources ul{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.advisor-brief-sources li{display:inline-flex;align-items:center;gap:4px;max-width:100%;border:1px solid #ddd3ea;border-radius:999px;background:#fff;padding:2px 4px 2px 10px;font-size:12.5px;color:#43385a}
+.advisor-brief-sources li span{min-width:0;overflow-wrap:anywhere}
+.advisor-brief-sources li button{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:50%;background:transparent;color:#6d5a8a;cursor:pointer}
+.advisor-brief-sources p{margin:0;font-size:12.5px;color:#8a8096}
+.advisor-brief-add{display:flex;gap:6px}
+.advisor-brief-add input{flex:1;min-width:0}
+.advisor-brief-add button{min-height:38px;border:1px solid #ddd3ea;border-radius:9px;background:#fff;color:#4f3f66;padding:6px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.advisor-brief-error{margin:0;color:#8b3b33;font-size:12.5px}
+.advisor-handoff{border-top:1px solid #eee9f3;padding-top:12px}
+.advisor-handoff-mode{display:inline-flex;justify-self:start;padding:3px;border:1px solid #e8e4ee;border-radius:10px;background:#faf9fc}
+.advisor-handoff-mode button{min-height:34px;border:0;background:transparent;color:#6d6380;font:inherit;font-size:13px;font-weight:600;padding:6px 14px;border-radius:7px;cursor:pointer}
+.advisor-handoff-mode button[aria-checked="true"]{background:#fff;color:#3c2f4d;box-shadow:0 1px 3px #2a1d3a14}
+.advisor-handoff-mode button:disabled{opacity:.45;cursor:default}
+.advisor-handoff-note,.advisor-handoff-fixed{margin:0;font-size:12.5px;color:#7a7088}
+.advisor-handoff-summary{margin:0;font-size:13px;line-height:1.55;color:#3c3248;background:#f5f1fa;border-radius:10px;padding:9px 12px}
+@media(max-width:600px){.advisor-brief{padding:14px}.advisor-brief-fields>div{grid-template-columns:minmax(0,1fr)}.advisor-brief-head span{margin-left:0;width:100%}.advisor-brief-form input,.advisor-brief-form textarea,.advisor-brief-form select,.advisor-handoff select{font-size:var(--type-input-touch,16px)}.advisor-brief-actions{justify-content:stretch}.advisor-brief-actions button{flex:1 1 140px}}
+@media(prefers-reduced-motion:reduce){.advisor-spin{animation:none}}
+/* Controls scrolled to by keyboard stay clear of the sticky composer below them. */
+.advisor-brief :is(button,input,select,textarea){scroll-margin-bottom:240px}
+.advisor-palette-trigger{width:auto;margin:-10px 10px 0}
+@media(max-width:600px){.advisor-palette-trigger{display:none}}
