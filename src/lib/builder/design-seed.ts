@@ -93,19 +93,21 @@ const GROUND_NOTES: Record<Ground, string> = {
   "warm light": "a warm tinted light ground, but not the default cream: push it toward stone, blush, butter or sand",
   "photographic": "the image is the ground of the first screen",
 };
+/** Grounds: a blind review read dark grounds with a gold or neon accent as a premium-template trope
+ * (4 of 6 round-1 sites went dark), so dark is suggested mainly where the subject is dark. */
 const GROUNDS: Record<Industry, Weighted<Ground>> = {
-  food: [["photographic", 3], ["dark", 2], ["colour flood", 2], ["mid-tone", 2], ["warm light", 1]],
-  saas: [["cool light", 3], ["dark", 3], ["colour flood", 1], ["mid-tone", 1]],
-  professional: [["cool light", 2], ["dark", 2], ["mid-tone", 2], ["warm light", 1]],
-  creator: [["colour flood", 3], ["dark", 2], ["cool light", 2], ["mid-tone", 1]],
-  commerce: [["colour flood", 3], ["mid-tone", 2], ["photographic", 2], ["cool light", 1]],
+  food: [["photographic", 3], ["colour flood", 2], ["mid-tone", 2], ["warm light", 2], ["dark", 1]],
+  saas: [["cool light", 4], ["colour flood", 1], ["mid-tone", 1], ["dark", 1]],
+  professional: [["cool light", 3], ["warm light", 2], ["mid-tone", 2], ["dark", 1]],
+  creator: [["colour flood", 3], ["cool light", 2], ["mid-tone", 2], ["dark", 1]],
+  commerce: [["colour flood", 3], ["mid-tone", 2], ["photographic", 2], ["cool light", 2]],
   wellness: [["mid-tone", 3], ["photographic", 2], ["cool light", 2], ["warm light", 1]],
-  trades: [["dark", 3], ["colour flood", 2], ["cool light", 2], ["photographic", 1]],
-  property: [["photographic", 3], ["mid-tone", 2], ["cool light", 2], ["dark", 1]],
+  trades: [["cool light", 3], ["colour flood", 2], ["mid-tone", 1], ["dark", 1], ["photographic", 1]],
+  property: [["photographic", 3], ["mid-tone", 2], ["cool light", 2], ["warm light", 1]],
   events: [["dark", 3], ["colour flood", 3], ["photographic", 1]],
-  weddings: [["photographic", 3], ["warm light", 2], ["mid-tone", 2], ["cool light", 2], ["dark", 1]],
+  weddings: [["photographic", 3], ["warm light", 2], ["mid-tone", 2], ["cool light", 2]],
   civic: [["colour flood", 2], ["cool light", 2], ["mid-tone", 2], ["photographic", 1]],
-  general: [["cool light", 2], ["mid-tone", 2], ["dark", 2], ["colour flood", 1]],
+  general: [["cool light", 2], ["mid-tone", 2], ["colour flood", 1], ["dark", 1]],
 };
 
 const HEADLINE_DEVICES = [
