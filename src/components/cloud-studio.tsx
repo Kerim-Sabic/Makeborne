@@ -13,6 +13,8 @@ import { takeReviewPrefill } from "@/lib/client-review/prefill";
 import WebsiteGithub from "./website-github";
 import WebsiteSourceDownload from "./website-source-download";
 import VersionCompare from "./version-compare";
+import { CheckpointControl, useVersionCheckpoints } from "./version-checkpoints";
+import { placeCheckpoints } from "@/lib/cloud/version-checkpoints";
 import WebsiteDomains from "./website-domains";
 import WebsiteAnalytics from "./website-analytics";
 import WebsiteSeo from "./website-seo";
@@ -1188,6 +1190,13 @@ export function CloudEditor({
   const [removedBlock, setRemovedBlock] = useState<RemovedAccountBlock | null>(null);
   const [inspectedVersion, setInspectedVersion] = useState<ArtifactVersion | null>(null);
   const [comparing, setComparing] = useState<{ from: number; to: number } | null>(null);
+  // Personal checkpoints (labels only) and a request to open a file at a line in Code (audit M11).
+  const checkpoints = useVersionCheckpoints({ accountId, workspaceId, artifactId: artifact.id });
+  const [checkpointsOnly, setCheckpointsOnly] = useState(false);
+  const filteringCheckpoints = checkpointsOnly && checkpoints.list.length > 0;
+  const [sourceReveal, setSourceReveal] = useState<{ path: string; line: number; key: string } | null>(null);
+  // A comparison opens Code at a line once; reopening Code later starts from the usual file.
+  useEffect(() => { if (view !== "edit" && sourceReveal) queueMicrotask(() => setSourceReveal(null)); }, [view, sourceReveal]);
   const [style, setStyle] = useState<StyleProfile | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(
     artifact.currentVersion,
@@ -1792,7 +1801,7 @@ export function CloudEditor({
           capture={content.websiteSource ? () => captureProjectSnapshot(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id }) : undefined}
           onSendToBuilder={role === "reviewer" ? undefined : text => { setBuilderPrefill({ key: crypto.randomUUID(), text }); if (useLiveBuilder) setView("preview"); }} /></div>}
         <div className="cloud-workbench-edit" hidden={view !== "edit"}>
-        {content.websiteSource ? (view === "edit" && <WebsiteSourceEditor source={content.websiteSource} readOnly={role === "reviewer" || uncertainSave || conflict || !!recovery || lockChangePending} onChange={(next, summary) => {
+        {content.websiteSource ? (view === "edit" && <WebsiteSourceEditor source={content.websiteSource} subject={{ artifactId: artifact.id, version: expectedVersion, dirty }} reveal={sourceReveal} readOnly={role === "reviewer" || uncertainSave || conflict || !!recovery || lockChangePending} onChange={(next, summary) => {
           if (role === "reviewer" || uncertainSave || conflict || recovery || lockChangePending) return;
           editRevision.current++; setContent({...content, websiteSource: next}); setDirty(true); setNote(summary);
         }} />) : <div className="cloud-edit-grid account-visual-editor">
@@ -1887,12 +1896,29 @@ export function CloudEditor({
             </div>
             {artifact.kind === "website" && liveVersion === "offline" && <p className="small-note cloud-history-live" role="status">Not live: no version of this website is published.</p>}
             {artifact.kind === "website" && liveVersion === "error" && <p className="small-note cloud-history-live" role="status">Couldn&apos;t check which version is live. Open Publish to see its status.</p>}
-            {comparing && <VersionCompare key={`${comparing.from}:${comparing.to}`} versions={versions} from={comparing.from} to={comparing.to} onClose={() => setComparing(null)} />}
+            {comparing && <VersionCompare key={`${comparing.from}:${comparing.to}`} versions={versions} from={comparing.from} to={comparing.to} onClose={() => setComparing(null)}
+              labels={Object.fromEntries(checkpoints.list.filter(item => versions.some(version => version.id === item.versionId)).map(item => [item.versionNumber, item.name]))}
+              currentVersion={expectedVersion} dirty={dirty}
+              onOpenInCode={content.websiteSource ? (path, line) => { setSourceReveal({ path, line, key: crypto.randomUUID() }); setView("edit"); } : undefined}
+              onPreview={number => { const target = versions.find(version => version.number === number); if (target) { setInspectedVersion(target); requestAnimationFrame(() => document.querySelector(".account-version-review")?.scrollIntoView({ block: "nearest" })); } }} />}
+            {checkpoints.list.length > 0 && <div className="cloud-history-filter">
+              <button type="button" className="button secondary small" aria-pressed={filteringCheckpoints} onClick={() => setCheckpointsOnly(!filteringCheckpoints)}>Checkpoints only ({checkpoints.list.length})</button>
+              {filteringCheckpoints && <span className="small-note" role="status">Showing checkpoints among the {versions.length} loaded {versions.length === 1 ? "version" : "versions"}.</span>}
+            </div>}
+            {filteringCheckpoints && (() => {
+              const away = placeCheckpoints(checkpoints.list, versions, nextOffset !== null).filter(place => place.state !== "loaded");
+              return away.length > 0 && <ul className="cloud-checkpoint-orphans">{away.map(place => <li key={place.checkpoint.versionId}>
+                “{place.checkpoint.name}” (version {place.checkpoint.versionNumber}) {place.state === "not-loaded" ? "is in an earlier page of History. Load earlier versions to see it." : "isn’t in this project’s history any more. Its label is kept until you remove it."}
+                {place.state === "missing" && <> <button type="button" className="button secondary small" onClick={() => checkpoints.remove(place.checkpoint.versionId)}>Remove label</button></>}
+              </li>)}</ul>;
+            })()}
+            {!checkpoints.available && <p className="small-note">Checkpoints need browser storage, which isn&apos;t available here.</p>}
             {versions.length === 0 ? (
               <p>No saved versions yet.</p>
             ) : (
               [...versions]
                 .sort((a, b) => b.number - a.number)
+                .filter(v => !filteringCheckpoints || checkpoints.list.some(item => item.versionId === v.id))
                 .map((v) => (
                   <div className="cloud-version" key={v.id}>
                     <strong>Version {v.number}{v.number === liveVersion && <span className="cloud-version-live">Live</span>}{artifact.kind === "website" && v.number === checkRecord?.version && <span className="cloud-version-checked" title="The latest check in this tab ran on this version">Checked</span>}{v.number === expectedVersion && <span className="cloud-version-current">Current</span>}</strong>
@@ -1900,6 +1926,7 @@ export function CloudEditor({
                     <small>{new Date(v.createdAt).toLocaleString()}</small>
                     <button type="button" className="button secondary small" aria-expanded={inspectedVersion?.id === v.id} onClick={() => setInspectedVersion(inspectedVersion?.id === v.id ? null : v)}> {inspectedVersion?.id === v.id ? "Close preview" : `Preview version ${v.number}`}</button>
                     {v.number < Math.max(...versions.map(version => version.number)) && <button type="button" className="button secondary small" onClick={() => setComparing({ from: v.number, to: Math.max(...versions.map(version => version.number)) })}>Compare with latest</button>}
+                    <CheckpointControl version={v} checkpoint={checkpoints.list.find(item => item.versionId === v.id)} onSave={(name, note) => checkpoints.save(v, name, note)} onRemove={() => checkpoints.remove(v.id)} />
                   </div>
                 ))
             )}

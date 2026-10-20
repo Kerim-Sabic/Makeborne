@@ -15,7 +15,7 @@ export type UnitChange = {
 };
 export type VersionComparison = { changes: UnitChange[]; unchanged: number; added: number; removed: number };
 
-type Unit = { key: string; label: string; group: string; text: string };
+export type Unit = { key: string; label: string; group: string; text: string };
 
 const MAX_LINES = 12_000;
 const MAX_EDITS = 3_000;
@@ -111,6 +111,9 @@ const titleOf = (value: unknown) => {
   for (const key of ["title", "heading", "name"]) if (typeof record?.[key] === "string" && record[key]) return String(record[key]).slice(0, 80);
   return "";
 };
+
+/** The named text units a version is compared by (also used by the readable summary). */
+export function contentUnits(content: ArtifactContent): Unit[] { return units(content); }
 
 function units(content: ArtifactContent): Unit[] {
   const list: Unit[] = [{ key: "meta:title", label: "Title", group: "Project", text: content.title }];
