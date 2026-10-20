@@ -17,7 +17,7 @@ export async function loadUsageHistory(user: User, params: { usage?: unknown; us
     const client = await createClient();
     const { data: claims, error: claimsError } = await client.auth.getClaims();
     if (claimsError || claims?.claims?.sub !== user.id) return { ...unavailableBilling, entries: [] };
-    const { data, error } = await client.rpc("makeborne_usage_history", {
+    const { data, error } = await client.rpc("makeborne_usage_history_v2", {
       p_period_start: period.start, p_period_end: period.end,
       p_before_at: cursor?.at ?? null, p_before_id: cursor?.id ?? null, p_limit: USAGE_PAGE_SIZE,
     });

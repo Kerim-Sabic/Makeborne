@@ -12,6 +12,13 @@ export const BillingEntrySchema = z.object({
   /** Reserved, Charged and Released describe one credit hold; Refunded, Withheld and Restored are their own events. */
   status: z.enum(["Reserved", "Charged", "Released", "Refunded", "Withheld", "Restored"]),
   credits: ExactAmountSchema,
+  workspaceId: z.string().uuid().optional(),
+  artifactId: z.string().uuid().optional(),
+  operationId: z.string().uuid().optional(),
+  operationCharged: ExactAmountSchema.optional(),
+  operationReserved: ExactAmountSchema.optional(),
+  mode: z.enum(["Create", "Plan", "Review", "Continue", "Brief", "Research", "Account"]).optional(),
+  funding: z.object({ plan: ExactAmountSchema, paid: ExactAmountSchema, other: ExactAmountSchema }).strict().optional(),
 }).strict();
 
 /**
@@ -92,6 +99,6 @@ export function billingStatement(input: unknown, category: string, query: string
     history: { complete: coverage.complete, total: coverage.total, from: coverage.from, to: coverage.to },
     usedInPeriod: summary.used,
     filters: { category, query: query.trim() },
-    entries: filterBillingEntries(summary.entries, category, query).map(entry => ({ id: entry.id, occurredAt: entry.occurredAt, project: entry.project, action: entry.action, category: entry.category, status: entry.status, credits: entry.credits })),
+    entries: filterBillingEntries(summary.entries, category, query).map(entry => Object.fromEntries(Object.entries(entry).filter(([key]) => key !== "model"))),
   }, null, 2);
 }

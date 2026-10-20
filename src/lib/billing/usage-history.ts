@@ -79,7 +79,11 @@ const RowSchema = z.object({
   lapsed: ExactAmountSchema.optional(),
   reason: text(500).optional(),
   paymentKind: z.enum(["payment", "credit_pack"]).optional(),
-}).strict();
+  workspaceId: z.string().uuid().optional(), artifactId: z.string().uuid().optional(),
+  operationId: z.string().uuid().optional(), operationCharged: ExactAmountSchema.optional(), operationReserved: ExactAmountSchema.optional(),
+  funding: z.object({ plan: ExactAmountSchema, paid: ExactAmountSchema, other: ExactAmountSchema }).strict().optional(),
+}).strict().refine(row => !row.funding || ((row.status === "Reserved" || row.status === "Charged")
+  && BigInt(row.funding.plan) + BigInt(row.funding.paid) + BigInt(row.funding.other) === BigInt(row.credits)), "Funding must reconcile with this step.");
 
 const ResultSchema = z.object({
   unit: z.literal("whole_customer_credits"),
@@ -124,21 +128,27 @@ function holdDetail(row: UsageRow): string {
 
 /** One database row as a customer-safe entry. Unknown activity stays visible as such. */
 export function usageEntry(row: UsageRow): BillingEntry {
-  const base = { id: row.id, occurredAt: row.occurredAt, status: row.status, credits: row.credits };
+  const base = { id: row.id, occurredAt: row.occurredAt, status: row.status, credits: row.credits,
+    ...(row.workspaceId && row.artifactId && row.projectState === "visible" ? { workspaceId: row.workspaceId, artifactId: row.artifactId } : {}),
+    ...(row.operationId ? { operationId: row.operationId, operationCharged: row.operationCharged, operationReserved: row.operationReserved } : {}),
+    ...(row.funding ? { funding: row.funding } : {}),
+  };
   switch (row.source) {
     case "operation": {
       const step = row.runKind ? STEPS[row.runKind] : row.operationKind ? STEPS[row.operationKind] : null;
       const action = row.format && step ? `${FORMATS[row.format]} ${step}` : step ? `Project ${step}` : "Project step";
       const project = row.projectState === "visible" && row.projectTitle ? row.projectTitle : PROJECT[row.projectState === "hidden" ? "hidden" : "deleted"];
-      return { ...base, project, action: action + holdDetail(row), category: "Creation" };
+      const stepKind = row.runKind ?? row.operationKind;
+      const mode = stepKind ? ({build:"Create",continuation:"Continue",review:"Review",plan:"Plan"} as const)[stepKind] : undefined;
+      return { ...base, project, mode, action: action + holdDetail(row), category: "Creation" };
     }
-    case "brief_questions": return { ...base, project: "No project yet", action: "Briefing questions" + holdDetail(row), category: "Creation" };
-    case "chat": return { ...base, project: "No project", action: "Expert chat" + holdDetail(row), category: "Research" };
-    case "personalize": return { ...base, project: "Client CRM", action: "Personalized follow-up draft" + holdDetail(row), category: "Creation" };
-    case "followup": return { ...base, project: "Client CRM", action: "Follow-up draft" + holdDetail(row), category: "Creation" };
-    case "lead_find": return { ...base, project: "Client CRM", action: "Lead finder" + holdDetail(row), category: "Research" };
-    case "unknown": return { ...base, project: "Unrecognized activity", action: "Credit hold without a recorded feature" + holdDetail(row), category: "Account" };
-    case "refund": return { ...base, project: "Account", action: "Credits refunded", category: "Account" };
+    case "brief_questions": return { ...base, mode: "Brief", project: "No project yet", action: "Briefing questions" + holdDetail(row), category: "Creation" };
+    case "chat": return { ...base, mode: "Research", project: "No project", action: "Expert chat" + holdDetail(row), category: "Research" };
+    case "personalize": return { ...base, mode: "Create", project: "Client CRM", action: "Personalized follow-up draft" + holdDetail(row), category: "Creation" };
+    case "followup": return { ...base, mode: "Create", project: "Client CRM", action: "Follow-up draft" + holdDetail(row), category: "Creation" };
+    case "lead_find": return { ...base, mode: "Research", project: "Client CRM", action: "Lead finder" + holdDetail(row), category: "Research" };
+    case "unknown": return { ...base, mode: "Account", project: "Unrecognized activity", action: "Credit hold without a recorded feature" + holdDetail(row), category: "Account" };
+    case "refund": return { ...base, mode: "Account", project: "Account", action: "Credits refunded", category: "Account" };
     case "payment": {
       const action = row.status === "Restored" ? (row.paymentKind === "credit_pack" ? "Credit pack review resolved: credits returned" : "Payment review resolved: credits returned")
         : (row.reason && WITHHELD[row.reason]) ?? "Payment under review: unused credits on hold";

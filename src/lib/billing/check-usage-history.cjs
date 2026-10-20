@@ -160,7 +160,7 @@ function loadWorkspace() {
   const stub = () => null;
   const modules = {
     "next/link": { default: ({ children, ...props }) => React.createElement("a", props, children) },
-    "./brand-mark": { default: stub }, "./billing-plans": { default: stub }, "./billing-topup-return": { default: stub }, "./billing-autotopup": { default: stub },
+    "./billing-controls": { default: stub }, "./billing-subscriptions": { default: stub }, "./brand-mark": { default: stub }, "./billing-plans": { default: stub }, "./billing-topup-return": { default: stub }, "./billing-autotopup": { default: stub },
     "./billing-credit-costs": { default: stub }, "./credit-balance": { default: stub, creditExpiryLabel: () => "" },
     "./billing-amount": require("../../components/billing-amount.ts"), "@/lib/billing/view": view, "@/lib/billing/usage-history": usage,
   };
@@ -211,7 +211,7 @@ check("server read uses the signed-in session and passes no account id", () => {
   assert.match(server, /await createClient\(\)/);
   assert.match(server, /claims\?\.claims\?\.sub !== user\.id/);
   assert.doesNotMatch(server, /billingDatabase|p_user|SUPABASE_SECRET_KEY/);
-  assert.match(server, /rpc\("makeborne_usage_history", \{\s*p_period_start/);
+  assert.match(server, /rpc\("makeborne_usage_history_v2", \{\s*p_period_start/);
 });
 check("migration is read-only, caller-scoped and granted to authenticated only", () => {
   const sql = read("supabase/migrations/20261020110000_usage_history_read.sql").replace(/^\s*--.*$/gm, "");

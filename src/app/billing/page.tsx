@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { publicPageMetadata } from "@/lib/site-metadata";
+import { subscriptionSummaries } from "@/lib/billing/subscription-summary";
 import BillingWorkspace from "@/components/billing-workspace";
 import { getAccountPrivileges } from "@/lib/account/privileges";
 import { billingUser } from "@/lib/billing/access";
@@ -21,10 +22,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const [params, accountPrivileges, freeTier, user] = await Promise.all([searchParams, getAccountPrivileges(), getFreeTierOffer(), billingUser()]);
   // Itemized usage for one UTC month (?usage=YYYY-MM), one page at a time (?usageBefore=cursor),
   // read as the signed-in user's own session. The live balance also loads client-side from /api/credits.
-  const [refundedPeriod, summary, showAutotopup] = user
-    ? await Promise.all([accountRefundedPeriod(user.id), loadUsageHistory(user, { usage: params.usage, usageBefore: params.usageBefore }), autotopupPanelVisible(user.id)])
-    : [null, unavailableBilling, false] as const;
-  return <BillingWorkspace topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
+  const [refundedPeriod, summary, showAutotopup, subscriptions] = user
+    ? await Promise.all([accountRefundedPeriod(user.id), loadUsageHistory(user, { usage: params.usage, usageBefore: params.usageBefore }), autotopupPanelVisible(user.id), subscriptionSummaries(user.id)])
+    : [null, unavailableBilling, false, null] as const;
+  return <BillingWorkspace subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
 }
 
 /** The current billing period when its payment was refunded or charged back (creation paused). Unknown shows nothing. */

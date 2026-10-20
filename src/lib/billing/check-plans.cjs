@@ -77,6 +77,8 @@ const BillingWorkspace = loadComponent("billing-workspace", {
   "./billing-credit-costs": {default: BillingCreditCosts},
   "./brand-mark": {default: () => null},
   "./billing-plans": {default: CreationPlans},
+  "./billing-controls": {default: () => null},
+  "./billing-subscriptions": {default: () => null},
   // The live return component is exercised separately in the browser harness.
   "./billing-topup-return": {default: ({orderId}) => React.createElement("div", {"data-topup-order": orderId})},
   // Automatic top-up setup renders only behind its qualification flag (check-autotopup.cjs).

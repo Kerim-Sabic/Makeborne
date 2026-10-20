@@ -74,6 +74,7 @@
 .lb-composer:focus-within { border-color:#a68ab8; box-shadow:0 0 0 3px #7c6cf040; }
 .lb-composer textarea { width:100%; min-height:52px; max-height:160px; margin:0 0 6px; padding:0 2px; border:0; outline:none; resize:none; background:transparent; font:inherit; font-size:var(--type-input); line-height:22px; color:#3d3448; box-shadow:none; }
 .lb-controls { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.lb-credit-warning { flex-basis:100%; margin:4px 0 0; padding:9px 11px; border:1px solid #e2d6b6; border-radius:9px; background:#fcf9f0; color:#655022; font-size:12px; line-height:1.5; }
 .lb-attach { display:grid; place-items:center; width:30px; height:30px; border-radius:8px; color:var(--text-muted); cursor:pointer; }
 .lb-attach:hover { background:#f4f1f7; }
 .lb-attach input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }

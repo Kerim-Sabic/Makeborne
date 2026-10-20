@@ -1,0 +1,11 @@
+import type { SubscriptionSummary } from "@/lib/billing/subscription-summary";
+import { usd } from "@/lib/billing/plans";
+const date=(s:string)=>new Date(s).toLocaleString("en-US",{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"})+" UTC";
+export default function BillingSubscriptions({items}:{items:SubscriptionSummary[]|null}){
+ return <section id="receipts" className="billing-control-section" aria-labelledby="subscription-heading"><h2 id="subscription-heading">Subscription &amp; receipts.</h2>
+  {items===null?<p role="status">Subscription details could not be loaded. Check your Whop account or confirmation email.</p>:items.length===0?<p>No creation subscription is recorded for this account.</p>:items.map((s,i)=><div className="billing-subscription-row" key={i}><h3>{s.name} · {s.interval}</h3><p>Status: {s.status}. Standard price: {usd(s.standardPriceCents)} per {s.interval==="yearly"?"year":"month"}, before tax.</p>{s.periodEnd&&<p>{s.status==="canceling"?"Recorded access ends":"Recorded billing period ends"}: {date(s.periodEnd)}.</p>}<small>Last checked {date(s.checkedAt)}. This is a stored observation, not a live invoice. Confirm your next charge, discounts, tax and any scheduled changes in Whop.</small></div>)}
+  <div className="billing-control-actions"><a href="https://whop.com/" target="_blank" rel="noopener noreferrer">Open Whop for receipts</a><a href="mailto:admin@makeborne.com?subject=Cancel%20my%20Makeborne%20subscription">Cancel subscription</a><a href="mailto:admin@makeborne.com?subject=Change%20my%20Makeborne%20plan">Request a plan change</a></div>
+  <p>Cancellation opens a support request; it does not cancel a subscription automatically. You can also manage it through your Whop confirmation email. Cancelling future renewal does not request a refund. Refund requests go through support and are reviewed against the unused-credit rule and applicable requirements.</p>
+  <p>Monthly included credits are released each billing month, including on annual plans. They expire two months after that allocation month ends. Non-expiring credits are used after expiring plan credits; your balance shows the next expiry. Unused holds return to their original funding lots and expiry.</p>
+ </section>;
+}
