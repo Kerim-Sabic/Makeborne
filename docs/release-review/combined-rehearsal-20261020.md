@@ -1,5 +1,7 @@
 # Combined application rehearsal — 20 October 2026
 
+**Later follow-up:** the extra golden-site editor check found and fixed a preview/publication font/artwork mismatch. See [the current parity qualification and remaining gates](combined-preview-parity-20261020.md). The identities and results below remain the original rehearsal checkpoint.
+
 ## Decision
 
 The combined candidate passes the staging journeys described below. **It is not yet cleared for the full paid launch.** Actual forthcoming Whop renewal delivery, live billing activation, production publishing authentication, AI images and native Office review remain separate gates. Production is unchanged; do not merge or activate from this report alone.

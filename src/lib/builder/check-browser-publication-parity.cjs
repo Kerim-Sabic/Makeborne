@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Real local browser/compiler regression; no provider or cloud calls. */
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{createServer}=require('node:http'),{build}=require('esbuild'),{chromium}=require('playwright'),sharp=require('sharp');
+const {execFileSync}=require('node:child_process');
 const root=path.resolve(__dirname,'../../..');
 (async()=>{
+ // CI intentionally runs checks before next build. Prepare the same locked,
+ // self-hosted runtime as prebuild instead of depending on a warm checkout.
+ execFileSync(process.execPath,[path.join(root,'scripts/prepare-builder-runtime.mjs')],{cwd:root,encoding:'utf8',timeout:120000});
  const image='data:image/png;base64,'+(await sharp({create:{width:32,height:32,channels:4,background:'#d55a30'}}).png().toBuffer()).toString('base64');
  const built=await build({stdin:{contents:"import {bundleProject} from './src/lib/builder/browser-bundler';window.qualifyBundle=bundleProject;",resolveDir:root,loader:'js'},bundle:true,write:false,platform:'browser',format:'iife',define:{'process.env.NODE_ENV':'"production"'}});
  let external=0;const server=createServer((req,res)=>{const url=new URL(req.url,'http://localhost');
