@@ -57,13 +57,18 @@ check("open drawer makes the page behind it inert and closes on Escape and widen
 
 const { studioSkipTargets } = load("src/lib/studio-skip-links.ts");
 check("skip links follow the visible task", () => {
-  assert.deepEqual(studioSkipTargets({ loaded: true, tab: "projects", composerVisible: true }).map(target => target.id).join(), "studio-brief,studio-library");
+  assert.deepEqual(studioSkipTargets({ loaded: true, tab: "projects", composerVisible: true, library: "first" }).map(target => target.id).join(), "studio-library,studio-brief", "returning users reach their projects first");
+  assert.deepEqual(studioSkipTargets({ loaded: true, tab: "projects", composerVisible: true, library: "none" }).map(target => target.id).join(), "studio-brief", "no link to a library toolbar that is not shown");
+  assert.deepEqual(studioSkipTargets({ loaded: true, tab: "projects", composerVisible: true }).map(target => target.id).join(), "studio-brief");
   assert.deepEqual(studioSkipTargets({ loaded: true, tab: "clients", composerVisible: false }).map(target => target.id).join(), "studio-content");
   assert.deepEqual(studioSkipTargets({ loaded: false, tab: "projects", composerVisible: true }).map(target => target.id).join(), "studio-content", "no link to a composer that is not mounted yet");
 });
 check("every skip target exists, can take focus, and the shell has one main", () => {
   assert.match(studio, /<textarea\n\s+id="studio-brief"/);
   assert.match(studio, /<div className="list-toolbar" id="studio-library" tabIndex=\{-1\}>/);
+  // The library skip link is offered exactly when its toolbar is mounted.
+  assert.match(studio, /\{libraryFirst && <div className="list-toolbar" id="studio-library" tabIndex=\{-1\}>/);
+  assert.match(studio, /library: libraryFirst \? "first" : "none"/);
   const shell = studio.slice(studio.indexOf("export default function Studio("), studio.indexOf("\nfunction Empty("));
   const mains = shell.match(/<main\b[^>]*>/g) ?? [];
   assert.equal(mains.length, 2, "loading state and loaded tab content are alternatives, never both");

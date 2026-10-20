@@ -13,6 +13,7 @@ import type { ProjectFiles } from "./files";
 import { compileVerdict } from "./compile";
 import { aiCostUsdPerCredit } from "./pricing";
 import { finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
+import { builtTitle } from "../projects/project-title";
 
 export type WebsiteBuildInput = {
   client: SupabaseClient;
@@ -25,6 +26,8 @@ export type WebsiteBuildInput = {
   files: ProjectFiles;
   /** Review rounds look at screenshots and fix visual problems. */
   reviewing: boolean;
+  /** The saved project brief. The builder's site name may replace only a placeholder or the title derived from it; a chosen title is kept. */
+  projectBrief?: string;
   message: string;
   effort: EffortLevel;
   request: string;
@@ -119,7 +122,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         if (input.operation) {
           const summary = result.summary || (result.finished ? "Updated the website." : "Saved the progress made so far.");
           emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished, build }, {
-            content: { schemaVersion: 1, kind: "website", title: ((reviewing ? "" : result.title) || current.content.title).slice(0, 200), sections: [], websiteSource: source },
+            content: { schemaVersion: 1, kind: "website", title: builtTitle(current.content.title, reviewing ? "" : result.title, input.projectBrief ?? "", "website").slice(0, 200), sections: [], websiteSource: source },
             style: current.style, assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])],
             summary: `${reviewing ? "Design review" : input.message.slice(0, 600)} → ${summary}`.slice(0, 2000), expectedVersion: artifact.current_version,
           })));
@@ -135,7 +138,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         const summary = result.summary || (result.finished ? "Updated the website." : "Saved the progress made so far.");
         const saved = await client.rpc("makeborne_save_artifact_version", {
           p_workspace_id: input.workspaceId, p_artifact_id: artifact.id, p_expected_version: artifact.current_version,
-          p_content: { schemaVersion: 1, kind: "website", title: ((reviewing ? "" : result.title) || current.content.title).slice(0, 200), sections: [], websiteSource: source },
+          p_content: { schemaVersion: 1, kind: "website", title: builtTitle(current.content.title, reviewing ? "" : result.title, input.projectBrief ?? "", "website").slice(0, 200), sections: [], websiteSource: source },
           p_style: current.style, p_asset_ids: assetIds,
           p_change_summary: `${reviewing ? "Design review" : input.message.slice(0, 600)} → ${summary}`.slice(0, 2000), p_request_key: hold.reference,
         });

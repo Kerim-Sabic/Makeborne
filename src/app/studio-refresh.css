@@ -2733,6 +2733,7 @@
 .account-projects-error p, .account-projects-failed p { margin: 0; flex: 1 1 240px; font-size: 13px; line-height: 1.6; }
 .account-projects-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .account-projects-heading h2 { font-size: 20px; letter-spacing: -.5px; margin: 6px 0 0; }
+.account-projects-search > p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: #5f6578; overflow-wrap: anywhere; }
 .account-project-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
 .account-project-card { display: flex; align-items: center; gap: 14px; text-align: left; min-width: 0; padding: 18px; background: #fff; border: 1px solid #e7e7ef; border-radius: 14px; cursor: pointer; transition: border-color .2s,box-shadow .2s; }
 .account-project-card:hover { border-color: #bcb8e0; box-shadow: 0 5px 18px #67579c0c; }
