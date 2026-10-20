@@ -1463,3 +1463,6 @@ Remote PR9/10/11 GitHub and preview checks were all green before this test/opera
 ### Combined rehearsal resolution
 Both handoff histories retained. Application files merged automatically; review src/lib/billing/check-plans.cjs auto-merge before combined gates. No source behaviour was manually discarded. Production remains held.
 
+
+### Combined rehearsal: exact migration bytes
+The staging preflight correctly refused ACL-repair and Stop-compatibility raw hashes after Windows checkout converted LF to CRLF. Compared both files against the qualified checkout: normalized SQL text is identical. Restored the qualified LF bytes and pinned those two paths with eol=lf in .gitattributes; no SQL tokens or existing staging migration history changed. The strict raw-hash preflight now passes. Production remains untouched.

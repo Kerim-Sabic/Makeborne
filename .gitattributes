@@ -1,3 +1,6 @@
 # This generated trust manifest is verified byte-for-byte during prebuild.
 # Preserve its canonical serialization in Windows checkouts and Git archives.
 infra/project-runtime/font-licenses.json text eol=lf
+# Preserve the exact LF bytes already applied and hashed on staging.
+supabase/migrations/20261020144714_artifact_title_search_acl.sql text eol=lf
+supabase/migrations/20261020183417_ai_operation_cancel_compatibility.sql text eol=lf
