@@ -8,24 +8,25 @@ if (publicSupabaseKey && !publicSupabaseKey.startsWith("sb_publishable_")) {
   );
 }
 
-/** Latin WOFF2 files for every face in DOCUMENT_FACES (checked by src/lib/documents/check-design-quality.cjs). */
+/** Latin and complementary latin-ext WOFF2 files for every face in DOCUMENT_FACES
+ * (checked by src/lib/documents/check-design-quality.cjs). SUBSET is expanded below. */
 const DOCUMENT_FONT_FILES = [
-  "@fontsource-variable/fraunces/files/fraunces-latin-opsz-*.woff2",
-  "@fontsource/instrument-serif/files/instrument-serif-latin-400-*.woff2",
-  "@fontsource-variable/playfair-display/files/playfair-display-latin-wght-*.woff2",
-  "@fontsource-variable/newsreader/files/newsreader-latin-wght-*.woff2",
-  "@fontsource-variable/cormorant/files/cormorant-latin-wght-*.woff2",
-  "@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-*.woff2",
-  "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-opsz-*.woff2",
-  "@fontsource-variable/sora/files/sora-latin-wght-*.woff2",
-  "@fontsource-variable/geist/files/geist-latin-wght-*.woff2",
-  "@fontsource-variable/inter/files/inter-latin-opsz-*.woff2",
-  "@fontsource-variable/dm-sans/files/dm-sans-latin-wght-*.woff2",
-  "@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-*.woff2",
-  "@fontsource-variable/outfit/files/outfit-latin-wght-*.woff2",
-  "@fontsource-variable/archivo/files/archivo-latin-wdth-*.woff2",
-  "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-*.woff2",
-].map((file) => `./node_modules/${file}`);
+  "@fontsource-variable/fraunces/files/fraunces-SUBSET-opsz-*.woff2",
+  "@fontsource/instrument-serif/files/instrument-serif-SUBSET-400-*.woff2",
+  "@fontsource-variable/playfair-display/files/playfair-display-SUBSET-wght-*.woff2",
+  "@fontsource-variable/newsreader/files/newsreader-SUBSET-wght-*.woff2",
+  "@fontsource-variable/cormorant/files/cormorant-SUBSET-wght-*.woff2",
+  "@fontsource-variable/space-grotesk/files/space-grotesk-SUBSET-wght-*.woff2",
+  "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-SUBSET-opsz-*.woff2",
+  "@fontsource-variable/sora/files/sora-SUBSET-wght-*.woff2",
+  "@fontsource-variable/geist/files/geist-SUBSET-wght-*.woff2",
+  "@fontsource-variable/inter/files/inter-SUBSET-opsz-*.woff2",
+  "@fontsource-variable/dm-sans/files/dm-sans-SUBSET-wght-*.woff2",
+  "@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-SUBSET-wght-*.woff2",
+  "@fontsource-variable/outfit/files/outfit-SUBSET-wght-*.woff2",
+  "@fontsource-variable/archivo/files/archivo-SUBSET-wdth-*.woff2",
+  "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-SUBSET-wght-*.woff2",
+].flatMap((file) => ["latin", "latin-ext"].map((subset) => `./node_modules/${file.replace("SUBSET", subset)}`));
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,

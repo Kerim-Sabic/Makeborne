@@ -9,7 +9,7 @@ const JSZip = require("jszip"), sharp = require("sharp");
 const { chromium } = require("playwright");
 const { DocumentSourceSchema, FONT_PAIRINGS, MOTIFS, SLIDE_LAYOUTS } = require("./schema.ts");
 const { FONTS, MOTIF_NOTES } = require("./theme.ts");
-const { DOCUMENT_FACES, faceFile, faceStyles, fontFaceCss } = require("./fonts.ts");
+const { DOCUMENT_FACES, FACE_SUBSETS, faceFile, faceStyles, fontFaceCss } = require("./fonts.ts");
 const { embeddedFontSources } = require("./fonts-server.ts");
 const { composeSlide, W, H } = require("./slide-scene.ts");
 const { deckHtml, deckFaces } = require("./render-deck.ts"), { bookHtml } = require("./render-book.ts"), { deckPptx, PPTX_MONO } = require("./pptx.ts");
@@ -98,9 +98,9 @@ const textShapes = xml => [...xml.matchAll(/<p:sp>([\s\S]*?)<\/p:sp>/g)].map(([,
       const entry = catalog.find(font => font.id === id);
       assert.ok(entry, `${id} is in the website font catalogue, so public/builder-runtime/fonts serves it`);
       assert.deepEqual([entry.family, entry.axis, entry.weight, entry.italic], [face.family, face.axis, face.weight, face.italic], `${id} matches the catalogue`);
-      for (const style of faceStyles(id)) {
-        assert.ok(fs.existsSync(path.join(modulesRoot, "node_modules", face.pkg, id, "files", faceFile(id, style))), `${id} ${style} file installed`);
-        assert.ok(config.includes(`${face.pkg}/${id}/files/${id}-latin-${face.axis}-*.woff2`), `${id} traced into the export route`);
+      for (const style of faceStyles(id)) for (const subset of FACE_SUBSETS) {
+        assert.ok(fs.existsSync(path.join(modulesRoot, "node_modules", face.pkg, id, "files", faceFile(id, style, subset))), `${id} ${style} ${subset} file installed`);
+        assert.ok(config.includes(`${face.pkg}/${id}/files/${id}-SUBSET-${face.axis}-*.woff2`), `${id} traced into the export route (latin and latin-ext)`);
       }
     }
     for (const fonts of FONT_PAIRINGS) {
