@@ -18,7 +18,7 @@ import type { OperationRequest, OperationSnapshot } from "@/lib/builder/operatio
 import { recoveryPreview } from "@/lib/builder/recovery-preview";
 import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest, prepareBuilderAttachments, type BuilderAttachment } from "@/lib/builder/attachments";
 import { attachmentOwner, projectAttachmentKey, retainBuilderAttachmentSnapshot, bindBuilderAttachmentSnapshot, readBuilderAttachmentSnapshot, type Attachment as StoredAttachment } from "@/lib/attachments";
-import { AttachmentList, useFileAttachments } from "./file-attachments";
+import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-attachments";
 import BriefQuestionsCard from "./brief-questions-card";
 import { briefQuestions, briefWithAnswers, isBriefQuestion, type BriefAnswers, type BriefQuestion } from "@/lib/builder/brief-questions";
 
@@ -104,6 +104,10 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const sourceOwner = attachmentOwner(accountId);
   const sourceContext = projectAttachmentKey(`${accountId}:${workspaceId}:${artifactId}`);
   const sources = useFileAttachments(sourceOwner, sourceContext);
+  // Per-request choice: a left-out file stays saved for the project but is not sent.
+  const [leftOut, setLeftOut] = useState<ReadonlySet<string>>(() => new Set());
+  const readiness = useSourceReadiness(sources.files, leftOut);
+  const settleSources = readiness.settle;
   const [preparingSources, setPreparingSources] = useState(false);
   const sourceLock = useRef(false);
   const sourceSession = useMemo(() => ({ active: true, accountId, workspaceId, artifactId }), [accountId, workspaceId, artifactId]);
@@ -413,8 +417,12 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
     if (!sources.ready || sources.busy) { setNotice("Wait for your source files to finish loading or saving."); return; }
     sourceLock.current = true; setPreparingSources(true); setNotice("");
-    const originals = sources.files;
     try {
+      // Bind exactly the files listed as "Will be read"; unsupported, over-limit, damaged,
+      // duplicate and left-out files stay saved and unsent instead of failing the request.
+      const decided = await settleSources();
+      if (decided.blocking.length) throw new Error(`Retry or leave out ${decided.blocking.map(entry => entry.file.name).join(", ")} before sending. Your message is kept.`);
+      const originals = decided.ready;
       const files = await prepareBuilderAttachments(originals);
       if (!sourceSession.active) return;
       if (requestMode === "plan") await plan(text, files);
@@ -425,7 +433,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       sourceLock.current = false;
       if (sourceSession.active) setPreparingSources(false);
     }
-  }, [busy, disabled, operationRunning, plan, previewingRecovery, send, sourceSession, sources.busy, sources.files, sources.ready]);
+  }, [busy, disabled, operationRunning, plan, previewingRecovery, send, settleSources, sourceSession, sources.busy, sources.ready]);
   /** Questions written for this brief by a small, capped AI call (free to the user). Null on any failure. */
   const tailoredQuestions = useCallback(async (brief: string, attachments: number): Promise<readonly BriefQuestion[] | null> => {
     try {
@@ -607,7 +615,11 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     <form className="lb-composer" data-mode={mode} onSubmit={event => { event.preventDefault(); submit(draft); }}>
       {mode === "plan" && <p className="lb-plan-note"><ListChecks size={12} />{draftPlan ? "Plan mode — your reply revises the plan above." : "Plan mode — I'll study your project and propose a plan. No code is written."}</p>}
       {draftPlan && <p className="lb-plan-note">Building the approved plan uses the source files currently listed here. Review this selection if you changed files after planning.</p>}
-      <AttachmentList files={sources.files} onRemove={id => void sources.remove(id)} disabled={busy || preparingSources || sources.busy || disabled || operationRunning} compact note="Saved on this device · sent to AI with each new request. Continuing uses the original request’s files." />
+      <AttachmentList files={sources.files} readiness={readiness} onRetry={readiness.retry}
+        onExclude={id => setLeftOut(current => new Set(current).add(id))} onInclude={id => setLeftOut(current => { const next = new Set(current); next.delete(id); return next; })}
+        onRemove={id => void sources.remove(id)} removeLabel={name => `Delete ${name} from this project on this device`}
+        disabled={busy || preparingSources || sources.busy || disabled || operationRunning} compact
+        note="Saved on this device for this project. Leave out skips a file for this request only; × deletes the saved copy. Continuing uses the original request’s files." />
       <p className="lb-plan-note lb-source-formats">AI sources: PNG, JPEG, WebP, GIF, PDF, TXT or Markdown · up to 5 files, 3 MB combined. Text: up to 200,000 characters.</p>
       {sources.error && <p className="lb-notice" role="alert">{sources.error}</p>}
       <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
@@ -624,7 +636,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         </select>
         {canReview && <button type="button" className="lb-review" aria-label={`Review design, up to ${reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} credits`} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} /><span className="lb-review-label">Review · {reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} max</span></button>}
         <span className="lb-balance">{balance ? balance.unlimited ? "Unlimited credits" : `${balance.available} credits` : ""}</span>
-        <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>
+        <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || readiness.checking || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>
       </div>
       <div className="lb-estimate">
         <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
