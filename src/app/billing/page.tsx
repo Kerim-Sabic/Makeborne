@@ -5,6 +5,8 @@ import { getAccountPrivileges } from "@/lib/account/privileges";
 import { billingUser } from "@/lib/billing/access";
 import { autotopupSetupEnabled } from "@/lib/billing/autotopup";
 import { billingDatabase } from "@/lib/billing/database";
+import { loadUsageHistory } from "@/lib/billing/usage-history-server";
+import { unavailableBilling } from "@/lib/billing/view";
 import { getFreeTierOffer } from "@/lib/credits/server";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
@@ -17,10 +19,12 @@ export const dynamic = "force-dynamic";
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [params, accountPrivileges, freeTier, user] = await Promise.all([searchParams, getAccountPrivileges(), getFreeTierOffer(), billingUser()]);
-  const refundedPeriod = user ? await accountRefundedPeriod(user.id) : null;
-  // The live balance loads client-side from /api/credits (CreditBalance). Itemized
-  // usage rows stay unavailable here until they are mapped to project activity.
-  return <BillingWorkspace topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={user !== null && autotopupSetupEnabled()} costs={builderEstimates(aiCostUsdPerCredit())} summary={{ status: "unavailable", unit: "whole_customer_credits", available: null, reserved: null, used: null, period: null, entries: [] }} />;
+  // Itemized usage for one UTC month (?usage=YYYY-MM), one page at a time (?usageBefore=cursor),
+  // read as the signed-in user's own session. The live balance also loads client-side from /api/credits.
+  const [refundedPeriod, summary] = user
+    ? await Promise.all([accountRefundedPeriod(user.id), loadUsageHistory(user, { usage: params.usage, usageBefore: params.usageBefore })])
+    : [null, unavailableBilling] as const;
+  return <BillingWorkspace topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={user !== null && autotopupSetupEnabled()} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
 }
 
 /** The current billing period when its payment was refunded or charged back (creation paused). Unknown shows nothing. */

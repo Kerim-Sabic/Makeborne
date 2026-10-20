@@ -254,3 +254,6 @@
 .billing-autotopup-confirm input{flex:none;width:18px;height:18px;margin:0;padding:0;accent-color:#211c2a}
 .billing-autotopup button{justify-self:start;height:38px;padding:0 16px;border:0;border-radius:10px;background:#211c2a;color:#fff;font-size:14px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .billing-autotopup button:disabled{opacity:.5;cursor:default}.billing-autotopup .billing-autotopup-secondary{background:#fff;color:#211c2a;border:1px solid #d9d2e4}
+.billing-usage-coverage{display:block;margin-top:4px}
+.billing-usage-pages{display:flex;flex-wrap:wrap;gap:6px 16px;padding:0 13px 12px;font-size:11px}
+.billing-usage-pages a{color:#70528a;text-decoration:underline;text-underline-offset:3px;min-height:24px;display:inline-flex;align-items:center}

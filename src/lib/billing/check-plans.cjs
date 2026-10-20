@@ -81,13 +81,15 @@ const BillingWorkspace = loadComponent("billing-workspace", {
   "./credit-balance": {default: () => null, creditExpiryLabel: () => "Expiry"},
   "./billing-amount": {formatBillingCredits: value => value},
   "@/lib/billing/view": view,
+  "@/lib/billing/usage-history": require("./usage-history.ts"),
 });
-for (const summary of [view.unavailableBilling, {status: "ready", unit: "whole_customer_credits", available: "0", reserved: "0", used: "0", period: "October 2026", entries: []}]) {
+for (const summary of [view.unavailableBilling, {status: "ready", unit: "whole_customer_credits", available: "0", reserved: "0", used: "0", period: "October 2026", entries: [], history: {periodKey: "2026-10", total: 0, newer: 0, olderCursor: null}}]) {
   const billing = renderToStaticMarkup(React.createElement(BillingWorkspace, {summary, accountPrivileges: {isAdmin: true, unlimitedCredits: true}}));
   assert.doesNotMatch(billing, /generation (?:is still )?disabled|creation services are disabled/i);
   assert.match(billing, /Generation depends on current service availability and safety limits/);
   assert.match(billing, /href="\/studio"/);
   if (summary.status === "unavailable") assert.match(billing, /Reserved and used amounts are unavailable/);
+  else assert.match(billing, /administrator allowance holds and charges no credits/, "a ready, empty allowance history explains why nothing is listed");
 }
 const returnOrder = "abcdefab-1234-4234-8234-123456789abc";
 const returnView = props => renderToStaticMarkup(React.createElement(BillingWorkspace, {summary: view.unavailableBilling, ...props}));
