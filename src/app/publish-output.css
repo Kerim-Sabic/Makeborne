@@ -1,22 +1,17 @@
-/* Publishing and output facts (audit reconciliation): version facts, publish report,
-   unconfirmed claims, rendered-state contrast and font coverage notes.
+/* Output facts outside the publish panel (audit reconciliation): version facts in the
+   editor header, History's Checked marker and font coverage notes in the document preview.
+   Publish-panel styles live in src/components/website-publish.css.
    Text colours meet 4.5:1 on their backgrounds. */
 
 /* Document preview: characters outside the embedded font subsets. */
 .dp-font-note{display:grid;gap:4px;margin:0;padding:8px 14px;border-bottom:1px solid #ebe8ef;background:#fdf8ec;color:#5a3d00;font-size:12px;line-height:1.5}
 .dp-font-note p{margin:0;overflow-wrap:anywhere}
 
-/* Unconfirmed claims before publishing (advisory). */
-.site-claims{display:grid;gap:10px;padding:14px;border:1px solid #e5e4ed;border-radius:14px;background:#fafafe}
-.site-claims-heading{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:#252535}.site-claims-heading>svg{color:#5b4bb5}
-.site-claims-count{margin-left:auto;font-size:12px;font-weight:600;border-radius:999px;padding:3px 9px;background:#f1f0f7;color:#3d3a4a}
-.site-claims-intro,.site-claims-empty{font-size:12px;line-height:1.55;margin:0;color:#55556a}
-.site-claims-scope{font-size:12px;margin:0;color:#3d3a4a;font-weight:550}
-.site-claims-list{display:grid;gap:6px;margin:0;padding:0;list-style:none}
-.site-claims-list>li{border-radius:10px;background:#fff;border:1px solid #ececf2}
-.site-claims-list summary{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;cursor:pointer;border-radius:10px}
-.site-claims-list summary:focus-visible{outline:2px solid #5b4bb5;outline-offset:2px}
-.site-claims-list summary>span{display:grid;gap:2px;min-width:0}.site-claims-list summary strong{font-size:12.5px;color:#252535}.site-claims-list summary small{font-size:11.5px;color:#55556a}
-.site-claims-list details ul{margin:0;padding:0 10px 10px 28px;display:grid;gap:6px;list-style:disc;font-size:12px;color:#33334a}
-.site-claims-list details li{overflow-wrap:anywhere}.site-claims-list details li small{display:block;font-size:11px;color:#55556a}
-.site-claims-list q{quotes:"“" "”"}
+/* Editor header: saved, checked and live side by side. */
+.version-facts{display:grid;gap:4px;margin-top:4px;min-width:0}
+.version-facts ul{display:flex;flex-wrap:wrap;gap:4px 6px;margin:0;padding:0;list-style:none}
+.version-facts li{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;line-height:1.4;padding:2px 8px;border-radius:999px;background:#f1f0f7;color:#3d3a4a;max-width:100%;overflow-wrap:anywhere}
+.version-facts li[data-fact="checked"][data-state="current"],.version-facts li[data-fact="live"][data-state="live"]{background:#edf8f1;color:#1d6339}
+.version-facts li[data-fact="checked"][data-state="older"]{background:#fdf4e3;color:#7a4a00}
+.version-facts-notice{margin:0;font-size:12px;line-height:1.45;color:#7a4a00}.version-facts-notice:empty{display:none}
+.cloud-version-checked{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;vertical-align:middle;background:#eef3fd;color:#244f9e}

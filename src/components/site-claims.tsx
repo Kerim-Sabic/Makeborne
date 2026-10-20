@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { BadgeCheck } from "lucide-react";
 import type { ClientReadyInput } from "@/lib/builder/client-ready";
 import { siteClaims } from "@/lib/builder/site-claims";
-import "@/app/publish-output.css";
 
 /** Advisory list of statements only the business can confirm (prices, guarantees,
  * awards, reviews, rankings, certifications, figures, hours, contact details).

@@ -42,6 +42,8 @@ import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
 import { useLiveVersion } from "./use-live-version";
+import { useCheckRecord } from "./use-check-record";
+import VersionFactsBar from "./version-facts";
 import { useCallback, useEffect, useEffectEvent, useMemo, useState, useRef } from "react";
 import {
   ArrowLeft,
@@ -1134,8 +1136,11 @@ export function CloudEditor({
   notify: (s: string) => void;
 }) {
   const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
-  // Which saved version is public, read when History opens (websites only; audit M07).
-  const liveVersion = useLiveVersion(accountId, workspaceId, artifact.id, view === "history" && artifact.kind === "website");
+  // Which saved version is public (websites only; audit M07): read on open, on each view change and after publishing.
+  const [liveRefresh, setLiveRefresh] = useState(0);
+  const liveVersion = useLiveVersion(accountId, workspaceId, artifact.id, artifact.kind === "website", `${view}:${liveRefresh}`);
+  // The latest explicit check of a saved version in this tab, for the header and History.
+  const checkRecord = useCheckRecord({ accountId, workspaceId, artifactId: artifact.id });
   // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
   const [brandColors, setBrandColors] = useState<{ label: string; value: string }[]>([]);
   const brandClient = project?.clientId ?? null;
@@ -1591,6 +1596,7 @@ export function CloudEditor({
             Version {expectedVersion} ·{" "}
             {savePaused || conflict || uncertainSave ? "Saving paused — review required" : busy && dirty ? "Saving…" : dirty ? "Waiting to save…" : "Saved"}
           </p>
+          {artifact.kind === "website" && <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} />}
         </div>
         <button
           className={dirty || savePaused || uncertainSave ? "button primary" : "button secondary"}
@@ -1752,7 +1758,7 @@ export function CloudEditor({
             <button type="button" onClick={() => setView("edit")} className="button secondary small"><PencilLine size={14} />Open editor</button>
           </div> : <><AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} content={content} style={style} dirty={dirty} /></>}
         </div>}
-        {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"}
+        {view === "publish" && content.websiteSource && <div className="lb-publish"><WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy || Boolean(live)} owner={role === "owner"} onPublished={() => setLiveRefresh(value => value + 1)}
           capture={() => captureProjectPublication(content.websiteSource!, { accountId, workspaceId, artifactId: artifact.id })} source={content.websiteSource} />
           {role === "owner" && <WebsiteSeo key={`seo:${accountId}:${workspaceId}:${artifact.id}`} source={content.websiteSource!} siteTitle={content.title} seo={content.seo} version={expectedVersion} dirty={dirty}
             disabled={uncertainSave || conflict || !!recovery || Boolean(live)} scope={{ accountId, workspaceId, artifactId: artifact.id }}
@@ -1841,7 +1847,7 @@ export function CloudEditor({
             <button className="button secondary" onClick={backup}>
               <FileText size={16} /> Download draft
             </button>
-            {content.kind === "website" && !content.websiteSource && <WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} />}
+            {content.kind === "website" && !content.websiteSource && <WebsitePublish key={`publish:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} title={content.title} version={expectedVersion} dirty={dirty} disabled={conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} onPublished={() => setLiveRefresh(value => value + 1)} />}
             {content.kind === "website" && !content.websiteSource && <WebsiteGithub key={`github:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} dirty={dirty || conflict || uncertainSave || !!recovery || busy} owner={role === "owner"} />}
             {content.document && <p className="small-note">This {artifact.kind} was made with the live builder. Download PDF{artifact.kind === "presentation" ? " or editable PPTX" : ""} from the Preview tab; the outline below is generated from it and is updated on every build.</p>}
             {style && !content.document && <AccountExport key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} documentId={artifact.id} content={content} style={style} dirty={dirty} disabled={conflict || uncertainSave || !!recovery} />}
@@ -1869,7 +1875,7 @@ export function CloudEditor({
                 .sort((a, b) => b.number - a.number)
                 .map((v) => (
                   <div className="cloud-version" key={v.id}>
-                    <strong>Version {v.number}{v.number === liveVersion && <span className="cloud-version-live">Live</span>}{v.number === expectedVersion && <span className="cloud-version-current">Current</span>}</strong>
+                    <strong>Version {v.number}{v.number === liveVersion && <span className="cloud-version-live">Live</span>}{artifact.kind === "website" && v.number === checkRecord?.version && <span className="cloud-version-checked" title="The latest check in this tab ran on this version">Checked</span>}{v.number === expectedVersion && <span className="cloud-version-current">Current</span>}</strong>
                     <p>{v.changeSummary}</p>
                     <small>{new Date(v.createdAt).toLocaleString()}</small>
                     <button type="button" className="button secondary small" aria-expanded={inspectedVersion?.id === v.id} onClick={() => setInspectedVersion(inspectedVersion?.id === v.id ? null : v)}> {inspectedVersion?.id === v.id ? "Close preview" : `Preview version ${v.number}`}</button>

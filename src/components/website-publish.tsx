@@ -14,14 +14,15 @@ import { HOSTING, SITE_ADDRESS_PARTS, siteAddress, validSiteSlug, type HostedSit
 export type PublishCapture = { snapshot: string; bundle?: { js: string; css: string } };
 
 /** source: the React website shown in the client-ready check before publishing. */
-type PublishProps = {accountId:string;workspaceId:string;artifactId:string;title:string;version:number;dirty:boolean;disabled:boolean;owner:boolean;capture?:()=>Promise<PublishCapture>;source?:ClientReadyInput};
+/** onPublished: called after the live state changed (published or taken offline), so the editor header can re-read it. */
+type PublishProps = {accountId:string;workspaceId:string;artifactId:string;title:string;version:number;dirty:boolean;disabled:boolean;owner:boolean;capture?:()=>Promise<PublishCapture>;source?:ClientReadyInput;onPublished?:()=>void};
 
 export default function WebsitePublish(props:PublishProps) {
   return props.capture ? <TrustedWebsitePublish key={`${props.accountId}:${props.workspaceId}:${props.artifactId}`} {...props}/> : <LegacyWebsitePublish {...props}/>;
 }
 
-function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, version, dirty, disabled, owner, capture, source }: {
-  accountId:string; workspaceId:string; artifactId:string; title:string; version:number; dirty:boolean; disabled:boolean; owner:boolean; source?:ClientReadyInput;
+function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, version, dirty, disabled, owner, capture, source, onPublished }: {
+  accountId:string; workspaceId:string; artifactId:string; title:string; version:number; dirty:boolean; disabled:boolean; owner:boolean; source?:ClientReadyInput; onPublished?:()=>void;
   /** React projects: render the saved site (static snapshot) and build its production bundle. */
   capture?: () => Promise<PublishCapture>;
 }) {
@@ -56,7 +57,7 @@ function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, versi
       const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":operation.key,"X-Makeborne-Account":accountId},body:operation.body,signal:AbortSignal.timeout(90_000)});
       const result=await response.json(); assertAccount();
       if(!response.ok){if(response.status<500)setPending(null);throw new Error(result.error?.message||"Publishing could not finish. Retry to confirm the result.");}
-      setPending(null);setSite(result.site);setSlug(result.site.slug);setInteractive(result.site.interactive);setConfirmOffline(false);setAgreedVersion(null);
+      setPending(null);setSite(result.site);setSlug(result.site.slug);setInteractive(result.site.interactive);setConfirmOffline(false);setAgreedVersion(null);onPublished?.();
       setMessage(result.site.live?`Your saved website is live${result.site.scripted&&result.site.interactive?" with JavaScript":""}. Future edits stay private until you publish again.`:"Your website is offline. Its address stays reserved for you.");
     } catch(error){setMessage(error instanceof Error?error.message:"Publishing could not finish. Retry to confirm the result.");}
     finally{setBusy(false);}

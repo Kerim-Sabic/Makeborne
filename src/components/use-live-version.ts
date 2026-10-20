@@ -4,7 +4,8 @@ import { cloudAccountGuard } from "./cloud-api";
 
 /** What the history list may say about the public site: the live version number,
  * "offline" (never published or taken offline), "error" (couldn't check), or
- * undefined while unknown. Read-only; refreshed each time it is enabled. */
+ * undefined while unknown. Read-only; refreshed each time it is enabled or the
+ * refresh key changes (for example after publishing). */
 export type LiveVersion = number | "offline" | "error" | undefined;
 
 export function liveVersionFrom(body: unknown): number | "offline" {
@@ -12,7 +13,7 @@ export function liveVersionFrom(body: unknown): number | "offline" {
   return site && site.live === true && Number.isInteger(site.version_number) ? site.version_number as number : "offline";
 }
 
-export function useLiveVersion(accountId: string, workspaceId: string, artifactId: string, enabled: boolean): LiveVersion {
+export function useLiveVersion(accountId: string, workspaceId: string, artifactId: string, enabled: boolean, refreshKey: string | number = ""): LiveVersion {
   const scope = `${accountId}:${workspaceId}:${artifactId}`;
   const [state, setState] = useState<{ scope: string; value: Exclude<LiveVersion, undefined> } | null>(null);
   useEffect(() => {
@@ -28,7 +29,7 @@ export function useLiveVersion(accountId: string, workspaceId: string, artifactI
       })
       .catch(() => { if (!abort.signal.aborted) setState({ scope, value: "error" }); });
     return () => abort.abort();
-  }, [enabled, scope, accountId, workspaceId, artifactId]);
+  }, [enabled, scope, accountId, workspaceId, artifactId, refreshKey]);
   // A value for another project or account is never shown here.
   return enabled && state?.scope === scope ? state.value : undefined;
 }

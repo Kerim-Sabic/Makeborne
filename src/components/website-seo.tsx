@@ -5,6 +5,10 @@ import { BUSINESS_TYPES, SiteSeoSchema, pageMeta, seoChecklist, type SeoCheck, t
 import type { WebsiteProjectSource } from "@/lib/projects/website-source";
 import { captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
 import { checkedFingerprint, checkedLabel, checkIsCurrent, type CheckedScope } from "@/lib/hosting/checked-version";
+import { readPreparedHead } from "@/lib/hosting/publish-report";
+import { PublicationPreparationSchema, type PublicationPreparation } from "@/lib/projects/publication-contract";
+import { cloudAccountGuard } from "./cloud-api";
+import { recordCheck } from "./use-check-record";
 import "@/app/website-seo.css";
 
 type Business = NonNullable<SiteSeo["business"]>;
@@ -12,6 +16,8 @@ type Slot = NonNullable<Business["hours"]>[number];
 const DAYS = [["Mo", "Mon"], ["Tu", "Tue"], ["We", "Wed"], ["Th", "Thu"], ["Fr", "Fri"], ["Sa", "Sat"], ["Su", "Sun"]] as const;
 const TYPE_LABELS: Partial<Record<Business["type"], string>> = { LocalBusiness: "Local business", CafeOrCoffeeShop: "Café or coffee shop", BarOrPub: "Bar or pub", ClothingStore: "Clothing store", BeautySalon: "Beauty salon", HairSalon: "Hair salon", HealthAndBeautyBusiness: "Health and beauty", MedicalClinic: "Medical clinic", LegalService: "Legal services", AccountingService: "Accounting", RealEstateAgent: "Estate agent", HomeAndConstructionBusiness: "Home and construction", AutoRepair: "Car repair", ExerciseGym: "Gym", ProfessionalService: "Professional services", Organization: "Organisation (no premises)" };
 const typeLabel = (type: Business["type"]) => TYPE_LABELS[type] ?? type.replace(/([a-z])([A-Z])/g, "$1 $2");
+/** What a check read: the prepared output (every page as it will be published) or the saved source. */
+type CheckedFrom = { prepared: true; pages: number } | { prepared: false; unreadable: boolean };
 
 /** Drops empty strings and empty lists so optional fields stay absent. */
 function compact(seo: SiteSeo): SiteSeo {
@@ -35,6 +41,7 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, ve
   const fingerprint = useMemo(() => checkedFingerprint(source, [siteTitle, compact(draft)]), [source, siteTitle, draft]);
   const current = checkIsCurrent(checked, fingerprint, version, dirty);
   const [homeHtml, setHomeHtml] = useState<string | null>(null);
+  const [checkedFrom, setCheckedFrom] = useState<CheckedFrom | null>(null);
   const [checking, setChecking] = useState(false);
   const images = useMemo(() => source.assets.map(asset => `/${asset.path.replace(/^public\//, "")}`), [source.assets]);
   const business = draft.business;
@@ -56,10 +63,41 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, ve
   const setBusiness = (patch: Partial<Business>) => update({ ...draft, business: { type: "LocalBusiness", name: draft.siteName || siteTitle, ...business, ...patch } as Business });
   const setSlot = (index: number, patch: Partial<Slot>) => setBusiness({ hours: (business?.hours ?? []).map((slot, at) => at === index ? { ...slot, ...patch } : slot) });
 
+  /** The prepared output of exactly this saved version, when one is ready (GET only). */
+  async function preparedPages(): Promise<PublicationPreparation["previewRoutes"] | null> {
+    if (dirty || version < 1) return null;
+    const assertAccount = cloudAccountGuard(scope.accountId);
+    const response = await fetch(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/publication/preparation`, { cache: "no-store", headers: { "X-Makeborne-Account": scope.accountId }, signal: AbortSignal.timeout(20_000) });
+    const body = await response.json();
+    assertAccount();
+    if (!response.ok) throw new Error("Preparation status is unavailable.");
+    if (body?.preparation === null || body?.preparation === undefined) return null;
+    const preparation = PublicationPreparationSchema.parse(body.preparation);
+    if (preparation.workspaceId !== scope.workspaceId || preparation.artifactId !== scope.artifactId) throw new Error("Preparation does not match this website.");
+    return preparation.state === "ready" && preparation.version === version && preparation.previewRoutes.length ? preparation.previewRoutes : null;
+  }
+
   async function runChecks() {
     setChecking(true);
     const scopeAtStart: CheckedScope = { fingerprint, version, dirty };
     try {
+      const prepared = await preparedPages().catch(() => "unreadable" as const);
+      if (prepared && prepared !== "unreadable") {
+        // Every prepared page, with the title and description it will actually be published with.
+        const heads = prepared.map(route => ({ path: route.path, head: readPreparedHead(route.html) }));
+        const seoFromOutput: SiteSeo = { ...compact(draft), pages: heads.map(({ path, head }) => ({ path, ...(head.title ? { title: head.title } : {}), ...(head.description ? { description: head.description } : {}) })) };
+        const results = seoChecklist({ siteTitle, pages: prepared.map(route => ({ path: route.path, routeTitle: source.routes.find(item => item.path === route.path)?.title, html: route.html })), seo: seoFromOutput, images });
+        for (const { path, head } of heads) {
+          const where = path === "/" ? "The home page" : `The page ${path}`;
+          if (!head.title) results.unshift({ id: `prepared-title:${path}`, level: "fail", path, title: `${where} has no title in the prepared output`, detail: "Prepare the website again. If it stays missing, set a title for this page above." });
+          if (!head.canonical) results.unshift({ id: `prepared-canonical:${path}`, level: "warn", path, title: `${where} has no canonical address`, detail: "Prepare the website again so search engines know this page's own address." });
+        }
+        setHomeHtml(prepared.find(route => route.path === "/")?.html ?? null);
+        setChecks(results.some(check => check.level === "fail" || check.level === "warn") ? results.filter(check => check.id !== "ready") : results);
+        setChecked(scopeAtStart); setCheckedFrom({ prepared: true, pages: prepared.length });
+        recordCheck(scope, { version: scopeAtStart.version, dirty: scopeAtStart.dirty, kind: "search", prepared: true });
+        return;
+      }
       const html = await captureProjectSnapshot(source, scope);
       setHomeHtml(html);
       const results = seoChecklist({ siteTitle, pages: [{ path: "/", routeTitle: source.routes.find(route => route.path === "/")?.title, html }], seo: compact(draft), images });
@@ -68,8 +106,9 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, ve
       if (new Set(titles).size < titles.length) results.push({ id: "duplicate-titles", level: "warn", title: "Some pages share the same title", detail: "Give each page its own title below." });
       const others = source.routes.filter(route => route.path !== "/").length;
       if (others) results.push({ id: "other-pages", level: "info", title: `${others === 1 ? "1 other page was" : `${others} other pages were`} checked for titles only`, detail: "Their text, images and links aren't checked here. Open them in the preview to look them over before you share the site." });
-      setChecks(results); setChecked(scopeAtStart);
-    } catch (cause) { setChecked(scopeAtStart); setChecks([{ id: "error", level: "fail", title: "The site couldn't be checked", detail: cause instanceof Error ? cause.message : "Try again in a moment." }]); }
+      setChecks(results); setChecked(scopeAtStart); setCheckedFrom({ prepared: false, unreadable: prepared === "unreadable" });
+      recordCheck(scope, { version: scopeAtStart.version, dirty: scopeAtStart.dirty, kind: "search", prepared: false });
+    } catch (cause) { setChecked(scopeAtStart); setCheckedFrom(null); setChecks([{ id: "error", level: "fail", title: "The site couldn't be checked", detail: cause instanceof Error ? cause.message : "Try again in a moment." }]); }
     finally { setChecking(false); }
   }
 
@@ -135,6 +174,9 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, ve
     <div className="ws-check">
       <button type="button" className="button secondary small" disabled={checking} onClick={() => void runChecks()}>{checking ? <Loader2 size={14} className="ws-spin" /> : <Search size={14} />}Check my site</button>
       {checks && checked && <p className="ws-checked" role="status" data-current={current}>{checkedLabel(checked)}{current ? "." : ". Your site changed after this check, so these results may be out of date. Check again."}</p>}
+      {checks && checkedFrom && <p className="ws-checked-from" data-source={checkedFrom.prepared ? "prepared" : "source"}>{checkedFrom.prepared
+        ? `Read from the prepared pages: all ${checkedFrom.pages === 1 ? "1 page" : `${checkedFrom.pages} pages`}, with the titles, descriptions and links they’ll be published with.`
+        : `Read from the saved source: the home page rendered in this browser, other pages by title only.${checkedFrom.unreadable ? " The prepared pages couldn’t be read." : ""} Prepare this version under Publish website to check every page as it will be published.`}</p>}
       {checks && <ul className="ws-results" aria-label="Search checklist" data-stale={!current || undefined}>{checks.map(check => <li key={check.id} data-level={check.level}>
         {check.level === "pass" ? <CheckCircle2 size={15} aria-hidden="true" /> : check.level === "fail" ? <XCircle size={15} aria-hidden="true" /> : check.level === "info" ? <Info size={15} aria-hidden="true" /> : <AlertTriangle size={15} aria-hidden="true" />}
         <div><strong>{check.title}</strong><span>{check.detail}</span></div>
