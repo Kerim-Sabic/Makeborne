@@ -313,7 +313,8 @@
 .pq-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; border-top: 1px solid #f1edf6; padding-top: 12px; }
 .pq-foot .mc-error { margin-right: auto; }
 .pq .button { display: inline-flex; align-items: center; gap: 6px; }
-.ce-ai { display: flex; gap: 8px; align-items: center; }
+.ce-ai { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ce-ai-limit { flex-basis: 100%; color: #5d6880; font-size: 12px; line-height: 1.5; }
 .ce-ai input { flex: 1; }
 .bulk-bar .bulk-ai { background: linear-gradient(135deg, #8f74d6, #6a4fa5); border: 0; color: #fff; display: inline-flex; align-items: center; gap: 6px; }
 .bulk-or { font-size: 12px; color: #cfc6e2; }

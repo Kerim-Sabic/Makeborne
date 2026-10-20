@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Pause, Play, Send, Sparkles, Square, Workflow } from "lucide-react";
+import { CHAT_MODES } from "@/lib/expert-personas";
 import { generateEmailDraft } from "./ai-draft";
 import { mailApi, MANUAL_MAIL_NOTICE, providerLabel, TOKEN_HELP, type Enrollment, type MailMessage, type MailOverview } from "./mail-api";
 
@@ -50,7 +51,7 @@ export default function ClientEmail({ accountId, workspaceId, client, canEdit, o
     setWriting(controller); setError(""); setMessage("");
     const account = mine.find(item => item.id === mailbox);
     const result = await generateEmailDraft({ accountId, workspaceId, clientId: client.id, signal: controller.signal, onText: text => setBody(text),
-      options: { goal: aiGoal, tone: "warm", mode: "standard", senderName: (account?.displayName || account?.email.split("@")[0] || "").split(/s+/)[0] } });
+      options: { goal: aiGoal, tone: "warm", mode: "standard", senderName: (account?.displayName || account?.email.split("@")[0] || "").split(/\s+/)[0] } });
     setWriting(null);
     if (result.error && !result.text) { setError(result.error.message); return; }
     if (!reply) setSubject(result.subject); setBody(result.body);
@@ -94,7 +95,8 @@ export default function ClientEmail({ accountId, workspaceId, client, canEdit, o
         {overview.templates.length > 0 && <label>Template<select value="" onChange={event => { const template = overview.templates.find(item => item.id === event.target.value); if (template) { setSubject(template.subject); setBody(template.body); } }}><option value="">Use a template…</option>{overview.templates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>}
       </div>
       <div className="ce-ai">{aiOpen ? <><input aria-label="What should this email achieve?" value={aiGoal} maxLength={1000} placeholder="What should it achieve? e.g. follow up on the proposal and offer a call" onChange={event => setAiGoal(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void writeWithAi(); } }} />
-        <button type="button" className="button secondary small" onClick={() => void writeWithAi()}>{writing ? <><Square size={13} />Stop</> : <><Sparkles size={13} />Write</>}</button></>
+        <button type="button" className="button secondary small" onClick={() => void writeWithAi()}>{writing ? <><Square size={13} />Stop</> : <><Sparkles size={13} />Write</>}</button>
+          {!writing && <small className="ce-ai-limit">Uses at most {CHAT_MODES.standard.holdCredits} credits. Rex writes from your goal plus this client&apos;s saved notes and history; you review before sending.</small>}</>
         : <button type="button" className="button secondary small" onClick={() => setAiOpen(true)}><Sparkles size={13} />Write with AI</button>}</div>
       <input aria-label="Subject" value={subject} maxLength={300} placeholder={reply ? "Subject (Re: is added when replying in the thread)" : "Subject"} onChange={event => setSubject(event.target.value)} />
       <textarea aria-label="Email" value={body} rows={7} maxLength={20000} placeholder={`Write to ${client.name}…`} onChange={event => setBody(event.target.value)} />

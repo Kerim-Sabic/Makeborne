@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, Copy, RotateCcw, Send, Sparkles, Square, X } from "lucide-react";
+import { CHAT_MODES } from "@/lib/expert-personas";
 import { generateEmailDraft, type DraftNotes, type DraftOptions } from "./ai-draft";
 import { leadApi } from "../leads/lead-api";
 import { mailApi, MailApiError, providerLabel, type MailOverview } from "./mail-api";
@@ -91,7 +92,7 @@ export default function PersonalizeQueue({ accountId, workspaceId, clients, onCl
   const busy = phase === "writing" || phase === "sending";
   return <Modal label={`Personal emails for ${items.length} clients`} onClose={onClose} locked={busy} wide>
       <header className="pq-head"><div><h3 id="pq-title"><Sparkles size={17} />Personal emails for {items.length} client{items.length === 1 ? "" : "s"}</h3>
-        <p>Rex writes a different email for each person from their saved notes and history (about 1 credit each for writing; sending is free). You review every one before anything is sent.</p></div>
+        <p>Rex writes a different email for each person from their saved notes and history (about 1 credit each for writing, at most {CHAT_MODES.standard.holdCredits} each and {CHAT_MODES.standard.holdCredits * items.filter(item => item.include).length} for this batch; sending is free). You review every one before anything is sent.</p></div>
         <button type="button" className="button ghost small" aria-label="Close" disabled={busy} onClick={onClose}><X size={16} /></button></header>
       {clients.length > MAX && <p className="mc-note"><AlertTriangle size={14} /> The first {MAX} selected clients are included; run it again for the rest.</p>}
 
