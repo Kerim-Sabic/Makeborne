@@ -54,7 +54,9 @@ Observations:
 - Prompt template (system prompt, IMAGERY): subject and action specific to the business, composition and camera with calm space for text, light, three or four palette colours named from the site tokens, material details, the site's house-style sentence (appended verbatim to every prompt), then "No text, letters, signage, logos or watermarks." Text and logos stay in HTML.
 - Spending: unchanged. Every call is reserved at its price-card bound before the provider is contacted; the run's image share stays at most a third of its allowance.
 
-## Decision needed (owner): D8 for the 2.5 models
+## D8 for the 2.5 models (decided by the owner on 2026-10-21)
+
+Update 2026-10-21: Kerim asked for the 2.5 models and per-image routing. The measured counts below are now the bounds (observed × 1.5) and the router is implemented; see `docs/AI_SPENDING.md`, "D8 changed". The original note follows.
 
 The 2.5 models still have no bounded price card in the app (`MEASURED_IMAGE_OUTPUT_TOKENS` is empty, decision D8 and the 2026-10-13 review: a sample is not a maximum). This research did not change that. With images on today, only `gpt-image-2` can run (opaque only, about 4x the cost of a 2.5 image).
 

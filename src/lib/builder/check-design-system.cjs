@@ -225,16 +225,16 @@ check("font sizes in the prompt match the runtime files and drive a font budget"
   assert.match(BUILDER_SYSTEM, /any <em>, <i>, <cite>, <address>, <dfn>, <var> or font-style: italic anywhere in the project loads them/);
 });
 
-check("image cut-outs: transparency only on models that support it; 2.5 models stay unpriced (D8)", () => {
+check("image cut-outs: transparency only on models that support it; 2.5 bounds only where measured (D8, 2026-10-21)", () => {
   assert.equal(prices.supportsTransparentImages("gpt-image-2"), false, "gpt-image-2 refused transparent live (400 invalid_value)");
   assert.equal(prices.supportsTransparentImages("gpt-image-2.5-flare"), true);
   assert.throws(() => prices.assertSupportedImageRequest({ model: "gpt-image-2", quality: "medium", size: "1024x1024", background: "transparent" }), error => error.code === "UNSUPPORTED_AI_CONFIG");
   assert.throws(() => prices.assertSupportedImageRequest({ model: "gpt-image-2", quality: "medium", size: "1024x1024", background: "checkerboard" }), error => error.code === "UNSUPPORTED_AI_CONFIG");
   prices.assertSupportedImageRequest({ model: "gpt-image-2", quality: "medium", size: "1024x1024", background: "opaque" });
   for (const model of ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]) {
-    assert.throws(() => prices.assertSupportedImageRequest({ model, quality: "medium", size: "1024x1024", background: "transparent" }), error => error.code === "UNPRICED_MODEL", `${model} has no bound until the owner decides D8`);
+    prices.assertSupportedImageRequest({ model, quality: "medium", size: "1024x1024", background: "transparent" });
+    assert.throws(() => prices.assertSupportedImageRequest({ model, quality: "low", size: "1024x1536" }), error => error.code === "UNSUPPORTED_AI_CONFIG", `${model}: unmeasured cell refused`);
   }
-  assert.deepEqual(prices.MEASURED_IMAGE_OUTPUT_TOKENS, {}, "no sample-derived bound was added");
 });
 
 check("image cut-outs are trimmed to the subject with alpha kept; opaque results are reported as opaque", async () => {
