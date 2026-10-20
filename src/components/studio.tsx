@@ -59,6 +59,7 @@ import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
+import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
@@ -145,6 +146,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const [clientDetail, setClientDetail] = useState<string | null>(null);
   const [opportunityClient, setOpportunityClient] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const navigationPanel = useRef<HTMLElement>(null);
+  const navigationToggle = useRef<HTMLButtonElement>(null);
   function startStudioPrompt() {
     if(!draftBrief.trim()||!composerAccount.ready||!composerAccount.accountId||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent)return;
     const requestId=crypto.randomUUID(),owner=attachmentOwner(composerAccount.accountId);
@@ -160,13 +163,36 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     setInitialStyle(AUTOMATIC_STYLE.id);setInitialClient("");setInitialWorkspaceId(null);setInitialAttachmentOwner(owner);
     setInitialGenerationConsent(consent);setHomeHandoff(false);setCreating(draftKind);
   }
+  // On phones the navigation is an opaque drawer over the page, so it behaves as a modal
+  // overlay: focus moves into it, Tab stays inside, the page behind is inert, and closing
+  // returns focus to the toggle. Widening past the drawer breakpoint closes it.
   useEffect(() => {
     if (!mobileNav) return;
-    const closeNavigation = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileNav(false);
+    const panel = navigationPanel.current, toggle = navigationToggle.current;
+    const drawer = window.matchMedia(DRAWER_NAVIGATION_QUERY);
+    if (!panel || !drawer.matches) { queueMicrotask(() => setMobileNav(false)); return; }
+    const focusable = () => Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(node =>
+      !node.matches(":disabled,[aria-disabled='true']") && node.tabIndex >= 0 && node.getClientRects().length > 0 && getComputedStyle(node).visibility !== "hidden");
+    (panel.querySelector<HTMLElement>("[aria-current='page']") ?? focusable()[0])?.focus({ preventScroll: true });
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // A popup inside the drawer closes first.
+        if (event.defaultPrevented) return;
+        event.preventDefault(); setMobileNav(false); return;
+      }
+      if (event.key !== "Tab") return;
+      const target = overlayTabTarget(focusable(), document.activeElement as HTMLElement | null, event.shiftKey);
+      if (target) { event.preventDefault(); target.focus(); }
     };
-    window.addEventListener("keydown", closeNavigation);
-    return () => window.removeEventListener("keydown", closeNavigation);
+    const widened = () => { if (!drawer.matches) setMobileNav(false); };
+    document.addEventListener("keydown", keydown);
+    drawer.addEventListener("change", widened);
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      drawer.removeEventListener("change", widened);
+      const active = document.activeElement;
+      if (shouldRestoreOverlayFocus(!!active && panel.contains(active), !active || active === document.body)) toggle?.focus({ preventScroll: true });
+    };
   }, [mobileNav]);
   useEffect(() => {
     queueMicrotask(async () => {
@@ -504,6 +530,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       {mobileNav && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
       <aside
         id="studio-navigation"
+        ref={navigationPanel}
         className={`sidebar ${mobileNav ? "open" : ""}`}
       >
         <Link className="wordmark" href="/">
@@ -553,9 +580,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           </div>
         </div>
       </aside>
-      <div className="studio-main">
+      <div className="studio-main" inert={mobileNav || undefined}>
         <header className="studio-topbar">
           <button
+            ref={navigationToggle}
             className="icon-button mobile-toggle"
             aria-expanded={mobileNav}
             aria-controls="studio-navigation"
