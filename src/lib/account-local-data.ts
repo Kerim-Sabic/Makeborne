@@ -7,6 +7,8 @@ function ownedByAccount(storage: KeyedStorage, key: string, accountId: string) {
     `makeborne.generation.v1.${accountId}.`,
     `makeborne.creation-reference.v1.${accountId}.`,
     `makeborne.project-conversation.v1:${accountId}:`,
+    // Personal version checkpoints (labels only; versions stay in the project history).
+    `makeborne.version-checkpoints.v1.${accountId}.`,
   ].some((prefix) => key.startsWith(prefix))) return true;
   if (key.startsWith("makeborne.wizard-draft.") && key.includes(`.account.${accountId}.`)) return true;
   // Library layout preference (grid/list), per device and account.
