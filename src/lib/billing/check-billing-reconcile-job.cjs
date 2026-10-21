@@ -251,5 +251,16 @@ function whopWith(fetchImpl) { return load("./whop.ts", env, { "@/lib/server/htt
     assert.equal(h.calls.finish.p_status, "failed");
   });
 
-  console.log(`${passed} reconciliation job checks passed (retry/backoff, sandbox base, payment pagination, cron auth, overlap, binding, failures, budget, heartbeat, expiry). Whop and the database are mocked.`);
+  await check("first-checkout discovery runs inside the job lease and persists failures/backlog", async () => {
+    let h = harness({ due: [] }), calls = 0;
+    h.deps.recoverCheckouts = async () => { calls++; assert.equal(h.calls.rpc[0], "makeborne_billing_job_begin"); return { processed: 2, recovered: 1, failed: 1, backlog: true }; };
+    const result = await job.runPlanCreditReconcileJob(h.deps);
+    assert.equal(calls, 1); assert.equal(result.status, "partial");
+    assert.equal(result.stats.checkoutRecoveries, 1); assert.equal(result.stats.checkoutRecoveryFailures, 1); assert.equal(result.stats.backlog, true);
+    assert.equal(h.calls.finish.p_stats.checkoutRecoveryFailures, 1);
+    h = harness({ due: [] }); h.deps.recoverCheckouts = async () => { throw new Error("Discovery storage unavailable"); };
+    const failed = await job.runPlanCreditReconcileJob(h.deps);
+    assert.equal(failed.status, "failed"); assert.equal(h.calls.finish.p_status, "failed");
+  });
+  console.log(`${passed} reconciliation job checks passed (retry/backoff, sandbox base, payment pagination, cron auth, overlap, binding, failures, budget, heartbeat, expiry, checkout discovery). Whop and the database are mocked.`);
 })().catch(error => { console.error(error); process.exit(1); });
