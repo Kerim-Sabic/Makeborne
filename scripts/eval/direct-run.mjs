@@ -137,13 +137,14 @@ try {
       const enhancerReservation = await budget.reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
       const enhanceSpend = new RunSpend({ run: `${values.run}/${id}/enhance`, providerCapMicrousd: Math.round(enhancerBoundUsd * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 50_000 });
       let enhanced = null, enhanceError = null;
-      try { enhanced = await enhancerModule.enhanceBrief({ brief: prep.message, title: brief.title, design: prep.design, spend: enhanceSpend, signal: AbortSignal.timeout(45_000) }); }
+      let reply = null;
+      try { enhanced = await enhancerModule.enhanceBrief({ brief: prep.message, title: brief.title, design: prep.design, spend: enhanceSpend, signal: AbortSignal.timeout(45_000), onReply: (text, stop) => { reply = { text, stop }; } }); }
       catch (error) { enhanceError = String(error.message).slice(0, 200); }
       const enhancerUncertain = enhanceSpend.uncertainMicrousd > 0;
       await budget.settle(enhancerReservation, enhancerUncertain ? { unknown: true, detail: { error: enhanceError } } : { actualUsd: enhanceSpend.providerMicrousd / 1e6, detail: { calls: enhanceSpend.calls.length, usable: Boolean(enhanced) } });
       prep.enhancer = { usd: enhanceSpend.providerMicrousd / 1e6, uncertain: enhancerUncertain, calls: enhanceSpend.calls.length, usable: Boolean(enhanced), error: enhanceError, credits: enhanceSpend.customerCredits(RATE) };
       if (enhanced) prep.approved = { mode: 'enhanced', text: enhancedModule.renderEnhancedBrief(enhanced) };
-      fs.writeFileSync(path.join(itemDir, 'enhanced.json'), JSON.stringify({ variant: values.variant, asked: prep.asked, design: prep.design, message: prep.message, enhanced, text: prep.approved?.text ?? null, enhancer: prep.enhancer }, null, 2));
+      fs.writeFileSync(path.join(itemDir, 'enhanced.json'), JSON.stringify({ variant: values.variant, asked: prep.asked, design: prep.design, message: prep.message, enhanced, text: prep.approved?.text ?? null, enhancer: prep.enhancer, ...(enhanced ? {} : { unusableReply: reply }) }, null, 2));
       console.log(`  ${id} enhance: $${prep.enhancer.usd.toFixed(4)} usable=${prep.enhancer.usable}${enhanceError ? ` ERROR ${enhanceError}` : ''}`);
     }
     const required = enhancing ? { sections: prep.approved ? enhancedModule.requiredSections(prep.approved.text) : [], design: prep.design, brief: [brief.brief, prep.message].join('\n') } : undefined;

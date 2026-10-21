@@ -52,6 +52,8 @@ const reply = {
     assert.equal(parseEnhancedBrief("no json", source), null);
     assert.equal(parseEnhancedBrief(JSON.stringify({ ...reply, tone: "medium" }), source), null, "schema violations fall back");
     assert.equal(parseEnhancedBrief(JSON.stringify({ ...reply, sections: [reply.sections[0]] }), source), null, "a one-section brief is unusable");
+    const long = parseEnhancedBrief(JSON.stringify({ ...reply, business: "B".repeat(400), factsGiven: Array.from({ length: 30 }, () => "Country loaf £6.50"), sections: [...reply.sections, ...Array.from({ length: 10 }, (_, index) => ({ name: `Extra ${index}`, anchor: `Extra Section ${index}`, purpose: "p".repeat(500) }))] }), source);
+    assert.ok(long && long.business.length === 240 && long.sections.length === 12 && long.sections[5].anchor === "extra-section-0" && long.sections[5].purpose.length === 220, "a long reply is shortened, not dropped");
   });
 
   await check("rendered text round-trips the required sections; edits are read back; the block keeps the client's words first", () => {
@@ -81,7 +83,7 @@ const reply = {
     const brief = await enhanceBrief({ brief: source, design: { vibe: "warm" }, spend, signal: new AbortController().signal, anthropic: client });
     assert.ok(brief && brief.sections.length === 5);
     assert.equal(calls.length, 1); assert.equal(calls[0].model, "claude-haiku-5-5");
-    assert.ok(calls[0].max_tokens <= 2600);
+    assert.ok(calls[0].max_tokens <= 4000);
     assert.ok(spend.providerMicrousd > 0 && spend.providerMicrousd < 3_000, `a typical enhancement costs a fraction of a cent (${spend.providerMicrousd} µ$)`);
     assert.equal(spend.customerCredits(0.03), 1);
     const failing = { beta: { messages: { countTokens: async () => ({ input_tokens: 2400 }), stream() { throw new Error("overloaded"); } } } };

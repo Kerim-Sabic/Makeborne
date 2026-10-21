@@ -10,7 +10,7 @@ import { designAnswerLabels } from "./brief-questions";
 import { EnhancedBriefSchema, groundEnhancedBrief, type EnhancedBrief } from "./enhanced-brief";
 
 export const ENHANCER_MODEL = "claude-haiku-5-5";
-const MAX_TOKENS = 2_600, MIN_TOKENS = 900;
+const MAX_TOKENS = 4_000, MIN_TOKENS = 900;
 
 export function enhancerPrompt(input: { brief: string; title?: string; design?: DesignAnswers; attachments?: number }) {
   const answers = input.design ? designAnswerLabels(input.design) : [];
@@ -25,6 +25,7 @@ Rules:
 - primaryAction: the one thing visitors should do first, as a short button label and its kind.
 - constraints: what the client asked for or ruled out, and honest limits (e.g. "Online ordering is not connected: say how to order instead").
 - answersUsed: repeat the client's one-click answers you applied, in plain words.
+- Be concise: every string is one short sentence or phrase; at most 9 sections, 6 include items each, 12 given facts, 10 missing facts and 8 constraints.
 ${answers.length ? `\nThe client's one-click answers (apply them exactly): ${answers.join("; ")}.` : "\nThe client answered no design questions."}
 The client ${input.attachments ? `attached ${input.attachments} file${input.attachments === 1 ? "" : "s"}` : "attached no files"}.${input.title ? ` Project title: ${input.title.slice(0, 120)}.` : ""}
 
@@ -37,18 +38,39 @@ ${input.brief.slice(0, 8000)}
 </brief>`;
 }
 
+const clip = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max).trim() : value;
+const list = (value: unknown, max: number, map: (item: unknown) => unknown) => Array.isArray(value) ? value.slice(0, max).map(map) : value;
+const slug = (value: unknown) => typeof value === "string" ? value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/^(\d)/, "s-$1").slice(0, 40) || "section" : value;
+/** Long, detailed briefs produce long replies: over-long text and lists are shortened, never a reason to drop the whole brief. Shape and enums still must match. */
+function normalise(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const value = raw as Record<string, unknown>;
+  const object = (item: unknown) => (item && typeof item === "object" ? item as Record<string, unknown> : {});
+  return { ...value,
+    business: clip(value.business, 240), goal: clip(value.goal, 240), audience: clip(value.audience, 240), toneWhy: clip(value.toneWhy, 240),
+    primaryAction: value.primaryAction && typeof value.primaryAction === "object" ? { ...object(value.primaryAction), label: clip(object(value.primaryAction).label, 48) } : value.primaryAction,
+    sections: list(value.sections, 12, item => ({ ...object(item), name: clip(object(item).name, 60), anchor: slug(object(item).anchor), purpose: clip(object(item).purpose, 220),
+      include: list(object(item).include ?? [], 8, entry => clip(entry, 160)) })),
+    imagery: value.imagery && typeof value.imagery === "object" ? { ...object(value.imagery), notes: clip(object(value.imagery).notes, 320), textInImage: object(value.imagery).textInImage === undefined ? null : clip(object(value.imagery).textInImage, 60) } : value.imagery,
+    factsGiven: list(value.factsGiven ?? [], 24, entry => clip(entry, 240)),
+    factsMissing: list(value.factsMissing ?? [], 16, item => ({ ...object(item), fact: clip(object(item).fact, 140), placeholder: clip(object(item).placeholder, 140) })),
+    constraints: list(value.constraints ?? [], 14, entry => clip(entry, 240)),
+    answersUsed: list(value.answersUsed ?? [], 10, entry => clip(entry, 140)),
+  };
+}
+
 /** Validated and grounded; null when the reply is unusable. */
 export function parseEnhancedBrief(text: string, source: string): EnhancedBrief | null {
   const match = /\{[\s\S]*\}/.exec(text);
   if (!match) return null;
   let raw: unknown;
   try { raw = JSON.parse(match[0]); } catch { return null; }
-  const parsed = EnhancedBriefSchema.safeParse(raw);
+  const parsed = EnhancedBriefSchema.safeParse(normalise(raw));
   return parsed.success ? groundEnhancedBrief(parsed.data, source) : null;
 }
 
 /** One capped call. Throws on spend/provider errors; returns null for unusable output. */
-export async function enhanceBrief(input: { brief: string; title?: string; design?: DesignAnswers; attachments?: number; spend: RunSpend; signal: AbortSignal; anthropic?: AnthropicLike }): Promise<EnhancedBrief | null> {
+export async function enhanceBrief(input: { brief: string; title?: string; design?: DesignAnswers; attachments?: number; spend: RunSpend; signal: AbortSignal; anthropic?: AnthropicLike; onReply?: (text: string, stop: string | null) => void }): Promise<EnhancedBrief | null> {
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
   const client = input.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 45_000 }) as unknown as AnthropicLike);
   const system = [{ type: "text", text: "You are the creative director at a top design studio, writing the design brief for a client's website before anyone designs. You are specific, complete and strictly honest about what the client did and did not say. Reply with JSON only." }];
@@ -58,5 +80,6 @@ export async function enhanceBrief(input: { brief: string; title?: string; desig
   const { message } = await budgetedStream({ client, spend: input.spend, meter, models: [ENHANCER_MODEL], maxTokens: MAX_TOKENS, minTokens: MIN_TOKENS, signal: input.signal,
     params: { output_config: { effort: "low" }, system, messages } });
   const text = (message.content as Array<{ type: string; text?: string }>).filter(block => block.type === "text").map(block => block.text ?? "").join("");
+  input.onReply?.(text, (message as { stop_reason?: string | null }).stop_reason ?? null);
   return parseEnhancedBrief(text, input.brief);
 }
