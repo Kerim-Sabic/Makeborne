@@ -67,7 +67,7 @@ export type CutOff = { text: string; element: string; side: "left" | "right"; wi
 /** A card, panel or product mock with text that runs past the edge of the screen (reviews sent back a hero
  * card running off the page). Full-bleed bands (exactly the viewport wide), images, scrollers, marquees and
  * rotated bands are left alone: only boxed, painted elements holding text are reported, outermost first. */
-export function cutOffPanels(doc: Document, view: Window, width: number, limit = 3): CutOff[] {
+export function cutOffPanels(doc: Document, view: Window, width: number, limit = 3, phone = false): CutOff[] {
   const out: CutOff[] = [], reported: Element[] = [];
   const boxed = (style: CSSStyleDeclaration) => {
     const alpha = /rgba?\(([^)]+)\)/.exec(style.backgroundColor)?.[1]?.split(/[\s,/]+/).filter(Boolean)[3];
@@ -81,24 +81,30 @@ export function cutOffPanels(doc: Document, view: Window, width: number, limit =
       if (/auto|scroll/.test(style.overflowX) || (style.animationName && style.animationName !== "none")) return true;
       const matrix = /matrix\(([^)]+)\)/.exec(style.transform)?.[1]?.split(",").map(Number);
       if (matrix && (Math.abs(matrix[1]) > 0.01 || Math.abs(matrix[2]) > 0.01)) return true;
-      if (node.getAttribute("aria-hidden") === "true" || node.closest("details:not([open])") && !node.closest("summary")) return true;
+      // Inside a closed <details> (a menu's links) is hidden; the closed <details> and its summary are on screen.
+      if (node.getAttribute("aria-hidden") === "true" || node.parentElement?.closest("details:not([open])") && !node.closest("summary")) return true;
     }
     return false;
   };
-  for (const el of Array.from(doc.body.querySelectorAll("div, section, article, aside, figure, li, table, form, blockquote, dl, ol, ul"))) {
+  // On the narrowest phone (360 px) anything holding text past the edge is cut off or makes the page scroll sideways
+  // (4 of 20 app-round sites: a header button, a menu, a sign-up panel), boxed or not.
+  const selector = phone ? "div, section, article, aside, figure, li, table, form, blockquote, dl, ol, ul, a, button, details, nav, label, input, select, textarea" : "div, section, article, aside, figure, li, table, form, blockquote, dl, ol, ul";
+  for (const el of Array.from(doc.body.querySelectorAll(selector))) {
     if (out.length >= limit) break;
     const rect = el.getBoundingClientRect();
-    const side = rect.right > width + 2 ? "right" : rect.left < -2 ? "left" : null;
-    if (!side || rect.width < 120 || rect.height < 40 || Math.abs(rect.width - width) <= 2 || rect.width > width * 1.5) continue;
+    // Only an element that straddles the edge is cut off; one wholly off screen (a skip link before focus) is parked on purpose.
+    const side = rect.right > width + 2 && rect.left < width - 2 ? "right" : rect.left < -2 && rect.right > 2 ? "left" : null;
+    if (!side || rect.width < (phone ? 24 : 120) || rect.height < (phone ? 16 : 40) || Math.abs(rect.width - width) <= 2 || rect.width > width * 1.5) continue;
     if (reported.some(parent => parent.contains(el))) continue;
-    const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
-    if (text.length < 2 || !boxed(view.getComputedStyle(el)) || exempt(el)) continue;
+    if (phone && el.closest(".sr-only, [class*='visually-hidden']")) continue;
+    const text = (el.textContent ?? "").replace(/\s+/g, " ").trim() || (el as HTMLInputElement).placeholder || el.getAttribute("aria-label") || "";
+    if (text.length < 2 || (!phone && !boxed(view.getComputedStyle(el))) || exempt(el)) continue;
     reported.push(el); out.push({ text: text.slice(0, 60), element: describe(el), side, width });
   }
   return out;
 }
 
-function measure(html: string, width: number, parse: ReturnType<typeof canvasColorParser>) {
+function measure(html: string, width: number, parse: ReturnType<typeof canvasColorParser>, phoneOnly = false) {
   return new Promise<ReturnType<typeof measureRenderedContrast> & { covered: CoveredText[]; cutOff: CutOff[] }>((resolve, reject) => {
     const frame = document.createElement("iframe");
     frame.setAttribute("sandbox", "allow-same-origin");
@@ -108,7 +114,9 @@ function measure(html: string, width: number, parse: ReturnType<typeof canvasCol
       try {
         const doc = frame.contentDocument, view = frame.contentWindow;
         if (!doc || !view) throw new Error("unavailable");
-        const contrast = measureRenderedContrast(doc, view, "/", parse, 400);
+        // The 360 px pass only looks for content past the screen edge; contrast and covered text are measured at 390.
+        const contrast = phoneOnly ? { findings: [], measured: 0, unmeasured: { image: 0 } } as unknown as ReturnType<typeof measureRenderedContrast> : measureRenderedContrast(doc, view, "/", parse, 400);
+        if (phoneOnly) { resolve({ ...contrast, covered: [], cutOff: cutOffPanels(doc, view, width, 2, true) }); return; }
         // The whole page in one viewport, so every line can be hit-tested.
         frame.style.height = `${Math.min(20_000, doc.documentElement.scrollHeight)}px`;
         resolve({ ...contrast, covered: coveredText(doc, view, width), cutOff: cutOffPanels(doc, view, width) });
@@ -130,6 +138,7 @@ export async function probeContrast(files: Record<string, string>): Promise<{ fi
     const result = await measure(html, width, parse);
     findings.push(...result.findings); measured += result.measured; unmeasuredImage += result.unmeasured.image; covered.push(...result.covered); cutOff.push(...result.cutOff);
   }
+  cutOff.push(...(await measure(html, 360, parse, true)).cutOff);
   return { findings: summarizeFindings(findings), measured, unmeasuredImage, covered, cutOff };
 }
 

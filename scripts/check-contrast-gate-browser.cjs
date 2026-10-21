@@ -47,6 +47,12 @@ async function main() {
     assert.ok(headline.some(problem => /^Cut off: div\.mock \("Night shift docket"\) runs past the right edge of the screen at 1440 px wide/.test(problem)), JSON.stringify(headline));
     assert.ok(!headline.some(problem => /section\.band|marquee|div\.track/.test(problem)), "full-width bands and marquees are not cut-off panels");
     pass("a headline highlight painted over the line above, and a card running off the screen edge, block the finish; full-width bands and marquees do not");
+    const phone = await check(site(
+      'export default function App() { return <><a className="skip" href="#main">Skip to content</a><header className="hdr"><span className="logo">Ledger</span><a className="btn" href="#join">Sign up free</a></header><main id="main"><p>Body</p></main></>; }\n',
+      "body { margin: 0; background: #ffffff; color: #111111; font: 16px/1.5 system-ui, sans-serif; overflow-x: clip; }\n.skip { position: absolute; left: -999px; top: 0; }\n.hdr { display: flex; gap: 16px; padding: 12px 20px; }\n.logo { flex: 0 0 auto; width: 220px; }\n.btn { flex: 0 0 auto; width: 130px; background: #111111; color: #ffffff; padding: 8px; }\n"));
+    assert.ok(phone.some(problem => /^Cut off: a\.btn \("Sign up free"\) runs past the right edge of the screen at 360 px wide/.test(problem)), JSON.stringify(phone));
+    assert.ok(!phone.some(problem => /Skip to content/.test(problem)), "a skip link parked off screen is not cut off");
+    pass("on a 360 px phone a header button past the edge blocks the finish; a parked skip link does not");
     const clean = await check(site('export default function App() { return <main><h1>Clear heading</h1><p>Plain readable text</p></main>; }\n', "body { margin: 0; background: #fafaf7; color: #1b1d1f; font: 16px/1.5 system-ui, sans-serif; }\n"));
     assert.deepEqual(clean, []);
     pass("a site whose text all passes reports no problem");

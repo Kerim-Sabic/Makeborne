@@ -34,7 +34,7 @@ export function coveredProblem(item: CoveredText) {
 
 /** A boxed element with text running past the screen edge (a hero card off the page). */
 export function cutOffProblem(item: CutOff) {
-  return `Cut off: ${item.element} ("${item.text}") runs past the ${item.side} edge of the screen at ${item.width} px wide. Keep cards, panels and product mocks inside the page margins at every width (size them to their grid column with max-width: 100%; only images and full-width bands may bleed), then call finish again.`;
+  return `Cut off: ${item.element} ("${item.text}") runs past the ${item.side} edge of the screen at ${item.width} px wide. Keep everything inside the page margins at every width down to 360 px: size cards, panels and product mocks to their column (max-width: 100%), let rows wrap, and on small phones move secondary header items into the menu; only images and full-width bands may bleed. Then call finish again.`;
 }
 
 /** Findings to problems: the worst pairs first, at most MAX_CONTRAST_PROBLEMS. */
