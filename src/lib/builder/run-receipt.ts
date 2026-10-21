@@ -28,6 +28,8 @@ export type RunMeter = {
   sources: string[];
   /** The advisor brief this request came from ("Mira’s brief · revision 2"), when it carried one. */
   brief?: string;
+  /** Which brief the first build used, and the credits its enhancement was charged (settled separately, before the build). */
+  enhanced?: { mode: "enhanced" | "edited" | "original"; credits: number };
   /** Generated images: the model the router chose, its quality, size, reason and measured cost. */
   images: ReceiptImage[];
 };
@@ -46,6 +48,7 @@ export type RunReceipt = {
   sources: string[];
   /** The advisor brief recorded with this request, when there was one. */
   brief?: string;
+  enhanced?: { mode: "enhanced" | "edited" | "original"; credits: number };
   checks: { ok: boolean; label: string }[];
   images: ReceiptImage[];
   /** This request saved nothing and the server settled it at zero credits. */
@@ -119,7 +122,7 @@ export function runReceipt(meter: RunMeter, options: { website: boolean; unlimit
   return {
     charged, unlimited: options.unlimited, saved: meter.saved, version: meter.version,
     durationMs: Math.max(0, (options.now ?? Date.now()) - meter.started),
-    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), checks, images: meter.images.map(image => ({ ...image })),
+    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), ...(meter.enhanced ? { enhanced: { ...meter.enhanced } } : {}), checks, images: meter.images.map(image => ({ ...image })),
     notCharged: !options.unlimited && charged === 0 && !meter.saved && meter.failed,
   };
 }
