@@ -149,6 +149,12 @@ export function qualityProblems({ files, changed, routes = [], required }: Quali
   if (quickBars.length) problems.push(`The quick-action bar (${quickBars.slice(0, 2).join(", ")}) must follow the quick-action pattern: <nav aria-label="Quick actions">, display:none from 768px, and padding-bottom on the page (calc with env(safe-area-inset-bottom)) so it never covers content.`);
   if (others.length) problems.push(`Remove the fixed bottom bar or floating button (${others.slice(0, 3).join(", ")}): it covers content on phones. Keep the action in the sticky header, the first screen and the closing section; a local business may use the mobile quick-action bar pattern instead.`);
 
+  // Body copy in a monospace face reads as a code page (the judge marked it down); mono is for data and labels only.
+  const monoBody = [...touchedStyles.matchAll(/([^{}@]+)\{([^{}]*)\}/g)]
+    .filter(([, selector, body]) => /(?:^|[\s,>])(?:body|p|main|article)(?![\w-])/.test(selector) && /font-family:\s*[^;}]*(?:\bmono\b|monospace|--font-mono|--mono\b)/i.test(body))
+    .map(([, selector]) => selector.trim().split(/\s*,\s*/).slice(0, 2).join(", "));
+  if (monoBody.length) problems.push(`Body copy is set in a monospace face (${[...new Set(monoBody)].slice(0, 3).join("; ")}): use the text family for paragraphs; keep the mono face for data, labels and code.`);
+
   // Completeness: every section the brief, the approved enhanced brief or the client's answers ask for.
   if (required && touchedScripts.length) {
     const missing = missingSections(scripts, required);

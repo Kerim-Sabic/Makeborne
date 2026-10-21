@@ -58,7 +58,8 @@ Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_C
 delete process.env.MAKEBORNE_BUILDER_MODEL;
 
 const { runBuilder } = loadApp('src/lib/builder/agent.ts');
-const { renderedContrastCheck } = loadApp('src/lib/builder/contrast-gate.ts');
+// Older trees (--repo at a base commit) have no contrast gate: they run without it, as they shipped.
+const renderedContrastCheck = fs.existsSync(path.join(REPO, 'src/lib/builder/contrast-gate.ts')) ? loadApp('src/lib/builder/contrast-gate.ts').renderedContrastCheck : null;
 const { ProjectFiles } = loadApp('src/lib/builder/files.ts');
 const { RunSpend, memoryGate } = loadApp('src/lib/ai/run-spend.ts');
 const { BUILDER_EFFORT } = loadApp('src/lib/builder/pricing.ts');
@@ -102,7 +103,7 @@ function context({ brief, files, history, prep }) {
 const browser = await chromium.launch();
 const runtime = await serve(path.join(REPO, 'public'));
 // The build route's rendered-contrast finish gate, on the local runtime origin (same probe, same rules).
-const contrastCheck = renderedContrastCheck({ origin: runtime.url, launch: () => chromium.launch() });
+const contrastCheck = renderedContrastCheck ? renderedContrastCheck({ origin: runtime.url, launch: () => chromium.launch() }) : undefined;
 try {
   for (const id of only) {
     const brief = JSON.parse(fs.readFileSync(path.join(REPO, 'scripts', 'eval', /^s\d/.test(id) ? 'briefs-short' : 'briefs', `${id}.json`), 'utf8'));

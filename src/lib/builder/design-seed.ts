@@ -105,7 +105,7 @@ const GROUND_NOTES: Record<Ground, string> = {
  * default; dark is suggested only where the subject itself is dark (nightlife, events). */
 const GROUNDS: Record<Industry, Weighted<Ground>> = {
   food: [["photographic", 2], ["warm light", 2], ["pale tint", 1], ["colour flood", 2], ["dark", 1], ["mid-tone", 1]],
-  saas: [["cool light", 2], ["pale tint", 1], ["colour flood", 1], ["dark", 2], ["mid-tone", 1]],
+  saas: [["cool light", 3], ["pale tint", 2], ["colour flood", 1], ["mid-tone", 1]],
   professional: [["cool light", 2], ["warm light", 2], ["pale tint", 2], ["mid-tone", 1]],
   creator: [["cool light", 1], ["pale tint", 1], ["colour flood", 2], ["dark", 2], ["warm light", 1], ["mid-tone", 1]],
   commerce: [["pale tint", 2], ["warm light", 1], ["cool light", 1], ["colour flood", 2], ["photographic", 1], ["dark", 1], ["mid-tone", 1]],
