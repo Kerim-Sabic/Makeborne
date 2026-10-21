@@ -68,7 +68,8 @@ export async function POST(request: Request) {
         throw new RequestError("ENHANCE_UNAVAILABLE", "Your brief couldn't be enhanced just now. Nothing was charged; the build uses your own words.", 503);
       }
       const settled = await settleRun(hold, spend.customerCredits(rate), detail());
-      return Response.json({ enhanced, text: renderEnhancedBrief(enhanced), charged: settled.charged, providerMicrousd: spend.providerMicrousd },
+      // The hold reference names this call in the provider-call ledger (receipts and eval settlement); it carries no secret.
+      return Response.json({ enhanced, text: renderEnhancedBrief(enhanced), charged: settled.charged, providerMicrousd: spend.providerMicrousd, reference: hold.reference },
         { headers: { "Cache-Control": "no-store" } });
     } finally { active.delete(user.id); }
   } catch (error) { return apiError(error); }

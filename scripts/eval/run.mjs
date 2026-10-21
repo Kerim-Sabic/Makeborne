@@ -8,6 +8,9 @@
 //                                                  websites run in Create mode (the studio default); --plan runs Plan mode first
 //                                                  generate through the app's own routes (PAID)
 //   node scripts/eval/run.mjs --selftest-live      live-path safety checks with fakes (free)
+//   --enhance (with --live, websites in Create mode): the studio's enhanced-brief step first: POST /api/build/enhance
+//     (its own eval reservation, kind runner-enhancer, at the 1-credit hold; settled from the provider-call ledger by the
+//     route's hold reference), then the build with { brief: { mode: "enhanced", text } }, as the studio's Start building does.
 //
 // The live path drives the same HTTP routes, in the same order, with the same
 // bodies as the studio (src/components/live-builder.tsx): plan -> approved
@@ -1506,11 +1509,21 @@ async function assetData(session, workspaceId, artifactId, assets, variant) {
   return list;
 }
 
-async function runBrief({ session, browser, brief, runDir, runId, pricing, images, rerun, withPlan = false, control, deps = {} }) {
+/** The enhanced-brief call's provider dollars, from the provider-call ledger by its hold reference (read-only). */
+async function enhancerLedger(reference) {
+  return withReadOnly('release-auth', async client => {
+    const { rows } = await client.query(`select status, bound_microusd::text bound, charged_microusd::text charged from makeborne_private.live_provider_calls where run_reference = $1`, [reference]);
+    return { calls: rows.length, open: rows.filter(row => row.status === 'open' || row.status === 'uncertain').length, actualMicrousd: rows.reduce((sum, row) => sum + Number(row.charged ?? row.bound), 0) };
+  });
+}
+
+async function runBrief({ session, browser, brief, runDir, runId, pricing, images, rerun, withPlan = false, enhance = false, control, deps = {} }) {
   // deps: injected fakes for the self-test; the defaults are the real functions.
   const { reserveFn = reserve, setLimits = setProviderLimits, settleBriefFn = settleBrief, settleFn = settle, save = saveOutputs, midnight = midnightWaitMs, now = Date.now, sleep = delay } = deps;
   const kind = brief.kind;
   const boundUsd = boundFor(kind, pricing, withPlan);
+  // The studio's enhanced-brief step (first website build in Create mode): its own 1-credit hold.
+  const enhancerBoundUsd = enhance && kind === 'website' && !withPlan ? round2(loadApp('src/lib/builder/enhanced-brief.ts').ENHANCER_CREDITS * pricing.costPerCreditUsd) : 0;
   const scopes = images ? ['global', 'anthropic', 'openai'] : ['global', 'anthropic'];
   control.assertRunning(`${brief.id}: before the midnight check`);
   // The whole brief (until its limits are disabled again) must fit before 00:00 UTC.
@@ -1542,7 +1555,7 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     copyFileSync(brief.file, path.join(item.dir, 'brief.json'));
     // Today's spend is read now, after the reservation: the limit allows this brief's bound and no more.
     // enableLimits refuses once the run is stopping and the guard re-checks before every scope write.
-    const limits = await control.enableLimits(guard => setLimits({ enabled: true, boundUsd, scopes, note: `Eval ${runId}: ${brief.id} (bound ${money(boundUsd)})`, guard }));
+    const limits = await control.enableLimits(guard => setLimits({ enabled: true, boundUsd: round2(boundUsd + enhancerBoundUsd), scopes, note: `Eval ${runId}: ${brief.id} (bound ${money(boundUsd)})`, guard }));
     cost.limits = limits.set;
 
     // Project and artifact, exactly as the studio's create routes take them.
@@ -1563,13 +1576,31 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     const full = brief.brief.trim();
     const message = full.length > 8000 ? `${full.slice(0, 7400).replace(/\s+\S*$/, '')}…\n\n(The full brief is in the project details.)` : full;
 
+    let approvedBrief = null;
+    if (enhancerBoundUsd) {
+      const enhancerReservation = await reserveFn({ kind: 'runner-enhancer', ref: brief.id, boundUsd: enhancerBoundUsd, note: `${runId} brief enhancer`, unique: !rerun });
+      control.open.add(enhancerReservation);
+      const response = await session.fetch('/api/build/enhance', { method: 'POST', body: { ...base, brief: message } });
+      const value = await response.json().catch(() => null);
+      item.requests.push({ stage: 'enhance', method: 'POST', path: '/api/build/enhance', status: response.status });
+      const usable = response.ok && typeof value?.text === 'string' && typeof value?.reference === 'string';
+      writeJson(path.join(item.dir, 'enhanced.json'), { status: response.status, enhanced: value?.enhanced ?? null, text: value?.text ?? null, charged: value?.charged ?? null, providerMicrousd: value?.providerMicrousd ?? null, error: usable ? null : value?.error ?? null });
+      // Settled from the provider-call ledger; a failed enhancement names no reference, so its full bound stays counted.
+      const ledger = usable ? await enhancerLedger(value.reference).catch(() => null) : null;
+      await settleFn(enhancerReservation, ledger && !ledger.open && ledger.calls ? { actualUsd: usd(ledger.actualMicrousd), detail: { calls: ledger.calls } } : { unknown: true, detail: { status: response.status, reason: usable ? 'ledger unreadable or open' : 'enhancement failed (fail open)' } });
+      control.open.delete(enhancerReservation);
+      cost.enhancer = { boundUsd: enhancerBoundUsd, reservationId: enhancerReservation, status: response.status, usable, actualUsd: ledger && !ledger.open ? usd(ledger.actualMicrousd) : null, charged: value?.charged ?? null };
+      if (usable) approvedBrief = { mode: 'enhanced', text: value.text };
+      itemJson.generation.enhancer = cost.enhancer; writeJson(path.join(item.dir, 'item.json'), itemJson);
+    }
+
     let approvedPlan = null, planRevision = null;
     // Create mode (the studio composer's default) sends the brief straight to the builder;
     // --plan runs Plan mode first and builds the plan as proposed.
     if (kind === 'website' && withPlan) {
       const planKey = randomUUID();
       item.actionKeys.push(planKey); cost.operations.push({ kind: 'plan', actionKey: planKey });
-      const planned = await item.stage(session, 'plan', '/api/build/plan', { ...base, expectedVersion: 0, expectedRevision: 0, message, effort: EFFORT, attachments: [],
+      const planned = await item.stage(session, 'plan', '/api/build/plan', { ...base, expectedVersion: 0, expectedRevision: 0, message, effort: EFFORT, attachments: [], approvedMaximum: pricing.planCeilingCredits,
         operation: { actionKey: planKey, stepKey: randomUUID() } });
       if (!planned.result || !planned.plan?.stored?.plan) throw Object.assign(new Error(planned.terminal.message ?? 'No plan was produced'), { code: planned.terminal.code ?? 'PLAN_MISSING', stage: 'plan' });
       approvedPlan = planned.plan.stored.plan; planRevision = planned.plan.stored.revision;
@@ -1581,7 +1612,9 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     item.actionKeys.push(buildKey); cost.operations.push({ kind: 'build', actionKey: buildKey });
     const built = await item.stage(session, 'build', '/api/build', { ...base, expectedVersion: 0,
       message: approvedPlan ? `Build the approved plan: ${approvedPlan.title}` : message, effort: EFFORT,
-      operation: { actionKey: buildKey, stepKey: randomUUID() }, attachments: [], ...(approvedPlan ? { plan: approvedPlan } : {}) });
+      // A new request names the maximum the studio showed (the effort ceiling), as live-builder.tsx sends it.
+      approvedMaximum: pricing.buildCeilingCredits,
+      operation: { actionKey: buildKey, stepKey: randomUUID() }, attachments: [], ...(approvedPlan ? { plan: approvedPlan } : {}), ...(approvedBrief ? { brief: approvedBrief } : {}) });
     let result = built.result;
     if (result && approvedPlan) {
       // planner.markBuilt(): mark the plan built after the first saved build (free).
@@ -1749,7 +1782,7 @@ function heldSecrets({ stack, fixture, images }) {
   ];
 }
 
-export async function runLive({ report, approval, only, max, images, rerun = false, plan = false }) {
+export async function runLive({ report, approval, only, max, images, rerun = false, plan = false, enhance = false }) {
   let selected = report.briefs.items;
   if (only?.length) selected = selected.filter(brief => only.includes(brief.id));
   if (max) selected = selected.slice(0, max);
@@ -1812,7 +1845,7 @@ export async function runLive({ report, approval, only, max, images, rerun = fal
         // Checked again right before the brief reserves (runBrief re-checks before reserving and before enabling limits).
         if (control.stopping) { stopped = stopReason(); break; }
         console.log(`\n  ${brief.id} (${brief.kind}, bound ${money(bound)})`);
-        try { items.push(await runBrief({ session, browser: control.browser, brief, runDir, runId, pricing: report.pricing, images, rerun, withPlan: plan, control })); }
+        try { items.push(await runBrief({ session, browser: control.browser, brief, runDir, runId, pricing: report.pricing, images, rerun, withPlan: plan, enhance, control })); }
         catch (error) {
           if (error instanceof CapReached) { stopped = error.message; break; }
           if (error instanceof DuplicateReservation) { stopped = `refused ${brief.id}: ${error.message} (pass --rerun)`; break; }
@@ -2243,7 +2276,7 @@ async function liveSelfTest() {
 function cli(argv) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     fixtures: { type: 'boolean' }, 'include-redesign': { type: 'boolean' }, live: { type: 'boolean' }, approval: { type: 'string' }, rerun: { type: 'boolean' },
-    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, plan: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, plan: { type: 'boolean' }, enhance: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     'selftest-live': { type: 'boolean' }, 'selftest-watchdog-parent': { type: 'boolean' },
   }, strict: true });
   const max = values.max === undefined ? null : Number(values.max);
@@ -2302,7 +2335,7 @@ async function main() {
       direction: item.direction, shared: item.shared, sha256: item.sha256, hashOk: item.hashOk, chars: item.chars, file: rel(item.file) })) } },
   });
   printPreflight(report, runDir);
-  if (options.live) return runLive({ report, approval: options.approval, only: options.only, max: options.max, images: options.images, rerun: options.rerun, plan: options.plan });
+  if (options.live) return runLive({ report, approval: options.approval, only: options.only, max: options.max, images: options.images, rerun: options.rerun, plan: options.plan, enhance: options.enhance });
   return 0;
 }
 
