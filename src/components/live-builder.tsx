@@ -28,6 +28,7 @@ import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendi
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
 import { provenanceLabel, type ProjectProvenance } from "@/lib/experts/advisor-brief";
+import responsive from "../../infra/project-runtime/responsive-images.cjs";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
@@ -73,7 +74,8 @@ const MAX_CONTINUATIONS = 2;
  * so the sandboxed capture frame needs no network access. */
 async function assetDataUrls(assets: Live["assets"], scope: { accountId: string; workspaceId: string; artifactId: string }): Promise<Record<string, string>> {
   const controller = new AbortController();
-  const entries = await Promise.all(assets.map(async asset => {
+  // Responsive copies (srcset) are for the published site; captures use the originals.
+  const entries = await Promise.all(assets.filter(asset => !responsive.isVariantPath(asset.path)).map(async asset => {
     try {
       const blob = await readCloudImage(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/assets/${asset.id}`, scope.accountId, controller.signal);
       const url = await new Promise<string>((resolve, reject) => {

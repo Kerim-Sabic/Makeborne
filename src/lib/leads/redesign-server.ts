@@ -2,7 +2,8 @@ import "server-only";
 import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Fetcher, Lookup } from "../mail/research";
-import { storeProjectImage } from "../builder/images";
+import { storeProjectImage, storeResponsiveVariants } from "../builder/images";
+import responsive from "../../../infra/project-runtime/responsive-images.cjs";
 import type { ProjectFiles } from "../builder/files";
 import { readWithHtml } from "./enrich";
 import { brandFromPage, fetchPublic, type ImportResult } from "../brand/server";
@@ -90,6 +91,10 @@ export async function importTheirPhotos(client: SupabaseClient, scope: { workspa
       const resized = await sharp(fetched.bytes, { limitInputPixels: 60_000_000 }).rotate().resize({ width: PHOTO_EDGE, height: PHOTO_EDGE, fit: "inside", withoutEnlargement: true }).toBuffer();
       const asset = await storeProjectImage(client, scope, resized, { kind: "client-photo", source: candidate.url.slice(0, 500) });
       files.addAsset({ id: asset.id, path, sha256: asset.sha256, bytes: asset.bytes, mediaType: "image/webp" });
+      // Responsive copies (srcset) while they fit the site's image budget.
+      const fits = (added: { bytes: number }[]) => responsive.variantsFit([...files.assets.values()], added);
+      const variants = await storeResponsiveVariants(client, scope, { ...asset, path }, { fits });
+      if (variants.length && fits(variants)) for (const variant of variants) files.addAsset(variant);
       return { url: `/images/photo-${index + 1}.webp`, alt: candidate.alt, width: asset.width, height: asset.height };
     } catch { return null; }
   }));

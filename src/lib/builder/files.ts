@@ -7,6 +7,7 @@ import {
 import { FONT_IMPORT, FONTS_BY_ID, unavailableFonts } from "./fonts";
 import { LUCIDE, lucideImports, unknownLucideIcons } from "./icons";
 import { contentProblems, MANIFEST_PATH } from "../portal/content-model";
+import responsive from "../../../infra/project-runtime/responsive-images.cjs";
 
 export type SourceAsset = WebsiteProjectSource["assets"][number];
 export type DesignDirection = NonNullable<WebsiteProjectSource["designDirection"]>;
@@ -157,7 +158,8 @@ export class ProjectFiles {
       files: [...[...this.files.entries()].map(([path, content]) => ({ path, content })),
         { path: "package.json", content: JSON.stringify(projectPackage, null, 2) },
         { path: "package-lock.json", content: JSON.stringify(projectLock) }],
-      assets: [...this.assets.values()],
+      // Responsive copies of images that are no longer in the project are dropped.
+      assets: responsive.pruneVariants([...this.assets.values()]),
       routes,
     });
     if (!parsed.success) throw new FileToolError(`The project is not valid yet: ${parsed.error.issues.slice(0, 3).map(issue => issue.message).join(" ")}`);

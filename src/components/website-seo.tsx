@@ -9,6 +9,7 @@ import { readPreparedHead } from "@/lib/hosting/publish-report";
 import { PublicationPreparationSchema, type PublicationPreparation } from "@/lib/projects/publication-contract";
 import { cloudAccountGuard } from "./cloud-api";
 import { recordCheck } from "./use-check-record";
+import responsive from "../../infra/project-runtime/responsive-images.cjs";
 import "@/app/website-seo.css";
 
 type Business = NonNullable<SiteSeo["business"]>;
@@ -43,7 +44,7 @@ export default function WebsiteSeo({ source, siteTitle, seo, disabled, scope, ve
   const [homeHtml, setHomeHtml] = useState<string | null>(null);
   const [checkedFrom, setCheckedFrom] = useState<CheckedFrom | null>(null);
   const [checking, setChecking] = useState(false);
-  const images = useMemo(() => source.assets.map(asset => `/${asset.path.replace(/^public\//, "")}`), [source.assets]);
+  const images = useMemo(() => source.assets.filter(asset => !responsive.isVariantPath(asset.path)).map(asset => `/${asset.path.replace(/^public\//, "")}`), [source.assets]);
   const business = draft.business;
 
   function update(next: SiteSeo) {
