@@ -14,6 +14,7 @@
  */
 import type { Browser } from "playwright";
 import type { ContrastFinding } from "./rendered-contrast";
+import type { CoveredText } from "./contrast-probe";
 
 const HOST_PATH = "/__makeborne-contrast-host";
 const STATE = { default: "", hover: " on hover", focus: " on keyboard focus", invalid: " in its error state" } as const;
@@ -23,6 +24,11 @@ export const MAX_CONTRAST_PROBLEMS = 6;
 export function contrastProblem(finding: ContrastFinding) {
   if (finding.kind === "field-border") return `Contrast: the border of ${finding.element}${STATE[finding.state]} is ${finding.ratio}:1 (${finding.foreground} on ${finding.background}); form field borders need ${finding.required}:1. Darken the border colour until it reaches ${finding.required}:1.`;
   return `Contrast: ${finding.element}${STATE[finding.state]} is ${finding.ratio}:1 (${finding.foreground} on ${finding.background}) and needs ${finding.required}:1 at its size. Change that text's colour on that surface (mix it toward the ink, or use --ink on tinted blocks and --accent-on-dark on dark panels) or put the text on a solid panel, then call finish again.`;
+}
+
+/** Text painted over by another element (a card over the phone number): one instruction per covered line. */
+export function coveredProblem(item: CoveredText) {
+  return `Covered text: "${item.text}" (${item.element}) is hidden under ${item.by} at ${item.width} px wide. Move, resize or re-stack the overlapping element so this text is fully visible at every width, then call finish again.`;
 }
 
 /** Findings to problems: the worst pairs first, at most MAX_CONTRAST_PROBLEMS. */
@@ -49,11 +55,11 @@ export function renderedContrastCheck(input: { origin: string; launch: () => Pro
       await page.goto(`${origin}${HOST_PATH}`, { waitUntil: "load" });
       await page.addScriptTag({ url: `${origin}/builder-runtime/contrast-probe.js` });
       const result = await page.evaluate(async record => {
-        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>) => Promise<{ findings: ContrastFinding[] }> } }).__makeborneContrast;
+        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[] }> } }).__makeborneContrast;
         if (!probe) throw new Error("contrast probe unavailable");
         return probe.probeContrast(record);
       }, Object.fromEntries(files));
-      return contrastProblems(result.findings);
+      return [...(result.covered ?? []).slice(0, 4).map(coveredProblem), ...contrastProblems(result.findings)];
     } catch (error) {
       console.error(JSON.stringify({ event: "builder_contrast_unverified", reason: error instanceof Error ? error.message.slice(0, 200) : "unavailable" }));
       return null;

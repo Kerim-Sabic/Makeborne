@@ -35,6 +35,11 @@ async function main() {
     assert.ok(failing.some(problem => /Book a table/.test(problem) && /on hover/.test(problem)), "hover states are measured");
     assert.ok(!failing.some(problem => /Readable paragraph|Opening hours/.test(problem)), "passing pairs are not reported");
     pass("a failing text pair (muted text on a tinted block) and a failing hover state block the finish with the exact colours and ratio");
+    const covered = await check(site(
+      'export default function App() { return <main><section className="hero"><h1>Fast repairs</h1><p className="phone">Call (555) 010-0187</p><div className="card">Work order card</div></section><p>Below the hero</p></main>; }\n',
+      "body { margin: 0; background: #ffffff; color: #111111; font: 16px/1.5 system-ui, sans-serif; }\n.hero { position: relative; min-height: 400px; }\n.card { position: absolute; top: 40px; left: 0; width: 600px; height: 160px; background: #ffffff; color: #111111; border: 1px solid #111111; }\n"));
+    assert.ok(covered.some(problem => /^Covered text: "Call \(555\) 010-0187"/.test(problem) && /hidden under div\.card/.test(problem)), JSON.stringify(covered));
+    pass("text painted over by another element (a card over the phone number) blocks the finish");
     const clean = await check(site('export default function App() { return <main><h1>Clear heading</h1><p>Plain readable text</p></main>; }\n', "body { margin: 0; background: #fafaf7; color: #1b1d1f; font: 16px/1.5 system-ui, sans-serif; }\n"));
     assert.deepEqual(clean, []);
     pass("a site whose text all passes reports no problem");
