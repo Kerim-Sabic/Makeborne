@@ -104,6 +104,12 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     if (storage) saveReviewDraft(storage, draftScope, { comment: body, pin, decision: deciding, note }, Date.now());
   }, [draftReadFor, draftScope, body, pin, deciding, note]);
   const draftShown = draftRestoredAt !== null && hasReviewDraftText({ comment: body, note: deciding ? note : "" });
+  /** Store what is still unsent right away once a post succeeds. The save effect would follow after the next
+   * paint, which a reviewer leaving at once (or a slower engine, as WebKit) could outrun, restoring sent text. */
+  function forgetSent(remaining: Parameters<typeof saveReviewDraft>[2]) {
+    const storage = browserStorage();
+    if (storage) saveReviewDraft(storage, draftScope, remaining, Date.now());
+  }
   function discardDraft() {
     const storage = browserStorage();
     if (storage) discardReviewDraft(storage, draftScope);
@@ -152,6 +158,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     try {
       const result = await post<{ comment: ReviewComment }>(`/api/review/${token}/comments`, { version: initial.version, name: identity.name, email: identity.email, body, anchor: anchor() });
       saveIdentity(identity); setEditingIdentity(false); setIdentityReady(true);
+      forgetSent({ comment: "", pin: null, decision: deciding, note });
       setComments(current => [...current, result.comment]); setBody(""); setPin(null); setActive(result.comment.id); setDraftRestoredAt(null);
       setNotice("Comment added. Thank you!");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your comment didn’t go through."); }
@@ -164,6 +171,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     try {
       const result = await post<{ decision: ReviewDecision; comment: ReviewComment }>(`/api/review/${token}/decision`, { version: initial.version, name: identity.name, email: identity.email, decision: value, note });
       saveIdentity(identity); setEditingIdentity(false); setIdentityReady(true);
+      forgetSent({ comment: body, pin, decision: null, note: "" });
       setDecision(result.decision); setComments(current => [...current, result.comment]); setDeciding(null); setNote(""); setDraftRestoredAt(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your decision didn’t go through."); }
     finally { setBusy(false); }
