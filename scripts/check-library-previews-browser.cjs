@@ -706,6 +706,26 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
       await page.locator("#toolbar").getByRole("button", { name: "Refresh" }).click();
       await waitCards(page, 4);
     });
+    await scenario("rendered frames are bounded to cards near the viewport; scrolling back remounts from memory without another read", () => {
+      window.session = { user: { id: window.ids.A } };
+      const many = Array.from({ length: 60 }, (_, n) => window.artifact(`e1000000-0000-4000-8000-${String(n).padStart(12, "0")}`, "website", `Site ${n}`, 1));
+      window.listings[window.ids.A] = { workspaces: [{ id: window.ids.W1, name: "Studio", role: "owner" }], artifacts: { [window.ids.W1]: many } };
+      window.autoPreview = request => window.answer(request, { format: "website-snapshot", html: window.siteHtml("BOUNDED " + request.artifactId.slice(-2)) }, { kind: "website" });
+    }, async page => {
+      await page.waitForFunction(() => document.querySelectorAll(".account-project-card").length === 60, null, { timeout });
+      for (let round = 0; round < 40; round++) { await page.evaluate(() => window.scrollBy(0, 400)); await page.waitForTimeout(60); }
+      await page.waitForFunction(() => window.scrollY + innerHeight >= document.documentElement.scrollHeight - 2, null, { timeout });
+      await page.waitForTimeout(300);
+      const atBottom = await page.evaluate(() => ({ frames: document.querySelectorAll(".library-card-thumb iframe").length, firstHasFrame: !!document.querySelector(".account-project-card .library-card-thumb iframe") && document.querySelector(".account-project-card").querySelector("iframe") !== null, reads: window.previewRequests.length }));
+      assert.ok(atBottom.reads >= 50, `the previews were read while scrolling (${atBottom.reads})`);
+      assert.ok(atBottom.frames < 40, `only cards near the viewport keep a frame (${atBottom.frames} of 60)`);
+      assert.equal(atBottom.firstHasFrame, false, "the first card's frame was released far above the viewport");
+      const heights = await page.evaluate(() => [...new Set([...document.querySelectorAll(".account-project-card")].map(card => Math.round(card.getBoundingClientRect().height)))]);
+      assert.equal(heights.length, 1, "released frames keep the card's size");
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(() => document.querySelector(".account-project-card iframe"), null, { timeout });
+      assert.equal(await page.evaluate(() => window.previewRequests.length), atBottom.reads, "scrolling back reuses the in-memory preview: no new read");
+    }, { viewport: { width: 900, height: 500 } });
   } finally { await browser.close(); server.close(); }
   const failed = results.filter(([, ok]) => !ok);
   if (baseline) { console.log(`Baseline ${baseline}: ${failed.length} of ${results.length} scenarios fail (expected: the pre-change library has no artifact previews).`); process.exit(failed.length ? 0 : 1); }

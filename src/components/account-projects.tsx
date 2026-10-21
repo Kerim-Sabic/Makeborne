@@ -225,14 +225,34 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
   }, [metaScope, visibleIds, accountId, metaWorkspace, metaAttempt]);
   const shownMeta = cardMeta.scope === metaScope ? cardMeta : noCardMeta;
   const retryMeta = () => { metaRequested.current = { scope: null, ids: new Set() }; setCardMeta(noCardMeta); setMetaAttempt(attempt => attempt + 1); };
-  const knownClient = scope.client === "all" || scope.client === "none" || !!snapshot?.clients.some(item => item.id === scope.client);
+  const knownClient = scope.client === "all" || scope.client === "none" || !snapshot || snapshot.clients.some(item => item.id === scope.client);
   // A project link uses the open-project layout from its first paint, so the page does not move when the project loads.
+  const listShown = !selected && !target?.artifactId;
+  const refresh = () => { if (snapshot) void load(snapshot.workspace.id); };
+  // In the page toolbar, sort, layout and refresh are there from the first paint (disabled until the list has loaded), so the toolbar keeps its shape.
+  const early = controlsSlot !== undefined && !snapshot && !message;
+  const ready = Boolean(snapshot) || early;
+  const controls = listShown && (ready || workspaces.length > 1) ? <div className="account-projects-controls">
+    {workspaces.length > 1 && <label className="library-select"><span>Workspace</span><select disabled={busy} value={snapshot?.workspace.id ?? ""} onChange={event => { if (scope.client !== "all") setScope({ ...scope, client: "all" }); navigate({ workspaceId: event.target.value, artifactId: null }); }}>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>}
+    {snapshot && (snapshot.clients.length > 0 || scope.client !== "all") && <label className="library-select"><span>Client</span><select disabled={busy || Boolean(query)} value={scope.client} onChange={event => setScope({ ...scope, client: event.target.value })}>
+      <option value="all">All clients</option><option value="none">No client</option>{!knownClient && <option value={scope.client}>Client not in this workspace</option>}
+      {snapshot.clients.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+    {ready && <label className="library-select"><span>Sort</span><select disabled={!snapshot || busy || Boolean(query)} value={scope.sort} onChange={event => setScope({ ...scope, sort: event.target.value as LibrarySort })}>
+      {(Object.keys(LIBRARY_SORTS) as LibrarySort[]).map(key => <option key={key} value={key}>{LIBRARY_SORTS[key]}</option>)}</select></label>}
+    {ready && <div className="account-projects-view" role="group" aria-label="Layout">
+      <button type="button" aria-pressed={view === "grid"} disabled={!accountId} onClick={() => chooseView("grid")}><LayoutGrid size={15} aria-hidden="true" /><span>Grid</span></button>
+      <button type="button" aria-pressed={view === "list"} disabled={!accountId} onClick={() => chooseView("list")}><List size={15} aria-hidden="true" /><span>List</span></button></div>}
+    {ready && <button type="button" className={`account-project-refresh${busy ? " busy" : ""}`} aria-label="Refresh" title="Refresh" disabled={!snapshot || busy} onClick={refresh}><RefreshCw size={15} aria-hidden="true" /></button>}
+  </div> : null;
+  const toolbarControls = controlsSlot === undefined ? controls : controlsSlot && controls ? createPortal(controls, controlsSlot) : null;
   const retryCapabilities = () => { setCloud("unknown"); setAuthReady(false); setCapabilityAttempt(attempt => attempt + 1); };
   if (cloud === "error") return <section className="account-projects account-projects-failed" aria-label="Projects saved to your account">
     <p role="alert">We couldn’t check for projects saved to your account, so this list may be incomplete. Projects on this device are not affected.</p>
     <button type="button" className="button secondary small" onClick={retryCapabilities}><RefreshCw size={14} /> Retry</button>
   </section>;
-  if (!accountId && !target && !authReady) return <p className="account-projects-checking" role="status">Checking for saved projects…</p>;
+  // In the library-first layout (a page toolbar is given), loading keeps the shape of the list it is about to show, so nothing below it jumps.
+  const placeholder = controlsSlot !== undefined ? <div className={`library-skeleton${view === "list" ? " list" : ""}`} aria-hidden="true">{Array.from({ length: view === "list" ? 16 : 12 }, (_, index) => <span key={index} className="library-skeleton-card"><span className="library-skeleton-thumb" /><span className="library-skeleton-line" /><span className="library-skeleton-line short" /></span>)}</div> : null;
+  if (!accountId && !target && !authReady) return <>{controlsSlot !== undefined && toolbarControls}<p className="account-projects-checking" role="status">Checking for saved projects…</p>{placeholder}</>;
   if (!accountId) return target ? <section className={`account-projects${target.artifactId ? " account-project-open" : ""}`} aria-label="Open saved project">
     <h2>{authReady ? "Sign in to open this project" : "Checking your account…"}</h2>
     {authReady && <><p>Account projects are available to their workspace members.</p><Link className="button primary small" href={`/login?next=${encodeURIComponent(studioHref({ tab: "projects", projectId: null, clientId: null, account: target }))}`}>Sign in</Link></>}
@@ -240,7 +260,6 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
   // A brand-new account has nothing saved yet: let the studio's single welcome state speak instead of two empty panels.
   if (snapshot && !busy && !message && !selected && !target?.artifactId && snapshot.artifacts.length === 0 && workspaces.length <= 1 && scope.client === "all")
     return <PendingCloudWrites accountId={accountId} refresh={async () => { await load(snapshot.workspace.id); }} />;
-  const listShown = !selected && !target?.artifactId;
   const workspaceId = snapshot?.workspace.id ?? null;
   const reopenFocus = (trigger: HTMLButtonElement | undefined) => requestAnimationFrame(() => { if (trigger?.isConnected) trigger.focus(); else document.getElementById("studio-library")?.focus(); });
   function closeRename() { const trigger = renaming?.trigger; setRenaming(null); reopenFocus(trigger); }
@@ -266,22 +285,8 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
     }
     trigger.focus();
   }
-  const refresh = () => { if (snapshot) void load(snapshot.workspace.id); };
-  const controls = listShown && (snapshot || workspaces.length > 1) ? <div className="account-projects-controls">
-    {workspaces.length > 1 && <label className="library-select"><span>Workspace</span><select disabled={busy} value={snapshot?.workspace.id ?? ""} onChange={event => { if (scope.client !== "all") setScope({ ...scope, client: "all" }); navigate({ workspaceId: event.target.value, artifactId: null }); }}>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>}
-    {snapshot && (snapshot.clients.length > 0 || scope.client !== "all") && <label className="library-select"><span>Client</span><select disabled={busy || Boolean(query)} value={scope.client} onChange={event => setScope({ ...scope, client: event.target.value })}>
-      <option value="all">All clients</option><option value="none">No client</option>{!knownClient && <option value={scope.client}>Client not in this workspace</option>}
-      {snapshot.clients.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-    {snapshot && <label className="library-select"><span>Sort</span><select disabled={busy || Boolean(query)} value={scope.sort} onChange={event => setScope({ ...scope, sort: event.target.value as LibrarySort })}>
-      {(Object.keys(LIBRARY_SORTS) as LibrarySort[]).map(key => <option key={key} value={key}>{LIBRARY_SORTS[key]}</option>)}</select></label>}
-    {snapshot && <div className="account-projects-view" role="group" aria-label="Layout">
-      <button type="button" aria-pressed={view === "grid"} onClick={() => chooseView("grid")}><LayoutGrid size={15} aria-hidden="true" /><span>Grid</span></button>
-      <button type="button" aria-pressed={view === "list"} onClick={() => chooseView("list")}><List size={15} aria-hidden="true" /><span>List</span></button></div>}
-    {snapshot && <button type="button" className={`account-project-refresh${busy ? " busy" : ""}`} aria-label="Refresh" title="Refresh" disabled={busy} onClick={refresh}><RefreshCw size={15} aria-hidden="true" /></button>}
-    {query && <p className="small-note">Search covers every client and lists matches newest first.</p>}
-  </div> : null;
   return <section className={`account-projects${selected || target?.artifactId ? " account-project-open" : ""}`} aria-label={selected ? "Project workspace" : "Projects saved to your account"}>
-    {controlsSlot === undefined ? controls : controlsSlot && controls ? createPortal(controls, controlsSlot) : null}
+    {toolbarControls}
     {listShown && <div className="library-notice-region" aria-live="polite">
       {notice && <div className={`library-notice ${notice.tone}`}><p role={notice.tone === "alert" ? "alert" : undefined}>{notice.text}{notice.link && <> <a href={notice.link} target="_blank" rel="noopener noreferrer">{notice.link}</a></>}</p>
         <button type="button" className="icon-button" aria-label="Dismiss message" onClick={() => setNotice(null)}><X size={14} aria-hidden="true" /></button></div>}
@@ -292,10 +297,11 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
       <button type="button" className="button secondary small" disabled={busy} onClick={() => setLoadAttempt(attempt => attempt + 1)}><RefreshCw size={14} /> Retry</button></div> : <p role="status">{message}</p>)}
     {!busy && target?.artifactId && !selected && <button className="button secondary small" onClick={() => navigate(null)}>Back to projects</button>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { if (snapshot) await load(snapshot.workspace.id); else window.location.reload(); }} />
-    {busy && !snapshot && <p role="status" className="account-projects-loading">Loading your account projects…</p>}
+    {busy && !snapshot && <><p role="status" className="account-projects-loading">Loading your account projects…</p>{!target?.artifactId && placeholder}</>}
     {selected && snapshot ? <AccountEditor key={`${accountId}:${snapshot.workspace.id}:${selected.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} artifact={selected} project={snapshot.projects.find(project => project.id === selected.projectId)} role={snapshot.workspace.role}
       notify={setMessage} back={() => navigate({ workspaceId: snapshot.workspace.id, artifactId: null })} /> : <>
       {query && snapshot && <div className="account-projects-search">
+        <p className="small-note">Search covers every client and lists matches newest first.</p>
         {searchNotice === "searching" && <p role="status">Searching the titles of all saved projects in {snapshot.workspace.name}…</p>}
         {searchNotice === "error" && <div className="account-projects-error"><p role="alert">We couldn’t search all saved projects. Showing title matches among the {snapshot.artifacts.length} loaded {snapshot.artifacts.length === 1 ? "project" : "projects"} only.</p>
           <button type="button" className="button secondary small" onClick={retrySearch}><RefreshCw size={14} /> Retry</button></div>}

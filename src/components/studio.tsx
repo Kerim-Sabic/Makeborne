@@ -285,6 +285,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           "Your saved workspace could not be read. Its original data has not been overwritten.",
         );
       }
+      // The first painted layout already uses this device's layout memory (the same rule the list's first status applies),
+      // so a returning user's page does not start prompt-first and then jump.
+      setLibraryHint(current => current ?? readLibraryHint(() => localStorage, undefined));
       setLoaded(true);
       const parameters = new URLSearchParams(window.location.search);
       if (readable) {

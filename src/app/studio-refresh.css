@@ -2790,7 +2790,7 @@
 .studio-shell .returning-workspace .library-heading h1 { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -.03em; color: #151b2b; }
 .studio-shell .returning-workspace .library-heading > .button { flex: 0 0 auto; min-height: 40px; font-size: 13.5px; }
 .studio-shell .returning-workspace .list-toolbar { container: library-toolbar / inline-size; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px; margin: 0 0 26px; padding: 0 0 18px; border-bottom: 1px solid #17203a14; }
-.studio-shell .returning-workspace .list-toolbar .search-field { flex: 1 1 220px; max-width: 340px; min-height: 38px; margin: 0; padding: 0 12px; border: 1px solid #17203a1f; border-radius: 9px; background: #fff; color: #576074; }
+.studio-shell .returning-workspace .list-toolbar .search-field { flex: 1 1 200px; max-width: 340px; min-height: 38px; margin: 0; padding: 0 12px; border: 1px solid #17203a1f; border-radius: 9px; background: #fff; color: #576074; }
 .studio-shell .returning-workspace .list-toolbar .search-field input { width: 100%; min-width: 0; min-height: 0; margin: 0; padding: 8px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: none; font-size: 13.5px; color: #1a2131; }
 .studio-shell .returning-workspace .list-toolbar .search-field input::placeholder { color: #6c7486; }
 .studio-shell .returning-workspace .list-toolbar .search-field:focus-within { box-shadow: none; outline: 2px solid #315bd6; outline-offset: 1px; border-radius: 9px; }
@@ -2803,6 +2803,9 @@
 @container library-toolbar (max-width: 720px) {
   .studio-shell .returning-workspace .list-toolbar .search-field { flex-basis: 100%; max-width: none; }
   .studio-shell .returning-workspace .library-toolbar-controls { margin-left: 0; }
+}
+@container library-toolbar (max-width: 480px) {
+  .studio-shell .returning-workspace .list-toolbar .filter-tabs button { padding: 0 8px; font-size: 12.5px; }
 }
 .studio-shell .returning-workspace .library-secondary { margin-top: 56px; padding-top: 28px; border-top: 1px solid #17203a14; }
 .studio-shell .returning-workspace .library-secondary-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; }

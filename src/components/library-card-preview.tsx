@@ -32,6 +32,9 @@ export default function LibraryCardPreview({ accountId, workspaceId, artifact, c
   const shown = useRef(key);
   const box = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  // Rendered frames are bounded: a ready preview keeps its frame only while the card is within a few screens of the viewport.
+  // Its rendered HTML stays in the in-memory cache, so scrolling back remounts it without another read.
+  const [inView, setInView] = useState(false);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   // Retry asks again for the same key; a failed answer is never cached, so it is a real new read.
   const [attempt, setAttempt] = useState(0);
@@ -43,10 +46,11 @@ export default function LibraryCardPreview({ accountId, workspaceId, artifact, c
     if (!node) return;
     const resize = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
     resize.observe(node);
-    if (typeof IntersectionObserver === "undefined") { queueMicrotask(() => setVisible(true)); return () => resize.disconnect(); }
+    if (typeof IntersectionObserver === "undefined") { queueMicrotask(() => { setVisible(true); setInView(true); }); return () => resize.disconnect(); }
     const near = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) { setVisible(true); near.disconnect(); } }, { rootMargin: "240px 0px" });
-    near.observe(node);
-    return () => { resize.disconnect(); near.disconnect(); };
+    const keep = new IntersectionObserver(entries => { const last = entries.at(-1); if (last) setInView(last.isIntersecting); }, { rootMargin: "1600px 0px" });
+    near.observe(node); keep.observe(node);
+    return () => { resize.disconnect(); near.disconnect(); keep.disconnect(); };
   }, []);
 
   useEffect(() => {
@@ -69,7 +73,7 @@ export default function LibraryCardPreview({ accountId, workspaceId, artifact, c
   const failed = current.status === "fallback" && current.reason === "failed";
   return <>
     <div ref={box} className={`library-card-thumb ${artifact.kind} ${current.status}`} aria-hidden="true" data-preview-key={current.status === "ready" ? current.frameKey : undefined}>
-      {current.status === "ready" && canvas && scale > 0 ? <iframe key={current.frameKey} className={`library-card-frame ${current.canvas}`} title="" tabIndex={-1} aria-hidden="true"
+      {current.status === "ready" ? canvas && scale > 0 && inView && <iframe key={current.frameKey} className={`library-card-frame ${current.canvas}`} title="" tabIndex={-1} aria-hidden="true"
         sandbox={current.sandbox} referrerPolicy="no-referrer" srcDoc={current.html}
         style={{ width: canvas.width, height: canvas.height, transform: `scale(${scale}) translate(-50%, ${current.canvas === "website" ? "0" : "-50%"})` }} />
         : <span className="library-card-fallback"><span className={`account-project-icon ${artifact.kind}`}><Icon size={20} /></span>{text.caption && <small>{text.caption}</small>}</span>}
