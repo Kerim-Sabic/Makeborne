@@ -104,18 +104,18 @@ const GROUND_NOTES: Record<Ground, string> = {
  * preferred calm light pages for services; round 2 still drifted to 7 of 20 dark sites. Light is the
  * default; dark is suggested only where the subject itself is dark (nightlife, events). */
 const GROUNDS: Record<Industry, Weighted<Ground>> = {
-  food: [["photographic", 2], ["warm light", 2], ["pale tint", 2], ["colour flood", 2], ["mid-tone", 1]],
-  saas: [["cool light", 3], ["pale tint", 2], ["warm light", 1], ["mid-tone", 1]],
+  food: [["photographic", 2], ["warm light", 2], ["pale tint", 1], ["colour flood", 2], ["dark", 1], ["mid-tone", 1]],
+  saas: [["cool light", 2], ["pale tint", 1], ["colour flood", 1], ["dark", 2], ["mid-tone", 1]],
   professional: [["cool light", 2], ["warm light", 2], ["pale tint", 2], ["mid-tone", 1]],
-  creator: [["cool light", 2], ["pale tint", 2], ["colour flood", 2], ["warm light", 1], ["mid-tone", 1]],
-  commerce: [["pale tint", 2], ["warm light", 2], ["cool light", 1], ["colour flood", 2], ["photographic", 1], ["mid-tone", 1]],
+  creator: [["cool light", 1], ["pale tint", 1], ["colour flood", 2], ["dark", 2], ["warm light", 1], ["mid-tone", 1]],
+  commerce: [["pale tint", 2], ["warm light", 1], ["cool light", 1], ["colour flood", 2], ["photographic", 1], ["dark", 1], ["mid-tone", 1]],
   wellness: [["pale tint", 3], ["warm light", 2], ["cool light", 2], ["photographic", 1], ["mid-tone", 1]],
-  trades: [["cool light", 3], ["pale tint", 2], ["warm light", 1], ["colour flood", 1], ["photographic", 1]],
+  trades: [["cool light", 2], ["pale tint", 1], ["warm light", 1], ["colour flood", 2], ["dark", 1], ["photographic", 1]],
   property: [["photographic", 2], ["warm light", 2], ["pale tint", 2], ["cool light", 1], ["mid-tone", 1]],
   events: [["dark", 3], ["colour flood", 2], ["photographic", 1], ["pale tint", 1]],
   weddings: [["photographic", 2], ["warm light", 2], ["pale tint", 2], ["cool light", 1]],
-  civic: [["warm light", 2], ["pale tint", 2], ["cool light", 2], ["colour flood", 1]],
-  general: [["cool light", 2], ["warm light", 2], ["pale tint", 2], ["mid-tone", 1]],
+  civic: [["warm light", 2], ["pale tint", 2], ["cool light", 1], ["colour flood", 2]],
+  general: [["cool light", 2], ["warm light", 1], ["pale tint", 1], ["colour flood", 1], ["dark", 1], ["mid-tone", 1]],
 };
 /** Industries whose visitors act from a phone on the spot (call, find, check hours, order). */
 const QUICK_ACTION_INDUSTRIES: ReadonlySet<Industry> = new Set(["food", "trades", "wellness", "events", "weddings"]);
@@ -125,12 +125,12 @@ const QUICK_ACTION_INDUSTRIES: ReadonlySet<Industry> = new Set(["food", "trades"
  * plumber with a huge phone number) were all quiet executions. */
 export type Tone = "quiet" | "loud";
 export const TONES: Record<Industry, Tone> = {
-  food: "loud", saas: "quiet", professional: "quiet", creator: "loud", commerce: "loud", wellness: "quiet",
-  trades: "quiet", property: "quiet", events: "loud", weddings: "quiet", civic: "quiet", general: "quiet",
+  food: "loud", saas: "loud", professional: "quiet", creator: "loud", commerce: "loud", wellness: "quiet",
+  trades: "loud", property: "quiet", events: "loud", weddings: "quiet", civic: "loud", general: "loud",
 };
 const TONE_NOTES: Record<Tone, string> = {
-  quiet: "quiet: a light ground, generous whitespace, one accent colour used sparingly, type and spacing doing the work, no marquee, no bento grid, no stat band, no dark section heavier than the footer, calm motion only; quiet is not plain: the first screen still carries one ownable, crafted signature drawn for this business (a diagram, illustration or object from its own facts)",
-  loud: "loud: bolder colour and scale are welcome, but still one dominant device on the first screen, a clear hierarchy and plenty of air around it",
+  quiet: "quiet: generous space, a calm palette, refined type at confident sizes and calm motion; quiet is not plain: the first screen carries one ownable, crafted signature drawn for this business (a diagram, illustration or object from its own facts) and every section looks designed for this site",
+  loud: "loud: commit to colour and scale: big, characterful display type, a saturated, tinted or deep dark ground where the subject suits it, and one crafted signature graphic carried through the sections; still one dominant device on the first screen and a clear hierarchy",
 };
 const HEADLINE_DEVICES: Record<Tone, readonly string[]> = {
   quiet: [

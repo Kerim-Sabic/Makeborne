@@ -201,7 +201,7 @@ check("design seed: deterministic, fitted to the industry and spread across proj
   assert.ok(Math.max(...Object.values(archetypes)) / 400 < 0.45 && Object.keys(archetypes).length >= 4, JSON.stringify(archetypes));
   assert.ok(pairings.size >= 8, `pairings ${pairings.size}`);
   for (let index = 0; index < 200; index++) {
-    const quiet = designSeed({ seed: `q-${index}`, brief: index % 2 ? "Employment solicitors in Manchester" : "A bookkeeping app for freelancers in public beta", images: true });
+    const quiet = designSeed({ seed: `q-${index}`, brief: index % 2 ? "Employment solicitors in Manchester" : "A family dental clinic in Leeds", images: true });
     assert.equal(quiet.tone, "quiet");
     assert.notEqual(quiet.ground, "dark", "quiet subjects never get a dark ground");
     assert.doesNotMatch(quiet.motion, /marquee|depth/);
@@ -210,7 +210,7 @@ check("design seed: deterministic, fitted to the industry and spread across proj
     assert.equal(loud.tone, "loud");
   }
   const block = designSeedBlock({ seed: "x", brief: "Climbing gym", images: false, brand: true });
-  assert.match(block, /- Tone: quiet: a light ground/);
+  assert.match(block, /- Tone: quiet: generous space/);
   assert.match(block, /- Motif: one quiet visual motif/);
   assert.match(block, /^<design_seed>[\s\S]*the brand kit[\s\S]*<\/design_seed>$/);
   assert.match(BUILDER_SYSTEM, /<design_seed>/);

@@ -26,6 +26,8 @@ export const EnhancedSectionSchema = z.object({
 }).strict();
 export const EnhancedBriefSchema = z.object({
   business: text(240),
+  /** A short working name when the client gave none (shown as an example, never as their real name). */
+  workingName: z.string().trim().max(40).nullable().default(null),
   goal: text(240),
   primaryAction: z.object({ label: text(48), kind: z.enum(ACTION_KINDS) }).strict(),
   audience: text(240),
@@ -34,7 +36,8 @@ export const EnhancedBriefSchema = z.object({
   toneWhy: text(240),
   imagery: z.object({ plan: z.enum(["illustration", "photo", "type", "mixed"]), notes: text(320), textInImage: z.string().trim().max(60).nullable() }).strict(),
   factsGiven: z.array(text(240)).max(24).default([]),
-  factsMissing: z.array(z.object({ fact: text(140), placeholder: text(140) }).strict()).max(16).default([]),
+  /** Facts the site needs but the client did not give: labelled example content (or a bracketed placeholder for contact details). */
+  factsMissing: z.array(z.object({ fact: text(140), placeholder: text(140), example: z.string().trim().max(240).nullable().default(null) }).strict()).max(16).default([]),
   constraints: z.array(text(240)).max(14).default([]),
   answersUsed: z.array(text(140)).max(10).default([]),
 }).strict();
@@ -91,6 +94,7 @@ export function groundEnhancedBrief(brief: EnhancedBrief, source: string): Enhan
     if (tokens.length && tokens.some(token => !rendered.includes(token)) && factsGiven.length < 24) factsGiven.push(sentence.slice(0, 240));
   }
   return { ...brief, sections, factsGiven, constraints: brief.constraints.filter(grounded),
+    // Examples are labelled as examples on the page, so they may carry illustrative numbers; labels may not.
     factsMissing: brief.factsMissing.filter(item => grounded(item.placeholder)) };
 }
 
@@ -99,6 +103,7 @@ export function renderEnhancedBrief(brief: EnhancedBrief): string {
   const list = (items: readonly string[]) => items.map(item => `- ${item}`).join("\n");
   return [
     `Business: ${brief.business}`,
+    brief.workingName ? `Working name (an example until the client gives theirs): ${brief.workingName}` : "",
     `Goal: ${brief.goal}`,
     `Primary action: "${brief.primaryAction.label}" (${brief.primaryAction.kind})`,
     `Audience: ${brief.audience}`,
@@ -108,7 +113,7 @@ export function renderEnhancedBrief(brief: EnhancedBrief): string {
     "Sections, in order (give each section the id shown):",
     ...brief.sections.map((section, index) => `${index + 1}. ${section.name} (#${section.anchor}): ${section.purpose}${section.include.length ? ` Include: ${section.include.join("; ")}.` : ""}`),
     brief.factsGiven.length ? `\nFacts given by the client (use exactly as written):\n${list(brief.factsGiven)}` : "",
-    brief.factsMissing.length ? `\nFacts not given (show a visible placeholder, never invent):\n${brief.factsMissing.map(item => `- ${item.fact} → "${item.placeholder}"`).join("\n")}` : "",
+    brief.factsMissing.length ? `\nFacts not given (labelled example content, or a bracketed placeholder for contact details; never presented as fact):\n${brief.factsMissing.map(item => `- ${item.fact} → ${item.example ? `example: ${item.example} (label: "${item.placeholder}")` : `"${item.placeholder}"`}`).join("\n")}` : "",
     brief.constraints.length ? `\nConstraints:\n${list(brief.constraints)}` : "",
     brief.answersUsed.length ? `\nAnswers used: ${brief.answersUsed.join("; ")}` : "",
   ].filter(line => line !== "").join("\n").slice(0, MAX_ENHANCED_BRIEF_CHARS);
@@ -133,7 +138,7 @@ export function briefTone(text: string | undefined): "quiet" | "loud" | undefine
 export function enhancedBriefBlock(brief: BuildBrief) {
   return [
     `<enhanced_brief source="${brief.mode}">`,
-    `Makeborne expanded the client's brief into this design brief before the build${brief.mode === "edited" ? " and the client then edited it" : ""}. The client's own words in "Brief:" above take priority: nothing here may drop or contradict them. Build every section listed, in this order, each with the id shown (id="anchor" on the section element), and show every missing fact as a visible placeholder (never invent it).`,
+    `Makeborne expanded the client's brief into this design brief before the build${brief.mode === "edited" ? " and the client then edited it" : ""}. The client's own words in "Brief:" above take priority: nothing here may drop or contradict them. Build every section listed, in this order, each with the id shown (id="anchor" on the section element), designed and finished. Where a fact is not given, write the example content in the site's own voice so the section looks complete, and mark it with one small, tidy label per section (for example a muted "Example — replace with yours" tag), never one per item and never as loud highlighted boxes; phone, e-mail and street address stay bracketed placeholders such as [Your phone]. An example is never presented as a fact anywhere else: no reviews, awards, statistics or named people the client did not give (never invent it as fact).`,
     brief.text,
     "</enhanced_brief>",
   ].join("\n");

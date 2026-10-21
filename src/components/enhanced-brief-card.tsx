@@ -53,10 +53,10 @@ export default function EnhancedBriefCard({ state, design, maximum, busy, onStar
       <label className="bq-custom" htmlFor="eb-text"><span>Edit the enhanced brief. Keep the numbered section lines if you want each section checked before the build is saved.</span></label>
       <textarea id="eb-text" ref={field} className="eb-text" value={draft} maxLength={MAX_ENHANCED_BRIEF_CHARS} disabled={busy} onChange={event => setDraft(event.target.value)} />
     </> : <>
-      <p className="eb-summary">{enhanced.business} <strong>Main action:</strong> {enhanced.primaryAction.label}.</p>
+      <p className="eb-summary">{enhanced.business}{enhanced.workingName ? <> Working name: <strong>{enhanced.workingName}</strong> (an example until you give yours).</> : null} <strong>Main action:</strong> {enhanced.primaryAction.label}.</p>
       <dl className="eb-meta">
         <dt>Sections</dt><dd><ol className="eb-list">{enhanced.sections.map(section => <li key={section.anchor}>{section.name}</li>)}</ol></dd>
-        {enhanced.factsMissing.length > 0 && <><dt>Placeholders for facts you haven&rsquo;t given</dt><dd><ul className="eb-list">{enhanced.factsMissing.map(item => <li key={item.fact}>{item.fact}</li>)}</ul></dd></>}
+        {enhanced.factsMissing.length > 0 && <><dt>Shown as labelled examples until you add them</dt><dd><ul className="eb-list">{enhanced.factsMissing.map(item => <li key={item.fact}>{item.fact}</li>)}</ul></dd></>}
         <dt>Feel and imagery</dt><dd>{enhanced.tone === "quiet" ? "Calm and restrained" : "Bold"} · {enhanced.imagery.plan === "type" ? "mostly type" : enhanced.imagery.plan}</dd>
         {(answers.length > 0 || enhanced.answersUsed.length > 0) && <><dt>Your answers used</dt><dd>{answers.length ? answers.join("; ") : enhanced.answersUsed.join("; ")}</dd></>}
       </dl>

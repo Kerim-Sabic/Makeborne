@@ -2,10 +2,10 @@
 const fs = require("node:fs"), path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const enhanced = {
-  business: "Ovenbird, a sourdough bakery in Leith.", goal: "Visits and pre-orders.", primaryAction: { label: "Pre-order bread", kind: "buy" }, audience: "Neighbours.",
+  business: "Ovenbird, a sourdough bakery in Leith.", workingName: null, goal: "Visits and pre-orders.", primaryAction: { label: "Pre-order bread", kind: "buy" }, audience: "Neighbours.",
   sections: [{ name: "Hero", anchor: "top", purpose: "Who we are.", include: [] }, { name: "Opening hours", anchor: "hours", purpose: "When we open.", include: [] }],
   tone: "loud", toneWhy: "Food.", imagery: { plan: "illustration", notes: "Drawn loaves.", textInImage: null },
-  factsGiven: [], factsMissing: [{ fact: "Opening hours", placeholder: "Opening hours coming soon" }], constraints: [], answersUsed: [],
+  factsGiven: [], factsMissing: [{ fact: "Opening hours", placeholder: "Example — replace with your hours", example: "Tue–Sat 7:30–15:00" }], constraints: [], answersUsed: [],
 };
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
 import BriefQuestionsCard from "./src/components/brief-questions-card";
@@ -88,7 +88,7 @@ async function main() {
     // Enhanced brief: start, edit, original, cancel; focus and keyboard.
     await show("ready");
     await page.waitForFunction(() => document.activeElement?.textContent === "Enhanced brief", null, { timeout: 3000 }).catch(() => assert.fail("focus moves to the card's heading"));
-    assert.match(await page.locator(".eb").innerText(), /Sections[\s\S]*Hero[\s\S]*Opening hours[\s\S]*Placeholders for facts you haven.t given[\s\S]*Your answers used[\s\S]*Feel: Warm and crafted/);
+    assert.match(await page.locator(".eb").innerText(), /Sections[\s\S]*Hero[\s\S]*Opening hours[\s\S]*Shown as labelled examples until you add them[\s\S]*Your answers used[\s\S]*Feel: Warm and crafted/);
     await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
     await page.getByRole("button", { name: "Start building" }).focus(); await page.keyboard.press("Enter");
     list = await events();
