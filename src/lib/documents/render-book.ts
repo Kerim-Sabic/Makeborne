@@ -199,6 +199,8 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .chapter figure img,.chapter figure .ph{width:100%;max-height:4.4in;object-fit:cover;display:block;border-radius:1.5pt}
 .chapter figcaption{font-size:8pt;line-height:1.4;font-style:italic;color:${muted};margin-top:.55em;text-align:center}
 .chapter ul,.chapter ol{margin:.6em 0 .7em 1.25em;padding:0;text-align:left}.chapter li{margin:.22em 0}
+/* Ordered markers can contain three digits; keep them inside the clipped page. */
+.chapter ol{margin-left:2.75em}
 .note{background:${p.surface};border-left:2.5pt solid ${p.accent};padding:.75em .95em;margin:1em 0;font-size:9.4pt;line-height:1.45;text-align:left;break-inside:avoid}
 .note strong{display:block;font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;color:${p.accent};margin-bottom:.3em}.note p{text-indent:0}
 .ph{display:flex;align-items:center;justify-content:center;min-height:2in;background:repeating-linear-gradient(135deg,${mix(p.surface, p.muted, 0.12)} 0 10px,${p.surface} 10px 20px);color:${muted};font-size:9pt}
