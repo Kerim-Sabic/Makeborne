@@ -56,7 +56,7 @@ export default function ClientFollowUpDraft({ accountId, workspaceId, client, on
     <div className="fd-controls">
       <label className="fd-goal"><span>Goal (optional)</span><input maxLength={300} value={goal} disabled={running} placeholder="e.g. book a 15-minute call, share the proposal" onChange={event => setGoal(event.target.value)} /></label>
       <label><span>Tone</span><select value={tone} disabled={running} onChange={event => setTone(event.target.value as typeof tone)}><option value="warm">Warm</option><option value="direct">Direct</option><option value="formal">Formal</option></select></label>
-      <label><span>Depth</span><select value={mode} disabled={running} onChange={event => setMode(event.target.value as ChatMode)} title={CHAT_MODES[mode].summary}><option value="standard">Standard · 1 credit</option><option value="genius">Genius · usage-based</option></select></label>
+      <label><span>Depth</span><select value={mode} disabled={running} onChange={event => setMode(event.target.value as ChatMode)} title={CHAT_MODES[mode].summary}><option value="standard">Standard · at most {CHAT_MODES.standard.holdCredits} credits</option><option value="genius">Genius · at most {CHAT_MODES.genius.holdCredits} credits</option></select></label>
       {running
         ? <button type="button" className="button secondary" onClick={() => abort.current?.abort()}><Square size={14} /> Stop</button>
         : <button type="button" className="button primary" onClick={() => void draft()}>{mode === "genius" ? <Gem size={15} /> : <Sparkles size={15} />}{text ? "Write another" : "Write draft"}</button>}

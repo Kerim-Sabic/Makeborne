@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Real mounted builder/hooks, local HTTP/SSE and sessionStorage; fictional operation service, no provider/database/cloud calls. */
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
-const {build}=require('esbuild'),{chromium}=require('playwright'),{createServer}=require('node:http');
+const {build}=require('esbuild'),{ browserType, engine, collectPageErrors } = require('./browser-engine.cjs'),{createServer}=require('node:http');
 const ids={actor:'11111111-1111-4111-8111-111111111111',workspace:'22222222-2222-4222-8222-222222222222',artifact:'33333333-3333-4333-8333-333333333333',operation:'44444444-4444-4444-8444-444444444444',run:'55555555-5555-4555-8555-555555555555'};
 const fixture=`import React from'react';import{createRoot}from'react-dom/client';import LiveBuilder from'./src/components/live-builder';
 createRoot(document.getElementById('root')).render(<LiveBuilder accountId="${ids.actor}" workspaceId="${ids.workspace}" artifactId="${ids.artifact}" version={1} history={[]} baseFiles={{}} baseAssets={[]} defaultEffort="light" autoStart="A fictional book about a lighthouse cat" kind="book" onLive={()=>{}} onSaved={()=>{}}/>);`;
@@ -48,17 +48,20 @@ async function main(){
    current.result={runId:ids.run,version:1,summary:'Stopped fixture',charged:current.charge,changed:false,finished:true};
    emit({...current.result,type:'done',operation:current.operation});if(!res.destroyed&&!res.writableEnded)res.end();};
  }catch(error){state?.errors.push(String(error.message));if(!res.headersSent)json(res,{error:{message:'Fixture failed'}},500);else res.destroy();}});
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`,browser=await chromium.launch({headless:true});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`,browser=await browserType.launch({headless:true});
  let passed=0;
  try{
   for(const name of ['before-id','mid-run-double-stop','reload-during-stop','lost-stop-reply','late-operation-event']){
    state={requests:[],builds:[],errors:[],operation:null,result:null,stream:null,initialDelay:name==='before-id'?1500:0,charge:name==='before-id'?0:1,finishOnStop:name!=='reload-during-stop',lostReply:name==='lost-stop-reply',finish:()=>{throw Error('Build not started');}};
    state.staleEvent=name==='late-operation-event';
    const current=state,context=await browser.newContext({viewport:{width:375,height:900}}),page=await context.newPage(),errors=[];
-   page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.message));
+   page.setDefaultTimeout(15000);collectPageErrors(page,errors);
    await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/,route=>route.abort());
    try{
-    await page.goto(base);const stop=page.getByRole('button',{name:'Stop',exact:true});await stop.waitFor();
+    await page.goto(base);await page.getByText(/Your brief is ready below/).waitFor();assert.equal(current.builds.length,0,'a handed-over brief is never sent on load');await page.locator('form.lb-composer button[type=submit]').click();const stop=page.getByRole('button',{name:'Stop',exact:true});await stop.waitFor();
+    // Press Stop once the server holds the build request. Stop can be shown before the POST arrives (WebKit sends it later);
+    // a Stop that reaches the server first is refused as unrecorded and correctly resent once the id is known.
+    for(const until=Date.now()+5000;!current.builds.length&&Date.now()<until;)await new Promise(resolve=>setTimeout(resolve,10));
     if(name!=='before-id')await page.getByText('0 / 20 credits',{exact:true}).waitFor();
     if(name==='mid-run-double-stop')await stop.dblclick();else await stop.click();
     if(name==='late-operation-event'){await page.waitForTimeout(100);assert.equal(current.staleDelivered,true);assert.equal(await page.getByRole('button',{name:'Stopping',exact:true}).isDisabled(),true,'late initial SSE cannot undo acknowledged Stop');}
@@ -68,7 +71,11 @@ async function main(){
      current.finish();await page.getByText('1 / 20 credits',{exact:true}).waitFor();
     }else{await page.getByText('Stopped fixture',{exact:true}).waitFor({state:'attached'});const toggle=page.locator('.workbench-chat-toggle');if(await toggle.getAttribute('aria-expanded')==='false')await toggle.click();await page.getByText('Stopped fixture',{exact:true}).waitFor();await page.getByRole('region',{name:'Request receipt'}).waitFor();}
     await page.waitForFunction(()=>{const value=JSON.parse(sessionStorage.getItem(`makeborne:operation:v1:${'11111111-1111-4111-8111-111111111111'}:${'22222222-2222-4222-8222-222222222222'}:${'33333333-3333-4333-8333-333333333333'}:build`));return value?.id&&!value.cancelPending;});
-    assert.equal(current.builds.length,1);assert.equal(current.requests.filter(request=>request.method==='DELETE').length,name==='lost-stop-reply'?2:1,'response loss permits one idempotent retry; double click sends one intent');
+    assert.equal(current.builds.length,1);const deletes=current.requests.filter(request=>request.method==='DELETE').length;
+    // A lost Stop reply on a kept-alive connection is resent once by Chromium's (and Firefox's) network stack; the app itself
+    // never repeats Stop. WebKit's stack does not resend, so it sees the single intent. Either way at most one retry reaches the server.
+    if(name==='lost-stop-reply'&&engine!=='chromium'){assert.ok(deletes===1||deletes===2,`response loss permits at most one idempotent retry (${deletes})`);console.log(`NOTE ${engine} transport sent ${deletes} DELETE for the lost Stop reply`);}
+    else assert.equal(deletes,name==='lost-stop-reply'?2:1,'response loss permits one idempotent retry; double click sends one intent');
     if(name==='before-id')assert.equal(current.requests.find(request=>request.method==='DELETE').body.actionKey,current.actionKey,'can stop before first operation event');
     assert.equal(await page.getByRole('button',{name:'Approve allowance & continue'}).count(),0);
     assert.ok(await page.getByRole('textbox',{name:'Message the builder'}).isEnabled(),'new message allowed after settled Stop');

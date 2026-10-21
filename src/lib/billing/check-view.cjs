@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
 const { readBillingView, unavailableBilling, billingStatement, filterBillingEntries } = require("./view.ts");
 const entry = { id: "event-1", occurredAt: "2026-10-03T12:00:00.000Z", project: "Field guide", action: "Book cover", model: "fixture-model", category: "Media", status: "Charged", credits: "9007199254740993" };
-const ready = { status: "ready", unit: "whole_customer_credits", available: "0", reserved: "2", used: "9007199254740993", period: "October 2026", entries: [entry] };
+const ready = { status: "ready", unit: "whole_customer_credits", available: "0", reserved: "2", used: "9007199254740993", period: "October 2026", entries: [entry], history: { periodKey: "2026-10", total: 1, newer: 0, olderCursor: null } };
 let checks = 0;
 function check(name, fn) { fn(); checks++; console.log(`PASS ${name}`); }
 check("exact balance survives", () => assert.equal(readBillingView(ready).used, "9007199254740993"));

@@ -6,7 +6,7 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import {parseControllerConfig,readControllerConfig,STAGING} from './config.mjs';
 import {attestController,validateLoginAttestation,validateNamespaceAttestation,LOGIN_ATTESTATION_SQL} from './attestation.mjs';
 import {runService,safeEvent} from './service.mjs';
-const approved={compiler:{image:`vcr.vercel.com/compiler@sha256:${'a'.repeat(64)}`,runtimeImageId:`sha256:${'b'.repeat(64)}`,evidenceSha256:'c'.repeat(64)},renderer:{image:`vcr.vercel.com/renderer@sha256:${'d'.repeat(64)}`,rendererId:`chromium-130.0-controller-${'e'.repeat(64)}`,evidenceSha256:'f'.repeat(64)}};
+const approved={compiler:{image:`vcr.vercel.com/${STAGING.imagePrefix}compiler@sha256:${'a'.repeat(64)}`,runtimeImageId:`sha256:${'b'.repeat(64)}`,evidenceSha256:'c'.repeat(64)},renderer:{image:`vcr.vercel.com/${STAGING.imagePrefix}renderer@sha256:${'d'.repeat(64)}`,rendererId:`chromium-130.0-controller-${'e'.repeat(64)}`,evidenceSha256:'f'.repeat(64)}};
 const approvedBytes=Buffer.from(JSON.stringify(approved)),approvedFile=resolve('approved.local.json'),caFile=resolve('ca.local.pem');
 const value={schemaVersion:1,namespace:'staging',supabaseProjectRef:STAGING.projectRef,qaWorkspaceId:'11111111-1111-4111-8111-111111111111',
  database:{host:STAGING.databaseHost,port:5432,database:'postgres',user:'makeborne_publication_controller_staging',caFile},

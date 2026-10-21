@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-react";
 import BrandMark from "@/components/brand-mark";
 import { getAccountPrivileges } from "@/lib/account/privileges";
-import { adminCustomer, adminCustomers, adminHealth, adminOverview, CUSTOMER_FILTERS, type CustomerFilter } from "@/lib/admin/console";
+import { adminCustomer, adminCustomerPayments, adminCustomers, adminHealth, adminOverview, CUSTOMER_FILTERS, type CustomerFilter } from "@/lib/admin/console";
 import { billingUser } from "@/lib/billing/access";
 import { getCapabilities } from "@/lib/capabilities/server";
 import { compilerSelfTest } from "@/lib/builder/compile";
@@ -45,7 +45,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   type Loaded =
     | { kind: "system"; compiler: Awaited<ReturnType<typeof compilerSelfTest>> }
     | { kind: "health"; data: Awaited<ReturnType<typeof adminHealth>> }
-    | { kind: "customers"; page: Awaited<ReturnType<typeof adminCustomers>>; detail: Awaited<ReturnType<typeof adminCustomer>> }
+    | { kind: "customers"; page: Awaited<ReturnType<typeof adminCustomers>>; detail: Awaited<ReturnType<typeof adminCustomer>>; payments: Awaited<ReturnType<typeof adminCustomerPayments>> }
     | { kind: "overview"; data: Awaited<ReturnType<typeof adminOverview>> }
     | { kind: "error" };
   let loaded: Loaded;
@@ -53,8 +53,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     if (tab === "system") loaded = { kind: "system", compiler: await compilerSelfTest() };
     else if (tab === "health") loaded = { kind: "health", data: await adminHealth(user.id, [7, 30, 90].includes(Number(one(params.days))) ? Number(one(params.days)) : 7) };
     else if (tab === "customers") {
-      const [page, detail] = await Promise.all([adminCustomers(user.id, { search: state.q, filter: state.filter, page: state.page }), state.customer ? adminCustomer(user.id, state.customer) : Promise.resolve(null)]);
-      loaded = { kind: "customers", page, detail };
+      // Payment records come from a later migration; their absence must not hide the customer.
+      const [page, detail, payments] = await Promise.all([adminCustomers(user.id, { search: state.q, filter: state.filter, page: state.page }), state.customer ? adminCustomer(user.id, state.customer) : Promise.resolve(null),
+        state.customer ? adminCustomerPayments(user.id, state.customer).catch(() => null) : Promise.resolve(null)]);
+      loaded = { kind: "customers", page, detail, payments };
     } else loaded = { kind: "overview", data: await adminOverview(user.id) };
   } catch {
     loaded = { kind: "error" };
@@ -63,7 +65,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const generatedAt = loaded.kind === "overview" || loaded.kind === "health" ? loaded.data.generatedAt : null;
   const content = loaded.kind === "system" ? <SystemTab operations={getCapabilities({ administrator: true }).operations} compiler={loaded.compiler} />
     : loaded.kind === "health" ? <HealthTab data={loaded.data} now={now} />
-    : loaded.kind === "customers" ? <CustomersTab page={loaded.page} detail={loaded.detail} state={state} now={now} />
+    : loaded.kind === "customers" ? <CustomersTab page={loaded.page} detail={loaded.detail} payments={loaded.payments} state={state} now={now} />
     : loaded.kind === "overview" ? (tab === "overview" ? <OverviewTab data={loaded.data} now={now} /> : tab === "subscriptions" ? <SubscriptionsTab data={loaded.data} now={now} /> : <CreditsTab data={loaded.data} />)
     : <section className="mbo-panel mbo-error" role="alert"><AlertTriangle size={18} aria-hidden="true" /><div><h2>Admin data could not be loaded</h2><p>The database did not answer, or this deployment has not been migrated yet (<code>20261013100000_admin_console.sql</code>). Nothing was changed. Try again in a moment.</p></div></section>;
 
@@ -79,7 +81,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div className="mbo-heading"><h1>{TABS.find(item => item.id === tab)?.label}</h1>
         <div className="mbo-heading-actions">{generatedAt && <span className="mbo-muted">Updated {exactTime(generatedAt)}</span>}<Link className="mbo-refresh" href={`?${refresh}`} prefetch={false}><RefreshCw size={14} aria-hidden="true" />Refresh</Link></div></div>
       {content}
-      <footer className="mbo-note">Read-only. Access is checked on the server against your administrator role for every request. Customer data shown here is for support; do not copy it elsewhere.</footer>
+      <footer className="mbo-note">Read-only except refund steps, which are recorded with your account. Access is checked on the server against your administrator role for every request. Customer data shown here is for support; do not copy it elsewhere.</footer>
     </main>
   </div>;
 }

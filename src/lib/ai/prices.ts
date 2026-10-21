@@ -76,18 +76,19 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
     priceSources: ["https://developers.openai.com/api/docs/pricing (Image models, standard: text input $5, image input $8, image output $30 per 1M)",
       "https://developers.openai.com/api/docs/guides/image-generation (per-image cost table for gpt-image-2: low $0.006/$0.005/$0.005, medium $0.053/$0.041/$0.041, high $0.211/$0.165/$0.165 for square/portrait/landscape)"],
     components: { textInput: 5, textCachedInput: 1.25, imageInput: 8, imageCachedInput: 2, imageOutput: 30 },
-    notes: ["Output tokens per image are derived from the published per-image prices: ceil((price + $0.0005 rounding) / $30 per 1M).",
+    notes: ["Output tokens per image are derived from the published per-image prices: ceil((price + $0.0005) / $30 per 1M). The $0.0005 (0.05 cent) covers the prices being rounded to a tenth of a cent.",
       "Cached input pricing applies only to the Responses API image tool, not the Images API used here.",
       "Usage reporting in Images API responses for this model is not documented; without usage the bound is recorded as spent.",
-      "Not live-qualified (no OpenAI key): image quality and actual usage still need one live run before it is configured."],
+      "Live-qualified once, 2026-10-20: one approved medium 1024x1024 call on an isolated local database reported 68 text-input and 1,756 output tokens ($0.05302 against a $0.061188 bound, no overrun); record: docs/release-review/openai-images-20261020.md. That is not a provider invoice, a builder integration or production activation: MAKEBORNE_IMAGE_MODEL stays unset until separately approved."],
   },
   ...(["sunburst", "flare"] as const).map(variant => ({
-    provider: "openai" as const, model: `gpt-image-2.5-${variant}`, label: `GPT Image 2.5 ${variant === "sunburst" ? "Sunburst" : "Flare"}`, verifiedAt: "2026-10-13",
+    provider: "openai" as const, model: `gpt-image-2.5-${variant}`, label: `GPT Image 2.5 ${variant === "sunburst" ? "Sunburst" : "Flare"}`, verifiedAt: "2026-10-20",
     idSource: `https://developers.openai.com/api/docs/models/gpt-image-2.5-${variant} (alias of snapshot gpt-image-2.5-${variant}-2026-09-08; no deprecation note)`,
     priceSources: ["https://developers.openai.com/api/docs/pricing (Image models, standard: text input $5, image input $8, image output $30 per 1M; same rates as gpt-image-2)",
+      "https://developers.openai.com/api/docs/guides/image-generation (checked 2026-10-20: both 2.5 models list text input $5, image input $8, image output $30, cached text input $1.25 and cached image input $2 per 1M, plus an output-token estimator)",
       "https://developers.openai.com/api/docs/deprecations (named, with the other 2.5 model, as gpt-image-1's replacement)"],
     components: { textInput: 5, textCachedInput: 1.25, imageInput: 8, imageCachedInput: 2, imageOutput: 30 },
-    notes: ["OpenAI publishes no per-image price or output-token count for 2.5 models, so the cost of one image cannot be bounded from documentation.",
+    notes: ["OpenAI publishes token rates for the 2.5 models and an estimator of output tokens by model, quality and size (image-generation guide, checked 2026-10-20), but no per-image price table and no guaranteed per-call maximum. An estimate is not a bound, so the cost of one image cannot be bounded from documentation alone.",
       "D8 changed 2026-10-21 (owner, Kerim): bounded by MEASURED_IMAGE_OUTPUT_TOKENS (observed output tokens per size and quality x 1.5), from the owner-approved research run of 2026-10-20 (docs/release-review/design-quality-images-20261020.md). Sizes and qualities without a measurement stay refused. A call whose output tokens exceed the bound stops routing to the model (image-health.ts) and, when it exceeds the dollar bound, trips the provider scope's emergency stop.",
       variant === "sunburst" ? "OpenAI: the most capable image generation and editing model." : "OpenAI: the fastest model for high-quality, everyday image generation."],
   })),
@@ -101,7 +102,7 @@ function evidence(model: string) {
 }
 
 /** Output tokens implied by a published per-image price at $30 per 1M output tokens,
- * with half a cent of headroom for the price's rounding. */
+ * with $0.0005 (0.05 cent, half of the prices' last digit) of headroom for their rounding. */
 function tokensFromPrice(usd: number) { return Math.ceil((usd + 0.0005) / 30 * 1_000_000); }
 
 export type TextPrice = { input: number; cacheWrite5m: number; cacheWrite1h: number; cacheRead: number; output: number };

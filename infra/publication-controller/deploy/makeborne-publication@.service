@@ -1,0 +1,34 @@
+[Unit]
+Description=Makeborne trusted publication controller (%i)
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/makeborne-publication/%i/controller.env
+# Operator installs the immutable image in advance. Restart never pulls new code.
+ExecStartPre=/usr/bin/docker image inspect --format={{.Id}} ${MBPUB_CONTROLLER_IMAGE}
+ExecStart=/usr/bin/docker run --rm --pull=never --name makeborne-publication-%i --network makeborne-publication-control --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --cpus=1 --pids-limit=128 --tmpfs=/tmp:rw,noexec,nosuid,size=32m --env-file=/etc/makeborne-publication/%i/controller.env --mount=type=bind,source=/etc/makeborne-publication/%i/config,target=/run/config,readonly ${MBPUB_CONTROLLER_IMAGE}
+ExecStop=/usr/bin/docker stop --time=30 makeborne-publication-%i
+Restart=always
+RestartSec=10
+TimeoutStopSec=40
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

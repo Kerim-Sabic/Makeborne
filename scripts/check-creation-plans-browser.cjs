@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Actual React flow with local mocked HTTP only. */
 const assert=require('node:assert/strict'),http=require('node:http'),path=require('node:path');
-const {chromium}=require('playwright');
+const { browserType } = require('./browser-engine.cjs');
 (async()=>{
  const bundle=await require('esbuild').build({stdin:{contents:"import React from 'react';import {createRoot} from 'react-dom/client';import Plans from './src/components/creation-plans';createRoot(document.getElementById('root')).render(<Plans/>);",resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'browser',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'},plugins:[{name:'link-stub',setup(build){build.onResolve({filter:/^next\/(link|navigation)$/},args=>({path:args.path,namespace:'stub'}));build.onLoad({filter:/.*/,namespace:'stub'},args=>({contents:args.path==='next/navigation'?"export const useRouter=()=>({push:url=>location.assign(url)});":"import React from 'react';export default function Link(p){return React.createElement('a',p)}",resolveDir:path.resolve('node_modules')}));}}]});
  let availability={authenticated:false,existingMember:false,offers:[]},requests=[],mode='error';
@@ -12,7 +12,7 @@ const {chromium}=require('playwright');
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`;let browser;
  try{
-  browser=await chromium.launch({headless:true});const page=await browser.newPage();
+  browser=await browserType.launch({headless:true});const page=await browser.newPage();
   await page.goto(base+'/billing');await page.getByText('Creation memberships are not available for purchase yet.').waitFor();assert.equal(await page.locator('.founding-cta:disabled').count(),3);
   availability.offers=[{tier:'create',interval:'monthly',totalCents:2900,monthlyCredits:300},{tier:'create',interval:'yearly',totalCents:27840,monthlyCredits:300}];
   await page.reload();await page.getByRole('button',{name:'Sign in for Create'}).waitFor();await page.getByRole('radio',{name:/Yearly/}).click();await page.getByRole('button',{name:'Sign in for Create'}).click();await page.waitForURL('**/login?**');assert.equal(requests.length,0);

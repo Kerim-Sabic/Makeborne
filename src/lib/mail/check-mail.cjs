@@ -115,13 +115,58 @@ function fakeFetch(routes) {
       { match: /conversationId%20eq/, reply: json(200, { value: [{ id: "x1", conversationId: "c1", from: { emailAddress: { address: "me@studio.test" } } },
         { id: "x2", conversationId: "c1", subject: "RE: Idea", bodyPreview: "Sounds good", receivedDateTime: "2026-10-13T10:00:00Z", from: { emailAddress: { address: "ana@client.test" } } }] }) },
     ]);
-    const outlook = microsoftClient(fetcher);
+    const outlook = microsoftClient(fetcher, { allowRead: true });
     assert.deepEqual(await outlook.send("token", { from: "me@studio.test", fromName: "Me", to: "ana@client.test", toName: "Ana", subject: "Idea", text: "Hello", replyTo: null }),
       { providerMessageId: "d1", threadId: "c1", rfcMessageId: "<d1@outlook>" });
     const reply = await outlook.send("token", { from: "me@studio.test", fromName: "Me", to: "ana@client.test", toName: "Ana", subject: "", text: "Following up", replyTo: { threadId: "c1", rfcMessageId: "<d1@outlook>", subject: "Idea" } });
     assert.equal(reply.threadId, "c1");
     assert.deepEqual(JSON.parse(calls.find(call => call.method === "PATCH").body), { body: { contentType: "Text", content: "Following up" } });
     assert.deepEqual((await outlook.replies("token", "c1", "me@studio.test")).map(item => [item.providerMessageId, item.from]), [["x2", "ana@client.test"]]);
+  });
+
+  await check("Outlook send-only: Mail.Send and identity scopes only, one sendMail call, no drafts or mailbox reads", async () => {
+    const { mailCapabilities } = require("./config.ts");
+    const { microsoftScopes } = require("./providers.ts");
+    const full = new URL(microsoftClient().authUrl({ clientId: "id", redirectUri: "https://app.test/callback", state: "state" }));
+    assert.deepEqual(full.searchParams.get("scope").split(" "), ["openid", "email", "profile", "offline_access", "User.Read", "Mail.Send", "Mail.ReadWrite"], "full mode keeps the draft/read scope it uses");
+    process.env.MAKEBORNE_MICROSOFT_MAIL_MODE = "send_only";
+    try {
+      const minimal = ["openid", "email", "profile", "offline_access", "User.Read", "Mail.Send"];
+      assert.deepEqual(microsoftScopes(), minimal);
+      const { fetcher, calls } = fakeFetch([
+        { method: "POST", match: /login\.microsoftonline\.com\/common\/oauth2\/v2\.0\/token$/, reply: () => json(200, { access_token: "access", refresh_token: "refresh", expires_in: 3600, scope: "openid profile email offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Mail.Send" }) },
+        { method: "POST", match: /\/me\/sendMail$/, reply: () => json(202) },
+      ]);
+      const outlook = microsoftClient(fetcher, { allowRead: true }); // A stale read-capable client must still respect the server mode.
+      const auth = new URL(outlook.authUrl({ clientId: "id", redirectUri: "https://app.test/callback", state: "state" }));
+      assert.deepEqual(auth.searchParams.get("scope").split(" "), minimal);
+      const tokens = await outlook.exchange({ clientId: "id", clientSecret: "secret", redirectUri: "https://app.test/callback", code: "code" });
+      assert.equal(new URLSearchParams(calls[0].body).get("scope"), minimal.join(" "), "the token request asks for the same minimal scopes");
+      assert.ok(tokens.grantedScopes.includes("https://graph.microsoft.com/Mail.Send"));
+      const sent = await outlook.send(tokens.accessToken, { from: "me@studio.test", fromName: "Me", to: "ana@client.test", toName: "Ana", subject: "", text: "Following up", replyTo: { threadId: "c1", rfcMessageId: "<d1@outlook>", subject: "Idea" } });
+      assert.deepEqual(sent, { providerMessageId: null, threadId: null, rfcMessageId: null });
+      const mail = JSON.parse(calls.at(-1).body);
+      assert.deepEqual(mail, { saveToSentItems: true, message: { subject: "Re: Idea", body: { contentType: "Text", content: "Following up" }, toRecipients: [{ emailAddress: { address: "ana@client.test", name: "Ana" } }] } });
+      const before = calls.length;
+      await assert.rejects(outlook.replies(tokens.accessToken, "c1", "me@studio.test"), /unavailable/);
+      assert.equal(calls.length, before, "no conversation read");
+      assert.ok(calls.every(call => /\/token$|\/me\/sendMail$/.test(call.url)), "no draft, no message search, no mailbox read");
+      const sendOnly = ["openid", "https://graph.microsoft.com/Mail.Send"], both = ["Mail.Send", "Mail.ReadWrite"];
+      assert.deepEqual(mailCapabilities({ provider: "microsoft", granted_scopes: sendOnly }), { canSend: true, canTrackReplies: false, canAutomate: false });
+      assert.deepEqual(mailCapabilities({ provider: "microsoft", granted_scopes: both }), { canSend: true, canTrackReplies: false, canAutomate: false }, "send-only mode never tracks, whatever was granted");
+      assert.deepEqual(mailCapabilities({ provider: "microsoft", granted_scopes: [] }), { canSend: true, canTrackReplies: false, canAutomate: false }, "legacy connection in send-only mode");
+      const refused = microsoftClient(async () => json(200, { access_token: "a", refresh_token: "r", expires_in: 3600, scope: "openid User.Read" }));
+      await assert.rejects(refused.exchange({ clientId: "id", clientSecret: "secret", redirectUri: "https://app.test/callback", code: "code" }), /permission to send/);
+      const unstated = microsoftClient(async () => json(200, { access_token: "a", refresh_token: "r", expires_in: 3600 }));
+      await assert.rejects(unstated.exchange({ clientId: "id", clientSecret: "secret", redirectUri: "https://app.test/callback", code: "code" }), /permission to send/, "an unstated grant fails closed");
+    } finally { delete process.env.MAKEBORNE_MICROSOFT_MAIL_MODE; }
+    assert.deepEqual(mailCapabilities({ provider: "microsoft", granted_scopes: ["Mail.Send"] }), { canSend: true, canTrackReplies: false, canAutomate: false }, "full mode without the read/write grant is send-only");
+    assert.deepEqual(mailCapabilities({ provider: "microsoft", granted_scopes: ["https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/Mail.ReadWrite"] }), { canSend: true, canTrackReplies: true, canAutomate: true });
+    assert.deepEqual(mailCapabilities({ provider: "microsoft", granted_scopes: ["Mail.ReadWrite"] }), { canSend: false, canTrackReplies: false, canAutomate: false });
+    assert.deepEqual(mailCapabilities({ provider: "microsoft", granted_scopes: [] }), { canSend: true, canTrackReplies: true, canAutomate: true }, "legacy connections keep what they were granted until the next refresh records it");
+    process.env.MAKEBORNE_MICROSOFT_MAIL_MODE = "nonsense";
+    try { assert.deepEqual(microsoftScopes(), ["openid", "email", "profile", "offline_access", "User.Read", "Mail.Send"], "unknown mode fails closed to send-only"); }
+    finally { delete process.env.MAKEBORNE_MICROSOFT_MAIL_MODE; }
   });
 
   await check("Gmail send-only: minimal scopes, verified OpenID identity, local Message-ID and zero inbox-read requests", async () => {

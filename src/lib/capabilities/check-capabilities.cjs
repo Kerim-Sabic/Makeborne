@@ -198,14 +198,14 @@ async function checkAdmin() {
       };
       const format = load("src/app/admin/format.ts");
       const revenue = load("src/lib/admin/revenue.ts", {"@/lib/billing/plans": shared["@/lib/billing/plans"]});
-      const adminModule = file => load(`src/app/admin/${file}.tsx`, {...shared, "./format": format, "@/lib/admin/console": {CUSTOMER_FILTERS: ["all", "subscribed", "admin", "unconfirmed"], CUSTOMER_PAGE_SIZE: 25}});
+      const adminModule = file => load(`src/app/admin/${file}.tsx`, {...shared, "./format": format, "./refund-actions": {default: () => null}, "@/lib/admin/console": {CUSTOMER_FILTERS: ["all", "subscribed", "admin", "unconfirmed"], CUSTOMER_PAGE_SIZE: 25}});
       const customers = adminModule("customers");
       let overviewReads = 0;
       const page = load("src/app/admin/page.tsx", {
         "./format": format, "./customers": customers, "./money": adminModule("money"), "./overview": adminModule("overview"), "./system": adminModule("system"), "./health": adminModule("health"), "@/lib/builder/compile": {compilerSelfTest: async () => ({ok: true, ms: 1, bytes: 1})},
         "@/lib/admin/console": {CUSTOMER_FILTERS: ["all", "subscribed", "admin", "unconfirmed"],
           adminOverview: async actor => { overviewReads++; assert.equal(actor, "verified-user"); return {...ADMIN_OVERVIEW, revenue: revenue.subscriptionRevenue(ADMIN_OVERVIEW.subscriptions)}; },
-          adminCustomers: async () => { throw new Error("customers not requested"); }, adminCustomer: async () => null},
+          adminCustomers: async () => { throw new Error("customers not requested"); }, adminCustomer: async () => null, adminCustomerPayments: async () => null},
         "react/jsx-runtime": require("react/jsx-runtime"),
         "next/link": {default: ({children, ...props}) => React.createElement("a", props, children)},
         "next/navigation": {redirect: value => {throw new Error(`redirect:${value}`);}, notFound: () => {throw new Error("not_found");}},

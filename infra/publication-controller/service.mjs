@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {attestController} from './attestation.mjs';
+import {scopedPublicationControl} from './scope.mjs';
 const types=new Set(['started','stopped','attempt_started','completed','not_claimed','attempt_failed','control_unavailable','startup_verified','shutdown_requested','shutdown_timeout','pool_close_timeout','fatal']);
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 export function safeEvent(event){
@@ -21,10 +22,10 @@ export async function runService(config,deps,parent,{emit=()=>{},shutdownMs=2000
   signal.addEventListener('abort',onAbort,{once:true});stoppedCleanup=()=>signal.removeEventListener('abort',onAbort);});
  try{
   await attestController(pool,config,signal);signal.throwIfAborted();log({type:'startup_verified'});
-  const rpc=deps.publicationControl(pool),transport=deps.vercelSandboxTransport(deps.Sandbox,config.vercel);
+  const rpc=scopedPublicationControl(deps.publicationControl(pool),config),transport=deps.vercelSandboxTransport(deps.Sandbox,config.vercel);
   const store=deps.createR2S3OutputStore(config.output),download=deps.publicationSourceDownloader(config.broker);
   const resolveArtwork=deps.publicationArtworkResolver({rpc,download});signal.throwIfAborted();
-  await Promise.race([deps.runPublicationController({pool,transport,approved:config.approved,store,resolveArtwork,
+  await Promise.race([deps.runPublicationController({pool,rpc,transport,approved:config.approved,store,resolveArtwork,
    runPreparation:deps.runPublicationPreparation,sitesDomain:config.sitesDomain,workerId:randomUUID(),signal,emit:log}),stopped]);
  }finally{
   cancelDeadline();stoppedCleanup?.();

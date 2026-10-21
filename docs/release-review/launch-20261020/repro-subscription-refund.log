@@ -1,0 +1,6 @@
+== makeborne_repro_base
+NOTICE:  before refund: creation access t, available credits 300
+NOTICE:  after refund (chain without the fix): creation access t, available credits 300
+== makeborne_repro_fixed
+NOTICE:  before refund: creation access t, available credits 300
+NOTICE:  after refund (with 20261020090000): creation access f, available credits 0

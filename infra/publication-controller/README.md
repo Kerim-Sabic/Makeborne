@@ -1,4 +1,14 @@
-# Staging publication controller
+# Trusted publication controller
+
+## Production profile preparation — 19 October 2026
+
+The current candidate supports two strictly separated profiles. `controller.example.json` remains staging schema 1, with its single QA workspace and protected-preview bypass. `controller.production.example.json` is production schema 2, with an explicit nonempty workspace allowlist and no preview-bypass credential. `profiles.mjs` pins each profile's database, Vercel project, registry image prefix, bucket and broker origin; cross-profile combinations are refused. No production activation has occurred.
+
+Production additionally requires migration `20261019134828_trusted_publication_production_profile.sql`. Its private workspace table starts empty. The controller's configured list must match the database's enabled list exactly at startup and before discovery; returned claims and source refreshes are checked again. Cleanup remains available during rollout drift. The application broker also requires the exact production deployment identity and its own explicit `MAKEBORNE_PUBLICATION_WORKSPACE_IDS` list. Coordinate all three lists while discovery is stopped; removing SQL authorization takes effect before the next compile/promotion.
+
+`deploy/` contains the separate environment template and systemd supervisor preparation. The owner approved a $6/month DigitalOcean host and $2 total new staging tests, excluding paid AI and production activation. Neither approval nor these files proves cloud qualification. See `docs/release-review/trusted-publishing-production-20261019.md` from the repository root for evidence and remaining gates.
+
+## Historical staging package contract
 
 Standalone Node 24 controller for the existing trusted publication worker. This package is prepared locally; it does not deploy or provision anything. It starts with database attestation, reconciles unresolved sandboxes, then discovers work. The browser remains unable to request compiler commands, credentials, runtime images, or cleanup authority.
 

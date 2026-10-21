@@ -8,9 +8,10 @@ import { RunSpend } from "../ai/run-spend";
 import { requirePricedModel } from "../ai/model-check";
 import { CHAT_MODES, type ChatMode, type ExpertId } from "../expert-personas";
 import { CHAT_ROUTES, chatCreditRate, expertChatResponse, type ChatTurn } from "./chat-run";
+import { BRIEF_ROUTE, runAdvisorBrief } from "./brief-run";
 
 export const chatEnabled = () => process.env.MAKEBORNE_EXPERT_CHAT_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
-/** One reply at a time per account on this server; the credit hold bounds cost regardless. */
+/** One advisor call (reply or brief) at a time per account on this server; the credit hold bounds cost regardless. */
 const active = new Set<string>();
 
 /**
@@ -40,6 +41,27 @@ export async function startExpertReply(input: { user: User; expert: ExpertId; mo
     active.delete(input.user.id);
     throw error;
   }
+}
+
+/**
+ * Drafts one structured brief from the conversation (Standard rate and hold), with the same
+ * order of checks as a reply: price, provider capacity, one call per account, hold, spend.
+ * Read-only: it sees only the turns sent and never touches a project.
+ */
+export async function startAdvisorBrief(input: { user: User; expert: ExpertId; turns: ChatTurn[]; signal?: AbortSignal; maxDuration: number }) {
+  if (!chatEnabled()) throw new RequestError("CHAT_UNAVAILABLE", "Expert chat isn't connected in this environment.", 503);
+  requirePricedModel(BRIEF_ROUTE.model);
+  await requireProviderCapacity("anthropic");
+  if (active.has(input.user.id)) throw new RequestError("CHAT_BUSY", "Wait for the current answer to finish before drafting a brief.", 409);
+  active.add(input.user.id);
+  try {
+    const credits = CHAT_MODES.standard.holdCredits;
+    const hold = await reserveCredits(input.user.id, credits, `chat_brief:${input.expert}:${randomUUID()}`);
+    const cap = Math.floor(credits * chatCreditRate("standard") * 1e6);
+    const spend = new RunSpend({ run: hold.reference, providerCapMicrousd: cap, customerCapMicrousd: hold.exempt ? null : cap, gate: databaseGate(hold.userId),
+      deadline: Math.min(Date.now() + (input.maxDuration - 10) * 1000, hold.reservedAt + HOLD_LIFETIME_MS - SETTLEMENT_WINDOW_MS - CLOCK_SKEW_MS) });
+    return await runAdvisorBrief({ hold, spend, expert: input.expert, turns: input.turns, signal: input.signal });
+  } finally { active.delete(input.user.id); }
 }
 
 function releaseWhenDone(response: Response, release: () => void): Response {

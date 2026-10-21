@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     if (process.env.NODE_ENV === "production")
       throw new RequestError(
         "EXPORT_NOT_CONFIGURED",
-        "Server exports need the cloud worker configuration. Your saved content remains available.",
+        "Exports aren’t available on this server yet. Your saved content remains available.",
         503,
       );
     const host = new URL(request.url).hostname;

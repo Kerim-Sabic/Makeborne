@@ -9,6 +9,7 @@ import { deckPptx } from "./pptx";
 import { FONTS } from "./theme";
 import { embeddedFontSources } from "./fonts-server";
 import { chromiumLaunchOptions } from "../server/export";
+import { downloadProjectAsset } from "../cloud/asset-storage";
 
 /** Read the document's generated artwork through the caller's RLS-bound client. */
 export async function loadDocumentImages(client: SupabaseClient, workspaceId: string, projectId: string, doc: DocumentSource) {
@@ -20,7 +21,7 @@ export async function loadDocumentImages(client: SupabaseClient, workspaceId: st
   for (const asset of doc.assets) {
     const row = data?.find(entry => entry.id === asset.id);
     if (!row || !String(row.object_path).startsWith(`${workspaceId}/`) || !["image/png", "image/jpeg", "image/webp"].includes(row.content_type)) continue;
-    const file = await client.storage.from("project-assets").download(row.object_path);
+    const file = await downloadProjectAsset(client, { workspaceId, projectId }, row.object_path);
     if (file.error || !file.data || file.data.size > 12_000_000) continue;
     buffers[asset.name] = Buffer.from(await file.data.arrayBuffer());
   }

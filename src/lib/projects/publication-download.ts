@@ -5,9 +5,11 @@ import {assertPublicationBrokerSecret, assertPublicationAssetOrigin, Publication
 
 /** Controller-only credential closure. The storage locator is intentionally not
  * transmitted; the application resolves it again under the current SQL fence. */
-export function publicationSourceDownloader(deps: {secret: string; origin: string; protectionBypassSecret?: string; fetch?: typeof fetch; now?: () => number}) {
+export function publicationSourceDownloader(deps: {secret: string; origin: string; namespace?: "staging" | "production"; protectionBypassSecret?: string; fetch?: typeof fetch; now?: () => number}) {
   const {secret, origin, protectionBypassSecret} = deps;
-  assertPublicationBrokerSecret(secret); assertPublicationAssetOrigin(origin);
+  const namespace = deps.namespace ?? "staging";
+  assertPublicationBrokerSecret(secret); assertPublicationAssetOrigin(origin, namespace);
+  if (namespace === "production" && protectionBypassSecret !== undefined) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
   if (protectionBypassSecret !== undefined && !/^[\x21-\x7e]{1,512}$/.test(protectionBypassSecret)) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
   const transport = deps.fetch ?? fetch;
   return async (_objectPath: string, maximum: number, parent: AbortSignal, context: PublicationDownloadContext): Promise<Uint8Array> => {

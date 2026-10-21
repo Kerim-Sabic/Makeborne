@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted PlanCard in Chromium (audit effort/cost contract): a plan no effort level fits is not labelled "Best fit" and explains the scope options; a normal plan keeps its Best fit. Fictional plans, no network, no build. Local only. Run: node scripts/check-plan-nofit-browser.cjs */
-const path = require("node:path"), fs = require("node:fs"), assert = require("node:assert/strict"), { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const path = require("node:path"), fs = require("node:fs"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const section = name => ({ name, purpose: `Why ${name} exists.`, content: `Key content for ${name}.` });
 const base = { kind: "new_site", title: "Fictional Atelier", summary: "A calm studio site.", goal: "Book a consultation.", audience: "Homeowners.", positioning: "Calm craft.",
@@ -26,7 +26,7 @@ async function main() {
   const server = createServer((req, res) => { const js = req.url === "/fixture.js"; res.setHeader("Content-Type", js ? "text/javascript" : "text/html"); res.end(js ? output.outputFiles[0].contents : `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${globals}${css.join("\n")}</style><div id="root"></div><script src="/fixture.js"></script>`); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   const shots = process.env.SHOTS_DIR;
   try {
@@ -39,7 +39,7 @@ async function main() {
       assert.match(await note.innerText(), /No effort level is sized to finish this plan in one build/);
       assert.match(await note.innerText(), /Remove pages or sections, or build the most important part first/);
       assert.equal(await page.getByRole("radio", { checked: true }).innerText().then(text => text.split("\n")[0]), "High", "the preselected fallback is unchanged");
-      assert.match(await page.locator(".pc-build span").innerText(), /^~90 credits$/, "an equal range is shown once");
+      assert.match(await page.locator(".pc-build span").innerText(), /^Estimated ~90 · At most 90 credits$/, "an equal range is shown once, beside the distinct authorized maximum");
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       assert.ok(overflow <= 0, `no horizontal overflow at ${width}px (${overflow})`);
       if (shots) await page.locator(".pc-foot").screenshot({ path: path.join(shots, `plan-nofit-${width}.png`) });
@@ -50,6 +50,6 @@ async function main() {
       await page.close();
     }
   } finally { await browser.close(); server.close(); }
-  console.log(`${passed} mounted plan-fit checks passed (Chromium, fictional plans, no network).`);
+  console.log(`${passed} mounted plan-fit checks passed (${engineLabel}, fictional plans, no network).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

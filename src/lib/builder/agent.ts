@@ -9,6 +9,7 @@ import { WebsiteDesignDirectionSchema } from "../projects/website-source";
 import { FileToolError, ProjectFiles } from "./files";
 import { compileVerdict, type CompileVerdict } from "./compile";
 import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage, type GeneratedImageRequest } from "./images";
+import responsive from "../../../infra/project-runtime/responsive-images.cjs";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
@@ -122,7 +123,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const imageBound = imageModels.length ? Math.max(...imageModels.map(model => imageCallBoundMicrousd(model, "medium", IMAGE_SIZES.portrait, "x".repeat(3400)))) : Infinity;
   const imageLimit = imageModelId ? Math.min(policy.maxImages, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
   const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
-  const storeImage = run.storeImage ?? ((request: GeneratedImageRequest, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes));
+  // Website images also get responsive copies (srcset) while they fit the site's image budget.
+  const storeImage = run.storeImage ?? ((request: GeneratedImageRequest, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes,
+    { variants: added => responsive.variantsFit([...run.files.assets.values()], added) }));
   const cutouts = imageModels.some(supportsTransparentImages);
   const textImages = imageModels.some(model => TEXT_IMAGE_MODELS.includes(model));
   let imagesUsed = 0, summary = "", title: string | undefined, finished = false, malformedTurns = 0;
@@ -272,6 +275,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               return { asset, record };
             }).then(({ asset, record }) => {
               run.files.addAsset({ id: asset.id, path: asset.path, sha256: asset.sha256, bytes: asset.bytes, mediaType: asset.mediaType });
+              // Parallel jobs checked the budget before storing; re-check against what is registered now.
+              if (asset.variants?.length && responsive.variantsFit([...run.files.assets.values()], asset.variants)) for (const variant of asset.variants) run.files.addAsset(variant);
               run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id, model: record.model, quality: record.quality, size: record.size, reason: record.reason, costMicrousd: record.costMicrousd });
               results.push({ type: "tool_result", tool_use_id: use.id, content: imageReadyMessage(asset, input.aspect, kind) });
             }, () => fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).")));

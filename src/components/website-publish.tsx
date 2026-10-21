@@ -3,6 +3,7 @@ import "./website-publish.css";
 import WebsiteEnquiries from "./website-enquiries";
 import TrustedWebsitePublish from "./trusted-website-publish";
 import ClientReadyCheck from "./client-ready-check";
+import SiteClaims from "./site-claims";
 import {checkedLabel} from "@/lib/hosting/checked-version";
 import type { ClientReadyInput } from "@/lib/builder/client-ready";
 import { useCallback, useEffect, useState } from "react";
@@ -13,14 +14,15 @@ import { HOSTING, SITE_ADDRESS_PARTS, siteAddress, validSiteSlug, type HostedSit
 export type PublishCapture = { snapshot: string; bundle?: { js: string; css: string } };
 
 /** source: the React website shown in the client-ready check before publishing. */
-type PublishProps = {accountId:string;workspaceId:string;artifactId:string;title:string;version:number;dirty:boolean;disabled:boolean;owner:boolean;capture?:()=>Promise<PublishCapture>;source?:ClientReadyInput};
+/** onPublished: called after the live state changed (published or taken offline), so the editor header can re-read it. */
+type PublishProps = {accountId:string;workspaceId:string;artifactId:string;title:string;version:number;dirty:boolean;disabled:boolean;owner:boolean;capture?:()=>Promise<PublishCapture>;source?:ClientReadyInput;onPublished?:()=>void};
 
 export default function WebsitePublish(props:PublishProps) {
   return props.capture ? <TrustedWebsitePublish key={`${props.accountId}:${props.workspaceId}:${props.artifactId}`} {...props}/> : <LegacyWebsitePublish {...props}/>;
 }
 
-function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, version, dirty, disabled, owner, capture, source }: {
-  accountId:string; workspaceId:string; artifactId:string; title:string; version:number; dirty:boolean; disabled:boolean; owner:boolean; source?:ClientReadyInput;
+function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, version, dirty, disabled, owner, capture, source, onPublished }: {
+  accountId:string; workspaceId:string; artifactId:string; title:string; version:number; dirty:boolean; disabled:boolean; owner:boolean; source?:ClientReadyInput; onPublished?:()=>void;
   /** React projects: render the saved site (static snapshot) and build its production bundle. */
   capture?: () => Promise<PublishCapture>;
 }) {
@@ -55,7 +57,7 @@ function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, versi
       const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":operation.key,"X-Makeborne-Account":accountId},body:operation.body,signal:AbortSignal.timeout(90_000)});
       const result=await response.json(); assertAccount();
       if(!response.ok){if(response.status<500)setPending(null);throw new Error(result.error?.message||"Publishing could not finish. Retry to confirm the result.");}
-      setPending(null);setSite(result.site);setSlug(result.site.slug);setInteractive(result.site.interactive);setConfirmOffline(false);setAgreedVersion(null);
+      setPending(null);setSite(result.site);setSlug(result.site.slug);setInteractive(result.site.interactive);setConfirmOffline(false);setAgreedVersion(null);onPublished?.();
       setMessage(result.site.live?`Your saved website is live${result.site.scripted&&result.site.interactive?" with JavaScript":""}. Future edits stay private until you publish again.`:"Your website is offline. Its address stays reserved for you.");
     } catch(error){setMessage(error instanceof Error?error.message:"Publishing could not finish. Retry to confirm the result.");}
     finally{setBusy(false);}
@@ -89,6 +91,7 @@ function LegacyWebsitePublish({ accountId, workspaceId, artifactId, title, versi
     {scriptable&&owner&&<label className="website-publish-toggle"><input type="checkbox" role="switch" aria-checked={interactive} checked={interactive} disabled={busy||switching||!!pending} onChange={e=>void changeInteractive(e.target.checked)}/><span><strong>Interactive (JavaScript)</strong><small>Runs your site’s code (menus, tabs, carousels, forms, animations) on its own isolated domain. Turn off to publish a static version.</small></span></label>}
     {dirty&&<p className="website-publish-detail">Save your changes before publishing a new version.</p>}
     {source&&<ClientReadyCheck source={source} scope={checkedLabel({version,dirty})}/>}
+    {source&&<SiteClaims source={source} scope={checkedLabel({version,dirty})}/>}
     {!owner?<p className="website-publish-detail">Only the workspace owner can publish this website.</p>:<>
       <label className="website-publish-consent"><input type="checkbox" checked={agreed} disabled={busy||!!pending||dirty||version<1} onChange={e=>setAgreedVersion(e.target.checked?version:null)}/><span>I’ve reviewed version {version} and have permission to make its text and images public.</span></label>
       <button type="button" className="button primary" disabled={busy||switching||!ready||disabled||(!pending&&(dirty||!agreed||!validSiteSlug(slug)||version<1))} onClick={()=>void publish(true)}>{busy?<LoaderCircle size={15} className="auth-spinner"/>:<Globe2 size={15}/>} {busy?"Publishing…":pending?"Retry publishing request":site&&slug!==site.slug?"Publish at new address":site?.live?"Publish saved changes":"Publish website"}</button>

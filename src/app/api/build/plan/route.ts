@@ -18,9 +18,11 @@ import { briefPhotos } from "@/lib/leads/redesign";
 import { PLAN_CEILING_CREDITS, SitePlanSchema, StoredPlanSchema, estimatePlanCredits, recommendedEffort, type StoredPlan } from "@/lib/builder/plan";
 import { planStreamResponse } from "@/lib/builder/plan-run";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
-import { beginOperation, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
+import { OperationError, beginOperation, brandKitFingerprint, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
+import { approvedMaximumIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
 import { requirePricedModel } from "@/lib/ai/model-check";
+import { AdvisorProvenanceSchema } from "@/lib/experts/advisor-brief";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -36,6 +38,10 @@ const PlanRequest = z.object({
   /** The plan being revised; the message is feedback on it. */
   previousPlan: SitePlanSchema.optional(),
   operation: OperationRequestSchema.optional(),
+  /** The planning maximum the customer saw before sending; must equal the server ceiling. */
+  approvedMaximum: z.number().int().positive().optional(),
+  /** Which advisor conversation and brief revision this plan request came from (ids only; recorded with the operation). */
+  provenance: AdvisorProvenanceSchema.optional(),
 }).strict();
 const SavePlan = z.object({
   workspaceId: z.string().uuid(),
@@ -127,6 +133,9 @@ export async function POST(request: Request) {
     const body = parsed.data;
     if (!body.operation) throw new RequestError("OPERATION_REQUIRED", "Reload the planner to use the request's shared credit limit.", 409);
     const { client, user } = await cloudContext(body.workspaceId, true);
+    // Bound to the planning maximum shown before sending; checked before any operation or hold.
+    const quoteIssue = approvedMaximumIssue(body.operation, body.approvedMaximum, PLAN_CEILING_CREDITS);
+    if (quoteIssue) throw new RequestError("QUOTE_CHANGED", quoteIssue, 409);
     const artifact = await websiteArtifact(client, body.workspaceId, body.artifactId);
     const [projectResult, versionsResult, existing] = await Promise.all([
       client.from("projects").select("*").eq("workspace_id", body.workspaceId).eq("id", artifact.project_id).maybeSingle(),
@@ -145,9 +154,16 @@ export async function POST(request: Request) {
     requirePricedModel(builderModel());
     // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
     await requireProviderCapacity("anthropic");
+    // Resolved before admission and fingerprinted into the request (see /api/build).
+    const brand = await projectBrandKit(client, body.workspaceId, project);
     const { operation: envelope, ...requestBody } = body;
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
-      expectedVersion: body.expectedVersion, effort: body.effort, kind: "plan", ceiling: PLAN_CEILING_CREDITS, envelope, request: requestBody });
+      expectedVersion: body.expectedVersion, effort: body.effort, kind: "plan", ceiling: PLAN_CEILING_CREDITS, envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) } }).catch(error => {
+      // SQL refuses a stale base version without saying so; name the versions instead.
+      if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
+        throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);
+      throw error;
+    });
     if (!admitted.run) return operationReplayResponse(admitted.status);
     const operation = admitted.run, hold = operation.hold;
     reserved = operation;
@@ -156,7 +172,6 @@ export async function POST(request: Request) {
     if (body.expectedRevision !== (existing?.revision ?? 0)) throw new RequestError("PLAN_REVISION_CONFLICT", "The plan changed. Reload it before requesting a new plan.", 409);
 
     const files = new ProjectFiles(current.content.websiteSource);
-    const brand = await projectBrandKit(client, body.workspaceId, project);
     const snapshot = files.files.size ? files.snapshot() : "";
     const outline = current.content.websiteSource ? "" : current.content.sections.map(section => [section.title, ...section.blocks.map(block => block.text)].filter(Boolean).join("\n")).join("\n\n").slice(0, 12_000);
     const history = versions.filter(version => version.number <= artifact.current_version).reverse().map(version => `v${version.number}: ${version.changeSummary}`).join("\n");

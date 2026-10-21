@@ -1,0 +1,246 @@
+{
+  "full": {
+    "unit": "whole_customer_credits",
+    "period": {
+      "end": "2026-11-01T00:00:00.000000Z",
+      "used": "54",
+      "newer": 0,
+      "start": "2026-10-01T00:00:00.000000Z",
+      "total": 11,
+      "hasMore": false
+    },
+    "wallet": {
+      "balance": "452",
+      "reserved": "8",
+      "available": "444",
+      "unlimited": false
+    },
+    "entries": [
+      {
+        "id": "ledger:cbd94b61-3cbc-4872-8d03-b9eb542d30a1",
+        "reason": "reversed",
+        "source": "payment",
+        "status": "Withheld",
+        "credits": "15",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "paymentKind": "credit_pack"
+      },
+      {
+        "id": "ledger:5fba38e6-f190-46d1-adcc-bc8653b99d4d",
+        "source": "refund",
+        "status": "Refunded",
+        "credits": "6",
+        "occurredAt": "2026-10-20T12:03:19.820652Z"
+      },
+      {
+        "id": "ledger:423af8ea-d9cd-4675-840d-6612fee92fbf",
+        "reason": "disputed",
+        "source": "payment",
+        "status": "Withheld",
+        "credits": "40",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "paymentKind": "payment"
+      },
+      {
+        "id": "ledger:0bb0c260-0c9b-485f-8f15-df760da4bba4",
+        "source": "payment",
+        "status": "Restored",
+        "credits": "40",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "paymentKind": "payment"
+      },
+      {
+        "id": "hold:fa781e8d339f78ec7a50755f5ec73f79",
+        "held": "20",
+        "source": "operation",
+        "status": "Charged",
+        "credits": "7",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "projectState": "deleted"
+      },
+      {
+        "id": "hold:ec4bf13d911d4ec4f852f76c13cbdf9b",
+        "held": "50",
+        "format": "website",
+        "source": "operation",
+        "status": "Charged",
+        "credits": "12",
+        "runKind": "build",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "projectState": "visible",
+        "projectTitle": "Field guide",
+        "operationKind": "build"
+      },
+      {
+        "id": "hold:e1c78324185809f7fabe692a0bc6c64e",
+        "held": "5",
+        "source": "unknown",
+        "status": "Charged",
+        "credits": "5",
+        "occurredAt": "2026-10-20T12:03:19.820652Z"
+      },
+      {
+        "id": "hold:8a79347a125b7fc9a4c4ed047948d2ea",
+        "held": "8",
+        "expert": "rex",
+        "source": "chat",
+        "status": "Reserved",
+        "credits": "8",
+        "occurredAt": "2026-10-20T12:03:19.820652Z"
+      },
+      {
+        "id": "hold:867c32923550a9212af6eae3f217a293",
+        "held": "10",
+        "source": "brief_questions",
+        "status": "Released",
+        "credits": "10",
+        "occurredAt": "2026-10-20T12:03:19.820652Z"
+      },
+      {
+        "id": "hold:688075d1fe3d7b61a2daf2af3789043c",
+        "held": "30",
+        "format": "presentation",
+        "source": "operation",
+        "status": "Charged",
+        "credits": "30",
+        "runKind": "review",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "projectState": "hidden",
+        "operationKind": "review"
+      },
+      {
+        "id": "hold:cefc7f010b8114e338c16939a68b4f15",
+        "held": "4",
+        "reason": "hold timeout",
+        "source": "lead_find",
+        "status": "Released",
+        "credits": "4",
+        "occurredAt": "2026-10-20T11:58:19.820652Z"
+      }
+    ],
+    "generatedAt": "2026-10-20T12:03:19.875957Z"
+  },
+  "note": "Captured from supabase/check-usage-history.sql fixtures on a disposable local database (rolled back). Fictional data.",
+  "period": {
+    "end": "2026-11-01T00:00:00.000000Z",
+    "start": "2026-10-01T00:00:00.000000Z"
+  },
+  "firstPage": {
+    "unit": "whole_customer_credits",
+    "period": {
+      "end": "2026-11-01T00:00:00.000000Z",
+      "used": "54",
+      "newer": 0,
+      "start": "2026-10-01T00:00:00.000000Z",
+      "total": 11,
+      "hasMore": true
+    },
+    "wallet": {
+      "balance": "452",
+      "reserved": "8",
+      "available": "444",
+      "unlimited": false
+    },
+    "entries": [
+      {
+        "id": "ledger:cbd94b61-3cbc-4872-8d03-b9eb542d30a1",
+        "reason": "reversed",
+        "source": "payment",
+        "status": "Withheld",
+        "credits": "15",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "paymentKind": "credit_pack"
+      },
+      {
+        "id": "ledger:5fba38e6-f190-46d1-adcc-bc8653b99d4d",
+        "source": "refund",
+        "status": "Refunded",
+        "credits": "6",
+        "occurredAt": "2026-10-20T12:03:19.820652Z"
+      },
+      {
+        "id": "ledger:423af8ea-d9cd-4675-840d-6612fee92fbf",
+        "reason": "disputed",
+        "source": "payment",
+        "status": "Withheld",
+        "credits": "40",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "paymentKind": "payment"
+      },
+      {
+        "id": "ledger:0bb0c260-0c9b-485f-8f15-df760da4bba4",
+        "source": "payment",
+        "status": "Restored",
+        "credits": "40",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "paymentKind": "payment"
+      }
+    ],
+    "generatedAt": "2026-10-20T12:03:19.875957Z"
+  },
+  "secondPage": {
+    "unit": "whole_customer_credits",
+    "period": {
+      "end": "2026-11-01T00:00:00.000000Z",
+      "used": "54",
+      "newer": 4,
+      "start": "2026-10-01T00:00:00.000000Z",
+      "total": 11,
+      "hasMore": true
+    },
+    "wallet": {
+      "balance": "452",
+      "reserved": "8",
+      "available": "444",
+      "unlimited": false
+    },
+    "entries": [
+      {
+        "id": "hold:fa781e8d339f78ec7a50755f5ec73f79",
+        "held": "20",
+        "source": "operation",
+        "status": "Charged",
+        "credits": "7",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "projectState": "deleted"
+      },
+      {
+        "id": "hold:ec4bf13d911d4ec4f852f76c13cbdf9b",
+        "held": "50",
+        "format": "website",
+        "source": "operation",
+        "status": "Charged",
+        "credits": "12",
+        "runKind": "build",
+        "occurredAt": "2026-10-20T12:03:19.820652Z",
+        "projectState": "visible",
+        "projectTitle": "Field guide",
+        "operationKind": "build"
+      },
+      {
+        "id": "hold:e1c78324185809f7fabe692a0bc6c64e",
+        "held": "5",
+        "source": "unknown",
+        "status": "Charged",
+        "credits": "5",
+        "occurredAt": "2026-10-20T12:03:19.820652Z"
+      },
+      {
+        "id": "hold:8a79347a125b7fc9a4c4ed047948d2ea",
+        "held": "8",
+        "expert": "rex",
+        "source": "chat",
+        "status": "Reserved",
+        "credits": "8",
+        "occurredAt": "2026-10-20T12:03:19.820652Z"
+      }
+    ],
+    "generatedAt": "2026-10-20T12:03:19.875957Z"
+  },
+  "authoritative": {
+    "lotSpent": "54",
+    "walletReserved": "8",
+    "walletAvailable": "444",
+    "settledReservationCharges": "54"
+  }
+}

@@ -16,7 +16,7 @@ export default function ClientReadyCheck({ source, pages, scope }: { source: Cli
     try { return { findings: clientReadyCheck({ ...source, pages }) }; }
     catch { return { failed: true }; }
   }, [source, pages]);
-  const intro = <p className="client-ready-intro">A quick read of {pages?.length ? "the prepared pages and " : ""}the website’s code for placeholder text, links that go nowhere, image details and colour pairs set in the same style rule. It’s not a full visual, accessibility or security review. Advice only: you can still publish.</p>;
+  const intro = <p className="client-ready-intro">A quick read of {pages?.length ? "the prepared pages and " : ""}the website’s code for placeholder text, links that go nowhere, image details, colour pairs set in the same style rule and characters its fonts don’t include. It’s not a full visual, accessibility or security review. Advice only: you can still publish.</p>;
   if ("failed" in result) return <section className="client-ready" aria-label="Client-ready check">
     <div className="client-ready-heading">
       <ClipboardCheck size={16} aria-hidden="true" />

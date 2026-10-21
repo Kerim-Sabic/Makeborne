@@ -12,6 +12,8 @@ const local = memory({
   [`makeborne.cloud-draft.${a}.${w}.x`]: "<html>A</html>",
   [`makeborne.generation.v1.${a}.${w}.x`]: "{}",
   [`makeborne.creation-reference.v1.${a}.${w}`]: "{}",
+  [`makeborne.version-checkpoints.v1.${a}.${w}.x`]: "{}",
+  [`makeborne.version-checkpoints.v1.${b}.${w}.x`]: "{}",
   "makeborne.pending-write.aa": JSON.stringify({ accountId: a }),
   "makeborne.pending-write.bb": JSON.stringify({ accountId: b }),
   "makeborne.pending-write.cc": "not json",
@@ -26,10 +28,10 @@ const session = memory({
   "makeborne.wizard-draft.v1.website.device.seed": "device draft",
 });
 clearAccountLocalData(a, [local, session]);
-assert.deepEqual([...local.records.keys()].sort(), ["makeborne.local-workspace.v1", "makeborne.pending-write.bb", "makeborne.pending-write.cc", `makeborne.cloud-draft.${b}.${w}.x`, "other-app.key"].sort());
+assert.deepEqual([...local.records.keys()].sort(), ["makeborne.local-workspace.v1", "makeborne.pending-write.bb", "makeborne.pending-write.cc", `makeborne.cloud-draft.${b}.${w}.x`, `makeborne.version-checkpoints.v1.${b}.${w}.x`, "other-app.key"].sort());
 assert.deepEqual([...session.records.keys()], ["makeborne.wizard-draft.v1.website.device.seed"]);
 clearAccountLocalData(null, [local]);
-assert.equal(local.records.size, 5);
+assert.equal(local.records.size, 6);
 const broken = { get length() { throw new Error("blocked"); } };
 assert.doesNotThrow(() => clearAccountLocalData(a, [broken]));
 console.log("PASS: 4 sign-out storage cleanup checks; other accounts and device projects kept.");

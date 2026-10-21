@@ -1,0 +1,156 @@
+▲ Next.js 16.3.8 (webpack)
+✓ Running next.config.ts took 37ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 22.9s
+  Running TypeScript ...
+  Finished TypeScript in 14.5s ...
+  Collecting page data using 31 workers ...
+  Generating static pages using 31 workers (0/61) ...
+  Generating static pages using 31 workers (15/61) 
+  Generating static pages using 31 workers (30/61) 
+  Generating static pages using 31 workers (45/61) 
+✓ Generating static pages using 31 workers (61/61) in 1372ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /api/admin/refunds
+├ ƒ /api/auth/providers
+├ ƒ /api/billing/access
+├ ƒ /api/billing/autotopup
+├ ƒ /api/billing/availability
+├ ƒ /api/billing/checkout
+├ ƒ /api/billing/checkout-status
+├ ƒ /api/billing/support-checkout
+├ ƒ /api/billing/topups
+├ ƒ /api/billing/topups/[orderId]
+├ ƒ /api/billing/webhook
+├ ƒ /api/billing/whop-events
+├ ƒ /api/build
+├ ƒ /api/build/operations
+├ ƒ /api/build/plan
+├ ƒ /api/build/questions
+├ ƒ /api/capabilities
+├ ƒ /api/chat
+├ ƒ /api/cloud/workspaces/[workspaceId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/analytics
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/assets
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/assets/[assetId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/document-export
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/domains
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/domains/[domainId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/enquiries
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/github
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/portal/changes/[changeId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/preview
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/publication
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/publication/preparation
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/review-snapshot
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/reviews
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/reviews/[linkId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/source
+├ ƒ /api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/versions
+├ ƒ /api/cloud/workspaces/[workspaceId]/brand-kits
+├ ƒ /api/cloud/workspaces/[workspaceId]/brand-kits/import
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/follow-up-draft
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/lead
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/lead/research
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/mail
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/portal
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/portal/[accessId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/projects
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/redesign
+├ ƒ /api/cloud/workspaces/[workspaceId]/clients/[clientId]/reviews
+├ ƒ /api/cloud/workspaces/[workspaceId]/enquiries
+├ ƒ /api/cloud/workspaces/[workspaceId]/enquiries/clients
+├ ƒ /api/cloud/workspaces/[workspaceId]/leads
+├ ƒ /api/cloud/workspaces/[workspaceId]/leads/find
+├ ƒ /api/cloud/workspaces/[workspaceId]/mail
+├ ƒ /api/cloud/workspaces/[workspaceId]/mail/accounts
+├ ƒ /api/cloud/workspaces/[workspaceId]/mail/enrollments
+├ ƒ /api/cloud/workspaces/[workspaceId]/mail/run
+├ ƒ /api/cloud/workspaces/[workspaceId]/mail/sequences
+├ ƒ /api/cloud/workspaces/[workspaceId]/mail/templates
+├ ƒ /api/cloud/workspaces/[workspaceId]/onboarding
+├ ƒ /api/cloud/workspaces/[workspaceId]/projects
+├ ƒ /api/cloud/workspaces/[workspaceId]/projects/[projectId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/projects/[projectId]/artifacts
+├ ƒ /api/cloud/workspaces/[workspaceId]/review-comments/[commentId]
+├ ƒ /api/cloud/workspaces/[workspaceId]/studio-projects
+├ ƒ /api/credits
+├ ƒ /api/cron/billing-reconcile
+├ ƒ /api/cron/mail
+├ ƒ /api/cron/topup-reconcile
+├ ƒ /api/export
+├ ƒ /api/generate
+├ ƒ /api/generate/[jobId]
+├ ƒ /api/generate/[jobId]/preview
+├ ƒ /api/generate/prepare
+├ ƒ /api/generate/requests/[requestKey]
+├ ƒ /api/github/callback
+├ ƒ /api/github/connect
+├ ƒ /api/github/connection
+├ ƒ /api/hosting/enquiries
+├ ƒ /api/hosting/publication-assets
+├ ƒ /api/mail/callback/[provider]
+├ ƒ /api/mail/connect
+├ ƒ /api/portal
+├ ƒ /api/portal/invites/[token]
+├ ƒ /api/portal/invites/[token]/accept
+├ ƒ /api/portal/sites/[artifactId]
+├ ƒ /api/portal/sites/[artifactId]/changes
+├ ƒ /api/portal/sites/[artifactId]/draft
+├ ƒ /api/portal/sites/[artifactId]/images/[assetId]
+├ ƒ /api/review/[token]/assets/[assetId]
+├ ƒ /api/review/[token]/comments
+├ ƒ /api/review/[token]/decision
+├ ƒ /api/review/[token]/view
+├ ƒ /api/telemetry
+├ ƒ /api/workspaces
+├ ƒ /api/workspaces/branding
+├ ƒ /auth/callback
+├ ƒ /auth/confirm
+├ ƒ /auth/update-password
+├ ƒ /auth/verify
+├ ƒ /billing
+├ ƒ /billing/return
+├ ○ /billing/terms
+├ ƒ /chat
+├ ○ /help
+├   /help/[slug]
+│ ├ ● /help/create-a-website-with-ai
+│ ├ ● /help/write-a-great-brief
+│ ├ ● /help/make-a-book-with-ai
+│ └ ● [+26 more paths]
+├ ○ /icon.svg
+├ ○ /llms.txt
+├ ƒ /login
+├ ○ /manifest.webmanifest
+├ ○ /opengraph-image
+├ ƒ /portal
+├ ƒ /portal/join/[token]
+├ ƒ /portal/login
+├ ƒ /portal/sites/[artifactId]
+├ ○ /privacy
+├ ƒ /review/[token]
+├ ○ /robots.txt
+├ ○ /sitemap.xml
+├ ƒ /studio
+└ ƒ /studio/cloud
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+
+exit 0

@@ -12,6 +12,8 @@ function load(file) {
       if (name === "server-only") return {};
       if (["zod", "node:crypto", "sharp", "jszip"].includes(name)) return require(name);
       if (!name.startsWith("./") && !name.startsWith("../")) throw new Error(`Unexpected source-contract dependency: ${name}`);
+      // The server-key read (src/lib/cloud/check-asset-storage.cjs) is replaced by this fixture storage.
+      if (name.endsWith("/cloud/asset-storage")) return {downloadProjectAsset: (client, scope, objectPath, init) => client.storage.from("project-assets").download(objectPath, {}, init)};
       if (name.endsWith(".cjs")) return require(path.resolve(path.dirname(file), name));
       if (name.endsWith(".json")) return JSON.parse(fs.readFileSync(path.resolve(path.dirname(file), name), "utf8"));
       return load(path.resolve(path.dirname(file), name + ".ts"));

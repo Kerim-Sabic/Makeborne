@@ -73,7 +73,15 @@ function decodeBase64(text) {
   return bytes;
 }
 const hex = buffer => [...new Uint8Array(buffer)].map(byte => byte.toString(16).padStart(2, "0")).join("");
-const notModified = (request, headers) => request.headers.get("If-None-Match") === headers.ETag ? new Response(null, { status: 304, headers }) : null;
+const notModified = (request, headers) => {
+  // GET/HEAD validators use weak comparison. CDN compression can add W/ to
+  // our digest; still require the current authorized resource before this call.
+  const condition = request.headers.get("If-None-Match");
+  if (!condition || !headers.ETag) return null;
+  const matches = condition.trim() === "*" || condition.split(",").some(tag =>
+    tag.trim().replace(/^W\//, "") === headers.ETag.replace(/^W\//, ""));
+  return matches ? new Response(null, { status: 304, headers }) : null;
+};
 
 /** Whether a successful document may be indexed: the namespace allows it and
  * the page is one the site's sitemap lists. "/" is always listed. Sites published
@@ -205,11 +213,13 @@ async function serveSite(request, env, context, config, url, slug, secure, head,
   if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
   if (url.pathname.length > 240) return failure(404, secure, head);
   if (url.pathname === "/robots.txt") {
-    return new Response(head ? null : robotsDocument(url.origin, config.indexable), { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+    // A custom host serves copies whose canonical is the Makeborne address, so it names no sitemap.
+    return new Response(head ? null : robotsDocument(url.origin, config.indexable, !custom), { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
   }
-  // Pages of the live site for search engines; not offered where indexing is off (staging, local).
+  // Pages of the live site for search engines; not offered where indexing is off (staging, local),
+  // nor on a custom host: its pages name the Makeborne address as canonical, and a sitemap lists canonical URLs only.
   if (url.pathname === "/sitemap.xml") {
-    if (!config.indexable) return failure(404, secure, head);
+    if (!config.indexable || custom) return failure(404, secure, head);
     try {
       const site = sitePaths(await rpc(config, "makeborne_read_site_paths", { p_slug: slug }, 20_000));
       if (!site) return failure(404, secure, head);

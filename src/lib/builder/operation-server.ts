@@ -126,6 +126,20 @@ export function watchOperationCancellation(run: OperationRun | undefined, spend:
   return () => { disposed = true; clearTimeout(timer); };
 }
 
+/** The brand kit a request was admitted with, as a content hash ("none" without a kit).
+ * Kits have no revision number, so their canonical content identifies them. */
+export function brandKitFingerprint(kit: object | null): string {
+  return kit ? `sha256:${createHash("sha256").update(canonicalSourceJson(kit)).digest("hex")}` : "none";
+}
+/** The request context recorded once with a new operation. Provenance (advisor brief ids) is kept for the record only. */
+export function operationContext(request: unknown, attachmentsSha256: string): Record<string, unknown> {
+  const body = typeof request === "object" && request !== null ? request as { message?: unknown; plan?: unknown; provenance?: unknown } : null;
+  const brandKit = requestBrandKit(request);
+  return { attachmentsSha256, ...(brandKit ? { brandKit } : {}), ...(body ? { message: body.message ?? "", ...(body.plan ? { plan: body.plan } : {}), ...(body.provenance ? { provenance: body.provenance } : {}) } : {}) };
+}
+const requestBrandKit = (request: unknown) => typeof request === "object" && request !== null && typeof (request as { brandKit?: unknown }).brandKit === "string"
+  ? (request as { brandKit: string }).brandKit : undefined;
+
 /** The server derives the cap, rate, actor and request digest. Client keys only identify replays. */
 export async function beginOperation(input: {
   actor: string; workspaceId: string; artifactId: string; expectedVersion: number; effort: EffortLevel;
@@ -133,6 +147,7 @@ export async function beginOperation(input: {
 }): Promise<{ run: OperationRun | null; status: OperationStatus }> {
   const digest = createHash("sha256").update(canonicalSourceJson(input.request)).digest("hex");
   const attachmentsSha256 = attachmentFingerprint(input.request);
+  const brandKit = requestBrandKit(input.request);
   let id: string;
   if ("actionKey" in input.envelope) {
     const created = await call("makeborne_ai_operation_create", {
@@ -140,7 +155,7 @@ export async function beginOperation(input: {
       p_action: input.envelope.actionKey, p_kind: input.kind, p_effort: input.effort,
       p_initial_version: input.expectedVersion, p_input_hash: digest, p_credit_cap: input.ceiling,
       p_rate_microusd: Math.round(aiCostUsdPerCredit() * 1_000_000),
-      p_context: { attachmentsSha256, ...(typeof input.request === "object" && input.request ? { message: (input.request as { message?: unknown }).message ?? "", ...((input.request as { plan?: unknown }).plan ? { plan: (input.request as { plan?: unknown }).plan } : {}) } : {}) },
+      p_context: operationContext(input.request, attachmentsSha256),
     });
     checkRefusal(created);
     id = snapshot(created.operation ?? created).id;
@@ -151,6 +166,10 @@ export async function beginOperation(input: {
     checkRefusal(existingData);
     const existing = publicStatus(existingData);
     if (existing.operation.effort !== input.effort) throw new OperationError("OPERATION_CONFLICT", "Continue with the effort originally authorized for this request.", 409, existing.operation);
+    // Every later stage (continuation or review) must use the brand kit the request started with.
+    const startedWith = (existingData.requestContext as { brandKit?: unknown } | null)?.brandKit;
+    if (typeof startedWith === "string" && brandKit !== undefined && startedWith !== brandKit)
+      throw new OperationError("OPERATION_BRAND_CHANGED", "The brand kit changed after this request started, so it was not continued with the new kit. Your saved work is safe. Start a new request to use the updated brand kit.", 409, existing.operation);
     // A visual-review stage deliberately supplies its own current screenshots.
     // Build/plan continuation must preserve the original reference set. Older
     // operations without a reference fingerprint cannot prove that equivalence.

@@ -27,7 +27,7 @@
 .cr-website-title{flex:1;min-width:0;text-align:center;font-size:12px;color:#6b6f7b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr-devices{display:flex;gap:4px}.cr-devices button{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:#6b6f7b}
 .cr-devices button[aria-pressed=true]{background:#fff;border-color:#e2e1dc;color:#16181d}
-.cr-website-viewport{background:#eceae5;display:flex;justify-content:center}
+.cr-website-viewport{position:relative;background:#eceae5;display:flex;justify-content:center}
 .cr-website-viewport iframe{display:block;border:0;width:100%;height:calc(100vh - 210px);min-height:560px;background:#fff}
 .cr-website-viewport.is-mobile{padding:18px}.cr-website-viewport.is-mobile iframe{width:390px;max-width:100%;border-radius:22px;box-shadow:0 0 0 8px #16181d}
 /* Pins on our own surfaces */
@@ -53,7 +53,7 @@
 .cr-thread h2 span{font-size:11px;color:#6b6f7b;background:#f1f0ec;border-radius:999px;padding:2px 8px}
 .cr-identity{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .cr-field{display:grid;gap:6px;font-size:12px;font-weight:600;color:#40444f}.cr-field small{font-weight:400;color:#8a8e99}
-.cr-field input,.cr-field textarea,.cr-composer textarea{width:100%;border:1px solid #dcdbd6;border-radius:10px;padding:10px 12px;background:#fff;font-size:13px;font-weight:400;color:#16181d;resize:vertical}
+.cr-field input,.cr-field textarea,.cr-composer textarea{width:100%;border:1px solid #dcdbd6;border-radius:10px;padding:10px 12px;background:#fff;font-size:var(--type-input);font-weight:400;color:#16181d;resize:vertical}
 .cr-field input:focus,.cr-field textarea:focus,.cr-composer textarea:focus{outline:2px solid #3358d4;outline-offset:0;border-color:transparent}
 .cr-as{margin:0;font-size:12px}.cr-as button{border:0;background:none;color:#3358d4;font-size:12px;padding:0 0 0 4px}
 .cr-anchor-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -63,7 +63,8 @@
 .cr-pin-button{display:inline-flex;align-items:center;gap:6px;border:1px solid #dcdbd6;background:#fff;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600}
 .cr-pin-button[aria-pressed=true]{background:#16181d;color:#fff;border-color:#16181d}
 .cr-composer-foot{display:flex;align-items:center;justify-content:space-between}.cr-composer-foot small{color:#9a9da8;font-size:11px}
-.cr-error{margin:0;font-size:12px;color:#b42318}.cr-notice{margin:0;font-size:12px;color:#1f6b45}
+.cr-draft-restored{margin:0;padding:8px 10px;border:1px solid #e3e1da;border-radius:10px;background:#f8f7f3;font-size:12px;line-height:1.5;color:#4a4d57}.cr-draft-restored button{margin-left:4px;padding:0;border:0;background:none;color:inherit;font:inherit;font-weight:600;text-decoration:underline;cursor:pointer}
+.cr-error{margin:0;font-size:12px;color:var(--state-error)}.cr-notice{margin:0;font-size:12px;color:var(--state-success)}
 .cr-thread{display:grid;gap:12px}
 .cr-thread ol{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .cr-comment-focus{display:grid;gap:5px;width:100%;text-align:left;border:1px solid #ecebe7;background:#fcfbf9;border-radius:12px;padding:12px}
@@ -83,4 +84,4 @@
 .cr-unavailable-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:#f1f0ec;color:#40444f;margin-bottom:10px}
 .cr-unavailable-card h1{font-size:22px;margin:0}.cr-unavailable-card p{font-size:14px;line-height:1.6;margin:0 0 14px}
 @media(max-width:1000px){.cr-layout{grid-template-columns:minmax(0,1fr)}.cr-sidebar{position:static;max-height:none;overflow:visible}.cr-website-viewport iframe{height:70vh;min-height:440px}}
-@media(max-width:640px){.cr-top{position:static;flex-direction:column;align-items:stretch;gap:12px}.cr-top-actions{justify-content:stretch}.cr-top-actions .button{flex:1}.cr-identity{grid-template-columns:1fr}.cr-layout{padding:14px 12px 32px;gap:14px}.cr-pin-hint{top:12px}}
+@media(max-width:640px){.cr-field input,.cr-field textarea,.cr-composer textarea{font-size:var(--type-input-touch)}.cr-top{position:static;flex-direction:column;align-items:stretch;gap:12px}.cr-top-actions{justify-content:stretch}.cr-top-actions .button{flex:1}.cr-identity{grid-template-columns:1fr}.cr-layout{padding:14px 12px 32px;gap:14px}.cr-pin-hint{top:12px}}

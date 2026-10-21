@@ -286,12 +286,34 @@ const config = { zoneId: "0123456789abcdef0123456789abcdef", token: "t".repeat(4
       assert.match(nested, /DNS zone <strong>mybakery\.com<\/strong>/);
       assert.doesNotMatch(nested, /<code>shop<\/code>/, "never only the first label");
       assert.match(article("d-expired"), /<code>www<\/code>[\s\S]*DNS zone <strong>ovenbird\.co\.uk<\/strong>/);
+      // Preferred-address policy (M17, docs/CUSTOM_DOMAINS.md): stated, and matching the Worker.
+      assert.match(html, /wd-policy">Both addresses show the same site, and neither one redirects to the other\. Your Makeborne address stays the main address for search engines: every page names it as the original, and only it lists a sitemap\./);
       // Polling follows inProgress, not the stored status.
       const ui = fs.readFileSync(uiPath, "utf8");
       assert.match(ui, /domains\.filter\(domain => domain\.inProgress\)/);
       assert.doesNotMatch(ui, /domain\.status === "pending" \? <Loader2/, "the spinner is not tied to the stored pending status");
       assert.match(ui, /copy\(record\.fqdn!/);
     } finally { delete stubs.react; delete stubs["@/app/website-domains.css"]; require.extensions[".tsx"] = previousTsx; delete require.cache[uiPath]; }
+  });
+
+  await check("the last successful check is shown apart from a later attempt that didn't reach the provider", async () => {
+    const { checkTimes } = require("./custom-domain-view.ts");
+    const at = iso => iso.slice(11, 16);
+    assert.deepEqual(checkTimes(null, null, at), { success: "No successful check yet", attempt: null });
+    assert.deepEqual(checkTimes("2026-10-20T10:00:00Z", null, at), { success: "Last successful check 10:00", attempt: null });
+    assert.deepEqual(checkTimes("2026-10-20T10:00:00Z", { at: "2026-10-20T10:20:00Z", ok: false }, at), { success: "Last successful check 10:00", attempt: "Last attempt 10:20 couldn’t reach the domain provider, so the status shown is from the last successful check." });
+    assert.equal(checkTimes("2026-10-20T10:30:00Z", { at: "2026-10-20T10:20:00Z", ok: false }, at).attempt, null, "an older failed attempt is superseded");
+    assert.equal(checkTimes("2026-10-20T10:20:00Z", { at: "2026-10-20T10:20:00Z", ok: true }, at).attempt, null);
+    assert.match(checkTimes(null, { at: "2026-10-20T10:20:00Z", ok: false }, at).attempt, /^Last attempt 10:20/);
+    // Only an answered check moves last_checked_at; a provider error writes nothing (see the 503 check above).
+    const gone = await checkNow(async () => Response.json({ success: false, errors: [{ message: "not found" }] }, { status: 404 }));
+    assert.ok(Date.parse(gone.updates[0].last_checked_at) > Date.parse(stored.last_checked_at), "a confirmed answer is a successful check");
+    const failed = await checkNow(async () => { throw new TypeError("fetch failed"); });
+    assert.deepEqual(failed.updates, []); assert.equal(failed.row.last_checked_at, stored.last_checked_at, "a failed attempt keeps the last successful time");
+    const ui = fs.readFileSync(path.join(src, "components", "website-domains.tsx"), "utf8");
+    assert.ok(ui.includes("checkTimes(domain.lastCheckedAt, attempts[domain.id] ?? null)"));
+    assert.ok(ui.includes("catch (cause) { setAttempts(current => ({ ...current, [id]: { at: new Date().toISOString(), ok: false } }));"), "quiet polls record failed attempts too");
+    assert.doesNotMatch(ui, />Checked \{new Date/, "no unlabelled 'Checked' time");
   });
 
   console.log(`\n${passed} custom domain checks passed.`);

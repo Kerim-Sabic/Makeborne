@@ -203,6 +203,7 @@ module.exports = async function offlineEngineChecks(check) {
       try {
         const f = fixture();
         f.tables.mail_accounts[1].provider = "microsoft";
+        f.tables.mail_accounts[1].granted_scopes = ["Mail.Send", "Mail.ReadWrite"];
         f.deps.clients.microsoft = f.provider;
         f.tables.mail_messages.push({ id: "prior", account_id: "blocked", client_id: "client-blocked", workspace_id: "workspace", direction: "out", status: "sent", sent_at: at.toISOString(), created_at: at.toISOString(), thread_id: "private-thread" });
         let replyCalls = 0;

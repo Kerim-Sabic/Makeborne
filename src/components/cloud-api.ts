@@ -87,7 +87,7 @@ function schemaFor(path: string, method: string) {
       artifacts: z.array(ArtifactSchema),
       pagination: z.object({ clients: page, projects: page, artifacts: page }),
     });
-  throw new CloudError(400, "This cloud operation is unsupported.");
+  throw new CloudError(400, "This request isn’t supported.");
 }
 const activeRequests = new Set<string>();
 export async function api<T>(
@@ -108,7 +108,7 @@ export async function api<T>(
       uncertain ? "Your account changed while this save was in progress. Sign back into the original account and review the saved record before retrying." : "Your account changed. Reopen this view before continuing.",
       "ACCOUNT_CHANGED", uncertain);
   }
-  if (isWrite && !requestAccount) throw new CloudError(401, "Verify your account before saving cloud work.", "ACCOUNT_REQUIRED");
+  if (isWrite && !requestAccount) throw new CloudError(401, "Verify your account before saving to it.", "ACCOUNT_REQUIRED");
   if (isWrite && activeRequests.has(activeSignature))
     throw new CloudError(
       409,
@@ -132,7 +132,7 @@ export async function api<T>(
       if (!requestAccount)
         throw new CloudError(
           401,
-          "Verify your account before saving cloud work.",
+          "Verify your account before saving to it.",
         );
       const digest = await crypto.subtle.digest(
         "SHA-256",
@@ -200,8 +200,8 @@ export async function api<T>(
       throw new CloudError(
         503,
         body
-          ? "The cloud could not confirm this write. Keep your draft and retry the same operation after reviewing saved records."
-          : "The cloud could not be reached.",
+          ? "Makeborne could not confirm this save. Keep your draft and retry the same operation after reviewing saved records."
+          : "Makeborne could not be reached. Check your connection and try again.",
         "NETWORK_UNCONFIRMED",
         !!body,
       );
@@ -212,7 +212,7 @@ export async function api<T>(
     } catch {
       throw new CloudError(
         503,
-        "The cloud returned an unreadable result. Keep your draft and review saved records before retrying.",
+        "Makeborne returned an unreadable result. Keep your draft and review saved records before retrying.",
         "RESPONSE_UNCONFIRMED",
         !!body,
       );
@@ -230,7 +230,7 @@ export async function api<T>(
         response.status,
         error.success
           ? error.data.error.message
-          : "The cloud request could not complete.",
+          : "The request could not complete.",
         error.success ? error.data.error.code : "REQUEST_FAILED",
         uncertain,
       );
@@ -239,7 +239,7 @@ export async function api<T>(
     if (!result.success)
       throw new CloudError(
         503,
-        "The cloud response could not be verified. Your draft is preserved; review saved records before another write.",
+        "The response could not be verified. Your draft is preserved; review saved records before another write.",
         "RESPONSE_UNCONFIRMED",
         !!body,
       );
@@ -251,7 +251,7 @@ export async function api<T>(
     )
       throw new CloudError(
         503,
-        "The cloud did not confirm the expected request identity. Keep your draft and review the saved record.",
+        "Makeborne did not confirm that this was the expected request. Keep your draft and review the saved record.",
         "RESPONSE_UNCONFIRMED",
         true,
       );

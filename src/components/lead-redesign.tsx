@@ -4,6 +4,7 @@ import { AlertTriangle, Check, ChevronDown, Globe, Loader2, RefreshCw, Wand2, X 
 import { BRAND_COLOR_ROLES, brandFont, type BrandKitInput } from "@/lib/brand/kit";
 import type { AuditFinding } from "@/lib/leads/redesign";
 import { brandRequest } from "./brand-kit-api";
+import { focusReturnTarget } from "@/lib/focus-return";
 import "@/app/lead-redesign.css";
 
 type Reading = {
@@ -48,7 +49,7 @@ export default function LeadRedesign({ accountId, workspaceId, client, onClose, 
 
   const close = useCallback(() => { if (busy !== "create") onClose(); }, [busy, onClose]);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = focusReturnTarget();
     dialog.current?.focus();
     const key = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
     document.addEventListener("keydown", key);

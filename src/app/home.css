@@ -109,7 +109,7 @@
 .mk-idea-chips button svg{opacity:.55}
 .mk-idea-chips button:hover{background:#ffffffd9;border-color:#d5cfeb;color:#514064}
 .mk-availability{margin-top:16px;font-size:10px;color:#7b7488}
-@media(max-width:720px){.mk-hero-content{padding-top:38px}.mk-format-switch button{padding:8px 12px}.mk-composer{padding:18px 16px 12px}.mk-composer textarea{font-size:14px}.mk-idea-chips{gap:6px}.mk-idea-chips button{font-size:10px;padding:8px 11px}}
+@media(max-width:720px){.mk-hero-content{padding-top:38px}.mk-format-switch button{padding:8px 12px}.mk-composer{padding:18px 16px 12px}.mk-composer textarea{font-size:var(--type-input-touch)}.mk-idea-chips{gap:6px}.mk-idea-chips button{font-size:10px;padding:8px 11px}}
 
 /* One continuous selected surface; format labels stay stable as it moves. */
 .mk-format-switch{display:inline-grid;grid-template-columns:repeat(3,minmax(0,1fr));position:relative;width:min(100%,420px);gap:0;isolation:isolate}

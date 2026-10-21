@@ -6,14 +6,14 @@ import {vercelPublicationExecutor} from './vercel-publication-executor.mjs';
 /** Host composition only. The operator supplies a verified restricted SQL pool,
  * scoped stores and bundled application functions. No credentials/source enter
  * events or the sandbox. Starting this does not enable app publication. */
-export async function runPublicationController({pool,transport,approved,store,resolveArtwork,
+export async function runPublicationController({pool,rpc:injectedRpc,transport,approved,store,resolveArtwork,
   runPreparation,sitesDomain,workerId,signal,emit,wait}){
   if(typeof pool?.connect!=='function'||typeof transport?.create!=='function'||typeof transport?.get!=='function'
     ||typeof store?.putIfAbsent!=='function'||typeof store?.get!=='function'||typeof resolveArtwork!=='function'
     ||typeof runPreparation!=='function'||!/^[a-z0-9]+(?:[.-][a-z0-9]+)+$/.test(sitesDomain)){
     throw Error('PUBLICATION_CONTROLLER_CONFIG_INVALID');
   }
-  const rpc=publicationControl(pool),onLifecycle=publicationLifecycleJournal(rpc);
+  const rpc=injectedRpc??publicationControl(pool),onLifecycle=publicationLifecycleJournal(rpc);
   const cleanup=publicationCleanupGate({rpc,transport});
   const dependencies={rpc,resolveArtwork,address:slug=>`https://${slug}.${sitesDomain}/`,
     executor:async context=>({

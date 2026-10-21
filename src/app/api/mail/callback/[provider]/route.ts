@@ -30,7 +30,8 @@ export async function GET(request: Request, context: { params: Promise<{ provide
     const now = new Date().toISOString();
     const email = profile.email.toLowerCase();
     const changes = { display_name: profile.name.slice(0, 160), status: "active", last_error: null, updated_at: now,
-      ...(provider === "google" ? { granted_scopes: tokens.grantedScopes } : {}) };
+      // Provider-returned grants decide what the mailbox may do (both providers verify sending in exchange()).
+      ...(tokens.grantedScopes ? { granted_scopes: tokens.grantedScopes } : {}) };
     // Let the unique constraint choose the first owner, including concurrent connects.
     // Reconnects may change metadata only on a row already owned by this user.
     // Never upsert user_id: a prior ownership read cannot protect a later write.

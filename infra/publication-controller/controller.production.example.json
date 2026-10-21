@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "namespace": "production",
+  "supabaseProjectRef": "rklojnmmsmhwnkbzuidp",
+  "workspaceAllowlist": ["<explicitly approved production workspace UUID>"],
+  "database": {
+    "host": "db.rklojnmmsmhwnkbzuidp.supabase.co",
+    "port": 5432,
+    "database": "postgres",
+    "user": "makeborne_publication_controller_production",
+    "caFile": "/run/config/database-ca.pem"
+  },
+  "vercel": {
+    "teamId": "team_viiayqU1BnwJBdEqgHdgmtnA",
+    "projectId": "prj_UzMAuCP7X4yeBP6FrUFCDlJ5GWHh"
+  },
+  "broker": {"origin": "https://makeborne.com", "protectionBypassRequired": false},
+  "output": {"accountId": "<verified R2 account ID>", "bucket": "makeborne-publication-production"},
+  "approvedFile": "/run/config/approved-images.json",
+  "approvedSha256": "<SHA256 of exact qualified production approval mapping>"
+}

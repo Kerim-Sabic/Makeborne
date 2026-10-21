@@ -59,6 +59,7 @@ async function main(){
    insert into auth.sessions(id,user_id) values('${session}','${actor}');
    insert into makeborne_private.account_privileges(user_id,is_admin,unlimited_credits,reason) values('${actor}',true,false,'Disposable integration qualification');
    insert into public.workspaces(id,name,owner_id) values('${workspace}','Integrated publication','${actor}');
+   insert into makeborne_private.trusted_publication_workspaces(workspace_id,enabled) values('${workspace}',true);
    insert into public.projects(id,workspace_id,title,kind) values('${project}','${workspace}','Integrated publication','website');
    insert into public.artifacts(id,workspace_id,project_id,title,kind) values('${artifact}','${workspace}','${project}','Integrated publication','website');
    insert into public.assets(id,workspace_id,project_id,object_path,content_type,sha256) values('${asset}','${workspace}','${project}',${literal(objectPath)},'image/png','${digest(bytes)}');

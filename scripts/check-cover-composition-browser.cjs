@@ -3,7 +3,7 @@ const fs = require("node:fs"), path = require("node:path"), ts = require("typesc
 const load = Module._load;
 Module._load = function(name, parent, main) { return name === "server-only" ? {} : load.call(this, name, parent, main); };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
-const { chromium } = require("playwright"), sharp = require("sharp");
+const { browserType, engineOnly } = require("./browser-engine.cjs"), sharp = require("sharp");
 const { fixtures, text } = require("../src/lib/documents/fixtures/authored-covers.cjs");
 const { DocumentSourceSchema } = require("../src/lib/documents/schema.ts");
 const { bookHtml } = require("../src/lib/documents/render-book.ts"), { deckHtml } = require("../src/lib/documents/render-deck.ts"), { deckPptx } = require("../src/lib/documents/pptx.ts");
@@ -16,8 +16,16 @@ async function inspectText(page, selector) {
     return [...range.getClientRects()].filter(rect => rect.width > 0 && rect.height > 0 && (rect.left < box.left - 2 || rect.right > box.right + 2 || rect.top < box.top - 2 || rect.bottom > box.bottom + 2)).map(rect => ({ text: element.textContent, box: { x: box.x, y: box.y, w: box.width, h: box.height }, textBox: { x: rect.x, y: rect.y, w: rect.width, h: rect.height } }));
   }));
 }
+// Fonts settle before measuring. Polled synchronously: with JavaScript disabled, Firefox's Playwright driver crashes the
+// page on any evaluate that returns a promise (such as document.fonts.ready).
+async function fontsReady(page) {
+  for (const until = Date.now() + 10_000; Date.now() < until; await new Promise(resolve => setTimeout(resolve, 25))) if (await page.evaluate(() => document.fonts.status) === "loaded") return;
+  throw new Error("Fonts did not finish loading.");
+}
+// The product prints PDFs in headless Chromium, and Playwright can print PDFs only there.
+const printsPdf = engineOnly("chromium", "PDF page size (book 432 x 648 pt, deck 960 x 540 pt)");
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   try {
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1, serviceWorkers: "block" });
     await context.route("**/*", route => { report.externalRequests++; return route.abort(); });
@@ -26,7 +34,7 @@ async function inspectText(page, selector) {
       const item = { id, synthetic: true, book: {}, slides: [] };
       const preview = bookHtml(book, {});
       fs.writeFileSync(path.join(output, `${id}-book.html`), preview);
-      await page.setContent(preview); await page.evaluate(() => document.fonts.ready);
+      await page.setContent(preview); await fontsReady(page);
       const cover = page.locator(".authored-cover"), dimensions = await cover.boundingBox();
       assert.ok(Math.abs(dimensions.width / dimensions.height - 2 / 3) < 0.001);
       assert.deepEqual(await inspectText(page, ".authored-cover [data-cover-text]"), []);
@@ -35,9 +43,11 @@ async function inspectText(page, selector) {
       await page.setContent(bookHtml(book, {}, "print")); await page.emulateMedia({ media: "print" });
       assert.deepEqual(await inspectText(page, ".authored-cover [data-cover-text]"), []);
       await page.locator(".authored-cover").screenshot({ path: path.join(output, `${id}-book-print.png`) });
-      const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true }); fs.writeFileSync(path.join(output, `${id}-book.pdf`), pdf);
-      assert.match(pdf.toString("latin1"), /\/MediaBox\s*\[0 0 432 648\]/);
-      item.book = { width: dimensions.width, height: dimensions.height, portrait: true, textOverflow: [], pdfPoints: [432, 648] };
+      if (printsPdf) {
+        const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true }); fs.writeFileSync(path.join(output, `${id}-book.pdf`), pdf);
+        assert.match(pdf.toString("latin1"), /\/MediaBox\s*\[0 0 432 648\]/);
+      }
+      item.book = { width: dimensions.width, height: dimensions.height, portrait: true, textOverflow: [], pdfPoints: printsPdf ? [432, 648] : null };
       await page.setContent(deckHtml(deck, {}, "print"));
       assert.deepEqual(await inspectText(page, ".slide .t"), []);
       for (let i = 0; i < deck.slides.length; i++) {
@@ -45,8 +55,10 @@ async function inspectText(page, selector) {
         await slide.screenshot({ path: path.join(output, `${id}-${deck.slides[i].layout}.png`) });
         item.slides.push({ layout: deck.slides[i].layout, width: box.width, height: box.height, textOverflow: [] });
       }
-      const slidePdf = await page.pdf({ printBackground: true, preferCSSPageSize: true }); fs.writeFileSync(path.join(output, `${id}-deck.pdf`), slidePdf);
-      assert.match(slidePdf.toString("latin1"), /\/MediaBox\s*\[0 0 960 540\]/);
+      if (printsPdf) {
+        const slidePdf = await page.pdf({ printBackground: true, preferCSSPageSize: true }); fs.writeFileSync(path.join(output, `${id}-deck.pdf`), slidePdf);
+        assert.match(slidePdf.toString("latin1"), /\/MediaBox\s*\[0 0 960 540\]/);
+      }
       fs.writeFileSync(path.join(output, `${id}-deck.pptx`), await deckPptx(deck, {}));
       await page.emulateMedia({ media: "screen" }); await page.setContent(deckHtml(deck, {}, "preview"));
       assert.deepEqual(await inspectText(page, ".slide .t"), []);

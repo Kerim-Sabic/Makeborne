@@ -116,12 +116,14 @@ function presentCss(motion: MotionKind) {
 /** Complete standalone document. `print` lays out one 1280×720 page per slide
  * for Chromium's PDF printer; `preview` stacks responsive slides with notes;
  * `present` is a full-viewport slideshow with CSS transitions. `fonts` maps
- * embedded faces to data: URLs where the page cannot fetch same-origin files. */
-export function deckHtml(deck: Deck, images: ImageMap, mode: DeckMode = "preview", fonts?: FontSources) {
+ * embedded faces to data: URLs where the page cannot fetch same-origin files.
+ * `limit` renders only the first slides (e.g. a library card's opening slide)
+ * while every slide is still composed in the context of the whole deck. */
+export function deckHtml(deck: Deck, images: ImageMap, mode: DeckMode = "preview", fonts?: FontSources, limit?: number) {
   const pairing = FONTS[deck.theme.fonts], dir = directionOf(deck.theme);
   const total = deck.slides.length;
   const treatments = new Map<string, ImageTreatment>();
-  const slides = deck.slides.map((slide, index) => {
+  const slides = deck.slides.slice(0, limit ?? total).map((slide, index) => {
     const scene = composeSlide(deck, slide, index, total);
     for (const prim of scene.prims) if (prim.k === "image" && prim.treatment) treatments.set(filterId(prim.treatment), prim.treatment);
     const html = slideHtml(deck, scene, images, `Slide ${index + 1}: ${slide.title}`, mode === "present" ? { index } : undefined);

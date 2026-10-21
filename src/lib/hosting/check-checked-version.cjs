@@ -43,7 +43,9 @@ check("panels are wired to the version they describe", () => {
   assert.ok(seo.includes("checkIsCurrent(checked, fingerprint, version, dirty)") && seo.includes("Your site changed after this check"));
   const studio = read("components", "cloud-studio.tsx");
   assert.ok(studio.includes("version={expectedVersion} dirty={dirty}"));
-  assert.ok(studio.includes("Your live website doesn&apos;t change until you publish again."), "restore says it does not publish");
+  // The full Restore effect (no AI/credits, no publish, no refund) is worded once in action-semantics.ts.
+  assert.ok(studio.includes('restoreEffect(inspectedVersion.number, expectedVersion, artifact.kind === "website")'), "website restore states its publishing effect");
+  assert.ok(read("lib", "builder", "action-semantics.ts").includes("Your live website doesn't change until you publish again."), "restore says it does not publish");
 });
 
 console.log(`\n${passed} checked-version checks passed.`);

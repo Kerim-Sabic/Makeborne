@@ -23,7 +23,7 @@ export default function SystemTab({ operations, compiler }: { operations: Operat
   ];
   return <>
     <section className="mbo-panel" aria-labelledby="setup-heading">
-      <header className="mbo-panel-head"><h2 id="setup-heading"><Database size={16} aria-hidden="true" />Cloud setup</h2><Link href="/studio/cloud">Cloud studio<ArrowUpRight size={13} aria-hidden="true" /></Link></header>
+      <header className="mbo-panel-head"><h2 id="setup-heading"><Database size={16} aria-hidden="true" />Cloud setup</h2><Link href="/studio/cloud">Saved account records<ArrowUpRight size={13} aria-hidden="true" /></Link></header>
       <ul className="mbo-checklist">{checks.map(check => <li key={check.label}><span className={`mbo-check-icon${check.set ? " is-set" : ""}`} aria-hidden="true">{check.set ? <Check size={14} /> : <CircleDashed size={14} />}</span><div><strong>{check.label}</strong><p>{check.detail}</p></div><span className={`mbo-badge is-${check.set ? "good" : "muted"}`}>{check.set ? "Set" : "Not set"}</span></li>)}</ul>
       <p className="mbo-footnote">{cloud.enabled ? "Cloud is enabled by configuration; availability is not verified here." : cloud.reason}</p>
     </section>

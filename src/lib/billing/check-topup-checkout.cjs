@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
 const uuid='00000000-0000-4000-8000-000000000001';
 const row={id:uuid,user_id:uuid,request_id:uuid,merchant_id:'biz_Test',plan_id:'plan_Test',whop_user_id:'user_Test',price_cents:1200,state:'awaiting_payment',checkout_url:null,checkout_request:null};
-const originalPlan={id:'plan_Test',company:{id:'biz_Test'},currency:'usd',plan_type:'one_time',initial_price:12,renewal_price:0,trial_period_days:null};
+const originalPlan={id:'plan_Test',company:{id:'biz_Test'},currency:'usd',adaptive_pricing_enabled:false,plan_type:'one_time',initial_price:12,renewal_price:0,trial_period_days:null};
 let plan=originalPlan,claimed=true,claimPurchase=row,posts=[],rpcCalls=[],savedError=false,memberships=[{whop_user_id:'user_Test'}];
 class RequestError extends Error{constructor(code,message,status){super(message);this.code=code;this.status=status;}}
 const config={companyId:'biz_Test',apiKey:'fake',sandbox:true,enabled:true};
@@ -48,8 +48,13 @@ function load(file){const filename=path.resolve(__dirname,file);if(cache.has(fil
  claimPurchase={...row,checkout_url:first.url};assert.equal((await create(row)).resumed,true);assert.equal(posts.length,oldPosts);
  claimPurchase=row;
  claimed=true;
- for(const patch of [{initial_price:13},{initial_price:12.001},{renewal_price:1},{plan_type:'renewal'},{currency:'eur'},{company:{id:'biz_Other'}},{trial_period_days:1}]){
+ for(const patch of [{initial_price:13},{initial_price:12.001},{renewal_price:1},{plan_type:'renewal'},{currency:'eur'},{company:{id:'biz_Other'}},{trial_period_days:1},{adaptive_pricing_enabled:true},{adaptive_pricing_enabled:undefined},{adaptive_pricing_enabled:null}]){
   plan={...originalPlan,...patch};rpcCalls=[];await assert.rejects(()=>create(row),e=>e.code==='CREDIT_PACK_PRICE_UNVERIFIED');assert.equal(rpcCalls.length,0);
+ }
+ for(const adaptive_pricing_enabled of [true,undefined,null]){
+  plan={...originalPlan,adaptive_pricing_enabled};const before=posts.length;rpcCalls=[];
+  await assert.rejects(()=>create({...row,checkout_url:first.url}),e=>e.code==='CREDIT_PACK_PRICE_UNVERIFIED');
+  assert.equal(posts.length,before,'Saved checkout must not bypass current currency qualification');assert.equal(rpcCalls.length,0);
  }
  plan=originalPlan;savedError=true;await assert.rejects(()=>create(row),e=>e.code==='CREDIT_PACK_CHECKOUT_UNVERIFIED');
  const uncertain=posts.at(-1);savedError=false;await create({...row,checkout_request:uncertain.body});

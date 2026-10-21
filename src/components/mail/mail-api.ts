@@ -1,12 +1,15 @@
 "use client";
 
 export type MailAccount = { id: string; provider: "google" | "microsoft"; email: string; displayName: string; status: "active" | "error" | "disconnected"; lastError: string | null;
-  mine: boolean; dailyLimit: number; lastSyncedAt: string | null; todayQuota: number; sentToday: number; canSend: boolean; canTrackReplies: boolean; canAutomate: boolean };
+  mine: boolean; dailyLimit: number; lastSyncedAt: string | null; todayQuota: number; sentToday: number; canSend: boolean; canTrackReplies: boolean; canAutomate: boolean;
+  /** Last confirmed provider send from this mailbox. */ lastSentAt?: string | null;
+  /** Sequences with running or paused clients on this mailbox. */ sequences?: MailboxSequenceUse[] };
+export type MailboxSequenceUse = { sequenceId: string; name: string; active: number; paused: number };
 export type MailTemplate = { id: string; name: string; subject: string; body: string; updatedAt: string };
 export type SequenceStep = { delayDays: number; subject: string; body: string };
 export type MailSequence = { id: string; name: string; steps: SequenceStep[]; stopOnReply: boolean; updatedAt: string; counts: Record<string, number> };
 export type MailReply = { id: string; clientId: string | null; clientName: string; subject: string; snippet: string; from: string; at: string };
-export type MailOverview = { availability: { google: boolean; microsoft: boolean }; automation: boolean; googleMode: "full" | "send_only"; accounts: MailAccount[]; templates: MailTemplate[]; sequences: MailSequence[]; replies: MailReply[] };
+export type MailOverview = { availability: { google: boolean; microsoft: boolean }; automation: boolean; googleMode: "full" | "send_only"; microsoftMode: "full" | "send_only"; accounts: MailAccount[]; templates: MailTemplate[]; sequences: MailSequence[]; replies: MailReply[] };
 export type MailMessage = { id: string; direction: "in" | "out"; status: "sending" | "sent" | "failed" | "unknown" | "received"; subject: string; body: string; from: string; to: string; at: string;
   error: string | null; automated: boolean; step: number | null; accountId: string };
 export type Enrollment = { id: string; sequenceId: string; clientId: string; clientName: string; clientEmail: string; accountId: string; status: string; nextStep: number; nextSendAt: string | null; lastError: string | null };

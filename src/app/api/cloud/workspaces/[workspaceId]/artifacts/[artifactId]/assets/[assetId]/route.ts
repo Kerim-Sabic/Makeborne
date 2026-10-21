@@ -1,6 +1,7 @@
 import { cloudContext, cloudError, databaseError, validId } from "@/lib/cloud/server";
 import { MAX_PREVIEW_SOURCE_BYTES, renderAssetPreview, renderAssetExport } from "@/lib/cloud/image-preview";
 import { RequestError } from "@/lib/server/http";
+import { downloadProjectAsset } from "@/lib/cloud/asset-storage";
 
 export const runtime = "nodejs";
 export async function GET(request: Request, context: { params: Promise<{ workspaceId: string; artifactId: string; assetId: string }> }) {
@@ -18,7 +19,7 @@ export async function GET(request: Request, context: { params: Promise<{ workspa
     databaseError(assetError);
     if (!asset) throw new RequestError("NOT_FOUND", "This artwork is unavailable in this project.", 404);
     if (!["image/png", "image/jpeg", "image/webp"].includes(asset.content_type) || !asset.object_path.startsWith(`${workspaceId}/`)) throw new RequestError("INVALID_IMAGE", "This asset cannot be previewed.", 415);
-    const { data: file, error } = await client.storage.from("project-assets").download(asset.object_path);
+    const { data: file, error } = await downloadProjectAsset(client, { workspaceId, projectId: artifact.project_id }, asset.object_path);
     if (error || !file) throw new RequestError("IMAGE_UNAVAILABLE", "The artwork could not be loaded.", 404);
     if (file.size > MAX_PREVIEW_SOURCE_BYTES) throw new RequestError("IMAGE_TOO_LARGE", "Artwork preview supports images under 8 MB.", 413);
     let bytes: Uint8Array<ArrayBuffer>;

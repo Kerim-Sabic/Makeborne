@@ -97,10 +97,12 @@ export function useBuilderOperation(scope: Scope) {
     identity.current = readIdentity(storageSnapshot());
     if (identity.current) void refresh().catch(() => setRecoveryNotice("The previous request could not be checked. Check its status before submitting again."));
   }, [key, refresh, setRecoveryNotice, storageSnapshot]);
-  const begin = useCallback((): OperationRequest => {
+  /** A new explicit action. `repeat` reuses one approval's identity, so a repeated
+   * click replays the same server operation instead of creating a second one. */
+  const begin = useCallback((repeat?: { actionKey: string; stepKey: string }): OperationRequest => {
     refreshSequence.current++;
     latestSnapshot.current = null;
-    const value = { actionKey: crypto.randomUUID(), stepKey: crypto.randomUUID() };
+    const value = repeat && validId(repeat.actionKey) && validId(repeat.stepKey) ? { actionKey: repeat.actionKey, stepKey: repeat.stepKey } : { actionKey: crypto.randomUUID(), stepKey: crypto.randomUUID() };
     retain({ actionKey: value.actionKey });
     setOperation(null); setRecoveryNotice(""); setChecking(false); setRecovery(null);
     return value;

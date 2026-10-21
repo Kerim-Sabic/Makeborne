@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Search, ShieldCheck, X } from "lucide-react";
-import { CUSTOMER_FILTERS, CUSTOMER_PAGE_SIZE, type AdminCustomer, type AdminCustomerDetail, type AdminCustomerPage, type AdminMembership, type CustomerFilter } from "@/lib/admin/console";
+import { CUSTOMER_FILTERS, CUSTOMER_PAGE_SIZE, type AdminCustomer, type AdminCustomerDetail, type AdminCustomerPage, type AdminCustomerPayments, type AdminMembership, type AdminPaymentRefund, type CustomerFilter } from "@/lib/admin/console";
 import { CREATION_PLANS } from "@/lib/billing/plans";
-import { count, day, exactTime, relative, titleCase, usdFromMicro } from "./format";
+import { count, day, exactTime, refundDecisionLabel, relative, titleCase, usdFromMicro } from "./format";
+import RefundActions from "./refund-actions";
 
 const FILTER_LABELS: Record<CustomerFilter, string> = { all: "All", subscribed: "Subscribed", admin: "Administrators", unconfirmed: "Unconfirmed email" };
 const FILTER_HEADINGS: Record<CustomerFilter, string> = { all: "All customers", subscribed: "Subscribed customers", admin: "Administrators", unconfirmed: "Email not confirmed" };
@@ -30,7 +31,7 @@ function query(base: { q: string; filter: CustomerFilter; page: number }, change
   return `?${params}${change.customer ? "#customer-detail" : ""}`;
 }
 
-export default function CustomersTab({ page, detail, state, now }: { page: AdminCustomerPage; detail: AdminCustomerDetail | null; state: { q: string; filter: CustomerFilter; page: number; customer: string | null }; now: number }) {
+export default function CustomersTab({ page, detail, payments, state, now }: { page: AdminCustomerPage; detail: AdminCustomerDetail | null; payments: AdminCustomerPayments | null; state: { q: string; filter: CustomerFilter; page: number; customer: string | null }; now: number }) {
   const pages = Math.max(1, Math.ceil(page.total / CUSTOMER_PAGE_SIZE));
   const from = page.total ? page.offset + 1 : 0, to = page.offset + page.rows.length;
   return <div className={`mbo-customers${detail ? " has-detail" : ""}`}>
@@ -58,7 +59,7 @@ export default function CustomersTab({ page, detail, state, now }: { page: Admin
         {state.page < pages ? <Link href={query(state, { page: state.page + 1 })} rel="next">Next<ArrowRight size={14} aria-hidden="true" /></Link> : <span aria-disabled="true" className="is-disabled">Next<ArrowRight size={14} aria-hidden="true" /></span>}
       </nav>}
     </section>
-    {state.customer && <CustomerDetail detail={detail} close={query(state, {})} now={now} />}
+    {state.customer && <CustomerDetail detail={detail} payments={payments} close={query(state, {})} now={now} />}
   </div>;
 }
 
@@ -75,15 +76,17 @@ function CustomerRow({ row, state, now, selected }: { row: AdminCustomer; state:
   </tr>;
 }
 
-function CustomerDetail({ detail, close, now }: { detail: AdminCustomerDetail | null; close: string; now: number }) {
+function CustomerDetail({ detail, payments, close, now }: { detail: AdminCustomerDetail | null; payments: AdminCustomerPayments | null; close: string; now: number }) {
   if (!detail) return <aside id="customer-detail" className="mbo-panel mbo-detail" aria-label="Customer"><header className="mbo-panel-head"><h2>Customer not found</h2><Link href={close} aria-label="Close customer"><X size={16} aria-hidden="true" /></Link></header><p className="mbo-empty">This customer no longer exists, or the link is incomplete.</p></aside>;
   const { profile, credits } = detail;
   const current = detail.memberships[0] ?? null;
   const status = membershipLabel(current, now);
+  // Whop keeps a refunded membership active; say plainly when the current period was refunded.
+  const revokedNow = payments?.revocations.find(item => !item.liftedAt && Date.parse(item.periodStart) <= now && now < Date.parse(item.periodEnd)) ?? null;
   return <aside id="customer-detail" className="mbo-panel mbo-detail" aria-labelledby="customer-heading">
     <header className="mbo-panel-head"><div><h2 id="customer-heading">{profile.email ?? "No email"}</h2><p className="mbo-id"><span className="mbo-sr">Customer ID </span>{profile.id}</p></div><Link href={close} className="mbo-close" aria-label="Close customer"><X size={16} aria-hidden="true" /></Link></header>
     <dl className="mbo-facts">
-      <div><dt>Subscription</dt><dd><span className={`mbo-badge is-${status.tone}`}>{status.text}</span>{current && planName(current.tier) && <> {planName(current.tier)} · {current.interval}</>}</dd></div>
+      <div><dt>Subscription</dt><dd><span className={`mbo-badge is-${status.tone}`}>{status.text}</span>{current && planName(current.tier) && <> {planName(current.tier)} · {current.interval}</>}{revokedNow && <> <span className="mbo-badge is-bad">{revokedNow.reason === "dispute_lost" ? "Charged back" : "Refunded"}: no creation access until {day(revokedNow.periodEnd)}</span></>}</dd></div>
       <div><dt>Credits available</dt><dd>{detail.privileges?.unlimitedCredits ? "Unlimited (administrator allowance)" : count(credits.available)}{credits.reserved > 0 && ` · ${count(credits.reserved)} reserved`}</dd></div>
       <div><dt>Joined</dt><dd title={exactTime(profile.createdAt)}>{day(profile.createdAt)}</dd></div>
       <div><dt>Last sign-in</dt><dd title={exactTime(profile.lastSignInAt)}>{relative(profile.lastSignInAt, now)}</dd></div>
@@ -96,6 +99,8 @@ function CustomerDetail({ detail, close, now }: { detail: AdminCustomerDetail | 
 
     <section className="mbo-detail-block"><h3>Subscriptions <span className="mbo-count">{detail.memberships.length}</span></h3>
       {detail.memberships.length ? <ul className="mbo-list">{detail.memberships.map(membership => <li key={membership.membershipId}><span><span className={`mbo-badge is-${membershipLabel(membership, now).tone}`}>{membershipLabel(membership, now).text}</span> {planName(membership.tier) ?? membership.planId}{membership.interval ? ` · ${membership.interval}` : ""}</span><span>{membership.periodEnd ? `Period ends ${day(membership.periodEnd)}` : "No period"}<code>{membership.membershipId}</code></span></li>)}</ul> : <p className="mbo-empty">Never subscribed.</p>}</section>
+
+    <PaymentsBlock payments={payments} />
 
     <section className="mbo-detail-block"><h3>Credit history</h3>
       {credits.ledger.length ? <div className="mbo-table-wrap"><table className="mbo-table is-compact"><caption className="mbo-sr">Latest credit changes</caption><thead><tr><th scope="col">When</th><th scope="col">Change</th><th scope="col" className="is-num">Credits</th><th scope="col" className="is-num">Balance</th></tr></thead>
@@ -111,4 +116,31 @@ function CustomerDetail({ detail, close, now }: { detail: AdminCustomerDetail | 
         {!detail.workspaces.length && !detail.sites.length && <li><span className="mbo-empty">No workspaces or websites.</span></li>}</ul>
     </section>
   </aside>;
+}
+
+const money = (cents: number, currency: string) => `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
+
+/** Payments with their refund decision. Refunds are issued in Whop; this only freezes or releases the payment's credits. */
+function PaymentsBlock({ payments }: { payments: AdminCustomerPayments | null }) {
+  if (!payments) return <section className="mbo-detail-block"><h3>Payments & refunds</h3><p className="mbo-empty">Payment records are unavailable: the database did not answer or is not migrated (<code>20261020090000</code>).</p></section>;
+  const all = [...payments.subscriptionPayments, ...payments.creditPackPayments];
+  return <section className="mbo-detail-block"><h3>Payments & refunds <span className="mbo-count">{all.length}</span></h3>
+    <p className="mbo-sub">A payment is refundable only while none of its credits were used. Freeze its credits here first, then refund it in the Whop dashboard (and cancel the membership there if it should not renew). The request completes when Whop reports the refund.</p>
+    {all.length ? all.map(payment => <PaymentRow key={payment.payment} payment={payment} />) : <p className="mbo-empty">No recorded payments.</p>}
+    {payments.revocations.length > 0 && <details className="mbo-more"><summary>Revoked billing periods ({payments.revocations.length})</summary><ul className="mbo-list">{payments.revocations.map(item => <li key={item.payment}><span>{day(item.periodStart)} – {day(item.periodEnd)} · {titleCase(item.reason)}</span><span>{item.liftedAt ? `Lifted ${day(item.liftedAt)}` : "In force"}<code>{item.payment}</code></span></li>)}</ul></details>}
+  </section>;
+}
+
+function PaymentRow({ payment }: { payment: AdminPaymentRefund }) {
+  const label = refundDecisionLabel(payment.decision, payment.credits.spent);
+  const exposure = payment.subscription?.consumedExposureCredits ?? payment.creditPack?.consumedExposureCredits ?? 0;
+  return <div className="mbo-payment">
+    <div className="mbo-payment-head"><span>{payment.kind === "subscription" ? "Subscription" : "Credit pack"} · {money(payment.provider.principalCents, payment.provider.currency)}{payment.provider.refundedCents > 0 && ` · ${money(payment.provider.refundedCents, payment.provider.currency)} refunded`}{payment.provider.dispute !== "none" && ` · dispute ${payment.provider.dispute}`}</span>
+      <span className={`mbo-badge is-${label.tone}`}>{label.text}</span></div>
+    <p><code>{payment.payment}</code>{payment.subscription && <> · paid {day(payment.subscription.paidAt)}{payment.subscription.periodStart && ` · period ${day(payment.subscription.periodStart)} – ${day(payment.subscription.periodEnd)}`}{payment.subscription.revoked && " · creation access revoked for this period"}</>}
+      {" · "}credits {count(payment.credits.spent)} used, {count(payment.credits.unused)} unused{payment.credits.withheld > 0 && `, ${count(payment.credits.withheld)} withheld`}{exposure > 0 && ` · ${count(exposure)} used before the refund (open for review)`}</p>
+    {payment.refundCase?.state === "pending" && <p>Refund requested {day(payment.refundCase.openedAt)}: {payment.refundCase.reason}</p>}
+    {payment.decision === "eligible" && <RefundActions paymentId={payment.payment} mode="begin" />}
+    {payment.decision === "refund_in_progress" && <RefundActions paymentId={payment.payment} mode="cancel" />}
+  </div>;
 }

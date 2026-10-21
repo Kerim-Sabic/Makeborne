@@ -44,3 +44,61 @@
 .cloud-history-head .button { display:inline-flex; align-items:center; gap:6px; }
 .cloud-version > button + button { margin-top:6px; }
 .vc .vc-pick select { height:auto; min-height:0; padding:6px 30px 6px 10px; font-size:13px; line-height:1.4; }
+/* Readable summary, file view and checkpoints (audit M11). */
+.vc-modes { display:inline-flex; justify-self:start; gap:2px; padding:3px; border:1px solid #e7e4ec; border-radius:9px; background:#faf9fb; }
+.vc-modes button { border:0; border-radius:7px; background:transparent; padding:6px 11px; font:600 12px Inter, system-ui, sans-serif; color:#6f6478; cursor:pointer; }
+.vc-modes button[aria-pressed=true] { background:#fff; color:#2f2637; box-shadow:0 1px 2px rgba(47,38,55,.12); }
+.vc-modes button:focus-visible, .vc-link:focus-visible, .vc-more:focus-visible, .vc-close:focus-visible { outline:2px solid #7d5fb0; outline-offset:1px; }
+.vc-readable { display:grid; gap:10px; min-width:0; }
+.vc-guide { margin:0; font-size:12px; color:#6f6478; line-height:1.45; }
+.vc-unit { display:grid; gap:8px; padding:10px 12px; border:1px solid #ece8f0; border-radius:10px; min-width:0; }
+.vc-unit > header { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; min-width:0; }
+.vc-unit-label { flex:1 1 160px; min-width:0; overflow-wrap:anywhere; font:12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; color:#2f2637; }
+.vc-kind { flex:none; padding:2px 7px; border:1px solid #e7e4ec; border-radius:5px; font-size:10.5px; font-weight:600; color:#6f6478; }
+.vc-entries { list-style:none; margin:0; padding:0; display:grid; gap:6px; min-width:0; }
+.vc-entry { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:baseline; gap:8px; font-size:13px; line-height:1.5; color:#2f2637; }
+.vc-entry-kind { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#8a7f93; min-width:62px; }
+.vc-entry.is-added .vc-entry-kind { color:#1d6f46; }
+.vc-entry.is-removed .vc-entry-kind { color:#9a2f2a; }
+.vc-words { margin:0; min-width:0; overflow-wrap:anywhere; }
+.vc-words.is-pair { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
+.vc-words ins { background:#dff3e6; color:#14532f; text-decoration:none; border-radius:3px; padding:0 1px; }
+.vc-words del { background:#fbe3e1; color:#7d211c; border-radius:3px; padding:0 1px; }
+.vc-only { margin:0; font-size:12.5px; color:#5b4d67; }
+.vc-unit-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.vc-unit-actions:empty { display:none; }
+.vc-link { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border:1px solid #e3dde9; border-radius:7px; background:#fff; color:#4b3a59; font:600 11.5px Inter, system-ui, sans-serif; cursor:pointer; white-space:nowrap; }
+.vc-link:hover, .vc-link[aria-expanded=true] { background:#f3f0f6; }
+.vc-more-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.vc-more-row p { margin:0; font-size:12.5px; color:#5b4d67; }
+.vc-more-row .vc-more { margin:0; }
+.vc-view { border:1px solid #e3dde9; border-radius:9px; overflow:hidden; min-width:0; background:#fff; }
+.vc-view-head { display:flex; align-items:center; gap:8px; padding:6px 6px 6px 10px; background:#f6f4f8; }
+.vc-view-path { flex:1; display:grid; min-width:0; font-size:11px; color:#6f6478; }
+.vc-view-path code { overflow-wrap:anywhere; color:#2f2637; font-size:11.5px; }
+.vc-view-code { max-height:360px; overflow:auto; font:12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.vc-view-line { display:grid; grid-template-columns:44px minmax(0, 1fr); min-width:max-content; }
+.vc-view-line.is-target { background:#fff3c4; }
+.vc-view-line code { padding-right:16px; white-space:pre; color:#2f2637; font:inherit; }
+.vc-view-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:6px 10px; border-top:1px solid #f0edf3; }
+.vc-view-actions .vc-more { margin:0; display:inline-flex; align-items:center; gap:5px; }
+.vc-view-actions .small-note { margin:0; }
+@media (max-width:560px) {
+  .vc { padding:12px; }
+  .vc-entry { grid-template-columns:minmax(0, 1fr); gap:2px; }
+  .vc-entry .vc-link { justify-self:start; }
+  .vc-pick select { min-width:0; width:100%; }
+  .vc-picks .vc-pick { flex:1 1 120px; }
+}
+.cloud-checkpoint { display:grid; gap:6px; margin-top:6px; }
+.cloud-checkpoint-badge { display:inline-flex; flex-wrap:wrap; align-items:center; gap:6px; justify-self:start; max-width:100%; padding:3px 8px; border:1px solid #d9cfe6; border-radius:7px; background:#f7f3fb; font-size:12px; color:#4b3a59; overflow-wrap:anywhere; }
+.cloud-checkpoint-badge strong { font-weight:700; }
+.cloud-checkpoint-note { margin:0; font-size:12px; color:#5b4d67; white-space:pre-line; overflow-wrap:anywhere; }
+.cloud-checkpoint-form { display:grid; gap:8px; padding:10px; border:1px solid #e7e4ec; border-radius:9px; background:#faf9fb; }
+.cloud-checkpoint-form label { display:grid; gap:4px; font-size:12px; font-weight:600; color:#4b3a59; }
+.cloud-checkpoint-form input, .cloud-checkpoint-form textarea { width:100%; min-width:0; padding:7px 9px; border:1px solid #e3dde9; border-radius:7px; background:#fff; font:inherit; font-weight:400; }
+.cloud-checkpoint-form textarea { resize:vertical; min-height:56px; }
+.cloud-checkpoint-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.cloud-checkpoint-error { margin:0; font-size:12px; color:#9a2f2a; }
+.cloud-history-filter { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0; }
+.cloud-checkpoint-orphans { margin:0 0 8px; padding-left:18px; font-size:12px; color:#5b4d67; }
