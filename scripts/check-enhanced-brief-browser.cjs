@@ -22,7 +22,7 @@ function App() {
       onSkip={() => window.events.push({ type: "skip" })} />;
   }
   if (view.kind === "none") return null;
-  const state = view.kind === "ready" ? { status: "ready", enhanced: ENHANCED, text: "Business: Ovenbird\\n1. Hero (#top): Who we are.\\n2. Opening hours (#hours): When we open.", charged: 1 } : { status: view.kind };
+  const state = view.kind === "ready" ? { status: "ready", enhanced: ENHANCED, text: "Business: Ovenbird\\n1. Hero (#top): Who we are.\\n2. Opening hours (#hours): When we open.", charged: 1 } : view.kind === "blocked" ? { status: "failed", blocking: true, message: "AI is paused right now. Nothing was started or charged." } : { status: view.kind };
   return <EnhancedBriefCard key={view.run} state={state} design={{ vibe: "warm", sections: ["hours"] }} maximum={50} busy={false}
     onStart={brief => window.events.push({ type: "start", brief })} onOriginal={() => window.events.push({ type: "original" })} onCancel={() => window.events.push({ type: "cancel" })} />;
 }
@@ -88,37 +88,40 @@ async function main() {
     // Enhanced brief: start, edit, original, cancel; focus and keyboard.
     await show("ready");
     await page.waitForFunction(() => document.activeElement?.textContent === "Enhanced brief", null, { timeout: 3000 }).catch(() => assert.fail("focus moves to the card's heading"));
-    assert.match(await page.locator(".eb").innerText(), /Sections[\s\S]*Hero[\s\S]*Opening hours[\s\S]*Shown as labelled examples until you add them[\s\S]*Your answers used[\s\S]*Feel: Warm and crafted/);
+    assert.match(await page.locator(".eb").innerText(), /Sections[\s\S]*Hero[\s\S]*Opening hours[\s\S]*Shown as placeholders until you add them[\s\S]*Your answers used[\s\S]*Feel: Warm and crafted/);
     await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
     await page.getByRole("button", { name: "Start building" }).focus(); await page.keyboard.press("Enter");
     list = await events();
     assert.deepEqual(list, [{ type: "start", brief: { mode: "enhanced", text: "Business: Ovenbird\n1. Hero (#top): Who we are.\n2. Opening hours (#hours): When we open." } }]);
     pass("Start building sends exactly the enhanced brief shown (keyboard)");
     await show("ready");
-    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.waitForFunction(() => document.activeElement?.id === "eb-text", null, { timeout: 3000 }).catch(() => assert.fail("Edit focuses the text"));
     await page.locator("#eb-text").fill("Business: Ovenbird\n1. Hero (#top): Who we are.\n2. Gift cards (#gifts): In store.");
     await page.getByRole("button", { name: "Start with my edits" }).click();
     list = await events();
     assert.deepEqual(list[0].brief, { mode: "edited", text: "Business: Ovenbird\n1. Hero (#top): Who we are.\n2. Gift cards (#gifts): In store." });
     await show("ready");
-    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.getByRole("button", { name: "Start with my edits" }).click();
     assert.equal((await events())[0].brief.mode, "enhanced", "unchanged text is still the enhanced brief");
     pass("Edit sends the client's edited text as an edited brief; untouched text stays enhanced");
     await show("ready");
-    await page.getByRole("button", { name: "Use my original" }).click();
+    await page.getByRole("button", { name: "Start with my original · up to 50 credits" }).click();
     await show("ready");
     await page.getByRole("button", { name: "Cancel" }).click();
     assert.deepEqual(await events(), [{ type: "cancel" }]);
     await show("failed");
     assert.match(await page.locator(".eb").innerText(), /couldn.t be enhanced just now\. Nothing was charged/);
-    await page.getByRole("button", { name: "Start building with my brief" }).click();
+    await page.getByRole("button", { name: "Start building with my brief · up to 50 credits" }).click();
     assert.deepEqual(await events(), [{ type: "original" }]);
+    await show("blocked");
+    assert.match(await page.locator(".eb").innerText(), /AI is paused right now. Nothing was started or charged./, "the server's own reason is shown");
+    assert.equal(await page.getByRole("button", { name: /Start building/ }).count(), 0, "no start that would fail for the same reason");
     await show("loading");
-    await page.getByRole("button", { name: "Use my original" }).click();
+    await page.getByRole("button", { name: "Start with my original · up to 50 credits" }).click();
     assert.deepEqual(await events(), [{ type: "original" }]);
-    pass("Use my original, Cancel, the failure state (fail open, nothing charged) and the loading skip each do one thing");
+    pass("Start with my original (with its maximum), Cancel, the failure state (fail open, nothing charged), a blocking refusal (its reason, no start) and the loading skip each do one thing");
 
     // Phone widths: nothing overflows, actions stay at least 44 px tall.
     for (const width of [320, 375]) {
