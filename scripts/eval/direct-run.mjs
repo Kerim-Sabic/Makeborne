@@ -13,7 +13,7 @@
 //     [--variant original|enhanced|answered]  (design round 3: "enhanced" runs the app's brief enhancer first, one capped Haiku
 //      call with its own ledger reservation (kind direct-enhancer) at the 1-credit hold; "answered" first applies the brief's
 //      simulatedAnswers to the on-device design questions the app would ask, then enhances. Short prompts: --only s01-dentist,...
-//      read from scripts/eval/briefs-short/)
+//      read from scripts/eval/briefs-short/; "questions" applies the simulated answers without the enhancer)
 // Outputs land in this harness's outputs/eval/runs/<runId>/ in the run.mjs layout (source.json etc.), so measure.mjs works
 // on them; item.json says origin.stack "none (direct runBuilder)". Report these runs as direct-agent, not app-route, runs.
 import path from 'node:path';
@@ -31,7 +31,7 @@ const REPO = path.resolve(values.repo ?? DQ);
 if (process.env.EVAL_SPEND_APPROVED !== 'yes' || !values.approval?.trim()) throw new Error('Refusing: EVAL_SPEND_APPROVED=yes and --approval are required');
 if (!/^[a-z0-9-]+$/.test(values.run ?? '')) throw new Error('--run must be a plain id');
 if (!['medium', 'high'].includes(values.effort)) throw new Error('--effort must be medium or high');
-if (!['original', 'enhanced', 'answered'].includes(values.variant)) throw new Error('--variant must be original, enhanced or answered');
+if (!['original', 'enhanced', 'answered', 'questions'].includes(values.variant)) throw new Error('--variant must be original, enhanced, answered or questions');
 const only = (values.only ?? '').split(',').map(id => id.trim()).filter(Boolean);
 if (!only.length || only.length > 8) throw new Error('--only takes 1 to 8 brief ids');
 process.chdir(REPO);
@@ -125,7 +125,7 @@ try {
     // Variants: the studio's first-build path. Answered: the design questions the app would ask, answered as the brief's
     // simulatedAnswers say (skips and "you choose" set nothing); enhanced: the brief enhancer (fail open on any failure).
     const prep = { message: brief.brief.trim(), design: {}, asked: [], approved: null, enhancer: null };
-    if (values.variant === 'answered') {
+    if (values.variant === 'answered' || values.variant === 'questions') {
       const asked = questionsModule.briefQuestions('website', brief.brief);
       const answers = Object.fromEntries(asked.map(question => { const value = brief.simulatedAnswers?.[question.id]; return [question.id, Array.isArray(value) ? { options: value } : typeof value === 'string' ? { option: value } : {}]; }));
       prep.asked = asked.map(question => question.id);
@@ -133,7 +133,7 @@ try {
       prep.design = questionsModule.designAnswers(asked, answers);
     }
     // Like the studio: only short briefs are enhanced (detailed ones build from the client's words and answers).
-    if (enhancing && enhancedModule.shouldEnhance(brief.brief)) {
+    if (enhancing && values.variant !== 'questions' && enhancedModule.shouldEnhance(brief.brief)) {
       const enhancerBoundUsd = enhancedModule.ENHANCER_CREDITS * RATE;
       const enhancerReservation = await budget.reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
       const enhanceSpend = new RunSpend({ run: `${values.run}/${id}/enhance`, providerCapMicrousd: Math.round(enhancerBoundUsd * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 50_000 });
