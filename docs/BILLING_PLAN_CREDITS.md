@@ -20,16 +20,16 @@
   - **No evidence:** an open `plan_credit_issues` row (`no_evidence`) that stays recoverable. It resolves itself when payment evidence arrives, or an operator resolves it (`makeborne_private.resolve_plan_credit_issue`, owned by the database owner, note required). An operator's "not owed" decision is final.
   - **Tier:** the one in force at the start. An upgrade evidenced inside the allocation tops up that allocation only; a downgrade applies from the next one. Nothing is clawed back.
   - **Paid:** the allocation is owed only if the evidence says paid (`active`/`canceling`). Cancelled and past-due months aren't owed; reactivation resumes.
-- **Grants** go through `credit_grant_plan_allocation` (idempotent per membership and allocation month). Every grant carries its allocation end and expires then (see Credit expiry). The app cannot grant with a caller-chosen tier. The undated `credit_grant_plan_month` path was removed.
+- **Grants** go through `credit_grant_plan_allocation` (idempotent per membership and allocation month). Every grant carries its allocation end and expires two calendar months after it (see Credit expiry). The app cannot grant with a caller-chosen tier. The undated `credit_grant_plan_month` path was removed.
   - Entry points (service role): `makeborne_record_plan_observation`, `makeborne_record_plan_payment`, `makeborne_reconcile_plan_credits`.
   - Concurrency: a per-membership advisory lock, then the wallet lock.
 
 ## Credit expiry
 
-Migrations `20261012120000_credit_lots_expiry.sql` and `20261012130000_credit_lock_clock.sql`.
+Migrations `20261012120000_credit_lots_expiry.sql`, `20261012130000_credit_lock_clock.sql` and the owner-approved rollover in `20261013130000_plan_credit_rollover.sql`. Later grant-function replacements preserve this rollover.
 
 - **Lots.** Every grant creates one row in `makeborne_private.credit_lots`, with a source, a reference, and `spent`, `held` and `lapsed` amounts. Every credit can be traced to its grant.
-  - **`plan`:** expires at the allocation end, an exact UTC instant (`expires_at`). At that instant the credits are expired. Top-ups expire with their own allocation month.
+  - **`plan`:** expires two calendar months after the allocation end, at the exact UTC instant in `expires_at`. Upgrade grants share that allocation's extended expiry. Previously expired credits are not restored. Purchased credit packs are separate non-expiring `topup` lots.
   - **`trial`:** never expires, while the trial stays disabled by default.
   - **`topup`:** never expires, which keeps the current pack terms.
   - **`adjust`:** goodwill or admin grants. They never expire, and they require `metadata.reason` (5 or more characters), which is kept on the lot and in the ledger.
@@ -46,7 +46,7 @@ Migrations `20261012120000_credit_lots_expiry.sql` and `20261012130000_credit_lo
   - **After that release:** a settle of the same reference fails with `PT409`. A reclaimed hold can never also be spent.
 - **Late settlement:** if a run's allocation ends while the run is in progress, the run can still be charged from its own hold, which was authorised while the credits were valid. Whatever the run did not use lapses.
 - **Time of decision:** each wallet write judges expiry, the hold timeout and availability at the instant it holds the wallet lock (`credit_clock`), not when its transaction started. A request that started before an allocation's end but obtained the lock after it cannot spend that allocation. Reads use the same clock: `now()` outside a write.
-- **Late catch-up:** an allocation granted after its end, such as months evidenced later by a payment, is recorded (lot, `plan_grant` and `expire` ledger rows) and lapses in the same transaction. Its `plan_grant` row's `balance_after` shows it never counted as available.
+- **Late catch-up:** an allocation granted after its rollover expiry (allocation end plus two calendar months), such as months evidenced later by a payment, is recorded (lot, `plan_grant` and `expire` ledger rows) and lapses in the same transaction. Its `plan_grant` row's `balance_after` shows it never counted as available. An allocation evidenced after its allocation end but before its rollover expiry remains available until that original extended expiry.
 - **Ledger:** the invariant `sum(delta) = available` still holds.
   - Unheld credits that expire produce a negative `expire` row.
   - Balances are exact at read time without these rows. `makeborne_credit_expire_due` writes the rows; it runs at the end of every reconciliation run and on the next wallet write.
@@ -73,7 +73,7 @@ Migrations `20261012120000_credit_lots_expiry.sql` and `20261012130000_credit_lo
   3. Update `billing_memberships` and record the observation.
   4. If issues are open, read its payments (paged, at most 5 pages). Whop's `query` search is fuzzy, so each item must name exactly this membership and merchant. Then record the evidence.
   5. A failure on one membership is counted and the run continues. Each membership is attempted once per run.
-- **Then** the database reconcile runs for every recorded entitlement, followed by `makeborne_credit_expire_due`, which records ended allocations and timed-out holds. A failure in either marks the run `failed`.
+- **Then** the database reconcile runs for every recorded entitlement, followed by `makeborne_credit_expire_due`, which records lots past their rollover expiry and timed-out holds. A failure in either marks the run `failed`.
 - **Idempotency:** every write is idempotent, so retried and repeated runs are safe.
 - **Monitoring:**
   - `billing_job_runs` holds each run's status (`succeeded`, `partial`, `failed`, `abandoned`), stats and errors.
@@ -169,11 +169,11 @@ The values are entered by the account owner and never shared in chat. Claude can
 
 | Check | Where | What |
 |---|---|---|
-| `supabase/check-credit-lots-expiry.sql` | local DB, rolled back | spend order, expiry boundary (at the instant), allocation expiring while held, partial/late settle never above the hold, returns keep source and expiry, expired release lapses, hold timeout and reclaimed-hold settle refused, MB402 counts valid credits only, plan catch-up lapses atomically, top-ups expire with their month, legacy migration and reconciliation, privileges |
+| `supabase/check-credit-lots-expiry.sql` | local DB, rolled back | spend order, expiry boundary (at the instant), allocation expiring while held, partial/late settle never above the hold, returns keep source and expiry, expired release lapses, hold timeout and reclaimed-hold settle refused, MB402 counts valid credits only, plan catch-up lapses atomically, upgrade grants share their allocation expiry, legacy migration and reconciliation, privileges |
 | `supabase/check-credit-lots-concurrency.sql` | **disposable DB** | concurrent reservations across lots; spending racing an allocation's end; hold timeout racing a late settle and release; settle racing release |
 | `supabase/check-credit-wallets.sql` | local DB, rolled back | free-tier gate, trial, grants (dated plan grants, adjustment reasons), reserve/settle/release, ledger invariant, admin bypass, RLS |
 | `supabase/check-plan-credit-allocations.sql` | local DB, rolled back | upgrade/downgrade in month 6, repeated changes, monthly↔yearly, Jan 31/Feb 29 anchors, renewal boundaries, cancellation and reactivation, previous-release grants, no inferred history (open issues), payment evidence, unverified/refunded payments, manual review, recording outcomes, permissions, job control |
-| `supabase/check-plan-credit-concurrency.sql` | **disposable DB** | 8 simultaneous deliveries plus a racing reconcile; ended months lapse |
+| `supabase/check-plan-credit-concurrency.sql` | **disposable DB** | 8 simultaneous deliveries plus a racing reconcile; expired rollover lots lapse |
 | `supabase/check-plan-credit-job-e2e.cjs` | **disposable DB** | real job and SQL with mocked Whop: issues opened, then resolved by payments; idle run; overlap |
 | `supabase/check-credit-wallets-concurrency.sql` | **disposable DB** | racing reserves and trials |
 | `src/lib/billing/check-billing-reconcile-job.cjs` | offline | retry/backoff, sandbox base, payment paging and filtering, cron auth, overlap, binding, failures, budget, heartbeat, expiry step |

@@ -1,5 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run lint && npm run build",
-  "regions": ["fra1"]
+  "regions": [
+    "fra1"
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "qualification/launch-services-20261021": false
+    }
+  }
 }
