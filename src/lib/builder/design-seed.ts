@@ -46,17 +46,17 @@ export const ARCHETYPES = ["Photographic", "Type as image", "Editorial split", "
 type Archetype = typeof ARCHETYPES[number];
 /** Type as image was 65% of measured first screens: it stays available but rarely suggested. */
 const ARCHETYPE_WEIGHTS: Record<Industry, Weighted<Archetype>> = {
-  food: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Poster", 2], ["Type as image", 1]],
+  food: [["Editorial split", 3], ["Photographic", 2], ["Index", 2], ["Poster", 2], ["Type as image", 1]],
   saas: [["Product stage", 5], ["Editorial split", 2], ["Index", 1], ["Type as image", 1]],
-  professional: [["Editorial split", 4], ["Index", 3], ["Photographic", 2], ["Type as image", 1]],
-  creator: [["Index", 4], ["Poster", 3], ["Photographic", 2], ["Type as image", 1]],
+  professional: [["Editorial split", 4], ["Index", 3], ["Type as image", 1]],
+  creator: [["Index", 4], ["Poster", 3], ["Type as image", 2], ["Photographic", 1]],
   commerce: [["Product stage", 4], ["Photographic", 3], ["Poster", 2], ["Editorial split", 2]],
-  wellness: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Type as image", 1]],
-  trades: [["Poster", 3], ["Photographic", 3], ["Editorial split", 2], ["Index", 2]],
-  property: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Type as image", 1]],
-  events: [["Poster", 4], ["Index", 3], ["Photographic", 2], ["Type as image", 1]],
-  weddings: [["Photographic", 4], ["Editorial split", 3], ["Type as image", 2], ["Index", 1]],
-  civic: [["Editorial split", 3], ["Photographic", 3], ["Poster", 2], ["Index", 2]],
+  wellness: [["Editorial split", 4], ["Index", 2], ["Photographic", 1], ["Type as image", 1]],
+  trades: [["Poster", 3], ["Editorial split", 3], ["Index", 2], ["Photographic", 1]],
+  property: [["Editorial split", 4], ["Index", 2], ["Photographic", 1], ["Type as image", 1]],
+  events: [["Poster", 4], ["Index", 3], ["Type as image", 2], ["Photographic", 1]],
+  weddings: [["Editorial split", 4], ["Type as image", 2], ["Index", 2]],
+  civic: [["Editorial split", 3], ["Poster", 2], ["Index", 2], ["Photographic", 1]],
   general: [["Editorial split", 3], ["Photographic", 2], ["Poster", 2], ["Index", 2], ["Product stage", 1], ["Type as image", 1]],
 };
 const ARCHETYPE_NOTES: Record<Archetype, string> = {
@@ -73,12 +73,12 @@ const PAIRINGS: Record<Industry, readonly Pairing[]> = {
   food: [["DM Serif Display", "DM Sans"], ["Fraunces", "Manrope"], ["Playfair Display", "Plus Jakarta Sans"], ["Bricolage Grotesque", "Geist"], ["Instrument Serif", "Outfit"]],
   saas: [["Geist", "JetBrains Mono"], ["Sora", "Geist"], ["Space Grotesk", "Geist"], ["Plus Jakarta Sans", "JetBrains Mono"], ["Instrument Serif", "Geist"]],
   professional: [["Newsreader", "Manrope"], ["Instrument Serif", "Geist"], ["Cormorant", "Plus Jakarta Sans"], ["Playfair Display", "DM Sans"], ["DM Serif Display", "Geist"]],
-  creator: [["Syne", "Space Grotesk"], ["Instrument Serif", "Space Grotesk"], ["Bricolage Grotesque", "DM Sans"], ["Unbounded", "Geist"], ["Archivo", "JetBrains Mono"]],
+  creator: [["Syne", "Space Grotesk"], ["Instrument Serif", "Space Grotesk"], ["Bricolage Grotesque", "DM Sans"], ["Unbounded", "Geist"], ["Fraunces", "Space Grotesk"]],
   commerce: [["Bricolage Grotesque", "Plus Jakarta Sans"], ["Syne", "DM Sans"], ["DM Serif Display", "Outfit"], ["Sora", "Manrope"], ["Playfair Display", "Geist"]],
   wellness: [["Fraunces", "DM Sans"], ["Cormorant", "Manrope"], ["Instrument Serif", "Plus Jakarta Sans"], ["Outfit", "Outfit"], ["DM Serif Display", "Manrope"]],
   trades: [["Archivo", "Archivo"], ["Bebas Neue", "Outfit"], ["Space Grotesk", "Manrope"], ["Sora", "DM Sans"], ["Unbounded", "Geist"]],
   property: [["Instrument Serif", "Geist"], ["Cormorant", "Manrope"], ["Newsreader", "Space Grotesk"], ["Playfair Display", "Plus Jakarta Sans"], ["Syne", "Geist"]],
-  events: [["Bebas Neue", "Space Grotesk"], ["Unbounded", "Manrope"], ["Syne", "Geist"], ["Archivo", "JetBrains Mono"], ["Cormorant", "Outfit"]],
+  events: [["Bebas Neue", "Space Grotesk"], ["Unbounded", "Manrope"], ["Syne", "Geist"], ["Space Grotesk", "JetBrains Mono"], ["Cormorant", "Outfit"]],
   weddings: [["Cormorant", "Manrope"], ["Playfair Display", "Plus Jakarta Sans"], ["Instrument Serif", "Geist"], ["Fraunces", "DM Sans"], ["DM Serif Display", "Outfit"]],
   civic: [["Bricolage Grotesque", "Manrope"], ["Fraunces", "Geist"], ["Sora", "DM Sans"], ["DM Serif Display", "Plus Jakarta Sans"], ["Outfit", "Newsreader"]],
   general: [["Instrument Serif", "Geist"], ["Space Grotesk", "Manrope"], ["Syne", "DM Sans"], ["Newsreader", "Outfit"], ["Bricolage Grotesque", "Geist"]],
@@ -93,44 +93,71 @@ const GROUND_NOTES: Record<Ground, string> = {
   "warm light": "a warm tinted light ground, but not the default cream: push it toward stone, blush, butter or sand",
   "photographic": "the image is the ground of the first screen",
 };
-/** Grounds: a blind review read dark grounds with a gold or neon accent as a premium-template trope
- * (4 of 6 round-1 sites went dark), so dark is suggested mainly where the subject is dark. */
+/** Grounds. A blind judge read dark grounds (especially with gold or neon accents) as template-like and
+ * preferred calm light pages for services; round 2 still drifted to 7 of 20 dark sites. Light is the
+ * default; dark is suggested only where the subject itself is dark (nightlife, events). */
 const GROUNDS: Record<Industry, Weighted<Ground>> = {
-  food: [["photographic", 3], ["colour flood", 2], ["mid-tone", 2], ["warm light", 2], ["dark", 1]],
-  saas: [["cool light", 4], ["colour flood", 1], ["mid-tone", 1], ["dark", 1]],
-  professional: [["cool light", 3], ["warm light", 2], ["mid-tone", 2], ["dark", 1]],
-  creator: [["colour flood", 3], ["cool light", 2], ["mid-tone", 2], ["dark", 1]],
-  commerce: [["colour flood", 3], ["mid-tone", 2], ["photographic", 2], ["cool light", 2]],
-  wellness: [["mid-tone", 3], ["photographic", 2], ["cool light", 2], ["warm light", 1]],
-  trades: [["cool light", 3], ["colour flood", 2], ["mid-tone", 1], ["dark", 1], ["photographic", 1]],
-  property: [["photographic", 3], ["mid-tone", 2], ["cool light", 2], ["warm light", 1]],
-  events: [["dark", 3], ["colour flood", 3], ["photographic", 1]],
-  weddings: [["photographic", 3], ["warm light", 2], ["mid-tone", 2], ["cool light", 2]],
-  civic: [["colour flood", 2], ["cool light", 2], ["mid-tone", 2], ["photographic", 1]],
-  general: [["cool light", 2], ["mid-tone", 2], ["colour flood", 1], ["dark", 1]],
+  food: [["photographic", 3], ["warm light", 3], ["colour flood", 2], ["mid-tone", 1]],
+  saas: [["cool light", 5], ["warm light", 1], ["mid-tone", 1]],
+  professional: [["cool light", 3], ["warm light", 3], ["mid-tone", 1]],
+  creator: [["cool light", 2], ["warm light", 2], ["colour flood", 2], ["mid-tone", 1]],
+  commerce: [["warm light", 2], ["cool light", 2], ["colour flood", 2], ["photographic", 2], ["mid-tone", 1]],
+  wellness: [["warm light", 3], ["cool light", 3], ["photographic", 2], ["mid-tone", 1]],
+  trades: [["cool light", 4], ["warm light", 2], ["colour flood", 1], ["photographic", 1]],
+  property: [["photographic", 3], ["warm light", 3], ["cool light", 2], ["mid-tone", 1]],
+  events: [["dark", 3], ["colour flood", 2], ["photographic", 1], ["cool light", 1]],
+  weddings: [["photographic", 3], ["warm light", 3], ["cool light", 2]],
+  civic: [["warm light", 3], ["cool light", 3], ["colour flood", 1]],
+  general: [["cool light", 3], ["warm light", 3], ["mid-tone", 1]],
 };
 
-const HEADLINE_DEVICES = [
-  "weight contrast: one line in a heavy weight against a light one, same colour",
-  "scale contrast: one word, numeral or date set far larger than the rest",
-  "a solid colour block behind one short phrase (text on it at AA contrast)",
-  "a drawn rule or thick underline under one phrase",
-  "no accent at all: size, measure and spacing carry the headline",
-  "a split headline: a small set-up line, then the claim at full display size",
-] as const;
-const SIGNATURE_MOTION = [
-  "image wipes: hero-adjacent and section images reveal with data-reveal=\"wipe\" (clip-path) as they enter",
-  "scroll-linked depth: one or two large images drift slowly inside clipped frames (data-depth)",
-  "a sticky scroll story: a pinned visual or heading while numbered steps scroll past and the active step is highlighted",
-  "an index that performs: large linked rows slide in with a stagger and reveal a preview or detail on hover and focus",
-  "a reading-progress rule in the header (data-progress) plus staggered rises on lists and figures",
-  "a slow marquee band of real details (services, dates, places), paused under reduced motion",
-] as const;
-const COMPOSITIONS = [
-  "an editorial asymmetric split with a bleeding image", "a bento grid of unequal cells", "layered, overlapping imagery with a caption card",
-  "a sticky scroll story", "an index list with large numerals", "a full-bleed band with an overlaid headline", "a printed-card price or menu list",
-  "a numbered process on a timeline", "a stat band of facts from the brief", "a split call-to-action footer",
-] as const;
+/** Quiet subjects earn calm, light, typographic restraint; loud ones may be bold. The judge's
+ * repeat preferences (a calm editorial law firm, a ledger-paper bookkeeping app, a plain-spoken
+ * plumber with a huge phone number) were all quiet executions. */
+export type Tone = "quiet" | "loud";
+export const TONES: Record<Industry, Tone> = {
+  food: "loud", saas: "quiet", professional: "quiet", creator: "loud", commerce: "loud", wellness: "quiet",
+  trades: "quiet", property: "quiet", events: "loud", weddings: "quiet", civic: "quiet", general: "quiet",
+};
+const TONE_NOTES: Record<Tone, string> = {
+  quiet: "quiet: a light ground, generous whitespace, one accent colour used sparingly, type and spacing doing the work, no marquee, no bento grid, no stat band, no dark section heavier than the footer, calm motion only; quiet is not plain: the first screen still carries one ownable, crafted signature drawn for this business (a diagram, illustration or object from its own facts)",
+  loud: "loud: bolder colour and scale are welcome, but still one dominant device on the first screen, a clear hierarchy and plenty of air around it",
+};
+const HEADLINE_DEVICES: Record<Tone, readonly string[]> = {
+  quiet: [
+    "no accent at all: size, measure and spacing carry the headline",
+    "a split headline: a small set-up line, then the claim at full display size",
+    "weight contrast within one family, same colour",
+  ],
+  loud: [
+    "weight contrast: one line in a heavy weight against a light one, same colour",
+    "scale contrast: one word, numeral or date set far larger than the rest",
+    "a solid colour block behind one short phrase (text on it at AA contrast)",
+    "a drawn rule or thick underline under one phrase",
+    "no accent at all: size, measure and spacing carry the headline",
+  ],
+};
+const SIGNATURE_MOTION: Record<Tone, readonly string[]> = {
+  quiet: [
+    "staggered rises on lists and figures, nothing else moving",
+    "a sticky scroll story: a pinned heading while numbered steps scroll past and the active step is highlighted",
+    "a reading-progress rule in the header (data-progress) plus staggered rises",
+    "image wipes on one or two figures (data-reveal=\"wipe\") and staggered rises elsewhere",
+  ],
+  loud: [
+    "image wipes: hero-adjacent and section images reveal with data-reveal=\"wipe\" (clip-path) as they enter",
+    "scroll-linked depth: one or two large images drift slowly inside clipped frames (data-depth)",
+    "a sticky scroll story: a pinned visual or heading while numbered steps scroll past and the active step is highlighted",
+    "an index that performs: large linked rows slide in with a stagger and reveal a preview or detail on hover and focus",
+    "a slow marquee band of real details (services, dates, places), paused and wrapped under reduced motion",
+  ],
+};
+const COMPOSITIONS: Record<Tone, readonly string[]> = {
+  quiet: ["an editorial asymmetric split", "an index list with large numerals", "a numbered process on a timeline", "a printed-card price or menu list",
+    "a two-column detail list with hairline rules", "a split call-to-action footer", "a full-width quote or fact set large on the ground colour"],
+  loud: ["an editorial asymmetric split with a bleeding image", "layered, overlapping imagery with a caption card", "a sticky scroll story", "an index list with large numerals",
+    "a full-bleed band with an overlaid headline", "a printed-card price or menu list", "a bento grid of unequal cells", "a split call-to-action footer"],
+};
 
 /** Bytes of a stable digest of the seed text (one byte per choice). */
 function digest(seed: string) {
@@ -143,25 +170,27 @@ function pick<T>(options: Weighted<T>, byte: number): T {
   return options[options.length - 1][0];
 }
 
-export type DesignSeed = { industry: Industry; archetype: Archetype; pairing: Pairing; ground: Ground; headline: string; motion: string; compositions: [string, string] };
+export type DesignSeed = { industry: Industry; tone: Tone; archetype: Archetype; pairing: Pairing; ground: Ground; headline: string; motion: string; compositions: [string, string] };
 
 export function designSeed(input: { seed: string; brief: string; images: boolean }): DesignSeed {
   const industry = detectIndustry(input.brief);
+  const tone = TONES[industry];
   const bytes = digest(input.seed);
   const archetypes = ARCHETYPE_WEIGHTS[industry].filter(([name]) => input.images || name !== "Photographic");
   const grounds = GROUNDS[industry].filter(([name]) => input.images || name !== "photographic");
   const pairings = PAIRINGS[industry];
-  const first = bytes[5] % COMPOSITIONS.length;
-  let second = bytes[6] % COMPOSITIONS.length;
-  if (second === first) second = (second + 1) % COMPOSITIONS.length;
+  const compositions = COMPOSITIONS[tone];
+  const first = bytes[5] % compositions.length;
+  let second = bytes[6] % compositions.length;
+  if (second === first) second = (second + 1) % compositions.length;
   return {
-    industry,
+    industry, tone,
     archetype: pick(archetypes, bytes[0]),
     pairing: pairings[bytes[1] % pairings.length],
     ground: pick(grounds, bytes[2]),
-    headline: HEADLINE_DEVICES[bytes[3] % HEADLINE_DEVICES.length],
-    motion: SIGNATURE_MOTION[bytes[4] % SIGNATURE_MOTION.length],
-    compositions: [COMPOSITIONS[first], COMPOSITIONS[second]],
+    headline: HEADLINE_DEVICES[tone][bytes[3] % HEADLINE_DEVICES[tone].length],
+    motion: SIGNATURE_MOTION[tone][bytes[4] % SIGNATURE_MOTION[tone].length],
+    compositions: [compositions[first], compositions[second]],
   };
 }
 
@@ -172,10 +201,12 @@ export function designSeedBlock(input: { seed: string; brief: string; images: bo
   return [
     "<design_seed>",
     "Starting points for this project's art direction, chosen per project so Makeborne sites do not converge on one look. Use them unless they clearly conflict with the brief; the brief, an approved plan, a requested style" + (input.brand ? " and the brand kit (its colours and fonts)" : "") + " always win. If you change one, choose something just as specific and say why in finish.design.",
+    `- Tone: ${TONE_NOTES[seed.tone]}.`,
     `- First screen: ${seed.archetype} (${ARCHETYPE_NOTES[seed.archetype]}).`,
     `- Type: "${display}"${display === text ? " for display and text (vary weight, width and size)" : ` for display, "${text}" for text`}.`,
     `- Ground: ${seed.ground}: ${GROUND_NOTES[seed.ground]}. Derive the exact hues from this business.`,
     `- Headline device: ${seed.headline}.`,
+    "- Motif: one quiet visual motif drawn from this business's own working objects (a ledger page, a receipt, a timetable, a map, a menu card, a ticket, a plan drawing), used consistently and drawn with care, never as clip-art.",
     `- Signature motion: ${seed.motion}.`,
     `- Feature these compositions somewhere on the page: ${seed.compositions[0]}; ${seed.compositions[1]}.`,
     "</design_seed>",
