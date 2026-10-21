@@ -46,17 +46,17 @@ export const ARCHETYPES = ["Photographic", "Type as image", "Editorial split", "
 type Archetype = typeof ARCHETYPES[number];
 /** Type as image was 65% of measured first screens: it stays available but rarely suggested. */
 const ARCHETYPE_WEIGHTS: Record<Industry, Weighted<Archetype>> = {
-  food: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Poster", 2], ["Type as image", 1]],
+  food: [["Editorial split", 3], ["Photographic", 2], ["Index", 2], ["Poster", 2], ["Type as image", 1]],
   saas: [["Product stage", 5], ["Editorial split", 2], ["Index", 1], ["Type as image", 1]],
   professional: [["Editorial split", 4], ["Index", 3], ["Type as image", 1]],
-  creator: [["Index", 4], ["Poster", 3], ["Photographic", 2], ["Type as image", 1]],
+  creator: [["Index", 4], ["Poster", 3], ["Type as image", 2], ["Photographic", 1]],
   commerce: [["Product stage", 4], ["Photographic", 3], ["Poster", 2], ["Editorial split", 2]],
-  wellness: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Type as image", 1]],
-  trades: [["Poster", 3], ["Photographic", 3], ["Editorial split", 2], ["Index", 2]],
-  property: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Type as image", 1]],
-  events: [["Poster", 4], ["Index", 3], ["Photographic", 2], ["Type as image", 1]],
-  weddings: [["Photographic", 4], ["Editorial split", 3], ["Type as image", 2], ["Index", 1]],
-  civic: [["Editorial split", 3], ["Photographic", 3], ["Poster", 2], ["Index", 2]],
+  wellness: [["Editorial split", 4], ["Index", 2], ["Photographic", 1], ["Type as image", 1]],
+  trades: [["Poster", 3], ["Editorial split", 3], ["Index", 2], ["Photographic", 1]],
+  property: [["Editorial split", 4], ["Index", 2], ["Photographic", 1], ["Type as image", 1]],
+  events: [["Poster", 4], ["Index", 3], ["Type as image", 2], ["Photographic", 1]],
+  weddings: [["Editorial split", 4], ["Type as image", 2], ["Index", 2]],
+  civic: [["Editorial split", 3], ["Poster", 2], ["Index", 2], ["Photographic", 1]],
   general: [["Editorial split", 3], ["Photographic", 2], ["Poster", 2], ["Index", 2], ["Product stage", 1], ["Type as image", 1]],
 };
 const ARCHETYPE_NOTES: Record<Archetype, string> = {
@@ -73,12 +73,12 @@ const PAIRINGS: Record<Industry, readonly Pairing[]> = {
   food: [["DM Serif Display", "DM Sans"], ["Fraunces", "Manrope"], ["Playfair Display", "Plus Jakarta Sans"], ["Bricolage Grotesque", "Geist"], ["Instrument Serif", "Outfit"]],
   saas: [["Geist", "JetBrains Mono"], ["Sora", "Geist"], ["Space Grotesk", "Geist"], ["Plus Jakarta Sans", "JetBrains Mono"], ["Instrument Serif", "Geist"]],
   professional: [["Newsreader", "Manrope"], ["Instrument Serif", "Geist"], ["Cormorant", "Plus Jakarta Sans"], ["Playfair Display", "DM Sans"], ["DM Serif Display", "Geist"]],
-  creator: [["Syne", "Space Grotesk"], ["Instrument Serif", "Space Grotesk"], ["Bricolage Grotesque", "DM Sans"], ["Unbounded", "Geist"], ["Archivo", "JetBrains Mono"]],
+  creator: [["Syne", "Space Grotesk"], ["Instrument Serif", "Space Grotesk"], ["Bricolage Grotesque", "DM Sans"], ["Unbounded", "Geist"], ["Fraunces", "Space Grotesk"]],
   commerce: [["Bricolage Grotesque", "Plus Jakarta Sans"], ["Syne", "DM Sans"], ["DM Serif Display", "Outfit"], ["Sora", "Manrope"], ["Playfair Display", "Geist"]],
   wellness: [["Fraunces", "DM Sans"], ["Cormorant", "Manrope"], ["Instrument Serif", "Plus Jakarta Sans"], ["Outfit", "Outfit"], ["DM Serif Display", "Manrope"]],
   trades: [["Archivo", "Archivo"], ["Bebas Neue", "Outfit"], ["Space Grotesk", "Manrope"], ["Sora", "DM Sans"], ["Unbounded", "Geist"]],
   property: [["Instrument Serif", "Geist"], ["Cormorant", "Manrope"], ["Newsreader", "Space Grotesk"], ["Playfair Display", "Plus Jakarta Sans"], ["Syne", "Geist"]],
-  events: [["Bebas Neue", "Space Grotesk"], ["Unbounded", "Manrope"], ["Syne", "Geist"], ["Archivo", "JetBrains Mono"], ["Cormorant", "Outfit"]],
+  events: [["Bebas Neue", "Space Grotesk"], ["Unbounded", "Manrope"], ["Syne", "Geist"], ["Space Grotesk", "JetBrains Mono"], ["Cormorant", "Outfit"]],
   weddings: [["Cormorant", "Manrope"], ["Playfair Display", "Plus Jakarta Sans"], ["Instrument Serif", "Geist"], ["Fraunces", "DM Sans"], ["DM Serif Display", "Outfit"]],
   civic: [["Bricolage Grotesque", "Manrope"], ["Fraunces", "Geist"], ["Sora", "DM Sans"], ["DM Serif Display", "Plus Jakarta Sans"], ["Outfit", "Newsreader"]],
   general: [["Instrument Serif", "Geist"], ["Space Grotesk", "Manrope"], ["Syne", "DM Sans"], ["Newsreader", "Outfit"], ["Bricolage Grotesque", "Geist"]],
@@ -120,7 +120,7 @@ export const TONES: Record<Industry, Tone> = {
   trades: "quiet", property: "quiet", events: "loud", weddings: "quiet", civic: "quiet", general: "quiet",
 };
 const TONE_NOTES: Record<Tone, string> = {
-  quiet: "quiet: a light ground, generous whitespace, one accent colour used sparingly, type and spacing doing the work, at most one decorative device on the first screen, no marquee, no bento grid, no stat band, no dark section heavier than the footer; calm motion only",
+  quiet: "quiet: a light ground, generous whitespace, one accent colour used sparingly, type and spacing doing the work, no marquee, no bento grid, no stat band, no dark section heavier than the footer, calm motion only; quiet is not plain: the first screen still carries one ownable, crafted signature drawn for this business (a diagram, illustration or object from its own facts)",
   loud: "loud: bolder colour and scale are welcome, but still one dominant device on the first screen, a clear hierarchy and plenty of air around it",
 };
 const HEADLINE_DEVICES: Record<Tone, readonly string[]> = {
