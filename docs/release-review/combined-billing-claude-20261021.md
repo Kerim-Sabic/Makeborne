@@ -38,13 +38,15 @@ The frozen-commit SQL/recovery rerun and current GitHub checks have separate pri
 
 ## Staging
 
-Only `xzwikrunwpurxnxgkznh` and `makeborne-release-staging` were changed. Deployed code BEFORE applying:
+Only `xzwikrunwpurxnxgkznh` and `makeborne-release-staging` were changed. The compatible preview was READY before applying:
 
 1. `20261020203000_scope_revocation_boundaries.sql`
 2. `20261020210000_artifact_card_previews.sql`
 3. `20261020231225_billing_ux_details_and_limits.sql`
 
 Strict raw hashes of all prior staged migrations match. New migrations were LF-pinned before their first staging application. Existing billing flags are unchanged. Security advisors:11WARN before and after, identical, zero new.
+
+Ordering deviation: the stable QA alias still pointed to the preceding application while these migrations ran. It was corrected immediately afterward. Creating an unused compatible preview is insufficient: production must actually route traffic to compatible code before the code-first migration. No failure was observed, but the compatibility gap is not claimed safe. Final UI-copy preview eqmo0h7pd now owns the QA alias.
 
 Actual staging HTTP/Auth/SQL/browser checks pass: sign-in; caller-scoped credit settings save/read/reject/restore; title search50+11 and account/workspace isolation; Stop/reload/settled receipt; real website/book/deck create/save/replay/stale-write refusal; real PDF/PPTX routes; anonymous review/comment/approval/revocation; project-only delivery transition. Zero page errors and zero model calls. Outputs reuse earlier real AI fixtures, so this is not a new quality sample of Claude's latest design prompt.
 
@@ -59,16 +61,25 @@ Previous cloud publication proof is reused only for unchanged controller/broker/
 1. Existing sandbox key refreshed for the same13permissions through22October00:00UTC; no new scope/key or production credential.
 2. Real Whop dashboard redelivery of an old refunded monthly payment reached the exact candidate route through the dedicated sandbox-only receiver. With the monthly plan omitted from the isolated harness it was correctly ignored200; that is not credit delivery. With the exact monthly plan allowed and no checkout binding, it returned503. After inserting an explicitly SYNTHETIC disposable binding to the provider's real checkout ID, genuine signed replays returned200 twice: one event receipt, one membership, zero ledger grants for the refunded purchase. The disposable DB was removed. This proves redelivery/recovery/idempotency with a fixture binding, not a fresh purchase.
 3. The same original provider signature reaches the real staging app unchanged; it returns `CHECKOUT_BINDING_PENDING`503 for the old checkout absent there. The relay does not re-sign or acknowledge an app failure as success.
-4. A new regular staging account actually signs in and creates one new monthly29USD SANDBOX checkout through the real app. Repeated request IDs and a new request resume the same URL. The fake4242card is selected. Purchase submission is pending the owner's action-time consent to the displayed terms.
-5. The weekly probe is due21October00:08:59UTC. It has no Makeborne checkout binding and is outside the monthly catalogue. Such an event can be ignored200 as unconfigured; it must never earn a monthly allowance. A real weekly charge proves provider renewal only, not account-bound customer-credit delivery.
+4. After separate action-time owner approvals, actual monthly29USD and one-time12USD checkouts used only fake4242. Real application-created account bindings, unchanged provider signatures and the actual staging webhook delivered exactly300 plan credits plus100 pack credits. The actual return page reached studio; a second subscription request returned409. Repeated/abandoned requests resumed the same unpaid checkout URL. No synthetic binding was inserted for either fresh purchase.
+5. An actual6USD partial sandbox pack refund held all100 pack credits for review, leaving300 available; this is the existing deliberate policy, not a proportional50-credit reversal. Refunding the remaining6USD fully reversed the100 credits. The unused29USD subscription refund reversed300 credits; immediate cancellation reached provider and staging as canceled. A real dashboard replay of the old pack success returned200 and did not recreate credits after refund. Final ledger: +300 plan, -300 adjustment, +100 pack, -100 adjustment; exactly one grant/order each, available0.
+6. The weekly probe actually charged1USD at2026-10-21T00:09:05.603Z. Original signed notification reached staging200. It has no checkout binding and is outside the monthly catalogue: this proves provider renewal only, not account-bound monthly allowance delivery. No fabricated binding or weekly catalogue entry was added.
 
-Pending: fresh bound subscription and pack settlement/return, duplicate subscription refusal after purchase, pack partial/full refunds and second-payment behavior, plus the actual upcoming renewal observation. Do not mark these passed from local signatures, mocked Whop, initial trial-ending charges or the old refunded replay.
+Remaining billing qualifications: a real account-bound recurring monthly renewal/failure and distinct second-payment behavior are not proven by this cycle or duplicate replay. Annual monthly allocation/expiry and concurrency remain actual SQL-test evidence, not a year of live merchant renewals. No real production purchase was made.
+
+## Currency safety follow-up
+
+The real pack checkout offered BAM conversion even though its plan currency was USD. Readback confirmed adaptive_pricing_enabled=true. Existing fulfillment deliberately accepts USD principal/refunds only; conversion must not be silently treated as equivalent. The controlled paid test explicitly selected USD.
+
+New topup-checkout guard requires adaptive_pricing_enabled=false, including when resuming a saved URL. True, missing and null values refuse before a checkout POST. Regression harness, typecheck, targeted lint, all180 offline harnesses and production build pass. This final guard is locally qualified; earlier cloud evidence belongs to the preceding runtime. Intended merchant pack plans must have adaptive pricing disabled/read back and the final candidate must be rehearsed before live sales. No production plan was changed. Existing exposed provider URLs are not invalidated by an app refusal; their settlement/reconciliation must remain working.
+
+Provider schema: [Whop variant adaptive-pricing setting](https://docs.whop.com/api-reference/beta/variants/variant), [checkout configuration](https://docs.whop.com/api-reference/checkout-configurations/create-checkout-configuration). Taxed/promo/non-USD packs remain unsupported evidence, not newly enabled.
 
 ## Budgets and retained state
 
 Original5USD ledger:4.712877 conservatively accounted/reserved,0.287123unreserved. This is a test ledger including retained worst-case bounds, not a provider invoice. Separate50USD Claude-API allowance:0spent. No new paid AI calls. Prior approved6USD/month controller host is unchanged and its controller remains inactive.
 
-App rehearsal fixture user/workspace/enquiry/client cleanup is audited at zero, with prior billing flags intact. New billing test account and unpaid checkout are retained privately pending checkout confirmation. The sandbox-only path relay/tunnel is retained for the near-term renewal check; all other paths refuse. The scheduled follow-up owns final disable/stop/cleanup if the active run has ended. No new production resource/data/env/domain/service change, main merge/push or automatic charging activation.
+App rehearsal fixture user/workspace/enquiry/client cleanup is audited at zero, with prior billing flags intact. Fresh billing fixture sessions revoked, account deleted and its membership/order rows absent after private financial evidence was retained. Both fake purchases fully refunded; new recurring test membership canceled. Temporary sandbox webhook read back Disabled; path receiver and tunnel stopped. Completed one-shot renewal follow-up paused to prevent duplicate work. Existing staging webhook-secret repair remains Preview-only. No new production resource/data/env/domain/service change, main merge/push or automatic charging activation.
 
 ## Rollout and recovery
 

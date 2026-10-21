@@ -70,6 +70,12 @@ Once a URL has been exposed, rollback must preserve compatible pack delivery, re
 
 ## Verification boundaries
 
+### USD checkout safety (2026-10-21)
+
+The pinned fulfillment currently qualifies only tax-free, promotion-free USD payments. A plan's `currency=usd` does not prevent Whop adaptive pricing from offering another currency. Before new or resumed checkout, the server requires an explicit `adaptive_pricing_enabled=false`; true, absent or null refuses. Disable adaptive pricing on each intended pack plan and read it back before activation. Production plan edits need the owner's separate go. Preserve settlement/refund reconciliation for URLs already exposed: disabling the app does not invalidate them.
+
+Fresh real sandbox signed delivery, partial/full refunds and delayed replay evidence is in `release-review/combined-billing-claude-20261021.md`; distinguish that preceding runtime from the final local guard and future cloud qualification.
+
 The offline harnesses `check-topups.cjs`, `check-topup-fulfillment.cjs`, `check-topup-checkout.cjs`, `check-topup-delivery.cjs`, `check-topup-reconcile-job.cjs` and `check-webhook-delivery.cjs` cover contracts and mocked integrations. They were run successfully during this audit. The updated checkout harness also covers funded/held/reversed refusal and awaiting-payment recovery.
 
 `release-review/topup-delivery-20261013.json` records earlier disposable SQL, actual service-role RPC/ledger and concurrency checks with mocked Whop. Those database checks were not rerun for this update. `release-review/whop-topup-checkout-probe.json` records the real idempotent sandbox checkout-creation probe. Neither proves paid pack delivery. Later overall migration rehearsal status is in `PROJECT_STATUS.md`; the older package report's migration count is historical.
