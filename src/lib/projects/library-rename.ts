@@ -54,11 +54,13 @@ export function renamedContent(content: ArtifactContent, name: string): Artifact
 
 /** Change summary recorded on the version the rename saves. */
 export const renameSummary = (name: string) => `Renamed to “${name}”`;
+/** A version that says it is a rename. Only a hint: the library still compares the saved content before treating it as one. */
+export const isRenameSummary = (summary: string) => summary.startsWith("Renamed to “");
 
 /** What a rename tells the user about its effect, per format. `ownDocumentTitle`: a book or deck whose cover or slides carry their own title. */
 export function renameEffect(kind: TitleKind, nextVersion: number, ownDocumentTitle: boolean): string {
   const base = `Saves Version ${nextVersion} with the new name. Nothing else in the project changes.`;
-  if (kind === "website") return `${base} This name is also the website’s default title in browser tabs and search results; a live site shows it after you publish again.`;
+  if (kind === "website") return `${base} This name is also the website’s default title in browser tabs and search results; a live site shows it after you publish again. A rename alone doesn’t count as an unpublished change.`;
   if (ownDocumentTitle) return `${base} The ${kind === "book" ? "cover keeps the title written on it" : "slides keep the title written on them"}.`;
   return base;
 }

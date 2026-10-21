@@ -15,6 +15,14 @@ check("publication state comes from the hosted-site row; never guessed", () => {
   assert.equal(meta.publicationState(3, { live: false, version_number: 3 }), "draft", "offline is not Live");
   assert.equal(meta.publicationState(3, { live: true, version_number: 3 }), "live");
   assert.equal(meta.publicationState(4, { live: true, version_number: 3 }), "live-behind");
+  assert.equal(meta.publicationState(4, { live: true, version_number: 3 }, true), "live", "versions that only rename are not unpublished changes");
+  assert.equal(meta.publicationState(4, { live: false, version_number: 3 }, true), "draft", "a rename never makes an offline site Live");
+  const v = (content, extra = {}) => ({ content, style_snapshot: { palette: ["#111", "#eee"] }, asset_manifest: [{ id: "a1" }], ...extra });
+  assert.ok(meta.sameExceptTitle(v({ title: "Old", pages: [{ html: "<h1>Hi</h1>" }], kind: "website" }), v({ kind: "website", pages: [{ html: "<h1>Hi</h1>" }], title: "New" })), "title and key order are ignored");
+  assert.ok(!meta.sameExceptTitle(v({ title: "Old", pages: [{ html: "<h1>Hi</h1>" }] }), v({ title: "New", pages: [{ html: "<h1>Hello</h1>" }] })), "a content change counts");
+  assert.ok(!meta.sameExceptTitle(v({ title: "A" }), v({ title: "A" }, { style_snapshot: { palette: ["#000"] } })), "a style change counts");
+  assert.ok(!meta.sameExceptTitle(v({ title: "A" }), v({ title: "A" }, { asset_manifest: [] })), "an asset change counts");
+  assert.ok(!meta.sameExceptTitle(v({ title: "A", note: "x" }), v({ title: "A" })), "a removed field counts");
   assert.equal(meta.PUBLICATION_LABEL["live-behind"], "Live · newer changes not published");
   assert.equal(meta.PUBLICATION_LABEL.draft, "Draft"); assert.equal(meta.PUBLICATION_LABEL.live, "Live");
 });
@@ -51,6 +59,7 @@ check("a live address comes only with a live state, only as http(s), and is the 
   assert.equal(meta.PUBLICATION_SHORT["live-behind"], "Live · unpublished changes");
   assert.equal(meta.publicationDetail("live-behind", 5, 4), "Version 4 is live. Version 5 is saved but not published.");
   assert.equal(meta.publicationDetail("live", 4, 4), "Version 4 is live.");
+  assert.equal(meta.publicationDetail("live", 5, 4), "Version 4 is live. Later versions only rename the project.");
   assert.equal(meta.publicationDetail("draft", 2, null), "Not published.");
 });
 
@@ -99,6 +108,10 @@ check("source guards: read-only authorized card-meta route; URL updates replace 
   // The address is the Publish panel's own (siteAddress of the row's slug), only while live and only for a valid slug.
   assert.match(route, /const address = state !== "draft" && validSiteSlug\(site!\.slug\) \? siteAddress\(site!\.slug\) : null;/);
   assert.match(route, /publication: \{ state, liveVersion: state === "draft" \? null : site!\.version_number, address \}/);
+  // A rename-only state is believed only after the live and current saved content are compared; the summary alone never decides.
+  assert.match(route, /if \(live && current && sameExceptTitle\(live, current\)\) found\.add\(item\.id\);/);
+  assert.match(route, /rows\.length === item\.current - item\.live && rows\.every\(row => isRenameSummary/, "every later version must have been read");
+  assert.match(route, /\.slice\(0, RENAME_VERIFY_MAX\)/, "content reads are bounded per request");
   assert.match(route, /return cloudJson\(\{ workspaceId, items \}\);/);
   const listing = read("src/app/api/cloud/workspaces/[workspaceId]/route.ts");
   assert.match(listing, /scope = parseLibraryScope\(search\)/);

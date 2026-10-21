@@ -41,6 +41,8 @@ check("a rename changes only the saved title; the document keeps its own cover t
 check("the dialog says what a rename does for each format", () => {
   assert.match(rename.renameEffect("website", 4, false), /^Saves Version 4 with the new name\./);
   assert.match(rename.renameEffect("website", 4, false), /default title in browser tabs and search results; a live site shows it after you publish again/);
+  assert.match(rename.renameEffect("website", 4, false), /A rename alone doesn’t count as an unpublished change.$/);
+  assert.ok(rename.isRenameSummary(rename.renameSummary("Harbour Dental")) && !rename.isRenameSummary("Changed the hero"), "a rename summary is recognised");
   assert.match(rename.renameEffect("book", 2, true), /cover keeps the title written on it/);
   assert.match(rename.renameEffect("presentation", 2, true), /slides keep the title written on them/);
   assert.doesNotMatch(rename.renameEffect("presentation", 2, false), /slides keep/, "an outline deck has no separate slide title");
