@@ -9,7 +9,7 @@ import { EffortLevelSchema } from "@/lib/routing/effort";
 import { ProjectFiles } from "@/lib/builder/files";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
-import { designSeedBlock } from "@/lib/builder/design-seed";
+import { designSeedBlock, seedApplies } from "@/lib/builder/design-seed";
 import { renderedContrastCheck } from "@/lib/builder/contrast-gate";
 import { BuildBriefSchema, DesignAnswersSchema, briefTone, designAnswersBlock, enhancedBriefBlock, requiredSections } from "@/lib/builder/enhanced-brief";
 import { imageConfiguration } from "@/lib/builder/images";
@@ -159,8 +159,9 @@ export async function POST(request: Request) {
     const approvedBrief = reviewing ? undefined : body.brief ?? operation.originalBrief;
     const design = reviewing ? undefined : body.design ?? operation.originalDesign;
     const direction = styleDirection(project.styleId, current.style);
-    // First builds without a preset, plan or prior design get per-project art-direction starting points.
-    const seed = artifact.kind === "website" && !reviewing && !approvedPlan && !direction && !files.files.size && !current.content.website
+    // First builds without a preset (the default "automatic" style is none), plan or prior design get per-project
+    // art-direction starting points and the concept step.
+    const seed = seedApplies({ kind: artifact.kind, reviewing: Boolean(reviewing), plan: Boolean(approvedPlan), styleId: project.styleId, files: files.files.size, staticDesign: Boolean(current.content.website) })
       ? designSeedBlock({ seed: artifact.project_id, brief: [project.brief, project.audience, project.purpose, artifact.title, operation.originalMessage ?? body.message, approvedBrief?.text].filter(Boolean).join("\n"),
         images: BUILDER_EFFORT[body.effort].maxImages > 0 && Boolean(imageConfiguration().model) && design?.imagery !== "type", brand: Boolean(brand), design,
         tone: briefTone(approvedBrief?.text) })

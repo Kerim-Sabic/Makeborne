@@ -212,6 +212,18 @@ const reply = {
     assert.ok(!qualityProblems({ files: site, changed: new Set(["src/App.tsx"]) }).some(problem => /Phone number/.test(problem)), "edits without the original brief are not checked");
   });
 
+  await check("the design seed (and the concept step) applies to first builds with the default automatic style, never to presets, plans, edits or reviews", () => {
+    const { seedApplies } = require("./design-seed.ts");
+    const first = { kind: "website", reviewing: false, plan: false, styleId: "automatic", files: 0, staticDesign: false };
+    assert.equal(seedApplies(first), true, "the studio default is no preset");
+    assert.equal(seedApplies({ ...first, styleId: "" }), true);
+    assert.equal(seedApplies({ ...first, styleId: "editorial-serif" }), false, "a chosen preset keeps its own direction");
+    for (const other of [{ plan: true }, { reviewing: true }, { files: 3 }, { staticDesign: true }, { kind: "presentation" }]) assert.equal(seedApplies({ ...first, ...other }), false, JSON.stringify(other));
+    const route = fs.readFileSync(path.join(src, "app", "api", "build", "route.ts"), "utf8");
+    assert.match(route, /const seed = seedApplies\(\{ kind: artifact\.kind, reviewing: Boolean\(reviewing\), plan: Boolean\(approvedPlan\), styleId: project\.styleId/);
+    assert.match(route, /concept: Boolean\(seed\)/);
+  });
+
   await check("body copy in a monospace face is reported; mono labels and data are not", () => {
     const css = text => qualityProblems({ files: files({ "src/App.tsx": "export default function App() { return <main />; }", "src/styles.css": text }), changed: new Set(["src/styles.css"]) });
     assert.match(css('p.lede { font-family: "JetBrains Mono", monospace; }')[0], /Body copy is set in a monospace face \(p\.lede\)/);

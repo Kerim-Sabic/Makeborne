@@ -263,3 +263,14 @@ export function designSeedBlock(input: { seed: string; brief: string; images: bo
     "</design_seed>",
   ].filter(Boolean).join("\n");
 }
+
+/**
+ * Whether a build gets the per-project design seed (and with it the concept step): a first website build with no
+ * preset style, no approved plan, no files and no static design to convert. The studio's default "automatic" style
+ * is no preset (its direction text only says so); before round 4 the route tested that text, so no app build ever
+ * got a seed.
+ */
+export function seedApplies(input: { kind: string; reviewing: boolean; plan: boolean; styleId: string | null | undefined; files: number; staticDesign: boolean }) {
+  const preset = Boolean(input.styleId?.trim()) && input.styleId !== "automatic";
+  return input.kind === "website" && !input.reviewing && !input.plan && !preset && input.files === 0 && !input.staticDesign;
+}
