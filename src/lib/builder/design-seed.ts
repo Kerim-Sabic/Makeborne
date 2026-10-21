@@ -48,7 +48,7 @@ type Archetype = typeof ARCHETYPES[number];
 const ARCHETYPE_WEIGHTS: Record<Industry, Weighted<Archetype>> = {
   food: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Poster", 2], ["Type as image", 1]],
   saas: [["Product stage", 5], ["Editorial split", 2], ["Index", 1], ["Type as image", 1]],
-  professional: [["Editorial split", 4], ["Index", 3], ["Photographic", 2], ["Type as image", 1]],
+  professional: [["Editorial split", 4], ["Index", 3], ["Type as image", 1]],
   creator: [["Index", 4], ["Poster", 3], ["Photographic", 2], ["Type as image", 1]],
   commerce: [["Product stage", 4], ["Photographic", 3], ["Poster", 2], ["Editorial split", 2]],
   wellness: [["Photographic", 4], ["Editorial split", 3], ["Index", 2], ["Type as image", 1]],
