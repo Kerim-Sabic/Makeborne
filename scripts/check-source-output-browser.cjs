@@ -123,6 +123,7 @@ assert.match(text, /Letters typed with separate accent marks: c \+ U\+030C → �
     await scenario("the build conversation shows each project file's AI state under a Source files heading, with the PDF limit stated", "9 M09 build conversation", async page => {
       await page.evaluate(async specs => { await window.seed(window.projectContext, specs); window.mountConversation(); }, MIXED);
       await page.locator(".attachment-chip[data-state='unsupported']").waitFor();
+      await page.waitForFunction(() => document.querySelectorAll(".attachment-chip").length === 3 && !document.querySelector(".attachment-chip[data-state='checking']"));
       assert.deepEqual(await states(page), ["menu.pdf: Will be read by AI.", "notes.txt: Will be read by AI.", "prices.csv: AI can’t read this type."]);
       assert.match(await page.locator(".attachment-read").innerText(), /^With the next AI build · Will be read: menu\.pdf, notes\.txt$/);
       assert.match(await page.locator(".attachment-heading").innerText(), /^Source files\s+your uploads · AI reads them, never changes them$/);
@@ -140,6 +141,8 @@ assert.match(text, /Letters typed with separate accent marks: c \+ U\+030C → �
     await scenario("the studio creation modal shows the same per-file AI states", "9 M09 creation modal", async page => {
       await page.evaluate(async ({ specs, request }) => { await window.seed(`draft:${request}`, specs); window.mountModal(); }, { specs: MIXED, request: ids.request });
       await page.locator(".attachment-chip[data-state='unsupported']").waitFor();
+      // Each file is read on its own; wait until none is still being checked (the reads finish later in WebKit).
+      await page.waitForFunction(() => document.querySelectorAll(".attachment-chip").length === 3 && !document.querySelector(".attachment-chip[data-state='checking']"));
       assert.deepEqual(await states(page), ["menu.pdf: Will be read by AI.", "notes.txt: Will be read by AI.", "prices.csv: AI can’t read this type."]);
       assert.match(await page.locator(".attachment-read").innerText(), /^When your project builds · Will be read: menu\.pdf, notes\.txt$/);
       await capture(page, "9-creation-modal", ".attachment-section");
