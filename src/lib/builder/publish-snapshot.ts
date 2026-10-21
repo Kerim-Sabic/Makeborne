@@ -1,6 +1,7 @@
 import { buildPublishBundle, captureStaticSnapshot } from "./browser-bundler";
 import { readCloudImage } from "@/components/cloud-api";
 import type { WebsiteProjectSource } from "../projects/website-source";
+import responsive from "../../../infra/project-runtime/responsive-images.cjs";
 
 const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
@@ -15,7 +16,8 @@ async function loadProject(source: WebsiteProjectSource, scope: { accountId: str
   const files = Object.fromEntries(source.files.filter(file => !/^package(-lock)?\.json$/.test(file.path)).map(file => [file.path, file.content]));
   const assets: Record<string, string> = {};
   const signal = AbortSignal.timeout(60_000);
-  for (const asset of source.assets) {
+  // Responsive copies (srcset) are served by the site host; the sandboxed render uses the originals.
+  for (const asset of source.assets.filter(asset => !responsive.isVariantPath(asset.path))) {
     const blob = await readCloudImage(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/assets/${asset.id}`, scope.accountId, signal);
     assets[`/${asset.path.replace(/^public\//, "")}`] = await toDataUrl(blob);
   }

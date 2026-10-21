@@ -7,6 +7,7 @@ import {canonicalRuntimeJson as canonical} from "./identity.mjs";
 import portableFonts from "./font-portability.cjs";
 import fontLicenseFiles from "./font-licenses.cjs";
 import compatibility from "./toolchain-compatibility.cjs";
+import responsiveImages from "./responsive-images.cjs";
 
 const digest = value => createHash("sha256").update(value).digest("hex");
 const root = "/tmp/project", output = "/tmp/result";
@@ -59,6 +60,16 @@ try {
     await writeFile(destination, file.content, {mode: 0o600});
   }
   await symlink("/opt/makeborne/node_modules", `${root}/node_modules`, "dir");
+  // Responsive copies of project images (assets of this same source revision): project JSX
+  // reads react/jsx-runtime through a trusted module that adds their srcset to <img>.
+  // Derived from verified asset paths and hashes only; the saved source stays untouched.
+  const responsive = responsiveImages.responsiveManifest(sourceManifest.assets);
+  const RESPONSIVE_RUNTIME = "\0makeborne-responsive-jsx-runtime";
+  const plugins = Object.keys(responsive).length ? [{name: "makeborne-responsive-images", enforce: "pre",
+    resolveId(source, importer) {
+      return source === "react/jsx-runtime" && typeof importer === "string" && importer.startsWith(`${root}/src/`) ? RESPONSIVE_RUNTIME : null;
+    },
+    load(id) { return id === RESPONSIVE_RUNTIME ? responsiveImages.jsxRuntimeModule(responsive) : null; }}] : [];
   const started = Date.now();
   const program = ts.createProgram(request.files.filter(file => /\.[cm]?tsx?$/.test(file.path)).map(file => `${root}/${file.path}`), {
     strict: true, noEmit: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
@@ -70,11 +81,12 @@ try {
   if (diagnostics.length) throw new Error(ts.formatDiagnostics(diagnostics.slice(0, 15), {
     getCanonicalFileName: file => file.replace(`${root}/`, ""), getCurrentDirectory: () => root, getNewLine: () => "\n",
   }));
-  await build({root, configFile: false, envDir: false, mode: "production", logLevel: "warn",
+  await build({root, configFile: false, envDir: false, mode: "production", logLevel: "warn", plugins,
     oxc: {jsx: {runtime: "automatic"}}, css: {postcss: {plugins: []}},
     build: {outDir: output, emptyOutDir: true, sourcemap: false, assetsInlineLimit: 0, target: "es2022"}});
   // This trusted record is itself covered by the final output/build hash.
   await writeFile(`${output}/makeborne-materialization.json`, JSON.stringify({schemaVersion: 1, materialization: "makeborne-portable-fonts-v2",
+    responsiveImages: plugins.length ? {runtime: "makeborne-responsive-jsx-v1", images: Object.keys(responsive).length} : null,
     compatibility: toolchain.compatibility, sourceHash: request.sourceHash, toolchainHash: request.toolchainHash, runtimeImageId,
     files: [...portable.files, ...licenses].map(file => ({path: file.path, bytes: Buffer.byteLength(file.content), sha256: digest(file.content)})),
     fonts: portable.styles.map(({font, style}) => ({id: font.id, family: font.family, style}))}));
