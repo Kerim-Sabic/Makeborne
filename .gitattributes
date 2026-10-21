@@ -17,3 +17,6 @@ supabase/migrations/20261019134828_trusted_publication_production_profile.sql te
 supabase/migrations/20261020203000_scope_revocation_boundaries.sql text eol=lf
 supabase/migrations/20261020210000_artifact_card_previews.sql text eol=lf
 supabase/migrations/20261020231225_billing_ux_details_and_limits.sql text eol=lf
+# Preserve the exact LF bytes qualified and applied to staging on 21 October.
+supabase/migrations/20261021125359_checkout_payment_recovery.sql text eol=lf
+supabase/migrations/20261021133151_billing_financial_reconcile_freshness.sql text eol=lf
