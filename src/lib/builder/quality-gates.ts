@@ -6,13 +6,58 @@
  * never forced into unrelated rework. Messages say exactly what to add.
  */
 
+import type { DesignAnswers } from "./brief-questions";
+
 export type QualityInput = {
   files: ReadonlyMap<string, string>;
   /** Paths written or edited in this run. */
   changed: ReadonlySet<string>;
   /** finish.routes (real page paths). */
   routes?: readonly { path: string }[];
+  /** Completeness: the approved brief's sections (by anchor), the client's must-haves and the brief text. */
+  required?: { sections?: readonly { name: string; anchor: string }[]; design?: DesignAnswers; brief?: string };
 };
+
+/** Evidence in the source that a section exists (generous: a heading, a label or a placeholder counts). */
+const SECTION_EVIDENCE: Record<string, { label: string; evidence: RegExp }> = {
+  prices: { label: "Prices or menu", evidence: /\b(prices?|pricing|menu|tariff|rates?)\b|[£€$]\s?\d/i },
+  hours: { label: "Opening hours", evidence: /\b(opening hours|hours|open (daily|today|from)|mon(day)?\s*[–-])/i },
+  gallery: { label: "Gallery", evidence: /\bgallery\b/i },
+  team: { label: "Team", evidence: /\b(team|meet (the|our)|who we are|staff)\b/i },
+  testimonials: { label: "Testimonials", evidence: /\b(testimonials?|reviews?|what (our )?(clients|customers|people|patients|guests) say)\b/i },
+  faq: { label: "FAQ", evidence: /\b(faqs?|frequently asked|questions)\b/i },
+  contact: { label: "Contact form", evidence: /<form\b/ },
+  map: { label: "Map or directions", evidence: /\b(map|directions|find us|getting here)\b/i },
+  signup: { label: "Email sign-up", evidence: /<form\b|type=["']email["']/ },
+};
+/** Sections a brief names in so many words ("opening hours", "an FAQ", "a contact form"). */
+const BRIEF_ASKS: readonly (readonly [RegExp, string])[] = [
+  [/\b(menu|price list|prices up front|pricing|our prices)\b/i, "prices"],
+  [/\b(opening hours|open(ing)? times)\b/i, "hours"],
+  [/\bgallery\b/i, "gallery"],
+  [/\b(meet the team|team section|our team)\b/i, "team"],
+  [/\btestimonials?\b/i, "testimonials"],
+  [/\b(faqs?|frequently asked)\b/i, "faq"],
+  [/\b(contact|enquiry|inquiry|booking|quote) form\b/i, "contact"],
+  [/\b(map|directions)\b/i, "map"],
+  [/\b(email list|mailing list|newsletter|wait[- ]?list|launch list)\b/i, "signup"],
+];
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Sections the brief, the approved enhanced brief or the client's answers ask for that the site lacks. */
+export function missingSections(scripts: string, required: NonNullable<QualityInput["required"]>): string[] {
+  const missing: string[] = [];
+  for (const section of required.sections ?? []) {
+    if (!new RegExp(`["'\`]${escapeRegExp(section.anchor)}["'\`]`).test(scripts)) missing.push(`${section.name} (id="${section.anchor}")`);
+  }
+  const asked = new Set<string>(required.design?.sections ?? []);
+  for (const [pattern, id] of BRIEF_ASKS) if (required.brief && pattern.test(required.brief)) asked.add(id);
+  for (const id of asked) {
+    const rule = SECTION_EVIDENCE[id];
+    if (rule && !rule.evidence.test(scripts) && !missing.some(item => item.toLowerCase().startsWith(rule.label.toLowerCase()))) missing.push(rule.label);
+  }
+  return missing;
+}
 
 const isScript = (path: string) => /\.(?:tsx|jsx|ts|js)$/.test(path);
 const isStyle = (path: string) => path.endsWith(".css");
@@ -47,7 +92,7 @@ function generatedImagesWithoutSize(source: string) {
   return offenders;
 }
 
-export function qualityProblems({ files, changed, routes = [] }: QualityInput): string[] {
+export function qualityProblems({ files, changed, routes = [], required }: QualityInput): string[] {
   const problems: string[] = [];
   const touched = [...changed].filter(path => files.has(path));
   if (!touched.length) return problems;
@@ -89,11 +134,26 @@ export function qualityProblems({ files, changed, routes = [] }: QualityInput): 
   }
 
   // Fixed or sticky bars and floating buttons at the bottom of the screen cover content (the judge
-  // penalised them on every brief where they appeared); the sticky header carries the action.
+  // penalised floating buttons and covering bars). The one exception is the mobile quick-action bar
+  // for local businesses (Call / Directions / Hours / Order), which the judge rewarded, built to the
+  // pattern: a labelled nav, hidden from 768px, and page padding so it never covers content.
   const bottomFixed = [...touchedStyles.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
     .filter(([, , body]) => /position:\s*(?:fixed|sticky)/.test(body) && /(?:^|[;\s])(?:bottom|inset-block-end):\s*(?:0|[0-9.]+(?:px|rem|em))/.test(body) && !/(?:^|[;\s])top:/.test(body))
     .map(([, selector]) => selector.trim().split(/\s*,\s*/).pop()!.slice(-60));
-  if (bottomFixed.length) problems.push(`Remove the fixed bottom bar or floating button (${[...new Set(bottomFixed)].slice(0, 3).join(", ")}): it covers content on phones. Keep the action in the sticky header, the first screen and the closing section.`);
+  const quickBarOk = (selector: string) => /quick/i.test(selector)
+    && new RegExp(`@media[^{]*min-width:\\s*(?:6[4-9]\\d|[7-9]\\d\\d)px[^{]*\\{[\\s\\S]*?${escapeRegExp(selector)}\\s*\\{[^}]*display:\\s*none`).test(styles)
+    && /padding-bottom:[^;}]*(?:var\(--quick|env\(safe-area-inset-bottom\)|calc\()/.test(styles)
+    && /aria-label=["'{]*Quick actions/i.test(scripts);
+  const covering = [...new Set(bottomFixed)].filter(selector => !quickBarOk(selector));
+  const quickBars = covering.filter(selector => /quick/i.test(selector)), others = covering.filter(selector => !/quick/i.test(selector));
+  if (quickBars.length) problems.push(`The quick-action bar (${quickBars.slice(0, 2).join(", ")}) must follow the quick-action pattern: <nav aria-label="Quick actions">, display:none from 768px, and padding-bottom on the page (calc with env(safe-area-inset-bottom)) so it never covers content.`);
+  if (others.length) problems.push(`Remove the fixed bottom bar or floating button (${others.slice(0, 3).join(", ")}): it covers content on phones. Keep the action in the sticky header, the first screen and the closing section; a local business may use the mobile quick-action bar pattern instead.`);
+
+  // Completeness: every section the brief, the approved enhanced brief or the client's answers ask for.
+  if (required && touchedScripts.length) {
+    const missing = missingSections(scripts, required);
+    if (missing.length) problems.push(`The brief asks for sections this site doesn't have yet: ${missing.slice(0, 6).join("; ")}. Add each as a real section (a visible placeholder where the client gave no facts, never invented ones).`);
+  }
 
   // Generated images keep their returned size so nothing shifts.
   const unsized = touchedScripts.flatMap(([, content]) => generatedImagesWithoutSize(content));

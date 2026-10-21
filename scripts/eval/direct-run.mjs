@@ -10,6 +10,10 @@
 //     --effort medium|high --only w01,w02 [--repo <another checkout whose app code to run, e.g. an extracted base commit>]
 //     [--images gpt-image-2.5-flare,gpt-image-2.5-sunburst,gpt-image-2]  (image routing on: OPENAI_API_KEY from the same .env.local;
 //      a second, OpenAI ledger reservation per brief covers its images under the OpenAI sub-cap; bytes land in <item>/assets/)
+//     [--variant original|enhanced|answered]  (design round 3: "enhanced" runs the app's brief enhancer first, one capped Haiku
+//      call with its own ledger reservation (kind direct-enhancer) at the 1-credit hold; "answered" first applies the brief's
+//      simulatedAnswers to the on-device design questions the app would ask, then enhances. Short prompts: --only s01-dentist,...
+//      read from scripts/eval/briefs-short/; "questions" applies the simulated answers without the enhancer)
 // Outputs land in this harness's outputs/eval/runs/<runId>/ in the run.mjs layout (source.json etc.), so measure.mjs works
 // on them; item.json says origin.stack "none (direct runBuilder)". Report these runs as direct-agent, not app-route, runs.
 import path from 'node:path';
@@ -20,13 +24,14 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' } } });
+const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' }, variant: { type: 'string', default: 'original' } } });
 // This harness: the ledger, the run outputs and the secret scan always go through it.
 const DQ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPO = path.resolve(values.repo ?? DQ);
 if (process.env.EVAL_SPEND_APPROVED !== 'yes' || !values.approval?.trim()) throw new Error('Refusing: EVAL_SPEND_APPROVED=yes and --approval are required');
 if (!/^[a-z0-9-]+$/.test(values.run ?? '')) throw new Error('--run must be a plain id');
 if (!['medium', 'high'].includes(values.effort)) throw new Error('--effort must be medium or high');
+if (!['original', 'enhanced', 'answered', 'questions'].includes(values.variant)) throw new Error('--variant must be original, enhanced, answered or questions');
 const only = (values.only ?? '').split(',').map(id => id.trim()).filter(Boolean);
 if (!only.length || only.length > 8) throw new Error('--only takes 1 to 8 brief ids');
 process.chdir(REPO);
@@ -61,6 +66,10 @@ const { reviewRequest, reviewAttachments, ReviewInputSchema } = loadApp('src/lib
 const { compileVerdict } = loadApp('src/lib/builder/compile.ts');
 const imagesModule = values.images ? loadApp('src/lib/builder/images.ts') : null;
 const prices = loadApp('src/lib/ai/prices.ts');
+const enhancing = values.variant !== 'original';
+const questionsModule = enhancing ? loadApp('src/lib/builder/brief-questions.ts') : null;
+const enhancedModule = enhancing ? loadApp('src/lib/builder/enhanced-brief.ts') : null;
+const enhancerModule = enhancing ? loadApp('src/lib/builder/brief-enhancer.ts') : null;
 const { createHash } = await import('node:crypto');
 let seedBlock = null;
 try { seedBlock = values.seedless ? null : loadApp('src/lib/builder/design-seed.ts').designSeedBlock; } catch { seedBlock = null; }
@@ -77,9 +86,13 @@ const runJson = fs.existsSync(runJsonFile) ? JSON.parse(fs.readFileSync(runJsonF
 const save = () => fs.writeFileSync(runJsonFile, JSON.stringify(runJson, null, 2));
 save();
 
-function context({ brief, files, history }) {
-  const seed = !files.files.size && seedBlock ? seedBlock({ seed: brief.projectSeed, brief: brief.brief, images: Boolean(values.images), brand: false }) : '';
-  return [`<project title="${brief.title.replace(/"/g, "'")}">`, `Brief: ${brief.brief}`, 'Visual direction: No preset — choose the best direction for this business.', seed,
+function context({ brief, files, history, prep }) {
+  // Like the build route: the client's own brief first, then their answers and the approved enhanced brief.
+  const seed = !files.files.size && seedBlock ? seedBlock({ seed: brief.projectSeed, brief: [brief.brief, prep.message, prep.approved?.text].filter(Boolean).join('\n'), images: Boolean(values.images) && prep.design?.imagery !== 'type', brand: false,
+    ...(enhancing ? { design: prep.design, tone: enhancedModule.briefTone(prep.approved?.text) } : {}) }) : '';
+  return [`<project title="${brief.title.replace(/"/g, "'")}">`, `Brief: ${brief.brief}`,
+    enhancing ? enhancedModule.designAnswersBlock(prep.design) : '', prep.approved ? enhancedModule.enhancedBriefBlock(prep.approved) : '',
+    'Visual direction: No preset — choose the best direction for this business.', seed,
     history.length ? `Recent revisions:\n${history.join('\n')}` : '', '</project>',
     files.files.size ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: none` : '<current_files>(empty — build the complete website from scratch)</current_files>',
   ].filter(Boolean).join('\n');
@@ -89,7 +102,7 @@ const browser = await chromium.launch();
 const runtime = await serve(path.join(REPO, 'public'));
 try {
   for (const id of only) {
-    const brief = JSON.parse(fs.readFileSync(path.join(REPO, 'scripts', 'eval', 'briefs', `${id}.json`), 'utf8'));
+    const brief = JSON.parse(fs.readFileSync(path.join(REPO, 'scripts', 'eval', /^s\d/.test(id) ? 'briefs-short' : 'briefs', `${id}.json`), 'utf8'));
     if (brief.format !== 'website') throw new Error(`${id} is not a website brief`);
     brief.projectSeed = randomUUID();
     const itemDir = path.join(runDir, id);
@@ -109,7 +122,34 @@ try {
     let spentMicrousd = 0, uncertain = false;
     const files = new ProjectFiles();
     const history = [];
-    const message = brief.brief.trim().length > 8000 ? `${brief.brief.trim().slice(0, 7400).replace(/\s+\S*$/, '')}…` : brief.brief.trim();
+    // Variants: the studio's first-build path. Answered: the design questions the app would ask, answered as the brief's
+    // simulatedAnswers say (skips and "you choose" set nothing); enhanced: the brief enhancer (fail open on any failure).
+    const prep = { message: brief.brief.trim(), design: {}, asked: [], approved: null, enhancer: null };
+    if (values.variant === 'answered' || values.variant === 'questions') {
+      const asked = questionsModule.briefQuestions('website', brief.brief);
+      const answers = Object.fromEntries(asked.map(question => { const value = brief.simulatedAnswers?.[question.id]; return [question.id, Array.isArray(value) ? { options: value } : typeof value === 'string' ? { option: value } : {}]; }));
+      prep.asked = asked.map(question => question.id);
+      prep.message = questionsModule.briefWithAnswers(brief.brief, asked, answers);
+      prep.design = questionsModule.designAnswers(asked, answers);
+    }
+    // Like the studio: only short briefs are enhanced (detailed ones build from the client's words and answers).
+    if (enhancing && values.variant !== 'questions' && enhancedModule.shouldEnhance(brief.brief)) {
+      const enhancerBoundUsd = enhancedModule.ENHANCER_CREDITS * RATE;
+      const enhancerReservation = await budget.reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
+      const enhanceSpend = new RunSpend({ run: `${values.run}/${id}/enhance`, providerCapMicrousd: Math.round(enhancerBoundUsd * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 50_000 });
+      let enhanced = null, enhanceError = null;
+      let reply = null;
+      try { enhanced = await enhancerModule.enhanceBrief({ brief: prep.message, title: brief.title, design: prep.design, spend: enhanceSpend, signal: AbortSignal.timeout(45_000), onReply: (text, stop) => { reply = { text, stop }; } }); }
+      catch (error) { enhanceError = String(error.message).slice(0, 200); }
+      const enhancerUncertain = enhanceSpend.uncertainMicrousd > 0;
+      await budget.settle(enhancerReservation, enhancerUncertain ? { unknown: true, detail: { error: enhanceError } } : { actualUsd: enhanceSpend.providerMicrousd / 1e6, detail: { calls: enhanceSpend.calls.length, usable: Boolean(enhanced) } });
+      prep.enhancer = { usd: enhanceSpend.providerMicrousd / 1e6, uncertain: enhancerUncertain, calls: enhanceSpend.calls.length, usable: Boolean(enhanced), error: enhanceError, credits: enhanceSpend.customerCredits(RATE) };
+      if (enhanced) prep.approved = { mode: 'enhanced', text: enhancedModule.renderEnhancedBrief(enhanced) };
+      fs.writeFileSync(path.join(itemDir, 'enhanced.json'), JSON.stringify({ variant: values.variant, asked: prep.asked, design: prep.design, message: prep.message, enhanced, text: prep.approved?.text ?? null, enhancer: prep.enhancer, ...(enhanced ? {} : { unusableReply: reply }) }, null, 2));
+      console.log(`  ${id} enhance: $${prep.enhancer.usd.toFixed(4)} usable=${prep.enhancer.usable}${enhanceError ? ` ERROR ${enhanceError}` : ''}`);
+    }
+    const required = enhancing ? { sections: prep.approved ? enhancedModule.requiredSections(prep.approved.text) : [], design: prep.design, brief: [brief.brief, prep.message].join('\n') } : undefined;
+    const message = prep.message.length > 8000 ? `${prep.message.slice(0, 7400).replace(/\s+\S*$/, '')}…` : prep.message;
     const storeImage = async (request, bytes) => {
       const prepared = await imagesModule.prepareImageBytes(bytes, { transparent: request.transparent, quality: request.transparent ? undefined : imagesModule.GENERATED_PHOTO_QUALITY });
       const sha256 = createHash('sha256').update(prepared.bytes).digest('hex');
@@ -134,9 +174,9 @@ try {
       const saved = new Map(files.files);
       let result = null, error = null;
       try {
-        result = await runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history }),
+        result = await runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history, prep }), required,
           attachments: extra.attachments ?? [], emit: event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300) }); },
-          signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits, ...(imagesModule ? { storeImage } : {}) });
+          signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage } : {}) });
       } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; }
       finally { clearTimeout(timer); }
       spentMicrousd += spend.providerMicrousd;
@@ -184,9 +224,9 @@ try {
       try { const source = files.toSource(); fs.writeFileSync(path.join(itemDir, 'source.json'), JSON.stringify(source)); sourceOk = true; } catch (error) { outcome = `no source: ${error.message}`; }
       fs.writeFileSync(path.join(itemDir, 'brief.json'), JSON.stringify(brief, null, 2));
       fs.writeFileSync(path.join(itemDir, 'item.json'), JSON.stringify({ id, kind: 'website', title: brief.title, direction: brief.direction, briefId: id, brief: brief.brief, briefSha256: null,
-        origin: { type: 'live', stack: 'none (direct runBuilder)', artifactId: null, version: null, path: null }, generation: { effort: values.effort, styleId: 'automatic', mode: 'create (direct)', images: values.images ? `on (${values.images})` : 'off', seed: Boolean(seedBlock) } }, null, 2));
+        origin: { type: 'live', stack: 'none (direct runBuilder)', artifactId: null, version: null, path: null }, generation: { effort: values.effort, styleId: 'automatic', mode: 'create (direct)', images: values.images ? `on (${values.images})` : 'off', seed: Boolean(seedBlock), variant: values.variant, questionsAsked: prep.asked, enhancer: prep.enhancer } }, null, 2));
       fs.writeFileSync(path.join(itemDir, 'events.jsonl'), events.map(event => JSON.stringify(event)).join('\n'));
-      fs.writeFileSync(path.join(itemDir, 'cost.json'), JSON.stringify({ boundUsd, reservationId: reservation, actualUsd: uncertain ? null : actualUsd, images: imageReservation ? { boundUsd: imageBoundUsd, reservationId: imageReservation, actualUsd: openaiUncertain ? null : openaiMicrousd / 1e6, count: images.length } : null, stages, ms: Date.now() - started }, null, 2));
+      fs.writeFileSync(path.join(itemDir, 'cost.json'), JSON.stringify({ boundUsd, reservationId: reservation, actualUsd: uncertain ? null : actualUsd, enhancer: prep.enhancer, images: imageReservation ? { boundUsd: imageBoundUsd, reservationId: imageReservation, actualUsd: openaiUncertain ? null : openaiMicrousd / 1e6, count: images.length } : null, stages, ms: Date.now() - started }, null, 2));
       fs.writeFileSync(path.join(itemDir, 'status.json'), JSON.stringify({ ok: sourceOk && outcome === 'ok', outcome }, null, 2));
       runJson.items = runJson.items.filter(item => item.id !== id).concat({ id, kind: 'website', status: sourceOk ? 'generated' : 'failed', costUsd: uncertain ? null : actualUsd });
       save();

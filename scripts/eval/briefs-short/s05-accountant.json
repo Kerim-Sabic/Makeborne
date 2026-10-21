@@ -1,0 +1,21 @@
+{
+  "id": "s05-accountant",
+  "format": "website",
+  "direction": "professional",
+  "title": "Accounting firm website",
+  "shared": false,
+  "brief": "website for my accounting firm",
+  "simulatedAnswers": {
+    "vibe": "calm",
+    "goal": "enquire",
+    "sections": [
+      "prices",
+      "team",
+      "faq",
+      "contact"
+    ],
+    "imagery": "type",
+    "theme": "light"
+  },
+  "notes": "Deliberately short and vague first prompt (design round 3). simulatedAnswers are the one-click answers a typical owner would give to the on-device design questions, fixed in advance; 'auto' means 'You choose' / 'Let Makeborne choose'. Only questions the app actually asks for this prompt are answered."
+}

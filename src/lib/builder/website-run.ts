@@ -34,6 +34,8 @@ export type WebsiteBuildInput = {
   context: string;
   attachments: BetaContentBlockParam[];
   limits?: BuilderRun["limits"];
+  /** What the finished site must contain (the approved brief's sections, the client's must-haves). */
+  required?: BuilderRun["required"];
   maxDuration: number;
   /** Injected for tests: providers and the step guard. */
   stepGuardMs?: number;
@@ -80,7 +82,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         try {
           result = await runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
             request: input.request, context: input.context, attachments: input.attachments, emit, signal: controller.signal,
-            deadline: Date.now() + (input.maxDuration - 20) * 1000, limits: input.limits,
+            deadline: Date.now() + (input.maxDuration - 20) * 1000, limits: input.limits, required: input.required,
             anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile });
         } catch (error) {
           // A step was cut off (time limit or provider error): keep finished work if it is valid.

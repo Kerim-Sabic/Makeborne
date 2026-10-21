@@ -17,7 +17,7 @@ import { UnpricedModelError, imageCallBoundMicrousd, supportsTransparentImages }
 import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
-import { qualityProblems } from "./quality-gates";
+import { qualityProblems, type QualityInput } from "./quality-gates";
 
 /** Conservative streaming output rate used to size steps to the time left. */
 const OUTPUT_TOKENS_PER_SECOND = 50;
@@ -91,6 +91,8 @@ export type BuilderRun = {
   deadline: number;
   /** Tighter limits for focused passes such as the design review. */
   limits?: { maxTurns?: number; maxImages?: number };
+  /** Completeness: sections the approved brief lists (by anchor) and the client's must-haves; checked at finish. */
+  required?: QualityInput["required"];
   /** No step starts with less time than this left (default 45 s; tests use less). */
   stepGuardMs?: number;
   /** Injected providers (tests). Production uses the SDKs with retries disabled. */
@@ -287,7 +289,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const problems = run.files.problems();
             if (input.routes?.length) run.files.routes = input.routes.some(route => route.path === "/") ? input.routes : [{ path: "/", title: "Home" }, ...input.routes];
             if (input.design) run.files.design = input.design;
-            if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes })) {
+            if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes, required: run.required })) {
               if (!qualityReported.has(problem)) { qualityReported.add(problem); problems.push(problem); }
             }
             if (!problems.length) { try { run.files.toSource(); } catch (error) { problems.push((error as Error).message); } }
@@ -318,6 +320,11 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     if (finished) break;
     messages.push({ role: "user", content: results });
     if (spend.stopped || spend.remainingMicrousd <= 0) break;
+    // A first build that has scaffolding and styles but still no page cannot be saved at all if the
+    // step ends now (an eval brief lost a whole stage this way): the page itself comes next.
+    if (turn >= 1 && run.files.files.size > 0 && !run.files.files.has("src/App.tsx") && /from\s+["']\.\/App["']/.test(run.files.files.get("src/main.tsx") ?? "")) {
+      messages.push({ role: "system", content: "src/App.tsx does not exist yet, so nothing can be saved. Write src/App.tsx next (the complete page with every section and real copy, in one file if need be) before any other file or refinement." });
+    }
     if (spend.remainingMicrousd < spend.allowanceMicrousd * 0.25 || turn === policy.maxTurns - 2 || Date.now() > deadline - 120_000) {
       messages.push({ role: "system", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }

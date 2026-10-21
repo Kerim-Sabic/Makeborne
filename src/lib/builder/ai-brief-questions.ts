@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { budgetedStream, ContextMeter, type AnthropicLike } from "@/lib/ai/anthropic-call";
 import type { RunSpend } from "@/lib/ai/run-spend";
-import { answeredQuestionIds, briefQuestions, type BriefKind, type BriefQuestion } from "./brief-questions";
+import { answeredQuestionIds, briefQuestions, standardQuestion, type BriefKind, type BriefQuestion } from "./brief-questions";
 
 export const QUESTIONS_MODEL = "claude-haiku-5-5";
 export const MAX_AI_QUESTIONS = 4;
@@ -33,8 +33,8 @@ Make questions specific to the subject: for a bakery, "Do people order ahead, wa
 
 If the brief already answers everything that matters, return no questions.
 
-Generic questions the on-device fallback would ask (use one only if it truly matters here; use the same id "style" if you ask about the look and feel, and the app will show colour swatches):
-${baseline}
+${kind === "website" ? "Makeborne already asks its own one-click design questions (look and feel, light or dark, photos or illustration, the main action, must-have sections, brand colour). Do not ask about any of those: ask only what is specific to this business and changes the content (\"Pickup, delivery or both?\", \"Do you take walk-ins?\"). Return no questions if nothing like that is open." : `Generic questions the on-device fallback would ask (use one only if it truly matters here; use the same id "style" if you ask about the look and feel, and the app will show colour swatches):
+${baseline}`}
 
 Reply with JSON only, no prose:
 {"questions":[{"id":"short-kebab-id","question":"…?","why":"one short sentence on how the answer changes the ${noun}","topic":"2–5 word label for the answer","placeholder":"example of a free-text answer","options":[{"label":"…","hint":"optional few-word detail"}]}]}
@@ -54,7 +54,7 @@ export function parseQuestions(kind: BriefKind, text: string, known?: { brief: s
   try { raw = JSON.parse(match[0]); } catch { return null; }
   const reply = AiReply.safeParse(raw);
   if (!reply.success) return null;
-  const style = briefQuestions(kind, "").find(question => question.id === "style");
+  const style = standardQuestion(kind, "style");
   const answered = known ? answeredQuestionIds(kind, known.brief, known) : new Set<string>();
   const seen = new Set<string>(), out: BriefQuestion[] = [];
   for (const item of reply.data.questions) {

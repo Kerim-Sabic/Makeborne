@@ -79,14 +79,62 @@ Combined estimate over the 20 briefs, taking the r8 result where it exists and r
 
 Metrics on the seven r8 sites against the same briefs in r7: Lighthouse performance mean 88.6 (r7 86.7, golden 86.1), 3 of 7 at 90 or more (r7 0 of 7); axe serious nodes 3 (r7 21, golden 32); failing contrast nodes 9 (r7 14, golden 10); one CLS failure (w11, 0.22 on one mobile load of twelve, with two photographs). w05 stopped at the step limit before writing `App.tsx` (no source, $0.75). Diversity on seven sites is indicative only: editorial split on 4 of 7 and warm-light grounds on 4 of 7 (D5 0.695), so the photographic seeds moved into one archetype rather than spreading.
 
+## Design round 3 (2026-10-21): first-prompt questions, brief enhancer, zero-cost fixes
+
+Approved by Kerim (+$75 Claude, +$2 OpenAI; design cap $194.31, OpenAI sub-cap $4.06, recorded in `capApprovals`). The eval ledger is now shared with the product-qualification allowance (scope `qualification-20261021`); design spend is accounted separately and the ledger-wide cap is respected. Built on `feature/lovable-integration` (merged in: M08 brief questions, cross-browser checks).
+
+What was built:
+- **One-click design questions** in the existing questions card: vibe (swatches), main action, must-have sections (multi-select chips), photos or illustration or mostly type, light or dark (swatches) and brand colour (colour picker or "use my logo"), each with its own-words answer and Skip. They are ranked per brief by how much they change the design: 5 for a short brief (all 8 short prompts got 5), 2–3 for the golden briefs (mean 2.4), and none the brief already answers. AI-tailored questions now ask only business-specific content questions and are merged in after the top three, with the cap unchanged. Answers feed the design seed deterministically: theme sets the ground, vibe the tone and type, imagery the archetypes, image plan and routing (mostly type means no images).
+- **Brief enhancer** (`POST /api/build/enhance`): one Haiku call through the advisor's hold and settlement pattern. It holds 1 credit, charges only for a usable brief and releases on every failure; it uses the tool call it was given, and parsing clips over-long fields. It writes business, goal and action, audience, every section with an anchor, tone, imagery plan, the facts given, labelled examples for missing facts, and constraints. Grounding drops numbers, e-mails and links the client never wrote, and appends any client fact the reply lost. The studio shows it as "Enhanced brief" before the build, with Start building, Edit and "Use my original" (M08); it fails open. It is bound to the request digest and operation context, the client's own words come first, and the shown maximum and the receipt include it. **Enhancement runs only on briefs of 60 words or fewer** (see the results below).
+- **Zero-cost fixes:**
+  - a completeness gate (every listed section, every chosen must-have, and the sections a brief names);
+  - a mobile quick-action bar pattern for local businesses (Call, Directions, Hours, Order; hidden from 768 px, page padding);
+  - contrast rules for tinted blocks, accent text on dark panels and text over artwork;
+  - flatter archetype weights, a pale-tint ground and a palette family per project;
+  - `App.tsx` written early (w05 now builds);
+  - "Conviction" replaces "Restraint", with loud as the default tone.
+
+| Round | What it tested | New version won (Claude judge, blind, both orders) | Spend (Claude, OpenAI) |
+|---|---|---|---|
+| r9 | short prompts s01–s04: original, enhanced, answered + enhanced (bare placeholders); golden losers with the zero-cost fixes | enhanced vs original 0 of 8; answered vs original 0 of 8; answered vs enhanced 5 of 8; vs golden 1 of 14 | $18.89, $0.25 |
+| r10 | labelled examples instead of placeholders; conviction over restraint; enhancer on golden losers | answered (r10) vs answered (r9) 8 of 8; answered vs original 4 of 8; conviction vs restraint 4 of 8; enhanced golden vs golden 0 of 12 | $14.66, $0.13 |
+| r11 | full golden set, enhancer off for detailed briefs; s05–s08 answered vs original; **app-route round** (3 short prompts through the real routes on release-auth, questions + enhancer + build + review, images off) | vs golden **16 of 40 (40 %)**; answered vs original 3 of 8; app-route vs direct original 2 of 6 | $30.19, $0.40 |
+| r12 | questions only (no enhancer) vs original, 8 short prompts | 8 of 16 | $8.15, $0.17 |
+
+Round 3 spend: $72.83 in total ($71.89 Claude, including $7.95 of judging, and $0.94 OpenAI). The design ledger ends at $181.64 of $194.31, with $12.67 left; design OpenAI spend is $1.85 of $4.06.
+
+The enhancer costs **$0.0006–0.0018 per build in provider dollars**: $0.0015 on the app route, settled from the provider-call ledger. That is 1 credit for a normal account; the fixture account is exempt.
+
+Example enhanced brief: s01 "website for my dentist", answered calm, book, prices / hours / team / FAQ, light. The enhancer wrote six sections with anchors (hero, prices and treatments, team, hours, FAQ, book and contact) and twelve missing facts, each with a label, and kept every answer. The r10 builds then show labelled example content instead of bracketed gaps. Full texts are in `outputs/eval/runs/<run>/<item>/enhanced.json`.
+
+Metrics, full golden set, r11 vs r7 vs golden:
+
+| Metric | r11 | r7 | golden |
+|---|---|---|---|
+| D5 diversity | **0.876** (target ≥ 0.85 met) | 0.751 | 0.639 |
+| axe serious, sites passing | 90 % | 65 % | 0 % |
+| Lighthouse accessibility, sites passing | 100 % | 100 % | 95 % |
+| Contrast, sites passing | 75 % | 75 % | 70 % |
+| CLS, sites passing | 90 % | 100 % | 75 % |
+| Lighthouse launch bar (≥ 90 performance), sites passing | 20 % | 15 % | 35 % |
+
+- **CLS:** the two failures (w06, w07) are single desktop loads with a median of 0, i.e. font-swap re-wraps.
+- **Lighthouse performance:** LCP is handled by the separate hero-image work.
+
+Findings:
+- A labelled example reads as finished; a bare placeholder reads as an unfinished template. The judge rejects pages full of "Add your…" boxes, even honest ones.
+- On short prompts, questions plus the enhancer reach parity with the prompt as typed (7 of 16; questions alone 8 of 16) but do not beat it. On detailed briefs the enhancer hurts (0 of 12), hence the 60-word gate.
+- Against golden, the new version is preferred on 40 % of verdicts. That is the best full-set result so far (r7 35 %), but it **misses the 75 % target**. Golden still wins on craft and distinctiveness for about half the briefs.
+
 ## Honest assessment
 
 Now strong: measurable quality (performance, CLS, contrast, accessibility contracts) and variety across sites, which was the golden set's weakest area; motion that never hides content; forms and pages that pass keyboard and screen-reader basics by construction; with images on, first screens that look commissioned (photographs and cut-outs in the site's palette, honest captions).
 
-Not there yet: visual preference is contested. After design round 2 the blind judge prefers the new version on about 45 % of verdicts (target 75 %); before that it preferred the calmer golden version on about half the briefs, mostly where a quiet editorial look or one dominant fact (phone, price) serves the brief better than a bolder art direction. Some seeded choices drift toward dark grounds and heavy display type. LCP with a generated hero image is about 4 s on the mobile lab profile (no responsive `srcset`, and the hosted snapshot drops `fetchpriority`); without images it is about 2.8 s, still above the 2.5 s claim bar because React and fonts load before the first paint completes. Lighthouse claim (≥ 95) is not reached. Residual CLS (three sites at 0.10–0.12 on one load of twelve) comes from display headlines re-wrapping when the web font arrives.
+Not there yet: visual preference is contested. After design round 3 the blind judge prefers the new version on 40 % of verdicts on the full golden set (target 75 %). The first-prompt questions and enhancer reach parity with, but do not beat, the prompt as typed. After design round 2 the estimate was about 45 % on a mixed set; before that it preferred the calmer golden version on about half the briefs, mostly where a quiet editorial look or one dominant fact (phone, price) serves the brief better than a bolder art direction. Some seeded choices drift toward dark grounds and heavy display type. LCP with a generated hero image is about 4 s on the mobile lab profile (no responsive `srcset`, and the hosted snapshot drops `fetchpriority`); without images it is about 2.8 s, still above the 2.5 s claim bar because React and fonts load before the first paint completes. Lighthouse claim (≥ 95) is not reached. Residual CLS (three sites at 0.10–0.12 on one load of twelve) comes from display headlines re-wrapping when the web font arrives.
 
 ## Limitations and rollback
 
-- Direct-agent runs, not app routes (see above). No live competitor comparison and no human designer panel.
+- Rounds 1–12 are direct-agent runs, except the r11 app-route round (3 builds through the real routes on the isolated release-auth stack, images off, an exempt fixture account, so 0 credits were charged). No live competitor comparison and no human designer panel.
+- The short-prompt simulated answers are fixed by hand: one typical owner per prompt, not a user study.
 - The Claude judge shares the builder's model family; it is a spot check, not the J1/J2 gate.
 - Roll back with `git revert` of the branch's commits; nothing was deployed and no data or configuration outside this branch and `outputs/eval/` changed. The eval ledger's cap raise is recorded in `capApprovals` and cannot be undone without a hand edit (the older harness refuses the raised ledger until merged).
