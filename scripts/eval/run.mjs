@@ -852,6 +852,10 @@ const CLOUD_SUPABASE_HOST = /[a-z0-9-]+\.supabase\.co(?![a-z0-9-])/i;
 /** src/lib/supabase/config.ts getSupabaseConfig() as Turbopack (or webpack) inlines it. */
 const INLINED_CONFIG_URL = /function getSupabaseConfig\(\)\s*\{\s*const url = (?:\(\s*"TURBOPACK compile-time value",\s*)?("(?:[^"\\]|\\.)*"|undefined|void 0)/g;
 const COMPILE_TIME_VALUE = /"TURBOPACK compile-time value",\s*("(?:[^"\\]|\\.)*")/g;
+/** webpack dev (--bundler webpack; Turbopack cannot follow this checkout's node_modules junction) ships each module as an
+ * eval() string, so the same source appears with its quotes and newlines escaped once or twice. Unescaping only reveals
+ * the module text; the check itself (the exact isolated URL inlined in getSupabaseConfig) is unchanged. */
+const unescapeOnce = text => text.replace(/\\(["'\\nrt])/g, (match, character) => (character === 'n' ? '\n' : character === 'r' ? '\r' : character === 't' ? '\t' : character));
 
 /**
  * Prove the server is the runner's own child built for the isolated stack:
@@ -878,7 +882,8 @@ export async function verifyServerIdentity({ child, expectedApi, origin = ORIGIN
     const { status, text } = await get(chunk);
     if (status !== 200) continue;
     fetched++;
-    for (const match of text.matchAll(INLINED_CONFIG_URL)) configured.add(match[1].startsWith('"') ? JSON.parse(match[1]) : null);
+    const once = unescapeOnce(text), twice = unescapeOnce(once);
+    for (const variant of new Set([text, once, twice])) for (const match of variant.matchAll(INLINED_CONFIG_URL)) configured.add(match[1].startsWith('"') ? JSON.parse(match[1]) : null);
     for (const match of text.matchAll(COMPILE_TIME_VALUE)) {
       compileTimeValues++;
       if (CLOUD_SUPABASE_HOST.test(JSON.parse(match[1]))) problems.push(`${chunk} inlines a cloud Supabase host`);
@@ -1956,6 +1961,11 @@ async function liveSelfTest() {
     check('identity: other local URL refused', await rejects(() => verify({ '/login': html, '/_next/static/chunks/src_a._.js': chunkFor('http://127.0.0.1:54321') })));
     check('identity: exited child refused', await rejects(() => verify({ '/login': html, '/_next/static/chunks/node_b._.js': chunkFor(API) }, { pid: 1, exitCode: 1, signalCode: null })));
     check('identity: /login not 200 refused', await rejects(() => verify({})));
+    // webpack dev: the module is an eval() string (quotes and newlines escaped).
+    const webpackChunkFor = url => `(self.webpackChunk=self.webpackChunk||[]).push([[1],{"./src/lib/supabase/config.ts":(m,e,r)=>{eval(${JSON.stringify(`function getSupabaseConfig() {\n    const url = ${JSON.stringify(url)};\n    const key = "sb_publishable_x";\n}\n/* createClient('https://xyzcompany.supabase.co') */`)});}}]);`;
+    const webpackGood = await verify({ '/login': html, '/_next/static/chunks/node_b._.js': webpackChunkFor(API) });
+    check('identity: webpack dev build (eval modules) accepted', webpackGood.ok && webpackGood.supabaseUrl === API, webpackGood);
+    check('identity: webpack dev build for another URL refused', await rejects(() => verify({ '/login': html, '/_next/static/chunks/node_b._.js': webpackChunkFor('https://abcdefghijklmnop.supabase.co') }), error => error.code === 'EVAL_SERVER_IDENTITY'));
 
     // 4/5. provider limits with a fake pg client: enable = today's spend + bound; read-back checked.
     const fakeDb = ({ used = 12_420_000, stuckOn = [], delayMs = 0 } = {}) => {
