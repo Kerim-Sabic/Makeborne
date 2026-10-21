@@ -676,6 +676,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
    * a repeated click for the same approval reuses its request identity, so the server joins it. */
   const buildPlan = async (approved: SitePlan, level: EffortLevel, maximum: number) => {
     if (approvingRef.current || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
+    // The plan card passes the maximum it showed; the server ceiling for the effort is the same number and the fallback.
+    if (!Number.isFinite(maximum)) maximum = BUILDER_EFFORT[level].ceilingCredits;
     const quoteIssue = affordability(maximum, balance);
     if (quoteIssue) { setNotice(quoteIssue); return; }
     approvingRef.current = true; setApproving(true); setNotice("");
