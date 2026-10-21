@@ -83,17 +83,19 @@ const money = value => (value === null || value === undefined ? 'n/a' : `$${Numb
 // ===========================================================================
 
 /** Read scripts/eval/briefs/index.json and verify every brief file's SHA-256. */
+/** Which frozen set the runner uses: the golden set, or the short-prompt set (scripts/eval/briefs-short) with --briefs short. */
+let BRIEF_SET_DIR = BRIEFS_DIR;
 export function loadBriefs() {
-  const file = path.join(BRIEFS_DIR, 'index.json');
+  const file = path.join(BRIEF_SET_DIR, 'index.json');
   if (!existsSync(file)) {
     return { ok: false, present: false, message: `No brief manifest at ${rel(file)} yet (written by the briefs builder); the budget plan cannot be computed.`, items: [] };
   }
   const raw = readFileSync(file);
   const index = JSON.parse(raw.toString('utf8'));
-  const order = Array.isArray(index.order) ? index.order : [];
+  const order = Array.isArray(index.order) ? index.order : Object.keys(index.sha256 ?? {});
   const items = [], problems = [];
   for (const [position, id] of order.entries()) {
-    const briefFile = path.join(BRIEFS_DIR, `${id}.json`);
+    const briefFile = path.join(BRIEF_SET_DIR, `${id}.json`);
     if (!existsSync(briefFile)) { problems.push(`${id}: file missing`); continue; }
     const bytes = readFileSync(briefFile);
     const actual = sha256(bytes);
@@ -104,7 +106,7 @@ export function loadBriefs() {
     if (!['website', 'presentation', 'book'].includes(brief.format)) problems.push(`${id}: unknown format ${brief.format}`);
     if (typeof brief.brief !== 'string' || !brief.brief.trim()) problems.push(`${id}: empty brief`);
     items.push({ id, priority: brief.order ?? position + 1, kind: brief.format, title: brief.title, direction: brief.direction, shared: Boolean(brief.shared),
-      sha256: actual, hashOk: actual === expected, chars: brief.brief?.length ?? 0, file: briefFile, brief: brief.brief });
+      sha256: actual, hashOk: actual === expected, chars: brief.brief?.length ?? 0, file: briefFile, brief: brief.brief, simulatedAnswers: brief.simulatedAnswers ?? null });
   }
   items.sort((a, b) => a.priority - b.priority);
   if (index.count !== undefined && index.count !== order.length) problems.push(`index count ${index.count} != ${order.length} ids in order`);
@@ -1517,13 +1519,15 @@ async function enhancerLedger(reference) {
   });
 }
 
-async function runBrief({ session, browser, brief, runDir, runId, pricing, images, rerun, withPlan = false, enhance = false, control, deps = {} }) {
+async function runBrief({ session, browser, brief, runDir, runId, pricing, images, rerun, withPlan = false, enhance = false, answers = false, control, deps = {} }) {
   // deps: injected fakes for the self-test; the defaults are the real functions.
   const { reserveFn = reserve, setLimits = setProviderLimits, settleBriefFn = settleBrief, settleFn = settle, save = saveOutputs, midnight = midnightWaitMs, now = Date.now, sleep = delay } = deps;
   const kind = brief.kind;
   const boundUsd = boundFor(kind, pricing, withPlan);
   // The studio's enhanced-brief step (first website build in Create mode): its own 1-credit hold.
-  const enhancerBoundUsd = enhance && kind === 'website' && !withPlan ? round2(loadApp('src/lib/builder/enhanced-brief.ts').ENHANCER_CREDITS * pricing.costPerCreditUsd) : 0;
+  // ...only for short briefs, as the studio decides (detailed briefs build from the client's words and answers).
+  const enhancedModule = enhance ? loadApp('src/lib/builder/enhanced-brief.ts') : null;
+  const enhancerBoundUsd = enhance && kind === 'website' && !withPlan && enhancedModule.shouldEnhance(brief.brief) ? round2(enhancedModule.ENHANCER_CREDITS * pricing.costPerCreditUsd) : 0;
   const scopes = images ? ['global', 'anthropic', 'openai'] : ['global', 'anthropic'];
   control.assertRunning(`${brief.id}: before the midnight check`);
   // The whole brief (until its limits are disabled again) must fit before 00:00 UTC.
@@ -1573,14 +1577,26 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     writeJson(path.join(item.dir, 'item.json'), itemJson);
     const base = { workspaceId: session.workspaceId, artifactId };
     // The studio's first message is the brief, capped like cloud-studio.tsx does.
-    const full = brief.brief.trim();
+    // --answers: the studio's one-click design questions for this brief, answered as the frozen brief's
+    // simulatedAnswers say (only questions the app asks; skips and "you choose" set nothing).
+    let design = null, asked = [];
+    let full = brief.brief.trim();
+    if (answers && kind === 'website' && brief.simulatedAnswers) {
+      const questions = loadApp('src/lib/builder/brief-questions.ts');
+      const list = questions.briefQuestions('website', brief.brief);
+      const chosen = Object.fromEntries(list.map(question => { const value = brief.simulatedAnswers[question.id]; return [question.id, Array.isArray(value) ? { options: value } : typeof value === 'string' ? { option: value } : {}]; }));
+      asked = list.map(question => question.id);
+      full = questions.briefWithAnswers(brief.brief, list, chosen);
+      design = questions.designAnswers(list, chosen);
+      itemJson.generation.briefQuestions = `on-device design questions answered from simulatedAnswers: ${asked.join(', ')}`;
+    }
     const message = full.length > 8000 ? `${full.slice(0, 7400).replace(/\s+\S*$/, '')}…\n\n(The full brief is in the project details.)` : full;
 
     let approvedBrief = null;
     if (enhancerBoundUsd) {
       const enhancerReservation = await reserveFn({ kind: 'runner-enhancer', ref: brief.id, boundUsd: enhancerBoundUsd, note: `${runId} brief enhancer`, unique: !rerun });
       control.open.add(enhancerReservation);
-      const response = await session.fetch('/api/build/enhance', { method: 'POST', body: { ...base, brief: message } });
+      const response = await session.fetch('/api/build/enhance', { method: 'POST', body: { ...base, brief: message, ...(design && Object.keys(design).length ? { design } : {}) } });
       const value = await response.json().catch(() => null);
       item.requests.push({ stage: 'enhance', method: 'POST', path: '/api/build/enhance', status: response.status });
       const usable = response.ok && typeof value?.text === 'string' && typeof value?.reference === 'string';
@@ -1614,7 +1630,7 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
       message: approvedPlan ? `Build the approved plan: ${approvedPlan.title}` : message, effort: EFFORT,
       // A new request names the maximum the studio showed (the effort ceiling), as live-builder.tsx sends it.
       approvedMaximum: pricing.buildCeilingCredits,
-      operation: { actionKey: buildKey, stepKey: randomUUID() }, attachments: [], ...(approvedPlan ? { plan: approvedPlan } : {}), ...(approvedBrief ? { brief: approvedBrief } : {}) });
+      operation: { actionKey: buildKey, stepKey: randomUUID() }, attachments: [], ...(approvedPlan ? { plan: approvedPlan } : {}), ...(approvedBrief ? { brief: approvedBrief } : {}), ...(!approvedPlan && design && Object.keys(design).length ? { design } : {}) });
     let result = built.result;
     if (result && approvedPlan) {
       // planner.markBuilt(): mark the plan built after the first saved build (free).
@@ -1782,7 +1798,7 @@ function heldSecrets({ stack, fixture, images }) {
   ];
 }
 
-export async function runLive({ report, approval, only, max, images, rerun = false, plan = false, enhance = false }) {
+export async function runLive({ report, approval, only, max, images, rerun = false, plan = false, enhance = false, answers = false }) {
   let selected = report.briefs.items;
   if (only?.length) selected = selected.filter(brief => only.includes(brief.id));
   if (max) selected = selected.slice(0, max);
@@ -1845,7 +1861,7 @@ export async function runLive({ report, approval, only, max, images, rerun = fal
         // Checked again right before the brief reserves (runBrief re-checks before reserving and before enabling limits).
         if (control.stopping) { stopped = stopReason(); break; }
         console.log(`\n  ${brief.id} (${brief.kind}, bound ${money(bound)})`);
-        try { items.push(await runBrief({ session, browser: control.browser, brief, runDir, runId, pricing: report.pricing, images, rerun, withPlan: plan, enhance, control })); }
+        try { items.push(await runBrief({ session, browser: control.browser, brief, runDir, runId, pricing: report.pricing, images, rerun, withPlan: plan, enhance, answers, control })); }
         catch (error) {
           if (error instanceof CapReached) { stopped = error.message; break; }
           if (error instanceof DuplicateReservation) { stopped = `refused ${brief.id}: ${error.message} (pass --rerun)`; break; }
@@ -2276,7 +2292,7 @@ async function liveSelfTest() {
 function cli(argv) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     fixtures: { type: 'boolean' }, 'include-redesign': { type: 'boolean' }, live: { type: 'boolean' }, approval: { type: 'string' }, rerun: { type: 'boolean' },
-    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, plan: { type: 'boolean' }, enhance: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, plan: { type: 'boolean' }, enhance: { type: 'boolean' }, briefs: { type: 'string' }, answers: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     'selftest-live': { type: 'boolean' }, 'selftest-watchdog-parent': { type: 'boolean' },
   }, strict: true });
   const max = values.max === undefined ? null : Number(values.max);
@@ -2289,6 +2305,10 @@ async function main() {
   process.chdir(REPO);
   const options = cli(process.argv.slice(2));
   if (options.effort !== undefined) setEffort(options.effort);
+  if (options.briefs !== undefined) {
+    if (!['golden', 'short'].includes(options.briefs)) throw new Error('--briefs must be golden or short');
+    if (options.briefs === 'short') BRIEF_SET_DIR = path.join(path.dirname(BRIEFS_DIR), 'briefs-short');
+  }
   if (options.bundler !== undefined) {
     if (!['turbopack', 'webpack'].includes(options.bundler)) throw new Error('--bundler must be turbopack or webpack');
     BUNDLER = options.bundler;
@@ -2335,7 +2355,7 @@ async function main() {
       direction: item.direction, shared: item.shared, sha256: item.sha256, hashOk: item.hashOk, chars: item.chars, file: rel(item.file) })) } },
   });
   printPreflight(report, runDir);
-  if (options.live) return runLive({ report, approval: options.approval, only: options.only, max: options.max, images: options.images, rerun: options.rerun, plan: options.plan, enhance: options.enhance });
+  if (options.live) return runLive({ report, approval: options.approval, only: options.only, max: options.max, images: options.images, rerun: options.rerun, plan: options.plan, enhance: options.enhance, answers: options.answers });
   return 0;
 }
 
