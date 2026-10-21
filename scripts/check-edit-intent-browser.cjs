@@ -198,6 +198,9 @@ async function main() {
       assert.equal(await composer(page).inputValue(), "", "a plan approval never becomes composer text");
       await page.getByRole("button", { name: /Build this plan/ }).click();
       await page.getByText(/· saved plan v3 · .* effort/).waitFor();
+      // The line shows as the request leaves; give the request itself time to reach the fixture server (later in WebKit/Firefox).
+      for (const until = Date.now() + 3000; current.builds.length < 2 && Date.now() < until;) await new Promise(resolve => setTimeout(resolve, 20));
+      await page.waitForTimeout(200);
       assert.equal(current.builds.length, 2); assert.notEqual(current.builds[0].operation.actionKey, current.builds[1].operation.actionKey, "a refused approval is not reused");
     });
     await scenario("handed-over-brief-waits-for-send", {}, async (page, current) => {
