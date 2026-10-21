@@ -148,8 +148,11 @@ check("a build downloads the brief's photos once and stores them as project imag
   const photos = await server.importTheirPhotos(client, scope, brief, files, deps);
   assert.deepEqual(photos, [{ url: "/images/photo-1.webp", alt: "Our surgery", width: 1600, height: 1000 }], "the too-small one is skipped");
   assert.equal(assets.get("public/images/photo-1.webp").mediaType, "image/webp"); assert.equal(stored[0].provenance.kind, "client-photo");
+  // Responsive copies (srcset) are registered with the photo and placed under public/images/_r/.
+  assert.deepEqual(stored.slice(1).map(row => [row.provenance.kind, row.provenance.width]), [["responsive-variant", 640], ["responsive-variant", 828], ["responsive-variant", 1280]]);
+  assert.deepEqual([...assets.keys()].filter(key => key.startsWith("public/images/_r/")).map(key => key.split("/").pop()), ["640.webp", "828.webp", "1280.webp"]);
   const again = await server.importTheirPhotos(client, scope, brief, files, deps);
-  assert.equal(stored.length, 1, "already imported photos are not fetched again"); assert.equal(again[0].url, "/images/photo-1.webp");
+  assert.equal(stored.length, 4, "already imported photos are not fetched again"); assert.equal(again[0].url, "/images/photo-1.webp");
   assert.match(server.photosContext(photos), /^Their own photos, uploaded and ready to use .*\/images\/photo-1\.webp \(1600×1000\) "Our surgery"$/);
   assert.equal((await server.importTheirPhotos(client, scope, "no block", files, deps)).length, 0);
 });
