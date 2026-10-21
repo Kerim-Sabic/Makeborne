@@ -86,6 +86,16 @@ function normalise(raw: unknown): unknown {
   };
 }
 
+/** Why a reply was unusable, for the server log: never the reply's content, only its shape (no JSON, bad JSON, or the failing fields). */
+export function unusableReason(text: string): string {
+  const match = /\{[\s\S]*\}/.exec(text);
+  if (!match) return "no JSON object";
+  let raw: unknown;
+  try { raw = JSON.parse(match[0]); } catch { return "invalid JSON"; }
+  const parsed = EnhancedBriefSchema.safeParse(normalise(raw));
+  return parsed.success ? "grounding" : parsed.error.issues.slice(0, 5).map(issue => `${issue.path.join(".")}: ${issue.code}`).join("; ").slice(0, 300);
+}
+
 /** Validated and grounded; null when the reply is unusable. */
 export function parseEnhancedBrief(text: string, source: string): EnhancedBrief | null {
   const match = /\{[\s\S]*\}/.exec(text);

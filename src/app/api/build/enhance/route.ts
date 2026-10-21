@@ -8,7 +8,7 @@ import { RunSpend } from "@/lib/ai/run-spend";
 import { requirePricedModel } from "@/lib/ai/model-check";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { logAiStop } from "@/lib/builder/website-run";
-import { ENHANCER_MODEL, enhanceBrief } from "@/lib/builder/brief-enhancer";
+import { ENHANCER_MODEL, enhanceBrief, unusableReason } from "@/lib/builder/brief-enhancer";
 import { DesignAnswersSchema, ENHANCER_CREDITS, renderBriefAnalysis, renderEnhancedBrief, shouldEnhance } from "@/lib/builder/enhanced-brief";
 
 export const runtime = "nodejs";
@@ -72,10 +72,17 @@ export async function POST(request: Request) {
       request.signal.addEventListener("abort", () => controller.abort(), { once: true });
       const detail = () => ({ kind: "brief_enhance", calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd });
       const mode = shouldEnhance(body.original ?? body.brief) ? "enhance" as const : "analyze" as const;
-      let enhanced = null;
-      try { enhanced = await enhanceBrief({ brief: body.brief, title: artifact.title, design: body.design, attachments: body.attachments, mode, spend, signal: controller.signal }); }
-      catch (cause) { logAiStop(hold.reference, cause); }
+      let enhanced = null, reply: { text: string; stop: string | null } | null = null;
+      try { enhanced = await enhanceBrief({ brief: body.brief, title: artifact.title, design: body.design, attachments: body.attachments, mode, spend, signal: controller.signal, onReply: (text, stop) => { reply = { text, stop }; } }); }
+      catch (cause) {
+        // Spend stops are logged by logAiStop; any other failure (provider error, timeout) is logged here, without content.
+        if (!logAiStop(hold.reference, cause)) console.error(JSON.stringify({ event: "brief_enhance_failed", reference: hold.reference, mode, error: cause instanceof Error ? `${cause.name}: ${cause.message}`.slice(0, 300) : "unknown" }));
+      }
       finally { clearTimeout(timeout); }
+      if (!enhanced && reply) {
+        const { text, stop } = reply as { text: string; stop: string | null };
+        console.error(JSON.stringify({ event: "brief_enhance_unusable", reference: hold.reference, mode, stop, chars: text.length, reason: unusableReason(text) }));
+      }
       if (!enhanced) {
         await release("brief_enhance_unusable");
         throw new RequestError("ENHANCE_UNAVAILABLE", "Your brief couldn't be enhanced just now. Nothing was charged; the build uses your own words.", 503);

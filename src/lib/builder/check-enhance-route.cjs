@@ -35,10 +35,11 @@ const fakes = {
     requireProviderCapacity: async () => { calls.push(["capacity"]); if (state.capacity) throw state.capacity; },
   },
   "@/lib/ai/model-check": { requirePricedModel: () => undefined },
-  "@/lib/builder/website-run": { logAiStop: () => calls.push(["stop"]) },
+  "@/lib/builder/website-run": { logAiStop: () => { calls.push(["stop"]); return null; } },
   "@/lib/builder/brief-enhancer": {
     ENHANCER_MODEL: "claude-haiku-5-5",
-    enhanceBrief: async input => { calls.push(["enhance", input.mode]); if (state.enhanced === "throw") throw new Error("provider"); return state.enhanced === null ? null : briefFixture; },
+    enhanceBrief: async input => { calls.push(["enhance", input.mode]); if (state.enhanced === "throw") throw new Error("provider"); if (state.enhanced === null) { input.onReply?.('{"business":"SECRET-CLIENT-TEXT"', "max_tokens"); return null; } return briefFixture; },
+    unusableReason: text => (text.endsWith("}") ? "fields" : "invalid JSON"),
   },
 };
 const briefFixture = {
@@ -85,7 +86,14 @@ async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}
   await check("an unusable or failed reading releases the hold and says nothing was charged", async () => {
     for (const enhanced of [null, "throw"]) {
       reset({ enhanced });
-      const response = await post(short), value = await response.json();
+      const logged = [], error = console.error;
+      console.error = line => logged.push(String(line));
+      let response;
+      try { response = await post(short); } finally { console.error = error; }
+      // Every failure is logged with its shape or cause, never the client's text.
+      assert.ok(logged.some(line => enhanced === null ? /brief_enhance_unusable/.test(line) && /"stop":"max_tokens"/.test(line) && /invalid JSON/.test(line) : /brief_enhance_failed/.test(line) && /Error: provider/.test(line)), logged.join("\n"));
+      assert.ok(!logged.some(line => /SECRET-CLIENT-TEXT/.test(line)), "no reply content in the log");
+      const value = await response.json();
       assert.equal(response.status, 503); assert.equal(value.error.code, "ENHANCE_UNAVAILABLE"); assert.match(value.error.message, /Nothing was charged/);
       assert.deepEqual(calls.at(-1), ["release", "brief_enhance_unusable"]);
     }
