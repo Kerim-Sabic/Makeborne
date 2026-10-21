@@ -8,6 +8,7 @@
 //                                                  websites run in Create mode (the studio default); --plan runs Plan mode first
 //                                                  generate through the app's own routes (PAID)
 //   node scripts/eval/run.mjs --selftest-live      live-path safety checks with fakes (free)
+//   --image-models a,b (with --images): the server's ordered image allowlist (MAKEBORNE_IMAGE_MODELS) when .env.local names no model
 //   --enhance (with --live, websites in Create mode): the studio's enhanced-brief step first: POST /api/build/enhance
 //     (its own eval reservation, kind runner-enhancer, at the 1-credit hold; settled from the provider-call ledger by the
 //     route's hold reference), then the build with { brief: { mode: "enhanced", text } }, as the studio's Start building does.
@@ -53,6 +54,8 @@ export function setEffort(value) {
 }
 /** next dev bundler: Turbopack (Next's default) or webpack (needed in worktrees whose node_modules is a junction). */
 let BUNDLER = 'turbopack';
+/** --image-models: the ordered image allowlist for this run's server (MAKEBORNE_IMAGE_MODELS), when .env.local names none. */
+let IMAGE_MODELS = '';
 /**
  * The .env.local the runner reads ANTHROPIC_API_KEY / OPENAI_API_KEY / MAKEBORNE_IMAGE_MODEL from
  * (only into its own server process). A git worktree has none of its own: EVAL_ENV_LOCAL names the
@@ -606,7 +609,7 @@ export function keyPresence() {
   } : null;
   // Next loads these files itself; the runner blanks every key they define in the server env.
   const nextLoaded = ENV_FILES_NEXT_LOADS.filter(name => existsSync(path.join(REPO, name)));
-  return { file: '.env.local', exists: Boolean(local), keys, imagesPossible: Boolean(keys?.OPENAI_API_KEY && keys?.MAKEBORNE_IMAGE_MODEL), envFilesNextLoads: nextLoaded,
+  return { file: '.env.local', exists: Boolean(local), keys, imagesPossible: Boolean(keys?.OPENAI_API_KEY && (keys?.MAKEBORNE_IMAGE_MODEL || IMAGE_MODELS)), envFilesNextLoads: nextLoaded,
     shellOverrides: { EVAL_SPEND_APPROVED: process.env.EVAL_SPEND_APPROVED === 'yes', EVAL_CAP_USD: process.env.EVAL_CAP_USD ?? null } };
 }
 
@@ -780,7 +783,7 @@ export function serverEnv(stack, { images, rate }, { read = readEnvFile, value =
   return Object.assign(env, {
     NODE_ENV: 'development', NEXT_TELEMETRY_DISABLED: '1',
     ANTHROPIC_API_KEY: value('ANTHROPIC_API_KEY', read),
-    OPENAI_API_KEY: images ? value('OPENAI_API_KEY', read) : '', MAKEBORNE_IMAGE_MODEL: images ? value('MAKEBORNE_IMAGE_MODEL', read) : '',
+    OPENAI_API_KEY: images ? value('OPENAI_API_KEY', read) : '', MAKEBORNE_IMAGE_MODEL: images ? value('MAKEBORNE_IMAGE_MODEL', read) : '', MAKEBORNE_IMAGE_MODELS: images ? IMAGE_MODELS : '',
     MAKEBORNE_BUILDER_FALLBACK_MODELS: '', MAKEBORNE_AI_COST_USD_PER_CREDIT: String(rate),
     MAKEBORNE_CLOUD_ENABLED: 'true', MAKEBORNE_CLOUD_MIGRATIONS_VERIFIED: 'true', MAKEBORNE_LIVE_BUILDER_ENABLED: 'true',
     NEXT_PUBLIC_SUPABASE_URL: stack.apiUrl, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: stack.publishableKey, SUPABASE_SECRET_KEY: stack.secretKey,
@@ -2303,7 +2306,7 @@ async function liveSelfTest() {
 function cli(argv) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     fixtures: { type: 'boolean' }, 'include-redesign': { type: 'boolean' }, live: { type: 'boolean' }, approval: { type: 'string' }, rerun: { type: 'boolean' },
-    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, plan: { type: 'boolean' }, enhance: { type: 'boolean' }, briefs: { type: 'string' }, answers: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, 'image-models': { type: 'string' }, plan: { type: 'boolean' }, enhance: { type: 'boolean' }, briefs: { type: 'string' }, answers: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     'selftest-live': { type: 'boolean' }, 'selftest-watchdog-parent': { type: 'boolean' },
   }, strict: true });
   const max = values.max === undefined ? null : Number(values.max);
@@ -2323,6 +2326,10 @@ async function main() {
   if (options.bundler !== undefined) {
     if (!['turbopack', 'webpack'].includes(options.bundler)) throw new Error('--bundler must be turbopack or webpack');
     BUNDLER = options.bundler;
+  }
+  if (options['image-models'] !== undefined) {
+    if (!/^[a-z0-9.-]+(?:,[a-z0-9.-]+)*$/.test(options['image-models'])) throw new Error('--image-models takes a comma-separated list of model ids');
+    IMAGE_MODELS = options['image-models'];
   }
   if (options.help) { console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 10).join('\n')); return 0; }
   if (options['selftest-live']) { console.log('run.mjs live-path self-test (fakes only: no DB writes, no server, no provider)'); return liveSelfTest(); }

@@ -156,7 +156,7 @@ export function renderBriefAnalysis(brief: EnhancedBrief): string {
     "Sections and must-haves the brief asks for, in a sensible order (give each section the id shown):",
     ...brief.sections.map((section, index) => `${index + 1}. ${section.name} (#${section.anchor}): ${section.purpose}${section.include.length ? ` Include: ${section.include.join("; ")}.` : ""}`),
     brief.factsGiven.length ? `\nFacts the brief gives (use exactly as written):\n${list(brief.factsGiven)}` : "",
-    brief.factsMissing.length ? `\nFacts it needs but does not give (write around each one as suggested, never invented; no brackets except a missing contact detail in the contact block):\n${brief.factsMissing.map(item => `- ${item.fact} → "${item.placeholder}"`).join("\n")}` : "",
+    brief.factsMissing.length ? `\nFacts it needs but does not give (handled as suggested: a tidy placeholder label where the brief asks for one, otherwise written around; never invented):\n${brief.factsMissing.map(item => `- ${item.fact} → "${item.placeholder}"`).join("\n")}` : "",
     brief.conflicts.length ? `\nConflicts or gaps (take the default shown and say so in the finish summary):\n${brief.conflicts.map(item => `- ${item.issue} → ${item.resolution}`).join("\n")}` : "",
     brief.constraints.length ? `\nConstraints the brief states:\n${list(brief.constraints)}` : "",
   ].filter(line => line !== "").join("\n").slice(0, MAX_ENHANCED_BRIEF_CHARS);
@@ -166,7 +166,7 @@ export function renderBriefAnalysis(brief: EnhancedBrief): string {
 export function enhancedBriefBlock(brief: BuildBrief) {
   if (brief.mode === "analysis") return [
     `<brief_analysis>`,
-    `Makeborne read the client's detailed brief and listed what it asks for. The brief above, in the client's own words, is the authority: this analysis never adds to, rewords or overrides it. Build every section listed, each with the id shown (id="anchor" on the section element); a fact the brief does not give is written around or stated once in plain visitor words (PLACEHOLDERS in your rules), never invented and never a bracketed gap in the first screen or the signature object.`,
+    `Makeborne read the client's detailed brief and listed what it asks for. The brief above, in the client's own words, is the authority: this analysis never adds to, rewords or overrides it. Build every section listed, each with the id shown (id="anchor" on the section element); a fact the brief does not give is never invented: a placeholder the brief asks for is clearly and tidily marked, any other gap is written around (PLACEHOLDERS in your rules).`,
     brief.text,
     `</brief_analysis>`,
   ].join("\n");
