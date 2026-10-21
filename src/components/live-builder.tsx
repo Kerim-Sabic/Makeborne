@@ -186,6 +186,17 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     queueMicrotask(() => setEarlier(found));
   }, [pendingScope]);
   const lastRefusal = useRef<string | null>(null);
+  // Firefox aborts in-flight requests as soon as a reload or navigation starts (before pagehide) and still runs
+  // their failure handling. A request whose page is going away has an unknown outcome: its record must survive
+  // for the next load. If a leave prompt is cancelled, the next key or pointer press clears the flag; until then an
+  // unknown outcome is simply kept (the conservative side: the next load asks before anything is resent).
+  const leavingPage = useRef(false);
+  useEffect(() => {
+    const leave = () => { leavingPage.current = true; }, stay = () => { leavingPage.current = false; };
+    const leaving = ["beforeunload", "pagehide"] as const, staying = ["pageshow", "pointerdown", "keydown"] as const;
+    leaving.forEach(type => window.addEventListener(type, leave)); staying.forEach(type => window.addEventListener(type, stay, true));
+    return () => { leaving.forEach(type => window.removeEventListener(type, leave)); staying.forEach(type => window.removeEventListener(type, stay, true)); };
+  }, []);
   const holdRequest = useCallback((request: PendingRequest, persist = true) => {
     setInFlight(request); setEarlier(null); lastRefusal.current = null;
     if (persist && pendingScope) savePendingRequest(browserStorage(), pendingScope, request);
@@ -193,6 +204,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   /** Ends the in-flight request; unless it finished, its text goes back in the composer (never sent again automatically).
    * A plan approval keeps no composer text: the plan card stays and its saved revision is the request. */
   const releaseRequest = useCallback((request: PendingRequest, outcome: Outcome, restore = true) => {
+    if (leavingPage.current && outcome !== "done") return;
     setInFlight(null);
     if (pendingScope) clearPendingRequest(browserStorage(), pendingScope);
     if (outcome === "done" || !restore) return;
