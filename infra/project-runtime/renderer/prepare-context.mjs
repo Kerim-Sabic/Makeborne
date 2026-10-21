@@ -10,7 +10,7 @@ const destination=resolve(directory);
 // A fresh directory avoids accidentally inheriting files from an earlier build.
 await mkdir(destination,{recursive:false});
 const mappings=kind==='compiler'
- ? ['Dockerfile','build.mjs','identity.mjs','watchdog.mjs','font-portability.cjs','font-licenses.cjs','font-licenses.json','font-catalog.json','toolchain-compatibility.cjs','legacy-toolchain.json','toolchain/package.json','toolchain/package-lock.json'].map(p=>[join(runtime,p),p])
+ ? ['Dockerfile','build.mjs','identity.mjs','watchdog.mjs','font-portability.cjs','font-licenses.cjs','font-licenses.json','font-catalog.json','toolchain-compatibility.cjs','legacy-toolchain.json','responsive-images.cjs','toolchain/package.json','toolchain/package-lock.json'].map(p=>[join(runtime,p),p])
  : [['Dockerfile','Dockerfile'],['package.json','package.json'],['package-lock.json','package-lock.json']].map(([src,dst])=>[join(here,src),dst]).concat(
    ['publication-renderer.mjs','vercel-publication-render-entry.mjs','vercel-publication-render-watchdog.mjs','vercel-publication-protocol.mjs','identity.mjs'].map(p=>[join(runtime,p),'runtime/'+p]),
    ['site-policy.js','website-policy.js'].map(p=>[join(root,'infra/customer-sites',p),'customer-sites/'+p]));

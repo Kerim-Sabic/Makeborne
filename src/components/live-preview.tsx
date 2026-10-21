@@ -11,6 +11,7 @@ import type { ElementDescription, ElementLoc, StyleField, VisualEdit } from "@/l
 import type { WebsiteProjectSource } from "@/lib/projects/website-source";
 import type { PickedElement } from "./visual-editor-panel";
 import { readCloudImage } from "./cloud-api";
+import responsive from "../../infra/project-runtime/responsive-images.cjs";
 import "@/app/visual-editor.css";
 
 const VisualEditorPanel = dynamic(() => import("./visual-editor-panel"), { ssr: false });
@@ -126,7 +127,8 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     void (async () => {
       const next: Record<string, string> = {};
       let missing = 0;
-      for (const asset of assets) {
+      // Responsive copies (srcset) are for the published site; the preview uses the originals.
+      for (const asset of assets.filter(asset => !responsive.isVariantPath(asset.path))) {
         let url = cache.current.get(asset.id);
         if (!url) {
           try {
@@ -286,7 +288,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   }
 
   const description: ElementDescription | null = useMemo(() => engine && picked && source ? engine.describeElement(source, picked.loc, picked.text) : null, [engine, picked, source]);
-  const projectImages = useMemo(() => (source?.assets ?? []).map(asset => {
+  const projectImages = useMemo(() => (source?.assets ?? []).filter(asset => !responsive.isVariantPath(asset.path)).map(asset => {
     const path = `/${asset.path.replace(/^public\//, "")}`;
     return { path, url: images[path] };
   }), [source, images]);

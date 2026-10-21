@@ -116,7 +116,10 @@ type Planned = { id: CompositionId; scene: SlideScene };
 const plans = new WeakMap<object, { slides: Slide[]; plan: Planned[] }>();
 function choose(deck: DeckLike, slide: Slide, index: number, total: number, previous: Planned | undefined, roleCount: number): Planned {
   const options = candidates(deck, slide, index, total);
-  if (slide.variant && (REGISTRY[slide.variant as CompositionId].accepts?.(slide, context(deck, slide, index, total)) ?? true)) {
+  const requiresImage = Boolean(slide.image && (slide.layout === "cover" || slide.layout === "closing"));
+  // Image-bearing covers have a semantic image requirement. A decorative
+  // variant cannot override that requirement and silently discard a paid asset.
+  if (slide.variant && (!requiresImage || slide.variant === "cover-image") && (REGISTRY[slide.variant as CompositionId].accepts?.(slide, context(deck, slide, index, total)) ?? true)) {
     const id = slide.variant as CompositionId;
     return { id, scene: run(deck, slide, index, total, id) };
   }
@@ -131,7 +134,7 @@ function choose(deck: DeckLike, slide: Slide, index: number, total: number, prev
     tried.push({ id, scene });
   }
   // Then repeats the rhythm rules allowed, then any other composition of the layout the copy fits.
-  const others = (COMPOSITIONS[slide.layout] as readonly CompositionId[]).filter(id => id !== "cover-image" && !order.includes(id) && (REGISTRY[id].accepts?.(slide, context(deck, slide, index, total)) ?? true));
+  const others = requiresImage ? [] : (COMPOSITIONS[slide.layout] as readonly CompositionId[]).filter(id => id !== "cover-image" && !order.includes(id) && (REGISTRY[id].accepts?.(slide, context(deck, slide, index, total)) ?? true));
   for (const id of [...order, ...others]) if (!tried.some(entry => entry.id === id)) { const scene = run(deck, slide, index, total, id); if (!scene.issues.length) return { id, scene }; tried.push({ id, scene }); }
   return tried.sort((a, b) => a.scene.issues.length - b.scene.issues.length)[0] ?? { id: order[0], scene: run(deck, slide, index, total, order[0]) };
 }

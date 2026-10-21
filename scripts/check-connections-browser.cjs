@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted MailCenter and WebsiteGithub in Chromium: the mailbox card names the sequences that use it, its last send and how to stop automation; disconnect copy says what stops and that the provider grant stays until revoked there (audit: connection clarity). APIs are answered by Playwright routes with fictional data; no OAuth, no send. Local only. Run: node scripts/check-connections-browser.cjs [screenshot-dir] */
-const path = require("node:path"), fs = require("node:fs"), assert = require("node:assert/strict"), { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const path = require("node:path"), fs = require("node:fs"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel, args: engineArgs } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
-const shots = process.argv[2] ? path.resolve(process.argv[2]) : null;
+const shots = engineArgs[0] ? path.resolve(engineArgs[0]) : null;
 const fixture = `import React from "react"; import { createRoot } from "react-dom/client";
 import "./src/app/globals.css"; import "./src/app/account-clients.css"; import "./src/components/website-publish.css";
 import MailCenter from "./src/components/mail/mail-center";
@@ -36,7 +36,7 @@ async function main() {
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -114,6 +114,6 @@ async function main() {
       await page.locator(".website-publish").screenshot({ path: path.join(shots, `github-disconnected-${width}.png`) });
     }
   } finally { await browser.close(); server.close(); }
-  console.log(`${passed} mounted connection checks passed (Chromium, routed API, no network).`);
+  console.log(`${passed} mounted connection checks passed (${engineLabel}, routed API, no network).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

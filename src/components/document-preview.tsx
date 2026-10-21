@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Play, X } from "lucide-react";
 import type { Deck, DocumentSource } from "@/lib/documents/schema";
 import { deckHtml } from "@/lib/documents/render-deck";
@@ -14,7 +14,9 @@ const readingTime = (words: number) => {
 import { advancesOnClick, presenterShortcut } from "@/lib/documents/presenter-keys";
 import { describeTyped, documentTexts, fontCoverage } from "@/lib/builder/font-fallback";
 import "@/app/publish-output.css";
+import { frameListenersRun, watchFrameScroll } from "@/lib/frame-events";
 import { readCloudImage } from "./cloud-api";
+import { focusReturnTarget } from "@/lib/focus-return";
 
 const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
@@ -29,6 +31,8 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
 export function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<string, string>; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null), frame = useRef<HTMLIFrameElement>(null), entered = useRef(false);
   const [index, setIndex] = useState(0);
+  // False where the browser ignores listeners on the script-free slide frame (Safari, see frame-events.ts).
+  const [frameListeners, setFrameListeners] = useState(true);
   const total = deck.slides.length, current = Math.max(0, Math.min(index, total - 1));
   const html = useMemo(() => deckHtml(deck, images, "present"), [deck, images]);
   const go = useCallback((next: number) => setIndex(Math.max(0, Math.min(total - 1, next))), [total]);
@@ -63,7 +67,7 @@ export function Presenter({ deck, images, onClose }: { deck: Deck; images: Recor
   // Focus moves into the presenter when it opens and back to the control that
   // opened it when it closes (once per presentation, whatever onClose is).
   useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    const opener = focusReturnTarget();
     root.current?.focus();
     return () => { if (opener?.isConnected) opener.focus({ preventScroll: true }); };
   }, []);
@@ -83,12 +87,27 @@ export function Presenter({ deck, images, onClose }: { deck: Deck; images: Recor
   const onLoad = () => {
     sync();
     const view = frame.current?.contentWindow;
-    view?.addEventListener("keydown", event => keyHandler.current(event));
-    view?.document.addEventListener("click", event => { if (advancesOnClick(event.target, view.getSelection()?.toString() ?? "")) go(currentRef.current + 1); });
+    if (!view) return;
+    const live = frameListenersRun(view.document);
+    setFrameListeners(live);
+    if (!live) return;
+    view.addEventListener("keydown", event => keyHandler.current(event));
+    view.document.addEventListener("click", event => { if (advancesOnClick(event.target, view.getSelection()?.toString() ?? "")) go(currentRef.current + 1); });
+  };
+  // Where the frame ignores its listeners, it takes no pointer or focus: keys stay with the presenter, and a
+  // click falls through to it and is mapped into the slide, with the same link/control rule as in the frame.
+  const onCanvasClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const element = frame.current, page = element?.contentDocument;
+    if (frameListeners || !element || !page || event.target !== root.current) return;
+    const rect = element.getBoundingClientRect();
+    const x = event.clientX - rect.left, y = event.clientY - rect.top;
+    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+    if (advancesOnClick(page.elementFromPoint(x, y), page.getSelection()?.toString() ?? "")) go(currentRef.current + 1);
   };
 
-  return <div ref={root} className="dp-present" data-presenter-root="" role="dialog" aria-modal="true" aria-label={`Presenting ${deck.title}`} tabIndex={-1}>
-    <iframe ref={frame} title={`Slide ${current + 1} of ${total}`} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={onLoad} />
+  return <div ref={root} className="dp-present" data-presenter-root="" role="dialog" aria-modal="true" aria-label={`Presenting ${deck.title}`} tabIndex={-1} onClick={onCanvasClick}>
+    <iframe ref={frame} title={`Slide ${current + 1} of ${total}`} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={onLoad}
+      {...(frameListeners ? {} : { tabIndex: -1, style: { pointerEvents: "none" as const }, onFocus: () => root.current?.focus() })} />
     <div className="dp-present-bar">
       <button type="button" aria-label="Previous slide" disabled={current === 0} onClick={() => go(current - 1)}><ChevronLeft size={16} /></button>
       <span aria-live="polite">{current + 1} / {total}</span>
@@ -170,21 +189,20 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
   const outlineRef = useRef(outline);
   useEffect(() => { outlineRef.current = outline; }, [outline]);
 
-  // Track which chapter or slide is at the top of the frame as the reader scrolls.
+  // Track which chapter or slide is at the top of the frame as the reader scrolls
+  // (from the host page where the browser ignores the frame's own listeners).
+  const stopFollowing = useRef<() => void>(() => {});
+  useEffect(() => () => stopFollowing.current(), []);
   const followScroll = (view: Window, page: Document) => {
-    let pending = 0;
-    view.addEventListener("scroll", () => {
-      if (pending) return;
-      pending = view.requestAnimationFrame(() => {
-        pending = 0;
-        let found = "";
-        for (const item of outlineRef.current) {
-          const element = page.getElementById(item.anchor);
-          if (element && element.getBoundingClientRect().top <= view.innerHeight * 0.35) found = item.anchor;
-        }
-        setCurrent(found);
-      });
-    }, { passive: true });
+    stopFollowing.current();
+    stopFollowing.current = watchFrameScroll(view, () => {
+      let found = "";
+      for (const item of outlineRef.current) {
+        const element = page.getElementById(item.anchor);
+        if (element && element.getBoundingClientRect().top <= view.innerHeight * 0.35) found = item.anchor;
+      }
+      setCurrent(found);
+    });
   };
 
   // Book pages are typeset at their real trim width (6 in = 576 CSS px plus the

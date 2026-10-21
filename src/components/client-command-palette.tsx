@@ -5,6 +5,7 @@ import { CalendarClock, Columns3, CornerDownLeft, Download, List, LoaderCircle, 
 import type { CloudClient } from "@/lib/cloud/contracts";
 import { clampActive, currentClients, searchKey, searchNotice, type PaletteSearch } from "@/lib/cloud/palette-search";
 import { api } from "./cloud-api";
+import { focusReturnTarget } from "@/lib/focus-return";
 
 export type PaletteAction = { id: string; label: string; hint?: string; icon: "add" | "overdue" | "board" | "list" | "export" | "import" | "email" };
 const icons = { add: Plus, overdue: CalendarClock, board: Columns3, list: List, export: Download, import: Upload, email: Mail };
@@ -24,9 +25,9 @@ export default function ClientCommandPalette({ workspaceId, today, actions, onOp
   const restore = useRef<Element | null>(null);
 
   useEffect(() => {
-    restore.current = document.activeElement;
+    restore.current = focusReturnTarget();
     input.current?.focus();
-    return () => { if (restore.current instanceof HTMLElement) restore.current.focus(); };
+    return () => { if (restore.current instanceof HTMLElement && restore.current.isConnected) restore.current.focus(); };
   }, []);
   useEffect(() => {
     let live = true;

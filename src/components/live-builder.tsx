@@ -30,6 +30,7 @@ import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendi
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
 import { provenanceLabel, type ProjectProvenance } from "@/lib/experts/advisor-brief";
+import responsive from "../../infra/project-runtime/responsive-images.cjs";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
@@ -75,7 +76,8 @@ const MAX_CONTINUATIONS = 2;
  * so the sandboxed capture frame needs no network access. */
 async function assetDataUrls(assets: Live["assets"], scope: { accountId: string; workspaceId: string; artifactId: string }): Promise<Record<string, string>> {
   const controller = new AbortController();
-  const entries = await Promise.all(assets.map(async asset => {
+  // Responsive copies (srcset) are for the published site; captures use the originals.
+  const entries = await Promise.all(assets.filter(asset => !responsive.isVariantPath(asset.path)).map(async asset => {
     try {
       const blob = await readCloudImage(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/assets/${asset.id}`, scope.accountId, controller.signal);
       const url = await new Promise<string>((resolve, reject) => {
@@ -188,6 +190,17 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     queueMicrotask(() => setEarlier(found));
   }, [pendingScope]);
   const lastRefusal = useRef<string | null>(null);
+  // Firefox aborts in-flight requests as soon as a reload or navigation starts (before pagehide) and still runs
+  // their failure handling. A request whose page is going away has an unknown outcome: its record must survive
+  // for the next load. If a leave prompt is cancelled, the next key or pointer press clears the flag; until then an
+  // unknown outcome is simply kept (the conservative side: the next load asks before anything is resent).
+  const leavingPage = useRef(false);
+  useEffect(() => {
+    const leave = () => { leavingPage.current = true; }, stay = () => { leavingPage.current = false; };
+    const leaving = ["beforeunload", "pagehide"] as const, staying = ["pageshow", "pointerdown", "keydown"] as const;
+    leaving.forEach(type => window.addEventListener(type, leave)); staying.forEach(type => window.addEventListener(type, stay, true));
+    return () => { leaving.forEach(type => window.removeEventListener(type, leave)); staying.forEach(type => window.removeEventListener(type, stay, true)); };
+  }, []);
   const holdRequest = useCallback((request: PendingRequest, persist = true) => {
     setInFlight(request); setEarlier(null); lastRefusal.current = null;
     if (persist && pendingScope) savePendingRequest(browserStorage(), pendingScope, request);
@@ -195,6 +208,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   /** Ends the in-flight request; unless it finished, its text goes back in the composer (never sent again automatically).
    * A plan approval keeps no composer text: the plan card stays and its saved revision is the request. */
   const releaseRequest = useCallback((request: PendingRequest, outcome: Outcome, restore = true) => {
+    if (leavingPage.current && outcome !== "done") return;
     setInFlight(null);
     if (pendingScope) clearPendingRequest(browserStorage(), pendingScope);
     if (outcome === "done" || !restore) return;
@@ -611,6 +625,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
    * a repeated click for the same approval reuses its request identity, so the server joins it. */
   const buildPlan = async (approved: SitePlan, level: EffortLevel, maximum: number) => {
     if (approvingRef.current || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
+    // The plan card passes the maximum it showed; the server ceiling for the effort is the same number and the fallback.
+    if (!Number.isFinite(maximum)) maximum = BUILDER_EFFORT[level].ceilingCredits;
     const quoteIssue = affordability(maximum, balance);
     if (quoteIssue) { setNotice(quoteIssue); return; }
     approvingRef.current = true; setApproving(true); setNotice("");

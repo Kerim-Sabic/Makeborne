@@ -4,6 +4,7 @@ import type {compileTrustedPublication} from "./publication-compiler";
 import {renderHostedSnapshot} from "../hosting/snapshot";
 import {serializeSiteFiles} from "../hosting/bundle";
 import {pageMeta, structuredData, type SiteSeo} from "../hosting/seo";
+import responsive from "../../../infra/project-runtime/responsive-images.cjs";
 
 type Compiled = Awaited<ReturnType<typeof compileTrustedPublication>>;
 const digest = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
@@ -18,6 +19,8 @@ export function composePublicationOutput(compiled: Compiled, presentation: {titl
   const origin = presentation.address.replace(/\/$/, "");
   const shareImage = presentation.seo?.shareImage && compiled.assetPaths.has(presentation.seo.shareImage) ? `${origin}${presentation.seo.shareImage}` : undefined;
   const siteName = presentation.seo?.siteName || presentation.title;
+  // Responsive copies built from the same retained files (public paths, exact bytes).
+  const responsiveImages = responsive.responsiveManifest(compiled.files.filter(file => file.contentType.startsWith("image/")).map(file => ({path: `public${file.path}`, sha256: file.sha256})));
   function composePage(snapshot:string, path:string, stylesheets:readonly string[]) {
   let css = "";
   for (const path of stylesheets) {
@@ -45,7 +48,7 @@ export function composePublicationOutput(compiled: Compiled, presentation: {titl
   const head = {siteName, image: shareImage, jsonLd: path === "/" ? structuredData(presentation.seo, presentation.address, shareImage) : null};
   const html = renderHostedSnapshot(portableSnapshot, meta.title, meta.description || presentation.description, address, {requireReactRoot: true, ...head});
   const isolatedHtml = renderHostedSnapshot(snapshot, meta.title, meta.description || presentation.description, address,
-    {assetPaths: compiled.assetPaths, stylesheets, requireReactRoot: true, ...head});
+    {assetPaths: compiled.assetPaths, stylesheets, responsiveImages, requireReactRoot: true, ...head});
   return {path, html, isolatedHtml};
   }
   const routes = compiled.routeSnapshots.map(route => composePage(route.html, route.path, route.stylesheets));

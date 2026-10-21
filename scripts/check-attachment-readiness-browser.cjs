@@ -2,7 +2,7 @@
  * Run: node scripts/check-attachment-readiness-browser.cjs [--baseline=<git rev>]  (SHOTS_DIR=<dir> saves screenshots)
  * --baseline bundles every src/ file from that revision instead, to show the audited behaviour it lacks. */
 const assert = require('node:assert/strict'), path = require('node:path'), fs = require('node:fs'), { execFileSync } = require('node:child_process');
-const { build } = require('esbuild'), { chromium } = require('playwright'), { createServer } = require('node:http');
+const { build } = require('esbuild'), { browserType } = require('./browser-engine.cjs'), { createServer } = require('node:http');
 
 const baseline = process.argv.find(arg => arg.startsWith('--baseline='))?.slice('--baseline='.length) ?? null;
 const shots = process.env.SHOTS_DIR ? path.resolve(process.env.SHOTS_DIR) : null;
@@ -78,7 +78,7 @@ async function main() {
   const server = createServer((req, res) => { const script = req.url === '/fixture.js'; res.setHeader('Content-Type', script ? 'text/javascript' : 'text/html'); res.end(script ? js : html); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   if (shots) fs.mkdirSync(shots, { recursive: true });
   const failures = [];
   async function scenario(name, run, viewport = { width: 1100, height: 900 }) {
@@ -107,6 +107,9 @@ async function main() {
       console.log(`FAIL ${name}: ${String(error.message).split('\n')[0]}`);
     } finally { await context.close(); }
   }
+  // A person can only pick files once file storage is open (the Attach button is disabled until then);
+  // setting the hidden input directly before that races the storage open, which is slower in some engines.
+  const homeReady = page => page.locator('button.attachment-add:enabled').waitFor();
   const send = async (page, text) => {
     const box = page.getByRole('textbox', { name: 'Message the builder' });
     await box.fill(text); await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -168,9 +171,12 @@ async function main() {
     });
     await scenario('a read error blocks Send until Retry re-reads the same stored copy', async (page, builds) => {
       await page.evaluate(async () => {
+        // Seed first: an engine that keeps files as bytes (WebKit ephemeral/private storage) reads each file once to
+        // save it. The injected fault is then the first read of the stored copy — the readiness read the builder makes.
+        await window.seedProject([{ name: 'flaky.txt', text: 'x'.repeat(77), type: 'text/plain' }, { name: 'ok.txt', text: 'fine', type: 'text/plain' }]);
         const original = Blob.prototype.arrayBuffer; let failed = false;
         Blob.prototype.arrayBuffer = function() { if (this.size === 77 && !failed) { failed = true; return Promise.reject(new DOMException('Fixture read failure', 'NotReadableError')); } return original.call(this); };
-        await window.seedProject([{ name: 'flaky.txt', text: 'x'.repeat(77), type: 'text/plain' }, { name: 'ok.txt', text: 'fine', type: 'text/plain' }]); window.mountBuilder();
+        window.mountBuilder();
       });
       await page.getByText('Retry or leave out flaky.txt before sending.', { exact: true }).waitFor();
       assert.equal((await states(page))[0].state, 'failed');
@@ -200,7 +206,7 @@ async function main() {
       assert.deepEqual(builds[0].attachments.map(file => file.name), ['brief.txt']);
     });
     await scenario('home composer states what will be read and that removal deletes the saved copy', async page => {
-      await page.evaluate(() => window.mountHome());
+      await page.evaluate(() => window.mountHome()); await homeReady(page);
       await page.locator('input[type=file][aria-label="Choose files to attach"]').setInputFiles([
         { name: 'brief.txt', mimeType: 'text/plain', buffer: Buffer.from('Use exactly 123 customers.') },
         { name: 'deck.pptx', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', buffer: Buffer.from('PK\u0003\u0004deck') },
@@ -221,7 +227,7 @@ async function main() {
         if (shots) await page.screenshot({ path: path.join(shots, `builder-${width}.png`), fullPage: true });
       }, { width, height: 900 });
       await scenario(`home at ${width}px: states fit without horizontal overflow`, async page => {
-        await page.evaluate(() => window.mountHome());
+        await page.evaluate(() => window.mountHome()); await homeReady(page);
         await page.locator('input[type=file][aria-label="Choose files to attach"]').setInputFiles([
           { name: `${long}.txt`, mimeType: 'text/plain', buffer: Buffer.from('Use exactly 123 customers.') },
           { name: `${long}.xlsx`, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('PK\u0003\u0004sheet') }]);

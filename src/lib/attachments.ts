@@ -1,6 +1,8 @@
 /** Device-only source files. The live builder explicitly sends selected sources to AI. */
 export const ATTACHMENT_LIMITS = { count: 10, fileBytes: 25 * 1024 * 1024, totalBytes: 100 * 1024 * 1024 };
 export type Attachment = { id: string; name: string; type: string; size: number; owner: string; blob: Blob; previewType: string | null };
+/** On disk a file is its Blob, or — where the engine refuses Blob values in IndexedDB — its bytes. */
+type StoredAttachment = Omit<Attachment, "blob"> & { blob?: Blob; bytes?: ArrayBuffer };
 type Collection = { key: string; owner: string; ids: string[]; builderRequest?: { context: string; actionKey: string; operationId?: string; createdAt: number; expiresAt: number } };
 type PendingCreation = { requestId: string; nonce: string; owner: string; draft: Record<string, unknown> };
 export const attachmentOwner = (accountId: string | null) => accountId ? `account:${accountId}` : "device";
@@ -20,6 +22,36 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 const collectionKey = (owner: string, context: string) => `${owner}/${context}`;
+const BLOB_PROBE_ID = "makeborne:blob-probe";
+let blobValues: Promise<boolean> | null = null;
+/** WebKit refuses Blob and File values in IndexedDB in ephemeral sessions (Safari private browsing,
+ * automation contexts): the whole transaction aborts. Probe once per page; where Blobs are refused the
+ * same files are kept as their bytes instead, so attaching works rather than failing as "out of storage". */
+function storesBlobValues(): Promise<boolean> {
+  blobValues ??= openDatabase().then(db => new Promise<boolean>(resolve => {
+    let stored = false;
+    const finish = (value: boolean) => { db.close(); resolve(value); };
+    const tx = db.transaction("files", "readwrite");
+    tx.oncomplete = () => finish(stored);
+    tx.onabort = () => finish(false);
+    try {
+      const put = tx.objectStore("files").put({ id: BLOB_PROBE_ID, blob: new Blob(["probe"], { type: "text/plain" }) });
+      put.onsuccess = () => { stored = true; tx.objectStore("files").delete(BLOB_PROBE_ID); };
+      put.onerror = event => { event.preventDefault(); };
+    } catch { /* DataCloneError: the transaction still completes without the probe. */ }
+  }), () => false);
+  return blobValues;
+}
+/** Encode before a transaction opens: reading bytes is asynchronous and would end an open transaction. */
+async function storable(files: readonly (Attachment | StoredAttachment)[]): Promise<StoredAttachment[]> {
+  if (await storesBlobValues()) return [...files];
+  return Promise.all(files.map(async ({ blob, ...file }) => blob ? { ...file, bytes: await blob.arrayBuffer() } : file));
+}
+function readable({ bytes, ...file }: StoredAttachment): Attachment {
+  if (bytes) return { ...file, blob: new Blob([bytes], { type: file.type }) };
+  if (!file.blob) throw new Error("Some attached files are unavailable on this device.");
+  return file as Attachment;
+}
 function requestValue<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
 }
@@ -37,13 +69,16 @@ async function transaction<T>(mode: IDBTransactionMode, run: (tx: IDBTransaction
   catch (error) { try { tx.abort(); } catch { /* Already settled. */ } await done.catch(() => {}); throw error; }
   finally { db.close(); }
 }
-async function collectionFiles(tx: IDBTransaction, owner: string, context: string) {
+async function collectionRecords(tx: IDBTransaction, owner: string, context: string) {
   const collection = await requestValue<Collection | undefined>(tx.objectStore("collections").get(collectionKey(owner, context)));
   if (!collection) return [];
   if (collection.owner !== owner) throw new Error("These files belong to another account.");
-  const files = await Promise.all(collection.ids.map(id => requestValue<Attachment | undefined>(tx.objectStore("files").get(id))));
+  const files = await Promise.all(collection.ids.map(id => requestValue<StoredAttachment | undefined>(tx.objectStore("files").get(id))));
   if (files.some(file => !file || file.owner !== owner)) throw new Error("Some attached files are unavailable on this device.");
-  return files as Attachment[];
+  return files as StoredAttachment[];
+}
+async function collectionFiles(tx: IDBTransaction, owner: string, context: string) {
+  return (await collectionRecords(tx, owner, context)).map(readable);
 }
 export function readAttachments(owner: string, context: string) {
   return transaction("readonly", tx => collectionFiles(tx, owner, context));
@@ -68,12 +103,13 @@ export async function addAttachments(owner: string, context: string, files: File
   const tooLarge = files.find(file => file.size > ATTACHMENT_LIMITS.fileBytes);
   if (tooLarge) throw new Error(`${tooLarge.name} is too large. Each file can be up to 25 MB.`);
   const records: Attachment[] = await Promise.all(files.map(async file => ({ id: crypto.randomUUID(), name: file.name.slice(0, 255), type: file.type || "application/octet-stream", size: file.size, owner, blob: file, previewType: await rasterType(file) })));
+  const stored = await storable(records);
   return transaction("readwrite", async tx => {
     const previous = await collectionFiles(tx, owner, context);
     const next = [...previous, ...records];
     if (next.length > ATTACHMENT_LIMITS.count) throw new Error("You can attach up to 10 files. Remove a file before adding more.");
     if (next.reduce((sum, file) => sum + file.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error("Keep the combined attachments under 100 MB.");
-    records.forEach(file => tx.objectStore("files").put(file));
+    stored.forEach(file => tx.objectStore("files").put(file));
     tx.objectStore("collections").put({ key: collectionKey(owner, context), owner, ids: next.map(file => file.id) } satisfies Collection);
     return next;
   });
@@ -115,7 +151,7 @@ export function claimCreationDraft(requestId: string, nonce: string, accountId: 
     if (!record || record.nonce !== nonce) throw new Error("This draft is saved in the browser where you started it. Continue in that browser, or start a new project here.");
     if (record.owner !== "device" && record.owner !== targetOwner) throw new Error("This draft belongs to another account. Sign back into the account that started it.");
     if (record.owner === "device") {
-      const files = await collectionFiles(tx, "device", `draft:${requestId}`);
+      const files = await collectionRecords(tx, "device", `draft:${requestId}`);
       const copies = files.map(file => ({ ...file, id: crypto.randomUUID(), owner: targetOwner }));
       copies.forEach(file => tx.objectStore("files").put(file));
       tx.objectStore("collections").put({ key: collectionKey(targetOwner, `draft:${requestId}`), owner: targetOwner, ids: copies.map(file => file.id) } satisfies Collection);
@@ -161,9 +197,10 @@ async function pruneBuilderSnapshots(tx: IDBTransaction, owner: string, now: num
 
 /** Retain exact source references before sending. Removing a project selection
  * cannot mutate an authorized request; the bounded snapshot owns those blobs. */
-export function retainBuilderAttachmentSnapshot(owner: string, context: string, actionKey: string, files: readonly Attachment[]) {
+export async function retainBuilderAttachmentSnapshot(owner: string, context: string, actionKey: string, files: readonly Attachment[]) {
+  if (files.some(file => file.owner !== owner)) throw new Error("These sources belong to another account.");
+  const stored = await storable(files);
   return transaction("readwrite", async tx => {
-    if (files.some(file => file.owner !== owner)) throw new Error("These sources belong to another account.");
     const key = collectionKey(owner, requestContext(context, actionKey));
     const store = tx.objectStore("collections");
     const existing = await requestValue<Collection | undefined>(store.get(key));
@@ -173,7 +210,14 @@ export function retainBuilderAttachmentSnapshot(owner: string, context: string, 
       const now = Date.now();
       const collections = await requestValue<Collection[]>(store.getAll());
       const createdAt = Math.max(now, ...collections.filter(item => item.owner === owner && item.builderRequest).map(item => item.builderRequest!.createdAt + 1));
-      files.forEach(file => tx.objectStore("files").put(file));
+      // Write only copies that are missing. Firefox ties a Blob read from IndexedDB to its stored record:
+      // rewriting a record that already exists makes every Blob already read from it unreadable
+      // ("The operation was aborted"), which would break the files the composer is about to send again.
+      for (const file of stored) {
+        const current = await requestValue<StoredAttachment | undefined>(tx.objectStore("files").get(file.id));
+        if (current && current.owner !== owner) throw new Error("These sources belong to another account.");
+        if (!current) tx.objectStore("files").put(file);
+      }
       store.put({ key, owner, ids, builderRequest: { context, actionKey, createdAt, expiresAt: now + BUILDER_SNAPSHOT_RETENTION.lifetimeMs } } satisfies Collection);
     }
     await pruneBuilderSnapshots(tx, owner, Date.now());

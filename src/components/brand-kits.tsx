@@ -4,6 +4,7 @@ import { AlertTriangle, Globe, ImagePlus, Loader2, Palette, Plus, Trash2, X } fr
 import { BRAND_COLOR_ROLES, BRAND_FONTS, BrandKitSchema, brandFont, brandWarnings, COLOR_ROLE_LABELS, contrast, emptyBrandKit, resolvedColors, type BrandColorRole, type BrandKit, type BrandKitInput } from "@/lib/brand/kit";
 import { brandRequest, type BrandKitList, type SavedBrandKit } from "./brand-kit-api";
 import { FONT_SUBSETS, UNICODE_RANGES, type FontSubset } from "@/lib/builder/fonts";
+import { focusReturnTarget } from "@/lib/focus-return";
 import "@/app/brand-kits.css";
 
 const OWN = "own";
@@ -144,7 +145,7 @@ function KitEditor({ accountId, path, target, title, initial, saved, onClose, on
 
   const close = useCallback(() => { if (!busy) onClose(); }, [busy, onClose]);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = focusReturnTarget();
     dialog.current?.querySelector<HTMLElement>("input, button")?.focus();
     const key = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
     document.addEventListener("keydown", key);

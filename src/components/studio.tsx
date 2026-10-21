@@ -75,6 +75,7 @@ import { PREVIEW_HISTORY_KEY } from "@/lib/builder/preview-route";
 import { opensAccountProject, readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
 import { DEFAULT_LIBRARY_SCOPE, readLibraryQuery, withLibraryQuery, type LibraryScope } from "@/lib/projects/library-card-meta";
 import { restoreContentVersion } from "@/lib/restore-content-version";
+import { focusReturnTarget } from "@/lib/focus-return";
 import {
   ArrowDown,
   ArrowLeft,
@@ -1250,7 +1251,7 @@ function Modal({
   const ref = useRef<HTMLDivElement>(null);
   const closeFromKeyboard = useEffectEvent(() => close());
   useEffect(() => {
-    const prev = document.activeElement as HTMLElement;
+    const prev = focusReturnTarget();
     const focusable = () =>
       Array.from(
         ref.current?.querySelectorAll<HTMLElement>(

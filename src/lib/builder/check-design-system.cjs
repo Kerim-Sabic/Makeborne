@@ -164,6 +164,10 @@ check("quality gates: report missing contracts once, accept compliant and one-li
   const noReduce = new Map([["src/m.css", "@keyframes spin { to { transform: rotate(1turn) } }"]]);
   assert.match(qualityProblems({ files: noReduce, changed: new Set(noReduce.keys()) }).join(" "), /no @media \(prefers-reduced-motion: reduce\)/);
   const images = new Map([["src/Hero.tsx", '<img src="/images/hero.webp" alt="Bread" onLoad={() => ready()} />\n<img\n  src="/images/side.webp"\n  width="1024"\n  height="1536"\n  alt=""\n/>']]);
+  const bars = new Map([["src/m.css", ".callbar { position: fixed; bottom: 0; left: 0; right: 0 } .hdr { position: sticky; top: 0 } .fab{position:fixed;right:16px;bottom:16px}"]]);
+  const barProblems = qualityProblems({ files: bars, changed: new Set(bars.keys()) }).join(" ");
+  assert.match(barProblems, /Remove the fixed bottom bar or floating button \(\.callbar, \.fab\)/);
+  assert.doesNotMatch(barProblems, /\.hdr/, "a sticky header is fine");
   const unsized = qualityProblems({ files: images, changed: new Set(images.keys()) }).join(" ");
   assert.match(unsized, /\/images\/hero\.webp/);
   assert.doesNotMatch(unsized, /side\.webp/);
@@ -196,7 +200,18 @@ check("design seed: deterministic, fitted to the industry and spread across proj
   assert.ok((archetypes["Type as image"] ?? 0) / 400 < 0.15, "the over-used archetype is rarely suggested");
   assert.ok(Math.max(...Object.values(archetypes)) / 400 < 0.45 && Object.keys(archetypes).length >= 4, JSON.stringify(archetypes));
   assert.ok(pairings.size >= 8, `pairings ${pairings.size}`);
+  for (let index = 0; index < 200; index++) {
+    const quiet = designSeed({ seed: `q-${index}`, brief: index % 2 ? "Employment solicitors in Manchester" : "A bookkeeping app for freelancers in public beta", images: true });
+    assert.equal(quiet.tone, "quiet");
+    assert.notEqual(quiet.ground, "dark", "quiet subjects never get a dark ground");
+    assert.doesNotMatch(quiet.motion, /marquee|depth/);
+    assert.doesNotMatch(quiet.compositions.join(" "), /bento|stat band/);
+    const loud = designSeed({ seed: `l-${index}`, brief: "A basement club night with gigs and DJs", images: false });
+    assert.equal(loud.tone, "loud");
+  }
   const block = designSeedBlock({ seed: "x", brief: "Climbing gym", images: false, brand: true });
+  assert.match(block, /- Tone: quiet: a light ground/);
+  assert.match(block, /- Motif: one quiet visual motif/);
   assert.match(block, /^<design_seed>[\s\S]*the brand kit[\s\S]*<\/design_seed>$/);
   assert.match(BUILDER_SYSTEM, /<design_seed>/);
 });

@@ -2,7 +2,7 @@
  * Run: node scripts/check-publish-output-browser.cjs [--baseline=<git rev>]  (SHOTS_DIR=<dir> saves 1440/375/320 screenshots)
  * --baseline bundles every src/ file from that revision instead (files new since then come from the working copy), to show what the earlier code lacks. */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs"), { execFileSync } = require("node:child_process");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const baseline = process.argv.find(arg => arg.startsWith("--baseline="))?.slice("--baseline=".length) ?? null;
 const shots = process.env.SHOTS_DIR ? path.resolve(process.env.SHOTS_DIR) : null;
@@ -79,7 +79,7 @@ async function main() {
   const server = createServer((req, res) => { const script = req.url === "/fixture.js"; res.setHeader("Content-Type", script ? "text/javascript" : "text/html"); res.end(script ? js : html); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   if (shots) fs.mkdirSync(shots, { recursive: true });
   const failures = [];
   const results = [];
@@ -170,11 +170,14 @@ async function main() {
       await page.getByRole("button", { name: "Publish reviewed website" }).click();
       await page.getByText("Your reviewed website is live.").waitFor();
       assert.deepEqual(writes, [`POST /api/cloud/workspaces/${ids.workspace}/artifacts/${ids.artifact}/publication`], "one promote request");
+      // Wait for the published report and refreshed header before clicking in
+      // the panel whose prepared iframe has just been removed. Assert the same
+      // final state in every engine, without a timing sleep or weaker checks.
+      assert.match(await page.getByRole("region", { name: "Publish report" }).locator(".publish-report-heading").innerText(), /Published version 3 · 2 pages/, "the report stays for the published version");
+      await page.getByText("Live version 3", { exact: true }).waitFor();
       await page.getByRole("button", { name: "Copy link" }).click();
       await page.getByText("Website address copied.").waitFor();
       assert.equal(await page.evaluate(() => window.copied), "https://sites.makeborne.com/ovenbird-test");
-      assert.match(await page.getByRole("region", { name: "Publish report" }).locator(".publish-report-heading").innerText(), /Published version 3 · 2 pages/, "the report stays for the published version");
-      await page.getByText("Live version 3", { exact: true }).waitFor();
       assert.equal(await page.locator(".version-facts-notice").innerText(), "", "nothing newer is waiting once version 3 is live");
       await capture(page, "2-published-copy-link", ".website-publish");
     });
@@ -203,6 +206,8 @@ async function main() {
       await openEditor(page); await openPublish(page);
       const claims = page.getByRole("region", { name: "Claims to confirm before publishing" });
       await claims.waitFor();
+      // The list covers the prepared pages once the preparation status has loaded (it answers later in WebKit).
+      await claims.getByText(/and its prepared pages\.$/).waitFor();
       const text = await claims.innerText();
       assert.match(text, /Prices and offers/); assert.match(text, /Awards and press/); assert.match(text, /Contact details and addresses/); assert.match(text, /Opening hours/);
       await claims.getByText("Prices and offers").click();
@@ -251,7 +256,7 @@ async function main() {
     });
   } finally { await browser.close(); server.close(); }
   const items = [...new Set(results.map(result => result.item))];
-  console.log(`\n${results.filter(result => result.pass).length}/${results.length} mounted publishing/output checks passed${baseline ? ` against baseline ${baseline}` : ""} (Chromium, routed API, nothing published).`);
+  console.log(`\n${results.filter(result => result.pass).length}/${results.length} mounted publishing/output checks passed${baseline ? ` against baseline ${baseline}` : ""} (${engineLabel}, routed API, nothing published).`);
   if (baseline) for (const item of items) console.log(`baseline ${item}: ${results.filter(result => result.item === item && !result.pass).length ? "fails (expected before the change)" : "passes"}`);
   if (failures.length && !baseline) process.exitCode = 1;
 }

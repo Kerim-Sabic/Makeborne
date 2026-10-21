@@ -3,7 +3,7 @@
  * code shown in the editor, names the version it read, and marks its results out
  * of date when that code changes. Opening a result only moves the editor; it
  * never edits, formats or saves anything. */
-import {useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent, type ReactNode} from "react";
+import {useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode} from "react";
 import {FileCode2, LockKeyhole, RefreshCw, Search, X} from "lucide-react";
 import type {WebsiteProjectSource} from "@/lib/projects/website-source";
 import {locateHit, searchIsCurrent, searchedLabel, searchSource, sourceFingerprint, SOURCE_SEARCH_LIMITS, type SearchScope, type SourceSearchResult} from "@/lib/projects/source-search";
@@ -62,6 +62,8 @@ export default function SourceSearchPanel({source, subject, onOpenFile, onOpenLi
     setNotice(`Opened ${path}.`);
     onOpenFile(path);
   }
+  // Keep focus on the clicked result so arrow keys reach the next one: Safari doesn't focus a button on click.
+  const keep = (event: MouseEvent<HTMLButtonElement>) => event.currentTarget.focus({ preventScroll: true });
   function move(event: KeyboardEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
     if (!target.matches("[data-search-result]")) return;
@@ -101,7 +103,7 @@ export default function SourceSearchPanel({source, subject, onOpenFile, onOpenLi
       {nothing && <p className="sse-empty">No {result.scope === "names" ? "file names match" : result.scope === "content" ? "code matches" : "file names or code match"} “{result.query}” in this version.{result.caseSensitive ? " Try turning off Match case." : result.scope !== "all" ? " Try searching All." : ""}</p>}
       {result.names.length > 0 && <section aria-label="File name matches">
         <h4>File names <span>{result.names.length}</span></h4>
-        <ul>{result.names.map(item => <li key={item.id}><button type="button" data-search-result title={item.path} onClick={() => openFile(item.path)}>
+        <ul>{result.names.map(item => <li key={item.id}><button type="button" data-search-result title={item.path} onClick={event => { keep(event); openFile(item.path); }}>
           {item.managed ? <LockKeyhole size={13} aria-hidden="true" /> : <FileCode2 size={13} aria-hidden="true" />}
           <span className="sse-path"><strong>{item.basename}</strong>{(item.directory || item.duplicate) && <span>{item.directory || "project root"}</span>}</span>{item.managed && <em>Managed</em>}
         </button></li>)}</ul>
@@ -110,12 +112,12 @@ export default function SourceSearchPanel({source, subject, onOpenFile, onOpenLi
       {result.files.length > 0 && <section aria-label="Code matches">
         <h4>In code <span>{plural(result.totals.contentFiles, "file")}</span></h4>
         <ul>{result.files.map(file => <li key={file.id} className="sse-file">
-          <button type="button" data-search-result title={file.path} onClick={() => openFile(file.path)} aria-label={`${file.path}, ${plural(file.occurrences, "match", "matches")}`}>
+          <button type="button" data-search-result title={file.path} onClick={event => { keep(event); openFile(file.path); }} aria-label={`${file.path}, ${plural(file.occurrences, "match", "matches")}`}>
             {file.managed ? <LockKeyhole size={13} aria-hidden="true" /> : <FileCode2 size={13} aria-hidden="true" />}
             <span className="sse-path"><strong>{file.basename}</strong>{file.directory && <span>{file.directory}</span>}</span>
             <em>{file.occurrences.toLocaleString("en")}</em>
           </button>
-          <ul>{file.hits.map(hit => <li key={hit.id}><button type="button" data-search-result className="sse-hit" onClick={() => openLine(file.path, hit.line, hit.column)}
+          <ul>{file.hits.map(hit => <li key={hit.id}><button type="button" data-search-result className="sse-hit" onClick={event => { keep(event); openLine(file.path, hit.line, hit.column); }}
             aria-label={`${file.path} line ${hit.line}${hit.matches > 1 ? `, ${hit.matches} matches` : ""}: ${hit.parts.map(part => part.text).join("")}`}>
             <span className="sse-line" aria-hidden="true">{hit.line}</span>
             <code aria-hidden="true">{hit.clippedStart && "…"}{hit.parts.map((part, index) => part.match ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>)}{hit.clippedEnd && "…"}</code>

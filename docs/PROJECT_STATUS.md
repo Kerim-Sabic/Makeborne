@@ -2,7 +2,7 @@
 
 The owner now authorizes publishing the tested combined app updates to makeborne.com. The combined branch contains Claude86cb4b6 plus Codex's qualified billing/recovery fixes. This is a gated app update, not permission to activate unqualified checkout, automatic charging, image models, trusted publication or mail automation. Existing production AI spending limits remain disabled.
 
-Current execution and exact evidence: docs/release-review/tested-app-release-20261021.md; docs/AGENT_HANDOFF.md. Verified baseline: main d14bf30, production94 migrations, staging105. Production dry run lists11 pending. M17 requires compatible code to serve actual traffic before its migration; use the phased maintenance procedure. Historical counts/holds below do not describe the new window. Stop on a failed current gate; do not claim full commercial launch readiness from an app update.
+Completed execution and exact evidence: docs/release-review/tested-app-release-20261021.md; docs/AGENT_HANDOFF.md. Qualified combined app is live at main70a1d91 (normal PR12 plus CSS-only PR13); actual production alias and READY deployment verified. Production94→105 completed in the reviewed8/code-first/3 order with backup, conserved data/settings and9→9 security warnings. All181 harnesses/lint/typecheck/build and final main CI pass. Final public12 browser checks, owner System/Health/library checks and continuous30-minute availability/error watch pass. Existing unqualified services remain off, especially provider spending, checkout and trusted publication. Historical counts/holds below do not describe this completed window; this is not full commercial-launch readiness.
 
 ---
 
@@ -97,3 +97,15 @@ The additive59th migration was included in the normal/failure/interruption rehea
 ## Historical record
 
 Earlier superseded counts, decisions and rollout reports are preserved in `docs/release-review/project-status-history-20261013-0625.md`. Use this page for current status and the handoff for active ownership, not an older embedded recommendation that conflicts with the owner's required launch scope.
+
+
+## 21 October service qualification
+AI/image integration, document exports and real cloud publishing/restart recovery passed for source54449ae; two renderer defects fixed locally. Commercial launch remains blocked by pending fresh sandbox purchase consent/evidence and bound monthly renewal/failure evidence. Production stays70a1d91 with unqualified features OFF. See docs/release-review/launch-services-qualification-20261021.md. Claude8c773a8 additions are not covered by this candidate's cloud receipts.
+
+
+## 21October recovery follow-up (local/staging only)
+Missing-first-webhook recovery and refund scheduling fixes are verified on staged candidatee45eaa50cf8527c367212df67f47bed4e63daced.185/185offline, sixSQLsuites and new3-session combined-image cloud test pass. Real29sandbox fullyrefunded/canceled, net0; cleanupdone. See docs/release-review/checkout-recovery-and-cloud-20261021.md. Production70a1d91 unchanged by this task. Actualmonthlyrenewal/failure andproductiongoldenpublishing remain gates; no activationapproval.
+
+
+## Codex publishing qualification update — 21 October 2026
+Current-source staging publishing/recovery, preview/public parity, phone form→CRM, unpublish/republish,20MB broker and four full-chain SQL boundary suites pass. Eight test VMs stopped and temporary access cleaned. See docs/release-review/cloud-publishing-final-20261021.md and launch-go-no-go-20261021.md. Production unchanged; actual monthly renewal/failure, production scoped setup/golden test, final CI and activation approval remain open. No paid AI calls this run; new2USD cloud bound closed/retained pending invoice.

@@ -1,3 +1,5 @@
+> Historical baseline: superseded by [Renewal and publishing readiness](renewal-publishing-readiness-20261021.md). The94-migration/11-pending inventory below is historical; current read-only baseline is105/two.
+
 # Production publishing preparation — 21 October 2026
 
 Status: NOT activated; production approval still required. This report is preparation, not a deployment authorization or claim of readiness.

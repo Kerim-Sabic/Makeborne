@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Real IndexedDB and mounted builder; APIs mocked, no provider calls. */
 const assert = require('node:assert/strict'), path = require('node:path');
-const {build} = require('esbuild'), {chromium} = require('playwright'), {createServer} = require('node:http');
+const {build} = require('esbuild'), { browserType } = require('./browser-engine.cjs'), {createServer} = require('node:http');
 const ids = {account:'11111111-1111-4111-8111-111111111111', other:'99999999-9999-4999-8999-999999999999', workspace:'22222222-2222-4222-8222-222222222222', artifact:'33333333-3333-4333-8333-333333333333', operation:'44444444-4444-4444-8444-444444444444'};
 const fixture = `import React,{useState}from'react';import{createRoot}from'react-dom/client';import LiveBuilder from'./src/components/live-builder';import * as storage from'./src/lib/attachments';import{prepareBuilderAttachments}from'./src/lib/builder/attachments';
 const ids=${JSON.stringify(ids)};window.sources=storage;window.prepare=prepareBuilderAttachments;window.ids=ids;window.context=storage.projectAttachmentKey(ids.account+':'+ids.workspace+':'+ids.artifact);
@@ -11,14 +11,14 @@ async function main(){
  const output=await build({stdin:{contents:fixture,loader:'jsx',resolveDir:process.cwd()},write:false,bundle:true,platform:'browser',jsx:'automatic',define:{'process.env':'{}'},plugins:[{name:'fixture',setup(b){
   b.onResolve({filter:/use-plan-mode|plan-card|design-capture|cloud-api/},a=>({path:a.path,namespace:'mock'}));
   b.onLoad({filter:/use-plan-mode/,namespace:'mock'},()=>({contents:planner,loader:'js',resolveDir:process.cwd()}));
-  b.onLoad({filter:/plan-card/,namespace:'mock'},()=>({contents:`import React from'react';export default function PlanCard(p){return <button disabled={p.busy} onClick={()=>p.onBuild(p.plan,'light')}>Build approved plan</button>}`,loader:'jsx',resolveDir:process.cwd()}));
+  b.onLoad({filter:/plan-card/,namespace:'mock'},()=>({contents:`import React from'react';import{BUILDER_EFFORT}from'./src/lib/builder/pricing';export default function PlanCard(p){return <button disabled={p.busy} onClick={()=>p.onBuild(p.plan,'light',BUILDER_EFFORT.light.ceilingCredits)}>Build approved plan</button>}`,loader:'jsx',resolveDir:process.cwd()}));
   b.onLoad({filter:/cloud-api/,namespace:'mock'},()=>({contents:'export async function readCloudImage(){throw new Error("Unexpected image request")}',loader:'js'}));
   b.onLoad({filter:/design-capture/,namespace:'mock'},()=>({contents:'export async function captureDesign(){throw new Error("No visual review in attachment fixture")}',loader:'js'}));
   b.onLoad({filter:/\.css$/},()=>({contents:'',loader:'js'}));
   b.onResolve({filter:/^@\//},a=>({path:path.resolve('src',a.path.slice(2)+(a.path.endsWith('.css')?'':'.ts'))}));
  }}]});
  const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/fixture.js'?'text/javascript':'text/html');res.end(req.url==='/fixture.js'?output.outputFiles[0].contents:'<!doctype html><div id="root"></div><script src="/fixture.js"></script>')});
- await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await browserType.launch({headless:true});
  try{
   const base=`http://127.0.0.1:${server.address().port}`;const failed=[];
   async function scenario(name,run){
@@ -67,7 +67,11 @@ async function main(){
    await page.waitForFunction(()=>window.reading);await page.evaluate(()=>window.switchAccount());await page.waitForFunction(()=>!document.querySelector('.attachment-chip'));await page.evaluate(()=>window.release());await page.waitForTimeout(100);assert.equal(requests.filter(r=>r.path==='build').length,0);
   });
   await scenario('account-upload-race',async(page,requests)=>{
-   await page.evaluate(()=>{const original=Blob.prototype.arrayBuffer;Blob.prototype.arrayBuffer=function(){const read=original.bind(this);window.reading=true;return new Promise(resolve=>{window.release=async()=>resolve(await read())})};window.mount()});
+   // Hold the upload's first read until the account has switched. Later reads pass through: an engine that keeps files
+   // as bytes (WebKit ephemeral storage) reads the file a second time to save it.
+   await page.evaluate(()=>{const original=Blob.prototype.arrayBuffer;let held=false;Blob.prototype.arrayBuffer=function(){const read=original.bind(this);if(held)return read();held=true;window.reading=true;return new Promise(resolve=>{window.release=async()=>resolve(await read())})};window.mount()});
+   // Pick files only once storage is open, as a person can (the file input is disabled until then).
+   await page.locator('input[type=file]:enabled').waitFor({state:'attached'});
    await page.locator('input[type=file]').setInputFiles({name:'late.txt',mimeType:'text/plain',buffer:Buffer.from('Original account only')});await page.waitForFunction(()=>window.reading);await page.evaluate(()=>window.switchAccount());await page.evaluate(()=>window.release());
    await page.waitForFunction(async()=> (await window.sources.readAttachments('account:'+window.ids.account,window.context)).length===1);
    assert.equal(await page.locator('.attachment-chip').count(),0);assert.equal(await page.evaluate(async()=> (await window.sources.readAttachments('account:'+window.ids.other,window.sources.projectAttachmentKey(window.ids.other+':'+window.ids.workspace+':'+window.ids.artifact))).length),0);assert.equal(requests.filter(r=>r.path==='build').length,0);
@@ -77,10 +81,11 @@ async function main(){
     const s=window.sources,owner='account:'+window.ids.account,context=window.context;await window.seed();const files=await s.readAttachments(owner,context);
     for(let i=0;i<10;i++){await s.retainBuilderAttachmentSnapshot(owner,context,'action-'+i,files);await s.bindBuilderAttachmentSnapshot(owner,context,'action-'+i,'operation-'+i);}
     let oldRefused=false,crossRefused=false;try{await s.readBuilderAttachmentSnapshot(owner,context,'operation-0')}catch{oldRefused=true}try{await s.readBuilderAttachmentSnapshot('account:'+window.ids.other,context,'operation-9')}catch{crossRefused=true}
-    await s.removeAttachment(owner,context,files[0].id);const retained=await s.readBuilderAttachmentSnapshot(owner,context,'operation-9');
+    // Read the retained bytes before clearing: once cleanup deletes the stored copy, Firefox (correctly) refuses reads through an older handle.
+    await s.removeAttachment(owner,context,files[0].id);const retained=await (await s.readBuilderAttachmentSnapshot(owner,context,'operation-9'))[0].blob.text();
     await s.clearBuilderAttachmentSnapshots(owner,context);let deletedRefused=false;try{await s.readBuilderAttachmentSnapshot(owner,context,'operation-9')}catch{deletedRefused=true}
     const current=await s.addAttachments(owner,context,[new File(['new'],'current.txt',{type:'text/plain'})]);await s.retainBuilderAttachmentSnapshot(owner,context,'expires',current);await s.bindBuilderAttachmentSnapshot(owner,context,'expires','expires');const now=Date.now;Date.now=()=>now()+s.BUILDER_SNAPSHOT_RETENTION.lifetimeMs+1;let expiredRefused=false;try{await s.readBuilderAttachmentSnapshot(owner,context,'expires')}catch{expiredRefused=true}Date.now=now;
-    const db=await new Promise((resolve,reject)=>{const req=indexedDB.open('makeborne.attachments.v1',2);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)});const counts=await new Promise(resolve=>{const tx=db.transaction(['collections','files'],'readonly');const a=tx.objectStore('collections').getAll(),b=tx.objectStore('files').getAll();tx.oncomplete=()=>resolve({snapshots:a.result.filter(x=>x.builderRequest).length,files:b.result.length})});db.close();return{oldRefused,crossRefused,deletedRefused,expiredRefused,retained:await retained[0].blob.text(),current:(await s.readAttachments(owner,context))[0].name,...counts};
+    const db=await new Promise((resolve,reject)=>{const req=indexedDB.open('makeborne.attachments.v1',2);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)});const counts=await new Promise(resolve=>{const tx=db.transaction(['collections','files'],'readonly');const a=tx.objectStore('collections').getAll(),b=tx.objectStore('files').getAll();tx.oncomplete=()=>resolve({snapshots:a.result.filter(x=>x.builderRequest).length,files:b.result.length})});db.close();return{oldRefused,crossRefused,deletedRefused,expiredRefused,retained,current:(await s.readAttachments(owner,context))[0].name,...counts};
    });assert.deepEqual(result,{oldRefused:true,crossRefused:true,deletedRefused:true,expiredRefused:true,retained:'Use exactly 123 customers.',current:'current.txt',snapshots:0,files:1});
   });
   if(failed.length)throw new Error(failed.length+' attachment scenario(s) failed: '+failed.join(', '));

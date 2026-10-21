@@ -2,7 +2,7 @@
  * Run: node scripts/check-version-compare-browser.cjs [--baseline=<git rev>]  (SHOTS_DIR=<dir> saves 1440/375/320 screenshots)
  * --baseline bundles every src/ file from that revision instead (files new since then come from the working copy), to show what the earlier code lacks. */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs"), { execFileSync } = require("node:child_process");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const baseline = process.argv.find(arg => arg.startsWith("--baseline="))?.slice("--baseline=".length) ?? null;
 const shots = process.env.SHOTS_DIR ? path.resolve(process.env.SHOTS_DIR) : null;
@@ -80,7 +80,7 @@ async function main() {
   const server = createServer((req, res) => { const script = req.url === "/fixture.js"; res.setHeader("Content-Type", script ? "text/javascript" : "text/html"); res.end(script ? js : html); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   if (shots) fs.mkdirSync(shots, { recursive: true });
   const failures = [];
   const tag = baseline ? `baseline-${baseline}` : "current";
@@ -263,6 +263,6 @@ async function main() {
     }, { width, height: 820 });
   } finally { await browser.close(); server.close(); }
   if (failures.length) { console.log(`\n${failures.length} mounted version comparison checks failed.`); process.exitCode = 1; }
-  else console.log("\nAll mounted version comparison checks passed (Chromium, routed API, nothing saved or published).");
+  else console.log(`\nAll mounted version comparison checks passed (${engineLabel}, routed API, nothing saved or published).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

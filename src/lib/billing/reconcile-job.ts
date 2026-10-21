@@ -34,6 +34,7 @@ export type ReconcileJobDeps = {
   isActive: (membership: WhopMembership) => boolean;
   hasCreditRule: (planId: string) => boolean;
   companyId: string;
+  recoverCheckouts?: () => Promise<{ processed: number; recovered: number; failed: number; backlog: boolean }>;
   now?: () => number;
   log?: (event: Record<string, unknown>) => void;
 };
@@ -43,7 +44,7 @@ export type ReconcileJobOptions = { pageSize?: number; maxMemberships?: number; 
 export type ReconcileJobResult = {
   status: "skipped" | "succeeded" | "partial" | "failed"; runId: number | null;
   stats: { processed: number; failed: number; bindingMismatch: number; unknownPlan: number; observationsGranted: number;
-    paymentsRecorded: number; paymentsGranted: number; paymentsReconciled: number; paymentsNotFunded: number; paymentPagesIncomplete: number; paymentEvidenceSkipped: number; reconciledMemberships: number; reconcileGranted: number; expiryWallets: number; expiredProviderCalls: number; budgetExhausted: boolean; backlog: boolean };
+    paymentsRecorded: number; paymentsGranted: number; paymentsReconciled: number; paymentsNotFunded: number; paymentPagesIncomplete: number; paymentEvidenceSkipped: number; reconciledMemberships: number; reconcileGranted: number; expiryWallets: number; expiredProviderCalls: number; budgetExhausted: boolean; backlog: boolean; checkoutRecoveries: number; checkoutRecoveryFailures: number };
   errors: string[];
 };
 
@@ -52,7 +53,7 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
   const pageSize = options.pageSize ?? 50, maxMemberships = options.maxMemberships ?? 200, staleSeconds = options.staleSeconds ?? 20 * 3600;
   const leaseSeconds = options.leaseSeconds ?? 300, budgetMs = options.budgetMs ?? 240_000, lookbackMs = (options.paymentLookbackDays ?? 120) * 86_400_000;
   const stats: ReconcileJobResult["stats"] = { processed: 0, failed: 0, bindingMismatch: 0, unknownPlan: 0, observationsGranted: 0,
-    paymentsRecorded: 0, paymentsGranted: 0, paymentsReconciled: 0, paymentsNotFunded: 0, paymentPagesIncomplete: 0, paymentEvidenceSkipped: 0, reconciledMemberships: 0, reconcileGranted: 0, expiryWallets: 0, expiredProviderCalls: 0, budgetExhausted: false, backlog: false };
+    paymentsRecorded: 0, paymentsGranted: 0, paymentsReconciled: 0, paymentsNotFunded: 0, paymentPagesIncomplete: 0, paymentEvidenceSkipped: 0, reconciledMemberships: 0, reconcileGranted: 0, expiryWallets: 0, expiredProviderCalls: 0, budgetExhausted: false, backlog: false, checkoutRecoveries: 0, checkoutRecoveryFailures: 0 };
   const errors: string[] = [];
   const begin = await deps.rpc("makeborne_billing_job_begin", { p_job: "plan_credits", p_lease_seconds: leaseSeconds });
   if (begin.error) throw new Error(`Job lease unavailable: ${begin.error.code ?? begin.error.message ?? "error"}`);
@@ -67,6 +68,12 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
     if (errors.length < 20) errors.push(`${membershipId}: ${(error as { code?: string }).code ?? (error as Error).message ?? "error"}`);
   };
   try {
+    if (deps.recoverCheckouts) {
+      const discovery = await deps.recoverCheckouts();
+      stats.checkoutRecoveries = discovery.recovered;
+      stats.checkoutRecoveryFailures = discovery.failed;
+      stats.backlog = discovery.backlog;
+    }
     pages: while (attempted.size < maxMemberships) {
       if (now() - started > budgetMs) { stats.budgetExhausted = true; break; }
       const due = await deps.rpc("makeborne_billing_job_due_memberships", { p_limit: pageSize + attempted.size + 1, p_stale_seconds: staleSeconds });
@@ -90,13 +97,12 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
           const updated = await deps.updateMembership(row.membership_id, row.user_id, { status: membership.status, verified_until: verifiedUntil,
             period_end: membership.renewal_period_end, checked_at: new Date(now()).toISOString() });
           if (updated.error) throw Object.assign(new Error("Membership row update failed"), { code: "MEMBERSHIP_STORAGE" });
-          const observed = await deps.recordObservation(row.user_id, { membershipId: row.membership_id, planId: membership.plan.id, status: membership.status,
-            paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "reconcile" });
-          stats.observationsGranted += observed.granted;
+          let financialEvidenceComplete = true;
           if (row.needs_payments || deps.reconcilePayment) {
             const list = await deps.listPayments(row.membership_id);
             if (!list.complete) stats.paymentPagesIncomplete++;
             stats.paymentEvidenceSkipped += list.skipped;
+            financialEvidenceComplete = list.complete && list.skipped === 0;
             for (const payment of list.payments) {
               // Current state first: a refund recorded here blocks this period's allocation below.
               if (deps.reconcilePayment && Date.parse(payment.paidAt) > now() - lookbackMs) {
@@ -109,6 +115,14 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
               if (recorded.outcome !== "duplicate") stats.paymentsRecorded++;
               stats.paymentsGranted += recorded.granted;
             }
+          }
+          // Only a complete financial pass advances the daily-job checkpoint.
+          // A login checks membership status, not refunds; failed or partial
+          // payment reads must remain due on the next run.
+          if (financialEvidenceComplete) {
+            const observed = await deps.recordObservation(row.user_id, { membershipId: row.membership_id, planId: membership.plan.id, status: membership.status,
+              paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "reconcile" });
+            stats.observationsGranted += observed.granted;
           }
           stats.processed++;
           if (stats.processed % 10 === 0) await deps.rpc("makeborne_billing_job_heartbeat", { p_run: runId, p_lease_seconds: leaseSeconds });
@@ -130,7 +144,7 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
     const calls = await deps.rpc("makeborne_provider_calls_expire", { p_limit: 500 });
     if (calls.error) throw new Error(`Provider call expiry failed: ${calls.error.code ?? "error"}`);
     stats.expiredProviderCalls = Number(((calls.data ?? {}) as Record<string, unknown>).expired ?? 0);
-    const status = stats.failed > 0 || stats.bindingMismatch > 0 || stats.unknownPlan > 0
+    const status = stats.failed > 0 || stats.checkoutRecoveryFailures > 0 || stats.bindingMismatch > 0 || stats.unknownPlan > 0
       || stats.paymentPagesIncomplete > 0 || stats.paymentEvidenceSkipped > 0 || stats.budgetExhausted || stats.backlog ? "partial" : "succeeded";
     await deps.rpc("makeborne_billing_job_finish", { p_run: runId, p_status: status, p_stats: stats, p_error: errors.length ? errors.join("; ") : null });
     deps.log?.({ job: "plan_credits", status, runId, ...stats, ms: now() - started });

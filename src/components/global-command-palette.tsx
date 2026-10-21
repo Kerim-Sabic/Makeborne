@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CornerDownLeft, Search } from "lucide-react";
 import { matchCommands, type PaletteCommand } from "@/lib/command-palette";
+import { focusReturnTarget } from "@/lib/focus-return";
 import "@/app/global-command-palette.css";
 
 export type { PaletteCommand } from "@/lib/command-palette";
@@ -42,7 +43,7 @@ function PaletteDialog({ commands, onClose }: { commands: readonly PaletteComman
   const restore = useRef<Element | null>(null);
   const list = useId();
   useEffect(() => {
-    restore.current = document.activeElement;
+    restore.current = focusReturnTarget();
     input.current?.focus();
     return () => { if (restore.current instanceof HTMLElement && restore.current.isConnected) restore.current.focus(); };
   }, []);

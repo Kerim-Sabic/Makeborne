@@ -35,8 +35,11 @@ const copy = value => structuredClone(value);
     assert.equal(hash(dom(bookHtml(book, {}))), "17a7ef025d71b8621e2162c22fe13b3062596f6d5636e41bd07b6426758ee61e");
     assert.equal(hash(dom(bookHtml(book, {}, "print"))), "70e2e3e9a3805c3b9981614329280c2d405b56d52f6596e8ea71b025340f12cd");
     assert.equal(hash(dom(deckHtml(deck, {}))), "7000fc80561b345b948c5aecd0e86070790a867e7d21b8ae7a4b54a17314218e");
-    assert.equal(hash(bookHtml(book, {})), "4cf1632e9cf23aea48ede8fa67db1f8ce4e9f374109e81664bb093e033c5f8db");
-    assert.equal(hash(bookHtml(book, {}, "print")), "d8b401a9a847b3af3b3590601b30b5d452218e3988517cfd3444f2a529b0d80c");
+    // Re-pinned 2026-10-21 for the ordered-marker gutter only. Removing that
+    // exact CSS rule/comment reproduces both previous full hashes; DOM stays
+    // unchanged. check-book-list-markers.cjs reproduces the old clipping.
+    assert.equal(hash(bookHtml(book, {})), "c72ad765545615454bead0921d7ae78c67e9823c559d227bbfcc2fd6056c3660");
+    assert.equal(hash(bookHtml(book, {}, "print")), "183bf9b220227b6c1fab53ba87ed649a2dcc2329b7b30431818148a3afc2c4f8");
     assert.equal(hash(deckHtml(deck, {})), "80e227d515f053200b86463924d1ccbcbc4bdac5257f8f7db4493269b99b6685");
     assert.equal(hash(JSON.stringify(deck.slides.map((s, i) => composeSlide(deck, s, i, 2)))), "eb8405ba973264fa7e5e21657fceb953dc6c1153ee30bcfc028b2477623ddcd2");
   });

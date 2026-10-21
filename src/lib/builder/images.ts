@@ -7,6 +7,8 @@ import type { ImageClientLike } from "../ai/image-call";
 import type { ImageSize } from "../ai/prices";
 import { allowedImageModels } from "./image-router";
 import type { SourceAsset } from "./files";
+import { responsiveVariantBytes } from "./image-variants";
+import responsive from "../../../infra/project-runtime/responsive-images.cjs";
 
 export type ImageConfiguration = { model: string; models: string[]; issue: null } | { model: null; models: []; issue: string };
 /**
@@ -78,13 +80,8 @@ export async function prepareImageBytes(input: Buffer, options: { transparent?: 
   return { bytes: await source.webp({ quality: options.quality ?? 84, ...(options.quality ? { smartSubsample: true, effort: 5 } : {}) }).toBuffer(), transparent: false };
 }
 
-/** Store original bytes as a registered project asset through the caller's
- * RLS-bound client, so the existing source-asset verifier accepts it. */
-export async function storeProjectImage(client: SupabaseClient, scope: { workspaceId: string; projectId: string }, input: Buffer, provenance: Record<string, unknown>, options: { transparent?: boolean; quality?: number } = {}) {
-  const prepared = await prepareImageBytes(input, options);
-  const bytes = prepared.bytes;
-  const meta = await sharp(bytes).metadata();
-  if (!meta.width || !meta.height) throw new Error("Generated image could not be decoded.");
+/** Upload final WebP bytes and register them as a project asset (idempotent: the id is bound to the bytes). */
+async function registerImageBytes(client: SupabaseClient, scope: { workspaceId: string; projectId: string }, bytes: Buffer, provenance: Record<string, unknown>) {
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const id = assetId(scope.workspaceId, scope.projectId, sha256);
   const objectPath = `${scope.workspaceId}/${scope.projectId}/artwork/${id}.webp`;
@@ -94,21 +91,63 @@ export async function storeProjectImage(client: SupabaseClient, scope: { workspa
     const uploaded = await client.storage.from("project-assets").upload(objectPath, bytes, { contentType: "image/webp", upsert: false, cacheControl: "0" });
     if (uploaded.error && !/exists|duplicate/i.test(uploaded.error.message)) throw new Error("Image storage failed.");
     const inserted = await client.from("assets").insert({ id, workspace_id: scope.workspaceId, project_id: scope.projectId, object_path: objectPath,
-      content_type: "image/webp", sha256, provenance: { ...provenance, byteLength: bytes.length, width: meta.width, height: meta.height, background: prepared.transparent ? "transparent" : "opaque" } });
+      content_type: "image/webp", sha256, provenance: { ...provenance, byteLength: bytes.length } });
     if (inserted.error && inserted.error.code !== "23505") throw new Error("Image registration failed.");
   }
-  return { id, sha256, bytes: bytes.length, width: meta.width, height: meta.height, transparent: prepared.transparent };
+  return { id, sha256 };
+}
+
+/** Store original bytes as a registered project asset through the caller's
+ * RLS-bound client, so the existing source-asset verifier accepts it. */
+export async function storeProjectImage(client: SupabaseClient, scope: { workspaceId: string; projectId: string }, input: Buffer, provenance: Record<string, unknown>, options: { transparent?: boolean; quality?: number } = {}) {
+  const prepared = await prepareImageBytes(input, options);
+  const bytes = prepared.bytes;
+  const meta = await sharp(bytes).metadata();
+  if (!meta.width || !meta.height) throw new Error("Generated image could not be decoded.");
+  const { id, sha256 } = await registerImageBytes(client, scope, bytes, { ...provenance, width: meta.width, height: meta.height, background: prepared.transparent ? "transparent" : "opaque" });
+  return { id, sha256, bytes: bytes.length, width: meta.width, height: meta.height, transparent: prepared.transparent, data: bytes };
+}
+
+/**
+ * Downscaled copies of a stored image (srcset widths, see responsive-images.cjs),
+ * each registered as its own asset through the same RLS-bound client and placed
+ * at public/images/_r/<sha16>-<W>x<H>/<w>.webp, so the authorised asset route,
+ * the source-asset verifier, the trusted build and the site host treat them like
+ * any project image. Best effort: `fits` (the site's image budget) can decline
+ * them, and a failure leaves the original usable on its own.
+ */
+export async function storeResponsiveVariants(client: SupabaseClient, scope: { workspaceId: string; projectId: string },
+  original: { id: string; path: string; sha256: string; width: number; height: number; data: Buffer },
+  options: { quality?: number; fits?: (added: { bytes: number }[]) => boolean } = {}): Promise<SourceAsset[]> {
+  if (!responsive.isOriginalPath(original.path)) return [];
+  try {
+    const variants = await responsiveVariantBytes(original.data, { quality: options.quality });
+    if (!variants.length || (options.fits && !options.fits(variants.map(variant => ({ bytes: variant.bytes.length }))))) return [];
+    const stored: SourceAsset[] = [];
+    for (const variant of variants) {
+      const { id, sha256 } = await registerImageBytes(client, scope, variant.bytes, { kind: "responsive-variant", of: original.id, width: variant.width, height: variant.height });
+      stored.push({ id, path: responsive.variantPath(original, variant.width), sha256, bytes: variant.bytes.length, mediaType: "image/webp" });
+    }
+    return stored;
+  } catch (error) {
+    console.warn(`Responsive copies skipped for ${original.path}: ${(error as Error).message}`);
+    return [];
+  }
 }
 
 /** The router's choice for one image, recorded on the stored asset. */
 export type ImageRouteRecord = { model: string; quality: string; size: string; reason: string; text: string | null; costMicrousd: number | null; outputTokens: number | null; overrun: boolean };
 export type GeneratedImageRequest = { name: string; prompt: string; model: string; kind?: string; transparent?: boolean; route?: ImageRouteRecord };
 /** What the builder tells the model about a stored image, besides its URL. */
-export type GeneratedImage = SourceAsset & { url: string; width?: number; height?: number; transparent?: boolean };
+export type GeneratedImage = SourceAsset & { url: string; width?: number; height?: number; transparent?: boolean; variants?: SourceAsset[] };
 
-/** Registers generated bytes as a project image whose public URL is `/images/<name>.webp`. */
-export async function storeGeneratedImage(client: SupabaseClient, scope: { workspaceId: string; projectId: string }, request: GeneratedImageRequest, bytes: Buffer): Promise<GeneratedImage> {
+/** Registers generated bytes as a project image whose public URL is `/images/<name>.webp`.
+ * With `options.variants` (website builds) it also stores the responsive copies
+ * that the site's image budget callback accepts. */
+export async function storeGeneratedImage(client: SupabaseClient, scope: { workspaceId: string; projectId: string }, request: GeneratedImageRequest, bytes: Buffer,
+  options: { variants?: (added: { bytes: number }[]) => boolean } = {}): Promise<GeneratedImage> {
   const stored = await storeProjectImage(client, scope, bytes, { kind: "generated", model: request.model, prompt: request.prompt.slice(0, 2000), ...(request.kind ? { imageKind: request.kind } : {}), ...(request.route ? { route: request.route } : {}) }, { transparent: request.transparent, quality: GENERATED_PHOTO_QUALITY });
   const path = `public/images/${request.name}.webp`;
-  return { id: stored.id, path, sha256: stored.sha256, bytes: stored.bytes, mediaType: "image/webp", url: `/images/${request.name}.webp`, width: stored.width, height: stored.height, transparent: stored.transparent };
+  const variants = options.variants ? await storeResponsiveVariants(client, scope, { ...stored, path }, { quality: GENERATED_PHOTO_QUALITY, fits: options.variants }) : undefined;
+  return { id: stored.id, path, sha256: stored.sha256, bytes: stored.bytes, mediaType: "image/webp", url: `/images/${request.name}.webp`, width: stored.width, height: stored.height, transparent: stored.transparent, ...(variants ? { variants } : {}) };
 }

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted MailCenter in Chromium: after a mailbox connects, the message names only the capabilities the overview confirms (audit capability states). The mail API is answered by Playwright routes with fictional data; no OAuth, no send. Local only. Run: node scripts/check-mail-connected-browser.cjs */
-const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 // The workspace can be switched in place (same component instance) to test late answers from the previous context.
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
@@ -19,7 +19,7 @@ async function main() {
   const server = createServer((req, res) => { res.setHeader("Content-Type", req.url === "/fixture.js" ? "text/javascript" : "text/html"); res.end(req.url === "/fixture.js" ? output.outputFiles[0].contents : '<!doctype html><div id="root"></div><script src="/fixture.js"></script>'); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
     const page = await browser.newPage();
@@ -68,6 +68,6 @@ async function main() {
     assert.match(await page.locator(".mc").innerText(), /Gmail sends only/);
     pass("a late overview from the previous workspace is ignored; the new workspace's capabilities stay");
   } finally { await browser.close(); server.close(); }
-  console.log(`${passed} mounted mail connection checks passed (Chromium, routed API, no network).`);
+  console.log(`${passed} mounted mail connection checks passed (${engineLabel}, routed API, no network).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

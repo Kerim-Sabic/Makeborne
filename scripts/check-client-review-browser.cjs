@@ -7,7 +7,7 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const { emptyDocument } = require("../src/lib/documents/editor.ts");
 const { DocumentSourceSchema } = require("../src/lib/documents/schema.ts");
 const { projectDocument } = require("../src/lib/documents/project.ts");
-const { chromium } = require("playwright");
+const { browserType } = require("./browser-engine.cjs");
 const out = path.resolve("work/client-review-browser"); fs.mkdirSync(out, { recursive: true });
 const assetId = "11111111-1111-4111-8111-111111111111", token = "b".repeat(43);
 const docs = {};
@@ -30,7 +30,7 @@ fs.writeFileSync(path.join(out,"entry.tsx"), `import React from 'react'; import 
  const base=`http://127.0.0.1:${server.address().port}`;
  let browser;
  try {
-  browser=await chromium.launch({headless:true});
+  browser=await browserType.launch({headless:true});
   for(const kind of ['deck','book']){
    const page=await browser.newPage({viewport:{width:1440,height:1100}});
    let release; const gate=new Promise(resolve=>{release=resolve;}); let requested=false;
@@ -41,7 +41,10 @@ fs.writeFileSync(path.join(out,"entry.tsx"), `import React from 'react'; import 
    release();
    await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Approve');return b&&!b.disabled;});
    assert.ok(requested);
-   const frame=page.frames().find(frame=>frame.url()==='about:srcdoc');assert.ok(frame);
+   // The review's srcdoc frame, found through its element, once its document has parsed: WebKit loads srcdoc after
+   // the page has enabled Approve and reports about:blank until then.
+   const frame=await (await page.locator('iframe').elementHandle()).contentFrame();assert.ok(frame);
+   await frame.waitForFunction(()=>location.href==='about:srcdoc'&&document.readyState==='complete');
    assert.ok(await frame.locator('img').count()>0);
    assert.ok(await frame.locator('img').evaluateAll(images=>images.every(image=>image.complete&&image.naturalWidth>0)));
    assert.equal(await frame.locator('details,script').count(),0);
@@ -49,7 +52,10 @@ fs.writeFileSync(path.join(out,"entry.tsx"), `import React from 'react'; import 
    if(kind==='deck'){assert.equal(await frame.locator('.slide').count(),2);assert.ok(await frame.locator('svg rect').count()>0);}
    else{assert.equal(await frame.locator('.cover-art').count(),1);assert.equal(await frame.locator('#chapter-opening').count(),1);assert.ok(await frame.locator('.chapter strong').count()>0);}
    await page.getByRole('button',{name:'Pin to a spot',exact:true}).click();
-   await frame.locator(kind==='deck'?'.slide':'.cover').first().click({position:{x:100,y:100}});
+   // A real pointer click at a spot on the slide/cover: it lands in the frame where the browser runs the host's frame
+   // listeners (Chromium, Firefox) and on the host's pin layer where it doesn't (WebKit). Both must place the pin.
+   const spot=await frame.locator(kind==='deck'?'.slide':'.cover').first().boundingBox();await page.mouse.click(spot.x+100,spot.y+100);
+   await page.getByRole('button',{name:'Remove pin',exact:true}).waitFor();await frame.locator('[data-mb-pin="draft"]').waitFor({state:'attached'});
    assert.ok(await page.getByRole('button',{name:'Remove pin',exact:true}).count()===1);
    await page.screenshot({path:path.join(out,`${kind}.png`),fullPage:true});
    console.log(`PASS browser ${kind}: real canonical layout, decoded artwork, notes absent, approval gate and pin placement`);
