@@ -111,7 +111,7 @@ async function main() {
   const scenario = async (name, run, viewport = { width: 1280, height: 1000 }) => {
     state = { version: 1, requests: [], builds: [], unexpected: [], errors: [], operation: null };
     const current = state, context = await browser.newContext({ viewport }), page = await context.newPage(), errors = [];
-    page.setDefaultTimeout(8000); page.on("pageerror", error => errors.push(error.message));
+    page.setDefaultTimeout(15000); /* parallel three-engine runs (run-browser-checks --jobs 3) can exceed 8 s in WebKit */ page.on("pageerror", error => errors.push(error.message));
     await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/, route => route.abort());
     await page.addInitScript(([key, value]) => { if (!localStorage.getItem(key)) localStorage.setItem(key, value); }, [`makeborne.advisor-chats.v2:${ids.actor}`, JSON.stringify(conversation)]);
     try {
