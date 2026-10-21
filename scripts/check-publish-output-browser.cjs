@@ -170,11 +170,14 @@ async function main() {
       await page.getByRole("button", { name: "Publish reviewed website" }).click();
       await page.getByText("Your reviewed website is live.").waitFor();
       assert.deepEqual(writes, [`POST /api/cloud/workspaces/${ids.workspace}/artifacts/${ids.artifact}/publication`], "one promote request");
+      // Wait for the published report and refreshed header before clicking in
+      // the panel whose prepared iframe has just been removed. Assert the same
+      // final state in every engine, without a timing sleep or weaker checks.
+      assert.match(await page.getByRole("region", { name: "Publish report" }).locator(".publish-report-heading").innerText(), /Published version 3 · 2 pages/, "the report stays for the published version");
+      await page.getByText("Live version 3", { exact: true }).waitFor();
       await page.getByRole("button", { name: "Copy link" }).click();
       await page.getByText("Website address copied.").waitFor();
       assert.equal(await page.evaluate(() => window.copied), "https://sites.makeborne.com/ovenbird-test");
-      assert.match(await page.getByRole("region", { name: "Publish report" }).locator(".publish-report-heading").innerText(), /Published version 3 · 2 pages/, "the report stays for the published version");
-      await page.getByText("Live version 3", { exact: true }).waitFor();
       assert.equal(await page.locator(".version-facts-notice").innerText(), "", "nothing newer is waiting once version 3 is live");
       await capture(page, "2-published-copy-link", ".website-publish");
     });
