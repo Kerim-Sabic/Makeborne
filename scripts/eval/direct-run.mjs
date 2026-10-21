@@ -132,7 +132,8 @@ try {
       prep.message = questionsModule.briefWithAnswers(brief.brief, asked, answers);
       prep.design = questionsModule.designAnswers(asked, answers);
     }
-    if (enhancing) {
+    // Like the studio: only short briefs are enhanced (detailed ones build from the client's words and answers).
+    if (enhancing && enhancedModule.shouldEnhance(brief.brief)) {
       const enhancerBoundUsd = enhancedModule.ENHANCER_CREDITS * RATE;
       const enhancerReservation = await budget.reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
       const enhanceSpend = new RunSpend({ run: `${values.run}/${id}/enhance`, providerCapMicrousd: Math.round(enhancerBoundUsd * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 50_000 });

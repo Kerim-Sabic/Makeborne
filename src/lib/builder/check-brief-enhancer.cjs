@@ -10,7 +10,7 @@ Module._load = function(name, parent, main) {
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 globalThis.fetch = async () => { throw new Error("Network forbidden"); };
 const { parseEnhancedBrief, enhanceBrief, enhancerPrompt, ENHANCER_MODEL } = require("./brief-enhancer.ts");
-const { renderEnhancedBrief, requiredSections, enhancedBriefBlock, briefTone, designAnswersBlock, ENHANCER_CREDITS, BuildBriefSchema } = require("./enhanced-brief.ts");
+const { renderEnhancedBrief, requiredSections, enhancedBriefBlock, briefTone, designAnswersBlock, ENHANCER_CREDITS, BuildBriefSchema, shouldEnhance, ENHANCE_MAX_WORDS } = require("./enhanced-brief.ts");
 const { designSeed, designSeedBlock } = require("./design-seed.ts");
 const { qualityProblems, missingSections } = require("./quality-gates.ts");
 const { QUICK_BAR_PATTERN, BUILDER_SYSTEM } = require("./prompt.ts");
@@ -104,6 +104,10 @@ const reply = {
     const client = fs.readFileSync(path.join(src, "components", "live-builder.tsx"), "utf8");
     assert.match(client, /ceiling \+ \(enhancesFirst && mode !== "plan" \? ENHANCER_CREDITS : 0\)/, "the shown maximum includes the enhancement");
     assert.match(client, /\/api\/build\/enhance/);
+    // Only short briefs are enhanced: detailed ones lost every blind comparison with the enhancement.
+    assert.equal(ENHANCE_MAX_WORDS, 60); assert.ok(shouldEnhance("bakery site") && shouldEnhance("word ".repeat(60)) && !shouldEnhance("word ".repeat(61)) && !shouldEnhance("  "));
+    assert.match(client, /const enhancesFirst = website && firstBuild && shouldEnhance\(draft\);/);
+    assert.match(client, /!shouldEnhance\(original\)\) \{ void submitSources\(text, requestMode, website && Object\.keys\(design\)\.length \? \{ design \} : undefined\)/, "a detailed brief starts at once, with its answers");
   });
 
   await check("the build binds the approved brief and answers to the operation: new requests only, read back for every later stage", () => {

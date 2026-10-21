@@ -15,6 +15,11 @@ import { designAnswerLabels, type DesignAnswers } from "./brief-questions";
 /** Credits the enhancement may charge (its hold); added to the maximum shown before a first build. */
 export const ENHANCER_CREDITS = 1;
 export const MAX_ENHANCED_BRIEF_CHARS = 6000;
+/** Briefs up to this many words are enhanced. In blind reviews the enhancer reached parity with the original
+ * on short, vague prompts but lost every detailed brief (it added example content and sections the client's
+ * own detailed brief did not need), so detailed briefs build from the client's words and answers alone. */
+export const ENHANCE_MAX_WORDS = 60;
+export const shouldEnhance = (brief: string) => { const words = brief.trim().split(/\s+/).filter(Boolean).length; return words > 0 && words <= ENHANCE_MAX_WORDS; };
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 export const ACTION_KINDS = ["call", "book", "buy", "visit", "enquire", "signup", "other"] as const;

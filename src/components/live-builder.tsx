@@ -27,7 +27,7 @@ import { sourceIntentIssue } from "@/lib/builder/source-readiness";
 import BriefQuestionsCard from "./brief-questions-card";
 import { briefWithAnswers, designAnswers, isBriefQuestion, mergedQuestions, type BriefAnswers, type BriefQuestion, type DesignAnswers } from "@/lib/builder/brief-questions";
 import EnhancedBriefCard, { type EnhancingState } from "./enhanced-brief-card";
-import { ENHANCER_CREDITS, type BuildBrief } from "@/lib/builder/enhanced-brief";
+import { ENHANCER_CREDITS, shouldEnhance, type BuildBrief } from "@/lib/builder/enhanced-brief";
 import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendingRequest, savePendingRequest, targetIssue, targetReference, undoIssue, type EditTarget, type PendingRequest } from "@/lib/builder/edit-intent";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
@@ -605,8 +605,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     } catch { return null; }
   }, [accountId, artifactId, sources.files.length, workspaceId]);
   /** After the questions: a first website build in Create mode shows its enhanced brief before starting; anything else starts as before. */
-  const proceed = useCallback((text: string, requestMode: "create" | "plan", design: DesignAnswers) => {
-    if (!website || requestMode !== "create") { void submitSources(text, requestMode); return; }
+  const proceed = useCallback((text: string, requestMode: "create" | "plan", design: DesignAnswers, original: string) => {
+    if (!website || requestMode !== "plan" && !shouldEnhance(original)) { void submitSources(text, requestMode, website && Object.keys(design).length ? { design } : undefined); return; }
+    if (requestMode !== "create") { void submitSources(text, requestMode); return; }
     enhanceAbort.current?.abort();
     const controller = new AbortController(); enhanceAbort.current = controller;
     const timer = window.setTimeout(() => controller.abort(), 45_000);
@@ -648,7 +649,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       // The on-device design questions for this brief, with AI-tailored business questions merged in when available.
       void tailoredQuestions(brief, attachments).then(tailored => {
         const questions = mergedQuestions(kind, brief, tailored, { attachments });
-        if (!questions.length) { setAsking(null); if (prepared) hold(); else proceed(brief, requestMode, {}); return; }
+        if (!questions.length) { setAsking(null); if (prepared) hold(); else proceed(brief, requestMode, {}, brief); return; }
         setAsking(current => current && current.text === brief && !current.questions ? { ...current, questions } : current);
       });
       return;
@@ -661,7 +662,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     const { text, mode: requestMode, questions } = asking;
     setAsking(null);
     // Only chosen answers reach the brief and the design seed (a skipped one never does, F04).
-    proceed(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode, answers && questions && website ? designAnswers(questions, answers) : {});
+    proceed(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode, answers && questions && website ? designAnswers(questions, answers) : {}, text);
   };
   const submit = (text: string) => {
     // A selected element must still be exactly what the user saw; otherwise refuse instead of editing another one.
@@ -777,7 +778,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
   const measured = estimates && effort === estimates.effort && firstBuild ? estimates.firstBuild[kind] : null;
   const ceiling = BUILDER_EFFORT[effort].ceilingCredits;
   // A first website build in Create mode enhances its brief first (up to ENHANCER_CREDITS), shown in the maximum.
-  const enhancesFirst = website && firstBuild;
+  const enhancesFirst = website && firstBuild && shouldEnhance(draft);
   const shownMaximum = ceiling + (enhancesFirst && mode !== "plan" ? ENHANCER_CREDITS : 0);
   const canReview = website && Object.keys(baseFiles).length > 0;
   const quoteIssue = affordability(mode === "plan" ? PLAN_CEILING_CREDITS : ceiling, balance);
@@ -788,9 +789,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     <div className="lb-log" id={`lb-log-${artifactId}`} ref={log} aria-live="polite">
       {empty && !asking && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {asking && <><div className="lb-turn lb-user"><p>{asking.text}</p></div>
-        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>{website && asking.mode === "create" ? "Skip questions" : <>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</>}</button></div>
+        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>{website && asking.mode === "create" && shouldEnhance(asking.text) ? "Skip questions" : <>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</>}</button></div>
           : <BriefQuestionsCard questions={asking.questions} kind={kind} planning={asking.mode === "plan"} busy={busy || preparingSources || Boolean(disabled)}
-          finalLabel={website && asking.mode === "create" ? "Continue" : undefined}
+          finalLabel={website && asking.mode === "create" && shouldEnhance(asking.text) ? "Continue" : undefined}
           limit={`Starting ${asking.mode === "plan" ? "the plan" : "the build"} uses up to ${asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits, with ${sources.files.length ? `your source files: ${sources.files.filter(file => !leftOut.has(file.id)).map(file => file.name).join(", ") || "none"}` : "no source files"}. You pay only for what is used.`}
           onStart={answers => answerQuestions(answers)} onSkip={() => answerQuestions(null)} />}</div></>}
       {enhancing && <><div className="lb-turn lb-user"><p>{enhancing.text}</p></div>
