@@ -1554,3 +1554,9 @@ ALLGREENat58bc0f7: PR39523613371, push39523608515 andVercelpreviewSUCCESS. Read 
 
 ### Codex — owner authorizes tested-feature production release, 2026-10-21
 LatesthumanrequestexplicitlyaskscombinedClaudeLovablefixesliveonmakeborne.com. Scope: releasequalifiedappUI/behaviorbehindexistingdisabledcapabilities; DO NOTactivateunqualifiedcheckout/images/automaticcharging/trustedpublication/Gmailsending. Runtime58bc0f7plusreport74d5754; Claude86cb4b6alreadyintegrated. Codexownsproductionreleasepreflight/backup/exact94→105rehearsal, phasedcode-firstM17deployment, migrations, normalPRmerge,smoke/watch. Willstoponactualfailedgate; noinventedrenewalevidence. Authoritativecurrentbaseline94,notold20. NoadditionalAIcallsorcontrollerresourcesplanned; existingbudgetsremain. SourceClaudecheckoutuntouched; acknowledgmentnotassumed.
+
+### Codex — staged CDN conditional-cache finding before edit
+FreshactualstagingWorkerdeploy8482b0cb reproduced200instead304whenBrotliresponseETagisW/quotedhash. CloudflareofficialETagdocsconfirmcompressionmayweakenETags. Codexownsinfra/customer-sites/_worker.jsandcheck-file-cache.mjs for smallRFCweakGETcomparisonfix; ACL lookupmuststillprecede304/cacheuse. No productionmutationyet. Stagecode/hashqualificationwillrepeat; donotresumeClaudequeueormodifyotherfiles.
+
+### Codex — real compressed Worker validation repaired
+NewsmallweakIf-None-MatchGET/HEADcomparisonpreservesauthoritativeACLbefore304. Miniflare cache regression andall5WorkerharnessesPASS (weak/strong/list/wildcard/mismatch/disabled/offline). ActualstagingWorkerbbb9d114returns304/emptybodyforbothBrotliCSSandJS; roots200/noindex,robotsDisallow,sitemap404correct. Firststaged8482returned200forweakvalidator; failurewasrealandfixed,notharnessrelaxation. No productionWorker/app/DBwriteyet; newsourcecheckpoint+remotechecksfollow. SourceSQLunchangedand105chainrecoveryretained. CloudflareETagdocsread; cachedfilesstillrecheckDBACL.

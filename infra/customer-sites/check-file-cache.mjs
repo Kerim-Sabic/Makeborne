@@ -47,6 +47,10 @@ try {
     assert.equal(before.headers.get('cache-control'),'public, max-age=0, must-revalidate');
     await settle();
     const notChanged=await get(image,{headers:{'If-None-Match':etag}},origin);assert.equal(notChanged.status,304);assert.equal(await notChanged.text(),'');
+    for(const condition of ['W/'+etag,'"different", W/'+etag,'*']){
+      const conditional=await get(image,{headers:{'If-None-Match':condition}},origin);assert.equal(conditional.status,304);assert.equal(await conditional.text(),'');
+    }
+    const staleWeak=await get(image,{headers:{'If-None-Match':'W/"different"'}},origin);assert.equal(staleWeak.status,200);assert.equal(await staleWeak.text(),'first image');
     files.set(image,file('replacement image'));
     const after=await get(image,{headers:{'If-None-Match':etag}},origin);assert.equal(after.status,200);assert.equal(await after.text(),'replacement image');assert.notEqual(after.headers.get('etag'),etag);
     const head=await get(image,{method:'HEAD'},origin);assert.equal(head.status,200);assert.equal(await head.text(),'');assert.equal(head.headers.get('etag'),after.headers.get('etag'));
@@ -58,7 +62,9 @@ try {
   const cached=await get(script);assert.equal(await cached.text(),'console.log(1)');assert.match(cached.headers.get('cache-control'),/immutable/);
   const scriptHead=await get(script,{method:'HEAD'});assert.equal(scriptHead.status,200);assert.equal(await scriptHead.text(),'');
   const script304=await get(script,{headers:{'If-None-Match':firstTag}});assert.equal(script304.status,304);
+  const compressed304=await get(script,{method:'HEAD',headers:{'If-None-Match':'W/'+firstTag}});assert.equal(compressed304.status,304);assert.equal(await compressed304.text(),'');
   interactive=false;const denied=await get(script,{headers:{'If-None-Match':firstTag}});assert.equal(denied.status,404);await denied.text();
+  const deniedWildcard=await get(script,{headers:{'If-None-Match':'*'}});assert.equal(deniedWildcard.status,404);await deniedWildcard.text();
   interactive=true;live=false;const offline=await get(script);assert.equal(offline.status,404);await offline.text();
   live=true;files.delete(script);const retired=await get(script);assert.equal(retired.status,404);await retired.text();
   files.set(script,file('console.log(2)','text/javascript; charset=utf-8'));

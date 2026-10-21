@@ -33,3 +33,7 @@ Remaining independent launch gates include account-bound monthly renewal/failure
 ## Execution result
 
 Pending. Updated after live checks; see handoff for progress and stop conditions.
+
+## Staged Worker follow-up
+
+Live Brotli responses exposed weak-ETag conditional requests returning200. The small GET/HEAD weak-comparison repair preserves upstream access checks and passes all5Worker harnesses plus direct staging CSS/JS304 checks. Stage Worker bbb9d114-e962-49da-bf31-142260756ee1 also passes root/noindex/robots/sitemap smoke. Source/SQL tests above remain applicable; exact final commit is in the handoff. Production Worker update will retain the existing routes/secrets and disabled publication settings. Cloudflare confirms compression can weaken ETags: https://developers.cloudflare.com/cache/reference/etag-headers/ .
