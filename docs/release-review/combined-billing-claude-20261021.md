@@ -31,10 +31,10 @@ Merged Claude's `dd8aff6` and newer `ebd296f` through normal feature-branch merg
 | Actual concurrent credit cap | Eight connections compete for30-credit holds under100: exactly3 admitted,5 refused; replay/settlement preserve the cap |
 | Usage v2 scale |100000 reservations plus100000 ledger rows; two UTC months,5000 unique rows/10pages each, correct10000-credit monthly sum; about0.97s per ten-page read locally |
 | Migration recovery | Normal, injected failure and terminated backend converge to identical schema/ACL/policy/flags |
-| Secret pattern scan |413 changed paths, zero findings; not a complete secret-discovery guarantee |
+| Secret pattern scan |417 changed paths, zero findings; not a complete secret-discovery guarantee |
 | Eval live-path safety self-test |46/46 with fakes, no paid calls |
 
-The frozen-commit SQL/recovery rerun and current GitHub checks have separate private receipts; check their latest status before release. Do not substitute earlier green runs for the current head.
+The frozen-commit105-chain SQL/recovery rerun completed:69/72 pass, three documented skips, zero failures, identical recovery schema. SQL is unchanged in final runtime3e8e518. Its actual committed-tree inventory check passes (1496 source files); Windows Git needed local core.longpaths=true to inspect an existing long document path. GitHub PR39520191870 and push39520186209 both pass at that head, as do Vercel checks. Report-only edits after it do not alter the frozen runtime.
 
 ## Staging
 
@@ -71,13 +71,21 @@ Remaining billing qualifications: a real account-bound recurring monthly renewal
 
 The real pack checkout offered BAM conversion even though its plan currency was USD. Readback confirmed adaptive_pricing_enabled=true. Existing fulfillment deliberately accepts USD principal/refunds only; conversion must not be silently treated as equivalent. The controlled paid test explicitly selected USD.
 
-New topup-checkout guard requires adaptive_pricing_enabled=false, including when resuming a saved URL. True, missing and null values refuse before a checkout POST. Regression harness, typecheck, targeted lint, all180 offline harnesses and production build pass. This final guard is locally qualified; earlier cloud evidence belongs to the preceding runtime. Intended merchant pack plans must have adaptive pricing disabled/read back and the final candidate must be rehearsed before live sales. No production plan was changed. Existing exposed provider URLs are not invalidated by an app refusal; their settlement/reconciliation must remain working.
+New topup-checkout guard requires adaptive_pricing_enabled=false, including when resuming a saved URL. True, missing and null values refuse before a checkout POST. Regression harness, typecheck, targeted lint, all180 offline harnesses and production build pass. Actual sandbox plan GET plus the real guard also refuses both new and resumed in-memory fixture orders with zero checkout POSTs/DB writes; this is not another purchase. Final runtime3e8e518 (normal merge of Claude86cb4b6) is READY on staging bqemlgxby/dpl_5Xf3bANP87P1R3n5LZ3X5B5UsDmb; exact project/source metadata verified. Real regular-account billing375/1440 save/read/restore and zero browser errors/overflow pass there; fixture removed. QA alias now points to it. Paid webhook journeys above belong to the preceding runtime whose delivery code is unchanged. Intended merchant pack plans must have adaptive pricing disabled/read back before live sales. No production plan was changed. Existing exposed provider URLs are not invalidated by an app refusal; their settlement/reconciliation must remain working.
 
 Provider schema: [Whop variant adaptive-pricing setting](https://docs.whop.com/api-reference/beta/variants/variant), [checkout configuration](https://docs.whop.com/api-reference/checkout-configurations/create-checkout-configuration). Taxed/promo/non-USD packs remain unsupported evidence, not newly enabled.
 
+## Real staging reconciliation and final preview
+
+Vercel Secret exports are masked; a pulled placeholder failed authentication and was not evidence of a broken deployed secret. An existing privately saved test credential also did not authenticate. Replaced only the isolated staging project's Preview-only CRON_SECRET with64 random hex characters, stored privately; no production row or runtime key changed. MAKEBORNE_TOPUP_RECONCILE_ENABLED was absent and was added only to that staging Preview environment after the owner approved an additional1USD cloud-test allowance.
+
+Final preview1vj34rpbv/dpl_6Ruc4YYH2CvThJg8LfzfKyRzPppG is READY with exact staging-project and3e8e518 source metadata. QA alias points to it. Both actual cron endpoints ran successfully and their health reads report overdue:false, zero open issues; top-up unchecked/exposure are0. Fixture accounts were already removed, so both jobs processed0 rows: this proves deployed authentication/job/health plumbing, not another lost-payment delivery. No production schedule was activated. Phone/desktop regular-user billing save/read/restore rerun passes, no overflow/page errors, fixture removed.
+
+The completed unbound weekly probe was canceled after capturing its renewal evidence, preventing further fake renewals. Temporary webhook remains disabled; receiver/tunnel remain stopped. No real charge, paid model call or production change occurred.
+
 ## Budgets and retained state
 
-Original5USD ledger:4.712877 conservatively accounted/reserved,0.287123unreserved. This is a test ledger including retained worst-case bounds, not a provider invoice. Separate50USD Claude-API allowance:0spent. No new paid AI calls. Prior approved6USD/month controller host is unchanged and its controller remains inactive.
+Original5USD ledger:4.912877 conservatively accounted/reserved,0.087123unreserved, including currency-guard and cron-recovery preview bounds. Owner then approved a separate additional1USD staging allowance;0.10 is retained there for the completed final top-up-job preview/check. These are test ledgers including retained worst-case bounds, not provider invoices. Separate50USD Claude-API allowance:0spent. No new paid AI calls. Prior approved6USD/month controller host is unchanged and its controller remains inactive.
 
 App rehearsal fixture user/workspace/enquiry/client cleanup is audited at zero, with prior billing flags intact. Fresh billing fixture sessions revoked, account deleted and its membership/order rows absent after private financial evidence was retained. Both fake purchases fully refunded; new recurring test membership canceled. Temporary sandbox webhook read back Disabled; path receiver and tunnel stopped. Completed one-shot renewal follow-up paused to prevent duplicate work. Existing staging webhook-secret repair remains Preview-only. No new production resource/data/env/domain/service change, main merge/push or automatic charging activation.
 
