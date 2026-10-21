@@ -184,5 +184,13 @@ const reply = {
     assert.match(BUILDER_SYSTEM, /--accent-on-dark/); assert.match(BUILDER_SYSTEM, /scrim \(at least 85% opaque/); assert.match(BUILDER_SYSTEM, /a project without src\/App\.tsx cannot be saved/);
   });
 
+  await check("body copy in a monospace face is reported; mono labels and data are not", () => {
+    const css = text => qualityProblems({ files: files({ "src/App.tsx": "export default function App() { return <main />; }", "src/styles.css": text }), changed: new Set(["src/styles.css"]) });
+    assert.match(css('p.lede { font-family: "JetBrains Mono", monospace; }')[0], /Body copy is set in a monospace face \(p\.lede\)/);
+    assert.match(css("body { font-family: var(--font-mono); }")[0], /monospace face \(body\)/);
+    assert.deepEqual(css(".label, .data { font-family: var(--font-mono); } body { font-family: var(--font-text); } .monogram p { font-family: var(--font-display); }"), []);
+    assert.match(BUILDER_SYSTEM, /Never add a section only to say something is missing or coming/);
+  });
+
   console.log(`\n${passed} brief enhancer checks passed.`);
 })().catch(error => { console.error(error); process.exit(1); });
