@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Real mounted builder/hooks, local HTTP/SSE and sessionStorage; fictional operation service, no provider/database/cloud calls. */
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
-const {build}=require('esbuild'),{ browserType, engine } = require('./browser-engine.cjs'),{createServer}=require('node:http');
+const {build}=require('esbuild'),{ browserType, engine, collectPageErrors } = require('./browser-engine.cjs'),{createServer}=require('node:http');
 const ids={actor:'11111111-1111-4111-8111-111111111111',workspace:'22222222-2222-4222-8222-222222222222',artifact:'33333333-3333-4333-8333-333333333333',operation:'44444444-4444-4444-8444-444444444444',run:'55555555-5555-4555-8555-555555555555'};
 const fixture=`import React from'react';import{createRoot}from'react-dom/client';import LiveBuilder from'./src/components/live-builder';
 createRoot(document.getElementById('root')).render(<LiveBuilder accountId="${ids.actor}" workspaceId="${ids.workspace}" artifactId="${ids.artifact}" version={1} history={[]} baseFiles={{}} baseAssets={[]} defaultEffort="light" autoStart="A fictional book about a lighthouse cat" kind="book" onLive={()=>{}} onSaved={()=>{}}/>);`;
@@ -55,10 +55,7 @@ async function main(){
    state={requests:[],builds:[],errors:[],operation:null,result:null,stream:null,initialDelay:name==='before-id'?1500:0,charge:name==='before-id'?0:1,finishOnStop:name!=='reload-during-stop',lostReply:name==='lost-stop-reply',finish:()=>{throw Error('Build not started');}};
    state.staleEvent=name==='late-operation-event';
    const current=state,context=await browser.newContext({viewport:{width:375,height:900}}),page=await context.newPage(),errors=[];
-   let reloading=false;page.setDefaultTimeout(15000);
-   // WebKit's driver reports a fetch the unloading page starts (and catches) as a page error "<url> due to access control checks.".
-   // Only that message, only while this check reloads, is set aside (and printed); any other page error still fails.
-   page.on('pageerror',error=>{if(engine==='webkit'&&reloading&&/^\S+ due to access control checks\.$/.test(error.message)){console.log(`NOTE WebKit reported a fetch cancelled by the reload: ${error.message}`);return;}errors.push(error.message);});
+   page.setDefaultTimeout(15000);collectPageErrors(page,errors);
    await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/,route=>route.abort());
    try{
     await page.goto(base);await page.getByText(/Your brief is ready below/).waitFor();assert.equal(current.builds.length,0,'a handed-over brief is never sent on load');await page.locator('form.lb-composer button[type=submit]').click();const stop=page.getByRole('button',{name:'Stop',exact:true});await stop.waitFor();
@@ -69,7 +66,7 @@ async function main(){
     if(name==='mid-run-double-stop')await stop.dblclick();else await stop.click();
     if(name==='late-operation-event'){await page.waitForTimeout(100);assert.equal(current.staleDelivered,true);assert.equal(await page.getByRole('button',{name:'Stopping',exact:true}).isDisabled(),true,'late initial SSE cannot undo acknowledged Stop');}
     if(name==='reload-during-stop'){
-     await page.getByRole('button',{name:'Stopping',exact:true}).waitFor();reloading=true;await page.reload();reloading=false;
+     await page.getByRole('button',{name:'Stopping',exact:true}).waitFor();await page.reload();
      await page.getByRole('button',{name:'Stopping',exact:true}).waitFor();assert.equal(current.builds.length,1,'reload never starts another build');
      current.finish();await page.getByText('1 / 20 credits',{exact:true}).waitFor();
     }else{await page.getByText('Stopped fixture',{exact:true}).waitFor({state:'attached'});const toggle=page.locator('.workbench-chat-toggle');if(await toggle.getAttribute('aria-expanded')==='false')await toggle.click();await page.getByText('Stopped fixture',{exact:true}).waitFor();await page.getByRole('region',{name:'Request receipt'}).waitFor();}

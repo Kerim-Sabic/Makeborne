@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted LiveBuilder + PlanCard in Chromium (audit M08 explicit intent): stale-base refusal keeps the text, pending text survives reload without resending, Undo restores as a new version, a picked element is bound to the file it was picked from, and Build approves exactly the saved plan revision and effort once. Local HTTP/SSE fixture with fictional data; no provider, database, cloud or paid call. Run: node scripts/check-edit-intent-browser.cjs [screenshot-dir] */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs");
-const { build } = require("esbuild"), { browserType, args: engineArgs } = require("./browser-engine.cjs"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, args: engineArgs, collectPageErrors } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 const ids = { actor: "11111111-1111-4111-8111-111111111111", workspace: "22222222-2222-4222-8222-222222222222", artifact: "33333333-3333-4333-8333-333333333333", operation: "44444444-4444-4444-8444-444444444444", run: "55555555-5555-4555-8555-555555555555" };
 const shots = engineArgs[0] ? path.resolve(engineArgs[0]) : null;
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client"; import LiveBuilder from "./src/components/live-builder";
@@ -78,7 +78,7 @@ async function main() {
   const scenario = async (name, setup, run, viewport = { width: 1100, height: 1000 }, query = "") => {
     state = { version: 1, builds: [], planSaves: [], restores: [], errors: [], plan: null, operation: null, reply: () => ({}), ...setup };
     const current = state, context = await browser.newContext({ viewport }), page = await context.newPage(), errors = [];
-    page.setDefaultTimeout(8000); page.on("pageerror", error => errors.push(error.message));
+    page.setDefaultTimeout(8000); collectPageErrors(page, errors);
     await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/, route => route.abort());
     try {
       await page.goto(base + query); await page.getByRole("textbox", { name: "Message the builder" }).waitFor();

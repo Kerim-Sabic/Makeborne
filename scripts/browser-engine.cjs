@@ -27,4 +27,23 @@ function engineOnly(engines, what) {
   return false;
 }
 
-module.exports = { ENGINES, engine, engineLabel, args, browserType: playwright[engine], engineOnly, selectedEngine };
+/** Collects the page's errors into `errors`. WebKit's driver reports a fetch that the page starts and catches while it
+ * unloads as a page error "<url> due to access control checks."; exactly that message, in WebKit only and only while
+ * the check itself reloads or navigates the page, is printed as a NOTE instead. Every other page error is collected. */
+function collectPageErrors(page, errors) {
+  let unloading = 0;
+  for (const method of ["reload", "goto"]) {
+    const original = page[method].bind(page);
+    page[method] = async (...parameters) => { unloading++; try { return await original(...parameters); } finally { unloading--; } };
+  }
+  page.on("pageerror", error => {
+    if (engine === "webkit" && unloading && /^\S+ due to access control checks\.$/.test(error.message)) {
+      console.log(`NOTE WebKit reported a fetch cancelled by the check's own reload: ${error.message}`);
+      return;
+    }
+    errors.push(error.message);
+  });
+  return errors;
+}
+
+module.exports = { ENGINES, engine, engineLabel, args, browserType: playwright[engine], collectPageErrors, engineOnly, selectedEngine };
