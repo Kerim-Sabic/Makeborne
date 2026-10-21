@@ -14,7 +14,7 @@ const sha = (value: string | Uint8Array) => createHash("sha256").update(value).d
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const PublicationBindingSchema = z.object({preparationId:z.string().uuid(), actorId:z.string().uuid(), workspaceId:z.string().uuid(), projectId:z.string().uuid(), artifactId:z.string().uuid(), versionId:z.string().uuid(), versionNumber:z.number().int().positive(), publicationRevision:z.number().int().nonnegative(), versionContentHash:hash, slug:z.string().refine(validSiteLabel), interactive:z.boolean()}).strict();
 export type PublicationBinding = z.infer<typeof PublicationBindingSchema>;
-export const PUBLICATION_POLICY_HASH = sha(canonicalSourceJson({id:"retained-vite-publication-v1", csp:siteDocumentCsp({interactive:true,secure:true}), limits:SITE_LIMITS, routes:"declared-exact-max20", entries:"one-module", renderer:"isolated-world-dom-v1", network:"manifest-only-no-sockets", sanitizer:"hosted-snapshot-v2"}));
+export const PUBLICATION_POLICY_HASH = sha(canonicalSourceJson({id:"retained-vite-publication-v1", csp:siteDocumentCsp({interactive:true,secure:true}), limits:SITE_LIMITS, routes:"declared-exact-max20", entries:"one-module", renderer:"isolated-world-dom-v1", network:"manifest-only-no-sockets", sanitizer:"hosted-snapshot-v3-responsive-images"}));
 type Workload = ReturnType<typeof websiteBuildInput>;
 export type PublicationCompilerDependencies = {
   qualifiedRuntimeImageId: string;

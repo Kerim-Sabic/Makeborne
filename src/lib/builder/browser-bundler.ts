@@ -4,6 +4,8 @@
 import { FONT_IMPORT, FONTS_BY_ID, detectFonts, fontFaceRule, fontFileName, fontSubsets, type FontEntry } from "./fonts";
 import { LUCIDE, LUCIDE_CORE, lucideIconFile, lucideImports, unknownLucideIcons } from "./icons";
 import { PREVIEW_START_MARKER } from "./preview-route";
+import responsive from "../../../infra/project-runtime/responsive-images.cjs";
+import type { ResponsiveImages } from "../hosting/snapshot";
 
 type Esbuild = typeof import("esbuild-wasm");
 type Loader = import("esbuild-wasm").Loader;
@@ -231,7 +233,7 @@ type CompileResult = { ok: true; js: string; css: string } | BundleFailure;
  * Preview keeps readable output; publish minifies. Neither includes the shim.
  * `inspect` (preview only) tags HTML elements with their source location for
  * click-to-edit; published and captured output never carries those tags. */
-async function compileProject(input: Record<string, string>, mode: "preview" | "publish", inspect = false, assets: Record<string, string> = {}): Promise<CompileResult> {
+async function compileProject(input: Record<string, string>, mode: "preview" | "publish", inspect = false, assets: Record<string, string> = {}, images: ResponsiveImages = {}): Promise<CompileResult> {
   const files = new Map(Object.entries(input));
   const artwork = new Map<string, string>();
   for (const [path, url] of Object.entries(assets)) {
@@ -275,6 +277,8 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
             }
             // React is inlined from the same-origin runtime: sandboxed documents
             // cannot rely on network access (e.g. private-network protections).
+            // Project JSX reads the runtime through the responsive-image module when copies exist (same module as the trusted build).
+            if (specifier === "react/jsx-runtime" && args.namespace === "project" && Object.keys(images).length) return { path: "jsx-runtime", namespace: "responsive" };
             if (VENDOR[specifier]) return { path: `${origin}/builder-runtime/vendor/${VENDOR[specifier]}`, namespace: "vendor" };
             if (args.kind === "entry-point") return { path: specifier, namespace: "project" };
             if (specifier === LUCIDE) return { path: LUCIDE, namespace: "lucide" };
@@ -312,6 +316,7 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
             return icons.problems.length ? { errors: icons.problems.map(text => ({ text })) } : { contents: icons.contents, loader: "js" };
           });
           builder.onLoad({ filter: /.*/, namespace: "font" }, () => ({ contents: "", loader: "css" }));
+          builder.onLoad({ filter: /.*/, namespace: "responsive" }, () => ({ contents: responsive.jsxRuntimeModule(images), loader: "js" }));
           builder.onLoad({ filter: /.*/, namespace: "vendor" }, async args => ({ contents: await vendorSource(args.path), loader: "js" }));
         },
       }],
@@ -370,9 +375,11 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
 }
 
 /** Production build for the isolated site host: one minified ES module plus one
- * stylesheet. Project images keep their public paths (served by the host). */
-export async function buildPublishBundle(input: Record<string, string>): Promise<{ js: string; css: string }> {
-  const compiled = await compileProject(input, "publish");
+ * stylesheet. Project images keep their public paths (served by the host).
+ * `images` (responsive-images.cjs responsiveManifest) adds srcset to <img> of
+ * originals with responsive copies, as the trusted build does. */
+export async function buildPublishBundle(input: Record<string, string>, options: { images?: ResponsiveImages } = {}): Promise<{ js: string; css: string }> {
+  const compiled = await compileProject(input, "publish", false, {}, options.images);
   if (!compiled.ok) throw new Error(`Fix the build before publishing: ${compiled.error}`);
   if (!compiled.js.trim()) throw new Error("The website build produced no script.");
   return { js: compiled.js, css: compiled.css };

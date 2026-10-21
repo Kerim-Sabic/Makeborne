@@ -5,6 +5,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund && npm cache clean --force
 COPY build.mjs identity.mjs watchdog.mjs ./
 COPY font-portability.cjs font-licenses.cjs font-licenses.json font-catalog.json ./
 COPY toolchain-compatibility.cjs legacy-toolchain.json ./
+COPY responsive-images.cjs ./
 RUN mkdir -p /input && chown node:node /input && chmod 0700 /input
 USER node
 ENTRYPOINT ["node", "/opt/makeborne/watchdog.mjs"]

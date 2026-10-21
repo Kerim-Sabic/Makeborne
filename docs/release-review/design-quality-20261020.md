@@ -64,11 +64,26 @@ Best pairs (screenshots in `outputs/eval/measure/<set>/<item>/shots/`, sheets in
 2. w01 Saffron Table: `golden-20261018` vs `dq-after3-medium-20261021` (saffron-stigma artwork, the full seasonal menu on the home page; judge: both orders) and `dq-images-medium-20261021` (a saffron-risotto photograph beside a saffron colour field).
 3. w03 Hartwell Rook: `golden-20261018` vs `dq-after4-medium-20261021` (the three-month deadline and a date checker beside the booking and call actions; judge: both orders).
 
+## Design round 2 (2026-10-21): restraint, light grounds, crafted artwork
+
+Target set by Kerim: the new version preferred on at least 75 % of blind, position-swapped Claude verdicts against `golden-20261018`, with no regression in the measured gains. Same direct-agent path (Medium effort) and the same judge script as rounds 1–4. Not met.
+
+| Round | Change tested | Briefs | New version won | Spend (Claude build + judge, OpenAI images) |
+|---|---|---|---|---|
+| r5 | quiet/loud tone, light grounds by default, images allowed | 4 | 2 of 8 (w07 both orders) | $3.67 + $0.45, $0.04 |
+| r6 | fact-diagram signatures, no stock-like photos for quiet services, say each thing once | 4 | 3 of 8 (w03 both, w07 split) | $3.74 + $0.45, $0.05 |
+| r7 | all 20 briefs with the r5–r6 changes, images on | 20 | 14 of 40 (35 %) | $18.40 + $2.26, $0.29 |
+| r8 | crafted illustration over generated photos, quiet keeps a crafted signature, fewer photographic seeds, `--accent-text` | 8 (losers of r7, all 0 of 2 there) | 4 of 14 (w04 and w07 both orders; w05 did not build) | $7.55 + $0.80, $0.09 |
+
+Combined estimate over the 20 briefs, taking the r8 result where it exists and r7 elsewhere: 18 of 40 verdicts (45 %). Judge rationales for the remaining losses: the golden version shows every section the brief lists in a more finished layout (w14), keeps a stronger industrial art direction (w02), or has a mobile quick-action bar (Call, Directions, Hours) that the brief rewards (w11); the new version's "no fixed bottom bar" gate works against that last case. In r7 the judge preferred the golden version on distinctiveness 36 to 3; generated photographs read as stock or AI-made, which r8 addressed.
+
+Metrics on the seven r8 sites against the same briefs in r7: Lighthouse performance mean 88.6 (r7 86.7, golden 86.1), 3 of 7 at 90 or more (r7 0 of 7); axe serious nodes 3 (r7 21, golden 32); failing contrast nodes 9 (r7 14, golden 10); one CLS failure (w11, 0.22 on one mobile load of twelve, with two photographs). w05 stopped at the step limit before writing `App.tsx` (no source, $0.75). Diversity on seven sites is indicative only: editorial split on 4 of 7 and warm-light grounds on 4 of 7 (D5 0.695), so the photographic seeds moved into one archetype rather than spreading.
+
 ## Honest assessment
 
 Now strong: measurable quality (performance, CLS, contrast, accessibility contracts) and variety across sites, which was the golden set's weakest area; motion that never hides content; forms and pages that pass keyboard and screen-reader basics by construction; with images on, first screens that look commissioned (photographs and cut-outs in the site's palette, honest captions).
 
-Not there yet: visual preference is contested. A blind judge still prefers the calmer golden version on about half the briefs, mostly where a quiet editorial look or one dominant fact (phone, price) serves the brief better than a bolder art direction. Some seeded choices drift toward dark grounds and heavy display type. LCP with a generated hero image is about 4 s on the mobile lab profile (no responsive `srcset`, and the hosted snapshot drops `fetchpriority`); without images it is about 2.8 s, still above the 2.5 s claim bar because React and fonts load before the first paint completes. Lighthouse claim (≥ 95) is not reached. Residual CLS (three sites at 0.10–0.12 on one load of twelve) comes from display headlines re-wrapping when the web font arrives.
+Not there yet: visual preference is contested. After design round 2 the blind judge prefers the new version on about 45 % of verdicts (target 75 %); before that it preferred the calmer golden version on about half the briefs, mostly where a quiet editorial look or one dominant fact (phone, price) serves the brief better than a bolder art direction. Some seeded choices drift toward dark grounds and heavy display type. LCP with a generated hero image is about 4 s on the mobile lab profile (no responsive `srcset`, and the hosted snapshot drops `fetchpriority`); without images it is about 2.8 s, still above the 2.5 s claim bar because React and fonts load before the first paint completes. Lighthouse claim (≥ 95) is not reached. Residual CLS (three sites at 0.10–0.12 on one load of twelve) comes from display headlines re-wrapping when the web font arrives.
 
 ## Limitations and rollback
 

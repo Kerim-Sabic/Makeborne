@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted BriefQuestionsCard in Chromium (audit F04): the start payload and the composed brief omit skipped answers. Local only. Run: node scripts/check-brief-skip-browser.cjs */
-const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const questions = [
   { id: "tone", topic: "Tone", question: "How should it sound?", why: "Sets the voice.", custom: "e.g. calm and expert", options: [{ value: "warm", label: "Warm" }, { value: "formal", label: "Formal" }] },
@@ -28,12 +28,14 @@ async function main() {
     } }] });
   const server = createServer((req, res) => { res.setHeader("Content-Type", req.url === "/fixture.js" ? "text/javascript" : "text/html"); res.end(req.url === "/fixture.js" ? output.outputFiles[0].contents : '<!doctype html><div id="root"></div><script src="/fixture.js"></script>'); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
     const page = await browser.newPage();
     await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    // React's first render is scheduled after load; some engines run it later than Chromium does.
+    await page.waitForFunction(() => typeof window.remount === "function");
     const started = () => page.evaluate(() => window.started);
     const one = async () => { const list = await started(); assert.equal(list.length, 1, JSON.stringify(list)); return list[0]; };
     // Wait for the new card to render before interacting, so actions never reach the previous card.
@@ -118,6 +120,6 @@ async function main() {
     await page.emulateMedia({ reducedMotion: "no-preference" });
     pass("prefers-reduced-motion disables auto-advance");
   } finally { await browser.close(); server.close(); }
-  console.log(`${passed} mounted brief-question checks passed (Chromium, no network).`);
+  console.log(`${passed} mounted brief-question checks passed (${engineLabel}, no network).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

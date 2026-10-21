@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted publish + SEO panels in Chromium (audit M07): consent and check results belong to the version that was reviewed. The publication API is answered by Playwright routes (fictional site, nothing published); the snapshot renderer is replaced by fixed HTML. Local only. Run: node scripts/check-checked-version-browser.cjs */
-const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const source = { schemaVersion: 1, toolchainId: "react-vite-v1", entrypoint: "src/main.tsx", files: [{ path: "src/main.tsx", content: "export default function App() { return <h1>Fixture</h1>; }" }], assets: [], routes: [{ path: "/", title: "Home" }] };
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
@@ -29,7 +29,7 @@ async function main() {
     } }] });
   const server = createServer((req, res) => { res.setHeader("Content-Type", req.url === "/fixture.js" ? "text/javascript" : "text/html"); res.end(req.url === "/fixture.js" ? output.outputFiles[0].contents : '<!doctype html><div id="root"></div><script src="/fixture.js"></script>'); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
     const page = await browser.newPage();
@@ -85,6 +85,6 @@ async function main() {
     assert.match(await label.innerText(), /^Checked saved version 4\. Your site changed/);
     pass("SEO results name their version and turn out-of-date after an edit or a newer save");
   } finally { await browser.close(); server.close(); }
-  console.log(`${passed} mounted checked-version checks passed (Chromium, routed API, nothing published).`);
+  console.log(`${passed} mounted checked-version checks passed (${engineLabel}, routed API, nothing published).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

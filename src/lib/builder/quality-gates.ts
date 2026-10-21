@@ -88,6 +88,13 @@ export function qualityProblems({ files, changed, routes = [] }: QualityInput): 
     problems.push("A [data-reveal] hidden state sits outside @media (prefers-reduced-motion: no-preference) and html.js: move it inside both gates so content is never stuck invisible.");
   }
 
+  // Fixed or sticky bars and floating buttons at the bottom of the screen cover content (the judge
+  // penalised them on every brief where they appeared); the sticky header carries the action.
+  const bottomFixed = [...touchedStyles.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+    .filter(([, , body]) => /position:\s*(?:fixed|sticky)/.test(body) && /(?:^|[;\s])(?:bottom|inset-block-end):\s*(?:0|[0-9.]+(?:px|rem|em))/.test(body) && !/(?:^|[;\s])top:/.test(body))
+    .map(([, selector]) => selector.trim().split(/\s*,\s*/).pop()!.slice(-60));
+  if (bottomFixed.length) problems.push(`Remove the fixed bottom bar or floating button (${[...new Set(bottomFixed)].slice(0, 3).join(", ")}): it covers content on phones. Keep the action in the sticky header, the first screen and the closing section.`);
+
   // Generated images keep their returned size so nothing shifts.
   const unsized = touchedScripts.flatMap(([, content]) => generatedImagesWithoutSize(content));
   if (unsized.length) problems.push(`Give every generated image its width and height attributes (from the generate_image result): ${[...new Set(unsized)].slice(0, 4).join(", ")}.`);

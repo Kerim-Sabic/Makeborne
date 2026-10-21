@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted Chromium checks for the trust-copy slice: Studio Settings labels where each setting is stored; the client review page keeps unsent feedback per link and version and never sends it by itself; composers use the app type scale (>=15px desktop, 16px on phones). All APIs are routed with fictional data; no network beyond 127.0.0.1, no AI, no mail.
  * Run: node scripts/check-trust-copy-browser.cjs [screenshot-dir] */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, engineLabel, args: engineArgs } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
-const shots = process.argv[2] ? path.resolve(process.argv[2]) : null;
+const shots = engineArgs[0] ? path.resolve(engineArgs[0]) : null;
 const token = "Rv".repeat(21) + "x";
 const review = version => ({ status: "active", kind: "website", title: "Harbour Bakery website", version, pinned: true, mode: "html", html: "<!doctype html><html><body style=\"font-family:sans-serif\"><header><h1>Harbour Bakery</h1></header><section><h2>Fresh every morning</h2><p>Sourdough and pastries.</p></section></body></html>",
   content: null, style: null, recipientName: "Ana Reed", message: "", expiresAt: "2099-01-01T00:00:00Z", decision: null, comments: [] });
@@ -63,7 +63,7 @@ async function main() {
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   const noScroll = async (page, label) => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${label}: no horizontal page scroll`);
   try {
@@ -173,6 +173,6 @@ ${(await page.locator("body").innerText()).slice(0, 600)}`); });
       await page.close();
     }
   } finally { await browser.close(); server.close(); }
-  console.log(`${passed} mounted trust-copy checks passed (Chromium, routed APIs, no network).`);
+  console.log(`${passed} mounted trust-copy checks passed (${engineLabel}, routed APIs, no network).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

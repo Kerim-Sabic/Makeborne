@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted global command palette (P2) in Chromium: Ctrl+K opens an accessible combobox in the Studio and the advisor page, arrows/Enter go to a place, Escape closes and restores focus, Start opens the composer without sending, the client list keeps its own Ctrl+K, and 320 px fits. Routed APIs with fictional data; no network, no AI.
  * Run: node scripts/check-command-palette-browser.cjs [screenshot-dir] */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, args: engineArgs } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
-const shots = process.argv[2] ? path.resolve(process.argv[2]) : null;
+const shots = engineArgs[0] ? path.resolve(engineArgs[0]) : null;
 const actor = "11111111-1111-4111-8111-111111111111";
 const fixture = `import React from "react"; import { createRoot } from "react-dom/client";
 import ExpertChat from "./src/components/expert-chat";
@@ -58,7 +58,7 @@ async function main() {
     res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}*{box-sizing:border-box}${styles}</style><div id="root"></div><script src="/fixture.js"></script>`);
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const base = `http://127.0.0.1:${server.address().port}`, browser = await chromium.launch({ headless: true });
+  const base = `http://127.0.0.1:${server.address().port}`, browser = await browserType.launch({ headless: true });
   let passed = 0; const failures = [];
   const scenario = async (name, run, viewport = { width: 1280, height: 900 }) => {
     const page = await browser.newPage({ viewport }), errors = [];
@@ -77,7 +77,9 @@ async function main() {
   };
   const dialog = page => page.getByRole("dialog", { name: "Go to or start" });
   const combo = page => page.getByRole("combobox");
-  const studio = async page => { await page.goto(`${base}/?view=studio`); await page.locator("#studio-brief").waitFor({ timeout: 15000 }); };
+  // Shortcut listeners are attached in effects that run after the first paint (later in WebKit): let them attach before typing.
+  const effects = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)))));
+  const studio = async page => { await page.goto(`${base}/?view=studio`); await page.locator("#studio-brief").waitFor({ timeout: 15000 }); await effects(page); };
   try {
     await scenario("studio-keyboard-navigation", async page => {
       await studio(page);
@@ -113,7 +115,7 @@ async function main() {
     });
     await scenario("client-list-keeps-its-shortcut", async page => {
       await page.goto(`${base}/?view=studio&tab=clients`);
-      await page.locator(".studio-nav button[aria-current='page']", { hasText: "Clients" }).waitFor({ timeout: 15000 });
+      await page.locator(".studio-nav button[aria-current='page']", { hasText: "Clients" }).waitFor({ timeout: 15000 }); await effects(page);
       await page.keyboard.press("Control+k");
       await page.getByRole("dialog", { name: "Find a client or action" }).waitFor();
       assert.equal(await dialog(page).count(), 0, "only the client palette opens on the client list");
@@ -121,7 +123,7 @@ async function main() {
       await dialog(page).waitFor();
     });
     await scenario("advisor-switch", async page => {
-      await page.goto(`${base}/?view=advisor`); await page.getByRole("textbox", { name: /Message Mira/ }).waitFor();
+      await page.goto(`${base}/?view=advisor`); await page.getByRole("textbox", { name: /Message Mira/ }).waitFor(); await effects(page);
       await page.keyboard.press("Control+k"); await dialog(page).waitFor();
       await page.keyboard.type("copy");
       assert.match(await page.getByRole("option").first().innerText(), /Ask Nova/);

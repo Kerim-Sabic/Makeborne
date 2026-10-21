@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { focusReturnTarget } from "@/lib/focus-return";
 
 /** Dialog rendered at the top of the page (above the studio sidebar), with Escape, focus and backdrop handling. */
 export default function Modal({ label, onClose, locked = false, wide = false, children }: { label: string; onClose: () => void; locked?: boolean; wide?: boolean; children: ReactNode }) {
   const sheet = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = focusReturnTarget();
     sheet.current?.focus();
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";

@@ -8,7 +8,7 @@ export const RESERVATION='docs/release-review/fresh-quality-reservation-20261013
 export const COPY_ENTRIES=['src','public','package.json','package-lock.json','next.config.ts','tsconfig.json','next-env.d.ts','postcss.config.mjs',
  'infra/customer-sites/namespace-policy.js','infra/customer-sites/site-policy.js','infra/customer-sites/website-policy.js',
  'infra/project-runtime/toolchain/package.json','infra/project-runtime/toolchain/package-lock.json','infra/project-runtime/font-catalog.json',
- 'infra/project-runtime/font-portability.cjs','infra/project-runtime/font-licenses.cjs','infra/project-runtime/toolchain-compatibility.cjs'];
+ 'infra/project-runtime/font-portability.cjs','infra/project-runtime/font-licenses.cjs','infra/project-runtime/toolchain-compatibility.cjs','infra/project-runtime/responsive-images.cjs'];
 export const json=file=>JSON.parse(readFileSync(file,'utf8').replace(/^\uFEFF/,''));
 export const save=(file,value)=>writeFileSync(file,JSON.stringify(value,null,2)+'\n',{flag:'w'});
 export const hash=value=>createHash('sha256').update(value).digest('hex');
