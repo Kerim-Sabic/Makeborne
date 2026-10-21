@@ -183,6 +183,7 @@ function whopWith(fetchImpl) { return load("./whop.ts", env, { "@/lib/server/htt
     assert.deepEqual([result.stats.paymentsReconciled, result.stats.paymentsNotFunded, result.stats.processed, result.stats.failed], [2, 1, 2, 1]);
     assert.equal(result.status, "partial");
     assert.match(calls.finish.p_error, /mem_err: PLAN_PAYMENT_UNVERIFIED/);
+    assert(!calls.observations.some(o => o.membershipId === "mem_err"), "failed financial read must not mark the membership recently reconciled");
   });
 
   await check("bounded: time budget and membership cap stop the run as partial; heartbeats renew the lease", async () => {
@@ -227,6 +228,7 @@ function whopWith(fetchImpl) { return load("./whop.ts", env, { "@/lib/server/htt
       if (["bindingMismatch", "unknownPlan"].includes(fixture.stat)) {
         assert.deepEqual(calls.updates, []);assert.deepEqual(calls.observations, []);
       }
+      assert.deepEqual(calls.observations, [], "incomplete or skipped evidence must remain due rather than advancing the financial checkpoint");
     }
   });
 

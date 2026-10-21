@@ -97,13 +97,12 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
           const updated = await deps.updateMembership(row.membership_id, row.user_id, { status: membership.status, verified_until: verifiedUntil,
             period_end: membership.renewal_period_end, checked_at: new Date(now()).toISOString() });
           if (updated.error) throw Object.assign(new Error("Membership row update failed"), { code: "MEMBERSHIP_STORAGE" });
-          const observed = await deps.recordObservation(row.user_id, { membershipId: row.membership_id, planId: membership.plan.id, status: membership.status,
-            paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "reconcile" });
-          stats.observationsGranted += observed.granted;
+          let financialEvidenceComplete = true;
           if (row.needs_payments || deps.reconcilePayment) {
             const list = await deps.listPayments(row.membership_id);
             if (!list.complete) stats.paymentPagesIncomplete++;
             stats.paymentEvidenceSkipped += list.skipped;
+            financialEvidenceComplete = list.complete && list.skipped === 0;
             for (const payment of list.payments) {
               // Current state first: a refund recorded here blocks this period's allocation below.
               if (deps.reconcilePayment && Date.parse(payment.paidAt) > now() - lookbackMs) {
@@ -116,6 +115,14 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
               if (recorded.outcome !== "duplicate") stats.paymentsRecorded++;
               stats.paymentsGranted += recorded.granted;
             }
+          }
+          // Only a complete financial pass advances the daily-job checkpoint.
+          // A login checks membership status, not refunds; failed or partial
+          // payment reads must remain due on the next run.
+          if (financialEvidenceComplete) {
+            const observed = await deps.recordObservation(row.user_id, { membershipId: row.membership_id, planId: membership.plan.id, status: membership.status,
+              paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "reconcile" });
+            stats.observationsGranted += observed.granted;
           }
           stats.processed++;
           if (stats.processed % 10 === 0) await deps.rpc("makeborne_billing_job_heartbeat", { p_run: runId, p_lease_seconds: leaseSeconds });
