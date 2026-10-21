@@ -11,7 +11,7 @@ async function main(){
  const output=await build({stdin:{contents:fixture,loader:'jsx',resolveDir:process.cwd()},write:false,bundle:true,platform:'browser',jsx:'automatic',define:{'process.env':'{}'},plugins:[{name:'fixture',setup(b){
   b.onResolve({filter:/use-plan-mode|plan-card|design-capture|cloud-api/},a=>({path:a.path,namespace:'mock'}));
   b.onLoad({filter:/use-plan-mode/,namespace:'mock'},()=>({contents:planner,loader:'js',resolveDir:process.cwd()}));
-  b.onLoad({filter:/plan-card/,namespace:'mock'},()=>({contents:`import React from'react';export default function PlanCard(p){return <button disabled={p.busy} onClick={()=>p.onBuild(p.plan,'light')}>Build approved plan</button>}`,loader:'jsx',resolveDir:process.cwd()}));
+  b.onLoad({filter:/plan-card/,namespace:'mock'},()=>({contents:`import React from'react';export default function PlanCard(p){return <button disabled={p.busy} onClick={()=>p.onBuild(p.plan,'light',20)}>Build approved plan</button>}`,loader:'jsx',resolveDir:process.cwd()}));
   b.onLoad({filter:/cloud-api/,namespace:'mock'},()=>({contents:'export async function readCloudImage(){throw new Error("Unexpected image request")}',loader:'js'}));
   b.onLoad({filter:/design-capture/,namespace:'mock'},()=>({contents:'export async function captureDesign(){throw new Error("No visual review in attachment fixture")}',loader:'js'}));
   b.onLoad({filter:/\.css$/},()=>({contents:'',loader:'js'}));
