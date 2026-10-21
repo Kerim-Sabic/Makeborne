@@ -712,7 +712,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     }
     if (prepared) { hold(); return; }
     void submitSources(text, requestMode, target ? { target } : undefined);
-  }, [analyzing, asking, enhancing, firstBuild, kind, proceed, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
+  }, [analyzing, asking, enhancing, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
   const answerQuestions = (answers: BriefAnswers | null) => {
     if (!asking) return;
     const { text, mode: requestMode, questions } = asking;
