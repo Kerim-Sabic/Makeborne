@@ -161,6 +161,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   // Library sort and client filter (account projects). Search, kind, client and sort are mirrored in the URL.
   const [libraryScope, setLibraryScope] = useState<LibraryScope>(DEFAULT_LIBRARY_SCOPE);
   const searchInput = useRef<HTMLInputElement>(null);
+  // Mount point for the account list's controls inside the single library toolbar.
+  const [libraryControls, setLibraryControls] = useState<HTMLDivElement | null>(null);
   const applyLibraryQuery = (search: string) => { const library = readLibraryQuery(search); setSearch(library.q); setFilter(library.kind); setLibraryScope({ sort: library.sort, client: library.client }); };
   const [accountLibrary, setAccountLibrary] = useState<AccountLibraryStatus>({ state: "checking" });
   // Keep the same object while nothing changed, so a re-render does not ripple through the page.
@@ -745,7 +747,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         ref={navigationPanel}
         className={`sidebar ${mobileNav ? "open" : ""}`}
       >
-        <Link className="wordmark" href="/">
+        <Link className="wordmark" href="/" data-label="Makeborne home">
           <BrandMark size={27} />
           Makeborne
         </Link>
@@ -766,6 +768,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
               <button
                 key={String(id)}
                 className={tab === id ? "active" : ""}
+                data-label={String(label)}
                 aria-current={tab === id ? "page" : undefined}
                 onClick={() => navigate(String(id))}
               >
@@ -774,19 +777,20 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
               </button>
             );
           })}
-          <Link href="/chat" className="studio-chat-link"><MessageCircle size={18} />Expert chat</Link>
+          <Link href="/chat" className="studio-chat-link" data-label="Expert chat"><MessageCircle size={18} />Expert chat</Link>
         </nav>
         <div className="sidebar-bottom">
           <button
             className={`sidebar-settings ${tab === "settings" ? "active" : ""}`}
+            data-label="Settings"
             aria-current={tab === "settings" ? "page" : undefined}
             onClick={() => navigate("settings")}
           >
             <Settings size={18} /> Settings
           </button>
-          <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> {unlimitedCredits ? "Unlimited credits" : "Plan & credits"} <ArrowUpRight size={14} /></Link>
-          <Link className="sidebar-home" href="/help"><LifeBuoy size={16} /> Help & guides <ArrowUpRight size={14} /></Link>
-          {isAdmin && <Link className="sidebar-home" href="/admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
+          <Link className="sidebar-home" href="/billing" data-label={unlimitedCredits ? "Unlimited credits" : "Plan & credits"}><CreditCard size={16} /> {unlimitedCredits ? "Unlimited credits" : "Plan & credits"} <ArrowUpRight size={14} /></Link>
+          <Link className="sidebar-home" href="/help" data-label="Help & guides"><LifeBuoy size={16} /> Help & guides <ArrowUpRight size={14} /></Link>
+          {isAdmin && <Link className="sidebar-home" href="/admin" data-label="Admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
           <div className="sidebar-device">
             <span className="sidebar-device-label"><span className="status-dot" /> Device backup & recovery</span>
             <button type="button" onClick={() => navigate("settings")}>Backup & recovery <ArrowUpRight size={12} /></button>
@@ -873,7 +877,13 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
             {tab === "projects" && (
               <>
                 {!accountRoute?.artifactId && <>
-                <div className="page-heading">
+                {/* Returning users: one heading and one primary action, then their work. New users keep the prompt-first welcome. */}
+                {libraryFirst ? <div className="page-heading library-heading">
+                  <h1>Projects</h1>
+                  <Link className="button primary" href="/">
+                    <Plus size={17} /> New project
+                  </Link>
+                </div> : <div className="page-heading">
                   <div>
                     <div className="eyebrow">YOUR CREATION STUDIO</div>
                     <h1>What will you make next?</h1>
@@ -882,36 +892,41 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   <Link className="button primary" href="/">
                     <Plus size={17} /> New project
                   </Link>
-                </div>
+                </div>}
                 {libraryFirst && <div className="list-toolbar" id="studio-library" tabIndex={-1}>
-                  <div className="filter-tabs">
-                    {["all", "website", "book", "presentation"].map((f) => (
-                      <button
-                        className={filter === f ? "active" : ""}
-                        key={f}
-                        onClick={() => setFilter(f)}
-                      >
-                        {f === "all"
-                          ? "All projects"
-                          : kindLabel[f as Kind] + "s"}
-                      </button>
-                    ))}
-                  </div>
                   <label className="search-field">
-                    <Search size={16} />
+                    <Search size={16} aria-hidden="true" />
                     <input
                       ref={searchInput}
+                      type="search"
                       aria-label="Search projects"
-                      placeholder="Find a project…"
+                      placeholder="Search projects"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                     />
                   </label>
+                  <div className="filter-tabs" role="group" aria-label="Format">
+                    {["all", "website", "book", "presentation"].map((f) => (
+                      <button
+                        type="button"
+                        className={filter === f ? "active" : ""}
+                        aria-pressed={filter === f}
+                        key={f}
+                        onClick={() => setFilter(f)}
+                      >
+                        {f === "all"
+                          ? "All"
+                          : kindLabel[f as Kind] + "s"}
+                      </button>
+                    ))}
+                  </div>
+                  {/* The account list's client, sort, layout and refresh controls join this toolbar. */}
+                  <div className="library-toolbar-controls" ref={setLibraryControls} />
                 </div>}
                 </>}
                 {/* New users start with a brief; the account list keeps one position so it never reloads when the order changes. */}
                 {!accountRoute?.artifactId && !libraryFirst && <div className="studio-create">{creationEntry}</div>}
-                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} scope={libraryScope} onScopeChange={setLibraryScope}
+                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} scope={libraryScope} onScopeChange={setLibraryScope} controlsSlot={libraryFirst && !accountRoute?.artifactId ? libraryControls : undefined}
                   onClearSearch={() => { setSearch(""); searchInput.current?.focus(); }} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
                 {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (projectsWelcome(workspace.projects.length, accountLibrary) !== "welcome" ? null : (
                   <Empty
@@ -972,8 +987,15 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                       })}
                   </div>
                 ))}
-                {!accountRoute?.artifactId && libraryFirst && <div className="studio-create">{creationEntry}</div>}
-                {!accountRoute?.artifactId && workspace.projects.length === 0 && (
+                {/* Returning users: creation stays on the page as a secondary destination below their work; inspiration lives in Styles. */}
+                {!accountRoute?.artifactId && libraryFirst && <section className="library-secondary" aria-labelledby="library-start-heading">
+                  <div className="library-secondary-heading">
+                    <h2 id="library-start-heading">Start something new</h2>
+                    <button type="button" className="text-link" onClick={() => navigate("styles")}>Browse creative directions <ArrowUpRight size={14} aria-hidden="true" /></button>
+                  </div>
+                  <div className="studio-create">{creationEntry}</div>
+                </section>}
+                {!accountRoute?.artifactId && !libraryFirst && workspace.projects.length === 0 && (
                   <TemplateGallery onChoose={chooseDirection} />
                 )}
               </>

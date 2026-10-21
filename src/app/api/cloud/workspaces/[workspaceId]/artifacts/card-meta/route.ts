@@ -2,6 +2,7 @@ import { z } from "zod";
 import { cloudContext, cloudError, cloudJson, databaseError } from "@/lib/cloud/server";
 import { RequestError } from "@/lib/server/http";
 import { CARD_META_MAX, publicationState, type CardMetaItem } from "@/lib/projects/library-card-meta";
+import { siteAddress, validSiteSlug } from "@/lib/hosting/config";
 
 /**
  * Read-only library card facts for up to 50 artifacts in one workspace:
@@ -26,7 +27,7 @@ export async function GET(request: Request, context: { params: Promise<{ workspa
     const projectIds = [...new Set((artifacts ?? []).map(row => row.project_id as string))];
     const [projects, sites] = await Promise.all([
       projectIds.length ? client.from("projects").select("id,client_id").eq("workspace_id", workspaceId).in("id", projectIds) : Promise.resolve({ data: [], error: null }),
-      client.from("hosted_sites").select("artifact_id,live,version_number").eq("workspace_id", workspaceId).in("artifact_id", ids),
+      client.from("hosted_sites").select("artifact_id,live,version_number,slug").eq("workspace_id", workspaceId).in("artifact_id", ids),
     ]);
     databaseError(projects.error); databaseError(sites.error);
     const clientOf = new Map((projects.data ?? []).map(row => [row.id as string, row.client_id as string | null]));
@@ -34,12 +35,14 @@ export async function GET(request: Request, context: { params: Promise<{ workspa
     const clients = clientIds.length ? await client.from("clients").select("id,name").eq("workspace_id", workspaceId).in("id", clientIds) : { data: [], error: null };
     databaseError(clients.error);
     const clientName = new Map((clients.data ?? []).map(row => [row.id as string, row.name as string]));
-    const siteOf = new Map((sites.data ?? []).map(row => [row.artifact_id as string, row as { live: boolean; version_number: number }]));
+    const siteOf = new Map((sites.data ?? []).map(row => [row.artifact_id as string, row as { live: boolean; version_number: number; slug: string }]));
     const items: CardMetaItem[] = (artifacts ?? []).map(row => {
       const clientId = clientOf.get(row.project_id) ?? null, name = clientId ? clientName.get(clientId) : undefined, site = siteOf.get(row.id);
       const state = publicationState(row.current_version, site);
+      // The address the Publish panel shows for this same row; only while it is live, and only for a valid slug.
+      const address = state !== "draft" && validSiteSlug(site!.slug) ? siteAddress(site!.slug) : null;
       return { artifactId: row.id, currentVersion: row.current_version, client: clientId && name ? { id: clientId, name } : null,
-        publication: { state, liveVersion: state === "draft" ? null : site!.version_number } };
+        publication: { state, liveVersion: state === "draft" ? null : site!.version_number, address } };
     });
     return cloudJson({ workspaceId, items });
   } catch (error) { return cloudError(error); }

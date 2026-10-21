@@ -23,6 +23,17 @@ check("an unreadable date is not shown as Invalid Date", () => {
   assert.match(shortDate(new Date().toISOString()), /\S/);
   assert.match(shortDate("2019-03-04T00:00:00.000Z"), /2019/, "older years are named");
 });
+check("library dates keep the time of day for today and yesterday, and say so", () => {
+  const { libraryDate } = context.exports;
+  const now = new Date(2026, 9, 21, 18, 0);
+  assert.match(libraryDate(new Date(2026, 9, 21, 14, 34).toISOString(), now), /^today, .*34/);
+  assert.match(libraryDate(new Date(2026, 9, 20, 9, 5).toISOString(), now), /^yesterday, .*05/);
+  assert.doesNotMatch(libraryDate(new Date(2026, 9, 19, 9, 5).toISOString(), now), /today|yesterday|:/, "older dates are the day only");
+  assert.match(libraryDate(new Date(2025, 2, 4).toISOString(), now), /2025/);
+  assert.equal(libraryDate("nope", now), "date unknown");
+  // Two projects saved the same day read differently.
+  assert.notEqual(libraryDate(new Date(2026, 9, 21, 9, 12).toISOString(), now), libraryDate(new Date(2026, 9, 21, 16, 40).toISOString(), now));
+});
 
 // The guard behind the label: only version saves write public.artifacts.
 const migrations = path.join(__dirname, "..", "..", "..", "supabase", "migrations");
@@ -47,7 +58,8 @@ check("the app never writes the artifact row directly", () => {
 });
 check("account cards render the saved-source label with a machine-readable time", () => {
   const projects = fs.readFileSync("src/components/account-projects.tsx", "utf8");
-  assert.match(projects, /meta = savedSourceMeta\(artifact, shortDate\)/);
+  // Cards use libraryDate: the same label, with the time of day for today and yesterday (similar projects saved the same day stay distinguishable).
+  assert.match(projects, /meta = savedSourceMeta\(artifact, libraryDate\)/);
   assert.match(projects, /<time dateTime=\{meta\.at\}>\{meta\.label\}<\/time>/);
   assert.doesNotMatch(projects, /"New draft"\}/, "no version-only label left");
 });

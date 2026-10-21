@@ -117,7 +117,14 @@ check("studio orders the page by the layout without remounting the account list"
   assert.equal((studio.match(/<AccountProjects /g) ?? []).length, 1, "one account list position: changing the order never refetches it");
   assert.match(studio, /!libraryFirst && <div className="studio-create">\{creationEntry\}<\/div>\}\s*<AccountProjects /, "new users: creation above the list");
   const after = studio.slice(studio.indexOf("<AccountProjects "));
-  assert.match(after, /libraryFirst && <div className="studio-create">\{creationEntry\}<\/div>\}\s*\{!accountRoute\?\.artifactId && workspace\.projects\.length === 0 && \(\s*<TemplateGallery/, "returning users: creation stays on the page, below their projects");
+  // Returning users: creation stays on the page as a secondary destination below their projects (S1), and inspiration lives in Styles.
+  assert.match(after, /libraryFirst && <section className="library-secondary" aria-labelledby="library-start-heading">[\s\S]{0,400}<div className="studio-create">\{creationEntry\}<\/div>\s*<\/section>\}\s*\{!accountRoute\?\.artifactId && !libraryFirst && workspace\.projects\.length === 0 && \(\s*<TemplateGallery/, "returning users: creation stays on the page, below their projects; the gallery is for new users");
+  assert.equal((studio.match(/\{creationEntry\}/g) ?? []).length, 2, "exactly one composer is mounted in either order");
+  assert.match(after, /onClick=\{\(\) => navigate\("styles"\)\}>Browse creative directions/, "inspiration stays one step away for returning users");
+  // One heading and one primary action for returning users; the prompt-first welcome only for new users.
+  assert.match(studio, /\{libraryFirst \? <div className="page-heading library-heading">\s*<h1>Projects<\/h1>\s*<Link className="button primary" href="\/">/);
+  assert.match(studio, /: <div className="page-heading">\s*<div>\s*<div className="eyebrow">YOUR CREATION STUDIO<\/div>\s*<h1>What will you make next\?<\/h1>/);
+  assert.doesNotMatch(projects, /SAVED TO YOUR ACCOUNT|Your saved projects<\/h2>/, "no second heading above the list");
   assert.match(studio, /libraryFirst \? "returning-workspace" : "fresh-workspace"/);
   assert.match(studio, /writeLibraryHint\(\(\) => localStorage, accountId, next\.count > 0\)/, "memory only changes on loaded data");
   // Explicit creation links are untouched: New project still goes to the prompt-first home.

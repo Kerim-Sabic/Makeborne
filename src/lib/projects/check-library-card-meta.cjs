@@ -25,13 +25,33 @@ check("card facts are bound to account + workspace + exact ids, and to the versi
   assert.equal(meta.cardMetaPath(W, [P2, P1]), `/api/cloud/workspaces/${W}/artifacts/card-meta?ids=${[P1, P2].sort().join(",")}`);
   const ids = Array.from({ length: 120 }, (_, i) => `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`);
   assert.deepEqual(meta.cardMetaChunks(ids).map(chunk => chunk.length), [50, 50, 20]);
-  const item = { artifactId: P1, currentVersion: 4, client: { id: C, name: "Acme" }, publication: { state: "live", liveVersion: 4 } };
+  const item = { artifactId: P1, currentVersion: 4, client: { id: C, name: "Acme" }, publication: { state: "live", liveVersion: 4, address: "https://sites.makeborne.com/acme" } };
   const items = new Map([[P1, item]]);
   assert.equal(meta.cardFacts(items, { id: P1, currentVersion: 4 }), item);
   assert.equal(meta.cardFacts(items, { id: P1, currentVersion: 3 }), null, "a stale listing shows no state until Refresh");
   assert.equal(meta.cardFacts(items, { id: P2, currentVersion: 1 }), null);
   assert.equal(meta.CardMetaResponseSchema.safeParse({ workspaceId: W, items: [item] }).success, true);
-  assert.equal(meta.CardMetaResponseSchema.safeParse({ workspaceId: W, items: [{ ...item, publication: { state: "maybe", liveVersion: 1 } }] }).success, false);
+  assert.equal(meta.CardMetaResponseSchema.safeParse({ workspaceId: W, items: [{ ...item, publication: { state: "maybe", liveVersion: 1, address: null } }] }).success, false);
+});
+
+check("a live address comes only with a live state, only as http(s), and is the only thing a card may copy (S1)", () => {
+  const parse = publication => meta.CardMetaItemSchema.safeParse({ artifactId: P1, currentVersion: 4, client: null, publication }).success;
+  assert.equal(parse({ state: "live", liveVersion: 4, address: "https://sites.makeborne.com/acme" }), true);
+  assert.equal(parse({ state: "live-behind", liveVersion: 3, address: "https://acme.makeborne.site/" }), true);
+  assert.equal(parse({ state: "live", liveVersion: 4, address: null }), true, "a live row with an unusable slug simply has no link");
+  assert.equal(parse({ state: "draft", liveVersion: null, address: "https://sites.makeborne.com/acme" }), false, "a draft never carries an address");
+  assert.equal(parse({ state: "live", liveVersion: 4, address: "javascript:alert(1)" }), false);
+  assert.equal(parse({ state: "live", liveVersion: 4, address: "ftp://acme.example/" }), false);
+  assert.equal(parse({ state: "live", liveVersion: 4 }), false, "the field is explicit");
+  assert.equal(meta.liveAddress({ publication: { state: "live", liveVersion: 4, address: "https://sites.makeborne.com/acme" } }), "https://sites.makeborne.com/acme");
+  assert.equal(meta.liveAddress({ publication: { state: "live-behind", liveVersion: 3, address: "https://sites.makeborne.com/acme" } }), "https://sites.makeborne.com/acme");
+  assert.equal(meta.liveAddress({ publication: { state: "draft", liveVersion: null, address: "https://sites.makeborne.com/acme" } }), null, "never from a draft, even if one slipped through");
+  assert.equal(meta.liveAddress({ publication: { state: "live", liveVersion: 4, address: "javascript:alert(1)" } }), null);
+  assert.equal(meta.liveAddress(null), null, "no facts loaded (or facts for another version): no link");
+  assert.equal(meta.PUBLICATION_SHORT["live-behind"], "Live · unpublished changes");
+  assert.equal(meta.publicationDetail("live-behind", 5, 4), "Version 4 is live. Version 5 is saved but not published.");
+  assert.equal(meta.publicationDetail("live", 4, 4), "Version 4 is live.");
+  assert.equal(meta.publicationDetail("draft", 2, null), "Not published.");
 });
 
 check("sort and client filter are whole-workspace listing parameters, validated server-side", () => {
@@ -75,7 +95,10 @@ check("source guards: read-only authorized card-meta route; URL updates replace 
   assert.match(route, /export async function GET/); assert.doesNotMatch(route, /export async function (POST|PATCH|PUT|DELETE)/);
   assert.match(route, /const \{ client \} = await cloudContext\(workspaceId\);/);
   assert.doesNotMatch(route, /billingDatabase|service_role|SECRET/, "the caller's own session and RLS decide what exists");
-  assert.match(route, /from\("hosted_sites"\)\.select\("artifact_id,live,version_number"\)/);
+  assert.match(route, /from\("hosted_sites"\)\.select\("artifact_id,live,version_number,slug"\)/);
+  // The address is the Publish panel's own (siteAddress of the row's slug), only while live and only for a valid slug.
+  assert.match(route, /const address = state !== "draft" && validSiteSlug\(site!\.slug\) \? siteAddress\(site!\.slug\) : null;/);
+  assert.match(route, /publication: \{ state, liveVersion: state === "draft" \? null : site!\.version_number, address \}/);
   assert.match(route, /return cloudJson\(\{ workspaceId, items \}\);/);
   const listing = read("src/app/api/cloud/workspaces/[workspaceId]/route.ts");
   assert.match(listing, /scope = parseLibraryScope\(search\)/);
