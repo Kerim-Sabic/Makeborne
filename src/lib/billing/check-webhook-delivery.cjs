@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Offline financial-delivery regression. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
 class RequestError extends Error {constructor(code,message,status){super(message);this.code=code;this.status=status}}
-let checkout=null,recorded=false,grantFails=false,reads=0,receipts=0,topupCalls=0,topupFails=false;
+let checkout=null,recorded=false,grantFails=false,reads=0,receipts=0,topupCalls=0,topupFails=false,draftBound=true,draftLookupFails=false,paymentStatus='refunded';
 const observations=[],order=[],paymentReads=[];let paymentFails=false,paymentMembership='mem_fixture';
 const membership={id:'mem_fixture',company:{id:'biz_fixture'},plan:{id:'plan_fixture'},user:{id:'user_fixture'},checkout_configuration_id:'ch_fixture',status:'active',renewal_period_start:new Date().toISOString(),renewal_period_end:new Date(Date.now()+86400000).toISOString()};
-const db={from(table){const q={select(){return q},eq(){return q},async maybeSingle(){return {error:null,data:table==='billing_webhook_events'?(recorded?{id:'event'}:null):table==='billing_checkouts'?checkout:{membership_id:membership.id}}}};return q},async rpc(){receipts++;recorded=true;return {error:null}}};
+const db={from(table){const q={select(){return q},eq(){return q},async maybeSingle(){return {error:table==='billing_memberships'&&draftLookupFails?{code:'temporary'}:null,data:table==='billing_webhook_events'?(recorded?{id:'event'}:null):table==='billing_checkouts'?checkout:draftBound?{membership_id:membership.id}:null}}};return q},async rpc(){receipts++;recorded=true;return {error:null}}};
 const modules={
  'server-only':{},'@/lib/server/http':{RequestError},'./config':{billingConfig:()=>({apiKey:'fixture',secretKey:'fixture',companyId:'biz_fixture',accessPlanIds:['plan_fixture']})},
  './database':{billingDatabase:()=>db},'./plan-credits':{creditRuleFor:()=>({})},
@@ -13,7 +13,7 @@ const modules={
  '@/lib/credits/server':{recordPlanObservation:async(user,observation)=>{if(grantFails)throw new Error('transient SQL error');observations.push({user,...observation});order.push('observation')}},
  './plan-payments':{
   eventPaymentId:e=>e.type.startsWith('payment.')?(e.data.id??null):(e.data.payment?.id??null),
-  retrieveVerifiedPlanPayment:async id=>{paymentReads.push(id);return {id,membershipId:paymentMembership,status:'refunded'}},
+  retrieveVerifiedPlanPayment:async id=>{paymentReads.push(id);return {id,membershipId:paymentMembership,status:paymentStatus}},
   reconcilePlanPayment:async(user,m,payment)=>{if(paymentFails)throw new RequestError('PLAN_PAYMENT_STORAGE_UNAVAILABLE','Retry',503);order.push(`payment:${user}:${m.id}:${payment.id}`)},
  },
 };
@@ -55,5 +55,23 @@ const event={id:'event',type:'payment.succeeded',account_id:'biz_fixture',data:{
  paymentMembership='mem_fixture';order.length=0;
  await reconcile({id:'membership-event',type:'membership.went_valid',account_id:'biz_fixture',data:{id:'mem_fixture'}});
  assert.equal(paymentReads.length,3,'Membership events do not read payments');
+ // Failed first attempts must not reserve a checkout for an unpaid draft.
+ membership.status='drafted';draftBound=false;recorded=false;paymentStatus='failed';
+ const failed={id:'failed-first-attempt',type:'payment.failed',account_id:'biz_fixture',data:{id:'pay_failed',membership:{id:'mem_fixture'}}};
+ const beforeDraftReceipts=receipts,beforeDraftObservations=observations.length;
+ await reconcile(failed);await reconcile(failed);
+ assert.equal(receipts,beforeDraftReceipts);assert.equal(observations.length,beforeDraftObservations);
+ paymentStatus='pending';await reconcile(failed);assert.equal(receipts,beforeDraftReceipts);
+ for(const status of ['paid','refunded']){paymentStatus=status;await assert.rejects(reconcile(failed),e=>e.code==='DRAFT_PAYMENT_UNVERIFIED'&&e.status===503);}
+ paymentStatus='failed';paymentMembership='mem_other';await assert.rejects(reconcile(failed),e=>e.code==='DRAFT_PAYMENT_UNVERIFIED');paymentMembership='mem_fixture';
+ draftLookupFails=true;await assert.rejects(reconcile(failed),e=>e.code==='WEBHOOK_STORAGE_UNAVAILABLE');draftLookupFails=false;
+ await reconcile({id:'draft-update',type:'membership.updated',account_id:'biz_fixture',data:{id:'mem_fixture'}});
+ assert.equal(receipts,beforeDraftReceipts);assert.equal(observations.length,beforeDraftObservations);
+ // Existing bindings must still process a regression and revoke cached access.
+ draftBound=true;await reconcile(failed);assert.equal(observations.at(-1).paid,false);assert.equal(observations.at(-1).status,'drafted');
+ // The later funded membership follows the unchanged binding/settlement path.
+ recorded=false;membership.status='active';paymentStatus='paid';order.length=0;
+ await reconcile({...failed,id:'retry-paid',type:'payment.succeeded'});
+ assert.deepEqual(order,['payment:account_fixture:mem_fixture:pay_failed','observation']);assert.equal(observations.at(-1).paid,true);
  console.log('PASS webhook delivery: missing checkout retries; plan mismatch refuses; receipt survives grant failure; duplicate heals only grant; delayed success reads current cancellation; wrong merchant denied; refund reconciled before observation and retried on failure');
 })().catch(e=>{console.error(e);process.exitCode=1});

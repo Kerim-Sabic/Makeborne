@@ -74,6 +74,24 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
   if (checkoutError) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Checkout binding is unavailable.", 503);
   if (!checkout || !membership.user) throw new RequestError("CHECKOUT_BINDING_PENDING", "The purchasing account could not be confirmed yet. Retry this delivery.", 503);
   if (checkout.plan_id !== membership.plan.id) throw new RequestError("CHECKOUT_PLAN_MISMATCH", "The membership plan differs from its recorded checkout. Operator reconciliation is required.", 503);
+  if (membership.status === "drafted") {
+    const { data: boundDraft, error: draftError } = await db.from("billing_memberships").select("membership_id")
+      .eq("membership_id", membership.id).maybeSingle();
+    if (draftError) throw new RequestError("WEBHOOK_STORAGE_UNAVAILABLE", "Membership storage is unavailable.", 503);
+    if (!boundDraft) {
+      // A declined first attempt can create a draft, then Whop creates a new
+      // membership when the same checkout succeeds. Binding the unpaid draft
+      // would permanently block that success under the duplicate safeguards.
+      // Previously bound memberships still flow through to revoke stale access.
+      const paymentId = eventPaymentId(event);
+      if (paymentId) {
+        const payment = await retrieveVerifiedPlanPayment(paymentId);
+        if (payment.membershipId !== membership.id || !["failed", "pending"].includes(payment.status))
+          throw new RequestError("DRAFT_PAYMENT_UNVERIFIED", "The payment and membership status could not be confirmed. Retry this delivery.", 503);
+      }
+      return;
+    }
+  }
   const active = activeMembership(membership);
   const verifiedUntil = active ? new Date(Math.min(Date.parse(membership.renewal_period_end!), Date.now() + 5 * 60_000)).toISOString() : new Date(0).toISOString();
   if (!alreadyRecorded) {

@@ -1,6 +1,6 @@
 # Supervised host preparation
 
-**Prepared, not installed or qualified.** The historical staging controller ran for a bounded test on the owner's Windows PC. Its launcher records a PID; it provides no service installation or reboot guarantee. Do not describe it as an existing cloud supervisor.
+**Staging host qualified; production remains unprovisioned and disabled.** The approved dedicated Linux host has passed runtime, reboot and supervised staging checks. The integrated two-route cloud build and its limitations are recorded in `docs/release-review/production-publishing-integration-20261021.md`. Both service instances are stopped after testing. These results do not qualify production startup or a new fault-recovery run on the current bundle. The earlier Windows PID launcher is historical evidence only.
 
 Use an always-on Linux host with Docker and systemd for the trusted Node controller only. Compilation and rendering remain in separate ephemeral Vercel sandboxes. Never install generated dependencies or execute website code on this host. No inbound controller port is needed.
 
