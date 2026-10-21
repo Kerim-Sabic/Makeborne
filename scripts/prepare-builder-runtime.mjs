@@ -64,8 +64,17 @@ const screenshotDir = join(modules, "modern-screenshot");
 const { version: screenshotVersion } = JSON.parse(await readFile(join(screenshotDir, "package.json"), "utf8"));
 const stamp = `${esbuildVersion}-${reactVersion}-${screenshotVersion}-${lucideVersion}-${createHash("sha256").update(catalogText).update(portabilityText).digest("hex").slice(0, 12)}`;
 
+/** The rendered-contrast finish gate's in-browser probe (src/lib/builder/contrast-probe.ts), rebuilt on every run
+ * because it is app code, not a vendored package: the server loads it from /builder-runtime/contrast-probe.js. */
+async function buildContrastProbe() {
+  await mkdir(out, { recursive: true });
+  await esbuild.build({ entryPoints: [join(root, "src", "lib", "builder", "contrast-probe.ts")], bundle: true, outfile: join(out, "contrast-probe.js"),
+    platform: "browser", format: "iife", target: "es2022", absWorkingDir: root, logLevel: "error", legalComments: "none", minify: true,
+    define: { "process.env.NODE_ENV": '"production"' } });
+}
+
 try {
-  if ((await readFile(join(out, "VERSION"), "utf8")).trim() === stamp) process.exit(0);
+  if ((await readFile(join(out, "VERSION"), "utf8")).trim() === stamp) { await buildContrastProbe(); process.exit(0); }
 } catch { /* first run */ }
 
 await rm(out, { recursive: true, force: true });
@@ -138,5 +147,6 @@ for (const font of catalog) {
   if (licenseFile) await copyFile(join(dir, licenseFile), join(out, "fonts", "licenses", `${font.id}.txt`));
 }
 
+await buildContrastProbe();
 await writeFile(join(out, "VERSION"), stamp);
 console.log(`builder runtime ready (esbuild ${esbuildVersion}, react ${reactVersion}, modern-screenshot ${screenshotVersion}, lucide ${lucideVersion}, ${catalog.length} fonts)`);

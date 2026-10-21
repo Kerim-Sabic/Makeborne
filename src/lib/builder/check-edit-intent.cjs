@@ -155,7 +155,7 @@ async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}
       { id: "goal", question: "What should visitors do first?", why: "Every page leads to it.", topic: "Main action", options: [{ label: "Book" }, { label: "Call" }] },
       { id: "service-area", question: "Which neighbourhoods do you cover?", why: "Sets the local copy.", topic: "Service area" } ] });
     assert.deepEqual(parseQuestions("website", reply, { brief, attachments: 1 }).map(question => question.id), ["service-area"]);
-    assert.deepEqual(parseQuestions("website", reply).map(question => question.id), ["style", "goal", "service-area"], "without the brief, parsing is unchanged");
+    assert.deepEqual(parseQuestions("website", reply).map(question => question.id), ["vibe", "goal", "service-area"], "without the brief, parsing is unchanged (a website style question is the vibe question)");
   });
 
   const route = require("../../app/api/build/route.ts");

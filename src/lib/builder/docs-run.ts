@@ -103,11 +103,13 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped };
         if (!editor.changed) {
           if (input.operation) {
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "incomplete", { ...detail, code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder stopped before a usable change was ready. Your previous saved document is safe.", version: artifact.current_version, changed: false, finished: result.finished })));
+            // Nothing usable saved: never charged (provider cost absorbed). A finished no-change request stays chargeable.
+            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, result.finished ? "incomplete" : "failed", { ...detail, code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder stopped before a usable change was ready. Your previous saved document is safe.", version: artifact.current_version, changed: false, finished: result.finished })));
             return;
           }
-          await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
-          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Your document is unchanged — try a more focused request or a higher effort level." });
+          if (result.finished) await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
+          else await releaseRun(hold, measured(), "incomplete_nothing_saved", { ...detail, kind: "incomplete" });
+          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Nothing was charged. Your document is unchanged — try a more focused request or a higher effort level." });
           return;
         }
         if (input.operation) {

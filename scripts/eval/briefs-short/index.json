@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "frozenAt": "2026-10-21",
+  "count": 8,
+  "effort": "medium",
+  "sha256": {
+    "s01-dentist": "ecfbdc980065f0fd914fdc647429ca0e5d092f25e27b0bf00750c0d247777e33",
+    "s02-bakery": "a6df0c6916a56e43e04fe7b4413a40bc8ec5c5f07df28e24b5448f65e339cca3",
+    "s03-plumber-leeds": "d656a978603ba4a9c7b1baa14c3f1263c7b7120911c709d6ffb93b7f9e643c0f",
+    "s04-yoga-studio": "bd25dda606695bf1070806de1932cc11ee86f8813bed4c892bf046e76bb80f5e",
+    "s05-accountant": "3eb49d15a2615d02f1945e7e18fe22f6b0a673fa179963b1f5c9181a83b3393d",
+    "s06-coffee-roaster": "50ab95f0f10c26da58c4d014e939f1297b4a359c6dd12496e5064437caba3d81",
+    "s07-wedding-photographer": "3de725cf5e3e8cfa88fed1278a97cf233859020864ae79d5512303c24874dad4",
+    "s08-cocktail-bar": "3ba20deff2cd332f51a53a80a9915eb90030bfabee874b65ffce1244c4c42a0c"
+  }
+}

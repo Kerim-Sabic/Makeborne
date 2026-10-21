@@ -8,6 +8,10 @@
 //                                                  websites run in Create mode (the studio default); --plan runs Plan mode first
 //                                                  generate through the app's own routes (PAID)
 //   node scripts/eval/run.mjs --selftest-live      live-path safety checks with fakes (free)
+//   --image-models a,b (with --images): the server's ordered image allowlist (MAKEBORNE_IMAGE_MODELS) when .env.local names no model
+//   --enhance (with --live, websites in Create mode): the studio's enhanced-brief step first: POST /api/build/enhance
+//     (its own eval reservation, kind runner-enhancer, at the 1-credit hold; settled from the provider-call ledger by the
+//     route's hold reference), then the build with { brief: { mode: "enhanced", text } }, as the studio's Start building does.
 //
 // The live path drives the same HTTP routes, in the same order, with the same
 // bodies as the studio (src/components/live-builder.tsx): plan -> approved
@@ -50,6 +54,8 @@ export function setEffort(value) {
 }
 /** next dev bundler: Turbopack (Next's default) or webpack (needed in worktrees whose node_modules is a junction). */
 let BUNDLER = 'turbopack';
+/** --image-models: the ordered image allowlist for this run's server (MAKEBORNE_IMAGE_MODELS), when .env.local names none. */
+let IMAGE_MODELS = '';
 /**
  * The .env.local the runner reads ANTHROPIC_API_KEY / OPENAI_API_KEY / MAKEBORNE_IMAGE_MODEL from
  * (only into its own server process). A git worktree has none of its own: EVAL_ENV_LOCAL names the
@@ -80,17 +86,19 @@ const money = value => (value === null || value === undefined ? 'n/a' : `$${Numb
 // ===========================================================================
 
 /** Read scripts/eval/briefs/index.json and verify every brief file's SHA-256. */
+/** Which frozen set the runner uses: the golden set, or the short-prompt set (scripts/eval/briefs-short) with --briefs short. */
+let BRIEF_SET_DIR = BRIEFS_DIR;
 export function loadBriefs() {
-  const file = path.join(BRIEFS_DIR, 'index.json');
+  const file = path.join(BRIEF_SET_DIR, 'index.json');
   if (!existsSync(file)) {
     return { ok: false, present: false, message: `No brief manifest at ${rel(file)} yet (written by the briefs builder); the budget plan cannot be computed.`, items: [] };
   }
   const raw = readFileSync(file);
   const index = JSON.parse(raw.toString('utf8'));
-  const order = Array.isArray(index.order) ? index.order : [];
+  const order = Array.isArray(index.order) ? index.order : Object.keys(index.sha256 ?? {});
   const items = [], problems = [];
   for (const [position, id] of order.entries()) {
-    const briefFile = path.join(BRIEFS_DIR, `${id}.json`);
+    const briefFile = path.join(BRIEF_SET_DIR, `${id}.json`);
     if (!existsSync(briefFile)) { problems.push(`${id}: file missing`); continue; }
     const bytes = readFileSync(briefFile);
     const actual = sha256(bytes);
@@ -101,7 +109,7 @@ export function loadBriefs() {
     if (!['website', 'presentation', 'book'].includes(brief.format)) problems.push(`${id}: unknown format ${brief.format}`);
     if (typeof brief.brief !== 'string' || !brief.brief.trim()) problems.push(`${id}: empty brief`);
     items.push({ id, priority: brief.order ?? position + 1, kind: brief.format, title: brief.title, direction: brief.direction, shared: Boolean(brief.shared),
-      sha256: actual, hashOk: actual === expected, chars: brief.brief?.length ?? 0, file: briefFile, brief: brief.brief });
+      sha256: actual, hashOk: actual === expected, chars: brief.brief?.length ?? 0, file: briefFile, brief: brief.brief, simulatedAnswers: brief.simulatedAnswers ?? null });
   }
   items.sort((a, b) => a.priority - b.priority);
   if (index.count !== undefined && index.count !== order.length) problems.push(`index count ${index.count} != ${order.length} ids in order`);
@@ -601,7 +609,7 @@ export function keyPresence() {
   } : null;
   // Next loads these files itself; the runner blanks every key they define in the server env.
   const nextLoaded = ENV_FILES_NEXT_LOADS.filter(name => existsSync(path.join(REPO, name)));
-  return { file: '.env.local', exists: Boolean(local), keys, imagesPossible: Boolean(keys?.OPENAI_API_KEY && keys?.MAKEBORNE_IMAGE_MODEL), envFilesNextLoads: nextLoaded,
+  return { file: '.env.local', exists: Boolean(local), keys, imagesPossible: Boolean(keys?.OPENAI_API_KEY && (keys?.MAKEBORNE_IMAGE_MODEL || IMAGE_MODELS)), envFilesNextLoads: nextLoaded,
     shellOverrides: { EVAL_SPEND_APPROVED: process.env.EVAL_SPEND_APPROVED === 'yes', EVAL_CAP_USD: process.env.EVAL_CAP_USD ?? null } };
 }
 
@@ -775,7 +783,7 @@ export function serverEnv(stack, { images, rate }, { read = readEnvFile, value =
   return Object.assign(env, {
     NODE_ENV: 'development', NEXT_TELEMETRY_DISABLED: '1',
     ANTHROPIC_API_KEY: value('ANTHROPIC_API_KEY', read),
-    OPENAI_API_KEY: images ? value('OPENAI_API_KEY', read) : '', MAKEBORNE_IMAGE_MODEL: images ? value('MAKEBORNE_IMAGE_MODEL', read) : '',
+    OPENAI_API_KEY: images ? value('OPENAI_API_KEY', read) : '', MAKEBORNE_IMAGE_MODEL: images ? value('MAKEBORNE_IMAGE_MODEL', read) : '', MAKEBORNE_IMAGE_MODELS: images ? IMAGE_MODELS : '',
     MAKEBORNE_BUILDER_FALLBACK_MODELS: '', MAKEBORNE_AI_COST_USD_PER_CREDIT: String(rate),
     MAKEBORNE_CLOUD_ENABLED: 'true', MAKEBORNE_CLOUD_MIGRATIONS_VERIFIED: 'true', MAKEBORNE_LIVE_BUILDER_ENABLED: 'true',
     NEXT_PUBLIC_SUPABASE_URL: stack.apiUrl, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: stack.publishableKey, SUPABASE_SECRET_KEY: stack.secretKey,
@@ -847,6 +855,10 @@ const CLOUD_SUPABASE_HOST = /[a-z0-9-]+\.supabase\.co(?![a-z0-9-])/i;
 /** src/lib/supabase/config.ts getSupabaseConfig() as Turbopack (or webpack) inlines it. */
 const INLINED_CONFIG_URL = /function getSupabaseConfig\(\)\s*\{\s*const url = (?:\(\s*"TURBOPACK compile-time value",\s*)?("(?:[^"\\]|\\.)*"|undefined|void 0)/g;
 const COMPILE_TIME_VALUE = /"TURBOPACK compile-time value",\s*("(?:[^"\\]|\\.)*")/g;
+/** webpack dev (--bundler webpack; Turbopack cannot follow this checkout's node_modules junction) ships each module as an
+ * eval() string, so the same source appears with its quotes and newlines escaped once or twice. Unescaping only reveals
+ * the module text; the check itself (the exact isolated URL inlined in getSupabaseConfig) is unchanged. */
+const unescapeOnce = text => text.replace(/\\(["'\\nrt])/g, (match, character) => (character === 'n' ? '\n' : character === 'r' ? '\r' : character === 't' ? '\t' : character));
 
 /**
  * Prove the server is the runner's own child built for the isolated stack:
@@ -873,7 +885,8 @@ export async function verifyServerIdentity({ child, expectedApi, origin = ORIGIN
     const { status, text } = await get(chunk);
     if (status !== 200) continue;
     fetched++;
-    for (const match of text.matchAll(INLINED_CONFIG_URL)) configured.add(match[1].startsWith('"') ? JSON.parse(match[1]) : null);
+    const once = unescapeOnce(text), twice = unescapeOnce(once);
+    for (const variant of new Set([text, once, twice])) for (const match of variant.matchAll(INLINED_CONFIG_URL)) configured.add(match[1].startsWith('"') ? JSON.parse(match[1]) : null);
     for (const match of text.matchAll(COMPILE_TIME_VALUE)) {
       compileTimeValues++;
       if (CLOUD_SUPABASE_HOST.test(JSON.parse(match[1]))) problems.push(`${chunk} inlines a cloud Supabase host`);
@@ -1506,11 +1519,24 @@ async function assetData(session, workspaceId, artifactId, assets, variant) {
   return list;
 }
 
-async function runBrief({ session, browser, brief, runDir, runId, pricing, images, rerun, withPlan = false, control, deps = {} }) {
+/** The enhanced-brief call's provider dollars, from the provider-call ledger by its hold reference (read-only). */
+async function enhancerLedger(reference) {
+  return withReadOnly('release-auth', async client => {
+    const { rows } = await client.query(`select status, bound_microusd::text bound, charged_microusd::text charged from makeborne_private.live_provider_calls where run_reference = $1`, [reference]);
+    return { calls: rows.length, open: rows.filter(row => row.status === 'open' || row.status === 'uncertain').length, actualMicrousd: rows.reduce((sum, row) => sum + Number(row.charged ?? row.bound), 0) };
+  });
+}
+
+async function runBrief({ session, browser, brief, runDir, runId, pricing, images, rerun, withPlan = false, enhance = false, answers = false, control, deps = {} }) {
   // deps: injected fakes for the self-test; the defaults are the real functions.
   const { reserveFn = reserve, setLimits = setProviderLimits, settleBriefFn = settleBrief, settleFn = settle, save = saveOutputs, midnight = midnightWaitMs, now = Date.now, sleep = delay } = deps;
   const kind = brief.kind;
   const boundUsd = boundFor(kind, pricing, withPlan);
+  // The studio's enhanced-brief step (first website build in Create mode): its own 1-credit hold.
+  // ...only for short briefs, as the studio decides (detailed briefs build from the client's words and answers).
+  const enhancedModule = enhance ? loadApp('src/lib/builder/enhanced-brief.ts') : null;
+  // (detailed briefs get the free analysis instead of the enhancement; the route decides from `original`).
+  const enhancerBoundUsd = enhance && kind === 'website' && !withPlan ? round2(enhancedModule.ENHANCER_CREDITS * pricing.costPerCreditUsd) : 0;
   const scopes = images ? ['global', 'anthropic', 'openai'] : ['global', 'anthropic'];
   control.assertRunning(`${brief.id}: before the midnight check`);
   // The whole brief (until its limits are disabled again) must fit before 00:00 UTC.
@@ -1542,7 +1568,7 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     copyFileSync(brief.file, path.join(item.dir, 'brief.json'));
     // Today's spend is read now, after the reservation: the limit allows this brief's bound and no more.
     // enableLimits refuses once the run is stopping and the guard re-checks before every scope write.
-    const limits = await control.enableLimits(guard => setLimits({ enabled: true, boundUsd, scopes, note: `Eval ${runId}: ${brief.id} (bound ${money(boundUsd)})`, guard }));
+    const limits = await control.enableLimits(guard => setLimits({ enabled: true, boundUsd: round2(boundUsd + enhancerBoundUsd), scopes, note: `Eval ${runId}: ${brief.id} (bound ${money(boundUsd)})`, guard }));
     cost.limits = limits.set;
 
     // Project and artifact, exactly as the studio's create routes take them.
@@ -1560,8 +1586,38 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     writeJson(path.join(item.dir, 'item.json'), itemJson);
     const base = { workspaceId: session.workspaceId, artifactId };
     // The studio's first message is the brief, capped like cloud-studio.tsx does.
-    const full = brief.brief.trim();
+    // --answers: the studio's one-click design questions for this brief, answered as the frozen brief's
+    // simulatedAnswers say (only questions the app asks; skips and "you choose" set nothing).
+    let design = null, asked = [];
+    let full = brief.brief.trim();
+    if (answers && kind === 'website' && brief.simulatedAnswers) {
+      const questions = loadApp('src/lib/builder/brief-questions.ts');
+      const list = questions.briefQuestions('website', brief.brief);
+      const chosen = Object.fromEntries(list.map(question => { const value = brief.simulatedAnswers[question.id]; return [question.id, Array.isArray(value) ? { options: value } : typeof value === 'string' ? { option: value } : {}]; }));
+      asked = list.map(question => question.id);
+      full = questions.briefWithAnswers(brief.brief, list, chosen);
+      design = questions.designAnswers(list, chosen);
+      itemJson.generation.briefQuestions = `on-device design questions answered from simulatedAnswers: ${asked.join(', ')}`;
+    }
     const message = full.length > 8000 ? `${full.slice(0, 7400).replace(/\s+\S*$/, '')}…\n\n(The full brief is in the project details.)` : full;
+
+    let approvedBrief = null;
+    if (enhancerBoundUsd) {
+      const enhancerReservation = await reserveFn({ kind: 'runner-enhancer', ref: brief.id, boundUsd: enhancerBoundUsd, note: `${runId} brief enhancer`, unique: !rerun });
+      control.open.add(enhancerReservation);
+      const response = await session.fetch('/api/build/enhance', { method: 'POST', body: { ...base, brief: message, original: brief.brief.trim().slice(0, 8000), ...(design && Object.keys(design).length ? { design } : {}) } });
+      const value = await response.json().catch(() => null);
+      item.requests.push({ stage: 'enhance', method: 'POST', path: '/api/build/enhance', status: response.status });
+      const usable = response.ok && typeof value?.text === 'string' && typeof value?.reference === 'string';
+      writeJson(path.join(item.dir, 'enhanced.json'), { status: response.status, enhanced: value?.enhanced ?? null, text: value?.text ?? null, charged: value?.charged ?? null, providerMicrousd: value?.providerMicrousd ?? null, error: usable ? null : value?.error ?? null });
+      // Settled from the provider-call ledger; a failed enhancement names no reference, so its full bound stays counted.
+      const ledger = usable ? await enhancerLedger(value.reference).catch(() => null) : null;
+      await settleFn(enhancerReservation, ledger && !ledger.open && ledger.calls ? { actualUsd: usd(ledger.actualMicrousd), detail: { calls: ledger.calls } } : { unknown: true, detail: { status: response.status, reason: usable ? 'ledger unreadable or open' : 'enhancement failed (fail open)' } });
+      control.open.delete(enhancerReservation);
+      cost.enhancer = { boundUsd: enhancerBoundUsd, reservationId: enhancerReservation, status: response.status, usable, actualUsd: ledger && !ledger.open ? usd(ledger.actualMicrousd) : null, charged: value?.charged ?? null };
+      if (usable) approvedBrief = { mode: value.mode === 'analyze' ? 'analysis' : 'enhanced', text: value.text };
+      itemJson.generation.enhancer = cost.enhancer; writeJson(path.join(item.dir, 'item.json'), itemJson);
+    }
 
     let approvedPlan = null, planRevision = null;
     // Create mode (the studio composer's default) sends the brief straight to the builder;
@@ -1569,7 +1625,7 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     if (kind === 'website' && withPlan) {
       const planKey = randomUUID();
       item.actionKeys.push(planKey); cost.operations.push({ kind: 'plan', actionKey: planKey });
-      const planned = await item.stage(session, 'plan', '/api/build/plan', { ...base, expectedVersion: 0, expectedRevision: 0, message, effort: EFFORT, attachments: [],
+      const planned = await item.stage(session, 'plan', '/api/build/plan', { ...base, expectedVersion: 0, expectedRevision: 0, message, effort: EFFORT, attachments: [], approvedMaximum: pricing.planCeilingCredits,
         operation: { actionKey: planKey, stepKey: randomUUID() } });
       if (!planned.result || !planned.plan?.stored?.plan) throw Object.assign(new Error(planned.terminal.message ?? 'No plan was produced'), { code: planned.terminal.code ?? 'PLAN_MISSING', stage: 'plan' });
       approvedPlan = planned.plan.stored.plan; planRevision = planned.plan.stored.revision;
@@ -1581,7 +1637,9 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     item.actionKeys.push(buildKey); cost.operations.push({ kind: 'build', actionKey: buildKey });
     const built = await item.stage(session, 'build', '/api/build', { ...base, expectedVersion: 0,
       message: approvedPlan ? `Build the approved plan: ${approvedPlan.title}` : message, effort: EFFORT,
-      operation: { actionKey: buildKey, stepKey: randomUUID() }, attachments: [], ...(approvedPlan ? { plan: approvedPlan } : {}) });
+      // A new request names the maximum the studio showed (the effort ceiling), as live-builder.tsx sends it.
+      approvedMaximum: pricing.buildCeilingCredits,
+      operation: { actionKey: buildKey, stepKey: randomUUID() }, attachments: [], ...(approvedPlan ? { plan: approvedPlan } : {}), ...(approvedBrief ? { brief: approvedBrief } : {}), ...(!approvedPlan && design && Object.keys(design).length ? { design } : {}) });
     let result = built.result;
     if (result && approvedPlan) {
       // planner.markBuilt(): mark the plan built after the first saved build (free).
@@ -1749,7 +1807,7 @@ function heldSecrets({ stack, fixture, images }) {
   ];
 }
 
-export async function runLive({ report, approval, only, max, images, rerun = false, plan = false }) {
+export async function runLive({ report, approval, only, max, images, rerun = false, plan = false, enhance = false, answers = false }) {
   let selected = report.briefs.items;
   if (only?.length) selected = selected.filter(brief => only.includes(brief.id));
   if (max) selected = selected.slice(0, max);
@@ -1812,7 +1870,7 @@ export async function runLive({ report, approval, only, max, images, rerun = fal
         // Checked again right before the brief reserves (runBrief re-checks before reserving and before enabling limits).
         if (control.stopping) { stopped = stopReason(); break; }
         console.log(`\n  ${brief.id} (${brief.kind}, bound ${money(bound)})`);
-        try { items.push(await runBrief({ session, browser: control.browser, brief, runDir, runId, pricing: report.pricing, images, rerun, withPlan: plan, control })); }
+        try { items.push(await runBrief({ session, browser: control.browser, brief, runDir, runId, pricing: report.pricing, images, rerun, withPlan: plan, enhance, answers, control })); }
         catch (error) {
           if (error instanceof CapReached) { stopped = error.message; break; }
           if (error instanceof DuplicateReservation) { stopped = `refused ${brief.id}: ${error.message} (pass --rerun)`; break; }
@@ -1907,6 +1965,11 @@ async function liveSelfTest() {
     check('identity: other local URL refused', await rejects(() => verify({ '/login': html, '/_next/static/chunks/src_a._.js': chunkFor('http://127.0.0.1:54321') })));
     check('identity: exited child refused', await rejects(() => verify({ '/login': html, '/_next/static/chunks/node_b._.js': chunkFor(API) }, { pid: 1, exitCode: 1, signalCode: null })));
     check('identity: /login not 200 refused', await rejects(() => verify({})));
+    // webpack dev: the module is an eval() string (quotes and newlines escaped).
+    const webpackChunkFor = url => `(self.webpackChunk=self.webpackChunk||[]).push([[1],{"./src/lib/supabase/config.ts":(m,e,r)=>{eval(${JSON.stringify(`function getSupabaseConfig() {\n    const url = ${JSON.stringify(url)};\n    const key = "sb_publishable_x";\n}\n/* createClient('https://xyzcompany.supabase.co') */`)});}}]);`;
+    const webpackGood = await verify({ '/login': html, '/_next/static/chunks/node_b._.js': webpackChunkFor(API) });
+    check('identity: webpack dev build (eval modules) accepted', webpackGood.ok && webpackGood.supabaseUrl === API, webpackGood);
+    check('identity: webpack dev build for another URL refused', await rejects(() => verify({ '/login': html, '/_next/static/chunks/node_b._.js': webpackChunkFor('https://abcdefghijklmnop.supabase.co') }), error => error.code === 'EVAL_SERVER_IDENTITY'));
 
     // 4/5. provider limits with a fake pg client: enable = today's spend + bound; read-back checked.
     const fakeDb = ({ used = 12_420_000, stuckOn = [], delayMs = 0 } = {}) => {
@@ -2243,7 +2306,7 @@ async function liveSelfTest() {
 function cli(argv) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     fixtures: { type: 'boolean' }, 'include-redesign': { type: 'boolean' }, live: { type: 'boolean' }, approval: { type: 'string' }, rerun: { type: 'boolean' },
-    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, plan: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, 'image-models': { type: 'string' }, plan: { type: 'boolean' }, enhance: { type: 'boolean' }, briefs: { type: 'string' }, answers: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     'selftest-live': { type: 'boolean' }, 'selftest-watchdog-parent': { type: 'boolean' },
   }, strict: true });
   const max = values.max === undefined ? null : Number(values.max);
@@ -2256,9 +2319,17 @@ async function main() {
   process.chdir(REPO);
   const options = cli(process.argv.slice(2));
   if (options.effort !== undefined) setEffort(options.effort);
+  if (options.briefs !== undefined) {
+    if (!['golden', 'short'].includes(options.briefs)) throw new Error('--briefs must be golden or short');
+    if (options.briefs === 'short') BRIEF_SET_DIR = path.join(path.dirname(BRIEFS_DIR), 'briefs-short');
+  }
   if (options.bundler !== undefined) {
     if (!['turbopack', 'webpack'].includes(options.bundler)) throw new Error('--bundler must be turbopack or webpack');
     BUNDLER = options.bundler;
+  }
+  if (options['image-models'] !== undefined) {
+    if (!/^[a-z0-9.-]+(?:,[a-z0-9.-]+)*$/.test(options['image-models'])) throw new Error('--image-models takes a comma-separated list of model ids');
+    IMAGE_MODELS = options['image-models'];
   }
   if (options.help) { console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 10).join('\n')); return 0; }
   if (options['selftest-live']) { console.log('run.mjs live-path self-test (fakes only: no DB writes, no server, no provider)'); return liveSelfTest(); }
@@ -2302,7 +2373,7 @@ async function main() {
       direction: item.direction, shared: item.shared, sha256: item.sha256, hashOk: item.hashOk, chars: item.chars, file: rel(item.file) })) } },
   });
   printPreflight(report, runDir);
-  if (options.live) return runLive({ report, approval: options.approval, only: options.only, max: options.max, images: options.images, rerun: options.rerun, plan: options.plan });
+  if (options.live) return runLive({ report, approval: options.approval, only: options.only, max: options.max, images: options.images, rerun: options.rerun, plan: options.plan, enhance: options.enhance, answers: options.answers });
   return 0;
 }
 

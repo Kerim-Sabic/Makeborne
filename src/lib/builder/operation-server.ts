@@ -6,6 +6,8 @@ import { RequestError, apiError } from "../server/http";
 import { canonicalSourceJson } from "../projects/canonical-json";
 import { aiCostUsdPerCredit } from "./pricing";
 import { SitePlanSchema, StoredPlanSchema, estimatePlanCredits, recommendedEffort, type SitePlan } from "./plan";
+import { BuildBriefSchema, DesignAnswersSchema, type BuildBrief } from "./enhanced-brief";
+import type { DesignAnswers } from "./brief-questions";
 import { RunSpend, SpendError, type SpendGate } from "../ai/run-spend";
 import { databaseGate, SETTLEMENT_WINDOW_MS, CLOCK_SKEW_MS } from "../ai/live-run";
 import type { CreditHold } from "../credits/server";
@@ -20,6 +22,9 @@ export type OperationRun = {
   hold: CreditHold; operation: OperationSnapshot; rateMicrousd: number; providerAllowanceMicrousd: number; expiresAt: number;
   originalMessage?: string;
   originalPlan?: SitePlan;
+  /** The enhanced (or client-edited) brief and one-click design answers the request was authorized with. */
+  originalBrief?: BuildBrief;
+  originalDesign?: DesignAnswers;
   finalizationStarted?: boolean;
 };
 export type OperationCandidate = {
@@ -133,9 +138,10 @@ export function brandKitFingerprint(kit: object | null): string {
 }
 /** The request context recorded once with a new operation. Provenance (advisor brief ids) is kept for the record only. */
 export function operationContext(request: unknown, attachmentsSha256: string): Record<string, unknown> {
-  const body = typeof request === "object" && request !== null ? request as { message?: unknown; plan?: unknown; provenance?: unknown } : null;
+  const body = typeof request === "object" && request !== null ? request as { message?: unknown; plan?: unknown; provenance?: unknown; brief?: unknown; design?: unknown } : null;
   const brandKit = requestBrandKit(request);
-  return { attachmentsSha256, ...(brandKit ? { brandKit } : {}), ...(body ? { message: body.message ?? "", ...(body.plan ? { plan: body.plan } : {}), ...(body.provenance ? { provenance: body.provenance } : {}) } : {}) };
+  return { attachmentsSha256, ...(brandKit ? { brandKit } : {}), ...(body ? { message: body.message ?? "", ...(body.plan ? { plan: body.plan } : {}), ...(body.provenance ? { provenance: body.provenance } : {}),
+    ...(body.brief ? { brief: body.brief } : {}), ...(body.design ? { design: body.design } : {}) } : {}) };
 }
 const requestBrandKit = (request: unknown) => typeof request === "object" && request !== null && typeof (request as { brandKit?: unknown }).brandKit === "string"
   ? (request as { brandKit: string }).brandKit : undefined;
@@ -199,7 +205,9 @@ export async function beginOperation(input: {
     hold: { userId: input.actor, reference: value.reference, amount: value.amount, exempt: value.exempt, reservedAt },
     operation: status.operation, rateMicrousd: op.rateMicrousd, providerAllowanceMicrousd: op.providerRemainingMicrousd, expiresAt,
     originalMessage: typeof (data.requestContext as { message?: unknown } | null)?.message === "string" ? (data.requestContext as { message: string }).message : undefined,
-    originalPlan: SitePlanSchema.safeParse((data.requestContext as { plan?: unknown } | null)?.plan).data } };
+    originalPlan: SitePlanSchema.safeParse((data.requestContext as { plan?: unknown } | null)?.plan).data,
+    originalBrief: BuildBriefSchema.safeParse((data.requestContext as { brief?: unknown } | null)?.brief).data,
+    originalDesign: DesignAnswersSchema.safeParse((data.requestContext as { design?: unknown } | null)?.design).data } };
 }
 
 export function createOperationSpend(run: OperationRun, platformDeadline: number): RunSpend {

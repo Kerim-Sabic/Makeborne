@@ -82,8 +82,10 @@ async function main() {
       }
       assert.equal(heightDuring, heightBefore, `${width}px: the field keeps its height when Send is pressed`);
       assert.ok(!moved, `${width}px: Send stays put between press and release`);
-      assert.equal(builds.length, 1, `${width}px: the mouse click on Send sent the message`);
-      assert.ok(JSON.stringify(builds[0]).includes("Make the opening headline warmer."), "the typed message is what was sent");
+      // A first website build now asks its one-click design questions first: the click registered if it sent a build or opened them.
+      const asked = await page.locator(".bq").count();
+      assert.equal(builds.length + (asked ? 1 : 0), 1, `${width}px: the mouse click on Send sent the message`);
+      assert.ok(asked ? (await page.locator(".lb-user").first().innerText()).includes("Make the opening headline warmer.") : JSON.stringify(builds[0]).includes("Make the opening headline warmer."), "the typed message is what was sent");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${width}px: no horizontal page scroll`);
       assert.deepEqual(errors, [], "no page errors");
       passed++; console.log(`PASS ${width}px: a mouse press and release on Send registers; the composer does not resize on blur`);

@@ -25,7 +25,9 @@ import { attachmentOwner, projectAttachmentKey, retainBuilderAttachmentSnapshot,
 import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-attachments";
 import { sourceIntentIssue } from "@/lib/builder/source-readiness";
 import BriefQuestionsCard from "./brief-questions-card";
-import { briefQuestions, briefWithAnswers, isBriefQuestion, type BriefAnswers, type BriefQuestion } from "@/lib/builder/brief-questions";
+import { briefWithAnswers, designAnswers, isBriefQuestion, mergedQuestions, questionLimit, type BriefAnswers, type BriefQuestion, type DesignAnswers } from "@/lib/builder/brief-questions";
+import EnhancedBriefCard, { buildRefusedToo, type EnhancingState } from "./enhanced-brief-card";
+import { shouldEnhance, type BuildBrief } from "@/lib/builder/enhanced-brief";
 import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendingRequest, savePendingRequest, targetIssue, targetReference, undoIssue, type EditTarget, type PendingRequest } from "@/lib/builder/edit-intent";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
@@ -34,7 +36,7 @@ import responsive from "../../infra/project-runtime/responsive-images.cjs";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
-type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[]; receipt?: RunReceipt };
+type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[]; receipt?: RunReceipt; enhancedBrief?: BuildBrief };
 type Attachment = BuilderAttachment;
 type Live = { files: Record<string, string>; assets: { id: string; path: string }[]; document?: DocumentSource; focus?: string };
 type RunResult = { version: number; changed: boolean; touched: number; finished: boolean; operation?: OperationSnapshot };
@@ -63,6 +65,8 @@ function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "bo
       <div><dt>Time</dt><dd>{formatDuration(receipt.durationMs)}</dd></div>
       <div><dt>Sources sent</dt><dd>{receipt.sources.length ? receipt.sources.join(", ") : "None"}</dd></div>
       {receipt.brief && <div><dt>Brief</dt><dd>From {receipt.brief}</dd></div>}
+      {receipt.concept && <div><dt>Concept</dt><dd>{receipt.concept.chosen}{receipt.concept.runnersUp.length ? ` · also considered: ${receipt.concept.runnersUp.join(", ")}` : ""}</dd></div>}
+      {receipt.enhanced && <div><dt>{receipt.brief ? "Brief used" : "Brief"}</dt><dd>{receipt.enhanced.mode === "original" ? "Your own words" : receipt.enhanced.mode === "analysis" ? "Your own words, with a brief analysis" : receipt.enhanced.mode === "edited" ? "Enhanced brief, with your edits" : "Enhanced brief"}{receipt.enhanced.mode === "original" ? "" : " · reading your brief was free"}</dd></div>}
       <div><dt>{kind === "website" ? "Files changed" : "Changes"}</dt><dd>{changes.length ? <details><summary>{changes.length} {noun}{changes.length === 1 ? "" : "s"}</summary><ul>{changes.slice(0, 40).map(item => <li key={item}>{item}</li>)}{changes.length > 40 && <li>and {changes.length - 40} more</li>}</ul></details> : "None"}</dd></div>
     </dl>
     {!!receipt.checks.length && <ul className="lb-receipt-checks">{receipt.checks.map(check => <li key={check.label} data-ok={check.ok}>{check.ok ? <Check size={13} aria-label="Passed" /> : <TriangleAlert size={13} aria-label="Needs attention" />}<span>{check.label}</span></li>)}</ul>}
@@ -148,6 +152,11 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   // Questions before the first build, asked once per project session.
   const [asking, setAsking] = useState<{ text: string; mode: "create" | "plan"; questions: readonly BriefQuestion[] | null } | null>(null);
   const asked = useRef(false);
+  /** The enhanced-brief step of a first website build: shown before anything paid starts (M08). */
+  const [enhancing, setEnhancing] = useState<{ text: string; design: DesignAnswers; state: EnhancingState } | null>(null);
+  const enhanceAbort = useRef<AbortController | null>(null);
+  /** A detailed first brief being analysed (free, automatic; Skip starts without it). */
+  const [analyzing, setAnalyzing] = useState<{ text: string; design: DesignAnswers } | null>(null);
   const authorizing = useRef(false);
   const [previewingRecovery, setPreviewingRecovery] = useState<{ runId: string; version: number } | null>(null);
   const [chosenMode, setMode] = useState<"create" | "plan" | null>(null);
@@ -410,7 +419,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     if (receipt) setTurns(current => [...current, { id: newId(), role: "assistant", text: "", activity: [], state: "done", receipt }]);
   }, [unlimited, website]);
 
-  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string }): Promise<Outcome | undefined> => {
+  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string; brief?: BuildBrief; design?: DesignAnswers; enhanced?: RunMeter["enhanced"] }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
     const quoteIssue = !options?.operation ? affordability(options?.approvedMaximum ?? BUILDER_EFFORT[options?.effort ?? effort].ceilingCredits, balance) : null;
     if (quoteIssue) { setNotice(quoteIssue); return; }
@@ -419,7 +428,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     const request: PendingRequest | null = options?.operation ? null : { text: text.trim(), mode: "create", baseVersion: version, ...(options?.target ? { target: options.target } : {}), sentAt: Date.now() };
     if (request) holdRequest(request, !options?.plan);
     let outcome: Outcome = "uncertain";
-    const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done" };
+    const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done", ...(options?.brief && !options.operation ? { enhancedBrief: options.brief } : {}) };
     const reply: Turn = { id: newId(), role: "assistant", text: "", activity: [], state: "streaming" };
     setTurns(current => [...current, userTurn, reply]);
     const live: Live = { files: { ...baseFiles }, assets: [...baseAssets], document: baseDocument };
@@ -428,6 +437,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     meter.sources = files.map(file => file.name);
     const brief = options?.operation ? null : pendingBrief;
     if (brief) meter.brief = provenanceLabel(brief.provenance);
+    if (options?.enhanced && !options.operation) meter.enhanced = options.enhanced;
     setSentSources({ names: meter.sources, operationId: options?.operation?.id ?? null });
     try {
       const level = options?.effort ?? effort;
@@ -439,7 +449,11 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         // A new request is bound to the maximum shown before sending (the composer limit or the plan approval).
         ...("actionKey" in requestOperation ? { approvedMaximum: options?.approvedMaximum ?? BUILDER_EFFORT[level].ceilingCredits } : {}),
         attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan, planRevision: options.planRevision } : {}),
-        ...(brief ? { provenance: brief.provenance } : {}) }, reply.id, live, meter);
+        ...(brief ? { provenance: brief.provenance } : {}),
+        // The approved enhanced brief and the client's answers start the operation; later stages read them from it.
+        ...("actionKey" in requestOperation && !options?.plan && options?.brief ? { brief: options.brief } : {}),
+        // Design answers also bind an approved plan's build (the plan carries its own direction; the answers keep must-haves and imagery).
+        ...("actionKey" in requestOperation && options?.design && Object.keys(options.design).length ? { design: options.design } : {}) }, reply.id, live, meter);
       outcome = result ? "done" : lastRefusal.current ? "refused" : "uncertain";
       if (brief && outcome === "done") briefSent(brief);
       if (request) releaseRequest(request, outcome, !options?.plan);
@@ -548,7 +562,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     setBusy(false);
     refreshBalance();
   }, [balance, briefSent, busy, disabled, draftPlan, effort, holdRequest, operationRunning, pendingBrief, planner, previewingRecovery, refreshBalance, releaseRequest, version]);
-  const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; target?: string }): Promise<Outcome | undefined> => {
+  const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; target?: string; brief?: BuildBrief; design?: DesignAnswers; enhanced?: RunMeter["enhanced"] }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
     if (!sources.ready || sources.busy) { setNotice("Wait for your source files to finish loading or saving."); return; }
     sourceLock.current = true; setPreparingSources(true); setNotice("");
@@ -582,6 +596,95 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       return Array.isArray(value.questions) && value.questions.every(isBriefQuestion) ? value.questions : null;
     } catch { return null; }
   }, [accountId, artifactId, kind, workspaceId]);
+  /** The enhanced brief (short prompts) or the brief analysis (detailed ones) for a first website build: a small capped call,
+   * free to the client. A failure carries the server's own message and whether a build would be refused for the same reason. */
+  const enhanceBrief = useCallback(async (brief: string, design: DesignAnswers, signal: AbortSignal, original?: string): Promise<Exclude<EnhancingState, { status: "loading" }>> => {
+    try {
+      const response = await fetch("/api/build/enhance", { method: "POST", cache: "no-store", signal,
+        headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
+        body: JSON.stringify({ workspaceId, artifactId, brief: brief.slice(0, 8000), ...(original ? { original: original.slice(0, 8000) } : {}), ...(Object.keys(design).length ? { design } : {}), attachments: Math.min(sources.files.length, 20) }) });
+      if (!response.ok) {
+        const error = await response.json().then(value => (value as { error?: { code?: unknown; message?: unknown } }).error).catch(() => undefined);
+        const code = typeof error?.code === "string" ? error.code : "", message = typeof error?.message === "string" && error.message.trim() ? error.message.trim().slice(0, 400) : undefined;
+        return { status: "failed", message, blocking: buildRefusedToo(code) };
+      }
+      const value = await response.json() as { enhanced?: unknown; text?: unknown; charged?: unknown };
+      if (!value.enhanced || typeof value.text !== "string" || !value.text.trim() || typeof value.charged !== "number") return { status: "failed" };
+      return { status: "ready", enhanced: value.enhanced as Extract<EnhancingState, { status: "ready" }>["enhanced"], text: value.text, charged: value.charged };
+    } catch { return { status: "failed" }; }
+  }, [accountId, artifactId, sources.files.length, workspaceId]);
+  /** After the questions: a first website build in Create mode shows its enhanced brief before starting; anything else starts as before. */
+  // Deferred starts (after the free reading or the questions) use the latest effort, balance and sources, not the ones
+  // captured when the questions appeared.
+  const submitLatest = useRef(submitSources);
+  useEffect(() => { submitLatest.current = submitSources; }, [submitSources]);
+  /** The brief the questions took out of the composer goes back there whenever a start is refused, so nothing typed is lost. */
+  const restoreBrief = useCallback((text: string, notice?: string) => {
+    setDraft(text); asked.current = false;
+    if (notice) setNotice(notice);
+  }, []);
+  /** A deferred start: a refusal (affordability, busy, sources not ready) returns the brief and answers to the composer. */
+  const startDeferred = useCallback(async (text: string, requestMode: "create" | "plan", options?: Parameters<typeof submitSources>[2]) => {
+    const outcome = await submitLatest.current(text, requestMode, options);
+    if (outcome === undefined || outcome === "refused") restoreBrief(text);
+    return outcome;
+  }, [restoreBrief]);
+  /** Structured design answers chosen before a Plan, kept for the approved plan's build. */
+  const planDesign = useRef<DesignAnswers | null>(null);
+  const proceed = useCallback((text: string, requestMode: "create" | "plan", design: DesignAnswers, original: string) => {
+    // Affordability first: a brief that cannot be built is never read or enhanced, and stays in the composer.
+    const quoteIssue = affordability(BUILDER_EFFORT[effort].ceilingCredits, balance);
+    if (quoteIssue) { restoreBrief(text, quoteIssue); return; }
+    if (!website) { void startDeferred(text, requestMode); return; }
+    if (requestMode !== "create") { planDesign.current = Object.keys(design).length ? design : null; void startDeferred(text, requestMode); return; }
+    if (!shouldEnhance(original)) {
+      // A detailed brief is never rewritten: a free analysis lists what the client's own words ask for, then the build starts.
+      enhanceAbort.current?.abort();
+      const controller = new AbortController(); enhanceAbort.current = controller;
+      const timer = window.setTimeout(() => controller.abort(), 45_000);
+      setAnalyzing({ text, design });
+      void enhanceBrief(text, design, controller.signal, original).then(result => {
+        window.clearTimeout(timer);
+        if (enhanceAbort.current !== controller) return;
+        enhanceAbort.current = null; setAnalyzing(null);
+        // A refusal that would stop the build too (AI paused, daily limit, no credits) is shown, and nothing starts.
+        if (result.status === "failed" && result.blocking) { restoreBrief(text, result.message ?? "Building isn't available right now. Nothing was started or charged."); return; }
+        const ready = result.status === "ready" ? result : null;
+        void startDeferred(text, "create", { ...(Object.keys(design).length ? { design } : {}), ...(ready ? { brief: { mode: "analysis", text: ready.text } } : {}), enhanced: { mode: ready ? "analysis" : "original", credits: 0 } });
+      });
+      return;
+    }
+    enhanceAbort.current?.abort();
+    const controller = new AbortController(); enhanceAbort.current = controller;
+    const timer = window.setTimeout(() => controller.abort(), 45_000);
+    setEnhancing({ text, design, state: { status: "loading" } });
+    void enhanceBrief(text, design, controller.signal, original).then(result => {
+      window.clearTimeout(timer);
+      if (enhanceAbort.current !== controller) return;
+      setEnhancing(current => current && current.text === text ? { ...current, state: result } : current);
+    });
+  }, [balance, effort, enhanceBrief, restoreBrief, startDeferred, website]);
+  const proceedLatest = useRef(proceed);
+  useEffect(() => { proceedLatest.current = proceed; }, [proceed]);
+  const startEnhanced = (brief: BuildBrief | null) => {
+    if (!enhancing) return;
+    const previous = enhancing, { text, design, state } = enhancing;
+    enhanceAbort.current?.abort(); enhanceAbort.current = null;
+    setEnhancing(null);
+    const credits = state.status === "ready" ? state.charged : 0;
+    void submitLatest.current(text, "create", { design, ...(brief ? { brief } : {}), enhanced: { mode: brief?.mode ?? "original", credits } }).then(outcome => {
+      if (outcome !== undefined && outcome !== "refused") return;
+      // Refused before it started: the card comes back with the client's edits, and the brief is in the composer too.
+      setEnhancing(brief && previous.state.status === "ready" ? { ...previous, state: { ...previous.state, text: brief.text } } : previous);
+      restoreBrief(text);
+    });
+  };
+  const cancelEnhanced = () => {
+    if (!enhancing) return;
+    enhanceAbort.current?.abort(); enhanceAbort.current = null;
+    setDraft(enhancing.text); setEnhancing(null); asked.current = false;
+    setNotice("Your brief is back in the composer. Nothing was started.");
+  };
   // The first request on an empty project asks what the brief leaves open.
   const firstBuild = !turns.length && !history.length && !planner.restored && version <= 1 && (website ? Object.keys(baseFiles).length === 0 : !baseDocument);
   /** `prepared` is a brief handed over from another screen (project creation): it may ask the free
@@ -591,27 +694,31 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     const issue = sourceIntentIssue(readiness);
     if (issue) { setNotice(issue); setDraft(text); return; }
     if (asking) { setNotice("Answer the questions above, or choose Skip questions."); return; }
+    if (enhancing) { setNotice("Choose how to start with the brief above, or Cancel."); return; }
+    if (analyzing) { setNotice("Your brief is being read; the build starts in a moment."); return; }
     if (firstBuild && !asked.current && text.trim()) {
       asked.current = true;
       const brief = text.trim(), attachments = sources.files.length;
-      const local = briefQuestions(kind, brief, { attachments });
+      // A detailed brief has nothing left to ask: it goes straight on (a website brief to its free reading, then the build).
+      if (!questionLimit(kind, brief)) { if (prepared) { asked.current = false; hold(); } else { setDraft(""); proceedLatest.current(brief, requestMode, {}, brief); } return; }
       setAsking({ text: brief, mode: requestMode, questions: null }); setDraft("");
-      // Tailored questions when the AI is available; otherwise the on-device set.
+      // The on-device design questions for this brief, with AI-tailored business questions merged in when available.
       void tailoredQuestions(brief, attachments).then(tailored => {
-        const questions = tailored ?? local;
-        if (!questions.length) { setAsking(null); if (prepared) hold(); else void submitSources(brief, requestMode); return; }
+        const questions = mergedQuestions(kind, brief, tailored, { attachments });
+        if (!questions.length) { setAsking(null); if (prepared) hold(); else proceedLatest.current(brief, requestMode, {}, brief); return; }
         setAsking(current => current && current.text === brief && !current.questions ? { ...current, questions } : current);
       });
       return;
     }
     if (prepared) { hold(); return; }
     void submitSources(text, requestMode, target ? { target } : undefined);
-  }, [asking, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
+  }, [analyzing, asking, enhancing, firstBuild, kind, proceed, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
   const answerQuestions = (answers: BriefAnswers | null) => {
     if (!asking) return;
     const { text, mode: requestMode, questions } = asking;
     setAsking(null);
-    void submitSources(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode);
+    // Only chosen answers reach the brief and the design seed (a skipped one never does, F04).
+    proceed(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode, answers && questions && website ? designAnswers(questions, answers) : {}, text);
   };
   const submit = (text: string) => {
     // A selected element must still be exactly what the user saw; otherwise refuse instead of editing another one.
@@ -638,6 +745,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       approvals.current.set(identity, approval);
       setMode("create"); setEffort(level);
       const outcome = await submitSources(`Build the approved plan: ${saved.plan.title}`, "create", { plan: saved.plan, planRevision: saved.revision, effort: level, approval, approvedMaximum: maximum,
+        // The structured design answers chosen before the plan still bind its build (must-have sections, imagery, theme).
+        ...(planDesign.current ? { design: planDesign.current } : {}),
         target: `saved plan v${saved.revision} · ${EFFORT_PRESENTATION[level].label} effort` });
       // Only an unknown outcome keeps the identity: building it again then joins the recorded request.
       if (outcome !== "uncertain") approvals.current.delete(identity);
@@ -728,6 +837,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     : history.length ? `${history.length} earlier change${history.length === 1 ? "" : "s"}` : "Conversation";
   const measured = estimates && effort === estimates.effort && firstBuild ? estimates.firstBuild[kind] : null;
   const ceiling = BUILDER_EFFORT[effort].ceilingCredits;
+  // Prompt help (enhancement or analysis) is free, so the maximum is the build's own ceiling.
+  const shownMaximum = ceiling;
   const canReview = website && Object.keys(baseFiles).length > 0;
   const quoteIssue = affordability(mode === "plan" ? PLAN_CEILING_CREDITS : ceiling, balance);
   return <aside className="lb" aria-label="Builder chat" data-chat-open={chatOpen || undefined} onKeyDown={event => closeSheetOnEscape(event, chatOpen, () => setChatOpen(false), ".lb-log")}>
@@ -737,10 +848,17 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     <div className="lb-log" id={`lb-log-${artifactId}`} ref={log} aria-live="polite">
       {empty && !asking && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {asking && <><div className="lb-turn lb-user"><p>{asking.text}</p></div>
-        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</button></div>
+        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>{website && asking.mode === "create" && shouldEnhance(asking.text) ? "Skip questions" : <>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</>}</button></div>
           : <BriefQuestionsCard questions={asking.questions} kind={kind} planning={asking.mode === "plan"} busy={busy || preparingSources || Boolean(disabled)}
+          finalLabel={website && asking.mode === "create" && shouldEnhance(asking.text) ? "Continue" : undefined}
           limit={`Starting ${asking.mode === "plan" ? "the plan" : "the build"} uses up to ${asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits, with ${sources.files.length ? `your source files: ${sources.files.filter(file => !leftOut.has(file.id)).map(file => file.name).join(", ") || "none"}` : "no source files"}. You pay only for what is used.`}
           onStart={answers => answerQuestions(answers)} onSkip={() => answerQuestions(null)} />}</div></>}
+      {analyzing && <><div className="lb-turn lb-user"><p>{analyzing.text}</p></div>
+        <div className="lb-turn lb-assistant"><div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to list everything it asks for… (free)</span>
+          <button type="button" className="bq-skip" onClick={() => { const current = analyzing; enhanceAbort.current?.abort(); enhanceAbort.current = null; setAnalyzing(null); void startDeferred(current.text, "create", { ...(Object.keys(current.design).length ? { design: current.design } : {}), enhanced: { mode: "original", credits: 0 } }); }}>Skip and start</button></div></div></>}
+      {enhancing && <><div className="lb-turn lb-user"><p>{enhancing.text}</p></div>
+        <div className="lb-turn lb-assistant"><EnhancedBriefCard key={enhancing.state.status} state={enhancing.state} design={enhancing.design} maximum={ceiling} busy={busy || preparingSources || Boolean(disabled)}
+          onStart={brief => startEnhanced(brief)} onOriginal={() => startEnhanced(null)} onCancel={cancelEnhanced} /></div></>}
       {!!history.length && <details className="lb-history"><summary>{history.length} earlier change{history.length === 1 ? "" : "s"}</summary>
         <ol>{history.map(item => <li key={item.number}><strong>v{item.number}</strong> {item.summary}</li>)}</ol></details>}
       {planner.restored && <div className="lb-turn lb-assistant">
@@ -753,6 +871,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           // eslint-disable-next-line @next/next/no-img-element -- data URL screenshots, not optimisable
           <li key={shot.label} data-viewport={shot.viewport}><img src={shot.url} alt={`${shot.label} screenshot`} title={shot.label} /></li>)}</ul>}
         {turn.text && <p>{turn.text}</p>}
+        {turn.enhancedBrief && <details className="lb-enhanced"><summary>{turn.enhancedBrief.mode === "edited" ? "Enhanced brief (your edits)" : turn.enhancedBrief.mode === "analysis" ? "Brief analysis" : "Enhanced brief"}</summary><pre>{turn.enhancedBrief.text}</pre></details>}
         {turn.plan && planner.active?.turnId === turn.id && planCard(planner.active)}
         {typeof turn.plan === "object" && planner.active?.turnId !== turn.id && <div className="pc pc-collapsed"><ListChecks size={14} /><span>Plan v{turn.plan.revision} · <strong>{turn.plan.title}</strong> — revised below</span></div>}
         {!!turn.activity.length && <ul className="lb-activity">{turn.activity.map(item => <li key={item.id} data-done={item.done}>
@@ -848,13 +967,13 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       {(busy || operationRunning) && <p className="lb-action-effect" id={`lb-stop-effect-${artifactId}`}>{stopEffect(operation, version, pendingCancel && !operation?.cancelRequested)}</p>}
       <div className="lb-estimate">
         {brandKit !== undefined && <p className="lb-brand">{brandKit ? `Brand kit: ${brandKit}` : "No brand kit"} · used for this request</p>}
-        <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
+        <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
         {/* Only measured figures: failed planning is released at zero; explicit Stop settles confirmed usage. */}
         <p className="lb-estimate-detail">{mode === "plan" ? "A failed plan is not charged. If you choose Stop, confirmed usage is charged and unused credits are returned."
           : measured ? `In testing, a first ${kind} at ${EFFORT_PRESENTATION[effort].label} used ${measured.min}–${measured.max} credits (${measured.samples} test ${kind}s, no AI images). You pay only for what is used.`
           : `You pay only for what is used, never more than ${ceiling} credits without your approval.`}</p>
         {/* Phones: one line instead of the three above (limit, measured range, balance). */}
-        <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
+        <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
       </div>
       {(notice || (disabled && disabledReason)) && <p className="lb-notice" role="status">{notice || disabledReason}</p>}
     </form>

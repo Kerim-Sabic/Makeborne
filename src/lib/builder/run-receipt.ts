@@ -28,6 +28,11 @@ export type RunMeter = {
   sources: string[];
   /** The advisor brief this request came from ("Mira’s brief · revision 2"), when it carried one. */
   brief?: string;
+  /** Which brief the first build used ("original" when it was not read: skipped, failed or not offered). Reading or
+   * enhancing the brief is free, so `credits` is always 0; it stays for receipts recorded before that. */
+  enhanced?: { mode: "enhanced" | "edited" | "analysis" | "original"; credits: number };
+  /** The concept the first build chose, and its runners-up (names). */
+  concept?: { chosen: string; runnersUp: string[] };
   /** Generated images: the model the router chose, its quality, size, reason and measured cost. */
   images: ReceiptImage[];
 };
@@ -46,6 +51,8 @@ export type RunReceipt = {
   sources: string[];
   /** The advisor brief recorded with this request, when there was one. */
   brief?: string;
+  enhanced?: { mode: "enhanced" | "edited" | "analysis" | "original"; credits: number };
+  concept?: { chosen: string; runnersUp: string[] };
   checks: { ok: boolean; label: string }[];
   images: ReceiptImage[];
   /** This request saved nothing and the server settled it at zero credits. */
@@ -56,7 +63,7 @@ export function newRunMeter(now = Date.now()): RunMeter {
   return { started: now, steps: 0, charged: 0, chargeKnown: true, files: new Set(), items: new Set(), saved: false, version: null, finished: null, build: null, reviews: 0, failed: false, render: null, sources: [], images: [] };
 }
 
-type StreamEvent = { type?: unknown; path?: unknown; label?: unknown; charged?: unknown; changed?: unknown; finished?: unknown; build?: unknown; version?: unknown;
+type StreamEvent = { type?: unknown; path?: unknown; label?: unknown; chosen?: unknown; runnersUp?: unknown; charged?: unknown; changed?: unknown; finished?: unknown; build?: unknown; version?: unknown;
   model?: unknown; quality?: unknown; size?: unknown; reason?: unknown; costMicrousd?: unknown };
 const text = (value: unknown) => typeof value === "string" && value ? value.slice(0, 300) : null;
 const credits = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -73,6 +80,10 @@ export function meterEvent(meter: RunMeter, event: StreamEvent) {
       break;
     case "item":
       if (typeof event.label === "string") meter.items.add(event.label);
+      break;
+    case "concept":
+      if (typeof event.chosen === "string" && event.chosen.trim()) meter.concept = { chosen: event.chosen.slice(0, 48),
+        runnersUp: Array.isArray(event.runnersUp) ? event.runnersUp.filter((name): name is string => typeof name === "string").slice(0, 2).map(name => name.slice(0, 48)) : [] };
       break;
     case "done": {
       meter.steps++;
@@ -119,7 +130,7 @@ export function runReceipt(meter: RunMeter, options: { website: boolean; unlimit
   return {
     charged, unlimited: options.unlimited, saved: meter.saved, version: meter.version,
     durationMs: Math.max(0, (options.now ?? Date.now()) - meter.started),
-    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), checks, images: meter.images.map(image => ({ ...image })),
+    files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), ...(meter.enhanced ? { enhanced: { ...meter.enhanced } } : {}), ...(meter.concept ? { concept: { chosen: meter.concept.chosen, runnersUp: [...meter.concept.runnersUp] } } : {}), checks, images: meter.images.map(image => ({ ...image })),
     notCharged: !options.unlimited && charged === 0 && !meter.saved && meter.failed,
   };
 }

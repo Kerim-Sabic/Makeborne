@@ -1,0 +1,97 @@
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
+import { apiError, boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
+import { HOLD_LIFETIME_MS, releaseRun, reserveCredits } from "@/lib/credits/server";
+import { CLOCK_SKEW_MS, databaseGate, requireProviderCapacity, SETTLEMENT_WINDOW_MS } from "@/lib/ai/live-run";
+import { RunSpend } from "@/lib/ai/run-spend";
+import { requirePricedModel } from "@/lib/ai/model-check";
+import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
+import { logAiStop } from "@/lib/builder/website-run";
+import { ENHANCER_MODEL, enhanceBrief, unusableReason } from "@/lib/builder/brief-enhancer";
+import { DesignAnswersSchema, ENHANCER_CREDITS, renderBriefAnalysis, renderEnhancedBrief, shouldEnhance } from "@/lib/builder/enhanced-brief";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+/** One enhancement at a time per account on this server; the hold bounds cost regardless. */
+const active = new Set<string>();
+
+const EnhanceRequest = z.object({
+  workspaceId: z.string().uuid(),
+  artifactId: z.string().uuid(),
+  /** The client's brief with their chosen answers, exactly as it will be sent to the build. */
+  brief: z.string().trim().min(1).max(8000),
+  /** The client's own words before any answers were added: decides between enhancing (short) and analysing (detailed). */
+  original: z.string().trim().min(1).max(8000).optional(),
+  design: DesignAnswersSchema.optional(),
+  attachments: z.number().int().min(0).max(20).default(0),
+}).strict();
+
+const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
+
+/**
+ * Prompt help for a first website build (JSON): a short or vague brief is enhanced; a detailed
+ * one is analysed (a structured reading of the client's verbatim words, never a rewrite). Free to
+ * the client: a hold of ENHANCER_CREDITS bounds the provider spend (about $0.001) and is always
+ * released, with the measured cost recorded as absorbed platform cost. Any failure falls back
+ * to the client's own brief.
+ */
+export async function POST(request: Request) {
+  try {
+    sameOrigin(request);
+    if (!builderEnabled()) throw new RequestError("BUILDER_UNAVAILABLE", "Brief enhancement isn't available in this environment.", 503);
+    const parsed = EnhanceRequest.safeParse(await boundedJson(request, 24_000));
+    if (!parsed.success) throw new RequestError("INVALID_REQUEST", "Describe the website you'd like to make.", 400);
+    const body = parsed.data;
+    validId(body.artifactId);
+    const { client, user, workspace } = await cloudContext(body.workspaceId, true);
+    if (workspace?.role === "reviewer") throw new RequestError("EDITOR_REQUIRED", "Only owners and editors can start a build.", 403);
+    const { data: artifact, error } = await client.from("artifacts").select("id,kind,title").eq("workspace_id", body.workspaceId).eq("id", body.artifactId).maybeSingle();
+    databaseError(error);
+    if (!artifact || artifact.kind !== "website") throw new RequestError("NOT_FOUND", "This project is unavailable.", 404);
+    requirePricedModel(ENHANCER_MODEL);
+    await requireProviderCapacity("anthropic");
+    if (active.has(user.id)) throw new RequestError("ENHANCE_BUSY", "Your brief is already being enhanced.", 409);
+    active.add(user.id);
+    try {
+      // The hold bounds the provider spend and names the call in the ledger; it is always returned, never charged.
+      // With no room for it (no credits, or the monthly limit reached) the reading does not run, and the reply says why.
+      const hold = await reserveCredits(user.id, ENHANCER_CREDITS, `brief_enhance:${randomUUID()}`).catch(error => {
+        if (error instanceof RequestError && (error.code === "INSUFFICIENT_CREDITS" || error.code === "CREDIT_USAGE_LIMIT"))
+          throw new RequestError(error.code, `Your brief wasn't read: reading it is free, but it briefly sets aside ${ENHANCER_CREDITS} credit (always returned), and ${error.code === "INSUFFICIENT_CREDITS" ? "your balance has no credits left" : "your monthly credit usage limit has no room left"}. A build needs credits too: ${error.code === "INSUFFICIENT_CREDITS" ? "add credits" : "review your limit in Billing"} to continue.`, 402);
+        throw error;
+      });
+      /** A failed release is logged, never shown as a failed reading: the database reclaims the hold unspent after its lifetime. */
+      const release = (reason: string) => releaseRun(hold, spend.customerCredits(rate), reason, detail())
+        .catch(error => console.error(JSON.stringify({ event: "credit_release_failed", reference: hold.reference, reason, error: error instanceof Error ? error.message.slice(0, 200) : "unknown" })));
+      const rate = aiCostUsdPerCredit(), cap = Math.floor(ENHANCER_CREDITS * rate * 1e6);
+      const deadline = Math.min(Date.now() + (maxDuration - 12) * 1000, hold.reservedAt + HOLD_LIFETIME_MS - SETTLEMENT_WINDOW_MS - CLOCK_SKEW_MS);
+      const spend = new RunSpend({ run: hold.reference, providerCapMicrousd: cap, customerCapMicrousd: hold.exempt ? null : cap, gate: databaseGate(hold.userId), deadline, minCallMs: 15_000 });
+      const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), (maxDuration - 8) * 1000);
+      request.signal.addEventListener("abort", () => controller.abort(), { once: true });
+      const detail = () => ({ kind: "brief_enhance", calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd });
+      const mode = shouldEnhance(body.original ?? body.brief) ? "enhance" as const : "analyze" as const;
+      let enhanced = null, reply: { text: string; stop: string | null } | null = null;
+      try { enhanced = await enhanceBrief({ brief: body.brief, title: artifact.title, design: body.design, attachments: body.attachments, mode, spend, signal: controller.signal, onReply: (text, stop) => { reply = { text, stop }; } }); }
+      catch (cause) {
+        // Spend stops are logged by logAiStop; any other failure (provider error, timeout) is logged here, without content.
+        if (!logAiStop(hold.reference, cause)) console.error(JSON.stringify({ event: "brief_enhance_failed", reference: hold.reference, mode, error: cause instanceof Error ? `${cause.name}: ${cause.message}`.slice(0, 300) : "unknown" }));
+      }
+      finally { clearTimeout(timeout); }
+      if (!enhanced && reply) {
+        const { text, stop } = reply as { text: string; stop: string | null };
+        console.error(JSON.stringify({ event: "brief_enhance_unusable", reference: hold.reference, mode, stop, chars: text.length, reason: unusableReason(text) }));
+      }
+      if (!enhanced) {
+        await release("brief_enhance_unusable");
+        throw new RequestError("ENHANCE_UNAVAILABLE", "Your brief couldn't be enhanced just now. Nothing was charged; the build uses your own words.", 503);
+      }
+      // Never charged: the measured provider cost is recorded as absorbed (like the tailored questions).
+      await release(mode === "enhance" ? "brief_enhance" : "brief_analysis");
+      // The hold reference names this call in the provider-call ledger (receipts and eval settlement); it carries no secret.
+      return Response.json({ mode, enhanced, text: mode === "enhance" ? renderEnhancedBrief(enhanced) : renderBriefAnalysis(enhanced), charged: 0, providerMicrousd: spend.providerMicrousd, reference: hold.reference },
+        { headers: { "Cache-Control": "no-store" } });
+    } finally { active.delete(user.id); }
+  } catch (error) { return apiError(error); }
+}
