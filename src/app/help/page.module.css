@@ -1,4 +1,5 @@
-.page{min-height:100vh;background:#fdfcfe;color:#28262f;font-family:var(--font-inter),Arial,sans-serif}
+/* Contain the oversized decorative hero backdrop; tables keep their own scroll area. */
+.page{min-height:100vh;overflow-x:clip;background:#fdfcfe;color:#28262f;font-family:var(--font-inter),Arial,sans-serif}
 .skip{position:absolute;left:20px;top:-80px;z-index:2;padding:12px 20px;background:#fff;border:1px solid #dbd7e5;border-radius:10px}
 .skip:focus{top:16px}
 .header{display:flex;align-items:center;justify-content:space-between;gap:24px;max-width:1180px;margin:auto;padding:24px 40px;border-bottom:1px solid #eeecf2}
