@@ -40,6 +40,13 @@ async function main() {
       "body { margin: 0; background: #ffffff; color: #111111; font: 16px/1.5 system-ui, sans-serif; }\n.hero { position: relative; min-height: 400px; }\n.card { position: absolute; top: 40px; left: 0; width: 600px; height: 160px; background: #ffffff; color: #111111; border: 1px solid #111111; }\n"));
     assert.ok(covered.some(problem => /^Covered text: "Call \(555\) 010-0187"/.test(problem) && /hidden under div\.card/.test(problem)), JSON.stringify(covered));
     pass("text painted over by another element (a card over the phone number) blocks the finish");
+    const headline = await check(site(
+      'export default function App() { return <main><h1 className="big"><span className="line">Nothing gets lost</span> <span className="line"><span className="hl">at handover</span></span></h1><section className="hero"><div className="mock">Night shift docket</div></section><section className="band">Full-width band</section><div className="track"><div className="marquee">Moving words in a marquee band that is wider than the screen</div></div></main>; }\n',
+      "body { margin: 0; background: #ffffff; color: #111111; font: 16px/1.5 system-ui, sans-serif; overflow-x: clip; }\n.big { font-size: 96px; line-height: 0.86; margin: 40px; }\n.line { display: block; }\n.hl { background: #ff5a3c; padding: 0.12em 0.1em; }\n.hero { position: relative; height: 300px; }\n.mock { position: absolute; left: 800px; top: 20px; width: 760px; height: 200px; background: #fdf8f4; border: 1px solid #111111; }\n.band { background: #e8eef0; padding: 24px; }\n.track { overflow: hidden; }\n.marquee { width: 2400px; background: #f4f0e0; animation: slide 20s linear infinite; }\n@keyframes slide { to { transform: translateX(-50%); } }\n"));
+    assert.ok(headline.some(problem => /^Covered text: "Nothing gets lost"/.test(problem) && /span\.hl/.test(problem)), JSON.stringify(headline));
+    assert.ok(headline.some(problem => /^Cut off: div\.mock \("Night shift docket"\) runs past the right edge of the screen at 1440 px wide/.test(problem)), JSON.stringify(headline));
+    assert.ok(!headline.some(problem => /section\.band|marquee|div\.track/.test(problem)), "full-width bands and marquees are not cut-off panels");
+    pass("a headline highlight painted over the line above, and a card running off the screen edge, block the finish; full-width bands and marquees do not");
     const clean = await check(site('export default function App() { return <main><h1>Clear heading</h1><p>Plain readable text</p></main>; }\n', "body { margin: 0; background: #fafaf7; color: #1b1d1f; font: 16px/1.5 system-ui, sans-serif; }\n"));
     assert.deepEqual(clean, []);
     pass("a site whose text all passes reports no problem");

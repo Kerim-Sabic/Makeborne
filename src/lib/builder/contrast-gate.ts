@@ -1,7 +1,8 @@
 /**
  * Rendered contrast as a hard finish gate. At finish the builder's files are
  * prepared and measured in a headless browser with the studio's own
- * rendered-contrast check (contrast-probe.ts), so a failing text pair is found
+ * rendered-contrast check (contrast-probe.ts), plus covered text and panels cut off
+ * by the screen edge, so a failing text pair is found
  * where it actually renders: muted text on a tinted block, accent numerals on a
  * dark panel, a hover or focus state. Each failing pair becomes one precise,
  * model-facing instruction; the agent's once-per-distinct-problem rule means a
@@ -14,7 +15,7 @@
  */
 import type { Browser } from "playwright";
 import type { ContrastFinding } from "./rendered-contrast";
-import type { CoveredText } from "./contrast-probe";
+import type { CoveredText, CutOff } from "./contrast-probe";
 
 const HOST_PATH = "/__makeborne-contrast-host";
 const STATE = { default: "", hover: " on hover", focus: " on keyboard focus", invalid: " in its error state" } as const;
@@ -29,6 +30,11 @@ export function contrastProblem(finding: ContrastFinding) {
 /** Text painted over by another element (a card over the phone number): one instruction per covered line. */
 export function coveredProblem(item: CoveredText) {
   return `Covered text: "${item.text}" (${item.element}) is hidden under ${item.by} at ${item.width} px wide. Move, resize or re-stack the overlapping element so this text is fully visible at every width, then call finish again.`;
+}
+
+/** A boxed element with text running past the screen edge (a hero card off the page). */
+export function cutOffProblem(item: CutOff) {
+  return `Cut off: ${item.element} ("${item.text}") runs past the ${item.side} edge of the screen at ${item.width} px wide. Keep cards, panels and product mocks inside the page margins at every width (size them to their grid column with max-width: 100%; only images and full-width bands may bleed), then call finish again.`;
 }
 
 /** Findings to problems: the worst pairs first, at most MAX_CONTRAST_PROBLEMS. */
@@ -55,11 +61,11 @@ export function renderedContrastCheck(input: { origin: string; launch: () => Pro
       await page.goto(`${origin}${HOST_PATH}`, { waitUntil: "load" });
       await page.addScriptTag({ url: `${origin}/builder-runtime/contrast-probe.js` });
       const result = await page.evaluate(async record => {
-        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[] }> } }).__makeborneContrast;
+        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[]; cutOff?: CutOff[] }> } }).__makeborneContrast;
         if (!probe) throw new Error("contrast probe unavailable");
         return probe.probeContrast(record);
       }, Object.fromEntries(files));
-      return [...(result.covered ?? []).slice(0, 4).map(coveredProblem), ...contrastProblems(result.findings)];
+      return [...(result.covered ?? []).slice(0, 4).map(coveredProblem), ...(result.cutOff ?? []).slice(0, 2).map(cutOffProblem), ...contrastProblems(result.findings)];
     } catch (error) {
       console.error(JSON.stringify({ event: "builder_contrast_unverified", reason: error instanceof Error ? error.message.slice(0, 200) : "unavailable" }));
       return null;

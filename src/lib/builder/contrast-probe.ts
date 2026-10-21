@@ -47,8 +47,11 @@ export function coveredText(doc: Document, view: Window, width: number, limit = 
     const range = doc.createRange(); range.selectNodeContents(node);
     lines: for (const rect of Array.from(range.getClientRects()).slice(0, 3)) {
       if (rect.width < 4 || rect.height < 4 || rect.right <= 0 || rect.left >= width) continue;
-      for (const x of [rect.left + 3, rect.left + rect.width / 2, rect.right - 3]) {
-        const hit = doc.elementFromPoint(x, rect.top + rect.height / 2);
+      // The middle of the line and, for text with descenders, the descender band: a highlight block
+      // behind the next line of a tightly led headline paints over this line's g, p and y.
+      const bands = /[gjpqy]/.test(text) ? [0.5, 0.86] : [0.5];
+      for (const [x, y] of bands.flatMap(at => [rect.left + 3, rect.left + rect.width / 2, rect.right - 3].map(x => [x, rect.top + rect.height * at] as const))) {
+        const hit = doc.elementFromPoint(x, y);
         if (!hit || hit === owner || owner.contains(hit) || hit.contains(owner) || !paints(hit)) continue;
         const key = `${text.slice(0, 40)}|${describe(hit)}`;
         if (seen.has(key)) continue;
@@ -60,8 +63,43 @@ export function coveredText(doc: Document, view: Window, width: number, limit = 
   return out;
 }
 
+export type CutOff = { text: string; element: string; side: "left" | "right"; width: number };
+/** A card, panel or product mock with text that runs past the edge of the screen (reviews sent back a hero
+ * card running off the page). Full-bleed bands (exactly the viewport wide), images, scrollers, marquees and
+ * rotated bands are left alone: only boxed, painted elements holding text are reported, outermost first. */
+export function cutOffPanels(doc: Document, view: Window, width: number, limit = 3): CutOff[] {
+  const out: CutOff[] = [], reported: Element[] = [];
+  const boxed = (style: CSSStyleDeclaration) => {
+    const alpha = /rgba?\(([^)]+)\)/.exec(style.backgroundColor)?.[1]?.split(/[\s,/]+/).filter(Boolean)[3];
+    const filled = style.backgroundColor !== "transparent" && (alpha === undefined || Number(alpha) >= 0.5);
+    return filled || (["Top", "Right", "Bottom", "Left"] as const).some(side => parseFloat(style[`border${side}Width`]) >= 1 && style[`border${side}Style`] !== "none");
+  };
+  const exempt = (el: Element) => {
+    for (let node: Element | null = el; node && node !== doc.body; node = node.parentElement) {
+      const style = view.getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0 || style.position === "fixed") return true;
+      if (/auto|scroll/.test(style.overflowX) || (style.animationName && style.animationName !== "none")) return true;
+      const matrix = /matrix\(([^)]+)\)/.exec(style.transform)?.[1]?.split(",").map(Number);
+      if (matrix && (Math.abs(matrix[1]) > 0.01 || Math.abs(matrix[2]) > 0.01)) return true;
+      if (node.getAttribute("aria-hidden") === "true" || node.closest("details:not([open])") && !node.closest("summary")) return true;
+    }
+    return false;
+  };
+  for (const el of Array.from(doc.body.querySelectorAll("div, section, article, aside, figure, li, table, form, blockquote, dl, ol, ul"))) {
+    if (out.length >= limit) break;
+    const rect = el.getBoundingClientRect();
+    const side = rect.right > width + 2 ? "right" : rect.left < -2 ? "left" : null;
+    if (!side || rect.width < 120 || rect.height < 40 || Math.abs(rect.width - width) <= 2 || rect.width > width * 1.5) continue;
+    if (reported.some(parent => parent.contains(el))) continue;
+    const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+    if (text.length < 2 || !boxed(view.getComputedStyle(el)) || exempt(el)) continue;
+    reported.push(el); out.push({ text: text.slice(0, 60), element: describe(el), side, width });
+  }
+  return out;
+}
+
 function measure(html: string, width: number, parse: ReturnType<typeof canvasColorParser>) {
-  return new Promise<ReturnType<typeof measureRenderedContrast> & { covered: CoveredText[] }>((resolve, reject) => {
+  return new Promise<ReturnType<typeof measureRenderedContrast> & { covered: CoveredText[]; cutOff: CutOff[] }>((resolve, reject) => {
     const frame = document.createElement("iframe");
     frame.setAttribute("sandbox", "allow-same-origin");
     frame.style.cssText = `position:fixed;left:-20000px;top:0;width:${width}px;height:900px;border:0`;
@@ -73,7 +111,7 @@ function measure(html: string, width: number, parse: ReturnType<typeof canvasCol
         const contrast = measureRenderedContrast(doc, view, "/", parse, 400);
         // The whole page in one viewport, so every line can be hit-tested.
         frame.style.height = `${Math.min(20_000, doc.documentElement.scrollHeight)}px`;
-        resolve({ ...contrast, covered: coveredText(doc, view, width) });
+        resolve({ ...contrast, covered: coveredText(doc, view, width), cutOff: cutOffPanels(doc, view, width) });
       } catch (error) { reject(error); }
       finally { window.clearTimeout(timer); frame.remove(); }
     }, { once: true });
@@ -82,17 +120,17 @@ function measure(html: string, width: number, parse: ReturnType<typeof canvasCol
   });
 }
 
-export async function probeContrast(files: Record<string, string>): Promise<{ findings: ContrastFinding[]; measured: number; unmeasuredImage: number; covered: CoveredText[] }> {
+export async function probeContrast(files: Record<string, string>): Promise<{ findings: ContrastFinding[]; measured: number; unmeasuredImage: number; covered: CoveredText[]; cutOff: CutOff[] }> {
   const html = await captureStaticSnapshot(files, {});
   const parse = canvasColorParser(document);
   const findings: ContrastFinding[] = [];
   let measured = 0, unmeasuredImage = 0;
-  const covered: CoveredText[] = [];
+  const covered: CoveredText[] = [], cutOff: CutOff[] = [];
   for (const width of [1440, 390]) {
     const result = await measure(html, width, parse);
-    findings.push(...result.findings); measured += result.measured; unmeasuredImage += result.unmeasured.image; covered.push(...result.covered);
+    findings.push(...result.findings); measured += result.measured; unmeasuredImage += result.unmeasured.image; covered.push(...result.covered); cutOff.push(...result.cutOff);
   }
-  return { findings: summarizeFindings(findings), measured, unmeasuredImage, covered };
+  return { findings: summarizeFindings(findings), measured, unmeasuredImage, covered, cutOff };
 }
 
 declare global { interface Window { __makeborneContrast?: { probeContrast: typeof probeContrast } } }

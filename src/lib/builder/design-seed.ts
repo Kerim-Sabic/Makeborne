@@ -259,7 +259,7 @@ export function designSeedBlock(input: { seed: string; brief: string; images: bo
     "- Motif: one quiet visual motif drawn from this business's own working objects (a ledger page, a receipt, a timetable, a map, a menu card, a ticket, a plan drawing), used consistently and drawn with care, never as clip-art.",
     `- Signature motion: ${seed.motion}.`,
     `- Feature these compositions somewhere on the page: ${seed.compositions[0]}; ${seed.compositions[1]}.`,
-    seed.quickActions ? "- Mobile quick actions: visitors act from their phone, so add the quick-action bar (only the actions this business has: Call, Directions, Hours, Order or Book) using the quick-action pattern." : "",
+    seed.quickActions ? "- Mobile quick actions: visitors act from their phone, so add the quick-action row in the page flow below the first screen on phones (only the actions this business has: Call, Directions, Hours, Order or Book) using the quick-action pattern, and keep Call in the sticky header." : "",
     "</design_seed>",
   ].filter(Boolean).join("\n");
 }

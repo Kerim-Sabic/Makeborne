@@ -171,16 +171,17 @@ const reply = {
     assert.deepEqual(qualityProblems({ files: project, changed: new Set(["src/App.tsx"]) }), [], "no requirements, no gate");
   });
 
-  await check("quick-action bar: the pattern passes; an unhidden or covering bar, and other bottom bars, are reported", () => {
+  await check("quick actions: the in-flow row pattern passes; a fixed quick bar and other bottom bars are reported", () => {
     const [jsx, ...css] = QUICK_BAR_PATTERN.split("\n</nav>\n");
+    assert.doesNotMatch(QUICK_BAR_PATTERN, /position:\s*(?:fixed|sticky)/, "the pattern is in the page flow");
     const app = `export default function App() { return <>${jsx}\n</nav><main /></>; }`;
     const ok = files({ "src/App.tsx": app, "src/styles.css": css.join("") });
     assert.deepEqual(qualityProblems({ files: ok, changed: new Set(["src/styles.css", "src/App.tsx"]) }), []);
-    const unhidden = files({ "src/App.tsx": app, "src/styles.css": ".quickbar { position: fixed; bottom: 0; }" });
-    assert.match(qualityProblems({ files: unhidden, changed: new Set(["src/styles.css"]) })[0], /must follow the quick-action pattern/);
+    const fixed = files({ "src/App.tsx": app, "src/styles.css": ".quickbar { position: fixed; bottom: 0; }\n@media (min-width: 768px) { .quickbar { display: none; } }\nbody { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }" });
+    assert.match(qualityProblems({ files: fixed, changed: new Set(["src/styles.css"]) })[0], /Remove the fixed bottom bar or floating button \(\.quickbar\)[^]*never fixed/);
     const pill = files({ "src/App.tsx": "export default function App() { return <main />; }", "src/styles.css": ".book-pill { position: fixed; bottom: 16px; right: 16px; }" });
     assert.match(qualityProblems({ files: pill, changed: new Set(["src/styles.css"]) })[0], /Remove the fixed bottom bar or floating button \(\.book-pill\)/);
-    assert.match(BUILDER_SYSTEM, /the mobile quick-action bar, exactly this pattern/);
+    assert.match(BUILDER_SYSTEM, /the quick-action row in the page flow directly below the first screen on phones, exactly this pattern/); assert.match(BUILDER_SYSTEM, /Nothing is fixed to the bottom of phone screens/);
     assert.match(BUILDER_SYSTEM, /--accent-on-dark/); assert.match(BUILDER_SYSTEM, /scrim \(at least 85% opaque/); assert.match(BUILDER_SYSTEM, /a project without src\/App\.tsx cannot be saved/);
   });
 
