@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
 import { apiError, boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
-import { HOLD_LIFETIME_MS, releaseRun, reserveCredits, settleRun } from "@/lib/credits/server";
+import { HOLD_LIFETIME_MS, releaseRun, reserveCredits } from "@/lib/credits/server";
 import { CLOCK_SKEW_MS, databaseGate, requireProviderCapacity, SETTLEMENT_WINDOW_MS } from "@/lib/ai/live-run";
 import { RunSpend } from "@/lib/ai/run-spend";
 import { requirePricedModel } from "@/lib/ai/model-check";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { logAiStop } from "@/lib/builder/website-run";
 import { ENHANCER_MODEL, enhanceBrief } from "@/lib/builder/brief-enhancer";
-import { DesignAnswersSchema, ENHANCER_CREDITS, renderEnhancedBrief } from "@/lib/builder/enhanced-brief";
+import { DesignAnswersSchema, ENHANCER_CREDITS, renderBriefAnalysis, renderEnhancedBrief, shouldEnhance } from "@/lib/builder/enhanced-brief";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,6 +22,8 @@ const EnhanceRequest = z.object({
   artifactId: z.string().uuid(),
   /** The client's brief with their chosen answers, exactly as it will be sent to the build. */
   brief: z.string().trim().min(1).max(8000),
+  /** The client's own words before any answers were added: decides between enhancing (short) and analysing (detailed). */
+  original: z.string().trim().min(1).max(8000).optional(),
   design: DesignAnswersSchema.optional(),
   attachments: z.number().int().min(0).max(20).default(0),
 }).strict();
@@ -29,10 +31,11 @@ const EnhanceRequest = z.object({
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 
 /**
- * The enhanced brief for a first website build (JSON). Priced and bounded like the advisor's
- * replies: a hold of ENHANCER_CREDITS caps the provider spend, confirmed usage is charged only
- * when a usable brief comes back, and every failure releases the hold uncharged. The studio then
- * builds from the client's original brief (fail open) and shows that it did.
+ * Prompt help for a first website build (JSON): a short or vague brief is enhanced; a detailed
+ * one is analysed (a structured reading of the client's verbatim words, never a rewrite). Free to
+ * the client: a hold of ENHANCER_CREDITS bounds the provider spend (about $0.001) and is always
+ * released, with the measured cost recorded as absorbed platform cost. Any failure falls back
+ * to the client's own brief.
  */
 export async function POST(request: Request) {
   try {
@@ -59,17 +62,19 @@ export async function POST(request: Request) {
       const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), (maxDuration - 8) * 1000);
       request.signal.addEventListener("abort", () => controller.abort(), { once: true });
       const detail = () => ({ kind: "brief_enhance", calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd });
+      const mode = shouldEnhance(body.original ?? body.brief) ? "enhance" as const : "analyze" as const;
       let enhanced = null;
-      try { enhanced = await enhanceBrief({ brief: body.brief, title: artifact.title, design: body.design, attachments: body.attachments, spend, signal: controller.signal }); }
+      try { enhanced = await enhanceBrief({ brief: body.brief, title: artifact.title, design: body.design, attachments: body.attachments, mode, spend, signal: controller.signal }); }
       catch (cause) { logAiStop(hold.reference, cause); }
       finally { clearTimeout(timeout); }
       if (!enhanced) {
         await releaseRun(hold, spend.customerCredits(rate), "brief_enhance_unusable", detail()).catch(() => undefined);
         throw new RequestError("ENHANCE_UNAVAILABLE", "Your brief couldn't be enhanced just now. Nothing was charged; the build uses your own words.", 503);
       }
-      const settled = await settleRun(hold, spend.customerCredits(rate), detail());
+      // Never charged: the measured provider cost is recorded as absorbed (like the tailored questions).
+      await releaseRun(hold, spend.customerCredits(rate), mode === "enhance" ? "brief_enhance" : "brief_analysis", detail());
       // The hold reference names this call in the provider-call ledger (receipts and eval settlement); it carries no secret.
-      return Response.json({ enhanced, text: renderEnhancedBrief(enhanced), charged: settled.charged, providerMicrousd: spend.providerMicrousd, reference: hold.reference },
+      return Response.json({ mode, enhanced, text: mode === "enhance" ? renderEnhancedBrief(enhanced) : renderBriefAnalysis(enhanced), charged: 0, providerMicrousd: spend.providerMicrousd, reference: hold.reference },
         { headers: { "Cache-Control": "no-store" } });
     } finally { active.delete(user.id); }
   } catch (error) { return apiError(error); }

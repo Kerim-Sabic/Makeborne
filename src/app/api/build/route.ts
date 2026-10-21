@@ -10,6 +10,7 @@ import { ProjectFiles } from "@/lib/builder/files";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
 import { designSeedBlock } from "@/lib/builder/design-seed";
+import { renderedContrastCheck } from "@/lib/builder/contrast-gate";
 import { BuildBriefSchema, DesignAnswersSchema, briefTone, designAnswersBlock, enhancedBriefBlock, requiredSections } from "@/lib/builder/enhanced-brief";
 import { imageConfiguration } from "@/lib/builder/images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
@@ -200,6 +201,13 @@ export async function POST(request: Request) {
     const response = websiteBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
       message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments,
       limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
+      // First build: the concept step (2-3 concepts scored on the rubric, the strongest built) inside this run.
+      concept: Boolean(seed),
+      // Rendered contrast at finish, measured in the export pipeline's Chromium on this app's origin (fail open without a browser).
+      contrastCheck: process.env.MAKEBORNE_CONTRAST_GATE === "off" ? undefined : renderedContrastCheck({ origin: new URL(request.url).origin, launch: async () => {
+        const [{ chromium }, { chromiumLaunchOptions }] = await Promise.all([import("playwright"), import("@/lib/server/export")]);
+        return chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
+      } }),
       // Completeness gate: every section the approved brief lists, and every must-have the client chose.
       required: reviewing ? undefined : { sections: approvedBrief ? requiredSections(approvedBrief.text) : [], design, brief: [project.brief, operation.originalMessage ?? body.message].filter(Boolean).join("\n") } });
     reserved = null;

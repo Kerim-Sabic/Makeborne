@@ -58,6 +58,7 @@ Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_C
 delete process.env.MAKEBORNE_BUILDER_MODEL;
 
 const { runBuilder } = loadApp('src/lib/builder/agent.ts');
+const { renderedContrastCheck } = loadApp('src/lib/builder/contrast-gate.ts');
 const { ProjectFiles } = loadApp('src/lib/builder/files.ts');
 const { RunSpend, memoryGate } = loadApp('src/lib/ai/run-spend.ts');
 const { BUILDER_EFFORT } = loadApp('src/lib/builder/pricing.ts');
@@ -100,6 +101,8 @@ function context({ brief, files, history, prep }) {
 
 const browser = await chromium.launch();
 const runtime = await serve(path.join(REPO, 'public'));
+// The build route's rendered-contrast finish gate, on the local runtime origin (same probe, same rules).
+const contrastCheck = renderedContrastCheck({ origin: runtime.url, launch: () => chromium.launch() });
 try {
   for (const id of only) {
     const brief = JSON.parse(fs.readFileSync(path.join(REPO, 'scripts', 'eval', /^s\d/.test(id) ? 'briefs-short' : 'briefs', `${id}.json`), 'utf8'));
@@ -132,19 +135,20 @@ try {
       prep.message = questionsModule.briefWithAnswers(brief.brief, asked, answers);
       prep.design = questionsModule.designAnswers(asked, answers);
     }
-    // Like the studio: only short briefs are enhanced (detailed ones build from the client's words and answers).
-    if (enhancing && values.variant !== 'questions' && enhancedModule.shouldEnhance(brief.brief)) {
+    // Like the studio: short briefs are enhanced; detailed ones get a free analysis of the client's verbatim words.
+    const helpMode = enhancing && enhancedModule.shouldEnhance(brief.brief) ? 'enhance' : 'analyze';
+    if (enhancing && values.variant !== 'questions') {
       const enhancerBoundUsd = enhancedModule.ENHANCER_CREDITS * RATE;
       const enhancerReservation = await budget.reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
       const enhanceSpend = new RunSpend({ run: `${values.run}/${id}/enhance`, providerCapMicrousd: Math.round(enhancerBoundUsd * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 50_000 });
       let enhanced = null, enhanceError = null;
       let reply = null;
-      try { enhanced = await enhancerModule.enhanceBrief({ brief: prep.message, title: brief.title, design: prep.design, spend: enhanceSpend, signal: AbortSignal.timeout(45_000), onReply: (text, stop) => { reply = { text, stop }; } }); }
+      try { enhanced = await enhancerModule.enhanceBrief({ brief: prep.message, title: brief.title, design: prep.design, mode: helpMode, spend: enhanceSpend, signal: AbortSignal.timeout(45_000), onReply: (text, stop) => { reply = { text, stop }; } }); }
       catch (error) { enhanceError = String(error.message).slice(0, 200); }
       const enhancerUncertain = enhanceSpend.uncertainMicrousd > 0;
       await budget.settle(enhancerReservation, enhancerUncertain ? { unknown: true, detail: { error: enhanceError } } : { actualUsd: enhanceSpend.providerMicrousd / 1e6, detail: { calls: enhanceSpend.calls.length, usable: Boolean(enhanced) } });
-      prep.enhancer = { usd: enhanceSpend.providerMicrousd / 1e6, uncertain: enhancerUncertain, calls: enhanceSpend.calls.length, usable: Boolean(enhanced), error: enhanceError, credits: enhanceSpend.customerCredits(RATE) };
-      if (enhanced) prep.approved = { mode: 'enhanced', text: enhancedModule.renderEnhancedBrief(enhanced) };
+      prep.enhancer = { mode: helpMode, usd: enhanceSpend.providerMicrousd / 1e6, uncertain: enhancerUncertain, calls: enhanceSpend.calls.length, usable: Boolean(enhanced), error: enhanceError, credits: enhanceSpend.customerCredits(RATE) };
+      if (enhanced) prep.approved = helpMode === 'enhance' ? { mode: 'enhanced', text: enhancedModule.renderEnhancedBrief(enhanced) } : { mode: 'analysis', text: enhancedModule.renderBriefAnalysis(enhanced) };
       fs.writeFileSync(path.join(itemDir, 'enhanced.json'), JSON.stringify({ variant: values.variant, asked: prep.asked, design: prep.design, message: prep.message, enhanced, text: prep.approved?.text ?? null, enhancer: prep.enhancer, ...(enhanced ? {} : { unusableReply: reply }) }, null, 2));
       console.log(`  ${id} enhance: $${prep.enhancer.usd.toFixed(4)} usable=${prep.enhancer.usable}${enhanceError ? ` ERROR ${enhanceError}` : ''}`);
     }
@@ -174,7 +178,9 @@ try {
       const saved = new Map(files.files);
       let result = null, error = null;
       try {
-        result = await runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history, prep }), required,
+        result = await runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history, prep }), required, contrastCheck,
+          // Like the route: the concept step on a first build (nothing written yet, no plan).
+          concept: name === 'build' && !files.files.size,
           attachments: extra.attachments ?? [], emit: event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300) }); },
           signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage } : {}) });
       } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; }
@@ -189,7 +195,8 @@ try {
         if (verdict.status === 'failed') { files.files.clear(); for (const [file, content] of saved) files.files.set(file, content); reverted = verdict.problems.join(' ').slice(0, 300); changed = []; }
       }
       for (const file of before) files.changed.add(file);
-      stages.push({ name, capMicrousd: cap, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, calls: spend.calls.length, finished: result?.finished ?? false, build: result?.build ?? null, stopped: result?.stopped ?? spend.stopped, summary: result?.summary ?? null, changed, reverted, error });
+      if (result?.concept) fs.writeFileSync(path.join(itemDir, 'concept.json'), JSON.stringify(result.concept, null, 2));
+      stages.push({ name, capMicrousd: cap, concept: result?.concept ? { chosen: result.concept.chosen.name, runnersUp: result.concept.runnersUp.map(item => item.name) } : undefined, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, calls: spend.calls.length, finished: result?.finished ?? false, build: result?.build ?? null, stopped: result?.stopped ?? spend.stopped, summary: result?.summary ?? null, changed, reverted, error });
       if (result?.summary) history.push(`v${history.length + 1}: ${(name === 'review' ? 'Design review' : message.slice(0, 600))} → ${result.summary}`.slice(0, 300));
       console.log(`  ${id} ${name}: $${(spend.providerMicrousd / 1e6).toFixed(3)} (${spend.calls.length} calls) finished=${result?.finished ?? false}${error ? ` ERROR ${error.code ?? error.name}` : ''}`);
       return { result, error, changed };

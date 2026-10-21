@@ -36,6 +36,8 @@ export type WebsiteBuildInput = {
   limits?: BuilderRun["limits"];
   /** What the finished site must contain (the approved brief's sections, the client's must-haves). */
   required?: BuilderRun["required"];
+  concept?: BuilderRun["concept"];
+  contrastCheck?: BuilderRun["contrastCheck"];
   maxDuration: number;
   /** Injected for tests: providers and the step guard. */
   stepGuardMs?: number;
@@ -82,7 +84,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         try {
           result = await runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
             request: input.request, context: input.context, attachments: input.attachments, emit, signal: controller.signal,
-            deadline: Date.now() + (input.maxDuration - 20) * 1000, limits: input.limits, required: input.required,
+            deadline: Date.now() + (input.maxDuration - 20) * 1000, limits: input.limits, required: input.required, concept: input.concept, contrastCheck: input.contrastCheck,
             anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile });
         } catch (error) {
           // A step was cut off (time limit or provider error): keep finished work if it is valid.
@@ -115,11 +117,14 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         }
         if (!source || !files.changed.size && !result.finished) {
           if (input.operation) {
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "incomplete", { ...detail, code: "BUILD_INCOMPLETE", message: "The builder stopped before a usable change was ready. Your previous saved version is safe.", version: artifact.current_version, changed: false, finished: false })));
+            // A step that saved nothing usable is never charged (its provider cost is absorbed); a finished request
+            // that needed no change is a completed request and stays chargeable.
+            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, result.finished ? "incomplete" : "failed", { ...detail, code: "BUILD_INCOMPLETE", message: "The builder stopped before a usable change was ready. Your previous saved version is safe.", version: artifact.current_version, changed: false, finished: false })));
             return;
           }
-          await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
-          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Your project is unchanged — try a more focused request or a higher effort level." });
+          if (result.finished) await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
+          else await releaseRun(hold, measured(), "incomplete_nothing_saved", { ...detail, kind: "incomplete" });
+          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Nothing was charged. Your project is unchanged — try a more focused request or a higher effort level." });
           return;
         }
         if (input.operation) {

@@ -7,7 +7,7 @@ Module._load = function(name, parent, main) {
 };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true}}).outputText, filename);
 
-const {BUILDER_SYSTEM, MOTION_PATTERN, FORM_PATTERN, ROUTE_PATTERN, FONT_FILE_KB, FONT_FALLBACKS} = require("./prompt.ts");
+const {BUILDER_SYSTEM, MOTION_PATTERN, FORM_PATTERN, ROUTE_PATTERN, FONT_FILE_KB, FONT_FALLBACKS, FONT_FALLBACKS_BOLD} = require("./prompt.ts");
 const {FONT_CATALOG} = require("./fonts.ts");
 const {ProjectFiles} = require("./files.ts");
 const {qualityProblems, withoutBlocks} = require("./quality-gates.ts");
@@ -234,8 +234,12 @@ check("font sizes in the prompt match the runtime files and drive a font budget"
     assert.ok(size > 60 && size < 150 && ascent > 60 && ascent < 140 && descent > 10 && descent < 50, `${font.family} metrics are plausible`);
     assert.equal(local === "Georgia", font.category === "serif", `${font.family}: serif families fall back to Georgia`);
     assert.ok(BUILDER_SYSTEM.includes(`Fallback: "${font.family} Fallback", `), `${font.family} stack names its fallback face`);
+    const bold = FONT_FALLBACKS_BOLD[font.family];
+    // Families with several weights get a real bold face (measured: one size-adjust cannot fit 400 and 800).
+    assert.equal(Boolean(bold), font.weight.includes(" "), `${font.family}: a bold face exactly when the family has several weights`);
+    if (bold) assert.ok(bold[0] === `${local} Bold` && bold[1] > 60 && bold[1] < 150, `${font.family} bold face`);
   }
-  assert.match(BUILDER_SYSTEM, /@font-face \{ font-family: "Fraunces Fallback"; src: local\("Georgia"\); size-adjust: 116\.3%;/);
+  assert.match(BUILDER_SYSTEM, /@font-face \{ font-family: "Archivo Fallback"; src: local\("Arial"\); font-weight: 100 599; size-adjust: 98%;[^}]*\} @font-face \{ font-family: "Archivo Fallback"; src: local\("Arial Bold"\); font-weight: 600 900; size-adjust: 98\.7%;/);
   assert.match(BUILDER_SYSTEM, /Font budget: about 100 KB/);
   assert.match(BUILDER_SYSTEM, /any <em>, <i>, <cite>, <address>, <dfn>, <var> or font-style: italic anywhere in the project loads them/);
 });

@@ -95,19 +95,36 @@ const reply = {
     assert.ok(prompt.length < 12_500, "the brief is truncated");
   });
 
-  await check("the enhance route holds ENHANCER_CREDITS, charges only a usable brief and releases every failure", () => {
+  await check("prompt help is free: the route holds ENHANCER_CREDITS only to bound spend, always releases, never settles a charge; detailed briefs are analysed, not rewritten", () => {
     const route = fs.readFileSync(path.join(src, "app", "api", "build", "enhance", "route.ts"), "utf8");
-    const order = ["sameOrigin(request)", "builderEnabled()", "cloudContext(", "reviewer", "artifact.kind !== \"website\"", "requirePricedModel(ENHANCER_MODEL)", "requireProviderCapacity(", "reserveCredits(user.id, ENHANCER_CREDITS", "enhanceBrief(", "if (!enhanced)", "releaseRun(", "settleRun("];
+    const order = ["sameOrigin(request)", "builderEnabled()", "cloudContext(", "reviewer", "artifact.kind !== \"website\"", "requirePricedModel(ENHANCER_MODEL)", "requireProviderCapacity(", "reserveCredits(user.id, ENHANCER_CREDITS", "shouldEnhance(body.original ?? body.brief)", "enhanceBrief(", "if (!enhanced)", "releaseRun(", "releaseRun("];
     let at = -1;
-    for (const marker of order) { const next = route.indexOf(marker, at + 1); assert.ok(next > at, `${marker} out of order`); at = next; }
+    for (const marker of order) { const next = route.indexOf(marker, at + 1); assert.ok(next > at, marker + " out of order"); at = next; }
+    assert.doesNotMatch(route, /settleRun/, "never charged");
+    assert.match(route, /charged: 0/);
     assert.equal(ENHANCER_CREDITS, 1);
     const client = fs.readFileSync(path.join(src, "components", "live-builder.tsx"), "utf8");
-    assert.match(client, /ceiling \+ \(enhancesFirst && mode !== "plan" \? ENHANCER_CREDITS : 0\)/, "the shown maximum includes the enhancement");
+    assert.match(client, /const shownMaximum = ceiling;/, "the shown maximum is the build's own ceiling (prompt help is free)");
     assert.match(client, /\/api\/build\/enhance/);
-    // Only short briefs are enhanced: detailed ones lost every blind comparison with the enhancement.
+    // Only short briefs are enhanced: detailed ones lost every blind comparison with the enhancement; they get a free analysis instead.
     assert.equal(ENHANCE_MAX_WORDS, 60); assert.ok(shouldEnhance("bakery site") && shouldEnhance("word ".repeat(60)) && !shouldEnhance("word ".repeat(61)) && !shouldEnhance("  "));
-    assert.match(client, /const enhancesFirst = website && firstBuild && shouldEnhance\(draft\);/);
-    assert.match(client, /!shouldEnhance\(original\)\) \{ void submitSources\(text, requestMode, website && Object\.keys\(design\)\.length \? \{ design \} : undefined\)/, "a detailed brief starts at once, with its answers");
+    assert.match(client, /if \(!shouldEnhance\(original\)\) \{[\s\S]{0,400}setAnalyzing\(\{ text, design \}\)/, "a detailed brief is analysed automatically");
+    assert.match(client, /brief: \{ mode: "analysis", text: ready\.text \}/);
+    assert.match(client, /Skip and start/);
+  });
+
+  await check("analysis of a detailed brief keeps the client's words authoritative and invents nothing", () => {
+    const { renderBriefAnalysis, enhancedBriefBlock } = require("./enhanced-brief.ts");
+    const { analysisPrompt } = require("./brief-enhancer.ts");
+    const brief = parseEnhancedBrief(JSON.stringify({ ...reply, workingName: "Invented Name", conflicts: [{ issue: "Dark site and an airy feel", resolution: "Light ground with one dark section" }] }), source);
+    const text = renderBriefAnalysis({ ...brief, workingName: null });
+    assert.doesNotMatch(text, /Working name|example:/, "no working name or example values in an analysis");
+    assert.match(text, /Conflicts or gaps[\s\S]*Dark site and an airy feel → Light ground with one dark section/);
+    assert.deepEqual(requiredSections(text).map(section => section.anchor), ["top", "bakes", "hours", "visit", "visit-2"]);
+    const block = enhancedBriefBlock({ mode: "analysis", text });
+    assert.match(block, /^<brief_analysis>[\s\S]*is the authority: this analysis never adds to, rewords or overrides it[\s\S]*<\/brief_analysis>$/);
+    const prompt = analysisPrompt({ brief: "A detailed brief" });
+    assert.match(prompt, /Do NOT rewrite, expand or improve it/); assert.match(prompt, /Never add a section for something the brief does not mention/);
   });
 
   await check("the build binds the approved brief and answers to the operation: new requests only, read back for every later stage", () => {

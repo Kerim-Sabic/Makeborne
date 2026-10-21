@@ -12,8 +12,11 @@
 import { z } from "zod";
 import { designAnswerLabels, type DesignAnswers } from "./brief-questions";
 
-/** Credits the enhancement may charge (its hold); added to the maximum shown before a first build. */
+/** Credits held while the brief is enhanced or analysed. The hold only bounds the provider spend: the step is
+ * free to the client (its cost, about $0.001, is absorbed as platform cost when the hold is released). */
 export const ENHANCER_CREDITS = 1;
+/** Prompt analysis and enhancement never charge the client. */
+export const ENHANCER_CHARGES = false;
 export const MAX_ENHANCED_BRIEF_CHARS = 6000;
 /** Briefs up to this many words are enhanced. In blind reviews the enhancer reached parity with the original
  * on short, vague prompts but lost every detailed brief (it added example content and sections the client's
@@ -45,6 +48,8 @@ export const EnhancedBriefSchema = z.object({
   factsMissing: z.array(z.object({ fact: text(140), placeholder: text(140), example: z.string().trim().max(240).nullable().default(null) }).strict()).max(16).default([]),
   constraints: z.array(text(240)).max(14).default([]),
   answersUsed: z.array(text(140)).max(10).default([]),
+  /** Analysis of a detailed brief: contradictions or gaps that change the design, with the sensible default the builder takes. */
+  conflicts: z.array(z.object({ issue: text(200), resolution: text(200) }).strict()).max(6).default([]),
 }).strict();
 export type EnhancedBrief = z.infer<typeof EnhancedBriefSchema>;
 
@@ -60,7 +65,8 @@ export const DesignAnswersSchema = z.object({
 
 /** What a build request carries: the brief text the client approved (enhanced as returned, or edited by them). */
 export const BuildBriefSchema = z.object({
-  mode: z.enum(["enhanced", "edited"]),
+  /** enhanced (short brief, expanded), edited (the client changed the enhanced text), analysis (detailed brief: a structured reading of the client's verbatim words). */
+  mode: z.enum(["enhanced", "edited", "analysis"]),
   text: z.string().trim().min(1).max(MAX_ENHANCED_BRIEF_CHARS),
 }).strict();
 export type BuildBrief = z.infer<typeof BuildBriefSchema>;
@@ -139,8 +145,31 @@ export function briefTone(text: string | undefined): "quiet" | "loud" | undefine
   return tone === "quiet" || tone === "loud" ? tone : undefined;
 }
 
+/** A detailed brief's analysis as plain text: what the client's words already ask for, nothing added or reworded. */
+export function renderBriefAnalysis(brief: EnhancedBrief): string {
+  const list = (items: readonly string[]) => items.map(item => `- ${item}`).join("\n");
+  return [
+    `Primary action: "${brief.primaryAction.label}" (${brief.primaryAction.kind})`,
+    `Tone implied: ${brief.tone} (${brief.toneWhy})`,
+    `Imagery implied: ${brief.imagery.plan}. ${brief.imagery.notes}`,
+    "",
+    "Sections and must-haves the brief asks for, in a sensible order (give each section the id shown):",
+    ...brief.sections.map((section, index) => `${index + 1}. ${section.name} (#${section.anchor}): ${section.purpose}${section.include.length ? ` Include: ${section.include.join("; ")}.` : ""}`),
+    brief.factsGiven.length ? `\nFacts the brief gives (use exactly as written):\n${list(brief.factsGiven)}` : "",
+    brief.factsMissing.length ? `\nFacts it needs but does not give (a visible, labelled placeholder, never invented):\n${brief.factsMissing.map(item => `- ${item.fact} → "${item.placeholder}"`).join("\n")}` : "",
+    brief.conflicts.length ? `\nConflicts or gaps (take the default shown and say so in the finish summary):\n${brief.conflicts.map(item => `- ${item.issue} → ${item.resolution}`).join("\n")}` : "",
+    brief.constraints.length ? `\nConstraints the brief states:\n${list(brief.constraints)}` : "",
+  ].filter(line => line !== "").join("\n").slice(0, MAX_ENHANCED_BRIEF_CHARS);
+}
+
 /** The builder-context block. The client's own brief stays above it, verbatim, and wins. */
 export function enhancedBriefBlock(brief: BuildBrief) {
+  if (brief.mode === "analysis") return [
+    `<brief_analysis>`,
+    `Makeborne read the client's detailed brief and listed what it asks for. The brief above, in the client's own words, is the authority: this analysis never adds to, rewords or overrides it. Build every section listed, each with the id shown (id="anchor" on the section element); a fact the brief does not give is a visible, labelled placeholder, never invented.`,
+    brief.text,
+    `</brief_analysis>`,
+  ].join("\n");
   return [
     `<enhanced_brief source="${brief.mode}">`,
     `Makeborne expanded the client's brief into this design brief before the build${brief.mode === "edited" ? " and the client then edited it" : ""}. The client's own words in "Brief:" above take priority: nothing here may drop or contradict them. Build every section listed, in this order, each with the id shown (id="anchor" on the section element), designed and finished. Where a fact is not given, write the example content in the site's own voice so the section looks complete, and mark it with one small, tidy label per section (for example a muted "Example — replace with yours" tag), never one per item and never as loud highlighted boxes; phone, e-mail and street address stay bracketed placeholders such as [Your phone]. An example is never presented as a fact anywhere else: no reviews, awards, statistics or named people the client did not give (never invent it as fact).`,

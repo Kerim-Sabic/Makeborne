@@ -21,21 +21,60 @@ export const FONT_FILE_KB: Readonly<Record<string, readonly [normal: number, ita
  * every CLS failure coincided with the web font swapping in; with these faces
  * two of five failing sites dropped below 0.02 and vertical shifts disappeared
  * (re-wrapping lines remain, hence the explicit-lines rule). */
+/** Size-matched fallback faces, measured in Chromium (scripts note: rendered width of sample display and body
+ * text, web font vs fallback): a regular face for weights below 600 and a real bold face for 600-900. One
+ * size-adjust per family could not fit both (Archivo needs about 98% at 400 and 105-111% at 700-800 against a
+ * synthesized bold; Fraunces' optical sizes made display text 15% narrower than its old fallback), which
+ * shifted wrapped headlines when the web font arrived (CLS). Values: [local font, size-adjust %, ascent %, descent %]. */
 export const FONT_FALLBACKS: Readonly<Record<string, readonly [local: string, sizeAdjust: number, ascent: number, descent: number]>> = Object.freeze({
-  "Fraunces": ["Georgia", 116.3, 84.1, 21.9], "Instrument Serif": ["Georgia", 76.8, 129, 40.4], "Playfair Display": ["Georgia", 102.4, 105.7, 24.5],
-  "Newsreader": ["Georgia", 96, 76.5, 27.6], "Cormorant": ["Georgia", 88.3, 104.6, 32.5], "DM Serif Display": ["Georgia", 101, 102.6, 33.2],
-  "Inter": ["Arial", 107.3, 90.3, 22.5], "Geist": ["Arial", 105.5, 95.3, 28], "DM Sans": ["Arial", 105.6, 94, 29.4], "Manrope": ["Arial", 100, 106.7, 30],
-  "Space Grotesk": ["Arial", 110.9, 88.7, 26.3], "Sora": ["Arial", 113.8, 85.2, 25.5], "Outfit": ["Arial", 98.9, 101.1, 26.3], "Plus Jakarta Sans": ["Arial", 105, 98.9, 21.1],
-  "Archivo": ["Arial", 101.8, 86.2, 20.6], "Bricolage Grotesque": ["Arial", 100.8, 92.2, 26.8], "JetBrains Mono": ["Courier New", 100, 102, 30],
-  "Syne": ["Arial", 98.9, 93.5, 27.8], "Unbounded": ["Arial", 135.4, 73.5, 18.1], "Bebas Neue": ["Arial", 77.5, 116.2, 38.7],
+  "Fraunces": ["Georgia", 101.9, 96, 25],
+  "Instrument Serif": ["Georgia", 76.7, 129.3, 40.5],
+  "Playfair Display": ["Georgia", 101.9, 106.2, 24.6],
+  "Newsreader": ["Georgia", 95.1, 77.2, 27.9],
+  "Cormorant": ["Georgia", 88.1, 104.8, 32.6],
+  "DM Serif Display": ["Georgia", 100.8, 102.8, 33.3],
+  "Inter": ["Arial", 101.3, 95.6, 23.8],
+  "Geist": ["Arial", 102.5, 98.1, 28.8],
+  "DM Sans": ["Arial", 104.4, 95.1, 29.7],
+  "Manrope": ["Arial", 102.5, 104.1, 29.3],
+  "Space Grotesk": ["Arial", 108.9, 90.4, 26.8],
+  "Sora": ["Arial", 112.8, 86, 25.7],
+  "Outfit": ["Arial", 99.7, 100.3, 26.1],
+  "Plus Jakarta Sans": ["Arial", 104.4, 99.5, 21.2],
+  "Archivo": ["Arial", 98, 89.5, 21.4],
+  "Bricolage Grotesque": ["Arial", 101.7, 91.4, 26.6],
+  "JetBrains Mono": ["Courier New", 100, 102, 30],
+  "Syne": ["Arial", 98.6, 93.8, 27.9],
+  "Unbounded": ["Arial", 132.3, 75.2, 18.5],
+  "Bebas Neue": ["Arial", 76.1, 118.3, 39.4],
+});
+/** The bold fallback face (font-weight 600 900); families with a single weight have none. */
+export const FONT_FALLBACKS_BOLD: Readonly<Record<string, readonly [local: string, sizeAdjust: number, ascent: number, descent: number]>> = Object.freeze({
+  "Fraunces": ["Georgia Bold", 92.8, 105.4, 27.5],
+  "Playfair Display": ["Georgia Bold", 89.3, 121.3, 28.1],
+  "Newsreader": ["Georgia Bold", 88.4, 83.1, 30],
+  "Cormorant": ["Georgia Bold", 76.2, 121.2, 37.7],
+  "Inter": ["Arial Bold", 99.3, 97.6, 24.3],
+  "Geist": ["Arial Bold", 102.5, 98.1, 28.8],
+  "DM Sans": ["Arial Bold", 102.9, 96.5, 30.2],
+  "Manrope": ["Arial Bold", 100.6, 106, 29.8],
+  "Space Grotesk": ["Arial Bold", 101.8, 96.7, 28.7],
+  "Sora": ["Arial Bold", 107.5, 90.2, 27],
+  "Outfit": ["Arial Bold", 96.3, 103.9, 27],
+  "Plus Jakarta Sans": ["Arial Bold", 101.4, 102.4, 21.8],
+  "Archivo": ["Arial Bold", 98.7, 88.9, 21.2],
+  "Bricolage Grotesque": ["Arial Bold", 98.9, 94, 27.3],
+  "JetBrains Mono": ["Courier New Bold", 100, 102, 30],
+  "Syne": ["Arial Bold", 129.5, 71.4, 21.2],
+  "Unbounded": ["Arial Bold", 131.4, 75.7, 18.7],
 });
 
 const fontLines = FONT_CATALOG.map(font => {
   const weight = font.weight.includes(" ") ? font.weight.replace(" ", "–") : `${font.weight} only`;
   const kb = FONT_FILE_KB[font.family];
   const size = kb ? `, ~${kb[0]} KB${font.italic && kb[1] ? ` + ${kb[1]} KB italic` : ""}` : "";
-  const fallback = FONT_FALLBACKS[font.family];
-  const metrics = fallback ? ` (fallback face: local("${fallback[0]}"), size-adjust ${fallback[1]}%, ascent-override ${fallback[2]}%, descent-override ${fallback[3]}%)` : "";
+  const fallback = FONT_FALLBACKS[font.family], heavy = FONT_FALLBACKS_BOLD[font.family];
+  const metrics = fallback ? ` (fallback faces: regular local("${fallback[0]}"), size-adjust ${fallback[1]}%, ascent-override ${fallback[2]}%, descent-override ${fallback[3]}%${heavy ? `; bold, font-weight 600 900, local("${heavy[0]}"), size-adjust ${heavy[1]}%, ascent-override ${heavy[2]}%, descent-override ${heavy[3]}%` : ""})` : "";
   return `- "${font.family}" (${font.category}, ${weight}${font.italic ? ", italic" : ""}${font.stretch ? `, width ${font.stretch.replace(" ", "–")}` : ""}${size}): ${font.voice}. Fallback: ${fallback ? `"${font.family} Fallback", ` : ""}${font.fallback}${metrics}`;
 }).join("\n");
 
@@ -147,14 +186,14 @@ You work by calling tools that edit a real project:
 - generate_image creates an original photograph, illustration, transparent cut-out or texture and returns the URL and pixel size to use in code.
 - finish ends the session with a short summary for the client. Always call finish when the site is complete.
 Before your first tool call, write one or two short sentences telling the user what you are about to build or change. Between steps, keep any narration to a single short sentence. Never paste code into your messages; code goes only into files.
-On an empty project, make your direction decision briefly and immediately write the small entry files and a complete, renderable first section. Then add the remaining sections and refine. Do not spend an entire response planning or composing one enormous file: finished files are saved across interruptions, unfinished tool inputs are not. Keep individual components focused so each write completes promptly. Keep the project compiling after every step: write a stylesheet or component before (or in the same step as) the file that imports it, and grow App.tsx section by section, so a step cut off by the time limit still saves a working site that the next step can continue. Your first or second step writes index.html, src/main.tsx and src/App.tsx (a real first section and the page structure) plus one short stylesheet; nothing else comes first: a project without src/App.tsx cannot be saved at all. Keep each file under about 300 lines (split large stylesheets) so every write completes inside one response.
+On an empty project, when the concept tool is available, call it first and once, before any file: two or three genuinely different concepts for this brief (a headline idea and copy angle, one signature visual device built from this business's own facts, the first-screen archetype and ground, and how it serves the primary action), each scored 1-5 on memorable, specific, action and buildable; choose the highest total and build only that one, with its device on the first screen and carried through the sections. The sharpest concepts turn the brief's own facts into the idea (a tide-table strip for a harbour café that opens with the tide, a stamped dispatch docket for a same-day courier, a 30-minute ruler for a locksmith who promises to arrive within half an hour); a mood or a generic hero is not a concept. Then make your remaining decisions briefly and immediately write the small entry files and a complete, renderable first section. Then add the remaining sections and refine. Do not spend an entire response planning or composing one enormous file: finished files are saved across interruptions, unfinished tool inputs are not. Keep individual components focused so each write completes promptly. Keep the project compiling after every step: write a stylesheet or component before (or in the same step as) the file that imports it, and grow App.tsx section by section, so a step cut off by the time limit still saves a working site that the next step can continue. Your first or second step writes index.html, src/main.tsx and src/App.tsx (a real first section and the page structure) plus one short stylesheet; nothing else comes first: a project without src/App.tsx cannot be saved at all. Keep each file under about 300 lines (split large stylesheets) so every write completes inside one response.
 
 TOOLCHAIN (fixed): React 19 + TypeScript + Vite, plain CSS. Installed packages: "react", "react-dom" and "lucide-react" (icons). Nothing else: no other packages, no Tailwind or CSS frameworks, no animation libraries, no remote fonts, stylesheets or scripts, no network calls except the hosted enquiry endpoint below, no environment variables.
 Required files: index.html (with <div id="root"></div> and <script type="module" src="/src/main.tsx"></script>), src/main.tsx (createRoot from "react-dom/client"), plus components and stylesheets you import. Keep files focused: src/App.tsx, src/components/*.tsx, src/styles/*.css (or co-located CSS). Every relative import must point to a file you created. Use hash-based or state-based navigation for multi-section/multi-page sites (no router package).
 
 FONTS: a curated, self-hosted library. Use a family by its exact name, quoted, with its fallback, ideally as tokens: --font-display: "Fraunces", Georgia, serif; --font-text: "DM Sans", system-ui, sans-serif; The builder embeds only the families you reference. Variable fonts take any weight in their range; never set a single-weight face ("400 only") bolder, as browsers fake the bold. No other web font exists: if a brief or style token names another font, use the closest family below. Sizes are what each visitor downloads before the page is final:
 ${fontLines}
-Size-matched fallbacks: for every family you use, declare its fallback face once in the tokens stylesheet with the values listed above, e.g. @font-face { font-family: "Fraunces Fallback"; src: local("Georgia"); size-adjust: 116.3%; ascent-override: 84.1%; descent-override: 21.9%; line-gap-override: 0%; } and put it second in the stack: --font-display: "Fraunces", "Fraunces Fallback", Georgia, serif; so text keeps its size and line positions while the web font loads.
+Size-matched fallbacks: for every family you use, declare its fallback faces once in the tokens stylesheet with exactly the values listed above: the regular face, and (for families with a bold entry) the bold face for weights 600-900, e.g. @font-face { font-family: "Archivo Fallback"; src: local("Arial"); font-weight: 100 599; size-adjust: 98%; ascent-override: 89.5%; descent-override: 21.4%; line-gap-override: 0%; } @font-face { font-family: "Archivo Fallback"; src: local("Arial Bold"); font-weight: 600 900; size-adjust: 98.7%; ascent-override: 88.9%; descent-override: 21.2%; line-gap-override: 0%; } and put it second in the stack: --font-display: "Archivo", "Archivo Fallback", Arial, sans-serif; so text keeps its size and line positions while the web font loads.
 Font budget: about 100 KB of font files in total. Italics are a separate file for every family used, and any <em>, <i>, <cite>, <address>, <dfn>, <var> or font-style: italic anywhere in the project loads them, so use italic only when it is the concept's signature; emphasise with weight, size or colour otherwise. A single family in several weights and widths is a confident choice.
 Pairings that work (display + text): Instrument Serif + Geist (architecture, premium B2B); Fraunces + DM Sans (food, hospitality, wellness); Newsreader + Manrope (law, consulting, finance); Playfair Display + Plus Jakarta Sans (luxury, beauty); Cormorant + Manrope (jewellery, hotels, weddings); DM Serif Display + DM Sans (cafes, bakeries, culture); Geist + JetBrains Mono (developer tools, AI); Sora + Geist (tech, mobility); Space Grotesk + Manrope (engineering, logistics); Syne + Space Grotesk (art, music, fashion); Instrument Serif + Space Grotesk (galleries, editorial tech); Bricolage Grotesque + Geist (creative studios, indie food and drink); Archivo condensed headlines (font-stretch 62–75%) + Archivo text (sport, industrial); Bebas Neue + Outfit (fitness, barbers, events); Unbounded + Manrope (events, gaming); Outfit alone (clinics, community). Use at most two families, plus JetBrains Mono for data or labels when the concept wants it (never for paragraphs or body copy). Inter is a safe body face, not a default: pick a text face with character when the concept allows.
 Typesetting: tight tracking (-0.02em to -0.045em) and leading (0.9–1.05) on large headlines; small uppercase labels at 0.72–0.8rem with +0.08em to +0.14em tracking; text-wrap: balance on headings and pretty on paragraphs; font-variant-numeric: tabular-nums for prices, stats and times.

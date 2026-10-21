@@ -200,10 +200,10 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
     const stream = await events(websiteBuildResponse({ ...runnerInput(await fresh()), reviewing: true }));
     assert.equal(stream.at(-1).charged, 2); assert.equal(stream.at(-1).changed, false); assert.equal(stream.at(-1).summary, "No changes needed in the captured views."); assert.equal(finishCall().args.p_outcome, "review_no_change");
   });
-  await check("incomplete unchanged website records confirmed usage without a new version", async () => {
+  await check("a step that saved nothing usable is never charged (released, cost absorbed)", async () => {
     websiteAgent = async () => ({ summary: "", finished: false });
     const stream = await events(websiteBuildResponse(runnerInput(await fresh())));
-    assert.equal(stream.at(-1).code, "BUILD_INCOMPLETE"); assert.equal(stream.at(-1).charged, 2); assert.equal(finishCall().args.p_candidate, null);
+    assert.equal(stream.at(-1).code, "BUILD_INCOMPLETE"); assert.equal(stream.at(-1).charged, 0); assert.equal(finishCall().args.p_outcome, "failed"); assert.equal(finishCall().args.p_candidate, null);
   });
   await check("document continuation includes original request and persists truthful finished flag", async () => {
     documentAgent = async input => { assert.match(input.context, /Original authorized request: Build a useful site/); input.editor.apply("write_chapter", { chapter: { id: "intro", title: "Introduction", text: "A useful first draft." } }); return { summary: "First chapter", finished: false }; };

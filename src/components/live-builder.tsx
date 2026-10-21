@@ -27,7 +27,7 @@ import { sourceIntentIssue } from "@/lib/builder/source-readiness";
 import BriefQuestionsCard from "./brief-questions-card";
 import { briefWithAnswers, designAnswers, isBriefQuestion, mergedQuestions, type BriefAnswers, type BriefQuestion, type DesignAnswers } from "@/lib/builder/brief-questions";
 import EnhancedBriefCard, { type EnhancingState } from "./enhanced-brief-card";
-import { ENHANCER_CREDITS, shouldEnhance, type BuildBrief } from "@/lib/builder/enhanced-brief";
+import { shouldEnhance, type BuildBrief } from "@/lib/builder/enhanced-brief";
 import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendingRequest, savePendingRequest, targetIssue, targetReference, undoIssue, type EditTarget, type PendingRequest } from "@/lib/builder/edit-intent";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
@@ -65,7 +65,8 @@ function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "bo
       <div><dt>Time</dt><dd>{formatDuration(receipt.durationMs)}</dd></div>
       <div><dt>Sources sent</dt><dd>{receipt.sources.length ? receipt.sources.join(", ") : "None"}</dd></div>
       {receipt.brief && <div><dt>Brief</dt><dd>From {receipt.brief}</dd></div>}
-      {receipt.enhanced && <div><dt>{receipt.brief ? "Brief used" : "Brief"}</dt><dd>{receipt.enhanced.mode === "original" ? "Your own words (not enhanced)" : receipt.enhanced.mode === "edited" ? "Enhanced brief, with your edits" : "Enhanced brief"}{receipt.enhanced.credits ? ` · enhancing charged ${receipt.enhanced.credits} credit${receipt.enhanced.credits === 1 ? "" : "s"} before the build` : ""}</dd></div>}
+      {receipt.concept && <div><dt>Concept</dt><dd>{receipt.concept.chosen}{receipt.concept.runnersUp.length ? ` · also considered: ${receipt.concept.runnersUp.join(", ")}` : ""}</dd></div>}
+      {receipt.enhanced && <div><dt>{receipt.brief ? "Brief used" : "Brief"}</dt><dd>{receipt.enhanced.mode === "original" ? "Your own words" : receipt.enhanced.mode === "analysis" ? "Your own words, with a brief analysis" : receipt.enhanced.mode === "edited" ? "Enhanced brief, with your edits" : "Enhanced brief"} · reading your brief was free</dd></div>}
       <div><dt>{kind === "website" ? "Files changed" : "Changes"}</dt><dd>{changes.length ? <details><summary>{changes.length} {noun}{changes.length === 1 ? "" : "s"}</summary><ul>{changes.slice(0, 40).map(item => <li key={item}>{item}</li>)}{changes.length > 40 && <li>and {changes.length - 40} more</li>}</ul></details> : "None"}</dd></div>
     </dl>
     {!!receipt.checks.length && <ul className="lb-receipt-checks">{receipt.checks.map(check => <li key={check.label} data-ok={check.ok}>{check.ok ? <Check size={13} aria-label="Passed" /> : <TriangleAlert size={13} aria-label="Needs attention" />}<span>{check.label}</span></li>)}</ul>}
@@ -154,6 +155,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   /** The enhanced-brief step of a first website build: shown before anything paid starts (M08). */
   const [enhancing, setEnhancing] = useState<{ text: string; design: DesignAnswers; state: EnhancingState } | null>(null);
   const enhanceAbort = useRef<AbortController | null>(null);
+  /** A detailed first brief being analysed (free, automatic; Skip starts without it). */
+  const [analyzing, setAnalyzing] = useState<{ text: string; design: DesignAnswers } | null>(null);
   const authorizing = useRef(false);
   const [previewingRecovery, setPreviewingRecovery] = useState<{ runId: string; version: number } | null>(null);
   const [chosenMode, setMode] = useState<"create" | "plan" | null>(null);
@@ -593,11 +596,11 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     } catch { return null; }
   }, [accountId, artifactId, kind, workspaceId]);
   /** The enhanced brief for a first website build: a small capped call, charged only when it works. Null on any failure (fail open). */
-  const enhanceBrief = useCallback(async (brief: string, design: DesignAnswers, signal: AbortSignal): Promise<Extract<EnhancingState, { status: "ready" }> | null> => {
+  const enhanceBrief = useCallback(async (brief: string, design: DesignAnswers, signal: AbortSignal, original?: string): Promise<Extract<EnhancingState, { status: "ready" }> | null> => {
     try {
       const response = await fetch("/api/build/enhance", { method: "POST", cache: "no-store", signal,
         headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
-        body: JSON.stringify({ workspaceId, artifactId, brief: brief.slice(0, 8000), ...(Object.keys(design).length ? { design } : {}), attachments: Math.min(sources.files.length, 20) }) });
+        body: JSON.stringify({ workspaceId, artifactId, brief: brief.slice(0, 8000), ...(original ? { original: original.slice(0, 8000) } : {}), ...(Object.keys(design).length ? { design } : {}), attachments: Math.min(sources.files.length, 20) }) });
       if (!response.ok) return null;
       const value = await response.json() as { enhanced?: unknown; text?: unknown; charged?: unknown };
       if (!value.enhanced || typeof value.text !== "string" || !value.text.trim() || typeof value.charged !== "number") return null;
@@ -606,13 +609,27 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
   }, [accountId, artifactId, sources.files.length, workspaceId]);
   /** After the questions: a first website build in Create mode shows its enhanced brief before starting; anything else starts as before. */
   const proceed = useCallback((text: string, requestMode: "create" | "plan", design: DesignAnswers, original: string) => {
-    if (!website || requestMode !== "plan" && !shouldEnhance(original)) { void submitSources(text, requestMode, website && Object.keys(design).length ? { design } : undefined); return; }
+    if (!website) { void submitSources(text, requestMode); return; }
     if (requestMode !== "create") { void submitSources(text, requestMode); return; }
+    if (!shouldEnhance(original)) {
+      // A detailed brief is never rewritten: a free analysis lists what the client's own words ask for, then the build starts.
+      enhanceAbort.current?.abort();
+      const controller = new AbortController(); enhanceAbort.current = controller;
+      const timer = window.setTimeout(() => controller.abort(), 45_000);
+      setAnalyzing({ text, design });
+      void enhanceBrief(text, design, controller.signal, original).then(ready => {
+        window.clearTimeout(timer);
+        if (enhanceAbort.current !== controller) return;
+        enhanceAbort.current = null; setAnalyzing(null);
+        void submitSources(text, "create", { ...(Object.keys(design).length ? { design } : {}), ...(ready ? { brief: { mode: "analysis", text: ready.text } } : {}), enhanced: { mode: ready ? "analysis" : "original", credits: 0 } });
+      });
+      return;
+    }
     enhanceAbort.current?.abort();
     const controller = new AbortController(); enhanceAbort.current = controller;
     const timer = window.setTimeout(() => controller.abort(), 45_000);
     setEnhancing({ text, design, state: { status: "loading" } });
-    void enhanceBrief(text, design, controller.signal).then(ready => {
+    void enhanceBrief(text, design, controller.signal, original).then(ready => {
       window.clearTimeout(timer);
       if (enhanceAbort.current !== controller) return;
       setEnhancing(current => current && current.text === text ? { ...current, state: ready ?? { status: "failed" } } : current);
@@ -642,6 +659,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     if (issue) { setNotice(issue); setDraft(text); return; }
     if (asking) { setNotice("Answer the questions above, or choose Skip questions."); return; }
     if (enhancing) { setNotice("Choose how to start with the brief above, or Cancel."); return; }
+    if (analyzing) { setNotice("Your brief is being read; the build starts in a moment."); return; }
     if (firstBuild && !asked.current && text.trim()) {
       asked.current = true;
       const brief = text.trim(), attachments = sources.files.length;
@@ -656,7 +674,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     }
     if (prepared) { hold(); return; }
     void submitSources(text, requestMode, target ? { target } : undefined);
-  }, [asking, enhancing, firstBuild, kind, proceed, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
+  }, [analyzing, asking, enhancing, firstBuild, kind, proceed, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
   const answerQuestions = (answers: BriefAnswers | null) => {
     if (!asking) return;
     const { text, mode: requestMode, questions } = asking;
@@ -779,9 +797,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     : history.length ? `${history.length} earlier change${history.length === 1 ? "" : "s"}` : "Conversation";
   const measured = estimates && effort === estimates.effort && firstBuild ? estimates.firstBuild[kind] : null;
   const ceiling = BUILDER_EFFORT[effort].ceilingCredits;
-  // A first website build in Create mode enhances its brief first (up to ENHANCER_CREDITS), shown in the maximum.
-  const enhancesFirst = website && firstBuild && shouldEnhance(draft);
-  const shownMaximum = ceiling + (enhancesFirst && mode !== "plan" ? ENHANCER_CREDITS : 0);
+  // Prompt help (enhancement or analysis) is free, so the maximum is the build's own ceiling.
+  const shownMaximum = ceiling;
   const canReview = website && Object.keys(baseFiles).length > 0;
   const quoteIssue = affordability(mode === "plan" ? PLAN_CEILING_CREDITS : ceiling, balance);
   return <aside className="lb" aria-label="Builder chat" data-chat-open={chatOpen || undefined} onKeyDown={event => closeSheetOnEscape(event, chatOpen, () => setChatOpen(false), ".lb-log")}>
@@ -796,6 +813,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           finalLabel={website && asking.mode === "create" && shouldEnhance(asking.text) ? "Continue" : undefined}
           limit={`Starting ${asking.mode === "plan" ? "the plan" : "the build"} uses up to ${asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits, with ${sources.files.length ? `your source files: ${sources.files.filter(file => !leftOut.has(file.id)).map(file => file.name).join(", ") || "none"}` : "no source files"}. You pay only for what is used.`}
           onStart={answers => answerQuestions(answers)} onSkip={() => answerQuestions(null)} />}</div></>}
+      {analyzing && <><div className="lb-turn lb-user"><p>{analyzing.text}</p></div>
+        <div className="lb-turn lb-assistant"><div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to list everything it asks for… (free)</span>
+          <button type="button" className="bq-skip" onClick={() => { const current = analyzing; enhanceAbort.current?.abort(); enhanceAbort.current = null; setAnalyzing(null); void submitSources(current.text, "create", { ...(Object.keys(current.design).length ? { design: current.design } : {}), enhanced: { mode: "original", credits: 0 } }); }}>Skip and start</button></div></div></>}
       {enhancing && <><div className="lb-turn lb-user"><p>{enhancing.text}</p></div>
         <div className="lb-turn lb-assistant"><EnhancedBriefCard key={enhancing.state.status} state={enhancing.state} design={enhancing.design} maximum={ceiling} busy={busy || preparingSources || Boolean(disabled)}
           onStart={brief => startEnhanced(brief)} onOriginal={() => startEnhanced(null)} onCancel={cancelEnhanced} /></div></>}
@@ -811,7 +831,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           // eslint-disable-next-line @next/next/no-img-element -- data URL screenshots, not optimisable
           <li key={shot.label} data-viewport={shot.viewport}><img src={shot.url} alt={`${shot.label} screenshot`} title={shot.label} /></li>)}</ul>}
         {turn.text && <p>{turn.text}</p>}
-        {turn.enhancedBrief && <details className="lb-enhanced"><summary>{turn.enhancedBrief.mode === "edited" ? "Enhanced brief (your edits)" : "Enhanced brief"}</summary><pre>{turn.enhancedBrief.text}</pre></details>}
+        {turn.enhancedBrief && <details className="lb-enhanced"><summary>{turn.enhancedBrief.mode === "edited" ? "Enhanced brief (your edits)" : turn.enhancedBrief.mode === "analysis" ? "Brief analysis" : "Enhanced brief"}</summary><pre>{turn.enhancedBrief.text}</pre></details>}
         {turn.plan && planner.active?.turnId === turn.id && planCard(planner.active)}
         {typeof turn.plan === "object" && planner.active?.turnId !== turn.id && <div className="pc pc-collapsed"><ListChecks size={14} /><span>Plan v{turn.plan.revision} · <strong>{turn.plan.title}</strong> — revised below</span></div>}
         {!!turn.activity.length && <ul className="lb-activity">{turn.activity.map(item => <li key={item.id} data-done={item.done}>
@@ -907,13 +927,13 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       {(busy || operationRunning) && <p className="lb-action-effect" id={`lb-stop-effect-${artifactId}`}>{stopEffect(operation, version, pendingCancel && !operation?.cancelRequested)}</p>}
       <div className="lb-estimate">
         {brandKit !== undefined && <p className="lb-brand">{brandKit ? `Brand kit: ${brandKit}` : "No brand kit"} · used for this request</p>}
-        <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits for this {mode === "plan" ? "plan" : shownMaximum > ceiling ? `request: ${ENHANCER_CREDITS} to enhance your brief, then the build and its automatic refinements` : "request, including automatic refinements"}.</p>
+        <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
         {/* Only measured figures: failed planning is released at zero; explicit Stop settles confirmed usage. */}
         <p className="lb-estimate-detail">{mode === "plan" ? "A failed plan is not charged. If you choose Stop, confirmed usage is charged and unused credits are returned."
           : measured ? `In testing, a first ${kind} at ${EFFORT_PRESENTATION[effort].label} used ${measured.min}–${measured.max} credits (${measured.samples} test ${kind}s, no AI images). You pay only for what is used.`
           : `You pay only for what is used, never more than ${ceiling} credits without your approval.`}</p>
         {/* Phones: one line instead of the three above (limit, measured range, balance). */}
-        <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits{mode !== "plan" && shownMaximum > ceiling ? ` (incl. ${ENHANCER_CREDITS} to enhance your brief)` : ""}{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
+        <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
       </div>
       {(notice || (disabled && disabledReason)) && <p className="lb-notice" role="status">{notice || disabledReason}</p>}
     </form>

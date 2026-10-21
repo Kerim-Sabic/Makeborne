@@ -18,6 +18,7 @@ import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
 import { qualityProblems, type QualityInput } from "./quality-gates";
+import { CONCEPT_TOOL, checkConcept, withConceptComment, type ConceptRecord } from "./concept";
 
 /** Conservative streaming output rate used to size steps to the time left. */
 const OUTPUT_TOKENS_PER_SECOND = 50;
@@ -37,6 +38,7 @@ export type BuilderEvent =
   | { type: "image"; path: string; url: string; assetId: string; model?: string; quality?: string; size?: string; reason?: string; costMicrousd?: number | null }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
+  | { type: "concept"; chosen: string; runnersUp: string[]; why: string }
   | { type: "done"; version: number; summary: string; charged: number; changed?: boolean; finished?: boolean; build?: "passed" | "unverified" | null }
   | { type: "error"; code: string; message: string; retryable?: boolean };
 
@@ -55,8 +57,9 @@ const ToolInputs = {
   }).strict(),
 };
 
-function tools(images: boolean, cutouts = false, textImages = false): BetaToolUnion[] {
+function tools(images: boolean, cutouts = false, textImages = false, concept = false): BetaToolUnion[] {
   const list: BetaToolUnion[] = [
+    ...(concept ? [CONCEPT_TOOL as unknown as BetaToolUnion] : []),
     { name: "write_file", description: "Create a new file or replace an entire file in the project.", eager_input_streaming: true,
       input_schema: { type: "object", properties: { path: { type: "string", description: "Relative path, e.g. src/components/Hero.tsx" }, content: { type: "string", description: "Complete file content" } }, required: ["path", "content"], additionalProperties: false } },
     { name: "edit_file", description: "Replace an exact string in an existing file. old_string must match the current file exactly (including whitespace) and be unique unless replace_all is true.", eager_input_streaming: true,
@@ -93,6 +96,10 @@ export type BuilderRun = {
   limits?: { maxTurns?: number; maxImages?: number };
   /** Completeness: sections the approved brief lists (by anchor) and the client's must-haves; checked at finish. */
   required?: QualityInput["required"];
+  /** First build of a website: record 2-3 concepts with the concept tool and build the strongest. */
+  concept?: boolean;
+  /** Rendered contrast at finish (text over its real background): failing pairs, or null when no browser is available. */
+  contrastCheck?: (files: ReadonlyMap<string, string>) => Promise<readonly string[] | null>;
   /** No step starts with less time than this left (default 45 s; tests use less). */
   stepGuardMs?: number;
   /** Injected providers (tests). Production uses the SDKs with retries disabled. */
@@ -105,7 +112,7 @@ export type BuilderRun = {
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds.
  * build: the finish-time compile verdict when the run finished, null otherwise. */
-export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null };
+export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null; concept?: ConceptRecord | null };
 
 /** Agentic edit loop: Claude edits the in-memory project through tools until it
  * calls finish with a project that passes static checks and compiles, or the budget runs out. */
@@ -131,11 +138,12 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const cutouts = imageModels.some(supportsTransparentImages);
   const textImages = imageModels.some(model => TEXT_IMAGE_MODELS.includes(model));
   let imagesUsed = 0, summary = "", title: string | undefined, finished = false, malformedTurns = 0;
+  let concept: ConceptRecord | null = null;
   // Quality gates block a finish once per distinct problem; a repeat is accepted, so a false positive can never strand the work.
   const qualityReported = new Set<string>();
   let build: BuilderResult["build"] = null;
   const system = [{ type: "text" as const, text: BUILDER_SYSTEM }];
-  const toolList = tools(imageLimit > 0, cutouts, textImages);
+  const toolList = tools(imageLimit > 0, cutouts, textImages, Boolean(run.concept));
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
 
@@ -284,9 +292,21 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             }, () => fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).")));
             break;
           }
+          case "concept": {
+            if (!run.concept) { fail("The concept step is only for a first build; continue with the current design."); break; }
+            const checked = checkConcept(use.input);
+            if (!checked.ok) { fail(checked.problem); break; }
+            concept = checked.record;
+            run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why });
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}).` });
+            break;
+          }
           case "finish": {
             const input = ToolInputs.finish.parse(use.input);
             const problems = run.files.problems();
+            // A first build records its concepts before it can finish (once: a repeat is accepted).
+            const noConcept = "Before finishing a first build, call the concept tool once with 2-3 genuinely distinct concepts, scored on the rubric, and keep building the strongest.";
+            if (run.concept && !concept && !qualityReported.has(noConcept)) { qualityReported.add(noConcept); problems.push(noConcept); }
             if (input.routes?.length) run.files.routes = input.routes.some(route => route.path === "/") ? input.routes : [{ path: "/", title: "Home" }, ...input.routes];
             if (input.design) run.files.design = input.design;
             if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes, required: run.required })) {
@@ -299,6 +319,12 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               run.emit({ type: "status", message: "Checking that the website builds…" });
               verdict = await (run.compile ?? compileVerdict)(run.files.files);
               if (verdict.status === "failed") problems.push(...verdict.problems);
+            }
+            // Rendered contrast: text measured over its real background in a browser. Each failing pair blocks once.
+            if (!problems.length && verdict?.status === "passed" && run.contrastCheck) {
+              run.emit({ type: "status", message: "Checking text contrast…" });
+              const findings = await run.contrastCheck(run.files.files).catch(() => null);
+              for (const finding of findings ?? []) if (!qualityReported.has(finding)) { qualityReported.add(finding); problems.push(finding); }
             }
             if (problems.length) { fail(`Not finished yet. Fix these problems, then call finish again:\n- ${problems.join("\n- ")}`); break; }
             // An unavailable compiler is not the model's to fix: keep the work and report it as unverified.
@@ -329,7 +355,13 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
       messages.push({ role: "system", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }
   }
-  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped };
+  // The chosen concept and its runners-up stay in the source (also for a continuation, which reads the files).
+  const app = run.files.files.get("src/App.tsx");
+  if (concept && app !== undefined) {
+    const commented = withConceptComment(app, concept);
+    if (commented !== app) { run.files.write("src/App.tsx", commented); run.emit({ type: "file", path: "src/App.tsx", op: "write", content: commented }); }
+  }
+  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept };
 }
 
 /** Tool result for a stored image: the URL, its real pixel size (for width/height, so nothing shifts) and, for cut-outs, whether the alpha survived. */

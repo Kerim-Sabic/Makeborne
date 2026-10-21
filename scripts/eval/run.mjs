@@ -1532,7 +1532,8 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
   // The studio's enhanced-brief step (first website build in Create mode): its own 1-credit hold.
   // ...only for short briefs, as the studio decides (detailed briefs build from the client's words and answers).
   const enhancedModule = enhance ? loadApp('src/lib/builder/enhanced-brief.ts') : null;
-  const enhancerBoundUsd = enhance && kind === 'website' && !withPlan && enhancedModule.shouldEnhance(brief.brief) ? round2(enhancedModule.ENHANCER_CREDITS * pricing.costPerCreditUsd) : 0;
+  // (detailed briefs get the free analysis instead of the enhancement; the route decides from `original`).
+  const enhancerBoundUsd = enhance && kind === 'website' && !withPlan ? round2(enhancedModule.ENHANCER_CREDITS * pricing.costPerCreditUsd) : 0;
   const scopes = images ? ['global', 'anthropic', 'openai'] : ['global', 'anthropic'];
   control.assertRunning(`${brief.id}: before the midnight check`);
   // The whole brief (until its limits are disabled again) must fit before 00:00 UTC.
@@ -1601,7 +1602,7 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     if (enhancerBoundUsd) {
       const enhancerReservation = await reserveFn({ kind: 'runner-enhancer', ref: brief.id, boundUsd: enhancerBoundUsd, note: `${runId} brief enhancer`, unique: !rerun });
       control.open.add(enhancerReservation);
-      const response = await session.fetch('/api/build/enhance', { method: 'POST', body: { ...base, brief: message, ...(design && Object.keys(design).length ? { design } : {}) } });
+      const response = await session.fetch('/api/build/enhance', { method: 'POST', body: { ...base, brief: message, original: brief.brief.trim().slice(0, 8000), ...(design && Object.keys(design).length ? { design } : {}) } });
       const value = await response.json().catch(() => null);
       item.requests.push({ stage: 'enhance', method: 'POST', path: '/api/build/enhance', status: response.status });
       const usable = response.ok && typeof value?.text === 'string' && typeof value?.reference === 'string';
@@ -1611,7 +1612,7 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
       await settleFn(enhancerReservation, ledger && !ledger.open && ledger.calls ? { actualUsd: usd(ledger.actualMicrousd), detail: { calls: ledger.calls } } : { unknown: true, detail: { status: response.status, reason: usable ? 'ledger unreadable or open' : 'enhancement failed (fail open)' } });
       control.open.delete(enhancerReservation);
       cost.enhancer = { boundUsd: enhancerBoundUsd, reservationId: enhancerReservation, status: response.status, usable, actualUsd: ledger && !ledger.open ? usd(ledger.actualMicrousd) : null, charged: value?.charged ?? null };
-      if (usable) approvedBrief = { mode: 'enhanced', text: value.text };
+      if (usable) approvedBrief = { mode: value.mode === 'analyze' ? 'analysis' : 'enhanced', text: value.text };
       itemJson.generation.enhancer = cost.enhancer; writeJson(path.join(item.dir, 'item.json'), itemJson);
     }
 

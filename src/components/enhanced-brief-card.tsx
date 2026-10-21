@@ -31,7 +31,7 @@ export default function EnhancedBriefCard({ state, design, maximum, busy, onStar
 
   if (state.status === "loading") return <div className="bq bq-loading" role="status">
     <Loader2 size={14} className="lb-spin" aria-hidden="true" />
-    <span>Turning your brief into a full design brief… (up to 1 credit, only if it works)</span>
+    <span>Turning your brief into a full design brief… (free)</span>
     <button type="button" className="bq-skip" onClick={onOriginal}>Use my original</button>
   </div>;
 
@@ -45,7 +45,7 @@ export default function EnhancedBriefCard({ state, design, maximum, busy, onStar
     </footer>
   </section>;
 
-  const { enhanced, charged } = state;
+  const { enhanced } = state;
   const edited = draft.trim() !== state.text.trim();
   return <section className="eb" aria-labelledby="eb-title">
     <header className="eb-head"><Sparkles size={14} aria-hidden="true" /><h4 id="eb-title" ref={heading} tabIndex={-1}>Enhanced brief</h4></header>
@@ -62,7 +62,7 @@ export default function EnhancedBriefCard({ state, design, maximum, busy, onStar
       </dl>
       <details><summary>Read the full enhanced brief</summary><pre>{state.text}</pre></details>
     </>}
-    <p className="eb-note">Your own words always come first: nothing you wrote is dropped or changed. Enhancing your brief cost {charged} credit{charged === 1 ? "" : "s"}. {limit}</p>
+    <p className="eb-note">Your own words always come first: nothing you wrote is dropped or changed. Enhancing your brief is free. {limit}</p>
     <footer className="eb-actions">
       {editing
         ? <button type="button" className="button primary small" disabled={busy || !draft.trim()} onClick={() => onStart(edited ? { mode: "edited", text: draft.trim() } : { mode: "enhanced", text: state.text })}>Start with my edits<ArrowRight size={14} /></button>
