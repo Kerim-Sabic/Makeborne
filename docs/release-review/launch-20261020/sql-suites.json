@@ -1,0 +1,943 @@
+{
+  "at": "2026-10-19T23:35:13.661Z",
+  "candidateCommit": "d14bf303165806ab2544299c3e1b63f923a5c9ea",
+  "supabaseDirty": "?? supabase/check-credit-autotopup.sql\n?? supabase/check-plan-payment-refunds.sql\n?? supabase/migrations/20261020090000_payment_funding_and_refunds.sql\n?? supabase/migrations/20261020100000_credit_autotopup_authorization.sql",
+  "container": "supabase_db_makeborne-rc-20261019",
+  "newMigrations": [
+    "20261020090000_payment_funding_and_refunds.sql",
+    "20261020100000_credit_autotopup_authorization.sql"
+  ],
+  "baseResidueBefore": 0,
+  "baseChain": 94,
+  "passed": 57,
+  "total": 60,
+  "failed": [],
+  "skipped": [
+    "check-crm-mail-upgrade.sql",
+    "check-local-pilot-lock.sql",
+    "check-mail-granted-scopes-upgrade.sql"
+  ],
+  "results": [
+    {
+      "file": "check-account-privileges.sql",
+      "sha256": "c67de70b6012704b7fc5a592a80dcf3ce32a2c94e3acbcd7183809d86ccf54f7",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3838,
+      "tail": [
+        "-------------------------------------------------------------------------------------------------------------------",
+        "PASS: account roles, self-promotion denial, tenant boundaries, revocation, audit, credit waiver and vendor limits",
+        "(1 row)"
+      ]
+    },
+    {
+      "file": "check-admin-console.sql",
+      "sha256": "caaec8bb09d42baeea1bdeac1e80509c6187173d824ed6a52f11a2987930e401",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3663,
+      "tail": [
+        "NOTICE:  PASS admin console: filters, pagination and bounds",
+        "NOTICE:  PASS admin console: customer detail, unknown customer, no credentials",
+        "NOTICE:  PASS admin console: server role only"
+      ]
+    },
+    {
+      "file": "check-ai-operations.sql",
+      "sha256": "af67078d7d74b535e0c2b19ccb627e3d871973fce5b0b7d14a30cb062e170762",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3892,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS cumulative cap, idempotency, rounding, absorption, atomic save, recovery, consent, expiry, provider uncertainty, plans, ACL",
+        "NOTICE:  PASS artifact/workspace/account deletion, exact hold release, retained provider exposure and audit"
+      ]
+    },
+    {
+      "file": "check-app-observability.sql",
+      "sha256": "d46321348e9b3f98a7eaf31a81d38c29583995259a34272c1ed822bb5e95e62a",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3713,
+      "tail": [
+        "NOTICE:  PASS observability: errors grouped by fingerprint with daily counts, fields capped, bad input refused, 300 new kinds a day then one overflow group",
+        "NOTICE:  PASS observability: visits count once per visitor per page per day, only salted hashes stored, salts kept two days, unlisted pages refused",
+        "NOTICE:  PASS observability: admin-only health (errors by day and top kinds, visits, sign-up funnel from existing records), window bounded to 90 days"
+      ]
+    },
+    {
+      "file": "check-billing-lifecycle-concurrency.sql",
+      "sha256": "332f19982b09ef459eb9931023be4f9cc16bbb7244d4b9eda17dc29aebcc4e5d",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": true,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3823,
+      "tail": [
+        "NOTICE:  PASS lifecycle race: eight different memberships on one account mint one allowance and seven durable review issues",
+        "NOTICE:  PASS lifecycle race: eight account checkout requests reserve exactly one provider attempt",
+        "NOTICE:  PASS concurrency: 4 duplicate observations + 4 duplicate payment deliveries + a racing reconcile -> 4 started allocations granted exactly once (4 x 850; 1 expired, 2 rolled over and 1 current), 1 period, 4 observations + 1 payment kept"
+      ]
+    },
+    {
+      "file": "check-billing-lifecycle.sql",
+      "sha256": "9d5ef67d006e8391b2cdde54f9a38bb1a9554041d785947fb441adb49b9a89e9",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3842,
+      "tail": [
+        "NOTICE:  PASS lifecycle: twelve annual monthly lots; late catch-up never resurrects expired months; every lot uses allocation end plus two months",
+        "NOTICE:  PASS lifecycle: active subscription blocks checkout; completed checkout cannot bind another membership; stale reactivation cannot duplicate account subscription",
+        "NOTICE:  PASS lifecycle: private helpers unavailable to browser and service roles; original service-only observation entry point retained"
+      ]
+    },
+    {
+      "file": "check-brand-kits.sql",
+      "sha256": "fe82418bec4c4d31ae6c83ff6dcd6b6be0f2039391994e1b0d5aa0974e4ce51f",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3851,
+      "tail": [
+        "NOTICE:  PASS brand kits: kit shape and size checks",
+        "NOTICE:  PASS brand kits: members read, strangers and browser writes refused",
+        "NOTICE:  PASS brand kits: client deletion cascades"
+      ]
+    },
+    {
+      "file": "check-budget-reservations.sql",
+      "sha256": "43a2849fb516b76ac16153e7fc3f4fefab0c70b6365bba5c4de931544479880c",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3705,
+      "tail": [
+        "NOTICE:  PASS both balances released exactly once without charges",
+        "NOTICE:  PASS release replay retains original audit",
+        "NOTICE:  PASS cancellation reason required"
+      ]
+    },
+    {
+      "file": "check-client-directory.sql",
+      "sha256": "b30a16ad9c5f9f9403cc85aafa1be6e0edd2dcb2f352911e1897096285b72541",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3795,
+      "tail": [
+        "NOTICE:  PASS other workspace denied",
+        "NOTICE:  PASS invalid page denied",
+        "NOTICE:  PASS anonymous directory denied"
+      ]
+    },
+    {
+      "file": "check-client-outreach.sql",
+      "sha256": "2a799e435880ac744606ec189457db0d6fc264103ee0b7348e432a5955d4e0a4",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3564,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS: 15 outreach checks (roles, tenant isolation, revisions, validation, history); fixtures rolled back"
+      ]
+    },
+    {
+      "file": "check-client-portal.sql",
+      "sha256": "a0521a176dffa2e3da843a4356ff04d15ac103d598ada91117f8b695dad75b40",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3887,
+      "tail": [
+        "NOTICE:  PASS client portal: rate limits refuse with MB429 (120 draft saves/hour/grant, 30 submissions/day/grant, 20 client versions/day/site, 30 invites/day/workspace, 10 grants/client, 100 grants/workspace)",
+        "NOTICE:  PASS client portal: 11 portal audit actions recorded with actor, names and counts only (no content, emails or notes)",
+        "NOTICE:  PASS client portal: cascades (client, artifact and workspace removal remove grants, site settings and changes)"
+      ]
+    },
+    {
+      "file": "check-client-projects.sql",
+      "sha256": "72498bb0ffbc76e83c266a57c9e5340dec7435772fea7cf4c1bf1ae595865e3f",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4526,
+      "tail": [
+        "NOTICE:  PASS unavailable client denied",
+        "NOTICE:  PASS invalid page denied",
+        "NOTICE:  PASS anonymous denied"
+      ]
+    },
+    {
+      "file": "check-client-review-document-assets.sql",
+      "sha256": "b0cf90151bd4cac163f99d4f350ed6ed0596346edae6c5a27a12cc5088e9f370",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4075,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS locator server-only; token/version/document/manifest/project/workspace allowlists enforced",
+        "NOTICE:  PASS latest/pinned semantics, creator access loss, revoked and expired links denied"
+      ]
+    },
+    {
+      "file": "check-client-review-links.sql",
+      "sha256": "4ea423d4269bfa55df247190ca954a62263a22535641071c2d27b7e1c21fea43",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4137,
+      "tail": [
+        "NOTICE:  PASS decisions move only the reviewed project",
+        "NOTICE:  PASS stale writes rejected without effects; current and pinned writes accepted",
+        "NOTICE:  PASS revocation, expiry, latest vs pinned, website snapshots"
+      ]
+    },
+    {
+      "file": "check-credit-autotopup.sql",
+      "sha256": "0a6018e61d5697861c86979a9cebe58c3edbfc2c378658a9d9f123b67d629061",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4044,
+      "tail": [
+        "NOTICE:  PASS auto top-up: subscription required, threshold, one attempt in flight, cooldown, daily and calendar-month limits, unique provider payment",
+        "NOTICE:  PASS auto top-up: re-consent on offer change, suspension after two failures, revocation cancels planned attempts",
+        "NOTICE:  PASS auto top-up: service-role entry points only; the switch is not writable through the API"
+      ]
+    },
+    {
+      "file": "check-credit-lots-concurrency.sql",
+      "sha256": "4f3b0734d808d52c7dd43390bbf3a30eb24eab6b7648a24189ca5f4d02e1bb93",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": true,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 7941,
+      "tail": [
+        "NOTICE:  Reservation already released",
+        "NOTICE:  PASS timeout vs late settle: the hold is reclaimed exactly once and can never also be spent",
+        "NOTICE:  PASS settle vs release: exactly one resolution (settled), ledger = available"
+      ]
+    },
+    {
+      "file": "check-credit-lots-expiry.sql",
+      "sha256": "c9b007e2bc3e46f2a43bc9a532ef7f98bc0ccb32f459018f13b18bc9044652db",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4333,
+      "tail": [
+        "NOTICE:  PASS plan allocations: late catch-up honours the two-month rollover, top-ups expire with their month, retries idempotent",
+        "NOTICE:  PASS legacy migration: audited non-expiring lot funds existing holds, reconciles exactly, refuses mismatches and repeats, spent last",
+        "NOTICE:  PASS reads and privileges: own balance with next expiry; lots private; expiry job service-only"
+      ]
+    },
+    {
+      "file": "check-credit-wallets-concurrency.sql",
+      "sha256": "35ee94476bc824b3a6f851e02c190120e340cde8b7b5c3a1e49f5d0fd2b22c2f",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": true,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 5104,
+      "tail": [
+        "NOTICE:  Insufficient credits",
+        "DETAIL:  available=10 required=30",
+        "NOTICE:  PASS concurrency: 6 racing reserves of 30 on 100 credits -> 3 ok, 3 MB402; 4 racing trials -> 1 grant"
+      ]
+    },
+    {
+      "file": "check-credit-wallets.sql",
+      "sha256": "eee8fb26a7ddef318e41e11380526f78ff0cb05ef4ee192c386aba6dce89c5e3",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3708,
+      "tail": [
+        "NOTICE:  PASS admin bypass",
+        "NOTICE:  PASS RLS and privileges",
+        "NOTICE:  PASS stale hold expiry"
+      ]
+    },
+    {
+      "file": "check-crm-concurrency.sql",
+      "sha256": "d4406fe9f91b7341cab8c54bbc3645c3eb6b19fe3ec0d30250f9cdad5cea1646",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": true,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 5116,
+      "tail": [
+        "NOTICE:  Client records are briefly read-only while Makeborne finishes an update. Try again in a minute.",
+        "NOTICE:  This version of Makeborne is out of date. Reload the page to keep working with clients.",
+        "NOTICE:  PASS G concurrency: freeze drained an in-flight write, blocked a racing write, out-of-date server rejected after contract, previous app restored after rollback"
+      ]
+    },
+    {
+      "file": "check-crm-lead-profile.sql",
+      "sha256": "6c1dd16be2bb7be08e7fceaa6c95089e5d9e86e18481ec3497e1ee2544479540",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3599,
+      "tail": [
+        "NOTICE:  PASS lead SQL: old app insert uses empty additive defaults and tags GIN index exists",
+        "NOTICE:  PASS lead SQL: old edits retain profile fields; owner/editor writes and reviewer/outsider restrictions preserved",
+        "NOTICE:  PASS lead SQL: tag count/content/null, deal range, currency, source and profile shape/size boundaries"
+      ]
+    },
+    {
+      "file": "check-crm-mail-boundaries.sql",
+      "sha256": "d4bda06aa8504d8ceff67c782af717a1ce59820c9390f7067d7973facda8a393",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3613,
+      "tail": [
+        "NOTICE:  PASS mail boundaries: server cross-tenant/wrong-client/wrong-account/null-client bindings rejected; linked sequence cannot move even with both workspace permissions",
+        "NOTICE:  PASS mail boundaries: enrollment/sequence deletion retains message tenant/client/account fields; mailbox deletion still cascades",
+        "NOTICE:  PASS mail boundaries: multidimensional and shifted tag arrays rejected; empty and bounded flat arrays remain compatible"
+      ]
+    },
+    {
+      "file": "check-crm-mail-security.sql",
+      "sha256": "1a12916a638f07c9863b5c0bc37f5f4b33d145a02358448aed8f5097ca9fc783",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3676,
+      "tail": [
+        "NOTICE:  PASS mail SQL: owner/editor/reviewer/outsider visibility, editor-only edits, workspace-move refusal, token calls and mailbox writes denied",
+        "NOTICE:  PASS mail SQL: token missing-row failure, service read/write, refresh preservation, unique row and size bound",
+        "NOTICE:  PASS mail SQL: unique send/enrollment/message claims, client workspace binding, sequence/quota bounds, mailbox cascade cleanup"
+      ]
+    },
+    {
+      "file": "check-crm-mail-upgrade.sql",
+      "sha256": "77c364461a22dc5b073ac61615d1212d63978e92ae3f134758692c7e2e373608",
+      "skipped": "Upgrade-path test: runs mid-chain with the 20261013260000 migration body substituted for its placeholder (scripts/rehearse-candidate.mjs). That migration is already applied in production and unchanged in this candidate."
+    },
+    {
+      "file": "check-crm-sales-delivery.sql",
+      "sha256": "c398d91f28cd48f3dc55f6d55dc9b583430d10b40f1a75209812c01b179d2d6a",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3828,
+      "tail": [
+        "NOTICE:  PASS D rollback: requires freeze, exact provenance restored, later user changes kept, previous app writes again",
+        "NOTICE:  PASS H repeated cycles: exact provenance, history intact, audit complete, inconsistent resume refused",
+        "NOTICE:  PASS F decisions (during a CRM freeze): anonymous, plan-less and paid reviewers move only the linked project, atomically; dead links, foreign projects and marker abuse rejected"
+      ]
+    },
+    {
+      "file": "check-custom-domains.sql",
+      "sha256": "4de84781176ca1680ae0c233155ce85ac4ce1bd406df1a9fbd90e9fbe6d4709c",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4239,
+      "tail": [
+        "NOTICE:  PASS custom domains: resolver returns the slug only for active hostnames of live sites",
+        "NOTICE:  PASS custom domains: owner-only reads, browser roles cannot write, service_role writes through limits",
+        "NOTICE:  PASS custom domains: cascade on site removal"
+      ]
+    },
+    {
+      "file": "check-durable-jobs.sql",
+      "sha256": "fff79708e9329bd4d46e41844188052a44250139dbb0e97c2ba1051dfa9a0125",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3708,
+      "tail": [
+        "NOTICE:  PASS one dispatch intent; lost worker and cancellation retain uncertain holds without redispatch",
+        "NOTICE:  PASS pre-dispatch cancellation releases once and invalidates active workers",
+        "NOTICE:  PASS deadline releases unused work; unresolved provider hold remains exact and uncharged"
+      ]
+    },
+    {
+      "file": "check-generation-authority.sql",
+      "sha256": "3859bd1afddd4703263bb72a17b5d8834d7b1c6345c892e98a47df7b475c5755",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3772,
+      "tail": [
+        "NOTICE:  PASS signed-out/expired session, revoked creation access and reviewer dispatch denied with caps enabled",
+        "NOTICE:  PASS source content/approval/permission, proposal fingerprint and stale revision deny before dispatch/holds",
+        "NOTICE:  PASS unchanged authorized job can dispatch through original exact cap/reservation authority"
+      ]
+    },
+    {
+      "file": "check-generation-caps.sql",
+      "sha256": "5f8e825220fc933d4e73191b683f710610280ac9c7c21de1e00b17e86d432100",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3819,
+      "tail": [
+        "NOTICE:  PASS unknown outcomes retain both caps; operator reconciliation must match route and settles actual cost once",
+        "NOTICE:  PASS outcome cannot change approved provider; debit failure rolls back all cap counters; zero-cost settlement and replay are exact",
+        "NOTICE:  PASS incurred overrun stops both authorities and retains full cost; immutable cap holds prevent audit rewrite"
+      ]
+    },
+    {
+      "file": "check-generation-dispatch.sql",
+      "sha256": "3a9e8e4f19a09196f12926b02b316acd0474378b122abce2ad9429ea4ad9c824",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3682,
+      "tail": [
+        "NOTICE:  PASS dispatch retains both holds without inventing charges",
+        "NOTICE:  PASS one immutable dispatch audit record",
+        "NOTICE:  PASS worker cannot rewrite dispatch audit"
+      ]
+    },
+    {
+      "file": "check-generation-result.sql",
+      "sha256": "682ea10dc29a7b188d3a63941887cc6c6b7d8f230d5b00dbfd7245218f724191",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3833,
+      "tail": [
+        "NOTICE:  PASS rollback after build insertion leaves no source, build, outcome, ledger or replay receipt",
+        "NOTICE:  PASS exact replay creates one canonical version, receipt, outcome and provider ledger entry; actor restored and no customer charge",
+        "NOTICE:  PASS changed evidence/content replay and subsequent customer revision rejected"
+      ]
+    },
+    {
+      "file": "check-generation-settlement.sql",
+      "sha256": "a3c0a37cd12a2e4cd6863aecda1900a1cf680855ef0201c2a8289f3a35ae7167",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3790,
+      "tail": [
+        "NOTICE:  PASS cancelled workers cannot attest; explicit operator reconciliation resolves actual cost without a refund",
+        "NOTICE:  PASS exact integer cost above JavaScript safe range is preserved, stops dispatch and never expands customer charge",
+        "NOTICE:  PASS accounting evidence is append-only; browser model details and direct worker ledger writes denied"
+      ]
+    },
+    {
+      "file": "check-github-connection-refresh.sql",
+      "sha256": "47e48fbaf8f13e707b684f988b9b6bc1e3ca10ddfb901cc3ed5d4718ea127968",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4167,
+      "tail": [
+        "NOTICE:  PASS github refresh: connections without a refresh token remain valid (no backfill)",
+        "NOTICE:  PASS github refresh: refresh token and expiry are stored together",
+        "NOTICE:  PASS github refresh: compare-and-swap lets exactly one renewal win and stale clears do nothing"
+      ]
+    },
+    {
+      "file": "check-hosting-modes.sql",
+      "sha256": "0f904f75a341f63cba4069d1f086abe0c980043db23828677a6519a6d6d0a9a7",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4530,
+      "tail": [
+        "NOTICE:  PASS rollback: republishing in the default mode removes the isolated copy and script; both hosts serve the portable copy",
+        "NOTICE:  PASS new project publishes portable by default; offline hides it everywhere",
+        "NOTICE:  PASS privileges: only the service role publishes; visitors read only published documents"
+      ]
+    },
+    {
+      "file": "check-live-ai-spend-concurrency.sql",
+      "sha256": "38e466fbfa69b629f273e108cf01253b445dba31837abc15c5a738e673d27423",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": true,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4749,
+      "tail": [
+        "DETAIL:  global 0+300000/300000, anthropic 0+300000/300000, call 100000",
+        "NOTICE:  PASS 8 users on 8 concurrent sessions against a limit for 3: exactly 3 admitted, reservations exact",
+        "NOTICE:  PASS finish racing the sweeper: the call is closed exactly once (settled)"
+      ]
+    },
+    {
+      "file": "check-live-ai-spend.sql",
+      "sha256": "1f9e704f366d820c0821e933a3131fa2c3aec1c7dfd8bd63d99f1eb71269d422",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4450,
+      "tail": [
+        "NOTICE:  PASS UTC days: calls charge their own day, a new day is a fresh allowance; late usage reconciles once, never released twice; preflight reports only paused/limit",
+        "NOTICE:  PASS run outcomes: settled (capped at the hold, excess absorbed), replayed, missing_hold, released_hold, released, exempt",
+        "NOTICE:  PASS privileges: service role uses the gate; only the database owner sets limits; browsers have no access"
+      ]
+    },
+    {
+      "file": "check-local-pilot-lock.sql",
+      "sha256": "67590b8e4ae9b52280a8590571b3d243695d8287343a630ebe5ea8eecb0315f6",
+      "skipped": "Postcondition of one developer stack (requires its dedicated local source fixture); not a property of the migration chain."
+    },
+    {
+      "file": "check-locked-content.sql",
+      "sha256": "d6e5fed64420b0678f42ae63dfbb87d00b011e637cb85dc30e1e884d760b09b4",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4336,
+      "tail": [
+        "NOTICE:  PASS rejected changes leave revision unchanged",
+        "NOTICE:  PASS separate unlock saved",
+        "NOTICE:  PASS edits after saved unlock allowed"
+      ]
+    },
+    {
+      "file": "check-mail-granted-scopes-upgrade.sql",
+      "sha256": "0e258f5146338fe7f9fb1a7179e2599225b7433c2b8bb2445f9509f9dd8dcba7",
+      "skipped": "Upgrade-path test: runs mid-chain with the 20261013270000 migration body substituted (scripts/rehearse-candidate.mjs). Already applied in production; unchanged in this candidate."
+    },
+    {
+      "file": "check-mail-granted-scopes.sql",
+      "sha256": "5e3cbcbda29d085159f1ec99408dd2c2267a03e95c3d8f2d9b08dc47192dea34",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4194,
+      "tail": [
+        "NOTICE:  PASS scopes SQL: service insert default empty, recorded Google/Microsoft scope formats valid, unrelated edits preserve grants",
+        "NOTICE:  PASS scopes SQL: owner/editor/reviewer read own workspace evidence, outsider/anonymous denied, all browsers unable to fabricate grants",
+        "NOTICE:  PASS scopes SQL: invalid content/null/duplicate/matrix/lower-bound/count/length rejected without mutation; 32 by 200 boundary and empty list valid"
+      ]
+    },
+    {
+      "file": "check-plan-credit-allocations.sql",
+      "sha256": "ea67376a95db3584ba634b048694b4f31d4732f0f5bf908b949e83b8fbb1491e",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4081,
+      "tail": [
+        "NOTICE:  PASS recording: stable anchors, duplicates, out-of-order, extension, renewal, missing/inconsistent data refused, unknown tiers rejected",
+        "NOTICE:  PASS permissions: only the service role records and reconciles; nobody grants with a caller-chosen tier",
+        "NOTICE:  PASS job control: no overlapping runs, crashed lease recovered as abandoned, heartbeat/finish once, health, stalest-first selection"
+      ]
+    },
+    {
+      "file": "check-plan-credit-concurrency.sql",
+      "sha256": "1ac3d141948a24d6d5ec8626aa25d7004a858325f2c6917aef7cc128077de955",
+      "database": "rehearsal",
+      "user": "postgres",
+      "retargeted": true,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4032,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS concurrency: 4 duplicate observations + 4 duplicate payment deliveries + a racing reconcile -> 4 started allocations granted exactly once (4 x 850; 1 expired, 2 rolled over and 1 current), 1 period, 4 observations + 1 payment kept"
+      ]
+    },
+    {
+      "file": "check-plan-credit-rollover.sql",
+      "sha256": "6ebd63cea99dfca3a9ca52dc9b55b472c11a2bdef93a3b59f81e5eca72df0375",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4207,
+      "tail": [
+        "NOTICE:  PASS historical rollover: spent/held quantities preserved, release returns to original lot, expiry audit coherent, replay idempotent",
+        "NOTICE:  PASS historical rollover: expired and exact-boundary lots stay lapsed, ledger reconciles",
+        "NOTICE:  PASS rolled-over hold: expiry charges only actual usage and lapses the unused hold without resurrection"
+      ]
+    },
+    {
+      "file": "check-plan-payment-refunds.sql",
+      "sha256": "66014aa8c4ef0c3efbbb9889e5488d562cde3d5ee9e1f2639e18f4064900ed5a",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4140,
+      "tail": [
+        "NOTICE:  PASS refunds J: unattributable and ambiguous payments are held for manual review",
+        "NOTICE:  PASS refunds K: membership binding, plan, unpaid attempts, funding immutability and administrator boundaries",
+        "NOTICE:  PASS refunds L: service-role entry points only; helpers and tables unreachable from clients"
+      ]
+    },
+    {
+      "file": "check-proposal-storage.sql",
+      "sha256": "1d4f91e1cec9d7f231e3cb3f2a98dd8562c7ac4777b8fa44cf993af1a517fea8",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4688,
+      "tail": [
+        "NOTICE:  PASS preapproved snapshot rejected",
+        "NOTICE:  PASS changed scope rejected",
+        "NOTICE:  PASS RLS enabled"
+      ]
+    },
+    {
+      "file": "check-publication-controller-boundary.sql",
+      "sha256": "2a2734d218a670ea7367b721b22c6a3a06be6dd0fe48b2fff78bb3f43030ae63",
+      "database": "rehearsal",
+      "user": "supabase_admin",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4074,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS lead validation stays available to authorized client writers without publication access",
+        "NOTICE:  PASS actual publication attestation succeeds with final mail/lead schema and rejects unrelated helper"
+      ]
+    },
+    {
+      "file": "check-publication-sandbox-journal.sql",
+      "sha256": "e8ab566c16d33789e75b8294303abcfab14d0ecff26f9a252c8216a0a0990d7c",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3772,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS journal RLS, no caller table/snapshot grants, no cascade FK, indexed bounded discovery/retention, three restricted fixed-path private/public bridges"
+      ]
+    },
+    {
+      "file": "check-publication-worker-authority.sql",
+      "sha256": "a6abc5f9e98f4e3c4e026949d094288b92f25de4ec92d5c7919643e803ae31fa",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3768,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS restricted role attributes, membership, explicit preparation/journal RPC grants, fixed search paths, no table or unrelated RPC access, legacy service grants",
+        "NOTICE:  PASS SECURITY DEFINER rejects owner session without explicit SQL worker role"
+      ]
+    },
+    {
+      "file": "check-review-link-views.sql",
+      "sha256": "94b170831e76e297e178c2a180530ac173ed745d035b6922df91ae31aa161051",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3682,
+      "tail": [
+        "NOTICE:  PASS review views: owner/member previews not counted, signed-in outsiders counted, RLS reads, no browser writes",
+        "NOTICE:  PASS review views: 200 new sessions per link per day (MB429), existing sessions continue, window rolls",
+        "NOTICE:  PASS review views: cascade on link removal"
+      ]
+    },
+    {
+      "file": "check-site-address-changes.sql",
+      "sha256": "1467bfd32ad4d64f1b912af62eeeb494dd8eb0c30f9ae1e835dc808a4b6be8d3",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4090,
+      "tail": [
+        "NOTICE:  PASS stale request and invalid document leave original address untouched",
+        "NOTICE:  PASS retired reservation, unrelated owner denial and role permissions",
+        "NOTICE:  PASS at most 10 addresses per website; earlier addresses stay reusable"
+      ]
+    },
+    {
+      "file": "check-site-address-namespace.sql",
+      "sha256": "f9cb9fdf4eef155e76de96f5e366e427f3369f7d6388f47cde7f56800614287e",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3741,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS namespace policy RLS, zero caller table/helper grants, owner-invoker configuration, private fixed paths, three write guards, unchanged service and worker scope"
+      ]
+    },
+    {
+      "file": "check-site-analytics.sql",
+      "sha256": "1b2ed9a494d94227a661f19d27ba5a1576884cb17c263b12d4a6cdb835da7cf3",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3909,
+      "tail": [
+        "NOTICE:  PASS site analytics: retention 2 days (hashes) / 400 days (totals), per site and global, opportunistic once per site per day",
+        "NOTICE:  PASS site analytics: owner-only reads, browser roles cannot write, private tables and purge unreachable, anon records only with a valid signature",
+        "NOTICE:  PASS site analytics: cascade on site removal"
+      ]
+    },
+    {
+      "file": "check-site-badge-setting.sql",
+      "sha256": "4c330baabbc7f57bfcad5441c19a03e9d2921ce23d6405e83285e092dc8fbd31",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4023,
+      "tail": [
+        "NOTICE:  PASS badge: the owner removes it and the public reader reports branding=false",
+        "NOTICE:  PASS badge: the new grant covers only the badge column",
+        "NOTICE:  PASS badge: unpaid owner cannot bypass paid eligibility with direct database update"
+      ]
+    },
+    {
+      "file": "check-site-enquiries.sql",
+      "sha256": "3ab9f8ffad2c60d46806c760df51f1f5f073e5e0b5010818c552fd688311445a",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3850,
+      "tail": [
+        "NOTICE:  PASS enquiries: per-visitor limit enforced without blocking other visitors",
+        "NOTICE:  PASS enquiries: refused for ineligible owners and static sites",
+        "NOTICE:  PASS enquiries: gateway-only writes, owner-only reads"
+      ]
+    },
+    {
+      "file": "check-site-sitemap.sql",
+      "sha256": "fe610f83ab4083a5efb9cc69c85817be319346c5d431ce6af116ad6b86dce0a2",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": true,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3960,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS: site sitemap"
+      ]
+    },
+    {
+      "file": "check-topup-fulfillment.sql",
+      "sha256": "c158db6b73d4cb5af9f04fff1beae66bec2af6f4911cbeba9a2fc718dc210f03",
+      "database": "makeborne_topup_verify",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4006,
+      "tail": [
+        "NOTICE:  PASS top-ups: refund before delivery grants nothing; globally unique checkout",
+        "NOTICE:  PASS top-ups: fair due queue, durable cursor, monitoring, overlapping/expired lease refusal",
+        "NOTICE:  PASS top-ups: browser roles refused; server RPC only, no direct table access"
+      ]
+    },
+    {
+      "file": "check-topup-status.sql",
+      "sha256": "bfee6c495fa7c2515c8d8aeae9cc13ed4c6afedd0353b781f98d0a5c79d1ba5b",
+      "database": "makeborne_topup_status_20261013",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3877,
+      "tail": [
+        "NOTICE:  PASS status SQL: restricted execute, explicit owner, stable private definer/public invoker, no table grants",
+        "NOTICE:  PASS status SQL: all eight state/grant combinations, no-plan owner, exact projection, frozen historic amounts, missing/wrong owner/null, repeated reads unchanged",
+        "NOTICE:  PASS status SQL: anonymous/authenticated RPC denial and direct service table denial"
+      ]
+    },
+    {
+      "file": "check-trusted-publication.sql",
+      "sha256": "5552b0fa562717cf32a4a7339d074a28a8de4c4fb49668ab38ca03fd483d136c",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4172,
+      "tail": [
+        "NOTICE:  PASS bounded retry, expired/failed preparations never change live",
+        "NOTICE:  PASS source website offline path preserved",
+        "NOTICE:  PASS RLS and exact service/browser grants, internal promotion/retired bypasses inaccessible"
+      ]
+    },
+    {
+      "file": "check-unified-creation.sql",
+      "sha256": "9b0e4a5d3d77e4384efd6ba9e384d617c611df9079681470415c64d537af0c4e",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 3889,
+      "tail": [
+        "pg_restore: warning: errors ignored on restore: 6",
+        "NOTICE:  PASS: 14 atomic creation checks; fixtures rolled back"
+      ]
+    },
+    {
+      "file": "check-unlimited-sites.sql",
+      "sha256": "96e052114f54e257bd532f1d50b173ba17bfe015d2759b6cb807f5f748e89835",
+      "database": "launch_suite",
+      "user": "postgres",
+      "retargeted": false,
+      "wrapped": false,
+      "prelude": null,
+      "exit": 0,
+      "ms": 4768,
+      "tail": [
+        "NOTICE:  PASS republishing and unpublishing retain immutable daily publication accounting",
+        "NOTICE:  PASS rolling-day boundary reopens one slot; browser cannot erase publication events",
+        "NOTICE:  PASS fair-use ceiling still refuses live site 1,001"
+      ]
+    }
+  ]
+}

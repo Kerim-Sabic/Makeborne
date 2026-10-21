@@ -1,0 +1,1144 @@
+{
+  "prefix": "makeborne_candidate_20261019",
+  "startedAt": "2026-10-19T13:54:41.857Z",
+  "productionLast": "20261007110318",
+  "productionTouched": false,
+  "providerCalls": 0,
+  "image": "public.ecr.aws/supabase/postgres:17.11.0.002",
+  "outOfOrder": [
+    "20261005113330_founder_waitlist.sql"
+  ],
+  "inputs": [
+    {
+      "file": "docs/release-review/staging-platform-schema.sql",
+      "sha256": "3117e0a6af040e6f7eb1826397a00c62c0c63c113d3906d9b299a31c37b93d90"
+    },
+    {
+      "file": "docs/release-review/production-schema.sql",
+      "sha256": "83eb0a51417f1b4e3b54fb5275b81c4f680f735f9523319571f0211745b92ff5"
+    },
+    {
+      "file": "docs/release-review/production-baseline.json",
+      "sha256": "13d192a4986a3ff17d5a10b71f687278f87fa0ebd4be044e3e4fcc9b0bab023a"
+    },
+    {
+      "file": "supabase/release-review/populated-baseline-fixture.sql",
+      "sha256": "2443039c4400b7f4d950bb629c74659fcf4fee2560b2546e46f7b8b0c9e6224f"
+    }
+  ],
+  "candidate": [
+    {
+      "file": "20261005113330_founder_waitlist.sql",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "20261008130542_canonical_website_source_revisions.sql",
+      "sha256": "014288d8e4fb6129e3ae0784177b00c3df5b32403a35fd9b9bffcacd70a484ea"
+    },
+    {
+      "file": "20261008133918_durable_generation_job_leases.sql",
+      "sha256": "83588361b8cd57a43be0057acaf93d6e970e30208acc6c5f980eead4ea135c3b"
+    },
+    {
+      "file": "20261008135727_generation_outcome_settlement.sql",
+      "sha256": "9ad9ee291111a8549e3628e6946b864105e418aedccf12dcedefcd87394f2abb"
+    },
+    {
+      "file": "20261008141212_generation_execution_caps.sql",
+      "sha256": "fd316f183ff8e2d166fbe366a1441833b23c68b8efb79dd0769023f3d586e9a3"
+    },
+    {
+      "file": "20261008143555_generation_worker_lifecycle.sql",
+      "sha256": "5a68119cc130486990026052bf82391f3028d4c6db8272233cb66eb9912c1c6b"
+    },
+    {
+      "file": "20261008151657_generation_approved_input_authority.sql",
+      "sha256": "694264ca14e62d4bf67d809439a1463523d630a770c18cfd5db47140e0f53c3b"
+    },
+    {
+      "file": "20261008154453_generation_atomic_worker_result.sql",
+      "sha256": "99c6d39747b908d9fff49fd70e24fb4f1da9836767bad0d99254b4a9bc12dde5"
+    },
+    {
+      "file": "20261008155402_generation_worker_result_readback.sql",
+      "sha256": "922c6cd02ff44238c5c855e638705e86b2ef945021efd2756b0b475cb738c46b"
+    },
+    {
+      "file": "20261008161434_project_build_handoff.sql",
+      "sha256": "22237aa9bf466b765d023b5f8c9d28ce0a10eb07627da9a9c4c85f50f7eed20c"
+    },
+    {
+      "file": "20261008163228_generation_submission_boundary.sql",
+      "sha256": "a2a32b199162646b2c7a45b30e94e7a4e31a7744efb157463650017ccd867d60"
+    },
+    {
+      "file": "20261008170101_generation_preparation_boundary.sql",
+      "sha256": "ab096b196e5d1b721fdd3734a4870297c3afcf4341464177b65f510de92843ea"
+    },
+    {
+      "file": "20261008171229_generation_request_recovery.sql",
+      "sha256": "edef799310f21613bc50af82797d693b400eaeeb50413d18bfb02e7330f0f0ba"
+    },
+    {
+      "file": "20261008181217_generation_preview_read_authority.sql",
+      "sha256": "9b62b08302950da969dd64f7d6620f898d19c79454e0c18f48697576ca69991a"
+    },
+    {
+      "file": "20261008181817_workspace_membership_policy_deduplication.sql",
+      "sha256": "8f48a7116dce2d7fea577ae7e6b20062f7e04aeb02748a39a7c6706d9222d8c5"
+    },
+    {
+      "file": "20261008182736_private_preview_sessions.sql",
+      "sha256": "e38ebfa0c837674755c0b3f8de133454fecc186d6c2b66a9a40d80cc44a12dba"
+    },
+    {
+      "file": "20261008190859_saved_website_preview_discovery.sql",
+      "sha256": "cab0599542825541551e3f177f90da046ebaf44f9c10e2f925f2256bd1d71fc7"
+    },
+    {
+      "file": "20261008200855_operator_website_qualification_proposal.sql",
+      "sha256": "c00382d3fa7aabcf9ebcec7931db0045cf57d5300fb3c056bb55be0208d48114"
+    },
+    {
+      "file": "20261008210222_operator_website_repair_review.sql",
+      "sha256": "66c47473adb89b8a6a31f695caf0a1fc026a17fd509e5d5f67048941f4a06445"
+    },
+    {
+      "file": "20261009005809_saved_native_slide_designs.sql",
+      "sha256": "3357b324f9dc3c9d148a22ebfdae250d6f7b914f181f6fb2b9ce32bb3c907c92"
+    },
+    {
+      "file": "20261009014243_saved_presentation_preparation.sql",
+      "sha256": "39d1cca7c8716e679f2756aace97a4825d2bb2eead65d6ce35ba45fa975d7f08"
+    },
+    {
+      "file": "20261009015516_native_presentation_progress.sql",
+      "sha256": "f53cca9ff0e77e74c5d02b6e07af4c95db495071ac837e7ae0f41c9339072372"
+    },
+    {
+      "file": "20261009021050_operator_native_composition_qualification.sql",
+      "sha256": "40e353860f013144e6b3e799daeb5f76977de187ab812732aa0901a3cb5651f6"
+    },
+    {
+      "file": "20261011090000_credit_wallets_free_tier.sql",
+      "sha256": "4203a33c5e6361b0c21bf0f9a0b3373b78a677d9159f17e39e5ce1dca32d21a2"
+    },
+    {
+      "file": "20261011120000_artifact_plans.sql",
+      "sha256": "bb6423cdb3c07acc0ad3bbc20a108e455b15a952937c02c589909b46469fb19d"
+    },
+    {
+      "file": "20261011130000_client_review_links.sql",
+      "sha256": "2b7cbf794a90e7a501b0026805b158478c964cad1c43dab03991df8762188e4d"
+    },
+    {
+      "file": "20261011140000_hosted_site_bundles.sql",
+      "sha256": "2a789e5ee4fa7ad4ead3ca4330f37a8b9898857eca14202285500d81e3b131d1"
+    },
+    {
+      "file": "20261011160000_credit_reservation_expiry.sql",
+      "sha256": "543235fa3edc9bf6b17c4c890565375e2d0f94c7c4705421ae8dbfa8056b53ec"
+    },
+    {
+      "file": "20261011170000_free_tier_off_by_default.sql",
+      "sha256": "944cab982852082c213a0516e54d2939f0dc41fa17c4501791afdb0fe1dcdde1"
+    },
+    {
+      "file": "20261011180000_crm_sales_delivery_split.sql",
+      "sha256": "3cf8121d1147657d2d3a744de01fc7a89f58a01994304132d2de99b1beeefdb6"
+    },
+    {
+      "file": "20261011190000_crm_transition.sql",
+      "sha256": "e5449341d303b2687bd2645c4a68dd445b867ff76847ead2843b7a37d82dcd69"
+    },
+    {
+      "file": "20261011200000_crm_write_freeze.sql",
+      "sha256": "7a90f0e642744afcf476f420cf361ba455e660e7759e4628998a9e2f484ca31f"
+    },
+    {
+      "file": "20261012090000_plan_credit_allocations.sql",
+      "sha256": "155fb96c43e574423ae0f40839f01b5c1d795e676999e186a7afc268e04e9405"
+    },
+    {
+      "file": "20261012100000_plan_entitlement_history.sql",
+      "sha256": "06289c1214f453e3280bf30db77e5b1a8e8d72d7f14a334822fff3180d44cfd7"
+    },
+    {
+      "file": "20261012110000_plan_evidence_and_jobs.sql",
+      "sha256": "da715d08e3d46fcecae1ce74e6dad7f4e5f14174180dc8b5bb509e09efda16bd"
+    },
+    {
+      "file": "20261012120000_credit_lots_expiry.sql",
+      "sha256": "0ddd06e7b8b6ea1fddaa578e5cd5677b93a0b4d97e51162f0caf3341e9926d06"
+    },
+    {
+      "file": "20261012130000_credit_lock_clock.sql",
+      "sha256": "d16367b7d810570ad99d495aa707e58699d3158193d767578d3ffa229f0c16d3"
+    },
+    {
+      "file": "20261012140000_live_ai_spend.sql",
+      "sha256": "3eb95b4b3797926c446fed5d7e7c1ce9bf966cb4c33a18d0bce16d374ed48523"
+    },
+    {
+      "file": "20261012150000_shared_provider_limits.sql",
+      "sha256": "0cc4fd384af034dddeb26e419f8a0ff5764eac3e380e521d11b779206e10923f"
+    },
+    {
+      "file": "20261012160000_portable_site_html.sql",
+      "sha256": "786d9f60d785c7b1d00c82e6466fc2c6be7382d95e15b7fb922078e1040b7a10"
+    },
+    {
+      "file": "20261012170000_preserve_isolated_sites.sql",
+      "sha256": "126b6f9b173d235e23607e571e476dd2201de1cf8e5f477cb9148b43ee8a4c32"
+    },
+    {
+      "file": "20261012175901_prevent_duplicate_creation_checkouts.sql",
+      "sha256": "704c31a3e8d3d662de1c3b94e64c8db09f151a50b91908dd7d13c31dd40a99c3"
+    },
+    {
+      "file": "20261012184407_hosted_site_enquiries.sql",
+      "sha256": "fc80ef91c492ce74b457150ed264ab8b6dd5148d7cfb4109388f92a2ebed0de9"
+    },
+    {
+      "file": "20261012210033_hosted_site_address_changes.sql",
+      "sha256": "a301a2c6fffca07ea6897828da6077c0338b45111dec2756555d3243cbd5eb6c"
+    },
+    {
+      "file": "20261013090000_hosting_review_fixes.sql",
+      "sha256": "d80b59a5f6470ead6eb2e7622d9ecd781df272f064de2d194f4fa87861b51230"
+    },
+    {
+      "file": "20261013100000_admin_console.sql",
+      "sha256": "c131ceb76fdefeb7ce800f621d8d43368ec930c5c0d099cabb4c869445e6b547"
+    },
+    {
+      "file": "20261013110000_durable_topup_fulfillment.sql",
+      "sha256": "a2a7ecd63b9bf8b37ac7055cf0eb2558c01313f9a31deacc3ba4bf235474b9f1"
+    },
+    {
+      "file": "20261013120000_unlimited_sites.sql",
+      "sha256": "73d61e48358fa7e4b9c5285dd55d0331f4d69a6a7d226a85449789d3e01ed65b"
+    },
+    {
+      "file": "20261013130000_plan_credit_rollover.sql",
+      "sha256": "b19f7f08ce49acb5fb98f287175a3796ad64a2e77661d06292201d10d33aadcd"
+    },
+    {
+      "file": "20261013140000_site_badge_setting.sql",
+      "sha256": "ca147ffd270918da29fae6ce3083324288eb6f66dbe42c541f91c87dd5997871"
+    },
+    {
+      "file": "20261013150000_cumulative_ai_operations.sql",
+      "sha256": "3d08dd668b5cec9ec72ac2f7f6cddb698a27cd79957afd730e8e5d3e9f236e95"
+    },
+    {
+      "file": "20261013160000_client_review_view_integrity.sql",
+      "sha256": "251f9175ab359e091103c8bfed637e91131eee5d6f20929fe768475b73cdeaa4"
+    },
+    {
+      "file": "20261013170000_client_review_document_assets.sql",
+      "sha256": "c017fcd4adf4cae2a8e5da84e76bbd10c4c93930d1265dfb8c48e8d319c5efbf"
+    },
+    {
+      "file": "20261013180000_trusted_publication_preparations.sql",
+      "sha256": "f0b2767f7f65928bc15a18baad03683583df6e9873f45e51b248021a7164c3c9"
+    },
+    {
+      "file": "20261013190000_publication_worker_authority.sql",
+      "sha256": "d05a1cb3313c156bc645d584997e7d2f196349ba02885394e49397e522f83461"
+    },
+    {
+      "file": "20261013200000_staging_site_address_namespace.sql",
+      "sha256": "e6aa3a8779c169bdfbd0cfe28ab1fd0a56d255252ad1e023410f50806fa9c1f3"
+    },
+    {
+      "file": "20261013210000_publication_sandbox_journal.sql",
+      "sha256": "808c6d306e48f6850ed736d2cfd368690b95467ce4c034925aee7343545afc8c"
+    },
+    {
+      "file": "20261013220000_publication_worker_attestation.sql",
+      "sha256": "8420fb178d817e21c678e3cf9ccd752db1b02403334b582e247fae4af04ae441"
+    },
+    {
+      "file": "20261013230000_read_topup_order_status.sql",
+      "sha256": "11b22f823a40ca381bc3fc0072469e2a946a25823be6c551f2614fb29765edb8"
+    },
+    {
+      "file": "20261013240000_crm_email_automation.sql",
+      "sha256": "ebc0ffee246a476d593fb5063e421aceb354f8b2d1f0759a78d032039fa55663"
+    },
+    {
+      "file": "20261013250000_crm_lead_profile.sql",
+      "sha256": "2a978161b1e541367a999b19da68b26b9b9d9c6243d98a591c2bdd01f8379fd6"
+    },
+    {
+      "file": "20261013260000_crm_mail_security_boundaries.sql",
+      "sha256": "ad40b7296495225e9cc8f0d34fabfb3ca7905066667e57dedb59ecda01e4c7b9"
+    },
+    {
+      "file": "20261013270000_mail_granted_scopes.sql",
+      "sha256": "873d7f5aabcf665d1cb7e8c5779d07c93b1d00927478eac8bbf4c1c052ad89b7"
+    },
+    {
+      "file": "20261013280000_billing_lifecycle_boundaries.sql",
+      "sha256": "2153aa84628f53109643ac60fa571592b6b4b7b50259c20c9cfe21021218cef8"
+    },
+    {
+      "file": "20261014011643_publication_worker_function_boundary.sql",
+      "sha256": "2da2959a247de60a9b1322e28da6a9c3434129071aaddc2faa27990c32de7ac6"
+    },
+    {
+      "file": "20261014150000_github_connection_refresh.sql",
+      "sha256": "bcc233b2347d9b1f287911a5a832c6e4ea667437b447f12d15f91f141f07cbca"
+    },
+    {
+      "file": "20261014160000_custom_domains.sql",
+      "sha256": "fd077d043b5dfb9d60dd69b5380a5530a8839b2b34ded824ceab4d49450b6f6c"
+    },
+    {
+      "file": "20261014170000_site_analytics.sql",
+      "sha256": "f44e9625932e981737ef71d6068b18db0b7b66d8ee0c7169a2f57b7add2eaa10"
+    },
+    {
+      "file": "20261014180000_site_sitemap.sql",
+      "sha256": "8119f3a057ed434073e772b38fee9ef9f31702d560c1cddfcbe7ea07e37f63ff"
+    },
+    {
+      "file": "20261014190000_brand_kits.sql",
+      "sha256": "85d8b8e966861fed910947f179cdaef187657864375e5990d104dd3fa9c269a5"
+    },
+    {
+      "file": "20261015100000_review_link_views.sql",
+      "sha256": "dafd80bb0e35688fccd3828fb88e07e3a3ec6195355d0b8001204f413769ad58"
+    },
+    {
+      "file": "20261016090000_client_portal.sql",
+      "sha256": "1c28732cf9b3e2aab81a0e74fd73f99584a1e0f520cd05670ef6814338e8b129"
+    },
+    {
+      "file": "20261017080000_rpc_definer_boundary.sql",
+      "sha256": "cddd8290447c81feb1f08b3efe658153539e0aef566b412b76d14a2607fcddda"
+    },
+    {
+      "file": "20261019090000_app_observability.sql",
+      "sha256": "fd619c1c990c069fbf03776c7136b240e87b8682f8f741aefe8df2d75e4b7c52"
+    },
+    {
+      "file": "20261019134828_trusted_publication_production_profile.sql",
+      "sha256": "1051d6f1db65fbaf7727d5c1e4cc6d642c9bfb102d4c130d9fcbe601f6546154"
+    }
+  ],
+  "scenarios": {
+    "full": {
+      "container": "makeborne_candidate_20261019_full_20261019135441",
+      "build": {
+        "platformErrorsExpected": 2
+      },
+      "fingerprint": "84280d7509fd73137afbc9e4a0cb55bf",
+      "data": {
+        "users": 1,
+        "clients": 1,
+        "clientStage": "Meeting",
+        "versions": 1,
+        "sites": 1,
+        "pilotReserved": 75,
+        "migrations": 95
+      },
+      "checks": {
+        "mailUpgrade": [
+          "PASS mail upgrade: invalid existing workspace binding rejected and earlier DDL/ACL changes rolled back",
+          "PASS mail upgrade: invalid existing tag matrix rejected and function/constraints/ACL changes rolled back",
+          "PASS mail upgrade: populated fixture retained byte-identical values; existing token RPC signatures and refresh behavior work"
+        ],
+        "mailScopeUpgrade": [
+          "PASS scope upgrade: existing Google/Microsoft rows receive empty grants only; other data unchanged; existing token refresh remains compatible"
+        ],
+        "legacyPause": [
+          "PASS old pilot pause: admin denied, no new dispatch, existing reserved cost unchanged"
+        ],
+        "populatedUpgrade": [
+          "PASS populated production-schema upgrade: client/history/content/site preserved, trial and spend off, pilot cost retained, contract and recovery preserve provenance"
+        ],
+        "check-hosting-modes.sql": [
+          "PASS: hosting modes (existing links, republish, isolated copy, rollback, new projects, guards, privileges)",
+          "PASS existing published link is served unchanged by both readers",
+          "PASS legacy republish: same address, portable document on the existing host, no script stored or enabled",
+          "PASS isolated publish: existing host keeps the portable copy; isolated host serves its copy and script; replays are exact",
+          "PASS rollback: republishing in the default mode removes the isolated copy and script; both hosts serve the portable copy",
+          "PASS new project publishes portable by default; offline hides it everywhere",
+          "PASS privileges: only the service role publishes; visitors read only published documents"
+        ],
+        "check-site-address-changes.sql": [
+          "PASS rename, refreshed document, old URL unavailable, idempotent retry",
+          "PASS stale request and invalid document leave original address untouched",
+          "PASS retired reservation, unrelated owner denial and role permissions",
+          "PASS at most 10 addresses per website; earlier addresses stay reusable"
+        ],
+        "check-site-enquiries.sql": [
+          "PASS: site enquiries",
+          "PASS enquiries: off by default, accepted once, identical retry idempotent, changed retry refused",
+          "PASS enquiries: per-visitor limit enforced without blocking other visitors",
+          "PASS enquiries: refused for ineligible owners and static sites",
+          "PASS enquiries: gateway-only writes, owner-only reads"
+        ],
+        "check-live-ai-spend.sql": [
+          "PASS: live AI spend gate (fail closed, daily limits, actual/uncertain/overrun/expired) and run outcomes",
+          "PASS gate ships disabled and refuses calls",
+          "PASS global and per-provider daily limits are both enforced; begin is idempotent",
+          "PASS actual cost settled once, unknown usage charged at the bound, overrun stops the provider until an operator clears it",
+          "PASS abandoned calls expire at their full bound",
+          "PASS UTC days: calls charge their own day, a new day is a fresh allowance; late usage reconciles once, never released twice; preflight reports only paused/limit",
+          "PASS run outcomes: settled (capped at the hold, excess absorbed), replayed, missing_hold, released_hold, released, exempt",
+          "PASS privileges: service role uses the gate; only the database owner sets limits; browsers have no access"
+        ],
+        "check-credit-lots-expiry.sql": [
+          "PASS: credit lots lifecycle (order, boundary, held expiry, returns, timeout, MB402, plan top-ups/catch-up, legacy migration, privileges)",
+          "PASS spend order: soonest-expiring plan credits, then trial, top-up, adjustment, refund; every hold records its lots",
+          "PASS expiry boundary: expired at the end instant, exact on reads, recorded once",
+          "PASS held allocation expiring mid-run: usage charged within the hold, unspent expired credits lapse, retries idempotent, never above the hold",
+          "PASS returns: valid credits go back to their own lot and expiry; expired credits lapse, never re-issued",
+          "PASS hold timeout: reclaimed after 15 minutes (valid parts back, expired parts lapse); a reclaimed hold can never be settled",
+          "PASS insufficient funds (MB402) counts only valid credits",
+          "PASS plan allocations: late catch-up honours the two-month rollover, top-ups expire with their month, retries idempotent",
+          "PASS legacy migration: audited non-expiring lot funds existing holds, reconciles exactly, refuses mismatches and repeats, spent last",
+          "PASS reads and privileges: own balance with next expiry; lots private; expiry job service-only"
+        ],
+        "check-credit-wallets.sql": [
+          "PASS: free tier gate, trial/grant idempotency, reserve MB402, settle partial/capped at hold, release, ledger invariants, admin bypass, RLS",
+          "PASS free-tier access gate",
+          "PASS trial idempotency and eligibility",
+          "PASS grant idempotency and validation",
+          "PASS reserve, insufficient credits (MB402) and replay",
+          "PASS settle partial, over-hold and replay",
+          "PASS release and replay",
+          "PASS ledger invariants",
+          "PASS admin bypass",
+          "PASS RLS and privileges",
+          "PASS stale hold expiry"
+        ],
+        "check-plan-credit-allocations.sql": [
+          "PASS upgrade in month 6: months 1-5 unchanged, month 6 topped up, month 7 at the new tier (incl. delayed catch-up)",
+          "PASS downgrade in month 6: month 6 unchanged, month 7 at the lower tier, no clawback",
+          "PASS repeated upgrades/downgrades: each month gets its historical tier plus in-month upgrades only; repeats idempotent",
+          "PASS monthly->yearly->monthly transitions at renewal boundaries: 14 allocations, no gap or duplicate",
+          "PASS month ends (Jan 31 anchor), leap years (Feb 29 anchor) and renewal boundaries",
+          "PASS cancellation: canceling keeps months, cancelled months not granted, reactivation resumes",
+          "PASS earlier single-reference grants honoured",
+          "PASS no inferred history: months before evidence open issues; paid initial payment resolves them; duplicates ignored",
+          "PASS subscription_update and refunded payments are stored but are not entitlement evidence",
+          "PASS manual review: owed and not-owed resolutions, audit note required, other months stay open",
+          "PASS recording: stable anchors, duplicates, out-of-order, extension, renewal, missing/inconsistent data refused, unknown tiers rejected",
+          "PASS permissions: only the service role records and reconciles; nobody grants with a caller-chosen tier",
+          "PASS job control: no overlapping runs, crashed lease recovered as abandoned, heartbeat/finish once, health, stalest-first selection"
+        ],
+        "check-crm-sales-delivery.sql": [
+          "PASS A project delivery backfill: mapped, audited, idempotent, status preserved",
+          "PASS E delivery stage permissions",
+          "PASS B expand: previous-app writes accepted, new-app Conversation stored compatibly with provenance, audited, history intact",
+          "PASS C contract: requires freeze, freeze blocks writes, cutoff rejects out-of-date servers and legacy stages",
+          "PASS D rollback: requires freeze, exact provenance restored, later user changes kept, previous app writes again",
+          "PASS H repeated cycles: exact provenance, history intact, audit complete, inconsistent resume refused",
+          "PASS F decisions (during a CRM freeze): anonymous, plan-less and paid reviewers move only the linked project, atomically; dead links, foreign projects and marker abuse rejected"
+        ],
+        "check-generation-caps.sql": [
+          "PASS disabled caps block even unlimited administrator; worker cannot mutate policy or call legacy dispatch/outcome",
+          "PASS missing draft, expired price, global stop and independently disabled provider deny before allocation",
+          "PASS durable dispatch draws on the shared daily provider limits: disabled or exhausted limits refuse it atomically",
+          "PASS global and independent provider concurrency are atomic; dispatch replay does not allocate twice",
+          "PASS shared global cap and per-provider cap deny independently; invalid fence rolls back allocations",
+          "PASS unknown outcomes retain both caps; operator reconciliation must match route and settles actual cost once",
+          "PASS outcome cannot change approved provider; debit failure rolls back all cap counters; zero-cost settlement and replay are exact",
+          "PASS incurred overrun stops both authorities and retains full cost; immutable cap holds prevent audit rewrite"
+        ],
+        "check-unlimited-sites.sql": [
+          "PASS: unlimited sites",
+          "PASS unlimited sites: 50 live websites in one workspace (old caps were 5 live, 20 total)",
+          "PASS fair use: the 51st new website in one day is refused with MB429",
+          "PASS fair use does not block republishing an existing site",
+          "PASS republishing and unpublishing retain immutable daily publication accounting",
+          "PASS rolling-day boundary reopens one slot; browser cannot erase publication events",
+          "PASS fair-use ceiling still refuses live site 1,001"
+        ],
+        "check-plan-credit-rollover.sql": [
+          "PASS: plan credit rollover",
+          "PASS rollover: credits stay spendable for two months after their month ends; older months lapse",
+          "PASS rollover: soonest-expiring (older) credits are spent first",
+          "PASS rollover: new lots are marked extended, so the one-time migration extension cannot re-run on them",
+          "PASS historical rollover: spent/held quantities preserved, release returns to original lot, expiry audit coherent, replay idempotent",
+          "PASS historical rollover: expired and exact-boundary lots stay lapsed, ledger reconciles",
+          "PASS rolled-over hold: expiry charges only actual usage and lapses the unused hold without resurrection"
+        ],
+        "check-site-badge-setting.sql": [
+          "PASS: site badge setting",
+          "PASS badge: shown by default on published websites",
+          "PASS badge: only the owner can change it",
+          "PASS badge: the owner removes it and the public reader reports branding=false",
+          "PASS badge: the new grant covers only the badge column",
+          "PASS badge: unpaid owner cannot bypass paid eligibility with direct database update"
+        ],
+        "check-client-review-links.sql": [
+          "PASS creation, hashing, roles and project delivery move",
+          "PASS anonymous read, comment validation, sanitising and rate limits",
+          "PASS tenant isolation and column privileges",
+          "PASS decisions move only the reviewed project",
+          "PASS stale writes rejected without effects; current and pinned writes accepted",
+          "PASS revocation, expiry, latest vs pinned, website snapshots"
+        ],
+        "check-client-review-document-assets.sql": [
+          "PASS locator server-only; token/version/document/manifest/project/workspace allowlists enforced",
+          "PASS latest/pinned semantics, creator access loss, revoked and expired links denied"
+        ],
+        "check-ai-operations.sql": [
+          "PASS cumulative cap, idempotency, rounding, absorption, atomic save, recovery, consent, expiry, provider uncertainty, plans, ACL",
+          "PASS artifact/workspace/account deletion, exact hold release, retained provider exposure and audit"
+        ],
+        "topups": [
+          "PASS top-ups: checkout request claims, immutable body, bounded retry and saved checkout resume",
+          "PASS top-ups: closed catalogue, replay binding and ownership",
+          "PASS top-ups: failed attempt cannot bind purchase or block out-of-order successful retry",
+          "PASS top-ups: single grant, duplicate/stale evidence and identity conflicts",
+          "PASS top-ups: dispute aborts funded reservations; winning restores original lot",
+          "PASS top-ups: partial/full refund, consumed exposure, no repeated debit or negative balance",
+          "PASS top-ups: refund before delivery grants nothing; globally unique checkout",
+          "PASS top-ups: fair due queue, durable cursor, monitoring, overlapping/expired lease refusal",
+          "PASS top-ups: browser roles refused; server RPC only, no direct table access"
+        ],
+        "topupStatus": [
+          "PASS status SQL: restricted execute, explicit owner, stable private definer/public invoker, no table grants",
+          "PASS status SQL: all eight state/grant combinations, no-plan owner, exact projection, frozen historic amounts, missing/wrong owner/null, repeated reads unchanged",
+          "PASS status SQL: anonymous/authenticated RPC denial and direct service table denial"
+        ],
+        "mailSecurity": [
+          "PASS mail SQL: exposed tables RLS, browser/server write ACLs, private token and RPC ACLs, pinned search paths",
+          "PASS mail SQL: owner/editor/reviewer/outsider visibility, editor-only edits, workspace-move refusal, token calls and mailbox writes denied",
+          "PASS mail SQL: token missing-row failure, service read/write, refresh preservation, unique row and size bound",
+          "PASS mail SQL: unique send/enrollment/message claims, client workspace binding, sequence/quota bounds, mailbox cascade cleanup"
+        ],
+        "leadProfile": [
+          "PASS lead SQL: old app insert uses empty additive defaults and tags GIN index exists",
+          "PASS lead SQL: old edits retain profile fields; owner/editor writes and reviewer/outsider restrictions preserved",
+          "PASS lead SQL: tag count/content/null, deal range, currency, source and profile shape/size boundaries"
+        ],
+        "mailBoundaries": [
+          "PASS mail boundaries: explicit owner, private definer/public invoker, restricted RPC grants, token RLS and no direct service table access",
+          "PASS mail boundaries: server cross-tenant/wrong-client/wrong-account/null-client bindings rejected; linked sequence cannot move even with both workspace permissions",
+          "PASS mail boundaries: enrollment/sequence deletion retains message tenant/client/account fields; mailbox deletion still cascades",
+          "PASS mail boundaries: multidimensional and shifted tag arrays rejected; empty and bounded flat arrays remain compatible"
+        ],
+        "billingLifecycle": [
+          "PASS lifecycle: renewal requires period-local evidence; stale older and invalid anchors cannot increase renewal credits",
+          "PASS lifecycle: reversed renewal/initial evidence order and repeated reconciliation preserve exactly one grant per paid month",
+          "PASS lifecycle: account overlap refused durably; same-membership difference-only grants, adjacent time and other accounts allowed; top-ups unchanged",
+          "PASS lifecycle: twelve annual monthly lots; late catch-up never resurrects expired months; every lot uses allocation end plus two months",
+          "PASS lifecycle: active subscription blocks checkout; completed checkout cannot bind another membership; stale reactivation cannot duplicate account subscription",
+          "PASS lifecycle: private helpers unavailable to browser and service roles; original service-only observation entry point retained"
+        ],
+        "mailGrantedScopes": [
+          "PASS scopes SQL: RLS/ACLs retained, no browser scope writes, service validation callable, immutable private invoker",
+          "PASS scopes SQL: service insert default empty, recorded Google/Microsoft scope formats valid, unrelated edits preserve grants",
+          "PASS scopes SQL: owner/editor/reviewer read own workspace evidence, outsider/anonymous denied, all browsers unable to fabricate grants",
+          "PASS scopes SQL: invalid content/null/duplicate/matrix/lower-bound/count/length rejected without mutation; 32 by 200 boundary and empty list valid"
+        ],
+        "publicationControllerBoundary": [
+          "PASS lead validation stays available to authorized client writers without publication access",
+          "PASS actual publication attestation succeeds with final mail/lead schema and rejects unrelated helper"
+        ],
+        "productionPublicationProfile": [
+          "PASS rollout table and helper have no application or worker write/read authority",
+          "PASS unlisted production workspace refused even for its authenticated admin owner",
+          "PASS explicit enablement and later revocation are enforced by real authority, not UI state",
+          "PASS staging QA scope unchanged and does not become a production rollout entry"
+        ],
+        "trustedPublication": [
+          "PASS raw source v4 denied and previous live bytes preserved",
+          "PASS actor/session/scope, request replay, conflicting input and latest recovery",
+          "PASS exclusive claim, expiry/reclaim fence, immutable receipt, exact output/file hashes and old-live preservation",
+          "PASS revoked current authority blocks, atomic promotion exact bytes, lost-response replay after newer publication",
+          "PASS saved-version and publication CAS; exact old request recovery",
+          "PASS bounded retry, expired/failed preparations never change live",
+          "PASS source website offline path preserved",
+          "PASS RLS and exact service/browser grants, internal promotion/retired bypasses inaccessible"
+        ],
+        "publicationWorker": [
+          "PASS restricted role attributes, membership, explicit preparation/journal RPC grants, fixed search paths, no table or unrelated RPC access, legacy service grants",
+          "PASS SECURITY DEFINER rejects owner session without explicit SQL worker role"
+        ],
+        "publicationJournal": [
+          "PASS journal RLS, no caller table/snapshot grants, no cascade FK, indexed bounded discovery/retention, three restricted fixed-path private/public bridges"
+        ]
+      },
+      "droppedPublicFunctions": [],
+      "crm": {
+        "contractReport": true,
+        "afterContract": "Conversation",
+        "afterRollback": "Meeting",
+        "report": {
+          "mode": "expand",
+          "frozen": false,
+          "consistent": true,
+          "frozenReason": "",
+          "minClientProtocol": 0,
+          "clientsLegacyStages": 1,
+          "clientsCurrentOnlyStages": 0
+        }
+      },
+      "hosting": {
+        "legacyReaderServes": true,
+        "isolatedCopies": 0,
+        "limitsEnabled": 0
+      }
+    },
+    "fault": {
+      "container": "makeborne_candidate_20261019_fault_20261019135441",
+      "build": {
+        "platformErrorsExpected": 2
+      },
+      "migrationFaults": [
+        {
+          "migration": "20261012120000_credit_lots_expiry.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
+        },
+        {
+          "migration": "20261013240000_crm_email_automation.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
+        },
+        {
+          "migration": "20261013250000_crm_lead_profile.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
+        },
+        {
+          "migration": "20261013260000_crm_mail_security_boundaries.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
+        },
+        {
+          "migration": "20261013270000_mail_granted_scopes.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
+        },
+        {
+          "migration": "20261013280000_billing_lifecycle_boundaries.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
+        },
+        {
+          "migration": "20261014011643_publication_worker_function_boundary.sql",
+          "failed": true,
+          "error": "ERROR:  division by zero",
+          "unchangedAfterFailure": true
+        }
+      ],
+      "failed": true,
+      "unchangedAfterFailure": true,
+      "recoveredFingerprintMatchesFull": true
+    },
+    "interrupt": {
+      "container": "makeborne_candidate_20261019_interrupt_20261019135441",
+      "build": {
+        "platformErrorsExpected": 2
+      },
+      "stoppedAfter": "20261012110000_plan_evidence_and_jobs.sql",
+      "appliedBeforeStop": 35,
+      "oldAppFunctionsMissingWhileStopped": [],
+      "dataWhileStopped": {
+        "users": 1,
+        "clients": 1,
+        "clientStage": "Meeting",
+        "versions": 1,
+        "sites": 1,
+        "pilotReserved": 75,
+        "migrations": 55
+      },
+      "legacySiteServedWhileStopped": true,
+      "mailBeforeLead": {
+        "stoppedAfter": "20261013240000_crm_email_automation.sql",
+        "oldAppFunctionsMissing": [],
+        "legacySiteServed": true,
+        "leadColumnsAbsent": true,
+        "mailSecurityChecks": [
+          "PASS mail SQL: exposed tables RLS, browser/server write ACLs, private token and RPC ACLs, pinned search paths",
+          "PASS mail SQL: owner/editor/reviewer/outsider visibility, editor-only edits, workspace-move refusal, token calls and mailbox writes denied",
+          "PASS mail SQL: token missing-row failure, service read/write, refresh preservation, unique row and size bound",
+          "PASS mail SQL: unique send/enrollment/message claims, client workspace binding, sequence/quota bounds, mailbox cascade cleanup"
+        ]
+      },
+      "resumedFingerprintMatchesFull": true
+    }
+  },
+  "baseline": {
+    "fingerprint": "8fa6dfff086c82d9adaab157ef2f3893",
+    "data": {
+      "users": 1,
+      "clients": 1,
+      "clientStage": "Meeting",
+      "versions": 1,
+      "sites": 1,
+      "pilotReserved": 75,
+      "migrations": 20
+    },
+    "publicFunctions": 14
+  },
+  "finishedAt": "2026-10-19T13:57:36.409Z",
+  "consumedInputs": [
+    {
+      "file": "supabase/migrations/20261005113330_founder_waitlist.sql",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "supabase/migrations/20261008130542_canonical_website_source_revisions.sql",
+      "sha256": "014288d8e4fb6129e3ae0784177b00c3df5b32403a35fd9b9bffcacd70a484ea"
+    },
+    {
+      "file": "supabase/migrations/20261008133918_durable_generation_job_leases.sql",
+      "sha256": "83588361b8cd57a43be0057acaf93d6e970e30208acc6c5f980eead4ea135c3b"
+    },
+    {
+      "file": "supabase/migrations/20261008135727_generation_outcome_settlement.sql",
+      "sha256": "9ad9ee291111a8549e3628e6946b864105e418aedccf12dcedefcd87394f2abb"
+    },
+    {
+      "file": "supabase/migrations/20261008141212_generation_execution_caps.sql",
+      "sha256": "fd316f183ff8e2d166fbe366a1441833b23c68b8efb79dd0769023f3d586e9a3"
+    },
+    {
+      "file": "supabase/migrations/20261008143555_generation_worker_lifecycle.sql",
+      "sha256": "5a68119cc130486990026052bf82391f3028d4c6db8272233cb66eb9912c1c6b"
+    },
+    {
+      "file": "supabase/migrations/20261008151657_generation_approved_input_authority.sql",
+      "sha256": "694264ca14e62d4bf67d809439a1463523d630a770c18cfd5db47140e0f53c3b"
+    },
+    {
+      "file": "supabase/migrations/20261008154453_generation_atomic_worker_result.sql",
+      "sha256": "99c6d39747b908d9fff49fd70e24fb4f1da9836767bad0d99254b4a9bc12dde5"
+    },
+    {
+      "file": "supabase/migrations/20261008155402_generation_worker_result_readback.sql",
+      "sha256": "922c6cd02ff44238c5c855e638705e86b2ef945021efd2756b0b475cb738c46b"
+    },
+    {
+      "file": "supabase/migrations/20261008161434_project_build_handoff.sql",
+      "sha256": "22237aa9bf466b765d023b5f8c9d28ce0a10eb07627da9a9c4c85f50f7eed20c"
+    },
+    {
+      "file": "supabase/migrations/20261008163228_generation_submission_boundary.sql",
+      "sha256": "a2a32b199162646b2c7a45b30e94e7a4e31a7744efb157463650017ccd867d60"
+    },
+    {
+      "file": "supabase/migrations/20261008170101_generation_preparation_boundary.sql",
+      "sha256": "ab096b196e5d1b721fdd3734a4870297c3afcf4341464177b65f510de92843ea"
+    },
+    {
+      "file": "supabase/migrations/20261008171229_generation_request_recovery.sql",
+      "sha256": "edef799310f21613bc50af82797d693b400eaeeb50413d18bfb02e7330f0f0ba"
+    },
+    {
+      "file": "supabase/migrations/20261008181217_generation_preview_read_authority.sql",
+      "sha256": "9b62b08302950da969dd64f7d6620f898d19c79454e0c18f48697576ca69991a"
+    },
+    {
+      "file": "supabase/migrations/20261008181817_workspace_membership_policy_deduplication.sql",
+      "sha256": "8f48a7116dce2d7fea577ae7e6b20062f7e04aeb02748a39a7c6706d9222d8c5"
+    },
+    {
+      "file": "supabase/migrations/20261008182736_private_preview_sessions.sql",
+      "sha256": "e38ebfa0c837674755c0b3f8de133454fecc186d6c2b66a9a40d80cc44a12dba"
+    },
+    {
+      "file": "supabase/migrations/20261008190859_saved_website_preview_discovery.sql",
+      "sha256": "cab0599542825541551e3f177f90da046ebaf44f9c10e2f925f2256bd1d71fc7"
+    },
+    {
+      "file": "supabase/migrations/20261008200855_operator_website_qualification_proposal.sql",
+      "sha256": "c00382d3fa7aabcf9ebcec7931db0045cf57d5300fb3c056bb55be0208d48114"
+    },
+    {
+      "file": "supabase/migrations/20261008210222_operator_website_repair_review.sql",
+      "sha256": "66c47473adb89b8a6a31f695caf0a1fc026a17fd509e5d5f67048941f4a06445"
+    },
+    {
+      "file": "supabase/migrations/20261009005809_saved_native_slide_designs.sql",
+      "sha256": "3357b324f9dc3c9d148a22ebfdae250d6f7b914f181f6fb2b9ce32bb3c907c92"
+    },
+    {
+      "file": "supabase/migrations/20261009014243_saved_presentation_preparation.sql",
+      "sha256": "39d1cca7c8716e679f2756aace97a4825d2bb2eead65d6ce35ba45fa975d7f08"
+    },
+    {
+      "file": "supabase/migrations/20261009015516_native_presentation_progress.sql",
+      "sha256": "f53cca9ff0e77e74c5d02b6e07af4c95db495071ac837e7ae0f41c9339072372"
+    },
+    {
+      "file": "supabase/migrations/20261009021050_operator_native_composition_qualification.sql",
+      "sha256": "40e353860f013144e6b3e799daeb5f76977de187ab812732aa0901a3cb5651f6"
+    },
+    {
+      "file": "supabase/migrations/20261011090000_credit_wallets_free_tier.sql",
+      "sha256": "4203a33c5e6361b0c21bf0f9a0b3373b78a677d9159f17e39e5ce1dca32d21a2"
+    },
+    {
+      "file": "supabase/migrations/20261011120000_artifact_plans.sql",
+      "sha256": "bb6423cdb3c07acc0ad3bbc20a108e455b15a952937c02c589909b46469fb19d"
+    },
+    {
+      "file": "supabase/migrations/20261011130000_client_review_links.sql",
+      "sha256": "2b7cbf794a90e7a501b0026805b158478c964cad1c43dab03991df8762188e4d"
+    },
+    {
+      "file": "supabase/migrations/20261011140000_hosted_site_bundles.sql",
+      "sha256": "2a789e5ee4fa7ad4ead3ca4330f37a8b9898857eca14202285500d81e3b131d1"
+    },
+    {
+      "file": "supabase/migrations/20261011160000_credit_reservation_expiry.sql",
+      "sha256": "543235fa3edc9bf6b17c4c890565375e2d0f94c7c4705421ae8dbfa8056b53ec"
+    },
+    {
+      "file": "supabase/migrations/20261011170000_free_tier_off_by_default.sql",
+      "sha256": "944cab982852082c213a0516e54d2939f0dc41fa17c4501791afdb0fe1dcdde1"
+    },
+    {
+      "file": "supabase/migrations/20261011180000_crm_sales_delivery_split.sql",
+      "sha256": "3cf8121d1147657d2d3a744de01fc7a89f58a01994304132d2de99b1beeefdb6"
+    },
+    {
+      "file": "supabase/migrations/20261011190000_crm_transition.sql",
+      "sha256": "e5449341d303b2687bd2645c4a68dd445b867ff76847ead2843b7a37d82dcd69"
+    },
+    {
+      "file": "supabase/migrations/20261011200000_crm_write_freeze.sql",
+      "sha256": "7a90f0e642744afcf476f420cf361ba455e660e7759e4628998a9e2f484ca31f"
+    },
+    {
+      "file": "supabase/migrations/20261012090000_plan_credit_allocations.sql",
+      "sha256": "155fb96c43e574423ae0f40839f01b5c1d795e676999e186a7afc268e04e9405"
+    },
+    {
+      "file": "supabase/migrations/20261012100000_plan_entitlement_history.sql",
+      "sha256": "06289c1214f453e3280bf30db77e5b1a8e8d72d7f14a334822fff3180d44cfd7"
+    },
+    {
+      "file": "supabase/migrations/20261012110000_plan_evidence_and_jobs.sql",
+      "sha256": "da715d08e3d46fcecae1ce74e6dad7f4e5f14174180dc8b5bb509e09efda16bd"
+    },
+    {
+      "file": "supabase/migrations/20261012120000_credit_lots_expiry.sql",
+      "sha256": "0ddd06e7b8b6ea1fddaa578e5cd5677b93a0b4d97e51162f0caf3341e9926d06"
+    },
+    {
+      "file": "supabase/migrations/20261012130000_credit_lock_clock.sql",
+      "sha256": "d16367b7d810570ad99d495aa707e58699d3158193d767578d3ffa229f0c16d3"
+    },
+    {
+      "file": "supabase/migrations/20261012140000_live_ai_spend.sql",
+      "sha256": "3eb95b4b3797926c446fed5d7e7c1ce9bf966cb4c33a18d0bce16d374ed48523"
+    },
+    {
+      "file": "supabase/migrations/20261012150000_shared_provider_limits.sql",
+      "sha256": "0cc4fd384af034dddeb26e419f8a0ff5764eac3e380e521d11b779206e10923f"
+    },
+    {
+      "file": "supabase/migrations/20261012160000_portable_site_html.sql",
+      "sha256": "786d9f60d785c7b1d00c82e6466fc2c6be7382d95e15b7fb922078e1040b7a10"
+    },
+    {
+      "file": "supabase/migrations/20261012170000_preserve_isolated_sites.sql",
+      "sha256": "126b6f9b173d235e23607e571e476dd2201de1cf8e5f477cb9148b43ee8a4c32"
+    },
+    {
+      "file": "supabase/migrations/20261012175901_prevent_duplicate_creation_checkouts.sql",
+      "sha256": "704c31a3e8d3d662de1c3b94e64c8db09f151a50b91908dd7d13c31dd40a99c3"
+    },
+    {
+      "file": "supabase/migrations/20261012184407_hosted_site_enquiries.sql",
+      "sha256": "fc80ef91c492ce74b457150ed264ab8b6dd5148d7cfb4109388f92a2ebed0de9"
+    },
+    {
+      "file": "supabase/migrations/20261012210033_hosted_site_address_changes.sql",
+      "sha256": "a301a2c6fffca07ea6897828da6077c0338b45111dec2756555d3243cbd5eb6c"
+    },
+    {
+      "file": "supabase/migrations/20261013090000_hosting_review_fixes.sql",
+      "sha256": "d80b59a5f6470ead6eb2e7622d9ecd781df272f064de2d194f4fa87861b51230"
+    },
+    {
+      "file": "supabase/migrations/20261013100000_admin_console.sql",
+      "sha256": "c131ceb76fdefeb7ce800f621d8d43368ec930c5c0d099cabb4c869445e6b547"
+    },
+    {
+      "file": "supabase/migrations/20261013110000_durable_topup_fulfillment.sql",
+      "sha256": "a2a7ecd63b9bf8b37ac7055cf0eb2558c01313f9a31deacc3ba4bf235474b9f1"
+    },
+    {
+      "file": "supabase/migrations/20261013120000_unlimited_sites.sql",
+      "sha256": "73d61e48358fa7e4b9c5285dd55d0331f4d69a6a7d226a85449789d3e01ed65b"
+    },
+    {
+      "file": "supabase/migrations/20261013130000_plan_credit_rollover.sql",
+      "sha256": "b19f7f08ce49acb5fb98f287175a3796ad64a2e77661d06292201d10d33aadcd"
+    },
+    {
+      "file": "supabase/migrations/20261013140000_site_badge_setting.sql",
+      "sha256": "ca147ffd270918da29fae6ce3083324288eb6f66dbe42c541f91c87dd5997871"
+    },
+    {
+      "file": "supabase/migrations/20261013150000_cumulative_ai_operations.sql",
+      "sha256": "3d08dd668b5cec9ec72ac2f7f6cddb698a27cd79957afd730e8e5d3e9f236e95"
+    },
+    {
+      "file": "supabase/migrations/20261013160000_client_review_view_integrity.sql",
+      "sha256": "251f9175ab359e091103c8bfed637e91131eee5d6f20929fe768475b73cdeaa4"
+    },
+    {
+      "file": "supabase/migrations/20261013170000_client_review_document_assets.sql",
+      "sha256": "c017fcd4adf4cae2a8e5da84e76bbd10c4c93930d1265dfb8c48e8d319c5efbf"
+    },
+    {
+      "file": "supabase/migrations/20261013180000_trusted_publication_preparations.sql",
+      "sha256": "f0b2767f7f65928bc15a18baad03683583df6e9873f45e51b248021a7164c3c9"
+    },
+    {
+      "file": "supabase/migrations/20261013190000_publication_worker_authority.sql",
+      "sha256": "d05a1cb3313c156bc645d584997e7d2f196349ba02885394e49397e522f83461"
+    },
+    {
+      "file": "supabase/migrations/20261013200000_staging_site_address_namespace.sql",
+      "sha256": "e6aa3a8779c169bdfbd0cfe28ab1fd0a56d255252ad1e023410f50806fa9c1f3"
+    },
+    {
+      "file": "supabase/migrations/20261013210000_publication_sandbox_journal.sql",
+      "sha256": "808c6d306e48f6850ed736d2cfd368690b95467ce4c034925aee7343545afc8c"
+    },
+    {
+      "file": "supabase/migrations/20261013220000_publication_worker_attestation.sql",
+      "sha256": "8420fb178d817e21c678e3cf9ccd752db1b02403334b582e247fae4af04ae441"
+    },
+    {
+      "file": "supabase/migrations/20261013230000_read_topup_order_status.sql",
+      "sha256": "11b22f823a40ca381bc3fc0072469e2a946a25823be6c551f2614fb29765edb8"
+    },
+    {
+      "file": "supabase/migrations/20261013240000_crm_email_automation.sql",
+      "sha256": "ebc0ffee246a476d593fb5063e421aceb354f8b2d1f0759a78d032039fa55663"
+    },
+    {
+      "file": "supabase/migrations/20261013250000_crm_lead_profile.sql",
+      "sha256": "2a978161b1e541367a999b19da68b26b9b9d9c6243d98a591c2bdd01f8379fd6"
+    },
+    {
+      "file": "supabase/migrations/20261013260000_crm_mail_security_boundaries.sql",
+      "sha256": "ad40b7296495225e9cc8f0d34fabfb3ca7905066667e57dedb59ecda01e4c7b9"
+    },
+    {
+      "file": "supabase/migrations/20261013270000_mail_granted_scopes.sql",
+      "sha256": "873d7f5aabcf665d1cb7e8c5779d07c93b1d00927478eac8bbf4c1c052ad89b7"
+    },
+    {
+      "file": "supabase/migrations/20261013280000_billing_lifecycle_boundaries.sql",
+      "sha256": "2153aa84628f53109643ac60fa571592b6b4b7b50259c20c9cfe21021218cef8"
+    },
+    {
+      "file": "supabase/migrations/20261014011643_publication_worker_function_boundary.sql",
+      "sha256": "2da2959a247de60a9b1322e28da6a9c3434129071aaddc2faa27990c32de7ac6"
+    },
+    {
+      "file": "supabase/migrations/20261014150000_github_connection_refresh.sql",
+      "sha256": "bcc233b2347d9b1f287911a5a832c6e4ea667437b447f12d15f91f141f07cbca"
+    },
+    {
+      "file": "supabase/migrations/20261014160000_custom_domains.sql",
+      "sha256": "fd077d043b5dfb9d60dd69b5380a5530a8839b2b34ded824ceab4d49450b6f6c"
+    },
+    {
+      "file": "supabase/migrations/20261014170000_site_analytics.sql",
+      "sha256": "f44e9625932e981737ef71d6068b18db0b7b66d8ee0c7169a2f57b7add2eaa10"
+    },
+    {
+      "file": "supabase/migrations/20261014180000_site_sitemap.sql",
+      "sha256": "8119f3a057ed434073e772b38fee9ef9f31702d560c1cddfcbe7ea07e37f63ff"
+    },
+    {
+      "file": "supabase/migrations/20261014190000_brand_kits.sql",
+      "sha256": "85d8b8e966861fed910947f179cdaef187657864375e5990d104dd3fa9c269a5"
+    },
+    {
+      "file": "supabase/migrations/20261015100000_review_link_views.sql",
+      "sha256": "dafd80bb0e35688fccd3828fb88e07e3a3ec6195355d0b8001204f413769ad58"
+    },
+    {
+      "file": "supabase/migrations/20261016090000_client_portal.sql",
+      "sha256": "1c28732cf9b3e2aab81a0e74fd73f99584a1e0f520cd05670ef6814338e8b129"
+    },
+    {
+      "file": "supabase/migrations/20261017080000_rpc_definer_boundary.sql",
+      "sha256": "cddd8290447c81feb1f08b3efe658153539e0aef566b412b76d14a2607fcddda"
+    },
+    {
+      "file": "supabase/migrations/20261019090000_app_observability.sql",
+      "sha256": "fd619c1c990c069fbf03776c7136b240e87b8682f8f741aefe8df2d75e4b7c52"
+    },
+    {
+      "file": "supabase/migrations/20261019134828_trusted_publication_production_profile.sql",
+      "sha256": "1051d6f1db65fbaf7727d5c1e4cc6d642c9bfb102d4c130d9fcbe601f6546154"
+    },
+    {
+      "file": "docs/release-review/staging-platform-schema.sql",
+      "sha256": "3117e0a6af040e6f7eb1826397a00c62c0c63c113d3906d9b299a31c37b93d90"
+    },
+    {
+      "file": "docs/release-review/production-schema.sql",
+      "sha256": "83eb0a51417f1b4e3b54fb5275b81c4f680f735f9523319571f0211745b92ff5"
+    },
+    {
+      "file": "docs/release-review/production-baseline.json",
+      "sha256": "13d192a4986a3ff17d5a10b71f687278f87fa0ebd4be044e3e4fcc9b0bab023a"
+    },
+    {
+      "file": "supabase/release-review/populated-baseline-fixture.sql",
+      "sha256": "2443039c4400b7f4d950bb629c74659fcf4fee2560b2546e46f7b8b0c9e6224f"
+    },
+    {
+      "file": "supabase/post-deploy/pause_legacy_pilot.sql",
+      "sha256": "915bdae8f4c35a2194ad15b4ba936055d6adbd043780bea9bde2102afc1b474f"
+    },
+    {
+      "file": "supabase/check-crm-mail-upgrade.sql",
+      "sha256": "77c364461a22dc5b073ac61615d1212d63978e92ae3f134758692c7e2e373608"
+    },
+    {
+      "file": "supabase/check-mail-granted-scopes-upgrade.sql",
+      "sha256": "0e258f5146338fe7f9fb1a7179e2599225b7433c2b8bb2445f9509f9dd8dcba7"
+    },
+    {
+      "file": "supabase/release-review/check-legacy-pause.sql",
+      "sha256": "c7ae784d3fbed882ab589f76317cc5dd5c391047aaed49e403db8c14ee82ae97"
+    },
+    {
+      "file": "supabase/release-review/check-populated-upgrade.sql",
+      "sha256": "3079fd3dbdbc00ce9e941add19a26824c150adaaec7b7db65df040ead60808ea"
+    },
+    {
+      "file": "supabase/check-hosting-modes.sql",
+      "sha256": "0f904f75a341f63cba4069d1f086abe0c980043db23828677a6519a6d6d0a9a7"
+    },
+    {
+      "file": "supabase/check-site-address-changes.sql",
+      "sha256": "1467bfd32ad4d64f1b912af62eeeb494dd8eb0c30f9ae1e835dc808a4b6be8d3"
+    },
+    {
+      "file": "supabase/check-site-enquiries.sql",
+      "sha256": "3ab9f8ffad2c60d46806c760df51f1f5f073e5e0b5010818c552fd688311445a"
+    },
+    {
+      "file": "supabase/check-live-ai-spend.sql",
+      "sha256": "1f9e704f366d820c0821e933a3131fa2c3aec1c7dfd8bd63d99f1eb71269d422"
+    },
+    {
+      "file": "supabase/check-credit-lots-expiry.sql",
+      "sha256": "c9b007e2bc3e46f2a43bc9a532ef7f98bc0ccb32f459018f13b18bc9044652db"
+    },
+    {
+      "file": "supabase/check-credit-wallets.sql",
+      "sha256": "eee8fb26a7ddef318e41e11380526f78ff0cb05ef4ee192c386aba6dce89c5e3"
+    },
+    {
+      "file": "supabase/check-plan-credit-allocations.sql",
+      "sha256": "ea67376a95db3584ba634b048694b4f31d4732f0f5bf908b949e83b8fbb1491e"
+    },
+    {
+      "file": "supabase/check-crm-sales-delivery.sql",
+      "sha256": "c398d91f28cd48f3dc55f6d55dc9b583430d10b40f1a75209812c01b179d2d6a"
+    },
+    {
+      "file": "supabase/check-generation-caps.sql",
+      "sha256": "5f8e825220fc933d4e73191b683f710610280ac9c7c21de1e00b17e86d432100"
+    },
+    {
+      "file": "supabase/check-unlimited-sites.sql",
+      "sha256": "96e052114f54e257bd532f1d50b173ba17bfe015d2759b6cb807f5f748e89835"
+    },
+    {
+      "file": "supabase/check-plan-credit-rollover.sql",
+      "sha256": "6ebd63cea99dfca3a9ca52dc9b55b472c11a2bdef93a3b59f81e5eca72df0375"
+    },
+    {
+      "file": "supabase/check-site-badge-setting.sql",
+      "sha256": "4c330baabbc7f57bfcad5441c19a03e9d2921ce23d6405e83285e092dc8fbd31"
+    },
+    {
+      "file": "supabase/check-client-review-links.sql",
+      "sha256": "4ea423d4269bfa55df247190ca954a62263a22535641071c2d27b7e1c21fea43"
+    },
+    {
+      "file": "supabase/check-client-review-document-assets.sql",
+      "sha256": "b0cf90151bd4cac163f99d4f350ed6ed0596346edae6c5a27a12cc5088e9f370"
+    },
+    {
+      "file": "supabase/check-ai-operations.sql",
+      "sha256": "af67078d7d74b535e0c2b19ccb627e3d871973fce5b0b7d14a30cb062e170762"
+    },
+    {
+      "file": "supabase/check-topup-fulfillment.sql",
+      "sha256": "c158db6b73d4cb5af9f04fff1beae66bec2af6f4911cbeba9a2fc718dc210f03"
+    },
+    {
+      "file": "supabase/check-topup-status.sql",
+      "sha256": "bfee6c495fa7c2515c8d8aeae9cc13ed4c6afedd0353b781f98d0a5c79d1ba5b"
+    },
+    {
+      "file": "supabase/check-crm-mail-security.sql",
+      "sha256": "1a12916a638f07c9863b5c0bc37f5f4b33d145a02358448aed8f5097ca9fc783"
+    },
+    {
+      "file": "supabase/check-crm-lead-profile.sql",
+      "sha256": "6c1dd16be2bb7be08e7fceaa6c95089e5d9e86e18481ec3497e1ee2544479540"
+    },
+    {
+      "file": "supabase/check-crm-mail-boundaries.sql",
+      "sha256": "d4bda06aa8504d8ceff67c782af717a1ce59820c9390f7067d7973facda8a393"
+    },
+    {
+      "file": "supabase/check-billing-lifecycle.sql",
+      "sha256": "9d5ef67d006e8391b2cdde54f9a38bb1a9554041d785947fb441adb49b9a89e9"
+    },
+    {
+      "file": "supabase/check-mail-granted-scopes.sql",
+      "sha256": "5e3cbcbda29d085159f1ec99408dd2c2267a03e95c3d8f2d9b08dc47192dea34"
+    },
+    {
+      "file": "supabase/check-publication-controller-boundary.sql",
+      "sha256": "8acf877ccb3ff5c176f435df54ff3383b2c899b555dfbdce1d76894879abd061"
+    },
+    {
+      "file": "supabase/check-publication-production-profile.sql",
+      "sha256": "4ebed56d4f2a84db0ace5c28b06991766c076706822a7a127d653b9a677537c9"
+    },
+    {
+      "file": "supabase/check-trusted-publication.sql",
+      "sha256": "ed25de7d82134d2a98fc2ce94f7e182d0a7a6a9ea872d7eb11a0672802a2a00a"
+    },
+    {
+      "file": "supabase/check-publication-worker-authority.sql",
+      "sha256": "a6abc5f9e98f4e3c4e026949d094288b92f25de4ec92d5c7919643e803ae31fa"
+    },
+    {
+      "file": "supabase/check-publication-sandbox-journal.sql",
+      "sha256": "e8ab566c16d33789e75b8294303abcfab14d0ecff26f9a252c8216a0a0990d7c"
+    },
+    {
+      "file": "supabase/post-deploy/crm_contract_client_stages.sql",
+      "sha256": "1b222f83f39ca88896cf48e09cb1306d05f1c2a69231d17849a9a969a477ad9d"
+    }
+  ],
+  "changedInputs": [],
+  "migrationListStable": true,
+  "passed": true
+}

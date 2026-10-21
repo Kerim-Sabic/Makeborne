@@ -1,4 +1,6 @@
 "use client";
+import { affordability } from "@/lib/billing/affordability";
+
 import { closeSheetOnEscape } from "@/lib/overlay-focus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Check, ChevronDown, Eye, FileCode2, Hammer, ImageIcon, ListChecks, Loader2, MessageSquare, Paperclip, ReceiptText, Sparkles, Square, TriangleAlert } from "lucide-react";
@@ -410,6 +412,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
 
   const send = useCallback(async (text: string, files: Attachment[] = [], options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
+    const quoteIssue = !options?.operation ? affordability(options?.approvedMaximum ?? BUILDER_EFFORT[options?.effort ?? effort].ceilingCredits, balance) : null;
+    if (quoteIssue) { setNotice(quoteIssue); return; }
     setBusy(true); setNotice(""); setDraft(""); setLastChange(null); setUndoing(null);
     // A continuation re-runs the saved request; only a new request holds its own text.
     const request: PendingRequest | null = options?.operation ? null : { text: text.trim(), mode: "create", baseVersion: version, ...(options?.target ? { target: options.target } : {}), sentAt: Date.now() };
@@ -499,22 +503,26 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       if (sourceSession.active) { addReceipt(meter); await finishRun(); }
     }
     return outcome;
-  }, [accountId, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, briefSent, busy, disabled, effort, finishRun, holdRequest, onLive, operationRunning, pendingBrief, pendingScope, planner, previewingRecovery, refreshBalance, releaseRequest, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
+  }, [accountId, balance, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, briefSent, busy, disabled, effort, finishRun, holdRequest, onLive, operationRunning, pendingBrief, pendingScope, planner, previewingRecovery, refreshBalance, releaseRequest, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
 
   /** Manual "Review design" for the current saved version. */
   const review = useCallback(async () => {
     if (busy || disabled || operationRunning || previewingRecovery || !Object.keys(baseFiles).length) return;
+    const quoteIssue = affordability(reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits), balance);
+    if (quoteIssue) { setNotice(quoteIssue); return; }
     setBusy(true); setNotice("");
     setTurns(current => [...current, { id: newId(), role: "user", text: "Review the design", activity: [], state: "done" }]);
     const meter = newRunMeter();
     try { await reviewRound({ version, round: 1, effort }, { files: { ...baseFiles }, assets: [...baseAssets] }, meter); }
     finally { if (sourceSession.active) addReceipt(meter); await finishRun(); }
-  }, [addReceipt, baseAssets, baseFiles, busy, disabled, effort, finishRun, operationRunning, previewingRecovery, reviewRound, sourceSession, version]);
+  }, [addReceipt, balance, baseAssets, baseFiles, busy, disabled, effort, finishRun, operationRunning, previewingRecovery, reviewRound, sourceSession, version]);
 
   /** Plan mode: investigate and propose an editable plan; never writes code.
    * A message while a draft plan is open revises that plan. */
   const plan = useCallback(async (text: string, files: Attachment[] = []) => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
+    const quoteIssue = affordability(PLAN_CEILING_CREDITS, balance);
+    if (quoteIssue) { setNotice(quoteIssue); return; }
     setBusy(true); setNotice(""); setDraft("");
     setMode("plan");
     const revise = draftPlan?.stored.plan ?? null;
@@ -539,7 +547,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     end("uncertain");
     setBusy(false);
     refreshBalance();
-  }, [briefSent, busy, disabled, draftPlan, effort, holdRequest, operationRunning, pendingBrief, planner, previewingRecovery, refreshBalance, releaseRequest, version]);
+  }, [balance, briefSent, busy, disabled, draftPlan, effort, holdRequest, operationRunning, pendingBrief, planner, previewingRecovery, refreshBalance, releaseRequest, version]);
   const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; target?: string }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
     if (!sources.ready || sources.busy) { setNotice("Wait for your source files to finish loading or saving."); return; }
@@ -617,6 +625,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
    * a repeated click for the same approval reuses its request identity, so the server joins it. */
   const buildPlan = async (approved: SitePlan, level: EffortLevel, maximum: number) => {
     if (approvingRef.current || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
+    const quoteIssue = affordability(maximum, balance);
+    if (quoteIssue) { setNotice(quoteIssue); return; }
     approvingRef.current = true; setApproving(true); setNotice("");
     try {
       const saved = await planner.approve(approved);
@@ -717,6 +727,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
   const measured = estimates && effort === estimates.effort && firstBuild ? estimates.firstBuild[kind] : null;
   const ceiling = BUILDER_EFFORT[effort].ceilingCredits;
   const canReview = website && Object.keys(baseFiles).length > 0;
+  const quoteIssue = affordability(mode === "plan" ? PLAN_CEILING_CREDITS : ceiling, balance);
   return <aside className="lb" aria-label="Builder chat" data-chat-open={chatOpen || undefined} onKeyDown={event => closeSheetOnEscape(event, chatOpen, () => setChatOpen(false), ".lb-log")}>
     <button type="button" className="workbench-chat-toggle" aria-expanded={chatOpen} aria-controls={`lb-log-${artifactId}`} onClick={() => setChatOpen(open => !open)}>
       {busy ? <Loader2 size={14} className="lb-spin" /> : <MessageSquare size={14} />}<span aria-live="polite">{chatSummary}</span><ChevronDown size={15} className="workbench-chat-chevron" />
@@ -824,6 +835,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}
         </select>
         {canReview && <button type="button" className="lb-review" aria-label={`Review design, up to ${reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} credits`} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onClick={() => void review()} title="Look at the site on desktop and mobile and fix visual problems"><Eye size={14} /><span className="lb-review-label">Review · {reviewCreditCeiling(BUILDER_EFFORT[effort].ceilingCredits)} max</span></button>}
+        {quoteIssue && <p className="lb-credit-warning" role="status">{quoteIssue} <a href="/billing#credits">Review credits</a></p>}
         <span className="lb-balance">{balance ? balance.unlimited ? "Unlimited credits" : `${balance.available} credits` : ""}</span>
         {(busy || operationRunning) ? <button type="button" className="lb-stop" disabled={cancelling || operation?.cancelRequested === true} aria-describedby={`lb-stop-effect-${artifactId}`}
           onClick={() => void stop().catch(() => setNotice("Stop could not be confirmed. Check the recorded request before retrying."))}

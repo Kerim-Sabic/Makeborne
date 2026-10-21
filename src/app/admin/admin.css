@@ -135,3 +135,9 @@ a.mbo-kpi:hover{border-color:#cfc8f2;box-shadow:0 6px 18px #2b1f7a0d}
 .mbo-table thead th,.mbo-table time{white-space:nowrap}
 .mbo-detail{scroll-margin-top:64px}
 @media (max-width:720px){.mbo-table tbody tr>th{grid-column:1/-1}.mbo-table tbody tr>td:nth-child(2){grid-column:1}.mbo-customer-link{overflow-wrap:anywhere}}
+.mbo-refund-form{display:grid;gap:6px;margin-top:8px;font-size:13px}.mbo-refund-form div{display:flex;gap:8px;flex-wrap:wrap}
+.mbo-refund-form input{flex:1;min-width:180px;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink);background:none}
+.mbo-refund-form button{height:34px;padding:0 12px;border:0;border-radius:8px;background:var(--ink);color:#fff;font-size:13px;font-weight:550;cursor:pointer}
+.mbo-refund-form button:disabled{opacity:.55;cursor:default}.mbo-refund-form p{margin:0;color:var(--muted)}
+.mbo-payment{display:grid;gap:4px;padding:10px 0;border-top:1px solid var(--line)}.mbo-payment:first-of-type{border-top:0}
+.mbo-payment-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;font-size:13px}.mbo-payment p{margin:0;font-size:12px;color:var(--muted)}

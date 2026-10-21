@@ -1,3 +1,9 @@
+# Current window — tested app update, 21 October 2026
+
+Use docs/release-review/tested-app-release-20261021.md for the owner-approved narrowed scope and current94→105 inventory. The historical20-migration/307881c checklist below is archived context, not an executable target. Backups, exact targeting, advisor comparison, maintenance/code-first ordering, disabled unqualified features, smoke and recovery gates still apply. No blanket commercial-launch approval is inferred.
+
+---
+
 # Production release checklist
 
 Prepared 2026-10-13 for candidate `docs/release-review/candidate-inventory.json`.

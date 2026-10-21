@@ -1,6 +1,7 @@
 import { billingConfig } from "@/lib/billing/config";
 import { billingDatabase } from "@/lib/billing/database";
 import { creditRuleFor } from "@/lib/billing/plan-credits";
+import { reconcilePlanPayment, retrieveVerifiedPlanPayment } from "@/lib/billing/plan-payments";
 import { runPlanCreditReconcileJob } from "@/lib/billing/reconcile-job";
 import { activeMembership, fetchMembership, listMembershipPayments } from "@/lib/billing/whop";
 import { recordPlanObservation, recordPlanPayment } from "@/lib/credits/server";
@@ -38,6 +39,7 @@ async function handle(request: Request) {
     listPayments: membershipId => listMembershipPayments(membershipId),
     recordObservation: (userId, observation) => recordPlanObservation(userId, observation),
     recordPayment: (userId, membershipId, payment) => recordPlanPayment(userId, membershipId, payment),
+    reconcilePayment: async (userId, membership, paymentId) => reconcilePlanPayment(userId, membership, await retrieveVerifiedPlanPayment(paymentId)),
     isActive: activeMembership,
     hasCreditRule: planId => creditRuleFor(planId) !== null,
     companyId: config.companyId,

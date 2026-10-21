@@ -2219,7 +2219,10 @@ async function liveSelfTest() {
     // detached helper and a failed disable is logged loudly (no database is reached).
     const closedPort = await new Promise(resolve => { const probe = net.createServer().listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => resolve(port)); }); });
     const pgLog = path.join(base, 'watchdog-pg.log');
-    const pgWatch = startWatchdog({ logFile: pgLog, dbUrl: `postgresql://selftest:selftest@127.0.0.1:${closedPort}/postgres` });
+    const refusedDatabase = new URL(`postgresql://127.0.0.1:${closedPort}/postgres`);
+    refusedDatabase.username = 'invalid-test-user';
+    refusedDatabase.password = 'invalid-test-password'; // Deliberately invalid closed-port fixture.
+    const pgWatch = startWatchdog({ logFile: pgLog, dbUrl: refusedDatabase.href });
     await sleep(300);
     pgWatch.child.stdin.end();
     await waitFor(() => existsSync(pgLog) && /DISABLING PROVIDER LIMITS FAILED/.test(readFileSync(pgLog, 'utf8')), 15_000);

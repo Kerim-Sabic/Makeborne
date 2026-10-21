@@ -2,11 +2,12 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
 const assert=require('node:assert/strict'),{randomUUID,createHash}=require('node:crypto');
 const modules=new Map(),routeEnv={env:{}},routeCalls=[];let routeData;
+let routeTransport=async()=>{throw Error('UNEXPECTED_TEST_NETWORK');};
 function load(file){
  file=path.resolve(file);if(modules.has(file))return modules.get(file).exports;
  const mod={exports:{}};modules.set(file,mod);
  const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
- vm.runInNewContext(code,{module:mod,exports:mod.exports,Buffer,TextEncoder,TextDecoder,AbortSignal,AbortController,Error,Request,Response,ReadableStream,URL,fetch,process:routeEnv,
+ vm.runInNewContext(code,{module:mod,exports:mod.exports,Buffer,TextEncoder,TextDecoder,AbortSignal,AbortController,Error,Request,Response,ReadableStream,URL,fetch:(...args)=>routeTransport(...args),process:routeEnv,
   require(name){if(name==='server-only')return {};if(['zod','node:crypto'].includes(name))return require(name);
    if(name==='@/lib/billing/database')return {billingDatabase:()=>({rpc:(name,args)=>{routeCalls.push({name,args});return {abortSignal:async()=>({data:routeData,error:null})};}})};
    let resolved=name.startsWith('@/')?path.resolve('src',name.slice(2)):path.resolve(path.dirname(file),name);
@@ -161,6 +162,36 @@ async function main(){
   assert.equal((await POST(signed(f.context,{signature:'0'.repeat(64)}))).status,403);assert.equal(routeCalls.length,0);
   routeData=null;assert.equal((await POST(signed(f.context))).status,403);assert.equal(routeCalls.length,1);
   assert.deepEqual(JSON.parse(JSON.stringify(routeCalls[0])),{name:'makeborne_load_publication_preparation',args:{p_preparation:f.context.preparationId,p_worker:f.context.workerId,p_fence:'2'}});
+ });
+ await check('production broker requires exact production deployment/database/rollout and denies mixed profiles before privileged access',async()=>{
+  const {publicationBrokerProfile}=load('src/lib/projects/publication-broker-profile.ts'),{PRODUCTION,STAGING}=load('infra/publication-controller/profiles.mjs');
+  const f=fixture(),env={MAKEBORNE_PUBLICATION_ASSET_BROKER_ENABLED:'true',MAKEBORNE_HOSTING_NAMESPACE:'production',MAKEBORNE_PUBLICATION_ASSET_BROKER_ORIGIN:'https://makeborne.com',NEXT_PUBLIC_SUPABASE_URL:`https://${PRODUCTION.projectRef}.supabase.co`,VERCEL_PROJECT_ID:PRODUCTION.projectId,VERCEL_ENV:'production',MAKEBORNE_PUBLICATION_WORKSPACE_IDS:f.workspaceId};
+  assert.equal(publicationBrokerProfile(env).workspaceIds[0],f.workspaceId);
+  for(const patch of [{VERCEL_ENV:'preview'},{VERCEL_PROJECT_ID:STAGING.projectId},{NEXT_PUBLIC_SUPABASE_URL:STAGING_SUPABASE_URL},{MAKEBORNE_HOSTING_NAMESPACE:'staging'},{MAKEBORNE_PUBLICATION_ASSET_BROKER_ORIGIN:origin},{MAKEBORNE_STAGING_QA_WORKSPACE_ID:f.workspaceId},{MAKEBORNE_PUBLICATION_WORKSPACE_IDS:''},{MAKEBORNE_PUBLICATION_WORKSPACE_IDS:f.workspaceId+','+f.workspaceId}])assert.throws(()=>publicationBrokerProfile({...env,...patch}));
+ });
+ await check('production asset transport binds signature, fixed storage project and multiple allowed workspaces without a preview bypass',async()=>{
+  const f=fixture(),production='https://makeborne.com',{workspaceId,...rest}=f.deps;
+  const deps={...rest,origin:production,namespace:'production',workspaceIds:[workspaceId,randomUUID()]};
+  const down=publicationSourceDownloader({secret,origin:production,namespace:'production',now:()=>now,fetch:async(u,init)=>{assert(!('x-vercel-protection-bypass' in init.headers));return publicationAssetBroker(deps)(new Request(u,init));}});
+  assert.deepEqual(Buffer.from(await down('',17,new AbortController().signal,f.context)),f.bytes);
+  assert.throws(()=>publicationSourceDownloader({secret,origin,namespace:'production'}));assert.throws(()=>publicationSourceDownloader({secret,origin:production,namespace:'production',protectionBypassSecret:'not-allowed'}));
+  const restricted={...deps,workspaceIds:[randomUUID()]};
+  const refused=publicationSourceDownloader({secret,origin:production,namespace:'production',now:()=>now,fetch:async(u,init)=>publicationAssetBroker(restricted)(new Request(u,init))});
+  const reads=f.calls.read.length;await assert.rejects(refused('',17,new AbortController().signal,f.context));assert.equal(f.calls.read.length,reads);
+  let target;const read=publicationStorageReader('sb_secret_fixture',async u=>{target=u;return new Response(f.bytes);},'production');await read(f.record.object_path,17,new AbortController().signal);assert.equal(new URL(target).origin,'https://rklojnmmsmhwnkbzuidp.supabase.co');
+ });
+ await check('actual production route authenticates, reauthorizes and streams only pinned production storage; mixed deployment makes no privileged call',async()=>{
+  const f=fixture(),{PRODUCTION,STAGING}=load('infra/publication-controller/profiles.mjs'),production=PRODUCTION.brokerOrigin;
+  const env={MAKEBORNE_PUBLICATION_ASSET_BROKER_ENABLED:'true',MAKEBORNE_HOSTING_NAMESPACE:'production',MAKEBORNE_PUBLICATION_ASSET_BROKER_SECRET:secret,MAKEBORNE_PUBLICATION_ASSET_BROKER_ORIGIN:production,NEXT_PUBLIC_SUPABASE_URL:`https://${PRODUCTION.projectRef}.supabase.co`,VERCEL_PROJECT_ID:PRODUCTION.projectId,VERCEL_ENV:'production',MAKEBORNE_PUBLICATION_WORKSPACE_IDS:f.workspaceId,SUPABASE_SECRET_KEY:'sb_secret_fixture'};
+  const body=JSON.stringify(f.context),time=String(Math.floor(Date.now()/1000));
+  const request=()=>new Request(production+contract.PUBLICATION_ASSET_PATH,{method:'POST',body,headers:{'content-type':'application/json','x-makeborne-asset-time':time,'x-makeborne-asset-signature':contract.publicationAssetSignature(secret,production,time,body)}});
+  let reads=0;routeData=f.loaded;routeEnv.env=env;
+  routeTransport=async(target,init)=>{reads++;assert.equal(new URL(target).origin,`https://${PRODUCTION.projectRef}.supabase.co`);assert.equal(init.headers.apikey,'sb_secret_fixture');assert(!('x-vercel-protection-bypass' in init.headers));return new Response(f.bytes);};
+  try{
+   const before=routeCalls.length,response=await POST(request());assert.equal(response.status,200);assert.deepEqual(Buffer.from(await response.arrayBuffer()),f.bytes);assert.equal(routeCalls.length-before,2);assert.equal(reads,1);
+   routeEnv.env={...env,VERCEL_PROJECT_ID:STAGING.projectId};const calls=routeCalls.length;assert.equal((await POST(request())).status,503);assert.equal(routeCalls.length,calls);assert.equal(reads,1);
+   routeEnv.env={...env,MAKEBORNE_PUBLICATION_WORKSPACE_IDS:randomUUID()};assert.equal((await POST(request())).status,403);assert.equal(reads,1);
+  }finally{routeTransport=async()=>{throw Error('UNEXPECTED_TEST_NETWORK');};routeData=null;routeEnv.env={};}
  });
  console.log(`${checks} private publication source transport groups passed; only mocked network/storage, no cloud calls.`);
 }

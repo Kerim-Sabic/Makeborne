@@ -48,6 +48,11 @@ export async function verifyCreationAccess(user: User, checkoutId?: string): Pro
     if (matches && !active) await recordPlanObservation(user.id, { membershipId: stored.membership_id, planId: membership.plan.id, status: membership.status,
       paid: false, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "access_check" }).catch(() => undefined);
     if (active) {
+      // Whop keeps a refunded membership active; a refunded or charged-back billing
+      // period stays closed whatever the live status says. Unknown fails closed.
+      const { data: revoked, error: revokedError } = await db.rpc("makeborne_membership_access_revoked", { p_membership: stored.membership_id });
+      if (revokedError) throw new RequestError("MEMBERSHIP_UNAVAILABLE", "Membership verification is temporarily unavailable.", 503);
+      if (revoked !== false) continue;
       const { data: enabled, error: enabledError } = await db.rpc("makeborne_billing_creation_enabled", { p_plan_id: membership.plan.id });
       const allowed = !enabledError && enabled === true;
       // Record the verified state; the database grants allocations owed since the

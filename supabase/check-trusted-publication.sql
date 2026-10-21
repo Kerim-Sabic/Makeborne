@@ -16,6 +16,7 @@ begin
  insert into auth.sessions(id,user_id) values(sess,u);
  insert into makeborne_private.account_privileges(user_id,is_admin,unlimited_credits,reason) values(u,true,false,'Publication fixture');
  insert into public.workspaces(id,name,owner_id) values(w,'Publication fixture',u);
+ insert into makeborne_private.trusted_publication_workspaces(workspace_id,enabled) values(w,true);
  insert into public.projects(id,workspace_id,title,kind) values(project,w,'Publication fixture','website');
  insert into public.artifacts(id,workspace_id,project_id,title,kind) values(a,w,project,'Publication fixture','website');
  insert into public.artifact_versions(id,workspace_id,artifact_id,version_number,content,style_snapshot,created_by)

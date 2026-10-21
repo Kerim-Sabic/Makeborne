@@ -7,7 +7,7 @@ const { Webhook } = require("standardwebhooks");
 class RequestError extends Error { constructor(code, message, status) { super(message); this.code = code; this.status = status; } }
 function load(file, env, modules = {}) {
   const output = ts.transpileModule(fs.readFileSync(require.resolve(file), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const context = { exports: {}, process: { env }, Buffer, Date, URL, require: name => name === "server-only" ? {} : modules[name] ?? (name === "./topup-delivery" ? {} : require(name)) };
+  const context = { exports: {}, process: { env }, Buffer, Date, URL, require: name => name === "server-only" ? {} : modules[name] ?? (name === "./topup-delivery" || name === "./plan-payments" ? {} : require(name)) };
   vm.runInNewContext(output, context);
   return context.exports;
 }
@@ -155,7 +155,8 @@ async function lifecycleChecks() {
     let rows = records;
     const query = { select: () => query, eq: (key, value) => { if (key === "checkout_id") rows = rows.filter(row => row[key] === value); return query; }, in: () => query, order: () => query, limit: async () => ({ data: rows, error: null }), update: () => { const update = { eq: () => update, then: resolve => resolve({ error: null }) }; return update; } };
     return query;
-  }, rpc: async () => ({ data: true, error: null }) };
+  }, rpc: async name => name === "makeborne_membership_access_revoked" ? (revokedError ? { data: null, error: { code: "42883" } } : { data: revoked, error: null }) : { data: true, error: null } };
+  let revoked = false, revokedError = false;
   let sessionUser = "account_test", databaseAccess = true;
   const databaseCalls = [], trials = [], grants = [];
   const access = load("./access.ts", env, {
@@ -172,6 +173,13 @@ async function lifecycleChecks() {
   grants.length = 0;
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_active"), true);
   assert.deepEqual(grants, [["account_test", { membershipId: "mem_active", planId: config.CREATION_CATALOG.create, status: "active", paid: true, periodStart: null, periodEnd: active.renewal_period_end, source: "access_check" }]]);
+  // A refunded period stays closed although Whop still reports the membership active; unknown fails closed.
+  revoked = true; grants.length = 0;
+  assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_active"), false);
+  assert.deepEqual(grants, [], "a revoked period records no paid observation");
+  revoked = false; revokedError = true;
+  await assert.rejects(access.verifyCreationAccess({ id: "account_test" }, "ch_active"), error => error.code === "MEMBERSHIP_UNAVAILABLE");
+  revokedError = false;
   // Database access (free tier/admin/recorded membership) comes first and grants the trial.
   assert.equal(await access.hasCreationAccess({ id: "account_test" }), true);
   assert.deepEqual(databaseCalls, ["makeborne_creation_access"]);

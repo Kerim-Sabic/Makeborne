@@ -54,8 +54,13 @@ const fontDataUrl = (url: string) => {
  * Text with letters beyond the latin file (ć, Ł, ğ, ő...) also embeds the
  * complementary latin-ext file; each rule carries its unicode-range. A latin-ext
  * file that cannot load is left out, so only those letters use the stack. */
-export async function projectFontCss(files: Map<string, string>, origin: string) {
-  const { fonts, italic } = detectFonts(files);
+export async function projectFontCss(files: Map<string, string>, origin: string, importedFonts: ReadonlySet<string> = new Set()) {
+  const detected = detectFonts(files);
+  const fonts = [...new Map([...detected.fonts, ...[...importedFonts].flatMap(id => {
+    const font = FONTS_BY_ID.get(id);
+    return font ? [font] : [];
+  })].map(font => [font.id, font])).values()];
+  const { italic } = detected;
   if (!fonts.length) return "";
   const subsets = fontSubsets(files.values());
   const rules = await Promise.all(fonts.flatMap((font: FontEntry) => (italic && font.italic ? ["normal", "italic"] as const : ["normal"] as const)
@@ -228,8 +233,21 @@ type CompileResult = { ok: true; js: string; css: string } | BundleFailure;
  * Preview keeps readable output; publish minifies. Neither includes the shim.
  * `inspect` (preview only) tags HTML elements with their source location for
  * click-to-edit; published and captured output never carries those tags. */
-async function compileProject(input: Record<string, string>, mode: "preview" | "publish", inspect = false, images: ResponsiveImages = {}): Promise<CompileResult> {
+async function compileProject(input: Record<string, string>, mode: "preview" | "publish", inspect = false, assets: Record<string, string> = {}, images: ResponsiveImages = {}): Promise<CompileResult> {
   const files = new Map(Object.entries(input));
+  const artwork = new Map<string, string>();
+  for (const [path, url] of Object.entries(assets)) {
+    const normalized = path.replace(/^\//, "");
+    if (!normalized || normalized.split("/").some(part => !part || part === "." || part === "..") || files.has(normalized)
+      || url.length > 12_000_000 || !/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(url)) {
+      return { ok: false, error: "Project artwork must have a unique project path and a supported embedded raster image.", kind: "code" };
+    }
+    artwork.set(normalized, url);
+    // Resolution shares the project's path rules; image bytes remain separate
+    // from source files and never pass through the JSX instrumentation.
+    files.set(normalized, "");
+  }
+  const importedFonts = new Set<string>();
   if (!files.has("src/main.tsx")) return { ok: false, error: "The project has no src/main.tsx entry yet.", kind: "code" };
   const origin = typeof location === "undefined" ? "" : location.origin;
   let build: Esbuild;
@@ -265,15 +283,25 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
             if (args.kind === "entry-point") return { path: specifier, namespace: "project" };
             if (specifier === LUCIDE) return { path: LUCIDE, namespace: "lucide" };
             // Fonts are embedded from usage detection; the explicit import is a no-op marker.
-            const font = FONT_IMPORT.exec(specifier);
-            if (font) {
-              if (FONTS_BY_ID.has(font[1])) return { path: font[1], namespace: "font" };
+            const marker = FONT_IMPORT.exec(specifier);
+            const installed = /^(@fontsource(?:-variable)?)\/([a-z0-9-]+)(?:\/index\.css)?$/.exec(specifier);
+            const fontId = marker?.[1] ?? installed?.[2];
+            if (fontId) {
+              const font = FONTS_BY_ID.get(fontId);
+              if (font && (!installed || installed[1] === (/^\d+$/.test(font.axis) ? "@fontsource" : "@fontsource-variable"))) {
+                importedFonts.add(fontId);
+                return { path: fontId, namespace: "font" };
+              }
               return { errors: [{ text: `"${specifier}" is not in the font library.` }] };
             }
+            const imageModule = (resolved: string) => args.kind === "url-token"
+              ? { path: artwork.get(resolved)!, external: true }
+              : { path: resolved, namespace: "artwork" };
+            if (specifier.startsWith("/") && artwork.has(specifier.slice(1))) return imageModule(specifier.slice(1));
             if (specifier.startsWith("/") || /^(?:data|https?):/.test(specifier)) return { path: specifier, external: true };
             if (specifier.startsWith(".")) {
               const resolved = resolveRelative(files, args.importer, specifier);
-              if (resolved) return { path: resolved, namespace: "project" };
+              if (resolved) return artwork.has(resolved) ? imageModule(resolved) : { path: resolved, namespace: "project" };
               return { errors: [{ text: `Cannot find "${specifier}" imported from ${args.importer}` }] };
             }
             return { errors: [{ text: `"${specifier}" is not installed. Only react, react-dom and lucide-react are available.` }] };
@@ -282,6 +310,7 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
             const contents = files.get(args.path) ?? "";
             return { contents: instrument ? instrument(args.path, contents) : contents, loader: LOADERS[extension(args.path)] ?? "text" };
           });
+          builder.onLoad({ filter: /.*/, namespace: "artwork" }, args => ({ contents: `export default ${JSON.stringify(artwork.get(args.path))};`, loader: "js" }));
           builder.onLoad({ filter: /.*/, namespace: "lucide" }, () => {
             const icons = lucideModule(files, origin);
             return icons.problems.length ? { errors: icons.problems.map(text => ({ text })) } : { contents: icons.contents, loader: "js" };
@@ -301,7 +330,7 @@ async function compileProject(input: Record<string, string>, mode: "preview" | "
   // Every output (preview, review capture, static snapshot, hosted bundle)
   // carries the used fonts as embedded @font-face rules at the top of its CSS.
   let fonts = "";
-  try { fonts = await projectFontCss(files, origin); }
+  try { fonts = await projectFontCss(files, origin, importedFonts); }
   catch { /* fonts are progressive: fall back to the declared system stacks */ }
   const css = result.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
   return {
@@ -317,7 +346,7 @@ ${css}` : css,
  * rasteriser; publish minifies. `inspect` adds click-to-edit locations to a
  * preview bundle only. */
 export async function bundleProject(input: Record<string, string>, assets: Record<string, string>, mode: "preview" | "publish" | "capture" = "preview", options: { inspect?: boolean } = {}): Promise<BundleResult> {
-  const compiled = await compileProject(input, mode === "publish" ? "publish" : "preview", mode === "preview" && options.inspect === true);
+  const compiled = await compileProject(input, mode === "publish" ? "publish" : "preview", mode === "preview" && options.inspect === true, assets);
   if (!compiled.ok) return compiled;
   const { js, css } = compiled;
   const source = input["index.html"] ?? '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Website</title></head><body><div id="root"></div></body></html>';
@@ -335,7 +364,13 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
   html = html.replace(/<\/head>/i, () => head);
   const script = `<script type="module">${scriptSafe(js)}</script>`;
   html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, () => `${script}</body>`) : `${html}${script}`;
-  for (const [path, url] of Object.entries(assets)) html = html.split(path).join(url);
+  for (const [path, url] of Object.entries(assets)) {
+    const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Replace complete quoted/URL references, never a matching byte sequence
+    // inside an already embedded image (e.g. a short path /9 in JPEG base64).
+    const reference = new RegExp("([\"'(])" + escaped + "(?=\\\\?[\"')])", "g");
+    html = html.replace(reference, (_match, before: string) => before + url);
+  }
   return { ok: true, html };
 }
 
@@ -344,7 +379,7 @@ export async function bundleProject(input: Record<string, string>, assets: Recor
  * `images` (responsive-images.cjs responsiveManifest) adds srcset to <img> of
  * originals with responsive copies, as the trusted build does. */
 export async function buildPublishBundle(input: Record<string, string>, options: { images?: ResponsiveImages } = {}): Promise<{ js: string; css: string }> {
-  const compiled = await compileProject(input, "publish", false, options.images);
+  const compiled = await compileProject(input, "publish", false, {}, options.images);
   if (!compiled.ok) throw new Error(`Fix the build before publishing: ${compiled.error}`);
   if (!compiled.js.trim()) throw new Error("The website build produced no script.");
   return { js: compiled.js, css: compiled.css };

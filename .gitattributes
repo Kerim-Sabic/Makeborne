@@ -1,3 +1,19 @@
 # This generated trust manifest is verified byte-for-byte during prebuild.
 # Preserve its canonical serialization in Windows checkouts and Git archives.
 infra/project-runtime/font-licenses.json text eol=lf
+# Preserve the exact LF bytes already applied and hashed on staging.
+supabase/migrations/20261020144714_artifact_title_search_acl.sql text eol=lf
+supabase/migrations/20261020183417_ai_operation_cancel_compatibility.sql text eol=lf
+# These two staged originals were hashed with CRLF; preserve those bytes too.
+supabase/migrations/20261020120000_artifact_title_search.sql text eol=crlf
+supabase/migrations/20261020174011_ai_operation_cancellation.sql text eol=crlf
+# New billing migrations have not been applied to staging; freeze canonical LF.
+supabase/migrations/20261020090000_payment_funding_and_refunds.sql text eol=lf
+supabase/migrations/20261020100000_credit_autotopup_authorization.sql text eol=lf
+supabase/migrations/20261020110000_usage_history_read.sql text eol=lf
+
+supabase/migrations/20261019134828_trusted_publication_production_profile.sql text eol=lf
+
+supabase/migrations/20261020203000_scope_revocation_boundaries.sql text eol=lf
+supabase/migrations/20261020210000_artifact_card_previews.sql text eol=lf
+supabase/migrations/20261020231225_billing_ux_details_and_limits.sql text eol=lf

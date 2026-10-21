@@ -7,7 +7,7 @@ export const LOGIN_ATTESTATION_SQL=`SELECT jsonb_build_object(
  'memberships',(SELECT coalesce(jsonb_agg(r.rolname ORDER BY r.rolname),'[]') FROM pg_roles r WHERE r.rolname<>session_user AND pg_has_role(session_user,r.oid,'MEMBER')),
  'membership',(SELECT jsonb_build_object('admin',m.admin_option,'inherit',m.inherit_option,'set',m.set_option) FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.roleid JOIN pg_roles u ON u.oid=m.member WHERE r.rolname='makeborne_publication_worker' AND u.rolname=session_user),
  'extraTables',EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN('public','makeborne_private','makeborne_hosting','auth','storage') AND c.relkind IN('r','v','m','p') AND has_table_privilege(session_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')),
- 'extraFunctions',EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN('public','makeborne_private','makeborne_hosting') AND p.prokind='f' AND has_function_privilege(session_user,p.oid,'EXECUTE')),
+ 'extraFunctions',EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN('public','makeborne_private','makeborne_hosting','makeborne_rpc') AND p.prokind='f' AND has_function_privilege(session_user,p.oid,'EXECUTE')),
  'createSchema',EXISTS(SELECT 1 FROM pg_namespace n WHERE n.nspname IN('public','makeborne_private','makeborne_hosting','auth','storage') AND has_schema_privilege(session_user,n.oid,'CREATE')),
  'createDatabase',has_database_privilege(session_user,current_database(),'CREATE'),
  'database',current_database()) AS result`;
@@ -19,7 +19,12 @@ export function validateLoginAttestation(value,config,stream){
   ||value.extraTables!==false||value.extraFunctions!==false||value.createSchema!==false||value.createDatabase!==false)invalid();
 }
 export function validateNamespaceAttestation(value,config){
- if(!value||Object.keys(value).length!==3||value.contractVersion!=='publication-controller-v1'||value.namespace!=='staging'||value.qaWorkspaceId!==config.qaWorkspaceId)invalid();
+ if(config.namespace==='staging'){
+  if(!value||Object.keys(value).length!==3||value.contractVersion!=='publication-controller-v1'||value.namespace!=='staging'||value.qaWorkspaceId!==config.qaWorkspaceId)invalid();
+ }else if(config.namespace==='production'){
+  if(!value||Object.keys(value).length!==3||value.contractVersion!=='publication-controller-v2'||value.namespace!=='production'
+   ||!Array.isArray(value.workspaceAllowlist)||JSON.stringify(value.workspaceAllowlist)!==JSON.stringify(config.workspaceAllowlist))invalid();
+ }else invalid();
 }
 export async function attestController(pool,config,parent){
  const signal=AbortSignal.any([parent,AbortSignal.timeout(10_000)]);signal.throwIfAborted();

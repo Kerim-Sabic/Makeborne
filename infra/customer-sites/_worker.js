@@ -73,7 +73,15 @@ function decodeBase64(text) {
   return bytes;
 }
 const hex = buffer => [...new Uint8Array(buffer)].map(byte => byte.toString(16).padStart(2, "0")).join("");
-const notModified = (request, headers) => request.headers.get("If-None-Match") === headers.ETag ? new Response(null, { status: 304, headers }) : null;
+const notModified = (request, headers) => {
+  // GET/HEAD validators use weak comparison. CDN compression can add W/ to
+  // our digest; still require the current authorized resource before this call.
+  const condition = request.headers.get("If-None-Match");
+  if (!condition || !headers.ETag) return null;
+  const matches = condition.trim() === "*" || condition.split(",").some(tag =>
+    tag.trim().replace(/^W\//, "") === headers.ETag.replace(/^W\//, ""));
+  return matches ? new Response(null, { status: 304, headers }) : null;
+};
 
 /** Whether a successful document may be indexed: the namespace allows it and
  * the page is one the site's sitemap lists. "/" is always listed. Sites published

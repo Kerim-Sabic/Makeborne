@@ -16,7 +16,8 @@ begin
   raise notice 'PASS lead validation stays available to authorized client writers without publication access';
   set local role makeborne_publication_worker;
   result:=public.makeborne_publication_worker_attest();
-  assert result->>'contractVersion'='publication-controller-v1';
+  assert (result->>'namespace'='staging' and result->>'contractVersion'='publication-controller-v1')
+    or (result->>'namespace'='production' and result->>'contractVersion'='publication-controller-v2' and jsonb_typeof(result->'workspaceAllowlist')='array');
   begin
     perform makeborne_private.valid_lead_tags(array['agency']);
     raise exception 'Publication role can execute unrelated helper';
