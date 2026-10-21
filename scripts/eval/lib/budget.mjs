@@ -32,17 +32,40 @@ import { OUT, TRANSIENT_FS_CODES, ensureDir, readJson, rel, retryTransient, slee
 //   test generation for design quality; +$2 OpenAI image research". The OpenAI part is
 //   bounded separately by PROVIDER_CAPS_USD.openai ($0.053 settled before + $2.00 new),
 //   independent of (and inside) the total cap.
-export const HARD_CAP_USD = 119.31;
-export const CAP_APPROVAL = 'Kerim, chat 2026-10-20: +$100 Claude test generation for design quality; +$2 OpenAI image research';
+// - $194.31 = $119.31 + $75.00 Claude for design round 3; OpenAI sub-cap $4.06 = $2.06 + $2.00.
+//   "Kerim, chat 2026-10-21: +$75 Claude / +$2 OpenAI design round 3". The separate +$20 Claude /
+//   +$3 OpenAI approved for product qualification is not part of this ledger.
+export const HARD_CAP_USD = 194.31;
+export const CAP_APPROVAL = 'Kerim, chat 2026-10-21: +$75 Claude / +$2 OpenAI design round 3';
 /** Per-provider sub-caps: a reservation must fit both the total cap and its provider's cap. */
-export const PROVIDER_CAPS_USD = Object.freeze({ openai: 2.06 });
+export const PROVIDER_CAPS_USD = Object.freeze({ openai: 4.06 });
 export const PROVIDERS = Object.freeze(['anthropic', 'openai']);
 /** Entries before 2026-10-20 carry no provider: openai-* kinds were OpenAI image calls, everything else Anthropic. */
 export const providerOf = entry => entry.provider ?? (/^openai-/.test(String(entry.kind)) ? 'openai' : 'anthropic');
 export const PHASE = 'launch-quality-phase1-baseline-2026-10';
 /** The approval record a ledger at this cap carries (written by --raise-cap and into fresh or rebuilt ledgers). */
-export const CAP_APPROVAL_RECORD = Object.freeze({ capUsd: HARD_CAP_USD, previousCapUsd: 25, providerCapsUsd: PROVIDER_CAPS_USD, approval: CAP_APPROVAL });
+export const CAP_APPROVAL_RECORD = Object.freeze({ capUsd: HARD_CAP_USD, previousCapUsd: 119.31, providerCapsUsd: PROVIDER_CAPS_USD, approval: CAP_APPROVAL });
 export const STATUSES = Object.freeze(['reserved', 'settled', 'unknown']);
+/**
+ * Shared ledger, separate allowances. Another approved allowance (e.g. Kerim's product-qualification
+ * budget, scope "qualification-20261021") may raise ledger.hardCapUsd with its own capApprovals record
+ * and write entries carrying `scope`. This module's own (design) spend is every entry WITHOUT a scope
+ * (or with scope DESIGN_SCOPE) and stays within HARD_CAP_USD / PROVIDER_CAPS_USD; the ledger-wide total
+ * stays within ledger.hardCapUsd and that record's provider caps. Entries of other scopes are never
+ * rewritten here. Unscoped rows written by anyone count against the design cap (the safe side).
+ */
+export const DESIGN_SCOPE = 'design';
+const isDesignEntry = entry => entry.scope === undefined || entry.scope === null || entry.scope === DESIGN_SCOPE;
+const designLedger = ledger => ({ ...ledger, entries: ledger.entries.filter(isDesignEntry) });
+/** The approval record for the ledger's current (possibly raised by another allowance) total cap. */
+function ledgerApproval(ledger) {
+  const records = Array.isArray(ledger.capApprovals) ? ledger.capApprovals.filter(item => isPlainObject(item) && item.capUsd === ledger.hardCapUsd) : [];
+  return records[records.length - 1] ?? null;
+}
+const ledgerProviderCapUsd = (ledger, provider) => {
+  const caps = ledgerApproval(ledger)?.providerCapsUsd;
+  return isPlainObject(caps) && typeof caps[provider] === 'number' ? caps[provider] : PROVIDER_CAPS_USD[provider];
+};
 export const TEST_ROOT_ENV = 'EVAL_BUDGET_TEST_ROOT';
 const TEST_KIND = /^test(?:-|$)/;
 const LOCK_STALE_MS = 120_000;
@@ -154,7 +177,9 @@ export function validateLedger(ledger) {
   const problems = [];
   if (ledger.phase !== PHASE) problems.push(`ledger belongs to phase ${JSON.stringify(ledger.phase)}, not ${PHASE}; refusing to mix budgets`);
   if (ledger.schemaVersion !== 1) problems.push(`schemaVersion ${JSON.stringify(ledger.schemaVersion)} is not 1`);
-  if (ledger.hardCapUsd !== HARD_CAP_USD) problems.push(`hardCapUsd ${JSON.stringify(ledger.hardCapUsd)} is not ${HARD_CAP_USD}`);
+  if (typeof ledger.hardCapUsd !== 'number' || !(ledger.hardCapUsd >= HARD_CAP_USD)) problems.push(`hardCapUsd ${JSON.stringify(ledger.hardCapUsd)} is below this allowance's ${HARD_CAP_USD}`);
+  // A total above this allowance's cap needs its own recorded approval (another allowance's raise).
+  else if (ledger.hardCapUsd !== HARD_CAP_USD && !ledgerApproval(ledger)?.approval) problems.push(`hardCapUsd ${ledger.hardCapUsd} has no capApprovals record`);
   // A raised cap is only valid with its recorded owner approval.
   if (HARD_CAP_USD > 25 && !(Array.isArray(ledger.capApprovals) && ledger.capApprovals.some(item => isPlainObject(item) && item.capUsd === HARD_CAP_USD && item.approval === CAP_APPROVAL
     && JSON.stringify(item.providerCapsUsd) === JSON.stringify(PROVIDER_CAPS_USD)))) problems.push(`capApprovals has no record approving the $${HARD_CAP_USD} cap and provider caps ${JSON.stringify(PROVIDER_CAPS_USD)}`);
@@ -171,6 +196,7 @@ export function validateLedger(ledger) {
     if (typeof entry.ref !== 'string') problems.push(`${at}.ref is not a string`);
     if (!Number.isSafeInteger(entry.boundMicrousd) || entry.boundMicrousd <= 0) problems.push(`${at}.boundMicrousd ${JSON.stringify(entry.boundMicrousd)} is not a positive safe integer`);
     if (!STATUSES.includes(entry.status)) problems.push(`${at}.status ${JSON.stringify(entry.status)} is not one of ${STATUSES.join('|')}`);
+    if (entry.scope !== undefined && entry.scope !== null && (typeof entry.scope !== 'string' || !entry.scope)) problems.push(`${at}.scope ${JSON.stringify(entry.scope)} is not a non-empty string`);
     if (entry.provider !== undefined && !PROVIDERS.includes(entry.provider)) problems.push(`${at}.provider ${JSON.stringify(entry.provider)} is not one of ${PROVIDERS.join('|')}`);
     if (entry.status === 'settled') {
       if (!Number.isSafeInteger(entry.actualMicrousd) || entry.actualMicrousd < 0) problems.push(`${at} is settled but actualMicrousd ${JSON.stringify(entry.actualMicrousd)} is not a non-negative safe integer`);
@@ -291,15 +317,26 @@ export async function reserve({ kind, ref, boundUsd, note, unique = false, provi
       if (prior.length) throw new DuplicateReservation(`${kind} ${ref} already has ${prior.length} ledger entr${prior.length === 1 ? 'y' : 'ies'} (${prior.map(entry => entry.status).join(', ')})`, { entries: prior.map(entry => ({ id: entry.id, status: entry.status })) });
     }
     const cap = micro(capUsd());
-    const committed = committedMicrousd(ledger);
+    const committed = committedMicrousd(designLedger(ledger));
+    const ledgerCommitted = committedMicrousd(ledger);
+    // The ledger-wide total (all allowances) never exceeds the ledger's own approved cap.
+    if (!(ledgerCommitted + bound <= micro(ledger.hardCapUsd))) {
+      throw new CapReached(`Ledger-wide cap reached: $${usd(ledgerCommitted).toFixed(2)} committed across allowances + $${boundUsd.toFixed(2)} bound for ${kind} ${ref} would exceed $${ledger.hardCapUsd.toFixed(2)}`,
+        { committedUsd: usd(ledgerCommitted), boundUsd, capUsd: ledger.hardCapUsd });
+    }
     // Written so that any NaN on either side refuses.
     if (!(committed + bound <= cap)) {
       throw new CapReached(`Spend cap reached: $${usd(committed).toFixed(2)} committed + $${boundUsd.toFixed(2)} bound for ${kind} ${ref} would exceed $${usd(cap).toFixed(2)}`,
         { committedUsd: usd(committed), boundUsd, capUsd: usd(cap) });
     }
+    const ledgerProviderCap = ledgerProviderCapUsd(ledger, who);
+    if (ledgerProviderCap !== undefined && !(providerCommittedMicrousd(ledger, who) + bound <= micro(ledgerProviderCap))) {
+      throw new CapReached(`${who} ledger-wide cap reached: $${usd(providerCommittedMicrousd(ledger, who)).toFixed(4)} committed + $${boundUsd.toFixed(4)} bound would exceed $${ledgerProviderCap.toFixed(2)}`,
+        { provider: who, committedUsd: usd(providerCommittedMicrousd(ledger, who)), boundUsd, capUsd: ledgerProviderCap });
+    }
     const providerCap = PROVIDER_CAPS_USD[who];
     if (providerCap !== undefined) {
-      const spent = providerCommittedMicrousd(ledger, who);
+      const spent = providerCommittedMicrousd(designLedger(ledger), who);
       if (!(spent + bound <= micro(providerCap))) {
         throw new CapReached(`${who} spend cap reached: $${usd(spent).toFixed(4)} committed + $${boundUsd.toFixed(4)} bound for ${kind} ${ref} would exceed $${providerCap.toFixed(2)}`,
           { provider: who, committedUsd: usd(spent), boundUsd, capUsd: providerCap });
@@ -431,7 +468,8 @@ export async function raiseCap({ write = false } = {}) {
     const file = ledgerFile();
     const ledger = readLedgerFile(file);
     if (ledger === MISSING) throw new LedgerError(`${display(file)} is missing; nothing to raise`, 'EVAL_LEDGER_MISSING');
-    if (ledger.hardCapUsd === HARD_CAP_USD) { load(); return { written: false, already: true, file: display(file) }; }
+    const ours = Array.isArray(ledger.capApprovals) && ledger.capApprovals.some(item => isPlainObject(item) && item.capUsd === HARD_CAP_USD && item.approval === CAP_APPROVAL);
+    if (ledger.hardCapUsd === HARD_CAP_USD || (ours && ledger.hardCapUsd > HARD_CAP_USD)) { load(); return { written: false, already: true, file: display(file) }; }
     if (ledger.hardCapUsd !== CAP_APPROVAL_RECORD.previousCapUsd) throw new LedgerError(`hardCapUsd ${JSON.stringify(ledger.hardCapUsd)} is not the previous cap ${CAP_APPROVAL_RECORD.previousCapUsd}`, 'EVAL_LEDGER_INVALID');
     const before = JSON.stringify(ledger.entries);
     const raised = { ...ledger, hardCapUsd: HARD_CAP_USD, capApprovals: [...(Array.isArray(ledger.capApprovals) ? ledger.capApprovals : []), { ...CAP_APPROVAL_RECORD, recordedAt: new Date().toISOString() }] };
@@ -450,8 +488,10 @@ export function ledgerEntries({ kind, ref } = {}) {
 }
 
 export function summary() {
-  const ledger = load();
+  let ledger = load();
   const cap = micro(capUsd());
+  const all = ledger;
+  ledger = designLedger(ledger);
   const committed = committedMicrousd(ledger);
   const settled = ledger.entries.filter(entry => entry.status === 'settled');
   return {
@@ -465,6 +505,8 @@ export function summary() {
     unknown: ledger.entries.filter(entry => entry.status === 'unknown').length,
     calls: ledger.entries.length,
     providerCapsUsd: PROVIDER_CAPS_USD,
+    ledgerWide: { capUsd: all.hardCapUsd, committedUsd: usd(committedMicrousd(all)), otherScopes: [...new Set(all.entries.filter(entry => !isDesignEntry(entry)).map(entry => entry.scope))],
+      providerCapsUsd: Object.fromEntries(PROVIDERS.map(provider => [provider, ledgerProviderCapUsd(all, provider) ?? null])), byProvider: Object.fromEntries(PROVIDERS.map(provider => [provider, usd(providerCommittedMicrousd(all, provider))])) },
     byProvider: Object.fromEntries(PROVIDERS.map(provider => [provider, usd(providerCommittedMicrousd(ledger, provider))])),
     byKind: Object.fromEntries([...new Set(ledger.entries.map(entry => entry.kind))].map(kind => [kind,
       usd(ledger.entries.filter(entry => entry.kind === kind).reduce((sum, entry) => sum + (entry.status === 'settled' ? entry.actualMicrousd : entry.boundMicrousd), 0))])),
@@ -476,8 +518,11 @@ export function fits(boundUsd, provider = 'anthropic') {
   const ledger = load();
   if (typeof boundUsd !== 'number' || !Number.isFinite(boundUsd) || !(boundUsd > 0)) return false;
   const providerCap = PROVIDER_CAPS_USD[provider];
-  if (providerCap !== undefined && !(providerCommittedMicrousd(ledger, provider) + micro(boundUsd) <= micro(providerCap))) return false;
-  return committedMicrousd(ledger) + micro(boundUsd) <= micro(capUsd());
+  const ledgerProviderCap = ledgerProviderCapUsd(ledger, provider);
+  if (ledgerProviderCap !== undefined && !(providerCommittedMicrousd(ledger, provider) + micro(boundUsd) <= micro(ledgerProviderCap))) return false;
+  if (!(committedMicrousd(ledger) + micro(boundUsd) <= micro(ledger.hardCapUsd))) return false;
+  if (providerCap !== undefined && !(providerCommittedMicrousd(designLedger(ledger), provider) + micro(boundUsd) <= micro(providerCap))) return false;
+  return committedMicrousd(designLedger(ledger)) + micro(boundUsd) <= micro(capUsd());
 }
 
 // ===========================================================================
@@ -609,6 +654,23 @@ export async function selfTest({ processes = 32, readers = 4, boundUsd = 1.8, lo
       check('openai sub-cap: a small one still fits', fits(0.05, 'openai') === true && (await refuses(() => reserve({ kind: 'test-image', ref: 'img-small', boundUsd: 0.05, provider: 'openai' }))) === false);
       check('openai sub-cap: anthropic spend is not limited by it', (await refuses(() => reserve({ kind: 'test-runner', ref: 'b', boundUsd: 5 }))) === false);
       check('unknown provider refused', await refuses(() => reserve({ kind: 'test', ref: 'p', boundUsd: 1, provider: 'other' }))); }
+    // Shared ledger: another allowance raised the total cap (+$20, OpenAI +$3) and writes scoped rows.
+    { const other = { capUsd: HARD_CAP_USD + 20, previousCapUsd: HARD_CAP_USD, providerCapsUsd: { openai: PROVIDER_CAPS_USD.openai + 3 }, approval: 'test: other allowance' };
+      const raisedExtra = { hardCapUsd: HARD_CAP_USD + 20, capApprovals: [CAP_APPROVAL_RECORD, other] };
+      const designAlmostFull = micro(HARD_CAP_USD) - 1_000_000;
+      fresh(); writeLedger(process.env[TEST_ROOT_ENV], [entry({ kind: 'test', status: 'settled', actualMicrousd: designAlmostFull, boundMicrousd: designAlmostFull }), entry({ kind: 'test-q', scope: 'qualification-test', status: 'settled', actualMicrousd: 15_000_000, boundMicrousd: 15_000_000 })], raisedExtra);
+      check('shared ledger: a raise by another allowance with its approval is valid', summary().ledgerWide.capUsd === HARD_CAP_USD + 20 && summary().ledgerWide.otherScopes.includes('qualification-test'));
+      check('shared ledger: other-scope rows do not count against the design cap', Math.abs(summary().committedUsd - usd(designAlmostFull)) < 1e-9);
+      check('shared ledger: design cap still binds although the ledger-wide cap has room', await refuses(() => reserve({ kind: 'test', ref: 'd', boundUsd: 1.5 }), 'EVAL_CAP_REACHED') && fits(1.5) === false && fits(0.5) === true);
+      fresh(); writeLedger(process.env[TEST_ROOT_ENV], [entry({ kind: 'test', status: 'settled', actualMicrousd: 100_000_000, boundMicrousd: 100_000_000 }), entry({ kind: 'test-q', scope: 'qualification-test', status: 'settled', actualMicrousd: micro(HARD_CAP_USD + 20) - 100_500_000, boundMicrousd: micro(HARD_CAP_USD + 20) - 100_500_000 })], raisedExtra);
+      check('shared ledger: the ledger-wide cap binds every allowance', await refuses(() => reserve({ kind: 'test', ref: 'w', boundUsd: 1 }), 'EVAL_CAP_REACHED') && fits(1) === false);
+      fresh(); writeLedger(process.env[TEST_ROOT_ENV], [entry({ kind: 'test-q', scope: 'qualification-test', provider: 'openai', status: 'settled', actualMicrousd: 3_000_000, boundMicrousd: 3_000_000 })], raisedExtra);
+      check('shared ledger: design OpenAI sub-cap counts design rows only', fits(PROVIDER_CAPS_USD.openai - 0.01, 'openai') === true && fits(PROVIDER_CAPS_USD.openai + 0.01, 'openai') === false);
+      fresh(); writeLedger(process.env[TEST_ROOT_ENV], [], { hardCapUsd: HARD_CAP_USD + 20, capApprovals: [CAP_APPROVAL_RECORD] });
+      check('shared ledger: a higher total cap without its own approval record is invalid', await refuses(() => reserve({ kind: 'test', ref: 'n', boundUsd: 1 }), 'EVAL_LEDGER_INVALID'));
+      fresh(); writeLedger(process.env[TEST_ROOT_ENV], [], { hardCapUsd: HARD_CAP_USD - 1 });
+      check('shared ledger: a total cap below this allowance is invalid', await refuses(() => reserve({ kind: 'test', ref: 'l', boundUsd: 1 }), 'EVAL_LEDGER_INVALID'));
+      fresh(); writeLedger(process.env[TEST_ROOT_ENV], []); }
     check('non-finite bound refused', await refuses(() => reserve({ kind: 'test', ref: 'r', boundUsd: Infinity })) && await refuses(() => reserve({ kind: 'test', ref: 'r', boundUsd: NaN })) && fits(NaN) === false);
 
     // Test mode only books test kinds; unique reservations; root must be in temp.
