@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted advisor → brief → build handoff in Chromium (audit M14): ExpertChat drafts a read-only brief (routed /api/chat/brief), the brief is edited, Use this brief shows target/format/mode/effort/maximum and Cancel sends nothing, Open in composer stores one handoff, the project's LiveBuilder (or the new-project Studio composer) is prefilled without sending, one Send makes one /api/build request carrying the shown maximum and the brief's provenance, and a stale target is refused. Keyboard and 375/320 px. Local HTTP/SSE fixture with fictional data; no provider, database, cloud or paid call.
  * Run: node scripts/check-advisor-handoff-browser.cjs [screenshot-dir] */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, args: engineArgs } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
-const shots = process.argv[2] ? path.resolve(process.argv[2]) : null;
+const shots = engineArgs[0] ? path.resolve(engineArgs[0]) : null;
 const ids = { actor: "11111111-1111-4111-8111-111111111111", workspace: "22222222-2222-4222-8222-222222222222", artifact: "33333333-3333-4333-8333-333333333333", book: "77777777-7777-4777-8777-777777777777",
   other: "88888888-8888-4888-8888-888888888888", project: "99999999-9999-4999-8999-999999999999", operation: "44444444-4444-4444-8444-444444444444", run: "55555555-5555-4555-8555-555555555555" };
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
@@ -105,7 +105,7 @@ async function main() {
     return json(res, { error: { message: "Not in this fixture" } }, 404);
   } catch (error) { state?.errors.push(String(error.message)); if (!res.headersSent) json(res, { error: { message: "Fixture failed" } }, 500); else res.destroy(); } });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const base = `http://127.0.0.1:${server.address().port}`, browser = await chromium.launch({ headless: true });
+  const base = `http://127.0.0.1:${server.address().port}`, browser = await browserType.launch({ headless: true });
   const failures = []; let passed = 0;
   const noScroll = page => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
   const scenario = async (name, run, viewport = { width: 1280, height: 1000 }) => {

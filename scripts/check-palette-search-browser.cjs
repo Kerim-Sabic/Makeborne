@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted ClientCommandPalette in Chromium with a controllable mock API (audit F03). Local only; no network. Run: node scripts/check-palette-search-browser.cjs */
-const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const path = require("node:path"), assert = require("node:assert/strict"), { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const fixture = `import React, { useState } from "react"; import { createRoot } from "react-dom/client";
 import ClientCommandPalette from "./src/components/client-command-palette";
@@ -31,7 +31,7 @@ async function main() {
     } }] });
   const server = createServer((req, res) => { res.setHeader("Content-Type", req.url === "/fixture.js" ? "text/javascript" : "text/html"); res.end(req.url === "/fixture.js" ? output.outputFiles[0].contents : '<!doctype html><div id="root"></div><script src="/fixture.js"></script>'); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
     const page = await browser.newPage();
@@ -100,6 +100,6 @@ async function main() {
     assert.equal(await page.getByRole("dialog").count(), 0);
     pass("Escape closes the palette");
   } finally { await browser.close(); server.close(); }
-  console.log(`${passed} mounted palette checks passed (Chromium, mocked API, no network).`);
+  console.log(`${passed} mounted palette checks passed (${engineLabel}, mocked API, no network).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });

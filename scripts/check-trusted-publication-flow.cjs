@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Real React/Chromium flow with local API responses; no database/providers. */
-const assert=require('node:assert/strict'),{createServer}=require('node:http'),{build}=require('esbuild'),{chromium}=require('playwright');
+const assert=require('node:assert/strict'),{createServer}=require('node:http'),{build}=require('esbuild'),{ browserType } = require('./browser-engine.cjs');
 const ids={account:'11111111-1111-4111-8111-111111111111',workspace:'22222222-2222-4222-8222-222222222222',artifact:'33333333-3333-4333-8333-333333333333',prep:'44444444-4444-4444-8444-444444444444',other:'55555555-5555-4555-8555-555555555555'};
 const html='<html><head></head><body><h1>Verified home</h1><script>parent.forged=true</script></body></html>';
 const ready=()=>({id:ids.prep,state:'ready',workspaceId:ids.workspace,artifactId:ids.artifact,version:1,publicationRevision:4,slug:'bakery',interactive:false,expiresAt:'2030-01-01T00:00:00Z',error:null,previewHtml:html,previewRoutes:[{path:'/',html},{path:'/about',html:'<html><head></head><body><h1>Verified about</h1></body></html>'}]});
@@ -9,7 +9,7 @@ async function main(){
  const output=await build({stdin:{contents:fixture,loader:'jsx',resolveDir:process.cwd()},bundle:true,write:false,platform:'browser',jsx:'automatic',define:{'process.env':'{}'},plugins:[{name:'enquiries-only-stub',setup(b){b.onResolve({filter:/website-enquiries$/},()=>({path:'enquiries',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export default function Enquiries(){return null}'}));}}]});
  const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/fixture.js'?'text/javascript':'text/html');res.end(req.url==='/fixture.js'?output.outputFiles[0].contents:'<!doctype html><div id="root"></div><script src="/fixture.js"></script>');});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  let browser;let count=0;
- try{browser=await chromium.launch({headless:true});const base=`http://127.0.0.1:${server.address().port}`;
+ try{browser=await browserType.launch({headless:true});const base=`http://127.0.0.1:${server.address().port}`;
  async function scenario(name,fn){const page=await browser.newPage();const requests=[];const state={site:live(),prep:null,available:true,postError:false,promoteError:false,hold:null};
   await page.route('**/api/cloud/**',async route=>{const req=route.request(),method=req.method(),isPrep=req.url().endsWith('/preparation'),data=method==='POST'?req.postDataJSON():null;requests.push({method,isPrep,data,key:req.headers()['idempotency-key'],account:req.headers()['x-makeborne-account']});
    if(state.hold&&method==='POST')await state.hold;

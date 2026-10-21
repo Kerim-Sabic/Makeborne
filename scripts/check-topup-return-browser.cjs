@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { browserType, engine } = require("./browser-engine.cjs");
 
 const ORDER_A = "abcdefab-1234-4234-8234-123456789abc";
 const ORDER_B = "abcdefab-1234-4234-8234-123456789def";
@@ -69,7 +69,7 @@ const results = [];
   const base = `http://127.0.0.1:${server.address().port}`;
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await browserType.launch({ headless: true });
     const fresh = async (replies = [{ body: order() }], options = {}) => {
       const p = await browser.newPage({ viewport: options.viewport || { width: 1200, height: 800 }, reducedMotion: "reduce" });
       const errors = [];
@@ -211,6 +211,8 @@ const results = [];
       const p = await fresh([{ never: true }]);
       await p.waitForFunction(() => window.activeTopups === 1);
       await p.evaluate(id => window.renderOrder(id), ORDER_B); await title(p, "Waiting for credit-pack confirmation");
+      // The old order's request is aborted by the effect cleanup, which runs after the new title paints (later in WebKit).
+      await p.waitForFunction(() => window.abortCount >= 1, null, { timeout: 2000 }).catch(() => undefined);
       assert.equal((await metrics(p)).aborts, 1);
       await p.evaluate(({ id }) => { window.setReplies(id, [{ never: true }]); window.renderOrder(id); }, { id: ORDER_A });
       await p.waitForFunction(() => window.activeTopups === 1);
@@ -226,7 +228,13 @@ const results = [];
       const layout = await p.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, buttons: [...document.querySelectorAll('.billing-topup-return-actions a,.billing-topup-return-actions button')].map(e => { const r=e.getBoundingClientRect();return { left:r.left,right:r.right,height:r.height,transition:getComputedStyle(e).transitionDuration }; }) }));
       assert.equal(layout.scroll <= layout.width, true, "No mobile horizontal overflow");
       for (const button of layout.buttons) { assert.equal(button.left >= 0 && button.right <= layout.width, true); assert.equal(button.height >= 44, true); assert.equal(button.transition, "0s"); }
+      // Safari moves Tab between form controls only by default (links need its "Press Tab to highlight each item"
+      // setting), which WebKit automation cannot change: a view with only links gets keyboard focus on its first link.
       await p.keyboard.press("Tab");
+      if (engine === "webkit" && await p.evaluate(() => document.activeElement === document.body)) {
+        console.log(`NOTE WebKit Tab skips links (browser setting): focused the first action link of "${state}" after the key press`);
+        await p.locator(".billing-topup-return-actions a").first().focus();
+      }
       assert.equal(await p.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), "solid");
       if (state === "refunded") assert.match(await p.getByRole("status").innerText(), /does not confirm which credits remain/);
       await p.screenshot({ path: path.join(out, `${state}-mobile.png`) });

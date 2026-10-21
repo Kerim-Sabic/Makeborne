@@ -27,7 +27,7 @@
 .cr-website-title{flex:1;min-width:0;text-align:center;font-size:12px;color:#6b6f7b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr-devices{display:flex;gap:4px}.cr-devices button{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:#6b6f7b}
 .cr-devices button[aria-pressed=true]{background:#fff;border-color:#e2e1dc;color:#16181d}
-.cr-website-viewport{background:#eceae5;display:flex;justify-content:center}
+.cr-website-viewport{position:relative;background:#eceae5;display:flex;justify-content:center}
 .cr-website-viewport iframe{display:block;border:0;width:100%;height:calc(100vh - 210px);min-height:560px;background:#fff}
 .cr-website-viewport.is-mobile{padding:18px}.cr-website-viewport.is-mobile iframe{width:390px;max-width:100%;border-radius:22px;box-shadow:0 0 0 8px #16181d}
 /* Pins on our own surfaces */

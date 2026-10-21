@@ -2,7 +2,7 @@
  * Run: node scripts/check-source-search-browser.cjs [--baseline=<git rev>]  (SHOTS_DIR=<dir> saves screenshots)
  * --baseline bundles every src/ file from that revision instead (files new since then come from the working copy), to show what the earlier code lacks. */
 const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs"), { execFileSync } = require("node:child_process");
-const { build } = require("esbuild"), { chromium } = require("playwright"), { createServer } = require("node:http");
+const { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http");
 
 const baseline = process.argv.find(arg => arg.startsWith("--baseline="))?.slice("--baseline=".length) ?? null;
 const shots = process.env.SHOTS_DIR ? path.resolve(process.env.SHOTS_DIR) : null;
@@ -57,7 +57,7 @@ async function main() {
   const server = createServer((req, res) => { const script = req.url === "/fixture.js"; res.setHeader("Content-Type", script ? "text/javascript" : "text/html"); res.end(script ? js : html); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   if (shots) fs.mkdirSync(shots, { recursive: true });
   const failures = [];
   const tag = baseline ? `baseline-${baseline}` : "current";
@@ -166,6 +166,8 @@ async function main() {
     await scenario("results go stale when the code changes: an out-of-date line is refused, Search again refreshes, same code under a new label stays current", async page => {
       await find(page, "Explore handmade collections");
       await page.evaluate(() => window.setSubject(subject => ({ ...subject, dirty: true })));
+      // The fixture's state change renders asynchronously (a frame later in WebKit): read the label once React has committed.
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0))));
       assert.equal(await page.locator(".sse-scope").innerText(), "Searching version 4 with unsaved changes. Plain text, not patterns.");
       assert.equal(await page.locator(".sse-stale").count(), 0, "identical code is still current");
       await page.evaluate(() => window.setSource(source => ({ ...source, files: source.files.map(file => file.path === "src/routes/index.tsx" ? { ...file, content: `// moved down\n${file.content}` } : file) })));
@@ -233,6 +235,6 @@ async function main() {
     }, { width, height: 820 });
   } finally { await browser.close(); server.close(); }
   if (failures.length) { console.log(`\n${failures.length} mounted source search checks failed.`); process.exitCode = 1; }
-  else console.log("\nAll mounted source search checks passed (Chromium, fictional code, nothing saved or sent).");
+  else console.log(`\nAll mounted source search checks passed (${engineLabel}, fictional code, nothing saved or sent).`);
 }
 main().catch(error => { console.error(error); process.exit(1); });
