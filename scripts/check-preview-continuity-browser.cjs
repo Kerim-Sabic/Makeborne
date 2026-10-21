@@ -167,6 +167,8 @@ async function main() {
           await frame.getByRole("link", { name: "Collections" }).click();
           await frame.locator("h1", { hasText: "Collections" }).waitFor();
           await page.waitForFunction(() => new URL(location.href).searchParams.get("preview-path") === "/collections");
+          // The address and the picker update in separate renders (a frame apart in WebKit): give the picker up to 2 s.
+          await picker.evaluate((element, expected) => new Promise(resolve => { const until = Date.now() + 2000; const tick = () => element.value === expected || Date.now() > until ? resolve() : requestAnimationFrame(tick); tick(); }), "/collections");
           assert.equal(await picker.inputValue(), "/collections", "picker follows in-site navigation");
           await page.evaluate(() => history.back());
           await frame.locator("h1", { hasText: "Learn at a long table." }).waitFor();

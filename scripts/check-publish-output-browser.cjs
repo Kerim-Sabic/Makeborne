@@ -203,6 +203,8 @@ async function main() {
       await openEditor(page); await openPublish(page);
       const claims = page.getByRole("region", { name: "Claims to confirm before publishing" });
       await claims.waitFor();
+      // The list covers the prepared pages once the preparation status has loaded (it answers later in WebKit).
+      await claims.getByText(/and its prepared pages\.$/).waitFor();
       const text = await claims.innerText();
       assert.match(text, /Prices and offers/); assert.match(text, /Awards and press/); assert.match(text, /Contact details and addresses/); assert.match(text, /Opening hours/);
       await claims.getByText("Prices and offers").click();
