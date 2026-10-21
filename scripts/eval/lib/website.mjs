@@ -27,6 +27,8 @@ import { HEIGHTS } from './thresholds.mjs';
 const require = createRequire(import.meta.url);
 const { loadApp } = require('./app-modules.cjs');
 const ts = require(path.join(REPO, 'node_modules', 'typescript'));
+// Responsive copies (srcset) of project images: the same rules as the trusted build and publication.
+const responsive = require(path.join(REPO, 'infra', 'project-runtime', 'responsive-images.cjs'));
 
 const SCRIPT_TYPE = 'text/javascript; charset=utf-8';
 const ms = since => Math.round(performance.now() - since);
@@ -140,7 +142,7 @@ export async function compileWebsite(sourceInput) {
   await warmBundler(); // so `ms` is this project's build, not the one-off warm-up wait
   const started = performance.now();
   try {
-    const { js, css } = await withWarmBundler(() => bundler.buildPublishBundle(bundleInput(source)));
+    const { js, css } = await withWarmBundler(() => bundler.buildPublishBundle(bundleInput(source), { images: responsive.responsiveManifest(source.assets) }));
     return { ok: true, error: null, ms: ms(started), jsBytes: Buffer.byteLength(js), cssBytes: Buffer.byteLength(css), js, css, staticProblems };
   } catch (error) {
     const message = String(error?.message ?? error).replace(/^Fix the build before publishing: /, '');
@@ -476,6 +478,7 @@ export async function hostedDocuments(raw, { title, description: fallback, addre
   const site = await sitePolicy();
   const origin = address.replace(/\/$/, '');
   const assetPaths = new Set(assets.map(asset => asset.url));
+  const responsiveImages = responsive.responsiveManifest(assets.map(asset => ({ path: asset.path, sha256: createHash('sha256').update(asset.bytes).digest('hex') })));
   const shareImage = seo?.shareImage && assetPaths.has(seo.shareImage) ? `${origin}${seo.shareImage}` : undefined;
   const meta = seoModule.pageMeta({ path: '/', routeTitle: routes?.find(route => route.path === '/')?.title, siteTitle: title, html: raw, seo });
   const description = meta.description || fallback || title;
@@ -495,7 +498,7 @@ export async function hostedDocuments(raw, { title, description: fallback, addre
   for (const asset of assets) isolated = isolated.split(`data:${asset.mediaType};base64,${asset.bytes.toString('base64')}`).join(asset.url);
   const stylesheets = css.trim() ? ['/site.css'] : [];
   isolated = hosting.renderHostedSnapshot(isolated.replace(BUNDLE_STYLE, ''), meta.title, description, address,
-    { assetPaths: new Set([...assetPaths, ...stylesheets]), stylesheets, requireReactRoot: true, ...head });
+    { assetPaths: new Set([...assetPaths, ...stylesheets]), stylesheets, responsiveImages, requireReactRoot: true, ...head });
   const published = site.composeSiteDocument(isolated, { script: SCRIPT_PLACEHOLDER, interactive: true, branding })
     .replace(`src="${SCRIPT_PLACEHOLDER}"`, 'src="/site.js"');
   return { snapshot, published, meta: { title: meta.title, description } };
@@ -557,7 +560,7 @@ export async function materializeWebsite({ itemDir, outDir, browser, source: sou
     let raw;
     if (procedure === 'app-frame') {
       const previewStarted = performance.now();
-      const preview = await withWarmBundler(() => appModules().bundler.bundleProject(bundleInput(source), Object.fromEntries(assets.found.map(asset => [asset.url, dataUrl(asset)])), 'preview'));
+      const preview = await withWarmBundler(() => appModules().bundler.bundleProject(bundleInput(source), Object.fromEntries(assets.found.filter(asset => !responsive.isVariantPath(asset.path)).map(asset => [asset.url, dataUrl(asset)])), 'preview'));
       if (!preview.ok) throw new Error(`preview bundle failed: ${preview.error}`);
       result.snapshot.previewMs = ms(previewStarted);
       raw = await captureRawSnapshot({ browser, previewHtml: preview.html });
