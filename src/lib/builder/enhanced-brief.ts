@@ -15,8 +15,6 @@ import { designAnswerLabels, type DesignAnswers } from "./brief-questions";
 /** Credits held while the brief is enhanced or analysed. The hold only bounds the provider spend: the step is
  * free to the client (its cost, about $0.001, is absorbed as platform cost when the hold is released). */
 export const ENHANCER_CREDITS = 1;
-/** Prompt analysis and enhancement never charge the client. */
-export const ENHANCER_CHARGES = false;
 export const MAX_ENHANCED_BRIEF_CHARS = 6000;
 /** Briefs up to this many words are enhanced. In blind reviews the enhancer reached parity with the original
  * on short, vague prompts but lost every detailed brief (it added example content and sections the client's
@@ -105,16 +103,20 @@ export function groundEnhancedBrief(brief: EnhancedBrief, source: string): Enhan
     if (tokens.length && tokens.some(token => !rendered.includes(token)) && factsGiven.length < 24) factsGiven.push(sentence.slice(0, 240));
   }
   return { ...brief, sections, factsGiven, constraints: brief.constraints.filter(grounded),
-    // Examples are labelled as examples on the page, so they may carry illustrative numbers; labels may not.
-    factsMissing: brief.factsMissing.filter(item => grounded(item.placeholder)) };
+    // Labels may not carry invented numbers. Examples are descriptive only: one that carries a number, a price, a time,
+    // a date or a contact detail is dropped (the fact stays a bracketed placeholder), whatever the reply says.
+    factsMissing: brief.factsMissing.filter(item => grounded(item.placeholder)).map(item => (item.example && FACT_LIKE.test(item.example) ? { ...item, example: null } : item)) };
 }
+
+/** An example that states a fact: any digit, a currency sign, an @ or a time/day pattern. Such values are never shown as examples. */
+export const FACT_LIKE = /[0-9£$€¥₹@]|\b(?:mon|tues?|wed|thu|thurs|fri|sat|sun)(?:day)?\b|\b(?:am|pm|noon|midnight)\b|\b(?:awards?|reviews?|rated|stars?|testimonials?)\b/i;
 
 /** The brief as plain text: shown on the card, editable, and sent to the builder. */
 export function renderEnhancedBrief(brief: EnhancedBrief): string {
   const list = (items: readonly string[]) => items.map(item => `- ${item}`).join("\n");
   return [
     `Business: ${brief.business}`,
-    brief.workingName ? `Working name (an example until the client gives theirs): ${brief.workingName}` : "",
+    brief.workingName ? `Working name (a placeholder until the client gives theirs; mark it on the page as a working name): ${brief.workingName}` : "",
     `Goal: ${brief.goal}`,
     `Primary action: "${brief.primaryAction.label}" (${brief.primaryAction.kind})`,
     `Audience: ${brief.audience}`,
@@ -124,7 +126,7 @@ export function renderEnhancedBrief(brief: EnhancedBrief): string {
     "Sections, in order (give each section the id shown):",
     ...brief.sections.map((section, index) => `${index + 1}. ${section.name} (#${section.anchor}): ${section.purpose}${section.include.length ? ` Include: ${section.include.join("; ")}.` : ""}`),
     brief.factsGiven.length ? `\nFacts given by the client (use exactly as written):\n${list(brief.factsGiven)}` : "",
-    brief.factsMissing.length ? `\nFacts not given (labelled example content, or a bracketed placeholder for contact details; never presented as fact):\n${brief.factsMissing.map(item => `- ${item.fact} → ${item.example ? `example: ${item.example} (label: "${item.placeholder}")` : `"${item.placeholder}"`}`).join("\n")}` : "",
+    brief.factsMissing.length ? `\nFacts not given (a bracketed placeholder, or labelled descriptive example content; never presented as fact):\n${brief.factsMissing.map(item => `- ${item.fact} → ${item.example ? `example: ${item.example} (label: "${item.placeholder}")` : `"${item.placeholder}"`}`).join("\n")}` : "",
     brief.constraints.length ? `\nConstraints:\n${list(brief.constraints)}` : "",
     brief.answersUsed.length ? `\nAnswers used: ${brief.answersUsed.join("; ")}` : "",
   ].filter(line => line !== "").join("\n").slice(0, MAX_ENHANCED_BRIEF_CHARS);
@@ -166,13 +168,13 @@ export function renderBriefAnalysis(brief: EnhancedBrief): string {
 export function enhancedBriefBlock(brief: BuildBrief) {
   if (brief.mode === "analysis") return [
     `<brief_analysis>`,
-    `Makeborne read the client's detailed brief and listed what it asks for. The brief above, in the client's own words, is the authority: this analysis never adds to, rewords or overrides it. Build every section listed, each with the id shown (id="anchor" on the section element); a fact the brief does not give is never invented: a placeholder the brief asks for is clearly and tidily marked, any other gap is written around (PLACEHOLDERS in your rules).`,
+    `Makeborne read the client's detailed brief and listed what it asks for. The client's own words (the project brief above and their message in <request>) are the authority: this analysis never adds to, rewords or overrides it. Build every section listed, each with the id shown (id="anchor" on the section element); a fact the brief does not give is never invented: a placeholder the brief asks for is clearly and tidily marked, any other gap is written around (PLACEHOLDERS in your rules).`,
     brief.text,
     `</brief_analysis>`,
   ].join("\n");
   return [
     `<enhanced_brief source="${brief.mode}">`,
-    `Makeborne expanded the client's brief into this design brief before the build${brief.mode === "edited" ? " and the client then edited it" : ""}. The client's own words in "Brief:" above take priority: nothing here may drop or contradict them. Build every section listed, in this order, each with the id shown (id="anchor" on the section element), designed and finished. Where a fact is not given, write the example content in the site's own voice so the section looks complete, and mark it with one small, tidy label per section (for example a muted "Example — replace with yours" tag), never one per item and never as loud highlighted boxes; phone, e-mail and street address stay bracketed placeholders such as [Your phone]. An example is never presented as a fact anywhere else: no reviews, awards, statistics or named people the client did not give (never invent it as fact).`,
+    `Makeborne expanded the client's brief into this design brief before the build${brief.mode === "edited" ? " and the client then edited it" : ""}. The client's own words (the project brief above and their message in <request>) take priority: nothing here may drop or contradict them. Build every section listed, in this order, each with the id shown (id="anchor" on the section element), designed and finished. Prices, hours, dates, counts and other numbers, phone numbers, e-mail and street addresses, names, reviews and awards the client did not give are clearly bracketed placeholders ([Opening hours], [Price], [Your phone]), never invented values. Descriptive example content listed below may fill a section so it looks complete, marked with one small, tidy label per section (for example a muted "Example — replace with yours" tag). A working name, if given below, is marked on the page as a working name (for example a small "Working name" tag beside the wordmark) until the client gives theirs.`,
     brief.text,
     "</enhanced_brief>",
   ].join("\n");

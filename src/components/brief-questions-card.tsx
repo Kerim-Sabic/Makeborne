@@ -112,7 +112,7 @@ export default function BriefQuestionsCard({ questions, kind, planning, busy, li
         {last ? finalLabel ?? (planning ? "Make the plan" : "Start building") : "Next"}<ArrowRight size={14} />
       </button>
       <button type="button" className="bq-skip" disabled={busy} onClick={skipThis}>Skip this question</button>
-      <button type="button" className="bq-skip bq-skip-all" disabled={busy} onClick={onSkip} title={`Start the ${thing} with the brief as written`}>Skip all</button>
+      <button type="button" className="bq-skip bq-skip-all" disabled={busy} onClick={onSkip} title={`Skip the questions and continue with the ${thing} brief as written`}>Skip all</button>
     </footer>
   </section>;
 }

@@ -65,7 +65,9 @@ const BuildRequest = z.object({
   // Provenance belongs to the request that starts an operation, never to an automatic stage or review.
   .refine(body => !body.provenance || (body.mode === "build" && (!body.operation || "actionKey" in body.operation)))
   // Like provenance, the approved brief and answers start an operation; its later stages read them back from it.
-  .refine(body => (!body.brief && !body.design) || (body.mode === "build" && !body.plan && (!body.operation || "actionKey" in body.operation)));
+  // An enhanced or analysed brief starts a Create build only; the client's design answers start a Create build or an approved plan's build.
+  .refine(body => !body.brief || (body.mode === "build" && !body.plan && (!body.operation || "actionKey" in body.operation)))
+  .refine(body => !body.design || (body.mode === "build" && (!body.operation || "actionKey" in body.operation)));
 
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 

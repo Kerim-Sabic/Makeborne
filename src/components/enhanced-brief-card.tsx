@@ -8,7 +8,11 @@ import "@/app/brief-questions.css";
 export type EnhancingState =
   | { status: "loading" }
   | { status: "ready"; enhanced: EnhancedBrief; text: string; charged: number }
-  | { status: "failed" };
+  /** message: the server's own explanation; blocking: the same reason would refuse the build (AI paused, daily limit, no credits). */
+  | { status: "failed"; message?: string; blocking?: boolean };
+
+/** Refusals that stop a build as well as the free reading, so the card never offers a start that would fail the same way. */
+export const buildRefusedToo = (code: string) => code.startsWith("AI_") || ["INSUFFICIENT_CREDITS", "CREDIT_USAGE_LIMIT", "BUILDER_UNAVAILABLE"].includes(code);
 
 /** The enhanced brief before a first website build (M08: explicit intent). The client sees what
  * will be built, can edit it, or builds from their own words; nothing starts until they choose. */
@@ -28,19 +32,21 @@ export default function EnhancedBriefCard({ state, design, maximum, busy, onStar
   useEffect(() => { if (editing) field.current?.focus(); }, [editing]);
   const answers = designAnswerLabels(design);
   const limit = `Starting the build uses up to ${maximum} credits. You pay only for what is used.`;
+  // Starting from the client's own words is a paid build too: the button says so.
+  const original = `Start with my original · up to ${maximum} credits`;
 
   if (state.status === "loading") return <div className="bq bq-loading" role="status">
     <Loader2 size={14} className="lb-spin" aria-hidden="true" />
     <span>Turning your brief into a full design brief… (free)</span>
-    <button type="button" className="bq-skip" onClick={onOriginal}>Use my original</button>
+    <button type="button" className="bq-skip" onClick={onOriginal}>{original}</button>
   </div>;
 
   if (state.status === "failed") return <section className="eb" aria-labelledby="eb-title">
     <header className="eb-head"><Sparkles size={14} aria-hidden="true" /><h4 id="eb-title" ref={heading} tabIndex={-1}>Your brief</h4></header>
-    <p className="eb-summary">Your brief couldn&rsquo;t be enhanced just now. Nothing was charged for it. The build can use your own words{answers.length ? " and your answers" : ""}.</p>
-    <p className="eb-note">{limit}</p>
+    <p className="eb-summary" role="alert">{state.message ?? "Your brief couldn’t be enhanced just now. Nothing was charged for it."}{state.blocking ? "" : ` The build can use your own words${answers.length ? " and your answers" : ""}.`}</p>
+    {!state.blocking && <p className="eb-note">{limit}</p>}
     <footer className="eb-actions">
-      <button type="button" className="button primary small" disabled={busy} onClick={onOriginal}>Start building with my brief<ArrowRight size={14} /></button>
+      {!state.blocking && <button type="button" className="button primary small" disabled={busy} onClick={onOriginal}>Start building with my brief · up to {maximum} credits<ArrowRight size={14} /></button>}
       <button type="button" className="bq-skip" disabled={busy} onClick={onCancel}>Cancel</button>
     </footer>
   </section>;
@@ -53,10 +59,10 @@ export default function EnhancedBriefCard({ state, design, maximum, busy, onStar
       <label className="bq-custom" htmlFor="eb-text"><span>Edit the enhanced brief. Keep the numbered section lines if you want each section checked before the build is saved.</span></label>
       <textarea id="eb-text" ref={field} className="eb-text" value={draft} maxLength={MAX_ENHANCED_BRIEF_CHARS} disabled={busy} onChange={event => setDraft(event.target.value)} />
     </> : <>
-      <p className="eb-summary">{enhanced.business}{enhanced.workingName ? <> Working name: <strong>{enhanced.workingName}</strong> (an example until you give yours).</> : null} <strong>Main action:</strong> {enhanced.primaryAction.label}.</p>
+      <p className="eb-summary">{enhanced.business}{enhanced.workingName ? <> Working name: <strong>{enhanced.workingName}</strong> (a placeholder name until you give yours).</> : null} <strong>Main action:</strong> {enhanced.primaryAction.label}.</p>
       <dl className="eb-meta">
         <dt>Sections</dt><dd><ol className="eb-list">{enhanced.sections.map(section => <li key={section.anchor}>{section.name}</li>)}</ol></dd>
-        {enhanced.factsMissing.length > 0 && <><dt>Shown as labelled examples until you add them</dt><dd><ul className="eb-list">{enhanced.factsMissing.map(item => <li key={item.fact}>{item.fact}</li>)}</ul></dd></>}
+        {enhanced.factsMissing.length > 0 && <><dt>Shown as placeholders until you add them</dt><dd><ul className="eb-list">{enhanced.factsMissing.map(item => <li key={item.fact}>{item.fact}</li>)}</ul></dd></>}
         <dt>Feel and imagery</dt><dd>{enhanced.tone === "quiet" ? "Calm and restrained" : "Bold"} · {enhanced.imagery.plan === "type" ? "mostly type" : enhanced.imagery.plan}</dd>
         {(answers.length > 0 || enhanced.answersUsed.length > 0) && <><dt>Your answers used</dt><dd>{answers.length ? answers.join("; ") : enhanced.answersUsed.join("; ")}</dd></>}
       </dl>
@@ -70,7 +76,7 @@ export default function EnhancedBriefCard({ state, design, maximum, busy, onStar
       {editing
         ? <button type="button" className="bq-skip" disabled={busy} onClick={() => { setEditing(false); setDraft(state.text); }}>Discard edits</button>
         : <button type="button" className="bq-skip" disabled={busy} onClick={() => setEditing(true)}>Edit</button>}
-      <button type="button" className="bq-skip" disabled={busy} onClick={onOriginal}>Use my original</button>
+      <button type="button" className="bq-skip" disabled={busy} onClick={onOriginal}>{original}</button>
       <button type="button" className="bq-skip bq-skip-all" disabled={busy} onClick={onCancel}>Cancel</button>
     </footer>
   </section>;

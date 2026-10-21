@@ -210,7 +210,8 @@ export function answeredQuestionIds(kind: BriefKind, brief: string, context: { a
 export function questionLimit(kind: BriefKind, brief: string) {
   const words = normalise(brief).trim() ? normalise(brief).trim().split(" ").length : 0;
   if (kind !== "website") return words > 150 ? 2 : words > 60 ? 3 : 4;
-  return words > 150 ? 2 : words > 60 ? 3 : words > 20 ? 4 : 5;
+  // A detailed website brief (over 150 words) goes straight to building; the free analysis reads its own words instead.
+  return words > 150 ? 0 : words > 60 ? 2 : words > 20 ? 4 : 5;
 }
 
 /** Questions the brief leaves open, the ones that most change the design for this brief first. A detailed brief gets fewer. */

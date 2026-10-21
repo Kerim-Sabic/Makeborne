@@ -119,12 +119,13 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
           if (input.operation) {
             // A step that saved nothing usable is never charged (its provider cost is absorbed); a finished request
             // that needed no change is a completed request and stays chargeable.
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, result.finished ? "incomplete" : "failed", { ...detail, code: "BUILD_INCOMPLETE", message: "The builder stopped before a usable change was ready. Your previous saved version is safe.", version: artifact.current_version, changed: false, finished: false })));
+            // That includes a run that called finish but left no source that compiles; a finished request that needed no
+            // change never reaches here (it has a source and is saved as a completed, chargeable request).
+            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "failed", { ...detail, code: "BUILD_INCOMPLETE", message: `The builder ${result.finished ? "finished without a website that compiles" : "stopped before a usable change was ready"}. Nothing was charged. Your previous saved version is safe.`, version: artifact.current_version, changed: false, finished: false })));
             return;
           }
-          if (result.finished) await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
-          else await releaseRun(hold, measured(), "incomplete_nothing_saved", { ...detail, kind: "incomplete" });
-          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Nothing was charged. Your project is unchanged — try a more focused request or a higher effort level." });
+          await releaseRun(hold, measured(), "incomplete_nothing_saved", { ...detail, kind: "incomplete" });
+          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "The builder finished without a website that compiles. Nothing was charged. Your project is unchanged." :"The builder ran out of room before finishing. Nothing was charged. Your project is unchanged — try a more focused request or a higher effort level." });
           return;
         }
         if (input.operation) {

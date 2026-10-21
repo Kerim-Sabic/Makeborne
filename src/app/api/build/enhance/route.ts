@@ -55,7 +55,16 @@ export async function POST(request: Request) {
     if (active.has(user.id)) throw new RequestError("ENHANCE_BUSY", "Your brief is already being enhanced.", 409);
     active.add(user.id);
     try {
-      const hold = await reserveCredits(user.id, ENHANCER_CREDITS, `brief_enhance:${randomUUID()}`);
+      // The hold bounds the provider spend and names the call in the ledger; it is always returned, never charged.
+      // With no room for it (no credits, or the monthly limit reached) the reading does not run, and the reply says why.
+      const hold = await reserveCredits(user.id, ENHANCER_CREDITS, `brief_enhance:${randomUUID()}`).catch(error => {
+        if (error instanceof RequestError && (error.code === "INSUFFICIENT_CREDITS" || error.code === "CREDIT_USAGE_LIMIT"))
+          throw new RequestError(error.code, `Your brief wasn't read: reading it is free, but it briefly sets aside ${ENHANCER_CREDITS} credit (always returned), and ${error.code === "INSUFFICIENT_CREDITS" ? "your balance has no credits left" : "your monthly credit usage limit has no room left"}. A build needs credits too: ${error.code === "INSUFFICIENT_CREDITS" ? "add credits" : "review your limit in Billing"} to continue.`, 402);
+        throw error;
+      });
+      /** A failed release is logged, never shown as a failed reading: the database reclaims the hold unspent after its lifetime. */
+      const release = (reason: string) => releaseRun(hold, spend.customerCredits(rate), reason, detail())
+        .catch(error => console.error(JSON.stringify({ event: "credit_release_failed", reference: hold.reference, reason, error: error instanceof Error ? error.message.slice(0, 200) : "unknown" })));
       const rate = aiCostUsdPerCredit(), cap = Math.floor(ENHANCER_CREDITS * rate * 1e6);
       const deadline = Math.min(Date.now() + (maxDuration - 12) * 1000, hold.reservedAt + HOLD_LIFETIME_MS - SETTLEMENT_WINDOW_MS - CLOCK_SKEW_MS);
       const spend = new RunSpend({ run: hold.reference, providerCapMicrousd: cap, customerCapMicrousd: hold.exempt ? null : cap, gate: databaseGate(hold.userId), deadline, minCallMs: 15_000 });
@@ -68,11 +77,11 @@ export async function POST(request: Request) {
       catch (cause) { logAiStop(hold.reference, cause); }
       finally { clearTimeout(timeout); }
       if (!enhanced) {
-        await releaseRun(hold, spend.customerCredits(rate), "brief_enhance_unusable", detail()).catch(() => undefined);
+        await release("brief_enhance_unusable");
         throw new RequestError("ENHANCE_UNAVAILABLE", "Your brief couldn't be enhanced just now. Nothing was charged; the build uses your own words.", 503);
       }
       // Never charged: the measured provider cost is recorded as absorbed (like the tailored questions).
-      await releaseRun(hold, spend.customerCredits(rate), mode === "enhance" ? "brief_enhance" : "brief_analysis", detail());
+      await release(mode === "enhance" ? "brief_enhance" : "brief_analysis");
       // The hold reference names this call in the provider-call ledger (receipts and eval settlement); it carries no secret.
       return Response.json({ mode, enhanced, text: mode === "enhance" ? renderEnhancedBrief(enhanced) : renderBriefAnalysis(enhanced), charged: 0, providerMicrousd: spend.providerMicrousd, reference: hold.reference },
         { headers: { "Cache-Control": "no-store" } });

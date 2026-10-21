@@ -28,7 +28,8 @@ export type RunMeter = {
   sources: string[];
   /** The advisor brief this request came from ("Mira’s brief · revision 2"), when it carried one. */
   brief?: string;
-  /** Which brief the first build used, and the credits its enhancement was charged (settled separately, before the build). */
+  /** Which brief the first build used ("original" when it was not read: skipped, failed or not offered). Reading or
+   * enhancing the brief is free, so `credits` is always 0; it stays for receipts recorded before that. */
   enhanced?: { mode: "enhanced" | "edited" | "analysis" | "original"; credits: number };
   /** The concept the first build chose, and its runners-up (names). */
   concept?: { chosen: string; runnersUp: string[] };

@@ -29,9 +29,11 @@ check("questions the brief already answers are not asked", () => {
 check("long, detailed briefs get fewer questions", () => {
   const detailed = `Website for Ovenbird, a sourdough bakery on Fennel Street. ${"We bake country loaves, rye and buns overnight in a wood-fired oven and sell from a hatch. ".repeat(12)}`;
   assert.ok(detailed.split(/\s+/).length > 150);
-  assert.equal(briefQuestions("website", detailed).length, 2);
+  assert.equal(briefQuestions("website", detailed).length, 0, "a detailed website brief goes straight to building");
+  assert.equal(mergedQuestions("website", detailed, [{ id: "ordering", question: "Do people order ahead?", why: "x", topic: "Ordering", options: [{ value: "a", label: "Ahead" }, { value: "b", label: "Walk in" }] }]).length, 0, "tailored questions too");
+  assert.ok(briefQuestions("presentation", detailed).length > 0, "other kinds keep their questions");
   const medium = `Website for Ovenbird, a sourdough bakery. ${"We bake loaves overnight in a wood-fired oven. ".repeat(7)}`;
-  assert.equal(briefQuestions("website", medium).length, 3);
+  assert.equal(briefQuestions("website", medium).length, 2);
   assert.equal(briefQuestions("website", "Website for Ovenbird, a sourdough bakery in Leith that bakes rye, country loaves and cardamom buns overnight and sells them from a hatch on Fennel Street").length, 4);
 });
 

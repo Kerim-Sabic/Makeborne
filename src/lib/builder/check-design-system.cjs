@@ -210,7 +210,12 @@ check("design seed: deterministic, fitted to the industry and spread across proj
     assert.equal(loud.tone, "loud");
   }
   const block = designSeedBlock({ seed: "x", brief: "Climbing gym", images: false, brand: true });
+  // The tone line no longer names the ground (the seed's ground line does, since round 3), so the light-ground rule
+  // for quiet subjects is checked on the seeds themselves: never dark, and light, pale or tinted on most projects.
   assert.match(block, /- Tone: quiet: generous space/);
+  const quietGrounds = Array.from({ length: 200 }, (_, index) => designSeed({ seed: `ql-${index}`, brief: index % 2 ? "Employment solicitors in Manchester" : "A family dental clinic in Leeds", images: true }).ground);
+  assert.ok(!quietGrounds.includes("dark") && !quietGrounds.includes("colour flood"), "quiet subjects never get a dark or colour-flooded ground");
+  assert.ok(quietGrounds.filter(ground => /light|pale tint/.test(ground)).length >= 150, "quiet subjects get a light ground on at least three projects in four");
   assert.match(block, /- Motif: one quiet visual motif/);
   assert.match(block, /^<design_seed>[\s\S]*the brand kit[\s\S]*<\/design_seed>$/);
   assert.match(BUILDER_SYSTEM, /<design_seed>/);

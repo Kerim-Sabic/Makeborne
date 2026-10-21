@@ -92,6 +92,31 @@ function generatedImagesWithoutSize(source: string) {
   return offenders;
 }
 
+const digitsOf = (value: string) => value.replace(/\D/g, "");
+/** Phone numbers in the site's source that the client never gave: every tel: href (an unfilled token such as
+ * tel:{PHONE} included) and every phone-shaped number in the text. A number counts as given when its last
+ * seven digits match a number in the brief, so "+1 520 555 0187" and "(520) 555-0187" are the same phone. */
+export function inventedPhoneNumbers(source: string, brief: string): string[] {
+  const given = [...brief.matchAll(/\+?\(?\d[\d\s().-]{5,}\d/g)].map(match => digitsOf(match[0])).filter(digits => digits.length >= 7);
+  const known = (digits: string) => digits.length >= 7 && given.some(value => value.endsWith(digits.slice(-7)) || digits.endsWith(value.slice(-7)));
+  const out = new Set<string>();
+  for (const match of source.matchAll(/tel:([^"'`\s>]*)/g)) {
+    const value = match[1].startsWith("{") ? match[1] : match[1].replace(/\}+$/, "");
+    // An expression (`tel:${phone}`, "tel:" + phone) takes its number from a literal checked below; a literal must be a given number.
+    if (!value || value.startsWith("${")) continue;
+    if (!known(digitsOf(value))) out.add(`tel:${value}`.slice(0, 40));
+  }
+  // Phone-shaped: groups split by dashes, dots or brackets (or by spaces when the number starts with 0 or +, or a group of
+  // three or more digits leads), 9 to 13 digits, never part of a price, date, decimal or a run of SVG coordinates.
+  for (const match of source.matchAll(/(?<![\w£$€.,/:#-]|\d\s)(\+?\(?\d{2,5}\)?[ .-]\d{3,4}[ .-]\d{3,4})(?![ \w.,/%-]*\d)/g)) {
+    const raw = match[1], digits = digitsOf(raw);
+    const spacesOnly = !/[().-]/.test(raw) && !raw.startsWith("+");
+    if (spacesOnly && !/^0\d{2,4} /.test(raw)) continue;
+    if (digits.length >= 9 && digits.length <= 13 && !known(digits)) out.add(raw);
+  }
+  return [...out];
+}
+
 export function qualityProblems({ files, changed, routes = [], required }: QualityInput): string[] {
   const problems: string[] = [];
   const touched = [...changed].filter(path => files.has(path));
@@ -154,8 +179,14 @@ export function qualityProblems({ files, changed, routes = [], required }: Quali
     if (missing.length) problems.push(`The brief asks for sections this site doesn't have yet: ${missing.slice(0, 6).join("; ")}. Add each as a real section (a visible placeholder where the client gave no facts, never invented ones).`);
   }
 
+  // Phone numbers: never invented. Every tel: link and every phone-shaped number on the page must be one the client gave.
+  if (required?.brief !== undefined && touchedScripts.length) {
+    const invented = inventedPhoneNumbers(join(files, path => isScript(path) || path.endsWith(".html")), required.brief);
+    if (invented.length) problems.push(`Phone number${invented.length > 1 ? "s" : ""} ${invented.slice(0, 3).map(value => `"${value}"`).join(", ")} ${invented.length > 1 ? "are" : "is"} not in the client's brief: never invent a phone number. Use the number the client gave; if they gave none, remove the Call link and tel: href and show a plain-text [Your phone] placeholder in the contact details. Form hints describe the format in words ("include the area code"), never with a made-up number.`);
+  }
+
   // Generated images keep their returned size so nothing shifts.
-  const unsized = touchedScripts.flatMap(([, content]) => generatedImagesWithoutSize(content));
+  const unsized =touchedScripts.flatMap(([, content]) => generatedImagesWithoutSize(content));
   if (unsized.length) problems.push(`Give every generated image its width and height attributes (from the generate_image result): ${[...new Set(unsized)].slice(0, 4).join(", ")}.`);
   return problems;
 }

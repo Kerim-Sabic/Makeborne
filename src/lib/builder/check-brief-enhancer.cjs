@@ -66,7 +66,7 @@ const reply = {
     assert.deepEqual(requiredSections(edited).at(-1), { name: "Gift cards", anchor: "gifts" });
     assert.equal(requiredSections("free text without numbered sections").length, 0);
     const block = enhancedBriefBlock({ mode: "edited", text });
-    assert.match(block, /^<enhanced_brief source="edited">[\s\S]*The client's own words in "Brief:" above take priority[\s\S]*never invent it[\s\S]*<\/enhanced_brief>$/);
+    assert.match(block, /^<enhanced_brief source="edited">[\s\S]*The client's own words \(the project brief above and their message in <request>\) take priority[\s\S]*never invented values[\s\S]*<\/enhanced_brief>$/);
     assert.equal(BuildBriefSchema.safeParse({ mode: "enhanced", text: "x".repeat(6001) }).success, false, "the approved brief is bounded");
     assert.equal(designAnswersBlock({}), "");
     assert.match(designAnswersBlock({ theme: "dark", sections: ["hours"] }), /Theme: Dark; Sections: Opening hours/);
@@ -95,13 +95,7 @@ const reply = {
     assert.ok(prompt.length < 12_500, "the brief is truncated");
   });
 
-  await check("prompt help is free: the route holds ENHANCER_CREDITS only to bound spend, always releases, never settles a charge; detailed briefs are analysed, not rewritten", () => {
-    const route = fs.readFileSync(path.join(src, "app", "api", "build", "enhance", "route.ts"), "utf8");
-    const order = ["sameOrigin(request)", "builderEnabled()", "cloudContext(", "reviewer", "artifact.kind !== \"website\"", "requirePricedModel(ENHANCER_MODEL)", "requireProviderCapacity(", "reserveCredits(user.id, ENHANCER_CREDITS", "shouldEnhance(body.original ?? body.brief)", "enhanceBrief(", "if (!enhanced)", "releaseRun(", "releaseRun("];
-    let at = -1;
-    for (const marker of order) { const next = route.indexOf(marker, at + 1); assert.ok(next > at, marker + " out of order"); at = next; }
-    assert.doesNotMatch(route, /settleRun/, "never charged");
-    assert.match(route, /charged: 0/);
+  await check("prompt help is free: one-credit hold only (its refusals, release and no-charge are checked behaviourally in check-enhance-route.cjs); detailed briefs are analysed, not rewritten", () => {
     assert.equal(ENHANCER_CREDITS, 1);
     const client = fs.readFileSync(path.join(src, "components", "live-builder.tsx"), "utf8");
     assert.match(client, /const shownMaximum = ceiling;/, "the shown maximum is the build's own ceiling (prompt help is free)");
@@ -122,7 +116,7 @@ const reply = {
     assert.match(text, /Conflicts or gaps[\s\S]*Dark site and an airy feel → Light ground with one dark section/);
     assert.deepEqual(requiredSections(text).map(section => section.anchor), ["top", "bakes", "hours", "visit", "visit-2"]);
     const block = enhancedBriefBlock({ mode: "analysis", text });
-    assert.match(block, /^<brief_analysis>[\s\S]*is the authority: this analysis never adds to, rewords or overrides it[\s\S]*<\/brief_analysis>$/);
+    assert.match(block, /^<brief_analysis>[\s\S]*are the authority: this analysis never adds to, rewords or overrides it[\s\S]*<\/brief_analysis>$/);
     const prompt = analysisPrompt({ brief: "A detailed brief" });
     assert.match(prompt, /Do NOT rewrite, expand or improve it/); assert.match(prompt, /Never add a section for something the brief does not mention/);
   });
@@ -132,7 +126,8 @@ const reply = {
     const context = operationContext({ message: "m", brief: { mode: "enhanced", text: "t" }, design: { theme: "light" } }, "a".repeat(64));
     assert.deepEqual(context.brief, { mode: "enhanced", text: "t" }); assert.deepEqual(context.design, { theme: "light" });
     const route = fs.readFileSync(path.join(src, "app", "api", "build", "route.ts"), "utf8");
-    assert.match(route, /\.refine\(body => \(!body\.brief && !body\.design\) \|\| \(body\.mode === "build" && !body\.plan && \(!body\.operation \|\| "actionKey" in body\.operation\)\)\)/);
+    assert.match(route, /\.refine\(body => !body\.brief \|\| \(body\.mode === "build" && !body\.plan && \(!body\.operation \|\| "actionKey" in body\.operation\)\)\)/, "an enhanced brief starts a Create build only");
+    assert.match(route, /\.refine\(body => !body\.design \|\| \(body\.mode === "build" && \(!body\.operation \|\| "actionKey" in body\.operation\)\)\)/, "design answers start a Create or an approved plan's build");
     assert.match(route, /body\.brief \?\? operation\.originalBrief/); assert.match(route, /body\.design \?\? operation\.originalDesign/);
     assert.match(route, /`Brief: \$\{project\.brief \|\| "\(none\)"\}`[\s\S]*designAnswersBlock\(design\),\s*approvedBrief \? enhancedBriefBlock\(approvedBrief\) : ""/, "the client's own brief comes first");
   });
@@ -183,6 +178,38 @@ const reply = {
     assert.match(qualityProblems({ files: pill, changed: new Set(["src/styles.css"]) })[0], /Remove the fixed bottom bar or floating button \(\.book-pill\)/);
     assert.match(BUILDER_SYSTEM, /the quick-action row in the page flow directly below the first screen on phones, exactly this pattern/); assert.match(BUILDER_SYSTEM, /Nothing is fixed to the bottom of phone screens/);
     assert.match(BUILDER_SYSTEM, /--accent-on-dark/); assert.match(BUILDER_SYSTEM, /scrim \(at least 85% opaque/); assert.match(BUILDER_SYSTEM, /a project without src\/App\.tsx cannot be saved/);
+  });
+
+  await check("examples never carry facts: hours, prices, dates, counts and contact details stay bracketed placeholders", () => {
+    const examples = { ...reply, factsMissing: [
+      { fact: "Opening hours", placeholder: "[Opening hours]", example: "Tue–Sat 7:30–15:00" },
+      { fact: "Prices", placeholder: "[Price]", example: "Country loaf £6" },
+      { fact: "Hours in words", placeholder: "[Opening hours]", example: "Open Tuesday to Saturday mornings" },
+      { fact: "Reviews", placeholder: "[Reviews]", example: "Rated five stars by locals" },
+      { fact: "What we bake", placeholder: "[Bakes]", example: "Seasonal bakes and a few savoury things" },
+    ] };
+    const brief = parseEnhancedBrief(JSON.stringify(examples), source);
+    assert.deepEqual(brief.factsMissing.map(item => item.example), [null, null, null, null, "Seasonal bakes and a few savoury things"], "only descriptive examples survive");
+    const block = enhancedBriefBlock({ mode: "enhanced", text: renderEnhancedBrief(brief) });
+    assert.match(block, /clearly bracketed placeholders \(\[Opening hours\], \[Price\], \[Your phone\]\), never invented values/);
+    assert.match(block, /their message in <request>/, "the block points at where the client's words really are");
+    assert.match(enhancerPrompt({ brief: "bakery" }), /always get a clearly bracketed placeholder[\s\S]*example: null/);
+  });
+
+  await check("phone numbers are never invented: the finish gate rejects any tel: link or phone number the brief did not give", () => {
+    const { inventedPhoneNumbers } = require("./quality-gates.ts");
+    const given = "Saltbush Auto, phone (520) 555-0187, Tucson.";
+    assert.deepEqual(inventedPhoneNumbers('<a href="tel:+15205550187">Call (520) 555-0187</a>', given), [], "the client's number in any format passes");
+    assert.deepEqual(inventedPhoneNumbers('<p>Call (520) 555-0100</p>', given), ["(520) 555-0100"]);
+    assert.deepEqual(inventedPhoneNumbers('<a href="tel:{PHONE}">Call</a>', "A bakery with no phone given"), ["tel:{PHONE}"], "an unfilled token is reported");
+    assert.deepEqual(inventedPhoneNumbers('<a href={`tel:${PHONE}`}>Call</a><path d="M 350 120 280 90" /><p>£2,400.00 · 2025/26 · 12 Oct</p>', given), [], "expressions, SVG coordinates, prices and dates are not phone numbers");
+    assert.deepEqual(inventedPhoneNumbers("<p>0117 000 0000</p>", "A restaurant in Bristol"), ["0117 000 0000"]);
+    assert.doesNotMatch(QUICK_BAR_PATTERN, /tel:\+?\d/, "the quick-action pattern carries no example number");
+    assert.match(BUILDER_SYSTEM, /\{PHONE\} is the number the client gave, and with no number from the client there is no Call link/);
+    const site = new Map(Object.entries({ "src/App.tsx": 'export default function App() { return <main><a href="tel:+15550100100">Call</a></main>; }' }));
+    const problems = qualityProblems({ files: site, changed: new Set(["src/App.tsx"]), required: { brief: "A plumber in Leeds" } });
+    assert.ok(problems.some(problem => /^Phone number "tel:\+15550100100" is not in the client's brief/.test(problem)), problems.join("\n"));
+    assert.ok(!qualityProblems({ files: site, changed: new Set(["src/App.tsx"]) }).some(problem => /Phone number/.test(problem)), "edits without the original brief are not checked");
   });
 
   await check("body copy in a monospace face is reported; mono labels and data are not", () => {
