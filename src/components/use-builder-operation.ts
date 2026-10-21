@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { OperationSnapshotSchema, OperationStatusSchema, type OperationRequest, type OperationSnapshot, type OperationStatus } from "@/lib/builder/operation-contract";
 
 type Scope = { accountId: string; workspaceId: string; artifactId: string; channel?: "build" | "plan" };
-type Identity = { actionKey: string; id?: string };
+type Identity = { actionKey: string; id?: string; cancelPending?: true };
 const validId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const subscribeStorage = (notify: () => void) => {
   window.addEventListener("storage", notify); window.addEventListener("makeborne-operation-identity", notify);
@@ -16,7 +16,7 @@ const serverIdentity = () => null;
 function readIdentity(raw: string | null): Identity | null {
   try {
     const saved = JSON.parse(raw ?? "null");
-    return saved && validId(saved.actionKey) && (saved.id === undefined || validId(saved.id)) ? { actionKey: saved.actionKey, ...(saved.id ? { id: saved.id } : {}) } : null;
+    return saved && validId(saved.actionKey) && (saved.id === undefined || validId(saved.id)) ? { actionKey: saved.actionKey, ...(saved.id ? { id: saved.id } : {}), ...(saved.cancelPending === true ? { cancelPending: true } : {}) } : null;
   } catch { return null; }
 }
 
@@ -29,6 +29,9 @@ export function useBuilderOperation(scope: Scope) {
   const identity = useRef<Identity | null>(null);
   const authorizationKeys = useRef(new Map<string, string>());
   const refreshSequence = useRef(0);
+  const cancelFlight = useRef<string | null>(null);
+  const autoCancelAttempt = useRef<string | null>(null);
+  const latestSnapshot = useRef<{ key: string; value: OperationSnapshot } | null>(null);
   const ready = useSyncExternalStore(noSubscription, browserReady, serverReady);
   const storageSnapshot = useCallback(() => { try { return sessionStorage.getItem(key); } catch { return null; } }, [key]);
   const deviceIdentity = useSyncExternalStore(subscribeStorage, storageSnapshot, serverIdentity);
@@ -37,6 +40,7 @@ export function useBuilderOperation(scope: Scope) {
   const [checkingState, setCheckingState] = useState<{ key: string; value: boolean } | null>(null);
   const [noticeState, setNoticeState] = useState<{ key: string; value: string } | null>(null);
   const [recoveryState, setRecoveryState] = useState<{ key: string; value: OperationStatus["recovery"] } | null>(null);
+  const [cancellingKey, setCancellingKey] = useState<string | null>(null);
   const operation = operationState?.key === key ? operationState.value : null;
   const checking = checkingState?.key === key ? checkingState.value : false;
   const recoveryNotice = noticeState?.key === key ? noticeState.value : "";
@@ -53,8 +57,13 @@ export function useBuilderOperation(scope: Scope) {
     if (activeKey.current !== key) return null;
     const checked = OperationSnapshotSchema.safeParse(value);
     if (!checked.success) return null;
+    // A delayed initial SSE event must not undo a newer Stop acknowledgement.
+    const latest = latestSnapshot.current;
+    if (latest?.key === key && latest.value.id === checked.data.id && latest.value.revision > checked.data.revision) return latest.value;
+    latestSnapshot.current = { key, value: checked.data };
     setOperation(checked.data);
-    if (identity.current) retain({ ...identity.current, id: checked.data.id });
+    if (identity.current) retain({ actionKey: identity.current.actionKey, id: checked.data.id,
+      ...(identity.current.cancelPending && !checked.data.cancelRequested && checked.data.status !== "cancelled" ? { cancelPending: true } : {}) });
     return checked.data;
   }, [key, retain, setOperation]);
   const refresh = useCallback(async (): Promise<OperationStatus | null> => {
@@ -81,15 +90,19 @@ export function useBuilderOperation(scope: Scope) {
   }, [accountId, artifactId, key, observe, setChecking, setRecovery, setRecoveryNotice, workspaceId]);
   useEffect(() => {
     activeKey.current = key;
+    latestSnapshot.current = null;
     identity.current = null;
     authorizationKeys.current.clear();
     refreshSequence.current++;
     identity.current = readIdentity(storageSnapshot());
     if (identity.current) void refresh().catch(() => setRecoveryNotice("The previous request could not be checked. Check its status before submitting again."));
   }, [key, refresh, setRecoveryNotice, storageSnapshot]);
-  const begin = useCallback((): OperationRequest => {
+  /** A new explicit action. `repeat` reuses one approval's identity, so a repeated
+   * click replays the same server operation instead of creating a second one. */
+  const begin = useCallback((repeat?: { actionKey: string; stepKey: string }): OperationRequest => {
     refreshSequence.current++;
-    const value = { actionKey: crypto.randomUUID(), stepKey: crypto.randomUUID() };
+    latestSnapshot.current = null;
+    const value = repeat && validId(repeat.actionKey) && validId(repeat.stepKey) ? { actionKey: repeat.actionKey, stepKey: repeat.stepKey } : { actionKey: crypto.randomUUID(), stepKey: crypto.randomUUID() };
     retain({ actionKey: value.actionKey });
     setOperation(null); setRecoveryNotice(""); setChecking(false); setRecovery(null);
     return value;
@@ -116,5 +129,51 @@ export function useBuilderOperation(scope: Scope) {
     setRecovery(parsed.data.recovery);
     return parsed.data;
   }, [accountId, artifactId, observe, setRecovery, workspaceId]);
-  return { operation, recovery, checking, recoveryNotice, ready, hasPrevious, actionKey: readIdentity(deviceIdentity)?.actionKey ?? null, begin, observe, refresh, authorize, recover };
+  const cancel = useCallback(async () => {
+    const known = identity.current;
+    if (!known) throw new Error("The request has not been recorded yet. Try Stop again.");
+    if (cancelFlight.current === key) return;
+    cancelFlight.current = key; setCancellingKey(key);
+    // Keep only intent + identity across a reload. This grants no authority and
+    // lets the real server state settle even if the initial SSE event is late.
+    retain({ ...known, cancelPending: true });
+    try {
+      const response = await fetch("/api/build/operations", { method: "DELETE", signal: AbortSignal.timeout(10_000),
+        headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
+        body: JSON.stringify({ workspaceId, artifactId, ...(known.id ? { id: known.id, ...(operation?.id === known.id ? { expectedRevision: operation.revision } : {}) } : { actionKey: known.actionKey }) }) });
+      const value = await response.json().catch(() => null);
+      if (activeKey.current !== key || identity.current?.actionKey !== known.actionKey) return;
+      const parsed = OperationStatusSchema.safeParse(value);
+      if (!response.ok || !parsed.success) {
+        setRecoveryNotice("Stop has not been confirmed yet. Retry Stop or check the recorded result; closing this tab alone does not stop paid work.");
+        return;
+      }
+      const next = observe(parsed.data.operation);
+      if (!next) return;
+      retain({ actionKey: known.actionKey, id: next.id });
+      setRecovery(parsed.data.recovery);
+      setRecoveryNotice(next.cancelRequested
+        ? next.status === "running" ? "Stop requested. Waiting for the recorded charge and remaining credits to settle." : "Stopped. Check the recorded charge and any recoverable work."
+        : "This request already finished. Its recorded result and charge are unchanged.");
+    } catch {
+      if (activeKey.current === key) setRecoveryNotice("Stop has not been confirmed yet. Retry Stop or check the recorded result; closing this tab alone does not stop paid work.");
+    } finally {
+      if (cancelFlight.current === key) { cancelFlight.current = null; setCancellingKey(null); }
+    }
+  }, [accountId, artifactId, key, observe, operation, retain, setRecovery, setRecoveryNotice, workspaceId]);
+  const pendingCancel = readIdentity(deviceIdentity)?.cancelPending === true;
+  useEffect(() => {
+    if (!pendingCancel || !operation || operation.cancelRequested) return;
+    const attempt = `${key}:${operation.id}:${operation.revision}`;
+    if (autoCancelAttempt.current === attempt) return;
+    autoCancelAttempt.current = attempt;
+    void cancel();
+  }, [cancel, key, operation, pendingCancel]);
+  useEffect(() => {
+    if (!operation?.cancelRequested || operation.status !== "running") return;
+    const timer = window.setTimeout(() => void refresh().catch(() => setRecoveryNotice("Stopped work is still being checked. Use Check saved result & charge again.")), 1000);
+    return () => window.clearTimeout(timer);
+  }, [operation, refresh, setRecoveryNotice]);
+  return { operation, recovery, checking, recoveryNotice, ready, hasPrevious, actionKey: readIdentity(deviceIdentity)?.actionKey ?? null,
+    begin, observe, refresh, authorize, recover, cancel, cancelling: cancellingKey === key, pendingCancel };
 }

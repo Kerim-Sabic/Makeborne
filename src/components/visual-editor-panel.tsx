@@ -26,10 +26,12 @@ function toHex(value: string | undefined): { hex: string; clear: boolean } {
 const px = (value: string | undefined) => { const number = parseFloat(value ?? ""); return Number.isFinite(number) ? String(Math.round(number * 10) / 10) : ""; };
 
 export type Swatch = { label: string; value: string };
+/** The picked element an "Ask the builder" request refers to, so the request can be bound to it. */
+export type AskTarget = { path: string; line: number; label: string };
 
 export default function VisualEditorPanel({ picked, description, images, swatches = [], note, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
   picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; swatches?: Swatch[]; note: string; canUndo: boolean;
-  onEdit: (edit: VisualEdit) => void; onParent: () => void; onClose: () => void; onUndo: () => void; onAsk?: (text: string) => void;
+  onEdit: (edit: VisualEdit) => void; onParent: () => void; onClose: () => void; onUndo: () => void; onAsk?: (text: string, target?: AskTarget) => void;
 }) {
   return <aside className="ve" aria-label="Edit selected element">
     <header className="ve-top">
@@ -47,7 +49,7 @@ export default function VisualEditorPanel({ picked, description, images, swatche
 
 function Inspector({ picked, description, images, swatches, onEdit, onParent, onAsk }: {
   picked: PickedElement; description: ElementDescription; images: ProjectImage[]; swatches: Swatch[];
-  onEdit: (edit: VisualEdit) => void; onParent: () => void; onAsk?: (text: string) => void;
+  onEdit: (edit: VisualEdit) => void; onParent: () => void; onAsk?: (text: string, target?: AskTarget) => void;
 }) {
   const loc = picked.loc;
   const text = "value" in description.text ? description.text : null;
@@ -139,7 +141,7 @@ function Inspector({ picked, description, images, swatches, onEdit, onParent, on
     </section>
 
     <footer className="ve-actions">
-      {onAsk && <button type="button" className="ve-secondary" onClick={() => onAsk(`Change the <${description.tag}>${snippet ? ` "${snippet}"` : ""} in ${loc.path} (line ${description.line}): `)}>
+      {onAsk && <button type="button" className="ve-secondary" onClick={() => onAsk(`Change the <${description.tag}>${snippet ? ` "${snippet}"` : ""} in ${loc.path} (line ${description.line}): `, { path: loc.path, line: description.line, label: `the <${description.tag}>` })}>
         <MessageSquarePlus size={14} />Ask the builder</button>}
       {description.removable && (confirmRemove
         ? <span className="ve-confirm" role="group" aria-label="Confirm removal"><button type="button" className="ve-danger" onClick={() => onEdit({ kind: "remove", loc })}>Remove{picked.count > 1 ? ` all ${picked.count}` : ""}</button><button type="button" className="ve-secondary" onClick={() => setConfirmRemove(false)}>Keep</button></span>

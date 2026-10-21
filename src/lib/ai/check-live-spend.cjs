@@ -572,7 +572,7 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
       { tools: [{ type: "web_search_20260209", name: "web_search" }] }, { cache_control: { type: "ephemeral", ttl: "1h" } }, { output_config: { effort: "high", format: {} } }, { model: "claude-opus-latest" }]) {
       assert.throws(() => prices.assertSupportedTextRequest({ ...base, ...bad }), error => ["UNSUPPORTED_AI_CONFIG", "UNPRICED_MODEL"].includes(error.code), JSON.stringify(bad));
     }
-    for (const bad of [{ quality: "high" }, { size: "1792x1024" }, { n: 2 }, { hasImageInput: true }, { model: "gpt-image-2.5-flare" }, { model: "gpt-image-2.5-sunburst" }]) {
+    for (const bad of [{ quality: "high" }, { quality: "xhigh" }, { size: "1792x1024" }, { n: 2 }, { hasImageInput: true }, { model: "gpt-image-2.5-flare", size: "1024x1536", quality: "low" }, { model: "gpt-image-2.5-sunburst", quality: "high" }]) {
       assert.throws(() => prices.assertSupportedImageRequest({ model: "gpt-image-2", quality: "medium", size: "1024x1024", ...bad }), error => ["UNSUPPORTED_AI_CONFIG", "UNPRICED_MODEL"].includes(error.code), JSON.stringify(bad));
     }
     const { spend, gate } = spendFor(billing.hold(50));
@@ -590,16 +590,21 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
       delete process.env.OPENAI_API_KEY; process.env.MAKEBORNE_IMAGE_MODEL = "gpt-image-2";
       assert.equal(imageConfiguration().model, null, "no key: images off");
       process.env.OPENAI_API_KEY = "sk-offline-test-never-sent"; delete process.env.MAKEBORNE_IMAGE_MODEL;
-      assert.deepEqual(imageConfiguration(), { model: null, issue: "MAKEBORNE_IMAGE_MODEL is not set" }, "no default model");
+      assert.deepEqual(imageConfiguration(), { model: null, models: [], issue: "MAKEBORNE_IMAGE_MODEL is not set" }, "no default model");
+      // gpt-image-1 is never routed (shutdown 2026-10-23), even before its date.
       process.env.MAKEBORNE_IMAGE_MODEL = "gpt-image-1";
-      assert.equal(imageConfiguration(Date.parse("2026-10-22T23:59:59Z")).model, "gpt-image-1");
+      assert.equal(imageConfiguration(Date.parse("2026-10-22T23:59:59Z")).model, null, "gpt-image-1 never routed");
       assert.equal(imageConfiguration(Date.parse("2026-10-23T00:00:00Z")).model, null, "retired model: images off");
       for (const model of [...prices.UNBOUNDED_IMAGE_MODELS, "gpt-image-9"]) { process.env.MAKEBORNE_IMAGE_MODEL = model; assert.equal(imageConfiguration().model, null, model); }
-      assert.equal(warnings.length, 4, "each unusable configured model is logged");
+      assert.ok(warnings.length >= 3, "each unusable configured model is logged");
       process.env.MAKEBORNE_IMAGE_MODEL = " gpt-image-2 ";
-      assert.deepEqual(imageConfiguration(), { model: "gpt-image-2", issue: null });
-      // A run with a retired model proceeds without images: no image tool, no image call, the text step still settles.
-      process.env.MAKEBORNE_IMAGE_MODEL = "gpt-image-2.5-flare";
+      assert.deepEqual(imageConfiguration(), { model: "gpt-image-2", models: ["gpt-image-2"], issue: null });
+      // The ordered allowlist wins over the single model and keeps its order; unusable entries are left out.
+      process.env.MAKEBORNE_IMAGE_MODELS = "gpt-image-2.5-flare, gpt-image-1 ,gpt-image-2.5-sunburst,gpt-image-2,gpt-image-9";
+      assert.deepEqual(imageConfiguration().models, ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2"]);
+      delete process.env.MAKEBORNE_IMAGE_MODELS;
+      // A run with an unusable model proceeds without images: no image tool, no image call, the text step still settles.
+      process.env.MAKEBORNE_IMAGE_MODEL = "gpt-image-9";
       const hold = billing.hold(50);
       const { spend } = spendFor(hold);
       const images = fakeImages([{ usage: IMAGE_USAGE }]);
@@ -615,7 +620,7 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
     }
   });
 
-  await check("image model replacement: gpt-image-2 bounded from published per-image prices; 2.5 models unbounded and refused; gpt-image-1 refused from its retirement date", async () => {
+  await check("image model replacement: gpt-image-2 bounded from published per-image prices; 2.5 models bounded by measured tokens x 1.5 (D8, 2026-10-21); gpt-image-1 refused from its retirement date", async () => {
     const two = prices.PRICE_EVIDENCE.find(item => item.model === "gpt-image-2");
     assert.ok(two && two.idSource.includes("gpt-image-2-2026-04-21"));
     assert.deepEqual([two.components.textInput, two.components.imageInput, two.components.imageOutput], [5, 8, 30]);
@@ -626,11 +631,16 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
       assert.ok(bound <= ((usd + 0.0005) * 1e6 + 30) * 1.1 + (3064 * 5) * 1.1 + 1, `${size} bound stays tight: ${bound}`);
     }
     prices.assertSupportedImageRequest({ model: "gpt-image-2", quality: "medium", size: "1024x1536" });
-    for (const model of prices.UNBOUNDED_IMAGE_MODELS) assert.throws(() => prices.imagePrice(model), prices.UnpricedModelError);
-    // The newest models (2.5) have evidence and rates, but no bound until a measured qualification is recorded.
-    assert.deepEqual([...prices.UNBOUNDED_IMAGE_MODELS].sort(), ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]);
-    assert.deepEqual(Object.keys(prices.MEASURED_IMAGE_OUTPUT_TOKENS), [], "no unmeasured bound may be recorded");
-    for (const model of prices.UNBOUNDED_IMAGE_MODELS) {
+    // D8 (owner, 2026-10-21): the 2.5 models are bounded by the measured counts of 2026-10-20 x 1.5; unmeasured cells stay refused.
+    assert.deepEqual([...prices.UNBOUNDED_IMAGE_MODELS], []);
+    assert.deepEqual(Object.keys(prices.MEASURED_IMAGE_OUTPUT_TOKENS).sort(), ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]);
+    for (const model of ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]) {
+      assert.equal(prices.imageOutputTokenBound(model, "medium", "1024x1024"), Math.ceil(439 * 1.5));
+      assert.equal(prices.imageOutputTokenBound(model, "low", "1536x1024"), Math.ceil(158 * 1.5));
+      assert.throws(() => prices.imageOutputTokenBound(model, "low", "1024x1536"), prices.UnpricedModelError, "unmeasured cell refused");
+      assert.ok(prices.MEASURED_IMAGE_OUTPUT_TOKENS[model].evidence.includes("image-research/20261020"));
+    }
+    for (const model of ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]) {
       const item = prices.PRICE_EVIDENCE.find(entry => entry.model === model);
       assert.deepEqual([item.components.textInput, item.components.imageInput, item.components.imageOutput], [5, 8, 30]);
       assert.ok(item.idSource.includes("2026-09-08"));

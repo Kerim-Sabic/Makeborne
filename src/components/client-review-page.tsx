@@ -10,6 +10,7 @@ import ClientReviewBeacon, { type ViewLocation } from "./client-review-beacon";
 import { ArtifactContentSchema, StyleProfileSchema, type ArtifactContent, type StyleProfile } from "@/lib/domain";
 import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
 import { anchorLabel } from "@/lib/client-review/feedback";
+import { discardReviewDraft, hasReviewDraftText, readReviewDraft, reviewDraftScope, saveReviewDraft } from "@/lib/client-review/unsent-feedback";
 import { reviewDateLabel as dateLabel, reviewTimeLabel as timeLabel } from "@/lib/client-review/date-format";
 import type { ActiveReview, ReviewAnchor, ReviewComment, ReviewDecision, ReviewPayload } from "@/lib/client-review/contracts";
 import "@/app/account-preview.css";
@@ -28,6 +29,8 @@ function readIdentity(): Identity {
 function saveIdentity(identity: Identity) {
   try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity)); } catch { /* optional convenience */ }
 }
+
+function browserStorage() { try { return window.localStorage; } catch { return null; } }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store" });
@@ -76,6 +79,35 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
   const [location, setLocation] = useState(initial.kind === "presentation" ? "slide:0" : initial.kind === "book" ? "page:0" : "page");
   const composer = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { queueMicrotask(() => { const stored = readIdentity(); setIdentity(stored); setIdentityReady(!!stored.name.trim()); }); }, []);
+  // Unsent feedback for this link and version survives closing the page; it is only ever put back
+  // into the fields, never posted or decided (src/lib/client-review/unsent-feedback.ts).
+  const draftScope = useMemo(() => reviewDraftScope(token, initial.version), [token, initial.version]);
+  const [draftRestoredAt, setDraftRestoredAt] = useState<number | null>(null);
+  const [draftReadFor, setDraftReadFor] = useState<string | null>(null);
+  useEffect(() => {
+    queueMicrotask(() => {
+      const storage = browserStorage();
+      const draft = storage && readReviewDraft(storage, draftScope, Date.now(), Date.parse(initial.expiresAt));
+      if (draft) {
+        setBody(draft.fields.comment); setPin(draft.fields.pin);
+        if (draft.fields.decision) { setDeciding(draft.fields.decision); setNote(draft.fields.note); }
+        setDraftRestoredAt(draft.savedAt);
+      }
+      setDraftReadFor(draftScope);
+    });
+  }, [draftScope, initial.expiresAt]);
+  useEffect(() => {
+    // Nothing is written until this scope's stored draft has been read, so it is never overwritten by empty fields.
+    if (draftReadFor !== draftScope) return;
+    const storage = browserStorage();
+    if (storage) saveReviewDraft(storage, draftScope, { comment: body, pin, decision: deciding, note }, Date.now());
+  }, [draftReadFor, draftScope, body, pin, deciding, note]);
+  const draftShown = draftRestoredAt !== null && hasReviewDraftText({ comment: body, note: deciding ? note : "" });
+  function discardDraft() {
+    const storage = browserStorage();
+    if (storage) discardReviewDraft(storage, draftScope);
+    setBody(""); setPin(null); setNote(""); setDeciding(null); setDraftRestoredAt(null);
+  }
   const parsed = useMemo(() => {
     if (initial.mode !== "content") return null;
     const content = ArtifactContentSchema.safeParse(initial.content);
@@ -119,7 +151,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     try {
       const result = await post<{ comment: ReviewComment }>(`/api/review/${token}/comments`, { version: initial.version, name: identity.name, email: identity.email, body, anchor: anchor() });
       saveIdentity(identity); setEditingIdentity(false); setIdentityReady(true);
-      setComments(current => [...current, result.comment]); setBody(""); setPin(null); setActive(result.comment.id);
+      setComments(current => [...current, result.comment]); setBody(""); setPin(null); setActive(result.comment.id); setDraftRestoredAt(null);
       setNotice("Comment added. Thank you!");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your comment didn’t go through."); }
     finally { setBusy(false); }
@@ -131,7 +163,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     try {
       const result = await post<{ decision: ReviewDecision; comment: ReviewComment }>(`/api/review/${token}/decision`, { version: initial.version, name: identity.name, email: identity.email, decision: value, note });
       saveIdentity(identity); setEditingIdentity(false); setIdentityReady(true);
-      setDecision(result.decision); setComments(current => [...current, result.comment]); setDeciding(null); setNote("");
+      setDecision(result.decision); setComments(current => [...current, result.comment]); setDeciding(null); setNote(""); setDraftRestoredAt(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your decision didn’t go through."); }
     finally { setBusy(false); }
   }
@@ -185,6 +217,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
         </div>
         <form className="cr-composer" onSubmit={send}>
           <h2><MessageSquare size={15} /> Add a comment</h2>
+          {draftShown && <p className="cr-draft-restored" role="status">Your unsent feedback from {timeLabel(new Date(draftRestoredAt!).toISOString())} is back. Nothing has been sent. <button type="button" onClick={discardDraft}>Discard</button></p>}
           {needsIdentity ? <IdentityFields identity={identity} onChange={setIdentity} /> : <p className="cr-as">Commenting as <strong>{identity.name}</strong> <button type="button" onClick={() => setEditingIdentity(true)}>Change</button></p>}
           <div className="cr-anchor-row">
             {pin ? <span className="cr-anchor-chip"><Crosshair size={13} /> {pin.label || "Pinned spot"}<button type="button" aria-label="Remove pin" onClick={() => setPin(null)}><X size={12} /></button></span>
@@ -193,7 +226,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
           </div>
           <label className="cr-sr" htmlFor="cr-comment">Comment</label>
           <textarea id="cr-comment" ref={composer} rows={4} maxLength={2000} value={body} onChange={event => setBody(event.target.value)} placeholder={pin ? "What should change here?" : "Share your thoughts on the whole piece…"} />
-          <div className="cr-composer-foot"><small>{body.length}/2000</small><button type="submit" className="button primary small" disabled={busy || !body.trim()}>{busy ? "Posting…" : "Post comment"}</button></div>
+          <div className="cr-composer-foot"><small>{body.trim() ? "Saved on this device until you post · " : ""}{body.length}/2000</small><button type="submit" className="button primary small" disabled={busy || !body.trim()}>{busy ? "Posting…" : "Post comment"}</button></div>
           {error && <p className="cr-error" role="alert">{error}</p>}
           {notice && <p className="cr-notice" role="status">{notice}</p>}
         </form>

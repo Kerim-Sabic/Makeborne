@@ -83,6 +83,8 @@
 .cloud-workbench-preview .ap-stage.book .ap-document { max-width: 720px; margin: auto; }
 .cloud-workbench-preview .ap-note { margin: 0; padding: 9px 14px; font-size:12px; background: #fff; border-top: 1px solid #e9e7ed; }
 .cloud-workbench-format { margin: 0 0 12px; padding: 10px 14px; border: 1px solid #e3dfe8; border-radius: 10px; background: #fff; color: #4a4452; font-size: 12px; line-height: 1.6; }
+.cloud-workbench-format-link { padding: 0; border: 0; background: none; color: var(--blue, #2f5bd3); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.cloud-workbench-format-link:focus-visible { outline: 2px solid var(--blue, #2f5bd3); outline-offset: 2px; border-radius: 3px; }
 .cloud-workbench-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding: 48px 24px; border: 1px solid #eae7ee; border-radius: 10px; background: #fff; text-align: center; }
 .cloud-workbench-empty-icon { display: grid; place-items: center; width: 66px; height: 66px; border: 1px solid #e9e3ef; border-radius: 19px; background: #f9f7fc; color:var(--text-muted); }
 .cloud-workbench-empty h3 { margin: 22px 0 8px; color: #39333e; font-family: var(--font-inter), Arial, sans-serif; font-size: 20px; font-weight: 500; letter-spacing: -.04em; }
@@ -130,3 +132,6 @@
 .private-website-preview:fullscreen .private-preview-canvas{height:calc(100vh - 100px)}
 .private-preview-loading{position:absolute;z-index:1;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;padding:10px 16px;border:1px solid #e5e7ee;border-radius:10px;background:#fff;font-size:12px;color:#606579;white-space:nowrap}
 @media(max-width:600px){.private-preview-toolbar{gap:6px;padding:8px}.private-preview-canvas{padding:6px;height:560px}.private-preview-label{font-size:12px}}
+.cloud-version-live, .cloud-version-current { display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; vertical-align:middle; }
+.cloud-version-live { background:#e6f4ea; color:#1e6b34; }
+.cloud-version-current { background:#eef0f8; color:#3b4470; }

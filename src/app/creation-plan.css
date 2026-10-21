@@ -62,7 +62,8 @@
 /* Optional source material sits beside the prompt, with native keyboard controls. */
 .studio-shell .creation-modal .prompt-source-intro { margin:0 0 16px; color:#777080; font-size:12px; line-height:1.7; }
 .studio-shell .creation-modal .prompt-source > label { margin:0 0 8px; font-size:12px; }
-.studio-shell .creation-modal .prompt-source > textarea { width:100%; box-sizing:border-box; min-height:150px; resize:vertical; padding:15px; border:1px solid #dfd8e8; border-radius:12px; background:#fcfbfe; font:inherit; font-size:13px; line-height:1.7; color:#39333f; }
+.studio-shell .creation-modal .prompt-source > textarea { width:100%; box-sizing:border-box; min-height:150px; resize:vertical; padding:15px; border:1px solid #dfd8e8; border-radius:12px; background:#fcfbfe; font:inherit; font-size:var(--type-input); line-height:1.7; color:#39333f; }
+@media (max-width:760px) { .studio-shell .creation-modal .prompt-source > textarea { font-size:var(--type-input-touch); } }
 .prompt-source > textarea:focus-visible { outline:2px solid #a28abf; outline-offset:2px; }
 .prompt-source-meta { display:flex; justify-content:space-between; gap:12px; margin:8px 0 21px; color:var(--text-muted); font-size:11px; }
 .prompt-source-meta > span:last-child { white-space:nowrap; font-variant-numeric:tabular-nums; }

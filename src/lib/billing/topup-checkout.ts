@@ -13,6 +13,9 @@ const rowSchema = z.object({ id: z.string().uuid(), user_id: z.string().uuid(), 
   state: z.enum(["awaiting_payment", "funded", "held", "reversed"]),
   checkout_url: z.string().nullable(), checkout_request: z.record(z.string(), z.unknown()).nullable() });
 const planSchema = z.object({ id: z.string(), company: z.object({ id: z.string() }), currency: z.literal("usd"),
+  // Fulfillment verifies USD principal/refunds. A USD plan alone can still offer
+  // adaptive local-currency checkout, which has not been qualified for delivery.
+  adaptive_pricing_enabled: z.literal(false),
   plan_type: z.literal("one_time"), initial_price: z.union([z.number(), z.string()]), renewal_price: z.union([z.number(), z.string()]),
   trial_period_days: z.number().nullable() });
 const checkoutSchema = z.object({ id: z.string().regex(/^ch_[A-Za-z0-9]+$/), company_id: z.string(), plan: z.object({ id: z.string() }), purchase_url: z.string() });
@@ -22,7 +25,6 @@ export async function checkoutForTopup(purchase: unknown) {
   const row = rowSchema.parse(purchase), config = billingConfig(), db = billingDatabase();
   if (row.merchant_id !== config.companyId) throw new RequestError("WRONG_MERCHANT", "This purchase could not be verified.", 403);
   if (row.state !== "awaiting_payment") throw new RequestError("CREDIT_PACK_CHECKOUT_RESOLVED", "This credit pack purchase is already paid or under review. Check your credits or contact support before paying again.", 409);
-  if (row.checkout_url) return { url: checkoutUrl(row.checkout_url), purchaseId: row.id, resumed: true };
   const plan = planSchema.safeParse(await whopGet(`/plans/${row.plan_id}`, { attempts: 2 }));
   let verified = false;
   if (plan.success) {
@@ -32,6 +34,7 @@ export async function checkoutForTopup(purchase: unknown) {
   }
   if (!verified)
     throw new RequestError("CREDIT_PACK_PRICE_UNVERIFIED", "Credit pack pricing could not be verified. No checkout was opened.", 503);
+  if (row.checkout_url) return { url: checkoutUrl(row.checkout_url), purchaseId: row.id, resumed: true };
   const body = row.checkout_request ?? { plan_id: row.plan_id, mode: "payment",
     metadata: { makeborne_topup_order_id: row.id, makeborne_terms_version: BILLING_TERMS_VERSION },
     redirect_url: config.sandbox ? "https://sandbox.whop.com/" : `https://makeborne.com/billing?topup=${row.id}` };

@@ -45,6 +45,9 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
   // Creators: 10 or 25 per search (each one is a web search and a profile read).
   const creatorCount = count === 10 ? 10 : 25;
   const size = mode === "list" ? Math.min(items.length || 1, LEAD_FINDER.maxListItems) : mode === "creators" ? creatorCount : count;
+  // A list request reserves for the smallest allowed count that covers the list; the shown maximum is that hold.
+  const listCount = LEAD_FINDER.counts.find(value => value >= size) ?? 40;
+  const holdSize = mode === "list" ? listCount : size;
   const discoveryBlocked = !LEAD_FINDER.discoveryAvailable && (mode === "creators" || (mode === "local" && Boolean(like)));
   const ready = !discoveryBlocked && (mode === "local" ? niche.trim().length >= 3 && place.trim().length >= 2 : mode === "creators" ? niche.trim().length >= 3 : items.length > 0 && items.length <= LEAD_FINDER.maxListItems);
   const busy = Boolean(run && run.stage !== "done") || Boolean(adding);
@@ -58,7 +61,7 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
     const similar = like ? { like, exclude } : {};
     const body = mode === "local" ? { mode, niche: niche.trim(), place: place.trim(), offer: offer.trim(), count, ...similar }
       : mode === "creators" ? { mode, niche: niche.trim(), platform, place: place.trim(), audience, offer: offer.trim(), count: creatorCount, ...similar }
-      : { mode, items: items.slice(0, LEAD_FINDER.maxListItems), offer: offer.trim(), count: 40 };
+      : { mode, items: items.slice(0, LEAD_FINDER.maxListItems), offer: offer.trim(), count: listCount };
     let found: Result | null = null;
     try {
       const response = await fetch(`/api/cloud/workspaces/${workspaceId}/leads/find`, { method: "POST", headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId }, body: JSON.stringify(body), signal: controller.current.signal });
@@ -176,7 +179,7 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
         <div className="lf-foot">
           {mode !== "list" && <div className="lf-count" role="radiogroup" aria-label="How many leads">{LEAD_FINDER.counts.filter(value => mode === "local" || value < 40).map(value =>
             <button type="button" role="radio" key={value} aria-checked={size === value} disabled={busy} onClick={() => setCount(value)}>{value}</button>)}<span>leads</span></div>}
-          {!discoveryBlocked && <p className="lf-price">About <strong>{leadFinderTypicalCredits(size, mode)} credits</strong>, at most {leadFinderMaxCredits(size, mode)}. Delivered leads cost 0.2 credits each, plus confirmed AI ranking. The combined total rounds up once to a whole credit. No new leads means no charge; adding them to clients is free.</p>}
+          {!discoveryBlocked && <p className="lf-price">About <strong>{leadFinderTypicalCredits(size, mode)} credits</strong>, at most {leadFinderMaxCredits(holdSize, mode)}. Delivered leads cost 0.2 credits each, plus confirmed AI ranking. The combined total rounds up once to a whole credit. No new leads means no charge; adding them to clients is free.</p>}
           <button type="submit" className="button primary" disabled={!ready || busy}>{busy ? <Loader2 size={16} className="ac-spin" /> : <Search size={16} />}Find leads</button>
         </div>
         {run && <Progress run={run} mode={mode} onCancel={() => { controller.current?.abort(); setRun(null); }} />}

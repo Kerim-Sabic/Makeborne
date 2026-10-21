@@ -13,8 +13,27 @@ export function parseGrantedScopes(raw: string) {
 export type GoogleMailMode = "full" | "send_only";
 /** Unset preserves the existing requested scopes. Unknown settings fail closed to send-only. */
 export const googleMailMode = (): GoogleMailMode => !process.env.MAKEBORNE_GOOGLE_MAIL_MODE || process.env.MAKEBORNE_GOOGLE_MAIL_MODE === "full" ? "full" : "send_only";
+/** Microsoft Graph delegated permissions. Sending needs only Mail.Send (POST /me/sendMail). Reply
+ * tracking reads the conversation, and the full-mode send creates and edits a draft to learn its
+ * conversation and Internet Message-ID, so full mode needs Mail.ReadWrite. */
+export const MICROSOFT_SEND_SCOPE = "Mail.Send";
+export const MICROSOFT_READWRITE_SCOPE = "Mail.ReadWrite";
+export type MicrosoftMailMode = GoogleMailMode;
+/** Same contract as Google: unset preserves the existing requested scopes; unknown settings fail closed to send-only. */
+export const microsoftMailMode = (): MicrosoftMailMode => !process.env.MAKEBORNE_MICROSOFT_MAIL_MODE || process.env.MAKEBORNE_MICROSOFT_MAIL_MODE === "full" ? "full" : "send_only";
+/** Microsoft returns Graph grants bare ("Mail.Send") or resource-qualified ("https://graph.microsoft.com/Mail.Send"). */
+export const hasMicrosoftScope = (scopes: readonly string[], scope: string) =>
+  scopes.some(granted => granted.replace(/^https:\/\/graph\.microsoft\.com\//i, "").toLowerCase() === scope.toLowerCase());
 export function mailCapabilities(account: { provider: MailProvider; granted_scopes?: readonly string[] | null }) {
-  if (account.provider === "microsoft") return { canSend: true, canTrackReplies: true, canAutomate: true };
+  if (account.provider === "microsoft") {
+    const scopes = account.granted_scopes ?? [];
+    // Outlook connections made before Microsoft grants were recorded (empty) were always asked for
+    // Mail.Send and Mail.ReadWrite in one consent; their next token refresh records the real grant.
+    const legacy = scopes.length === 0;
+    const canSend = legacy || hasMicrosoftScope(scopes, MICROSOFT_SEND_SCOPE);
+    const canTrackReplies = canSend && microsoftMailMode() === "full" && (legacy || hasMicrosoftScope(scopes, MICROSOFT_READWRITE_SCOPE));
+    return { canSend, canTrackReplies, canAutomate: canTrackReplies };
+  }
   const canSend = account.granted_scopes?.includes(GMAIL_SEND_SCOPE) === true;
   const canTrackReplies = canSend && googleMailMode() === "full" && account.granted_scopes?.includes(GMAIL_READ_SCOPE) === true;
   return { canSend, canTrackReplies, canAutomate: canTrackReplies };

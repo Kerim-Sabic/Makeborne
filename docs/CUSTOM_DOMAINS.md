@@ -46,7 +46,25 @@ docker exec -i supabase_db_makeborne-release-auth psql -U postgres -d postgres -
 - **Serving**: after resolution the request takes the same path as a slug address: documents, stored files, `robots.txt`, `/_mb/enquiries` with the resolved slug, 405 for other methods, and the same CSP and headers. The HTTP → HTTPS 308 redirect still runs before resolution. There are two deliberate differences:
   - Responses on a custom host send `Strict-Transport-Security: max-age=31536000` without `includeSubDomains`, because the custom hostname may be the customer's registrable apex.
   - The file cache key for a custom host also binds the resolved slug, so moving a hostname to another site never serves the old site's cached files.
+  - A custom host has no `sitemap.xml` (404) and its `robots.txt` is `User-agent: *` / `Allow: /` with no `Sitemap:` line. See [Preferred address](#preferred-address-canonical-redirects-and-sitemap).
 - **Checks**: `infra/customer-sites/check-custom-hosts.mjs` covers the validator, classification in each namespace, mocked-fetch resolution, positive and negative caching, cache-entry validation, 404 and 503 handling, the redirect, enquiries and Origin checks, staging and local isolation, and a real local workerd Cache API run. `check-namespace.mjs` covers the existing namespace rules. `node scripts/run-checks.mjs` runs both.
+
+## Preferred address: canonical, redirects and sitemap
+
+A site with an active custom domain has two addresses: `https://<slug>.makeborne.site` and `https://www.example.com`. The policy is explicit and the same in the Worker, the domains panel and this document:
+
+| Question | Answer today | Where it is decided |
+| --- | --- | --- |
+| Which address is canonical? | The **Makeborne address**. Every published page carries `<link rel="canonical">` and `og:url` for `<slug>.makeborne.site`, written when the page is published. Connecting a domain does not republish or rewrite pages. | `src/lib/projects/publication-output.ts` → `src/lib/hosting/snapshot.ts` (trusted publication), `src/lib/hosting/render.ts` (legacy publish), at publish time |
+| Does either address redirect? | **No.** Both answer `200` with byte-identical documents and files. The only redirect is HTTP → HTTPS (`308`), which keeps the requested host. | `infra/customer-sites/_worker.js` (`serveSite`, `serveCustomHost`) |
+| Which host lists a sitemap? | **Only the Makeborne address.** A sitemap should list canonical URLs only, so the custom host answers `404` for `/sitemap.xml`, and its `robots.txt` allows crawling (so search engines read the canonical tag) without a `Sitemap:` line. Pages on both hosts keep the same per-path indexing rule (listed paths indexable, everything else `noindex`). | `infra/customer-sites/_worker.js`, `infra/customer-sites/sitemap.js` |
+| What does the owner see? | The domains panel states: both addresses show the same site, neither redirects, the Makeborne address stays the main address for search engines and is the only one with a sitemap. | `src/components/website-domains.tsx` |
+
+Tests: `infra/customer-sites/check-sitemap.mjs` (policy groups "preferred address: …": sitemap and robots per host, identical bytes, no redirect, stored canonical served unchanged, HTTPS upgrade keeps the host) and `infra/customer-sites/check-custom-hosts.mjs` (the same under a real local workerd). `src/lib/hosting/check-custom-domains.cjs` asserts the panel copy.
+
+Making the custom domain the primary address is a separate, optional product change that needs an owner decision and staging qualification: choose one primary hostname per site (a site may have up to 5), publish pages whose canonical/`og:url` name it, serve the sitemap there, and `301` the Makeborne address (and any other custom hostnames) to it while the domain is active, falling back automatically when the domain fails or is removed. None of that exists yet; do not describe the custom domain as the primary or canonical address until it does.
+
+Until custom domains are switched on (see below), this policy only changes behaviour for hosts that can never reach the Worker in production, because there is no catch-all route. **Needs staging qualification** with one QA hostname before enabling: `curl -sI https://<qa-host>/sitemap.xml` → `404`, `curl -s https://<qa-host>/robots.txt` → no `Sitemap:` line, and the slug address still serves its sitemap.
 
 ## Before enabling (owner / operator)
 
@@ -63,7 +81,8 @@ Work through these steps in order. None of them has been done.
    - `CLOUDFLARE_SAAS_API_TOKEN`: an API token scoped to **that zone only**, with the single permission **Zone → SSL and Certificates → Edit**. That permission covers creating, reading and deleting custom hostnames. Do not use a global API key or an account-wide token. Store it only as an encrypted Vercel variable for the environment that needs it, and never put it in the repository or in Worker variables.
    - `MAKEBORNE_CUSTOM_DOMAIN_TARGET`: the CNAME target from step 2, for example `customers.makeborne.site`.
 5. **Customer DNS instructions shown by the app.**
-   - A subdomain such as `www` uses `CNAME www → customers.makeborne.site`.
+   - A subdomain such as `www` uses `CNAME www → customers.makeborne.site`. A nested hostname shows its whole zone-relative name and the exact full name (`shop.eu.example.com` → name `shop.eu` in the zone `example.com`, full name `shop.eu.example.com`); both can be copied. The zone is the registrable domain as far as the app can tell, so a customer with a delegated zone (for example `eu.example.com`) uses the full name.
+   - Certificate states are shown as they are: `validation_timed_out` and the other `*_timed_out` states, `expired`/`pending_expiration`, removed certificates and unrecognised values stop the progress spinner and polling and say what to do. "Check now" only re-reads the status; the app never restarts validation or recreates a hostname on its own. A provider error while checking returns 503 and leaves the stored row unchanged.
    - An apex domain needs a DNS provider that supports CNAME flattening or ALIAS records. Recommend `www` plus a registrar redirect from the apex.
    - Customers also add the ownership and certificate-validation records stored in `verification`. Cloudflare activates the hostname and issues the certificate only after those records validate.
 
@@ -108,6 +127,6 @@ curl --resolve shop.example.test:8787:127.0.0.1 http://shop.example.test:8787/
 
 ## Known limitations / follow-ups
 
-- The slug address keeps serving next to the custom domain. A canonical redirect, or a `rel=canonical` from `<slug>.makeborne.site` to the active custom domain, is not implemented yet.
+- The slug address keeps serving next to the custom domain and stays canonical (see [Preferred address](#preferred-address-canonical-redirects-and-sitemap)). A primary-custom-domain option (canonical on the custom host plus a `301` from the slug address) is not implemented.
 - Activation and removal propagate through the edge cache within 60 s (found) and 30 s (unknown).
 - The resolver ignores owner eligibility on purpose. The site readers (`makeborne_read_hosted_site_v3` and the file reader) still refuse ineligible owners, so a custom host for such a site returns 404.

@@ -1,3 +1,9 @@
+# Current window — tested app update, 21 October 2026
+
+Use docs/release-review/tested-app-release-20261021.md for the owner-approved narrowed scope and current94→105 inventory. The historical20-migration/307881c checklist below is archived context, not an executable target. Backups, exact targeting, advisor comparison, maintenance/code-first ordering, disabled unqualified features, smoke and recovery gates still apply. No blanket commercial-launch approval is inferred.
+
+---
+
 # Production release checklist
 
 Prepared 2026-10-13 for candidate `docs/release-review/candidate-inventory.json`.
@@ -105,7 +111,7 @@ select version from supabase_migrations.schema_migrations order by version; -- e
 | `WHOP_CREATION_ENABLED` | `false` until D1 is resolved and the founding/standard offer is approved |
 | `MAKEBORNE_BILLING_RECONCILE_ENABLED`, `CRON_SECRET` | `false` until section G; secret ≥ 32 characters |
 | `ANTHROPIC_API_KEY`, `MAKEBORNE_BUILDER_MODEL` | priced model only (`prices.ts`), else `AI_UNAVAILABLE` |
-| `OPENAI_API_KEY`, `MAKEBORNE_IMAGE_MODEL` | unset (images off), or `gpt-image-2` after D8 qualification |
+| `OPENAI_API_KEY`, `MAKEBORNE_IMAGE_MODELS` (or `MAKEBORNE_IMAGE_MODEL`) | unset (images off), or `gpt-image-2.5-flare,gpt-image-2.5-sunburst,gpt-image-2` (D8 changed 2026-10-21) before gpt-image-1 shuts down on 2026-10-23 |
 | `MAKEBORNE_FORMS_SIGNING_SECRET` | random ≥ 32 characters; same value as the Worker's `FORMS_SIGNING_SECRET` |
 | `NEXT_PUBLIC_MAKEBORNE_SITE_HOSTING`, `..._SITE_URL_TEMPLATE`, `..._SITE_DOMAIN_VERIFIED` | unset (existing addresses), or all three per `HOSTING_DOMAIN.md` after section F |
 | `MAKEBORNE_HOSTING_NAMESPACE`, `MAKEBORNE_STAGING_QA_WORKSPACE_ID` | `production`; QA workspace unset |

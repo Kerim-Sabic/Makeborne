@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ArtifactVersion } from "../domain";
 import type { EffortLevel } from "../routing/effort";
 import { holdIsActive, releaseRun, settleRun, type CreditHold } from "../credits/server";
-import { finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
+import { watchOperationCancellation, finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
 import type { RunSpend } from "../ai/run-spend";
 import type { AnthropicLike } from "../ai/anthropic-call";
 import type { ImageClientLike } from "../ai/image-call";
@@ -17,6 +17,7 @@ import { wordCount } from "../documents/book-markup";
 import { runDocumentBuilder, type DocBuilderEvent, type DocBuilderRun } from "./docs-agent";
 import { documentStyleDirection } from "./docs-style";
 import { documentBrandBlock, type BrandKit } from "../brand/kit";
+import { builtTitle } from "../projects/project-title";
 
 export type DocumentBuildInput = {
   client: SupabaseClient;
@@ -76,6 +77,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
   const context = [documentContext(input, editor, fresh), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n");
   const encoder = new TextEncoder();
   const controller = new AbortController();
+  const stopWatching = watchOperationCancellation(input.operation, spend, controller);
   const timeout = setTimeout(() => controller.abort(), (input.maxDuration - 20) * 1000);
   const stream = new ReadableStream<Uint8Array>({
     async start(output) {
@@ -112,7 +114,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
           const doc = editor.doc;
           const summary = result.summary || (result.finished ? `Updated the ${artifact.kind}.` : "Saved the progress made so far. Continue to finish the remaining parts.");
           emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished }, {
-            content: { schemaVersion: 1, kind: artifact.kind, title: doc.title.slice(0, 200), sections: projectDocument(doc), document: doc },
+            content: { schemaVersion: 1, kind: artifact.kind, title: builtTitle(current.content.title, doc.title, input.project.brief, artifact.kind).slice(0, 200), sections: projectDocument(doc), document: doc },
             style: current.style, assetIds: [...new Set([...current.assetIds, ...documentAssetIds(doc)])],
             summary: `${input.message.slice(0, 600)} → ${summary}`.slice(0, 2000), expectedVersion: artifact.current_version,
           })));
@@ -128,7 +130,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         const summary = result.summary || (result.finished ? `Updated the ${artifact.kind}.` : "Saved the progress made so far. Ask me to continue to finish the remaining parts.");
         const saved = await client.rpc("makeborne_save_artifact_version", {
           p_workspace_id: input.workspaceId, p_artifact_id: artifact.id, p_expected_version: artifact.current_version,
-          p_content: { schemaVersion: 1, kind: artifact.kind, title: doc.title.slice(0, 200), sections: projectDocument(doc), document: doc },
+          p_content: { schemaVersion: 1, kind: artifact.kind, title: builtTitle(current.content.title, doc.title, input.project.brief, artifact.kind).slice(0, 200), sections: projectDocument(doc), document: doc },
           p_style: current.style, p_asset_ids: [...new Set([...current.assetIds, ...documentAssetIds(doc)])],
           p_change_summary: `${input.message.slice(0, 600)} → ${summary}`.slice(0, 2000), p_request_key: hold.reference,
         });
@@ -143,7 +145,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         if (input.operation) {
           const stop = logAiStop(hold.reference, error);
           let candidate: OperationCandidate | undefined;
-          if (editor.changed) try { candidate = { content: { schemaVersion: 1, kind: artifact.kind, title: editor.doc.title.slice(0, 200), sections: projectDocument(editor.doc), document: editor.doc }, style: current.style,
+          if (editor.changed) try { candidate = { content: { schemaVersion: 1, kind: artifact.kind, title: builtTitle(current.content.title, editor.doc.title, input.project.brief, artifact.kind).slice(0, 200), sections: projectDocument(editor.doc), document: editor.doc }, style: current.style,
             assetIds: [...new Set([...current.assetIds, ...documentAssetIds(editor.doc)])], summary: "Recovered the work completed before the builder stopped.", expectedVersion: artifact.current_version }; } catch { /* An invalid partial result must not become recoverable source. */ }
           emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false }, candidate));
           return;
@@ -155,7 +157,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         else emit({ type: "error", code: "BUILD_FAILED", message: (error as { code?: string }).code === "REFUSED" ? "This request can't be built. Try rephrasing it."
           : "The builder hit a problem and stopped. Your document is unchanged and no credits were charged." });
       } finally {
-        clearTimeout(timeout); clearInterval(heartbeat);
+        stopWatching(); clearTimeout(timeout); clearInterval(heartbeat);
         if (open) try { output.close(); } catch { /* client already gone */ }
       }
     },

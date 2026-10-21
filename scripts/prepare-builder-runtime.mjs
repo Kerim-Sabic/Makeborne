@@ -25,6 +25,10 @@ const { version: reactVersion } = require("react/package.json");
 const { version: lucideVersion } = require("lucide-react/package.json");
 const catalogText = await readFile(catalogPath, "utf8");
 const catalog = JSON.parse(catalogText);
+const portabilityPath = join(root, "infra", "project-runtime", "font-portability.cjs");
+const {FONT_SUBSETS, UNICODE_RANGES, packageFontFile, runtimeFontFile} = require(portabilityPath);
+// The subset file layout and its unicode-ranges are part of the runtime identity.
+const portabilityText = (await readFile(portabilityPath, "utf8")).replace(/\r\n/g, "\n");
 // Verify even when the browser runtime cache is current.
 await prepareFontLicenses();
 
@@ -58,7 +62,7 @@ if (iconManifest.version !== lucideVersion) {
 }
 const screenshotDir = join(modules, "modern-screenshot");
 const { version: screenshotVersion } = JSON.parse(await readFile(join(screenshotDir, "package.json"), "utf8"));
-const stamp = `${esbuildVersion}-${reactVersion}-${screenshotVersion}-${lucideVersion}-${createHash("sha256").update(catalogText).digest("hex").slice(0, 12)}`;
+const stamp = `${esbuildVersion}-${reactVersion}-${screenshotVersion}-${lucideVersion}-${createHash("sha256").update(catalogText).update(portabilityText).digest("hex").slice(0, 12)}`;
 
 try {
   if ((await readFile(join(out, "VERSION"), "utf8")).trim() === stamp) process.exit(0);
@@ -117,15 +121,18 @@ for (const file of Object.keys(iconManifest.icons)) {
 }
 await copyFile(join(modules, "lucide-react", "LICENSE"), join(out, "vendor", "lucide", "LICENSE"));
 
-// Fonts: latin subset only, one woff2 per family and style (OFL-1.1).
+// Fonts (OFL-1.1): per family and style, the latin file under its original name
+// plus the complementary latin-ext file, whose unicode-ranges must match the package.
 for (const font of catalog) {
   const variable = !/^\d+$/.test(font.axis);
   const dir = join(modules, variable ? "@fontsource-variable" : "@fontsource", font.id);
   const metadata = JSON.parse(await readFile(join(dir, "metadata.json"), "utf8"));
   const weight = variable ? `${metadata.variable.wght.min} ${metadata.variable.wght.max}` : font.axis;
   if (metadata.family !== font.family || weight !== font.weight || metadata.license?.type !== "OFL-1.1") throw new Error(`Font catalogue entry ${font.id} does not match its package metadata.`);
-  for (const style of font.italic ? ["normal", "italic"] : ["normal"]) {
-    await copyFile(join(dir, "files", `${font.id}-latin-${font.axis}-${style}.woff2`), join(out, "fonts", `${font.id}-${style}.woff2`));
+  const ranges = JSON.parse(await readFile(join(dir, "unicode.json"), "utf8"));
+  for (const subset of FONT_SUBSETS) if (ranges[subset] !== UNICODE_RANGES[subset]) throw new Error(`Font ${font.id} ${subset} unicode-range differs from infra/project-runtime/font-portability.cjs.`);
+  for (const style of font.italic ? ["normal", "italic"] : ["normal"]) for (const subset of FONT_SUBSETS) {
+    await copyFile(join(dir, "files", packageFontFile(font, style, subset)), join(out, "fonts", runtimeFontFile(font, style, subset)));
   }
   const licenseFile = (await readdir(dir)).find(name => /^LICENSE/i.test(name));
   if (licenseFile) await copyFile(join(dir, licenseFile), join(out, "fonts", "licenses", `${font.id}.txt`));

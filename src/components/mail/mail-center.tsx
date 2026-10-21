@@ -1,8 +1,10 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Inbox, Mail, Pause, Play, Plus, RefreshCw, Square, Trash2, Workflow, FileText } from "lucide-react";
 import Modal from "./modal";
-import { mailApi, MANUAL_MAIL_NOTICE, providerLabel, TOKEN_HELP, type Enrollment, type MailOverview, type MailSequence, type MailTemplate, type SequenceStep } from "./mail-api";
+import { connectedMessage } from "@/lib/mail/connected-message";
+import { disconnectedMessage, disconnectQuestion, mailboxUse, PROVIDER_PERMISSION_PAGES, sequenceUseCounts } from "@/lib/mail/connection-copy";
+import { mailApi, MANUAL_MAIL_NOTICE, providerLabel, TOKEN_HELP, type Enrollment, type MailAccount, type MailOverview, type MailSequence, type MailTemplate, type SequenceStep } from "./mail-api";
 
 /** A proven starting point: every touch adds something; replies stop the sequence automatically. */
 const STARTER_STEPS: SequenceStep[] = [
@@ -15,21 +17,40 @@ const STARTER_STEPS: SequenceStep[] = [
 export default function MailCenter({ accountId, workspaceId, canEdit, connectResult, onOpenClient }: {
   accountId: string; workspaceId: string; canEdit: boolean; connectResult: { result: string; detail: string } | null; onOpenClient: (id: string) => void;
 }) {
-  const [overview, setOverview] = useState<MailOverview | null>(null);
-  const [message, setMessage] = useState(connectResult?.result === "connected" ? `Connected ${connectResult.detail}. You can now send and automate emails from it.` : connectResult?.result === "error" ? connectResult.detail : connectResult?.result === "cancelled" ? "Connection cancelled." : "");
+  // The overview belongs to the account and workspace it was loaded for; a late answer for another context is never shown here.
+  const scope = `${accountId}:${workspaceId}`;
+  const [loaded, setLoaded] = useState<{ scope: string; value: MailOverview } | null>(null);
+  const overview = loaded?.scope === scope ? loaded.value : null;
+  const [message, setMessage] = useState(connectResult?.result === "error" ? connectResult.detail : connectResult?.result === "cancelled" ? "Connection cancelled." : "");
+  // A just-connected mailbox is acknowledged until the next action; what it can do comes from the loaded overview.
+  const [justConnected, setJustConnected] = useState(connectResult?.result === "connected" ? connectResult.detail : null);
   const [running, setRunning] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [failedScope, setFailedScope] = useState<string | null>(null);
+  const loadFailed = failedScope === scope;
   const [editing, setEditing] = useState<{ kind: "sequence"; value: Partial<MailSequence> } | { kind: "template"; value: Partial<MailTemplate> } | null>(null);
   const [openSequence, setOpenSequence] = useState<string | null>(null);
   const base = `/api/cloud/workspaces/${workspaceId}/mail`;
+  const loadError = useRef("");
+  const latest = useRef(scope);
+  useEffect(() => { latest.current = scope; }, [scope]);
   const load = useCallback(async () => {
-    try { setOverview(await mailApi<MailOverview>(accountId, base)); setLoadFailed(false); } catch (error) { setLoadFailed(true); setMessage(error instanceof Error ? error.message : "Email is unavailable."); }
-  }, [accountId, base]);
+    // A successful reload clears its own earlier load error (not other messages).
+    const requested = `${accountId}:${workspaceId}`;
+    try {
+      const value = await mailApi<MailOverview>(accountId, base);
+      if (latest.current !== requested) return;
+      setLoaded({ scope: requested, value });
+      setFailedScope(null); setMessage(current => current === loadError.current ? "" : current);
+    } catch (error) {
+      if (latest.current !== requested) return;
+      setFailedScope(requested); loadError.current = error instanceof Error ? error.message : "Email is unavailable."; setMessage(loadError.current);
+    }
+  }, [accountId, workspaceId, base]);
   // Load after mount (from a callback, so the effect itself never sets state).
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
   async function run() {
-    setRunning(true); setMessage("");
+    setRunning(true); setMessage(""); setJustConnected(null);
     try {
       const result = await mailApi<{ replies: number; sent: number; waiting?: number; note?: string; replyCheckErrors?: number }>(accountId, `${base}/run`, "POST", {});
       setMessage(result.note ?? `Checked: ${result.replies} new repl${result.replies === 1 ? "y" : "ies"}, ${result.sent} email${result.sent === 1 ? "" : "s"} sent${result.waiting ? `, ${result.waiting} waiting` : ""}.${result.replyCheckErrors ? " Some reply checks could not finish; those mailboxes' follow-ups are waiting." : ""}`);
@@ -38,12 +59,12 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
     finally { setRunning(false); }
   }
   async function act(action: () => Promise<unknown>, done: string) {
-    setMessage("");
+    setMessage(""); setJustConnected(null);
     try { await action(); setMessage(done); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "That didn't work. Try again."); }
   }
 
   // A failed first load gets a clear, retryable state instead of an endless placeholder.
-  if (!overview && loadFailed) return <div className="mc-unavailable" role="alert"><Mail size={22} /><div><strong>Email isn’t available right now</strong><p>We couldn’t load your mailboxes and sequences. Your clients and notes are unaffected; try again in a moment.</p></div><button type="button" className="button secondary" onClick={() => { setLoadFailed(false); void load(); }}><RefreshCw size={15} />Try again</button></div>;
+  if (!overview && loadFailed) return <div className="mc-unavailable" role="alert"><Mail size={22} /><div><strong>Email isn’t available right now</strong>{justConnected && <p>{connectedMessage(justConnected, null, true)}</p>}<p>We couldn’t load your mailboxes and sequences. Your clients and notes are unaffected; try again in a moment.</p></div><button type="button" className="button secondary" onClick={() => { setFailedScope(null); void load(); }}><RefreshCw size={15} />Try again</button></div>;
   if (!overview) return <div className="ac-skeleton ac-skeleton-detail" role="status" aria-label="Loading email"><span /><span /><span /></div>;
   const mine = overview.accounts.filter(account => account.mine && account.status !== "disconnected");
   const canCheck = mine.some(account => account.canTrackReplies);
@@ -52,8 +73,9 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
       <div><h2>Email</h2><p>Send reviewed emails from your own Gmail or Outlook. Mailboxes with reply tracking can also run follow-up sequences. <strong className="mc-free">Sending is free.</strong> Only AI writing uses credits.</p></div>
       {canCheck && <button type="button" className="button secondary" disabled={running} onClick={() => void run()}><RefreshCw size={15} className={running ? "ac-spin" : undefined} />Check now</button>}
     </header>
-    {message && <p className="mc-message" role="status">{message}</p>}
+    {(justConnected || message) && <p className="mc-message" role="status">{justConnected && !message ? connectedMessage(justConnected, overview, loadFailed) : message}</p>}
     {overview.googleMode === "send_only" && <p className="mc-note">Gmail sends only: read replies in Gmail and update client stages yourself. Gmail reply tracking and automatic sequences are unavailable.</p>}
+    {overview.microsoftMode === "send_only" && overview.availability.microsoft && <p className="mc-note">Outlook sends only: Makeborne asks Microsoft for permission to send, not to read your mailbox. Read replies in Outlook and update client stages yourself; Outlook reply tracking and automatic sequences are unavailable.</p>}
     {!overview.automation && canCheck && <p className="mc-note"><AlertTriangle size={14} /> For mailboxes with reply tracking, automatic sending runs once the schedule is enabled. Until then, <strong>Check now</strong> sends due emails and checks replies.</p>}
 
     <div className="mc-grid">
@@ -62,12 +84,13 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
         <ul className="mc-list">{overview.accounts.map(account => <li key={account.id}>
           <div><strong>{account.email}</strong><small>{providerLabel(account.provider)} · {account.status === "active" ? `${account.sentToday}/${account.todayQuota} sent today${account.todayQuota < account.dailyLimit ? " (warming up)" : ""}` : account.status === "error" ? "Needs reconnecting" : "Disconnected"}{account.mine ? "" : " · connected by a teammate"}</small>
             {!account.canSend ? <small className="mc-error">Reconnect to confirm sending permission.</small> : !account.canTrackReplies ? <small>{MANUAL_MAIL_NOTICE}</small> : <small>Reply tracking and sequences available.</small>}
-            {account.lastError && account.status !== "active" && <small className="mc-error">{account.lastError}</small>}</div>
+            {account.lastError && account.status !== "active" && <small className="mc-error">{account.lastError}</small>}
+            <MailboxUse account={account} /></div>
           {account.mine && canEdit && <div className="mc-row-actions">
             {(account.status !== "active" || !account.canSend) && <a className="button secondary small" href={`/api/mail/connect?provider=${account.provider}&workspace=${workspaceId}`}>Reconnect</a>}
             {account.status === "active" && <select aria-label={`Daily limit for ${account.email}`} value={account.dailyLimit} onChange={event => void act(() => mailApi(accountId, `${base}/accounts`, "PATCH", { id: account.id, dailyLimit: Number(event.target.value) }), "Daily limit updated.")}>
               {[10, 20, 30, 50, 80, 120].map(limit => <option key={limit} value={limit}>{limit}/day max</option>)}</select>}
-            {account.status !== "disconnected" && <button type="button" className="button ghost small" onClick={() => { if (window.confirm(`Disconnect ${account.email}? Running sequences on it will pause.`)) void act(() => mailApi(accountId, `${base}/accounts`, "DELETE", { id: account.id }), "Mailbox disconnected. Sent history is kept."); }}>Disconnect</button>}
+            {account.status !== "disconnected" && <button type="button" className="button ghost small" onClick={() => { if (window.confirm(disconnectQuestion(account))) void act(() => mailApi(accountId, `${base}/accounts`, "DELETE", { id: account.id }), disconnectedMessage(account)); }}>Disconnect</button>}
           </div>}
         </li>)}</ul>
         {canEdit && <div className="mc-connect">
@@ -77,6 +100,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
           {!overview.availability.google && !overview.availability.microsoft && <small>Mailbox connections need to be set up by the Makeborne administrator first.</small>}
         </div>}
         <small className="mc-fine">New mailboxes warm up: 10 emails a day at first, rising gradually, with at least two minutes between automatic sends.</small>
+        {overview.accounts.length > 0 && <small className="mc-fine">Disconnecting stops Makeborne from using a mailbox and deletes its stored access. The permission itself stays with the provider until you remove Makeborne in your <a href={PROVIDER_PERMISSION_PAGES.google} target="_blank" rel="noopener noreferrer">Google account</a>, your <a href={PROVIDER_PERMISSION_PAGES.microsoftPersonal} target="_blank" rel="noopener noreferrer">personal Microsoft account</a> or your <a href={PROVIDER_PERMISSION_PAGES.microsoftWork} target="_blank" rel="noopener noreferrer">work or school Microsoft account</a>.</small>}
       </section>
 
       <section className="mc-card" aria-labelledby="mc-replies"><h3 id="mc-replies"><Inbox size={16} />Recent replies</h3>
@@ -118,6 +142,17 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
       await mailApi(accountId, `${base}/templates`, template.id ? "PATCH" : "POST", template); setEditing(null); setMessage("Template saved."); await load();
     }} />}
   </section>;
+}
+
+/** Where a mailbox is used, when it last sent, and how to stop its automatic emails. */
+function MailboxUse({ account }: { account: MailAccount }) {
+  const use = mailboxUse(account);
+  if (!use) return null;
+  return <>
+    <small className="mc-use">{use.lastSentAt ? <>Last sent <time dateTime={use.lastSentAt}>{new Date(use.lastSentAt).toLocaleString()}</time></> : "Nothing sent from it yet"}</small>
+    <small className="mc-use">{use.sequences.length ? <>Used by {use.sequences.map((item, index) => <span key={item.sequenceId}>{index ? " · " : ""}<strong>{item.name}</strong> ({sequenceUseCounts(item)})</span>)}</> : use.unused}</small>
+    {use.stop && <small className="mc-use">{use.stop}</small>}
+  </>;
 }
 
 function SequenceEnrollments({ accountId, workspaceId, sequenceId, canEdit, automaticAccountIds, onOpenClient }: { accountId: string; workspaceId: string; sequenceId: string; canEdit: boolean; automaticAccountIds: string[]; onOpenClient: (id: string) => void }) {

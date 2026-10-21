@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, Check, Eye, MessageSquare, RotateCcw, Sparkles } from "lucide-react";
 import { cloudAccountGuard } from "./cloud-api";
 import { linkState, type ReviewLink, type StudioReviewComment } from "@/lib/client-review/contracts";
-import { anchorLabel, builderRequestFromFeedback } from "@/lib/client-review/feedback";
+import { REVIEW_IDENTITY_NOTE, anchorLabel, builderRequestFromFeedback, reviewDecisionLabel } from "@/lib/client-review/feedback";
 import { storeReviewPrefill } from "@/lib/client-review/prefill";
 import { formatDuration, relativeTime, type ViewSummary } from "@/lib/client-review/views";
 import type { AccountProjectRoute } from "@/lib/studio-navigation";
@@ -57,7 +57,7 @@ export default function ClientReviewFeed({ accountId, workspaceId, clientId, cli
       <header className="crp-head">
         <span className="crp-icon">{item.link.decision === "approved" ? <Check size={18} /> : item.link.decision === "changes_requested" ? <RotateCcw size={18} /> : <MessageSquare size={18} />}</span>
         <div><h3>{item.artifact?.title ?? "Project"}</h3>
-          <p><span className={`crp-state is-${state}`}>{state === "active" ? "Link active" : state === "expired" ? "Link expired" : "Link off"}</span> {item.link.decision && <span className={`crp-state is-${item.link.decision}`}>{item.link.decision === "approved" ? `Approved by ${item.link.decisionName}` : `Changes requested by ${item.link.decisionName}`}</span>} · {item.link.version === null ? "latest version" : `version ${item.link.version}`} · sent {moment(item.link.createdAt)} · {item.views !== undefined ? item.views ? `opened ${item.views.opens} ${item.views.opens === 1 ? "time" : "times"}` : "not opened yet" : `${item.link.viewCount} views`}</p></div>
+          <p><span className={`crp-state is-${state}`}>{state === "active" ? "Link active" : state === "expired" ? "Link expired" : "Link off"}</span> {item.link.decision && <span className={`crp-state is-${item.link.decision}`} title={REVIEW_IDENTITY_NOTE}>{reviewDecisionLabel(item.link.decision, item.link.decisionName)}</span>} · {item.link.version === null ? "latest version" : `version ${item.link.version}`} · sent {moment(item.link.createdAt)} · {item.views !== undefined ? item.views ? `opened ${item.views.opens} ${item.views.opens === 1 ? "time" : "times"}` : "not opened yet" : `${item.link.viewCount} views`}</p></div>
       </header>
       {entries.length > 0 && <ol className="crp-comments">{entries.map(entry => "view" in entry ? <li key={entry.key} className="crp-view-entry">
         <div className="crp-comment-head"><strong><Eye size={12} aria-hidden="true" /> Viewed {item.artifact?.title ?? "the project"} · {formatDuration(entry.view.seconds)} · {relativeTime(entry.view.at)}</strong><time dateTime={entry.view.at}>{moment(entry.view.at)}</time></div>

@@ -11,6 +11,9 @@ const readingTime = (words: number) => {
   const minutes = Math.max(1, Math.round(words / 230));
   return minutes < 60 ? `${minutes} min read` : `${Math.floor(minutes / 60)} h ${minutes % 60 ? `${minutes % 60} min ` : ""}read`;
 };
+import { advancesOnClick, presenterShortcut } from "@/lib/documents/presenter-keys";
+import { describeTyped, documentTexts, fontCoverage } from "@/lib/builder/font-fallback";
+import "@/app/publish-output.css";
 import { readCloudImage } from "./cloud-api";
 
 const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
@@ -20,13 +23,10 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(blob);
 });
 
-const NEXT_KEYS = new Set(["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"]);
-const PREVIOUS_KEYS = new Set(["ArrowLeft", "ArrowUp", "PageUp", "Backspace"]);
-
 /** Full-screen presenter for decks. The slides are the same script-free HTML in
  * "present" mode; this host only toggles which slide is current, and CSS in the
  * frame provides the transition and builds (instant under reduced motion). */
-function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<string, string>; onClose: () => void }) {
+export function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<string, string>; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null), frame = useRef<HTMLIFrameElement>(null), entered = useRef(false);
   const [index, setIndex] = useState(0);
   const total = deck.slides.length, current = Math.max(0, Math.min(index, total - 1));
@@ -43,14 +43,16 @@ function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<strin
   }, [current]);
   useEffect(sync, [sync]);
 
+  // Shortcuts belong to the slide canvas; a focused button or field keeps its own keys (presenter-keys.ts).
   const onKey = useCallback((event: KeyboardEvent) => {
-    if (NEXT_KEYS.has(event.key)) { event.preventDefault(); go(current + 1); }
-    else if (PREVIOUS_KEYS.has(event.key)) { event.preventDefault(); go(current - 1); }
-    else if (event.key === "Home") { event.preventDefault(); go(0); }
-    else if (event.key === "End") { event.preventDefault(); go(total - 1); }
-    else if (event.key === "Escape") onClose();
+    const action = presenterShortcut(event);
+    if (!action) return;
+    event.preventDefault();
+    if (action === "close") onClose();
+    else go(action === "next" ? current + 1 : action === "previous" ? current - 1 : action === "first" ? 0 : total - 1);
   }, [current, go, onClose, total]);
-  const keyHandler = useRef(onKey);
+  const keyHandler = useRef(onKey), currentRef = useRef(current);
+  useEffect(() => { currentRef.current = current; }, [current]);
   useEffect(() => { keyHandler.current = onKey; }, [onKey]);
   useEffect(() => {
     const listener = (event: KeyboardEvent) => keyHandler.current(event);
@@ -58,10 +60,17 @@ function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<strin
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
+  // Focus moves into the presenter when it opens and back to the control that
+  // opened it when it closes (once per presentation, whatever onClose is).
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    root.current?.focus();
+    return () => { if (opener?.isConnected) opener.focus({ preventScroll: true }); };
+  }, []);
+
   // Full screen when the browser allows it; leaving full screen ends the presentation.
   useEffect(() => {
     const element = root.current;
-    element?.focus();
     void element?.requestFullscreen?.().then(() => { entered.current = true; }).catch(() => undefined);
     const change = () => { if (entered.current && !document.fullscreenElement) onClose(); };
     document.addEventListener("fullscreenchange", change);
@@ -75,10 +84,10 @@ function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<strin
     sync();
     const view = frame.current?.contentWindow;
     view?.addEventListener("keydown", event => keyHandler.current(event));
-    view?.document.addEventListener("click", () => keyHandler.current(new KeyboardEvent("keydown", { key: "ArrowRight" })));
+    view?.document.addEventListener("click", event => { if (advancesOnClick(event.target, view.getSelection()?.toString() ?? "")) go(currentRef.current + 1); });
   };
 
-  return <div ref={root} className="dp-present" role="dialog" aria-modal="true" aria-label={`Presenting ${deck.title}`} tabIndex={-1}>
+  return <div ref={root} className="dp-present" data-presenter-root="" role="dialog" aria-modal="true" aria-label={`Presenting ${deck.title}`} tabIndex={-1}>
     <iframe ref={frame} title={`Slide ${current + 1} of ${total}`} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={onLoad} />
     <div className="dp-present-bar">
       <button type="button" aria-label="Previous slide" disabled={current === 0} onClick={() => go(current - 1)}><ChevronLeft size={16} /></button>
@@ -86,6 +95,19 @@ function Presenter({ deck, images, onClose }: { deck: Deck; images: Record<strin
       <button type="button" aria-label="Next slide" disabled={current >= total - 1} onClick={() => go(current + 1)}><ChevronRight size={16} /></button>
       <button type="button" aria-label="Exit presentation" onClick={onClose}><X size={15} /></button>
     </div>
+  </div>;
+}
+
+/** Characters the document's embedded fonts (Latin and Latin Extended) can't draw,
+ * so the preview and PDF show them in a fallback font. Advice only. */
+export function FontCoverageNote({ document: doc }: { document: DocumentSource }) {
+  const coverage = useMemo(() => fontCoverage(documentTexts(doc), 3), [doc]);
+  if (!coverage.uncovered.length && !coverage.decomposed.length) return null;
+  const places = (items: { locations: string[] }[]) => [...new Set(items.flatMap(item => item.locations))].slice(0, 4).join(", ");
+  const kind = doc.kind === "deck" ? "presentation" : "book";
+  return <div className="dp-font-note" role="note" aria-label="Font coverage">
+    {coverage.uncovered.length > 0 && <p><strong>Some characters aren’t in this {kind}’s fonts:</strong> <span lang="und">{coverage.uncovered.slice(0, 12).map(item => item.char).join(" ")}</span>{coverage.uncovered.length > 12 ? ` and ${coverage.uncovered.length - 12} more` : ""} ({places(coverage.uncovered)}). The fonts embed Latin and Latin Extended letters only, so these show in a fallback font in the preview and PDF.</p>}
+    {coverage.decomposed.length > 0 && <p><strong>Letters typed with separate accent marks:</strong> {coverage.decomposed.slice(0, 6).map(item => `${describeTyped(item.typed)} → ${item.letter}`).join(", ")} ({places(coverage.decomposed)}). Fonts are chosen for the joined letter, but a browser may still draw these in a fallback font; retype them as single letters to be safe.</p>}
   </div>;
 }
 
@@ -236,15 +258,17 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
         {outline.map(item => <option key={item.anchor} value={item.anchor}>{item.label.length > 70 ? `${item.label.slice(0, 68)}…` : item.label}</option>)}
       </select>}
       <span className="lp-status" role="status">{building ? "Writing live…" : message || "Live preview"}</span>
-      <div className="dp-actions">
-        <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pdf")} title={canExport ? "Download the saved version as PDF" : "Save the document first"}>
+      <div className="dp-actions" role="group" aria-label={`Generated outputs from saved version ${savedVersion}`}>
+        <span className="dp-outputs-label" aria-hidden="true" title="Made by Makeborne from the saved version; your uploaded source files are listed with the builder">Generated · v{savedVersion}</span>
+        <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pdf")} title={canExport ? `Generated output: download saved version ${savedVersion} as PDF` : "Save the document first"}>
           {exporting === "pdf" ? <Loader2 size={13} className="lb-spin" /> : <Download size={13} />}PDF</button>
-        {doc.kind === "deck" && <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pptx")} title="Download an editable PowerPoint file">
+        {doc.kind === "deck" && <button type="button" className="dp-export" disabled={exportDisabled} onClick={() => void download("pptx")} title={`Generated output: download saved version ${savedVersion} as an editable PowerPoint file`}>
           {exporting === "pptx" ? <Loader2 size={13} className="lb-spin" /> : <Download size={13} />}PPTX</button>}
         {doc.kind === "deck" && doc.slides.length > 0 && <button type="button" aria-label="Present" title="Present: arrow keys move, Esc exits" onClick={() => setPresenting(true)}><Play size={15} /></button>}
         <button type="button" aria-label="Full screen preview" onClick={() => void frame.current?.requestFullscreen?.().catch(() => undefined)}><Maximize2 size={15} /></button>
       </div>
     </header>
+    <FontCoverageNote document={doc} />
     <div className="lp-stage dp-stage">
       {html ? <iframe ref={frame} title={doc.kind === "deck" ? "Presentation preview" : "Book preview"} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={onLoad} style={{ width: "100%" }} />
         : <div className="lp-empty">Preparing preview…</div>}

@@ -153,6 +153,14 @@
 .cp-results li strong { font-size: 14px; font-weight: 550; color: #2a2335; overflow-wrap: anywhere; }
 .cp-results li small { font-size: 12px; color: #8a8199; }
 .cp-results .cp-empty { cursor: default; font-size: 13px; }
+.cp-status:empty { display: none; }
+.cp-status .cp-empty { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 18px 14px; color: #6b6577; font-size: 13px; }
+.cp-spin { animation: cp-spin .9s linear infinite; }
+@keyframes cp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cp-spin { animation: none; } }
+.cp-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 6px 6px; padding: 10px 12px; border-radius: 11px; background: #fdf0ee; color: #8a2a20; font-size: 13px; }
+.cp-error button { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 5px 11px; border: 1px solid #e7c3bd; border-radius: 999px; background: #fff; color: #8a2a20; font: inherit; font-weight: 600; cursor: pointer; }
+.cp-error button:focus-visible { outline: 2px solid #8a2a20; outline-offset: 2px; }
 .cp-enter { color: #9c8fbb; }
 @keyframes cp-fade { from { opacity: 0; } }
 @keyframes cp-rise { from { opacity: 0; transform: translateY(-8px) scale(.99); } }
@@ -206,12 +214,15 @@
 .mc-list > li > div:first-child { display: grid; gap: 3px; min-width: 0; }
 .mc-list strong { font-size: 13.5px; font-weight: 560; color: #2a2335; overflow-wrap: anywhere; }
 .mc-list small { font-size: 12px; color: #857d92; }
+.mc-list small.mc-use { line-height: 1.5; overflow-wrap: anywhere; }
+.mc-list .mc-use strong { font-size: inherit; font-weight: 600; color: #5d5568; }
+.mc-fine a { color: inherit; text-decoration: underline; }
 .mc-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mc-row-actions select { border: 1px solid #e6e1ee; border-radius: 9px; background: #fff; font: inherit; font-size: 12px; padding: 6px 8px; color: #5d5568; }
 .mc-connect { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .mc-connect small { font-size: 12px; color: #8a8199; }
 .mc-fine { display: block; font-size: 11.5px; color: #9089a0; margin-top: 10px; line-height: 1.55; }
-.mc-error { display: block; color: #a03a31; font-size: 12px; margin: 4px 0 0; }
+.mc-error { display: block; color: var(--state-error); font-size: 12px; margin: 4px 0 0; }
 .mc-link { display: inline-flex; align-items: center; gap: 3px; border: 0; background: none; padding: 0; font: inherit; color: #5b44a0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .mc-reply { display: grid; gap: 3px; width: 100%; text-align: left; border: 0; background: transparent; font: inherit; padding: 0; cursor: pointer; color: inherit; }
 .mc-reply:disabled { cursor: default; }
@@ -305,7 +316,8 @@
 .pq-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; border-top: 1px solid #f1edf6; padding-top: 12px; }
 .pq-foot .mc-error { margin-right: auto; }
 .pq .button { display: inline-flex; align-items: center; gap: 6px; }
-.ce-ai { display: flex; gap: 8px; align-items: center; }
+.ce-ai { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ce-ai-limit { flex-basis: 100%; color: #5d6880; font-size: 12px; line-height: 1.5; }
 .ce-ai input { flex: 1; }
 .bulk-bar .bulk-ai { background: linear-gradient(135deg, #8f74d6, #6a4fa5); border: 0; color: #fff; display: inline-flex; align-items: center; gap: 6px; }
 .bulk-or { font-size: 12px; color: #cfc6e2; }
@@ -547,3 +559,6 @@ a.lf-chip:hover { border-color: #cfc3e3; color: #2c2240; }
 /* The dialog sheet takes focus on open (for screen readers and Escape); it needs no visible ring itself. */
 .mc-sheet:focus { outline: none; }
 .ac-heading-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Phones: typed fields are 16px so iOS Safari does not zoom on focus (app type scale in globals.css). */
+@media (max-width: 760px) { .mc-sheet input, .mc-sheet textarea, .ce-compose input, .ce-compose textarea { font-size: var(--type-input-touch); } }

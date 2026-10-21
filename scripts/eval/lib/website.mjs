@@ -265,22 +265,24 @@ export function resolveAssets(sourceInput, itemDir) {
 // which is what the studio preview and client review snapshots still carry).
 // Contributed by the Phase 2 platform session (H1'), adopted as an instrument change.
 export const FONT_DELIVERY = process.env.EVAL_FONT_DELIVERY === 'bundle' ? 'bundle' : 'trusted';
-const EMBEDDED_FONT_RULES = /^(?:@font-face\{[^{}]*url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\)\}\n)+/;
+const EMBEDDED_FONT_RULES = /^(?:@font-face\{[^{}]*url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\)(?:;unicode-range:[^{}]+)?\}\n)+/;
 
-/** compiled.css with its embedded font rules replaced by file-backed ones, plus the font files to serve. */
+/** compiled.css with its embedded font rules replaced by file-backed ones, plus the font files to serve.
+ * Like the portable build, every style links both its latin-ext and latin files (fetched by unicode-range). */
 export function trustedFontDelivery(sourceInput, css) {
   const { fonts: fontModule } = appModules();
   const { fonts, italic } = fontModule.detectFonts(Object.entries(bundleInput(asWebsiteSource(sourceInput))));
   const styles = fonts.flatMap(font => (italic && font.italic ? ['normal', 'italic'] : ['normal']).map(style => ({ font, style })));
   const embedded = EMBEDDED_FONT_RULES.exec(css)?.[0] ?? '';
-  const embeddedCount = (embedded.match(/@font-face\{/g) ?? []).length;
-  if (embeddedCount !== styles.length) throw new Error(`font delivery: ${embeddedCount} embedded rule(s) but ${styles.length} detected style(s)`);
+  const embeddedStyles = new Set([...embedded.matchAll(/font-family:"([^"]+)";font-style:(\w+)/g)].map(match => `${match[1]}:${match[2]}`));
+  if (embeddedStyles.size !== styles.length) throw new Error(`font delivery: ${embeddedStyles.size} embedded style(s) but ${styles.length} detected style(s)`);
   if (!styles.length) return { css, files: [] };
-  const files = styles.map(({ font, style }) => ({
-    url: `/assets/${font.id}-latin-${font.axis}-${style}.woff2`,
-    file: path.join(REPO, 'public', 'builder-runtime', 'fonts', fontModule.fontFileName(font, style)),
+  const faces = styles.flatMap(({ font, style }) => fontModule.FONT_SUBSETS.map(subset => ({ font, style, subset })));
+  const files = faces.map(({ font, style, subset }) => ({
+    url: `/assets/${font.id}-${subset}-${font.axis}-${style}.woff2`,
+    file: path.join(REPO, 'public', 'builder-runtime', 'fonts', fontModule.fontFileName(font, style, subset)),
   }));
-  const rules = styles.map(({ font, style }, index) => fontModule.fontFaceRule(font, style, files[index].url)).join('\n');
+  const rules = faces.map(({ font, style, subset }, index) => fontModule.fontFaceRule(font, style, files[index].url, subset)).join('\n');
   return { css: `${rules}\n${css.slice(embedded.length)}`, files };
 }
 

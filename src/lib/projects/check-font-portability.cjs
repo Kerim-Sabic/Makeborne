@@ -61,11 +61,14 @@ function fixture() {
       const result = portable.portableFontFiles(input);
       assert.deepEqual(result.fonts.map(item => item.id), browser.detectFonts(input.map(file => [file.path, file.content])).fonts.map(item => item.id));
       assert.equal(result.styles.length, italic && font.italic ? 2 : 1);
-      for (const {style} of result.styles) {
-        const filename = `${font.id}-latin-${font.axis}-${style}.woff2`;
+      const css = result.files.find(file => file.path === portable.FONT_CSS).content;
+      for (const {style} of result.styles) for (const subset of portable.FONT_SUBSETS) {
+        const filename = `${font.id}-${subset}-${font.axis}-${style}.woff2`;
+        assert.equal(portable.packageFontFile(font, style, subset), filename);
+        assert.ok(css.includes(`/files/${filename}) format("woff2");unicode-range:${portable.UNICODE_RANGES[subset]}`), `${filename} linked with its range`);
         const bytes = fs.readFileSync(require.resolve(`${portable.fontPackage(font)}/files/${filename}`));
         assert.equal(bytes.subarray(0, 4).toString(), "wOF2");
-        assert.equal(portable.fontFaceRule(font, style, "local.woff2"), browser.fontFaceRule(font, style, "local.woff2"));
+        assert.equal(portable.fontFaceRule(font, style, "local.woff2", subset), browser.fontFaceRule(font, style, "local.woff2", subset));
       }
       assert.match(licenses(result.fonts)[0].content, /SIL OPEN FONT LICENSE/i);
     }
@@ -134,7 +137,8 @@ function fixture() {
 
   if (process.env.MAKEBORNE_VERIFY_PORTABLE_RUNTIME === "true") {
     const {dockerCommand, localRuntimeFlags, removeLocalTemporary} = await import("../../../infra/project-runtime/local-adapter.mjs");
-    const image = await dockerCommand(["image", "inspect", "makeborne-react-vite:font-parity", "--format", "{{.Id}}"]);
+    // A qualification run can pin its own image without retagging a shared runtime.
+    const image = await dockerCommand(["image", "inspect", process.env.MAKEBORNE_PORTABLE_RUNTIME_IMAGE || "makeborne-react-vite:font-parity", "--format", "{{.Id}}"]);
     assert.equal(image.code, 0, image.output); const imageId = image.output.trim(); assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
     for (const candidate of [version, legacyVersion]) {
     const expectedHash = websiteProjectManifest(candidate.content.websiteSource).sourceHash;
@@ -159,8 +163,8 @@ function fixture() {
           const run = await dockerCommand(["run", "--rm", ...localRuntimeFlags(name, dir), "--env", `MAKEBORNE_RUNTIME_IMAGE=${imageId}`, "--entrypoint", "node", imageId, "--input-type=module", "--eval", script], 60_000);
           assert.equal(run.code, 0, `${mode}: ${run.output}`);
           const result = JSON.parse(run.output.split("\n").find(line => line.startsWith("PARITY:")).slice(7));
-          check(`${mode} builds offline with four real font files, licenses and Lucide icons`, () => {
-            assert.equal(result.fonts.length, 4); assert.equal(result.faces, 4); assert.equal(result.licenses, 2);
+          check(`${mode} builds offline with eight real font files (latin + latin-ext for four styles), licenses and Lucide icons`, () => {
+            assert.equal(result.fonts.length, 8); assert.equal(result.faces, 8); assert.equal(result.licenses, 2);
             assert(result.inter && result.fraunces && result.icons);
             if (mode === "verified runtime") assert.equal(result.receipt.sourceHash, expectedHash);
           });

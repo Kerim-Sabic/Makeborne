@@ -80,7 +80,7 @@ export type ChatMode = "standard" | "genius";
  * Credits are charged in whole numbers until fractional credits ship.
  */
 export const CHAT_MODES: Readonly<Record<ChatMode, { label: string; summary: string; holdCredits: number; priceMultiplier: number }>> = {
-  standard: { label: "Standard", summary: "Fast, focused advice. Usually under 1 credit per answer.", holdCredits: 3, priceMultiplier: 15 },
+  standard: { label: "Standard", summary: "Fast, focused advice. Usually under 1 credit per answer, never more than 3.", holdCredits: 3, priceMultiplier: 15 },
   // Opus costs far more per token than Haiku; a low multiple keeps a Genius answer at a few Standard answers.
   genius: { label: "Genius", summary: "Our strongest model for hard decisions. Usually 2–4 credits per answer, never more than 15.", holdCredits: 15, priceMultiplier: 1.5 },
 };

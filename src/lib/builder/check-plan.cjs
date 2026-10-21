@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Offline Plan mode checks (no network, no paid calls). */
-const fs = require("node:fs"), ts = require("typescript"), Module = require("node:module"), assert = require("node:assert/strict");
+const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), Module = require("node:module"), assert = require("node:assert/strict");
 const load = Module._load;
 Module._load = function(name, parent, main) { return name === "server-only" ? {} : load.call(this, name, parent, main); };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true}}).outputText, filename);
-const {SitePlanSchema, StoredPlanSchema, parsePlan, estimatePlanCredits, recommendedEffort, planToBrief, PROPOSE_PLAN_INPUT_SCHEMA, PLAN_CEILING_CREDITS, PLAN_MAX_BYTES} = require("./plan.ts");
+const {SitePlanSchema, StoredPlanSchema, parsePlan, estimatePlanCredits, recommendedEffort, effortFit, planToBrief, PROPOSE_PLAN_INPUT_SCHEMA, PLAN_CEILING_CREDITS, PLAN_MAX_BYTES} = require("./plan.ts");
 const {BUILDER_EFFORT} = require("./pricing.ts");
 const {EFFORT_LEVELS} = require("../routing/effort.ts");
 
@@ -90,6 +90,19 @@ check("recommended effort fits the plan; light only for edits", () => {
   assert.ok(EFFORT_LEVELS.includes(level) && level !== "light");
   const edit = SitePlanSchema.parse({...sample(), kind: "edit", changes: [{change: "Fix a typo.", files: ["src/App.tsx"]}]});
   assert.equal(recommendedEffort(edit), "light");
+});
+check("no-fit: a plan beyond every level's headroom is not called a best fit", () => {
+  const huge = SitePlanSchema.parse({...sample(), pages: Array.from({length: 12}, (_, page) => ({name: `Page ${page + 1}`, path: page ? `/p${page}` : "/", purpose: "Fictional page.", sections: Array.from({length: 14}, (_, item) => section(`Section ${item + 1}`))}))});
+  const estimate = estimatePlanCredits(huge);
+  for (const level of EFFORT_LEVELS) assert.equal(estimate[level].max, BUILDER_EFFORT[level].ceilingCredits, `${level} is clamped to its ceiling`);
+  assert.deepEqual(effortFit(huge), {level: "high", fits: false, reason: "exceeds_every_level"});
+  assert.equal(recommendedEffort(huge), "high", "the preselected fallback is unchanged; only its label changes");
+  assert.deepEqual(effortFit(SitePlanSchema.parse(sample())), {level: recommendedEffort(SitePlanSchema.parse(sample())), fits: true});
+  const edit = SitePlanSchema.parse({...sample(), kind: "edit", changes: [{change: "Fix a typo.", files: ["src/App.tsx"]}]});
+  assert.deepEqual(effortFit(edit), {level: "light", fits: true});
+  const card = fs.readFileSync(path.join(__dirname, "..", "..", "components", "plan-card.tsx"), "utf8");
+  assert.ok(card.includes("{fit.fits && level === recommended && <em>Best fit</em>}"), "Best fit only when the plan fits");
+  assert.ok(card.includes("{!fit.fits && <p className=\"pc-nofit\""), "the no-fit note explains the scope options");
 });
 check("planning is capped below the cheapest build", () => {
   assert.ok(PLAN_CEILING_CREDITS > 0 && PLAN_CEILING_CREDITS <= BUILDER_EFFORT.light.ceilingCredits);

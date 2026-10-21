@@ -81,7 +81,7 @@ check("document, file and error headers carry isolation, caching and HSTS rules"
   assert.match(script["Content-Security-Policy"], /sandbox/);
   assert.match(script["Content-Security-Policy"], /default-src 'none'/);
   const image = policy.siteFileHeaders({pathname: "/images/hero.webp", contentType: "image/webp", secure: true});
-  assert.equal(image["Cache-Control"], "public, max-age=300, stale-while-revalidate=3600");
+  assert.equal(image["Cache-Control"], "public, max-age=0, must-revalidate");
   const missing = policy.siteErrorHeaders({secure: true, status: 404});
   assert.equal(missing["X-Robots-Tag"], "noindex");
   assert.match(policy.siteErrorPage(404), /Page not found/);
@@ -250,7 +250,8 @@ async function withRpc(handler, fn) {
   try { return await fn(calls); } finally { global.fetch = original; }
 }
 
-check("worker serves an interactive document with its bundle under the strict policy", () => withRpc(() => ({html: SITE_HTML, interactive: true, script: "/_mb/app-2222222222222222.js", revision: 7}), async calls => {
+// An older single-snapshot site: every path gets the home document and only "/" is in its sitemap.
+check("worker serves an interactive document with its bundle under the strict policy", () => withRpc(name => (name === "makeborne_read_site_paths" ? {paths: ["/"], updated_at: null} : {html: SITE_HTML, interactive: true, script: "/_mb/app-2222222222222222.js", revision: 7}), async calls => {
   const response = await worker.fetch(new Request("https://good-dog.makeborne.site/"), ENV);
   assert.equal(response.status, 200);
   const body = await response.text();
@@ -264,7 +265,8 @@ check("worker serves an interactive document with its bundle under the strict po
   assert.equal(revalidated.status, 304);
   const route = await worker.fetch(new Request("https://good-dog.makeborne.site/services"), ENV);
   assert.equal(route.status, 200, "client routes fall back to the document");
-  assert.equal(route.headers.get("X-Robots-Tag"), "noindex");
+  assert.equal(route.headers.get("X-Robots-Tag"), "noindex", "a fallback copy of the home page is not in the sitemap");
+  assert.ok(calls.some(call => call.url.endsWith("/makeborne_read_site_paths") && call.body.p_slug === "good-dog"), "nested indexing follows the sitemap's page list");
 }));
 check("worker withholds the script while JavaScript is off", () => withRpc(() => ({html: SITE_HTML, interactive: false, script: "/_mb/app-2222222222222222.js", revision: 8}), async () => {
   const response = await worker.fetch(new Request("https://good-dog.makeborne.site/"), ENV);
@@ -340,10 +342,13 @@ check("Vite manifest paths and exact declared document requests preserve isolati
   for(const path of ["/assets/index-AbCd123.js","/assets/styles-0123.css","/assets/inter-latin-123.woff2"]){assert.ok(policy.siteFilePath(path));assert.ok(policy.siteFileContentType(path));}
   for(const path of ["/assets/.env","/assets/a.json","/assets/a.svg","/assets/nested/app.js","/assets/../app.js"]){assert.ok(!policy.siteFilePath(path));}
   await withRpc((name,args)=>{
-    assert.equal(name,"makeborne_read_hosted_site_v3");assert.equal(args.p_slug,"good-dog");
+    assert.equal(args.p_slug,"good-dog");
+    if(name==="makeborne_read_site_paths")return {paths:["/","/work"],updated_at:null};
+    assert.equal(name,"makeborne_read_hosted_site_v3");
     return args.p_path==='/work'?{html:SITE_HTML,interactive:true,script:'/assets/index-AbCd123.js',revision:10}:null;
   },async()=>{
     const found=await worker.fetch(new Request('https://good-dog.makeborne.site/work'),ENV);assert.equal(found.status,200);assert.match(await found.text(),/src="\/assets\/index-AbCd123.js"/);
+    assert.equal(found.headers.get("X-Robots-Tag"),null,"a declared route is in the sitemap and indexable");
     assert.equal((await worker.fetch(new Request('https://good-dog.makeborne.site/not-declared'),ENV)).status,404);
   });
   const font=Buffer.from('wOF2fixture');

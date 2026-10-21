@@ -38,6 +38,7 @@
 .ws-results li > svg { flex:none; margin-top:1px; }
 .ws-results li[data-level="pass"] { background:#f1f8f3; color:#1d6f46; }
 .ws-results li[data-level="warn"] > svg { color:#a86b00; }
+.ws-results li[data-level="info"] > svg { color:#5b6b8a; }
 .ws-results li[data-level="fail"] { background:#fdf3f2; }
 .ws-results li[data-level="fail"] > svg { color:#9a2f2a; }
 .ws-results strong { display:block; color:#2f2637; }
@@ -46,3 +47,8 @@
 @keyframes ws-spin { to { transform:rotate(360deg); } }
 @media (max-width:560px) { .ws-grid { grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce) { .ws-spin { animation:none; } }
+.ws-checked { margin:8px 0 0; font-size:12px; color:#5b4d67; }
+.ws-checked[data-current="false"] { color:#7a5a12; font-weight:550; }
+.ws-checked-from { margin:4px 0 0; font-size:12px; line-height:1.5; color:#55556a; }
+.ws-checked-from[data-source="prepared"] { color:#1d6339; }
+.ws-results[data-stale] { opacity:.6; }

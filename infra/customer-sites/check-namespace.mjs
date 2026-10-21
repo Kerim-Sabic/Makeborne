@@ -120,7 +120,7 @@ await check('allowed QA assets cannot reuse legacy or production cache entries',
   try {
     const response=await worker.fetch(new Request(origin+path+'?__mb_namespace=production-v1'),STAGE,{waitUntil:promise=>promise});
     assert.deepEqual(Buffer.from(await response.arrayBuffer()),IMAGE);
-    assert.deepEqual(keys,[origin+path+'?__mb_namespace=staging-v1']);assert.equal(calls.length,1);
+    assert.deepEqual(keys,[],'mutable images never consult any edge-cache namespace');assert.equal(calls.length,1);
     assert.ok(calls[0].startsWith(STAGING_SUPABASE_URL));
   } finally {globalThis.fetch=previous.fetch;if(previous.caches===undefined)delete globalThis.caches;else globalThis.caches=previous.caches;}
 });
@@ -186,7 +186,7 @@ try {
           assert.deepEqual(Buffer.from(await uncached.arrayBuffer()),IMAGE,'legacy production cache never reused by staging');
         }
         const asset=await request(origin+'/images/hero.webp');assert.equal(asset.status,200);
-        if(mode!=='local')assert.equal(await asset.text(),'SEEDED_FORBIDDEN_CACHE','same-namespace authorized cache still works');
+        assert.deepEqual(Buffer.from(await asset.arrayBuffer()),IMAGE,'mutable images ignore even same-namespace stale cache entries');
         const form=await request(origin+'/_mb/enquiries',{method:'POST',headers:{Origin:origin,'content-type':'application/json','CF-Connecting-IP':'192.0.2.1'},
           body:JSON.stringify({requestId:'11111111-1111-4111-8111-111111111111',name:'Fixture',email:'fixture@example.invalid',message:'Synthetic local check'})});
         assert.equal(form.status,200);assert.equal(calls.at(-1),values.APP_ORIGIN+'/api/hosting/enquiries');

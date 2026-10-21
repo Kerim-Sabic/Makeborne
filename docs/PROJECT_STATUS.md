@@ -1,3 +1,11 @@
+# Current release scope — 21 October 2026
+
+The owner now authorizes publishing the tested combined app updates to makeborne.com. The combined branch contains Claude86cb4b6 plus Codex's qualified billing/recovery fixes. This is a gated app update, not permission to activate unqualified checkout, automatic charging, image models, trusted publication or mail automation. Existing production AI spending limits remain disabled.
+
+Current execution and exact evidence: docs/release-review/tested-app-release-20261021.md; docs/AGENT_HANDOFF.md. Verified baseline: main d14bf30, production94 migrations, staging105. Production dry run lists11 pending. M17 requires compatible code to serve actual traffic before its migration; use the phased maintenance procedure. Historical counts/holds below do not describe the new window. Stop on a failed current gate; do not claim full commercial launch readiness from an app update.
+
+---
+
 # Makeborne — current release status
 
 Updated 2026-10-14 by Codex. **Scoped live update approved; commercial launch remains blocked.**

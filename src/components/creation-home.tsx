@@ -15,10 +15,14 @@ import { templateDirections } from "@/lib/template-directions";
 import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
 import { useCreationAccount } from "./use-creation-account";
 import { attachmentOwner, saveCreationDraft } from "@/lib/attachments";
-import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop } from "./file-attachments";
+import { AttachFilesButton, AttachmentList, useFileAttachments, useFileDrop, useSourceReadiness } from "./file-attachments";
+import { useUnsentDraft } from "./use-unsent-draft";
+import UnsentDraftNotice from "./unsent-draft-notice";
 import "@/app/home.css";
 
 type Kind = "website" | "book" | "presentation";
+/** The home brief has no per-request exclusions: a file is either attached or removed. */
+const NO_EXCLUSIONS: ReadonlySet<string> = new Set();
 const formats = [
   { id: "website" as const, label: "Website", icon: Globe2 },
   { id: "book" as const, label: "Book", icon: BookOpen },
@@ -69,7 +73,18 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
   const immediateWebsite=kind==="website"&&mode==="create"&&permissions.enabled;
   const owner = account.ready ? attachmentOwner(account.accountId) : null;
   const attachments = useFileAttachments(owner, "home");
+  const readiness = useSourceReadiness(attachments.files, NO_EXCLUSIONS);
   const drop = useFileDrop(attachments.add, !attachments.ready || attachments.busy || busy);
+  // The unsent brief and its settings survive a reload for this account (or this signed-out device) only.
+  // Attached files already persist separately with their owner; consent is never part of the draft.
+  const unsent = useUnsentDraft({
+    surface: "home",
+    account: account.accountId ? { accountId: account.accountId } : account.ready ? { accountId: null } : null,
+    enabled: !busy,
+    fields: { kind, mode, effort, text: brief },
+    defaults: { kind: "website", mode: "create", effort: DEFAULT_EFFORT, text: "" },
+    apply: next => { pickKind(next.kind); setMode(next.mode); setEffort(next.effort); setBrief(next.text); setError(""); },
+  });
   const starting = useRef(false);
   async function start() {
     if (starting.current || attachments.busy) return;
@@ -86,6 +101,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
       const draft = { kind, brief: brief.trim(), styleId: selectedStyle?.id ?? AUTOMATIC_STYLE.id, style: selectedStyle, mode, effort, requestId, attachmentOwner: owner, generationConsent };
       await saveCreationDraft(owner, requestId, nonce, draft);
       sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify(draft));
+      unsent.submitted();
       router.push(`/studio?create=${kind}&from=home&draft=${requestId}&claim=${nonce}`);
     } catch { setError("Your browser could not save this brief and its files. Keep a copy and try again."); starting.current = false; setBusy(false); }
   }
@@ -120,7 +136,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
           <div className="mk-format-switch" data-slide={slide} style={{ "--format-index": formatIndex } as CSSProperties} role="group" aria-label="What would you like to create?"><span className="mk-format-indicator" aria-hidden="true" />{formats.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={kind === id} className={kind === id ? "is-active" : ""} onClick={() => { pickKind(id); setError(""); }}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</div>
           <form className={`mk-composer${drop.dragging ? " is-file-dragging" : ""}`} {...drop.handlers} onSubmit={event => { event.preventDefault(); void start(); }}>
             {drop.dragging && <p className="attachment-drop-hint">Drop files to attach</p>}
-            <AttachmentList files={attachments.files} onRemove={id => void attachments.remove(id)} disabled={attachments.busy || busy} />
+            <AttachmentList files={attachments.files} readiness={readiness} onRetry={readiness.retry} readPrefix="When your project builds · " onRemove={id => void attachments.remove(id)} removeLabel={name => `Remove ${name} and delete its saved copy from this device`} disabled={attachments.busy || busy} note="Saved on this device until your project opens. × removes a file and deletes its saved copy." />
             {selectedStyle && <div className="mk-selected-style" role="status">
               {selectedConcept && <Image src={`/gallery/${selectedConcept.id}.png`} alt="" width={32} height={32} />}
               <span><small>Style</small>{selectedStyle.name}</span>
@@ -134,11 +150,12 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
               <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim() || !accessReady || immediateWebsite&&!permissions.consent} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
             </div>
           </form>
+          <UnsentDraftNotice restoredAt={unsent.restoredAt} storageRefused={unsent.storageRefused} onDiscard={unsent.discard} disabled={busy} className="mk-unsent-draft" />
           {immediateWebsite&&<GenerationPermissions value={permissions} disabled={busy}/>}
           {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
           <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>
-          <p className="mk-availability">{immediateWebsite ? "Your website starts building as soon as your project opens." : trialCredits ? `Start free — confirmed accounts get ${trialCredits} trial credits to build their first website.` : "Every creation plan includes monthly credits to build with."}</p>
+          <p className="mk-availability">{immediateWebsite ? "Your project opens with this brief ready to send. Building starts, and credits are used, only when you press Send there, after its maximum is shown." : trialCredits ? `Start free — confirmed accounts get ${trialCredits} trial credits to build their first website.` : "Every creation plan includes monthly credits to build with."}</p>
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>

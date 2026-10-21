@@ -1,25 +1,27 @@
 "use client";
 
-import {useCallback, useEffect, useRef, useState} from "react";
-import {ArrowUpRight, Globe2, LoaderCircle, RefreshCw} from "lucide-react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {ArrowUpRight, Copy, Globe2, LoaderCircle, RefreshCw} from "lucide-react";
 import {cloudAccountGuard} from "./cloud-api";
 import WebsiteEnquiries from "./website-enquiries";
 import ClientReadyCheck from "./client-ready-check";
+import SiteClaims from "./site-claims";
+import PublishReport from "./publish-report";
+import {audienceLine, indexingPolicy} from "@/lib/hosting/publish-report";
+import {previewDocument} from "@/lib/hosting/prepared-preview";
+import RenderedContrastCheck from "./rendered-contrast-check";
 import type {ClientReadyInput} from "@/lib/builder/client-ready";
+import {checkedLabel} from "@/lib/hosting/checked-version";
 import {HOSTING, SITE_ADDRESS_PARTS, siteAddress, validSiteSlug, type HostedSite} from "@/lib/hosting/config";
 import {PublicationPreparationSchema, type PublicationPreparation} from "@/lib/projects/publication-contract";
 import type {PublicationAddressPolicy} from "@/lib/hosting/namespace-server";
 
-type Props = {accountId:string;workspaceId:string;artifactId:string;title:string;version:number;dirty:boolean;disabled:boolean;owner:boolean;source?:ClientReadyInput};
+type Props = {accountId:string;workspaceId:string;artifactId:string;title:string;version:number;dirty:boolean;disabled:boolean;owner:boolean;source?:ClientReadyInput;onPublished?:()=>void};
 type Pending = {key:string;body:string};
-const previewPolicy = "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'";
-function previewDocument(html:string) {
-  return html.replace(/<head>/i, `<head><meta http-equiv="Content-Security-Policy" content="${previewPolicy}">`);
-}
 
 /** Mounted with an account/artifact key by the parent. Preparation only queues a
  * trusted worker; publishing requires review of that worker's retained output. */
-export default function TrustedWebsitePublish({accountId,workspaceId,artifactId,title,version,dirty,disabled,owner,source}:Props) {
+export default function TrustedWebsitePublish({accountId,workspaceId,artifactId,title,version,dirty,disabled,owner,source,onPublished}:Props) {
   const base=`/api/cloud/workspaces/${workspaceId}/artifacts/${artifactId}/publication`;
   const storageKey=`makeborne-publish-v1:${accountId}:${workspaceId}:${artifactId}`;
   const [site,setSite]=useState<HostedSite|null>(null), [preparation,setPreparation]=useState<PublicationPreparation|null>(null);
@@ -31,6 +33,8 @@ export default function TrustedWebsitePublish({accountId,workspaceId,artifactId,
   const [message,setMessage]=useState(""), [consent,setConsent]=useState<string|null>(null), [offline,setOffline]=useState(false);
   const [pending,setPending]=useState<Pending|null>(null);
   const [previewPath,setPreviewPath]=useState("/");
+  // The per-page report of the output that was just published (the preparation's pages are cleared on publish).
+  const [publishedReport,setPublishedReport]=useState<{version:number;routes:PublicationPreparation["previewRoutes"]}|null>(null);
   const refreshSequence=useRef(0);
   const headers={"X-Makeborne-Account":accountId};
   const refresh=useCallback(async(signal?:AbortSignal, initial=false)=>{
@@ -91,6 +95,11 @@ export default function TrustedWebsitePublish({accountId,workspaceId,artifactId,
     setPending(value);
     try {if(value)sessionStorage.setItem(storageKey,JSON.stringify(value));else sessionStorage.removeItem(storageKey);}catch{}
   }
+  /** After an unconfirmed publish or offline change, read what is actually live (GET only; nothing is resent). */
+  function reconcile(reason:string) {
+    setMessage(reason);
+    void refresh().then(()=>{setMessage(`${reason} The status shown is the current one from the server.`);onPublished?.();}).catch(()=>{});
+  }
   function fenceStatus(confirmed:boolean) {
     refreshSequence.current++;
     setStatusConfirmed(confirmed);
@@ -117,6 +126,12 @@ export default function TrustedWebsitePublish({accountId,workspaceId,artifactId,
   const matches=preparation?.version===version&&preparation.publicationRevision===(site?.revision??0)&&preparation.slug===slug&&preparation.interactive===interactive;
   const addressAllowed=addressPolicy.enabled&&validSiteSlug(slug)&&!addressPolicy.reservedSlugs.includes(slug)&&(addressPolicy.allowedSlugs===null||addressPolicy.allowedSlugs.includes(slug));
   const canPublish=preparation?.state==="ready"&&matches&&!dirty&&consent===preparation.id&&addressAllowed&&statusConfirmed;
+  // Audience and indexing follow the hosting policy: test-workspace and local addresses are never indexed.
+  const policy=useMemo(()=>indexingPolicy({testAddresses:addressPolicy.enabled&&addressPolicy.allowedSlugs!==null,localHosting:HOSTING.domain==="localhost"}),[addressPolicy]);
+  async function copyLink(address:string) {
+    try {await navigator.clipboard.writeText(address);setMessage("Website address copied.");}
+    catch {setMessage("Copy isn’t available here. Select the address from Open live website instead.");}
+  }
   async function publish() {
     if(!canPublish||busy||!preparation||!owner)return;
     fenceStatus(false);
@@ -127,10 +142,10 @@ export default function TrustedWebsitePublish({accountId,workspaceId,artifactId,
       const response=await fetch(base,{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({preparationId:preparation.id,acknowledged:true}),signal:AbortSignal.timeout(30_000)});
       const result=await response.json();assertAccount();
       if(!response.ok)throw new Error(result.error?.message||"Publishing could not be confirmed. Refresh its status before retrying.");
-      setSite(result.site);setConsent(null);setPreparation({...preparation,state:"published",previewHtml:null,previewRoutes:[]});
+      setSite(result.site);setConsent(null);setPublishedReport({version:preparation.version,routes:preparation.previewRoutes});setPreparation({...preparation,state:"published",previewHtml:null,previewRoutes:[]});
       setMessage("Your reviewed website is live. Future edits stay private until you publish again.");
-      fenceStatus(true);
-    } catch(error){fenceStatus(false);setMessage(error instanceof Error?error.message:"Refresh publishing status before retrying.");}
+      fenceStatus(true);onPublished?.();
+    } catch(error){fenceStatus(false);reconcile(error instanceof Error?error.message:"Publishing could not be confirmed.");}
     finally{setBusy(false);}
   }
   async function takeOffline() {
@@ -143,8 +158,8 @@ export default function TrustedWebsitePublish({accountId,workspaceId,artifactId,
       const result=await response.json();assertAccount();
       if(!response.ok)throw new Error(result.error?.message||"Offline status is unconfirmed. Refresh before retrying.");
       setSite(result.site);setOffline(false);setConsent(null);setMessage("Your website is offline. Its address stays reserved.");
-      fenceStatus(true);
-    }catch(error){fenceStatus(false);setMessage(error instanceof Error?error.message:"Refresh publishing status.");}finally{setBusy(false);}
+      fenceStatus(true);onPublished?.();
+    }catch(error){fenceStatus(false);reconcile(error instanceof Error?error.message:"Offline status is unconfirmed.");}finally{setBusy(false);}
   }
   return <section className="website-publish" aria-labelledby={`publish-${artifactId}`}>
     <div className="website-publish-heading"><span className="website-publish-icon"><Globe2 size={18}/></span><div><h3 id={`publish-${artifactId}`}>Publish website</h3><p>{site?.live?`Live · version ${site.version_number}`:"Prepare, review, publish"}</p></div>{site?.live&&<span className="website-publish-live">Live</span>}</div>
@@ -153,13 +168,15 @@ export default function TrustedWebsitePublish({accountId,workspaceId,artifactId,
     {addressPolicy.enabled&&addressPolicy.allowedSlugs!==null&&<p className="website-publish-detail">Test workspace addresses: {addressPolicy.allowedSlugs.join(" or ")}. Customer addresses are reserved for the live app.</p>}
     {addressPolicy.enabled&&validSiteSlug(slug)&&!addressAllowed&&<p className="website-publish-message">This address is reserved. Choose another website address.</p>}
     {HOSTING.interactiveAllowed&&<label className="website-publish-toggle"><input type="checkbox" checked={interactive} disabled={!owner||busy||running||!!pending} onChange={e=>{setInteractive(e.target.checked);setConsent(null);}}/><span><strong>Interactive website</strong><small>Run menus, forms and animations on your website’s separate domain.</small></span></label>}
-    {site?.live&&<a className="website-publish-url" href={siteAddress(site.slug)} target="_blank" rel="noopener noreferrer">Open live website <ArrowUpRight size={13}/></a>}
+    {site?.live&&<div className="website-publish-links"><a className="website-publish-url" href={siteAddress(site.slug)} target="_blank" rel="noopener noreferrer">Open live website <ArrowUpRight size={13}/></a><button type="button" onClick={()=>void copyLink(siteAddress(site.slug))}><Copy size={13}/>Copy link</button></div>}
+    {site?.live&&publishedReport&&site.version_number===publishedReport.version&&publishedReport.routes.length>0&&<PublishReport routes={publishedReport.routes} policy={policy} version={publishedReport.version} published address={siteAddress(site.slug)}/>}
     {!available&&loaded&&<p className="website-publish-detail">Verified publishing is being prepared. You can keep editing and visit any existing live website.</p>}
     {dirty&&<p className="website-publish-detail">Save your changes before preparing this version.</p>}
-    {source&&<ClientReadyCheck source={source} pages={preparation?.state==="ready"&&matches?preparation.previewRoutes:undefined}/>}
+    {source&&<ClientReadyCheck source={source} scope={checkedLabel({version,dirty})} pages={preparation?.state==="ready"&&matches&&!dirty?preparation.previewRoutes:undefined}/>}
+    {source&&<SiteClaims source={source} scope={checkedLabel({version,dirty})} pages={preparation?.state==="ready"&&matches&&!dirty?preparation.previewRoutes:undefined}/>}
     {owner?<button type="button" className="button secondary" disabled={busy||running||!loaded||!statusConfirmed||!available||disabled||dirty||version<1||!addressAllowed} onClick={()=>void prepare()}>{running||busy?<LoaderCircle size={15} className="auth-spinner"/>:<Globe2 size={15}/>} {running?"Preparing website…":pending?"Retry preparation request":"Prepare saved website"}</button>:<p className="website-publish-detail">Only the workspace owner can publish.</p>}
     {pending&&<div className="website-publish-detail"><p>Retry sends the original saved request, including its original address. To choose new options, refresh the publishing status first. Clearing this saved request does not cancel work already on the server.</p><button type="button" className="website-publish-text-button" disabled={busy||running||!statusConfirmed} onClick={()=>{if(!busy&&!running&&statusConfirmed){remember(null);setConsent(null);setMessage("Saved request cleared. Review the current status and choose your publishing options.");}}}>Clear saved preparation request</button></div>}
-    {preparation?.state==="ready"&&preparation.previewHtml&&<div className="website-publication-review"><div><strong>Final appearance · version {preparation.version}</strong><p className="website-publish-detail">This shows the prepared page without running scripts here. {preparation.interactive?"Its verified build also includes interactive features.":"Visitors will see the static version."}</p></div><label className="website-publish-label">Page to review<select aria-label="Prepared page" value={preparation.previewRoutes.some(route=>route.path===previewPath)?previewPath:"/"} onChange={event=>setPreviewPath(event.target.value)}>{preparation.previewRoutes.map(route=><option key={route.path} value={route.path}>{route.path==="/"?"Home":route.path}</option>)}</select></label><iframe title="Prepared website appearance" srcDoc={previewDocument(preparation.previewRoutes.find(route=>route.path===previewPath)?.html??preparation.previewHtml)} sandbox="" referrerPolicy="no-referrer"/>{!matches&&<p className="website-publish-message">The saved version or publishing options changed. Prepare the website again.</p>}<label className="website-publish-consent"><input type="checkbox" checked={consent===preparation.id} disabled={!owner||!matches||dirty||busy} onChange={e=>setConsent(e.target.checked?preparation.id:null)}/><span>I’ve reviewed this prepared version and have permission to publish its content and artwork.</span></label><button type="button" className="button primary" disabled={!owner||!canPublish||busy||disabled} onClick={()=>void publish()}>{busy?"Publishing…":"Publish reviewed website"}</button></div>}
+    {preparation?.state==="ready"&&preparation.previewHtml&&<div className="website-publication-review"><div><strong>Final appearance · version {preparation.version}</strong><p className="website-publish-detail">This shows the prepared page without running scripts here. {preparation.interactive?"Its verified build also includes interactive features.":"Visitors will see the static version."}</p></div><label className="website-publish-label">Page to review<select aria-label="Prepared page" value={preparation.previewRoutes.some(route=>route.path===previewPath)?previewPath:"/"} onChange={event=>setPreviewPath(event.target.value)}>{preparation.previewRoutes.map(route=><option key={route.path} value={route.path}>{route.path==="/"?"Home":route.path}</option>)}</select></label><iframe title="Prepared website appearance" srcDoc={previewDocument(preparation.previewRoutes.find(route=>route.path===previewPath)?.html??preparation.previewHtml)} sandbox="" referrerPolicy="no-referrer"/>{!matches&&<p className="website-publish-message">The saved version or publishing options changed. Prepare the website again.</p>}{matches&&!dirty&&preparation.previewRoutes.length>0&&<PublishReport routes={preparation.previewRoutes} policy={policy} version={preparation.version} published={false} address={siteAddress(preparation.slug)}/>}{matches&&!dirty&&preparation.previewRoutes.length>0&&<RenderedContrastCheck key={preparation.id} routes={preparation.previewRoutes} version={preparation.version} dirty={dirty} scope={{accountId,workspaceId,artifactId}}/>}<p className="website-publish-audience">{audienceLine(policy)}</p><label className="website-publish-consent"><input type="checkbox" checked={consent===preparation.id} disabled={!owner||!matches||dirty||busy} onChange={e=>setConsent(e.target.checked?preparation.id:null)}/><span>I’ve reviewed this prepared version and have permission to publish its content and artwork.</span></label><button type="button" className="button primary" disabled={!owner||!canPublish||busy||disabled} onClick={()=>void publish()}>{busy?"Publishing…":"Publish reviewed website"}</button></div>}
     {preparation?.error&&<p className="website-publish-message" role="alert">{preparation.error}</p>}
     <button type="button" className="website-publish-text-button" disabled={busy} onClick={()=>void refresh().catch(error=>setMessage(error instanceof Error?error.message:"Status unavailable."))}><RefreshCw size={12}/> Refresh publishing status</button>
     {site?.live&&owner&&(offline?<div className="website-publish-offline"><p>Take this website offline?</p><button type="button" className="button secondary small" disabled={busy} onClick={()=>void takeOffline()}>Take offline</button><button type="button" className="button secondary small" disabled={busy} onClick={()=>setOffline(false)}>Cancel</button></div>:<button type="button" className="website-publish-text-button" disabled={busy} onClick={()=>setOffline(true)}>Take website offline</button>)}

@@ -20,7 +20,7 @@ export function cloudJson(value: unknown, status = 200) {
   });
 }
 export function cloudError(error: unknown) {
-  const response = apiError(error instanceof RequestError ? error : new RequestError("CLOUD_OUTCOME_UNKNOWN", "Cloud storage could not confirm the outcome. Keep this draft and retry with the same request key before starting another write.", 503));
+  const response = apiError(error instanceof RequestError ? error : new RequestError("CLOUD_OUTCOME_UNKNOWN", "Saving to your account could not confirm the outcome. Keep this draft and retry with the same request key before starting another write.", 503));
   response.headers.set("Cache-Control", "private, no-store");
   response.headers.set("Vary", "Cookie");
   return response;
@@ -87,7 +87,7 @@ export function databaseError(error: { code?: string } | null) {
     );
   throw new RequestError(
     "CLOUD_OUTCOME_UNKNOWN",
-    "Cloud storage could not confirm this request. Keep your draft and retry with the same request key before starting another write.",
+    "Saving to your account could not confirm this request. Keep your draft and retry with the same request key before starting another write.",
     503,
   );
 }
@@ -97,7 +97,7 @@ export async function cloudContext(workspaceId?: string, write = false) {
   if (!status.enabled)
     throw new RequestError(
       "CLOUD_DISABLED",
-      status.reason ?? "Cloud storage is unavailable.",
+      status.reason ?? "Saving to your account is unavailable.",
       503,
     );
   const client = await createClient();
@@ -105,7 +105,7 @@ export async function cloudContext(workspaceId?: string, write = false) {
   if (authError || !auth.user)
     throw new RequestError(
       "AUTH_REQUIRED",
-      "Sign in to access your cloud workspace.",
+      "Sign in to access your workspace.",
       401,
     );
   // This header can only constrain the authenticated identity, never grant access.
@@ -118,7 +118,7 @@ export async function cloudContext(workspaceId?: string, write = false) {
   if (schemaError || schemaVersion !== CLOUD_SCHEMA_VERSION)
     throw new RequestError(
       "CLOUD_SCHEMA_UNVERIFIED",
-      "The cloud database is not ready for this application version.",
+      "Saving to your account isn’t ready for this version of Makeborne yet.",
       503,
     );
   if (!workspaceId) return { client, user: auth.user, workspace: null };

@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { AlertTriangle, Globe, ImagePlus, Loader2, Palette, Plus, Trash2, X } from "lucide-react";
 import { BRAND_COLOR_ROLES, BRAND_FONTS, BrandKitSchema, brandFont, brandWarnings, COLOR_ROLE_LABELS, contrast, emptyBrandKit, resolvedColors, type BrandColorRole, type BrandKit, type BrandKitInput } from "@/lib/brand/kit";
 import { brandRequest, type BrandKitList, type SavedBrandKit } from "./brand-kit-api";
+import { FONT_SUBSETS, UNICODE_RANGES, type FontSubset } from "@/lib/builder/fonts";
 import "@/app/brand-kits.css";
 
 const OWN = "own";
 const keyOf = (clientId: string | null) => clientId ?? OWN;
 const FONT_GROUPS: [string, string][] = [["serif", "Serif"], ["sans", "Sans serif"], ["display", "Display"], ["mono", "Monospace"]];
-const fontSrc = (id: string) => `/builder-runtime/fonts/${id}-normal.woff2`;
+/** Same-origin copies of a catalogue face: latin, and latin-ext for names such as Šibenik or Łódź. */
+const fontSrc = (id: string, subset: FontSubset) => `/builder-runtime/fonts/${id}-${subset === "latin" ? "" : `${subset}-`}normal.woff2`;
 
 /**
  * Brand kits for the workspace's own brand and for each client. With
@@ -157,7 +159,7 @@ function KitEditor({ accountId, path, target, title, initial, saved, onClose, on
   const colors = preview ? resolvedColors(preview) : null;
   const heading = brandFont(kit.fonts?.heading), body = brandFont(kit.fonts?.body);
   const fontCss = [heading, body].filter((font, index, all) => font && all.findIndex(other => other?.id === font.id) === index)
-    .map(font => `@font-face{font-family:"bk-${font!.id}";src:url(${fontSrc(font!.id)}) format("woff2");font-display:swap;font-weight:100 900}`).join("");
+    .flatMap(font => FONT_SUBSETS.map(subset => `@font-face{font-family:"bk-${font!.id}";src:url(${fontSrc(font!.id, subset)}) format("woff2");font-display:swap;font-weight:100 900;unicode-range:${UNICODE_RANGES[subset]}}`)).join("");
 
   const setColor = (role: BrandColorRole, value: string | null) => setKit(current => ({ ...current, colors: { ...current.colors, [role]: value } }));
 

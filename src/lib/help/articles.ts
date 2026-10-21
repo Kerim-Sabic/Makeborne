@@ -329,7 +329,7 @@ const CORE_ARTICLES: HelpArticle[] = [
     ],
     faqs: [
       { q: "Do unused credits expire?", a: "Plan credits carry over for two months after the month they were granted." },
-      { q: "Can I get a refund?", a: "See Subscriptions, pricing and refunds for the full terms. Contact support with your purchase reference." },
+      { q: "Can I get a refund?", a: "Yes, for a payment whose credits are all unused: a subscription payment or a credit pack. Each payment is checked on its own, and the credits expiring soonest are used first. Contact support with your Whop payment reference; support holds that payment's credits and refunds it through Whop. See Subscriptions, pricing and refunds for the full terms." },
     ],
     related: ["plan-create-and-effort", "find-new-leads", "ask-an-ai-advisor"],
   },

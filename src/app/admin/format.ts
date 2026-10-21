@@ -26,3 +26,20 @@ export const titleCase = (value: string) => value.replace(/[_-]+/g, " ").replace
 /** The moment this request is rendered. Admin pages are server components rendered once per
  * request (`dynamic = "force-dynamic"`), so one timestamp keeps every relative time consistent. */
 export const requestTime = () => Date.now();
+
+/** Support wording for a payment's refund decision (makeborne_support_payment_refund_check). */
+export function refundDecisionLabel(decision: string, spent = 0): { text: string; tone: "good" | "warn" | "muted" | "bad" } {
+  switch (decision) {
+    case "eligible": return { text: "Refundable: none of its credits were used", tone: "good" };
+    case "not_eligible_used": return { text: `Not refundable: ${count(spent)} of its credits were used`, tone: "muted" };
+    case "blocked_active_hold": return { text: "Wait: a run is using these credits now", tone: "warn" };
+    case "refund_in_progress": return { text: "Refund in progress: credits frozen", tone: "warn" };
+    case "already_refunded": return { text: "Refunded", tone: "muted" };
+    case "held_for_review": return { text: "Partial refund or dispute: credits withheld", tone: "bad" };
+    case "manual_review_unattributed": return { text: "Manual review: not matched to a billing period", tone: "bad" };
+    case "manual_review_no_credits": return { text: "Manual review: no credits linked to it", tone: "bad" };
+    case "nothing_to_refund": return { text: "Nothing to refund ($0 payment)", tone: "muted" };
+    case "not_paid": return { text: "Not paid", tone: "muted" };
+    default: return { text: "Unknown payment", tone: "muted" };
+  }
+}

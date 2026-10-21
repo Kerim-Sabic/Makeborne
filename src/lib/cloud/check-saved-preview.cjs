@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Offline saved-content compatibility checks: the editor preview follows the saved format, not the builder's availability. */
 const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), assert = require("node:assert/strict"), { randomUUID } = require("node:crypto");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
-const { savedFormat, choosePreview, hasBuilderSource } = require("./saved-preview.ts");
+const { savedFormat, choosePreview, hasBuilderSource, editorEntry } = require("./saved-preview.ts");
 const { ArtifactContentSchema } = require("../domain.ts");
 const { emptyDocument } = require("../documents/editor.ts");
 const { projectDocument } = require("../documents/project.ts");
@@ -123,5 +123,27 @@ check("the saved-format notice promises only what production delivers (no standa
   const exportRoute = fs.readFileSync(path.join(__dirname, "..", "..", "app", "api", "export", "route.ts"), "utf8");
   if (/process\.env\.NODE_ENV === "production"\)\s*throw new RequestError\(\s*"EXPORT_NOT_CONFIGURED"/.test(exportRoute))
     assert.doesNotMatch(notice, /export/i, "outline and static-design records cannot be exported in production; the notice must not offer it");
+});
+check("F01: the format notice names the editor control actually shown, for every format and role", () => {
+  // [content, toolbar label, does the editor tab itself offer a draft download?]
+  const cases = [
+    [{ kind: "website", website: { html: "<p>x</p>", css: "" } }, "Code", true],
+    [{ kind: "website", websiteSource: { files: [] } }, "Code", false],
+    [{ kind: "website" }, "Edit", true],
+    [{ kind: "book" }, "Edit", true], [{ kind: "book", document: {} }, "Edit", true],
+    [{ kind: "presentation" }, "Edit", true], [{ kind: "presentation", document: {} }, "Edit", true],
+  ];
+  for (const [content, label, editorDownload] of cases) for (const reviewer of [false, true]) {
+    const entry = editorEntry(content, reviewer);
+    assert.equal(entry.label, label, JSON.stringify(content));
+    assert.ok(entry.instruction.includes(`from the ${label} tab`), entry.instruction);
+    assert.equal(entry.canEdit, !reviewer);
+    assert.equal(/edit it/.test(entry.instruction), !reviewer, "reviewers are not told they can edit");
+    assert.equal(/download a copy/.test(entry.instruction), editorDownload, "download is promised only where the editor tab has it");
+  }
+  const studio = fs.readFileSync(path.join(__dirname, "..", "..", "components", "cloud-studio.tsx"), "utf8");
+  assert.ok(studio.includes('title={editor.label} onClick={() => setView("edit")}><PencilLine size={15} /><span className="workbench-tab-label">{editor.label}</span>'), "toolbar label comes from the same definition");
+  assert.ok(studio.includes('{editor.instruction}{" "}<button type="button" className="cloud-workbench-format-link" onClick={() => setView("edit")}>Open {editor.label}</button>'), "notice uses it and offers a navigation-only shortcut");
+  assert.ok(!studio.includes("from the Edit tab"), "no hard-coded control name left");
 });
 console.log(`PASS ${count} saved-content compatibility checks: legacy books, decks and websites stay visible and unchanged in every builder state.`);

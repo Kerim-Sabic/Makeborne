@@ -1,9 +1,11 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AdvisorProvenance } from "@/lib/experts/advisor-brief";
 import type { EffortLevel } from "@/lib/routing/effort";
 import { estimatePlanCredits, parsePlan, recommendedEffort, StoredPlanSchema, type PlanEstimate, type SitePlan, type StoredPlan } from "@/lib/builder/plan";
 import { useBuilderOperation } from "./use-builder-operation";
 import { serializeBuilderRequest } from "@/lib/builder/attachments";
+import { canonicalSourceJson } from "@/lib/projects/canonical-json";
 
 export type ActivePlan = {
   turnId: string;
@@ -65,7 +67,7 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
   const [state, setState] = useState<{ key: object; active: ActivePlan | null; restored: ActivePlan | null } | null>(null);
   const active = state?.key === key ? state.active : null;
   const restored = state?.key === key ? state.restored : null;
-  const { operation, recovery, checking, recoveryNotice, ready, hasPrevious, begin, observe, refresh, recover: recoverOperation } = useBuilderOperation({ accountId, workspaceId, artifactId, channel: "plan" });
+  const { operation, recovery, checking, recoveryNotice, ready, hasPrevious, begin, observe, refresh, recover: recoverOperation, cancel, cancelling, pendingCancel } = useBuilderOperation({ accountId, workspaceId, artifactId, channel: "plan" });
   const recoverablePlan = useMemo(() => recovery?.candidate && typeof recovery.candidate === "object"
     ? readPlanView({ ...recovery.candidate, persisted: false }, "recovered-plan") : null, [recovery]);
   const publish = useCallback((plan: ActivePlan | null, restore = false) => {
@@ -141,6 +143,32 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
     session.timer = setTimeout(() => { session.timer = null; session.queue = save; void flush(); }, 700);
   }, [flush, publish, key]);
 
+  /** Saves `plan` now when it differs from the saved revision, then returns exactly
+   * what is saved. A build approves only this saved revision; an unsaved, failed or
+   * superseded edit refuses here instead of being built from local state. */
+  const approve = useCallback(async (plan: SitePlan): Promise<{ plan: SitePlan; revision: number }> => {
+    const session = sessionRef.current;
+    if (!session?.live || session.key !== key || !session.active) throw new Error("Reload the plan before building it.");
+    const current = session.active;
+    if (current.stored.status !== "draft") throw new Error("This plan was already built. Revise it or describe the next change.");
+    if (session.running || session.blocked || current.save === "error" || current.save === "local") throw new Error("This plan isn't saved. Fix the highlighted fields or reload the plan before building.");
+    const checked = parsePlan(plan);
+    if (!checked.plan) throw new Error(`This plan can't be saved: ${checked.error}`);
+    const generation = session.generation;
+    if (session.timer || canonicalSourceJson(checked.plan) !== canonicalSourceJson(current.stored.plan)) {
+      cancelSave(session); session.edit++;
+      publish({ ...current, stored: { ...current.stored, plan: checked.plan, status: "draft" }, save: "saving" });
+      session.queue = { plan: checked.plan, status: "draft", edit: session.edit };
+    }
+    await flush();
+    const saved = session.active;
+    if (!session.live || session.generation !== generation || session.blocked || session.timer || session.queue || !saved || saved.save !== "saved"
+      || saved.stored.status !== "draft" || canonicalSourceJson(saved.stored.plan) !== canonicalSourceJson(checked.plan)) {
+      throw new Error("The plan was not confirmed as saved, so it was not built. Check it and try again.");
+    }
+    return { plan: saved.stored.plan, revision: saved.stored.revision };
+  }, [flush, publish, key]);
+
   const markBuilt = useCallback((plan: SitePlan) => {
     const session = sessionRef.current;
     if (!session?.live || session.key !== key) return;
@@ -200,7 +228,7 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
   }, [operation, recovery, recoverablePlan, recoverOperation, restoreRecorded, key]);
 
   /** Runs one planning call. Revises the active draft plan when there is one. */
-  const run = useCallback(async (input: { turnId: string; message: string; effort: EffortLevel; expectedVersion: number; attachments: PlanAttachment[]; revise: SitePlan | null }, on: PlanCallbacks) => {
+  const run = useCallback(async (input: { turnId: string; message: string; effort: EffortLevel; expectedVersion: number; attachments: PlanAttachment[]; revise: SitePlan | null; approvedMaximum: number; provenance?: AdvisorProvenance }, on: PlanCallbacks) => {
     let finished = false;
     const session = sessionRef.current;
     if (!session?.live || session.key !== key || session.running) return;
@@ -238,9 +266,9 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
     };
     try {
       const response = await fetch("/api/build/plan", { method: "POST", headers: { "Content-Type": "application/json", "X-Makeborne-Account": accountId },
-        body: serializeBuilderRequest({ workspaceId, artifactId, expectedVersion: input.expectedVersion, expectedRevision: session.revision, message: input.message, effort: input.effort,
+        body: serializeBuilderRequest({ workspaceId, artifactId, expectedVersion: input.expectedVersion, expectedRevision: session.revision, message: input.message, effort: input.effort, approvedMaximum: input.approvedMaximum,
           operation: requestOperation,
-          attachments: input.attachments, ...(input.revise ? { previousPlan: input.revise } : {}) }) });
+          attachments: input.attachments, ...(input.revise ? { previousPlan: input.revise } : {}), ...(input.provenance ? { provenance: input.provenance } : {}) }) });
       if (!isCurrent()) return;
       if (!response.ok || !response.body) {
         const failure = await response.json().catch(() => null);
@@ -279,5 +307,5 @@ export function usePlanMode({ accountId, workspaceId, artifactId }: { accountId:
     } finally { if (isCurrent()) session.running = false; }
   }, [accountId, workspaceId, artifactId, begin, observe, refresh, publish, restoreRecorded, key]);
 
-  return useMemo(() => ({ active, restored, run, edit, markBuilt, operation, checking, recoveryNotice, ready, hasPrevious, refreshOperation, recoverablePlan, recoverPlan }), [active, restored, run, edit, markBuilt, operation, checking, recoveryNotice, ready, hasPrevious, refreshOperation, recoverablePlan, recoverPlan]);
+  return useMemo(() => ({ active, restored, run, edit, approve, markBuilt, operation, checking, recoveryNotice, ready, hasPrevious, refreshOperation, recoverablePlan, recoverPlan, cancel, cancelling, pendingCancel }), [active, restored, run, edit, approve, markBuilt, operation, checking, recoveryNotice, ready, hasPrevious, refreshOperation, recoverablePlan, recoverPlan, cancel, cancelling, pendingCancel]);
 }

@@ -4,12 +4,15 @@
  * source and, when available, on the prepared static pages. Findings warn and
  * never block publishing. */
 
+import { detectFonts } from "./fonts";
+import { describeTyped, fontCoverage } from "./font-fallback";
+
 export type ClientReadySeverity = "error" | "warning" | "info";
 export type ClientReadyRule =
   | "placeholder-text" | "placeholder-contact" | "placeholder-image" | "unfinished-note"
-  | "empty-link" | "dead-route" | "missing-anchor" | "missing-image"
+  | "empty-link" | "dead-route" | "missing-anchor" | "unreadable-link" | "missing-image"
   | "image-alt" | "image-size" | "low-contrast" | "link-name"
-  | "page-title" | "meta-description" | "html-lang";
+  | "page-title" | "meta-description" | "html-lang" | "font-fallback" | "decomposed-text";
 export type ClientReadyFinding = {
   rule: ClientReadyRule; severity: ClientReadySeverity; title: string; detail: string;
   /** Where it was found ("src/components/Footer.tsx:12", "page /menu"), at most MAX_LOCATIONS. */
@@ -35,6 +38,7 @@ const RULES: Record<ClientReadyRule, { severity: ClientReadySeverity; title: str
   "empty-link": { severity: "error", title: "Links that go nowhere", detail: "These links use href=\"#\", an empty address or an empty mailto:/tel:. Point each one at a real page, section, phone number or email, or make it plain text." },
   "dead-route": { severity: "error", title: "Links to pages that don’t exist", detail: "These links point at pages or files the website doesn’t have. Fix the address or add the page." },
   "missing-anchor": { severity: "warning", title: "Links to missing sections", detail: "These in-page links point at a section id that isn’t on the site, so clicking them does nothing." },
+  "unreadable-link": { severity: "warning", title: "Links with broken encoding", detail: "These links contain a % that isn’t a complete escape (such as a lone %, %ZZ or a cut-off %E0%A4), or are too long to check, so browsers can’t match them to a page or section. Write the address in plain words, or write a literal percent sign as %25." },
   "missing-image": { severity: "error", title: "Images that don’t exist", detail: "These image paths are not among the project’s images, so they show as broken." },
   "image-alt": { severity: "warning", title: "Images without a description", detail: "Add alt text that describes each image (use alt=\"\" only for purely decorative images). Screen readers and search engines rely on it." },
   "image-size": { severity: "warning", title: "Images without width and height", detail: "Images without width and height make the page jump while it loads. Add both attributes with the image’s proportions." },
@@ -43,6 +47,8 @@ const RULES: Record<ClientReadyRule, { severity: ClientReadySeverity; title: str
   "page-title": { severity: "warning", title: "The page title is missing or generic", detail: "Set a <title> in index.html with the business name. It appears in browser tabs and in exported or downloaded code." },
   "meta-description": { severity: "info", title: "No meta description in index.html", detail: "Published pages get descriptions from Search & sharing; downloaded source and GitHub exports use the one in index.html." },
   "html-lang": { severity: "info", title: "The page language isn’t set", detail: "Add lang to <html> (for example lang=\"en\") so screen readers pronounce the text correctly." },
+  "font-fallback": { severity: "warning", title: "Some characters aren’t in the website’s fonts", detail: "The website embeds the Latin and Latin Extended parts of its fonts. These characters are outside them, so each visitor’s device draws them in its own fallback font, which may look different. Check them on the prepared pages, or choose wording without them. (Compared with the fonts’ declared character ranges; emoji and icons aren’t counted.)" },
+  "decomposed-text": { severity: "info", title: "Letters typed with separate accent marks", detail: "These letters are stored as a base letter plus a combining accent (for example c + U+030C instead of č). Makeborne chooses fonts for the joined letter, but browsers don’t always join them: in Chromium a lone “c + U+030C” was drawn in a system font. Retype them as single letters to be safe." },
 };
 const ORDER: ClientReadySeverity[] = ["error", "warning", "info"];
 
@@ -67,8 +73,27 @@ function segments(path: string, content: string): Segment[] {
   }
   const code = stripComments(content), found: Segment[] = [];
   for (const match of code.matchAll(STRING)) found.push({ text: match[0].slice(1, -1).replace(/\$\{[^}]*\}/g, " "), index: match.index! + 1 });
-  if (/\.[jt]sx$/i.test(path)) for (const match of code.matchAll(/>([^<>{}]*[A-Za-z][^<>{}]*)</g)) found.push({ text: match[1], index: match.index! + 1 });
+  // Any letter, not only A–Z: text such as "Добро пожаловать" is visible too.
+  if (/\.[jt]sx$/i.test(path)) for (const match of code.matchAll(/>([^<>{}]*\p{L}[^<>{}]*)</gu)) found.push({ text: match[1], index: match.index! + 1 });
   return found;
+}
+
+/** Text a visitor could see in one file, each piece with its "path:line" location. */
+function fileTexts(path: string, content: string): { text: string; where: string }[] {
+  const found: { text: string; where: string }[] = [];
+  for (const segment of segments(path, content)) {
+    if (/\.html?$/i.test(path) || CODE.test(path)) found.push({ text: segment.text, where: `${path}:${lineAt(content, segment.index)}` });
+    else if (/\.(?:json|md|txt)$/i.test(path)) for (const [index, line] of segment.text.split("\n").entries()) found.push({ text: line, where: `${path}:${index + 1}` });
+  }
+  return found;
+}
+const SKIPPED_FILES = /(?:^|\/)(?:package(?:-lock)?\.json|tsconfig[^/]*|vite\.config[^/]*)$/i;
+/** Visible text of the website (string literals and JSX text in code, HTML text,
+ * data files line by line, and the prepared pages' text), with locations. A static
+ * read: text assembled at runtime from parts may be split or missed. */
+export function visibleText(input: ClientReadyInput): { text: string; where: string }[] {
+  return [...input.files.filter(file => !SKIPPED_FILES.test(file.path)).flatMap(file => fileTexts(file.path, file.content)),
+    ...(input.pages ?? []).map(page => ({ text: plain(page.html), where: `page ${page.path}` }))];
 }
 
 const PLACEHOLDER: RegExp[] = [
@@ -160,6 +185,15 @@ const solidBackground = (value: string) => /\b(?:url|gradient)\(/i.test(value) ?
 // ------------------------------------------------------------------ check
 
 const routeKey = (path: string) => (path.replace(/\/+$/, "") || "/");
+/** Longest link part that is decoded; anything longer is reported rather than processed. */
+const MAX_DECODE = 2_000;
+/** decodeURIComponent that never throws: null for a malformed escape or an over-long value. */
+export function safeDecode(value: string): string | null {
+  if (value.length > MAX_DECODE) return null;
+  try { return decodeURIComponent(value); } catch { return null; }
+}
+/** A link as shown in a finding's location: the original text, shortened when long. */
+const shown = (value: string) => value.length > 80 ? `${value.slice(0, 79)}…` : value;
 const plain = (html: string) => html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/g, " ").replace(/&amp;/g, "&").replace(/&[a-z#0-9]+;/gi, " ");
 
 export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] {
@@ -171,7 +205,7 @@ export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] 
     if (entry.locations.length < MAX_LOCATIONS) entry.locations.push(location);
     found.set(rule, entry);
   };
-  const files = input.files.filter(file => !/(?:^|\/)(?:package(?:-lock)?\.json|tsconfig[^/]*|vite\.config[^/]*)$/i.test(file.path));
+  const files = input.files.filter(file => !SKIPPED_FILES.test(file.path));
   const routes = new Set((input.routes?.length ? input.routes : [{ path: "/" }]).map(route => routeKey(route.path)));
   const assets = new Set((input.assets ?? []).map(asset => `/${asset.path.replace(/^public\//, "")}`));
 
@@ -188,17 +222,21 @@ export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] 
     const value = href.trim();
     if (value === "" || value === "#" || /^javascript:/i.test(value) || /^(?:mailto|tel|sms):\s*$/i.test(value)) { add("empty-link", where); return; }
     if (/^(?:mailto|tel|sms):/i.test(value)) { if (CONTACT.some(pattern => pattern.test(value))) add("placeholder-contact", where); return; }
+    // Malformed escapes are a finding about this link; the rest of the check carries on.
     if (value.startsWith("#")) {
-      const id = decodeURIComponent(value.slice(1));
+      const id = safeDecode(value.slice(1));
+      if (id === null) { add("unreadable-link", `${where} (${shown(value)})`); return; }
       // "#top" scrolls to the top in every browser even without an element.
-      if (id !== "top" && !id.startsWith("/") && !id.startsWith("!") && !ids.has(id)) add("missing-anchor", `${where} (${value})`);
+      if (id !== "top" && !id.startsWith("/") && !id.startsWith("!") && !ids.has(id)) add("missing-anchor", `${where} (${shown(value)})`);
       return;
     }
     if (!value.startsWith("/") || value.startsWith("//")) return;
     const [path, hash = ""] = value.split("#");
-    const clean = routeKey(path.split("?")[0]);
-    if (/\.[a-z0-9]{2,5}$/i.test(clean) ? !assets.has(clean) : !routes.has(clean)) add("dead-route", `${where} (${value})`);
-    else if (hash && !hash.startsWith("/") && !ids.has(decodeURIComponent(hash))) add("missing-anchor", `${where} (${value})`);
+    const pathOnly = path.split("?")[0], id = hash ? safeDecode(hash) : "";
+    if (safeDecode(pathOnly) === null || id === null) { add("unreadable-link", `${where} (${shown(value)})`); return; }
+    const clean = routeKey(pathOnly);
+    if (/\.[a-z0-9]{2,5}$/i.test(clean) ? !assets.has(clean) : !routes.has(clean)) add("dead-route", `${where} (${shown(value)})`);
+    else if (hash && !hash.startsWith("/") && !ids.has(id)) add("missing-anchor", `${where} (${shown(value)})`);
   };
   const checkImage = (tag: Tag, where: string) => {
     const src = tag.attrs.get("src");
@@ -231,10 +269,7 @@ export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] 
     const { path, content } = file;
     const code = CODE.test(path) ? stripComments(content) : /\.css$/i.test(path) ? content.replace(/\/\*[\s\S]*?\*\//g, blank) : content;
     const at = (index: number) => `${path}:${lineAt(content, index)}`;
-    for (const segment of segments(path, content)) {
-      if (/\.html?$/i.test(path) || CODE.test(path)) checkText(segment.text, at(segment.index));
-      else if (/\.(?:json|md|txt)$/i.test(path)) for (const [index, line] of segment.text.split("\n").entries()) checkText(line, `${path}:${index + 1}`);
-    }
+    for (const piece of fileTexts(path, content)) checkText(piece.text, piece.where);
     if (/\.css$/i.test(path)) {
       for (const rule of code.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         if (/::selection|:disabled|::placeholder/.test(rule[1])) continue;
@@ -287,6 +322,13 @@ export function clientReadyCheck(input: ClientReadyInput): ClientReadyFinding[] 
       else if (!tag.attrs.has("data-makeborne-attribution")) checkLink(tag.attrs.get("href"), where);
     }
     checkText(plain(page.html), where);
+  }
+
+  // Embedded catalogue fonts carry Latin and Latin Extended only; other characters fall back.
+  if (detectFonts(files.map(file => [file.path, file.content] as [string, string])).fonts.length) {
+    const coverage = fontCoverage(visibleText({ ...input, files }), MAX_LOCATIONS);
+    for (const item of coverage.uncovered) for (const where of item.locations) add("font-fallback", `${where} (${item.char})`);
+    for (const item of coverage.decomposed) for (const where of item.locations) add("decomposed-text", `${where} (${describeTyped(item.typed)} → ${item.letter})`);
   }
 
   return [...found.entries()]

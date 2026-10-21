@@ -33,7 +33,7 @@ const check = (name, fn) => checks.push([name, fn]);
 const ORIGIN = "https://makeborne.com";
 const post = (body, headers = { origin: ORIGIN }) => route.POST(new Request(`${ORIGIN}/api/telemetry`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) }));
 
-check("scrubbing removes personal data and secrets; routes become patterns", () => {
+check("scrubbing replaces emails, ids, tokens, long numbers and query strings; routes become patterns", () => {
   assert.equal(scrub.scrubMessage("Failed for ana.reed@example.com on 7e1a0c55-5c3e-4d0b-9a51-3f1f00e0d001 with probe_ABCDEFGHIJKLMNOPQRSTUVWX012345 order 48211 https://x.com/a?token=secret"),
     "Failed for <email> on <id> with <token> order <n> https://x.com/a");
   assert.equal(scrub.scrubMessage("word ".repeat(200)).length, 300);
@@ -93,6 +93,29 @@ check("server errors: onRequestError records the scrubbed error with the route p
   await instrumentation.onRequestError(new Error("z"), { path: "/", method: "GET", headers: {} }, { routePath: "/", routeType: "render" });
   failRpc = false;
   delete process.env.NEXT_RUNTIME;
+});
+
+check("disclosure matches enforcement: privacy notice states the real fields, salt deletion and retention; scrub is described as pattern-based", () => {
+  const read = file => fs.readFileSync(path.join(src, file), "utf8");
+  const migrations = path.join(src, "..", "supabase", "migrations");
+  const defining = fs.readdirSync(migrations).filter(file => /function public\.makeborne_record_studio_visit/.test(fs.readFileSync(path.join(migrations, file), "utf8")));
+  assert.deepEqual(defining, ["20261019090000_app_observability.sql"], "one definition of the visit function, so its retention is the enforced one");
+  const sql = fs.readFileSync(path.join(migrations, defining[0]), "utf8");
+  // Runs on every counted visit: the salt for day D is deleted by the first visit on day D+2 or later.
+  assert.match(sql, /delete from makeborne_private\.telemetry_salts where day < v_day - 1;/);
+  for (const table of ["studio_visits", "app_error_days"]) assert.match(sql, new RegExp(`delete from makeborne_private\\.${table} where day < v_day - 400;`));
+  assert.match(sql, /delete from makeborne_private\.app_error_groups where last_seen < now\(\) - interval '400 days';/);
+  const privacy = read("app/privacy/page.tsx");
+  assert.doesNotMatch(privacy, /deleted after two days|so it cannot identify you|without emails, ids or tokens/);
+  assert.match(privacy, /deleted when the first visit is counted two or more days later/);
+  assert.match(privacy, /Visit counts and error reports are deleted after about 400 days/);
+  assert.match(privacy, /This is pattern matching, so other text in an error message can remain/);
+  assert.match(privacy, /home, pricing, sign-in, studio, client portal and help pages/);
+  assert.deepEqual([...new Set(["/", "/billing", "/login", "/studio", "/portal", "/help"].map(scrub.telemetryPage))], ["home", "pricing", "login", "studio", "portal", "help"], "the six pages named in the notice");
+  const scrubSource = read("lib/telemetry/scrub.ts");
+  assert.doesNotMatch(scrubSource, /no personal data or secrets/);
+  assert.match(scrubSource, /best-effort filter, not a guarantee/);
+  assert.equal(scrub.scrubMessage("Failed for Ana Reed, pin 123"), "Failed for Ana Reed, pin 123", "names and short values are not recognised, as documented");
 });
 
 check("wiring: client instrumentation reports errors and visits; error pages report and offer retry; admin Health tab", () => {

@@ -2,14 +2,20 @@
 import "@/app/studio-refresh.css";
 import { z } from "zod";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { creationStyles, styleConcept } from "@/lib/creation-styles";
 import { AUTOMATIC_STYLE } from "@/lib/automatic-style";
 import BrandMark from "./brand-mark";
 import StudioAccount from "./studio-account";
 import BuildConversation from "./build-conversation";
-import { AttachmentList, useFileAttachments } from "./file-attachments";
+import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-attachments";
 import ComposerControls from "./composer-controls";
+import { useUnsentDraft } from "./use-unsent-draft";
+import UnsentDraftNotice from "./unsent-draft-notice";
+import { AdvisorHandoffBanner, bindCreationHandoff, forgetCreationHandoff, forgetHandoffParameter, rememberCreationHandoff } from "./advisor-handoff";
+import { readAdvisorHandoff, type AdvisorHandoff } from "@/lib/experts/advisor-brief";
+import GlobalCommandPalette, { type PaletteCommand } from "./global-command-palette";
 import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import CreationSource from "./creation-source";
 import AccountProjects from "./account-projects";
@@ -19,6 +25,8 @@ import { useCreationAccount, type CreationAccount } from "./use-creation-account
 import GettingStarted from "./onboarding/getting-started";
 import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import SiteBadgeSetting from "./site-badge-setting";
+import StorageLabel from "./storage-label";
+import { SETTINGS_STORAGE } from "@/lib/settings-storage";
 import { createClient } from "@/lib/supabase/client";
 import { buildCreationPayload } from "@/lib/cloud/creation-payload";
 import { continueProjectCreation, creationReferenceKey, readCreationReference } from "@/lib/cloud/creation-reference";
@@ -47,7 +55,7 @@ import {
   type ProjectTask,
   type Workspace,
 } from "./studio-model";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import WebsiteSections from "./website-sections";
 import TemplateGallery from "./template-gallery";
 import ClientWorkspace from "./client-workspace";
@@ -59,7 +67,13 @@ import "@/app/creation-plan.css";
 import ProjectTasks from "./project-tasks";
 import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
-import { readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
+import { studioSkipTargets } from "@/lib/studio-skip-links";
+import { creationTitle, fallbackProjectTitle, isPlaceholderTitle, placeholderTitle } from "@/lib/projects/project-title";
+import { libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
+import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
+import { PREVIEW_HISTORY_KEY } from "@/lib/builder/preview-route";
+import { opensAccountProject, readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
+import { DEFAULT_LIBRARY_SCOPE, readLibraryQuery, withLibraryQuery, type LibraryScope } from "@/lib/projects/library-card-meta";
 import { restoreContentVersion } from "@/lib/restore-content-version";
 import {
   ArrowDown,
@@ -108,6 +122,7 @@ function date(value: string) {
 }
 
 export default function Studio({ isAdmin = false, unlimitedCredits = false, initialTab = "projects", initialProjectOpen = false }: { isAdmin?: boolean; unlimitedCredits?: boolean; initialTab?: string; initialProjectOpen?: boolean }) {
+  const router = useRouter();
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [accountClientRoute, setAccountClientRoute] = useState<AccountClientRoute | null>(null);
   const [accountRoute, setAccountRoute] = useState<AccountProjectRoute | null>(null);
@@ -129,7 +144,12 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const composerPermissions=useGenerationConsent(composerAccount.accountId);
   const immediateWebsite=draftKind==="website"&&creationMode==="create"&&composerPermissions.enabled;
   const [homeHandoff, setHomeHandoff] = useState(false);
+  // A brief from an advisor ("Use this brief"): pending until the account is known, then shown above the composer.
+  const [advisorHandoff, setAdvisorHandoff] = useState<{ pending: string } | { applied: AdvisorHandoff } | null>(null);
+  const appliedHandoff = advisorHandoff && "applied" in advisorHandoff ? advisorHandoff.applied : null;
   const [loaded, setLoaded] = useState(false);
+  // False until the opening URL is understood, so a home handoff or create link is never overwritten by an unsent draft.
+  const [routeSettled, setRouteSettled] = useState(false);
   const [tab, setTab] = useState(initialTab);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState<Kind | null>(null);
@@ -137,7 +157,20 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const [styleModal, setStyleModal] = useState(false);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [accountProjectCount, setAccountProjectCount] = useState<number | null>(null);
+  // Library sort and client filter (account projects). Search, kind, client and sort are mirrored in the URL.
+  const [libraryScope, setLibraryScope] = useState<LibraryScope>(DEFAULT_LIBRARY_SCOPE);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const applyLibraryQuery = (search: string) => { const library = readLibraryQuery(search); setSearch(library.q); setFilter(library.kind); setLibraryScope({ sort: library.sort, client: library.client }); };
+  const [accountLibrary, setAccountLibrary] = useState<AccountLibraryStatus>({ state: "checking" });
+  // Keep the same object while nothing changed, so a re-render does not ripple through the page.
+  // Whether this account had saved projects the last time this device loaded them (null: not known).
+  const [libraryHint, setLibraryHint] = useState<boolean | null>(null);
+  const reportAccountLibrary = useCallback((next: AccountLibraryStatus, accountId: string | null) => {
+    setAccountLibrary(current => sameLibraryStatus(current, next) ? current : next);
+    if (next.state === "loaded" && accountId) { writeLibraryHint(() => localStorage, accountId, next.count > 0); setLibraryHint(next.count > 0); return; }
+    // An unknown account (still checking, or the check failed) may use the last account's answer; signed out uses none.
+    setLibraryHint(readLibraryHint(() => localStorage, accountId ?? (next.state === "unavailable" ? null : undefined)));
+  }, []);
   const [notice, setNotice] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
   const [saveInvalid, setSaveInvalid] = useState(false);
@@ -145,9 +178,21 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   const [clientDetail, setClientDetail] = useState<string | null>(null);
   const [opportunityClient, setOpportunityClient] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const navigationPanel = useRef<HTMLElement>(null);
+  const navigationToggle = useRef<HTMLButtonElement>(null);
+  // The Projects composer keeps its unsent brief and settings across reloads for this account only.
+  const unsentBrief = useUnsentDraft({
+    surface: "studio",
+    account: composerAccount.accountId ? { accountId: composerAccount.accountId } : composerAccount.ready ? { accountId: null } : null,
+    enabled: loaded && routeSettled && !creating && !directStart && !(advisorHandoff && "pending" in advisorHandoff),
+    fields: { kind: draftKind, mode: creationMode, effort: creationEffort, text: draftBrief },
+    defaults: { kind: "website", mode: "create", effort: DEFAULT_EFFORT, text: "" },
+    apply: next => { setDraftKind(next.kind); setCreationMode(next.mode); setCreationEffort(next.effort); setDraftBrief(next.text); },
+  });
   function startStudioPrompt() {
     if(!draftBrief.trim()||!composerAccount.ready||!composerAccount.accountId||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent)return;
     const requestId=crypto.randomUUID(),owner=attachmentOwner(composerAccount.accountId);
+    if(appliedHandoff)rememberCreationHandoff(requestId,draftKind,appliedHandoff.provenance);else forgetCreationHandoff();
     const consent=immediateWebsite?composerPermissions.consent:null;
     const draft={kind:draftKind,brief:draftBrief.trim(),mode:creationMode,effort:creationEffort,
       styleId:AUTOMATIC_STYLE.id,requestId,attachmentOwner:owner,generationConsent:consent??undefined};
@@ -155,18 +200,60 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       sessionStorage.setItem("makeborne.creation-draft.v1",JSON.stringify(draft));
       const url=new URL(window.location.href);url.search="";url.searchParams.set("create",draftKind);url.searchParams.set("from","home");
       window.history.pushState(window.history.state,"",url);
+      unsentBrief.submitted();
     } catch {setNotice("This browser could not preserve your prompt. Keep a copy and free browser storage before creating.");return;}
-    setDirectStart(true);setCreationRequestId(requestId);setInitialBrief(draft.brief);setInitialTitle(`Untitled ${draftKind}`);
+    setDirectStart(true);setCreationRequestId(requestId);setInitialBrief(draft.brief);setInitialTitle(placeholderTitle(draftKind));
     setInitialStyle(AUTOMATIC_STYLE.id);setInitialClient("");setInitialWorkspaceId(null);setInitialAttachmentOwner(owner);
     setInitialGenerationConsent(consent);setHomeHandoff(false);setCreating(draftKind);
   }
   useEffect(() => {
+    if (!advisorHandoff || !("pending" in advisorHandoff) || !composerAccount.ready) return;
+    const id = advisorHandoff.pending;
+    queueMicrotask(() => {
+      forgetHandoffParameter();
+      let read: ReturnType<typeof readAdvisorHandoff>;
+      try { read = readAdvisorHandoff(sessionStorage, { id, accountId: composerAccount.accountId, now: Date.now() }); }
+      catch { read = { issue: "This browser could not read the brief. Nothing was sent." }; }
+      if ("issue" in read || read.handoff.target.type !== "new") {
+        setAdvisorHandoff(null); setNotice("issue" in read ? read.issue : "This brief was prepared for a saved project. Open that project to use it.");
+        return;
+      }
+      const { handoff } = read;
+      setDraftKind(handoff.format); setCreationMode(handoff.mode); setCreationEffort(handoff.effort); setDraftBrief(handoff.text.slice(0, 20000));
+      setAdvisorHandoff({ applied: handoff });
+      requestAnimationFrame(() => { const input = document.getElementById("studio-brief"); input?.scrollIntoView({ block: "center" }); input?.focus({ preventScroll: true }); });
+    });
+  }, [advisorHandoff, composerAccount.ready, composerAccount.accountId]);
+  // On phones the navigation is an opaque drawer over the page, so it behaves as a modal
+  // overlay: focus moves into it, Tab stays inside, the page behind is inert, and closing
+  // returns focus to the toggle. Widening past the drawer breakpoint closes it.
+  useEffect(() => {
     if (!mobileNav) return;
-    const closeNavigation = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileNav(false);
+    const panel = navigationPanel.current, toggle = navigationToggle.current;
+    const drawer = window.matchMedia(DRAWER_NAVIGATION_QUERY);
+    if (!panel || !drawer.matches) { queueMicrotask(() => setMobileNav(false)); return; }
+    const focusable = () => Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(node =>
+      !node.matches(":disabled,[aria-disabled='true']") && node.tabIndex >= 0 && node.getClientRects().length > 0 && getComputedStyle(node).visibility !== "hidden");
+    (panel.querySelector<HTMLElement>("[aria-current='page']") ?? focusable()[0])?.focus({ preventScroll: true });
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // A popup inside the drawer closes first.
+        if (event.defaultPrevented) return;
+        event.preventDefault(); setMobileNav(false); return;
+      }
+      if (event.key !== "Tab") return;
+      const target = overlayTabTarget(focusable(), document.activeElement as HTMLElement | null, event.shiftKey);
+      if (target) { event.preventDefault(); target.focus(); }
     };
-    window.addEventListener("keydown", closeNavigation);
-    return () => window.removeEventListener("keydown", closeNavigation);
+    const widened = () => { if (!drawer.matches) setMobileNav(false); };
+    document.addEventListener("keydown", keydown);
+    drawer.addEventListener("change", widened);
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      drawer.removeEventListener("change", widened);
+      const active = document.activeElement;
+      if (shouldRestoreOverlayFocus(!!active && panel.contains(active), !active || active === document.body)) toggle?.focus({ preventScroll: true });
+    };
   }, [mobileNav]);
   useEffect(() => {
     queueMicrotask(async () => {
@@ -202,6 +289,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
         if (route.notice) setNotice(route.notice);
       }
+      applyLibraryQuery(window.location.search);
+      // A saved project opened with a brief takes it in its own editor; the new-project composer takes the rest.
+      const handoffId = parameters.get("handoff");
+      if (handoffId && !opensAccountProject(window.location.search)) setAdvisorHandoff({ pending: handoffId });
       const kind = parameters.get("create");
       if (parameters.get("from") === "home") {
         try {
@@ -241,7 +332,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
               setInitialAttachmentOwner(draft.data.attachmentOwner ?? null);
               setInitialGenerationConsent(draft.data.kind === "website" && draft.data.mode === "create" ? draft.data.generationConsent ?? null : null);
               setDirectStart(Boolean(draft.data.brief.trim()));
-              setInitialTitle(`Untitled ${draft.data.kind}`);
+              setInitialTitle(placeholderTitle(draft.data.kind));
               setDraftBrief(draft.data.brief);
               setDraftKind(draft.data.kind);
               if (draft.data.style) {
@@ -272,28 +363,44 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           setNotice(
             error instanceof Error ? error.message : "The saved creation brief could not be read. Continue from your original browser or start a new project.",
           );
+          setRouteSettled(true);
           return;
         }
       }
       if (kind === "book" || kind === "website" || kind === "presentation")
         setCreating(kind);
+      setRouteSettled(true);
     });
   }, []);
-  const restoreHistory = useEffectEvent(() => {
+  const restoreHistory = useEffectEvent((event: PopStateEvent) => {
     if (!loaded) return;
     const route = persistenceAllowed
       ? readStudioRoute(window.location.search, workspace)
       : { tab: "settings", projectId: null, clientId: null } as const;
+    // A step between pages of the open project's website preview is the
+    // preview's own history: the project, its editor and any draft stay put.
+    const account = "account" in route ? route.account ?? null : null;
+    if (event.state?.[PREVIEW_HISTORY_KEY] !== undefined && !creating && route.tab === tab && route.projectId === selected && route.clientId === clientDetail
+      && account?.workspaceId === accountRoute?.workspaceId && account?.artifactId === accountRoute?.artifactId && Boolean(accountRoute?.artifactId)) return;
     setTab(route.tab); setSelected(route.projectId); setClientDetail(route.clientId); setAccountRoute("account" in route ? route.account ?? null : null); setAccountClientRoute("accountClient" in route ? route.accountClient ?? null : null);
+    applyLibraryQuery(window.location.search);
     // Keep unsaved client/style forms mounted when the underlying route changes.
     setCreating(null); setInitialAttachmentOwner(null); setInitialGenerationConsent(null); setInitialWorkspaceId(null); setInitialClient(""); setMobileNav(false);
     if ("notice" in route && route.notice) setNotice(route.notice);
   });
   useEffect(() => {
-    const restore = () => restoreHistory();
+    const restore = (event: PopStateEvent) => restoreHistory(event);
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);
+  // The library list's search, kind, client and sort replace the current history entry (typing never adds entries).
+  const libraryListShown = loaded && routeSettled && tab === "projects" && !accountRoute?.artifactId && !selected;
+  useEffect(() => {
+    if (!libraryListShown) return;
+    const here = window.location.pathname + window.location.search + window.location.hash;
+    const next = withLibraryQuery(here, { q: search, kind: filter as "all", client: libraryScope.client, sort: libraryScope.sort });
+    if (next !== here) window.history.replaceState(window.history.state, "", next);
+  }, [libraryListShown, search, filter, libraryScope]);
   useEffect(() => {
     if (loaded && persistenceAllowed)
       try {
@@ -467,7 +574,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     }
     setDraftKind(kind);
     setInitialBrief(draftBrief);
-    setInitialTitle(`Untitled ${kind}`);
+    setInitialTitle(placeholderTitle(kind));
     setInitialStyle(styleId);
     setCreating(kind);
   }
@@ -493,17 +600,148 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           accountCreated={(workspaceId, artifact, generationStaged) => {
             setCreating(null); setInitialAttachmentOwner(null); setInitialGenerationConsent(null); setDirectStart(false); setInitialWorkspaceId(null); setInitialClient(""); setInitialBrief("");
             try { sessionStorage.removeItem("makeborne.creation-draft.v1"); } catch { /* Saved project takes precedence. */ } setInitialTitle(""); setDraftBrief("");
+            bindCreationHandoff({ requestId: creationRequestId, accountId: composerAccount.accountId, workspaceId, artifactId: artifact.id, kind: artifact.kind });
             openRoute({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId: artifact.id } }, directStart || homeHandoff);
             toast(generationStaged ? "Brief saved. Follow your website request in the workspace." : "Project saved to your account. Your supplied content is ready to edit; AI generation has not run.");
           }}
         />
       );
   if (directStart && creating) return <div className="studio-shell creation-route">{creationView}</div>;
+  // Open editors hide the navigation rail, so there is nothing to bypass there.
+  const projectOpen = Boolean(project || accountRoute?.artifactId || (!loaded && initialProjectOpen));
+  // Returning users see their library first; new users (and unknown first visits) keep the prompt-first entry.
+  const libraryFirst = libraryLayout(workspace.projects.length, accountLibrary, libraryHint) === "library-first";
+  const skipTargets = studioSkipTargets({ loaded, tab, composerVisible: tab === "projects" && !accountRoute?.artifactId, library: libraryFirst ? "first" : "none" });
+  // One creation entry: above the library for new users, below it for returning users.
+  const creationEntry = <>
+    <section
+      className="studio-composer"
+      aria-label="Start with a brief"
+    >
+      {appliedHandoff && <AdvisorHandoffBanner handoff={appliedHandoff} format={draftKind} mode={creationMode} effort={creationEffort} onRemove={() => setAdvisorHandoff(null)} />}
+      <div className="composer-format-tabs">
+        {(["website", "book", "presentation"] as Kind[]).map(
+          (k) => {
+            const Icon = icons[k];
+            return (
+              <button
+                key={k}
+                className={draftKind === k ? "active" : ""}
+                onClick={() => setDraftKind(k)}
+              >
+                <Icon size={16} />
+                {kindLabel[k]}
+              </button>
+            );
+          },
+        )}
+        <span>Your next project starts here</span>
+      </div>
+      <label className="composer-input-label">
+        <span className="sr-only">Describe your next project</span>
+        <textarea
+          id="studio-brief"
+          value={draftBrief}
+          maxLength={20000}
+          onChange={(e) => setDraftBrief(e.target.value)}
+          placeholder={
+            draftKind === "website"
+              ? "Describe the website you want to create…"
+              : draftKind === "book"
+                ? "What knowledge do you want to turn into a book?"
+                : "What would you like your presentation to say?"
+          }
+        />
+      </label>
+      <div className="composer-bottom">
+        <ComposerControls mode={creationMode} onMode={setCreationMode} effort={creationEffort} onEffort={setCreationEffort} />
+        <button
+          className="button primary"
+          disabled={!draftBrief.trim()||!composerAccount.ready||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent}
+          aria-label={creationMode === "plan" ? "Plan this project" : "Create this project"}
+          onClick={startStudioPrompt}
+        >
+          <ArrowUp size={19} />
+        </button>
+      </div>
+      {immediateWebsite&&<GenerationPermissions value={composerPermissions}/>}
+    </section>
+    <div className="composer-note">
+      {immediateWebsite?"Your brief is saved and waits in the builder. Nothing is sent or charged until you press Send there.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
+    </div>
+    <UnsentDraftNotice restoredAt={unsentBrief.restoredAt} storageRefused={unsentBrief.storageRefused} onDiscard={unsentBrief.discard} />
+    <div
+      className="brief-suggestions"
+      aria-label="Brief suggestions"
+    >
+      {[
+        {
+          label: "A website for a client",
+          kind: "website" as Kind,
+          brief:
+            "Help me plan a website for a client. I will provide their business, services, brand direction, and approved content.",
+        },
+        {
+          label: "Turn knowledge into a book",
+          kind: "book" as Kind,
+          brief:
+            "Help me shape my knowledge into a practical book. I will provide the topic, intended reader, and source material.",
+        },
+        {
+          label: "Present an idea clearly",
+          kind: "presentation" as Kind,
+          brief:
+            "Help me structure a presentation that explains my idea clearly. I will provide the audience, purpose, and key points.",
+        },
+      ].map((suggestion) => (
+        <button
+          type="button"
+          key={suggestion.kind}
+          onClick={() => {
+            setDraftKind(suggestion.kind);
+            setDraftBrief(suggestion.brief);
+            document.getElementById("studio-brief")?.focus();
+          }}
+        >
+          {suggestion.label}
+          <ArrowUpRight size={14} />
+        </button>
+      ))}
+    </div>
+  </>;
+  function skipTo(event: React.MouseEvent<HTMLAnchorElement>, id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    // Move keyboard focus itself, not just the scroll position, and keep the URL unchanged.
+    event.preventDefault();
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "center" });
+  }
+  // Ctrl/⌘+K: places and starting points. Starting only opens the composer; nothing is sent.
+  const go = (run: () => void) => () => { setMobileNav(false); run(); };
+  const startWith = (kind: Kind) => go(() => {
+    if (tab !== "projects" || accountRoute?.artifactId || selected) navigate("projects");
+    setDraftKind(kind);
+    requestAnimationFrame(() => { const input = document.getElementById("studio-brief"); input?.scrollIntoView({ block: "center" }); input?.focus({ preventScroll: true }); });
+  });
+  const paletteCommands: PaletteCommand[] = [
+    { id: "go-projects", group: "Go to", label: "Projects", keywords: ["library", "home"], run: go(() => navigate("projects")) },
+    { id: "go-clients", group: "Go to", label: "Clients", keywords: ["crm", "leads"], run: go(() => navigate("clients")) },
+    { id: "go-styles", group: "Go to", label: "Styles", keywords: ["brand", "palette"], run: go(() => navigate("styles")) },
+    { id: "go-settings", group: "Go to", label: "Settings", keywords: ["backup", "recovery"], run: go(() => navigate("settings")) },
+    { id: "go-chat", group: "Go to", label: "Expert chat", hint: "Advisors for positioning, copy, sales and more", keywords: ["advisor", "advice"], run: go(() => router.push("/chat")) },
+    { id: "go-billing", group: "Go to", label: unlimitedCredits ? "Unlimited credits" : "Plan & credits", keywords: ["billing", "top up"], run: go(() => router.push("/billing")) },
+    { id: "go-help", group: "Go to", label: "Help & guides", keywords: ["support", "docs"], run: go(() => router.push("/help")) },
+    ...(["website", "book", "presentation"] as Kind[]).map(kind => ({ id: `start-${kind}`, group: "Start" as const, label: `New ${kindLabel[kind].toLowerCase()}`, hint: "Opens the composer. Nothing is sent until you create it.", keywords: ["create", "new project"], run: startWith(kind) })),
+    ...workspace.projects.slice(0, 40).map(item => ({ id: `project-${item.id}`, group: "Projects" as const, label: item.title || "Untitled project", hint: `${kindLabel[item.kind]} on this device`, run: go(() => openRoute({ tab: "projects", projectId: item.id, clientId: null })) })),
+  ];
   return (
-    <div className={`studio-shell ${project || accountRoute?.artifactId || (!loaded && initialProjectOpen) ? "is-project-open" : ""}`}>
+    <div className={`studio-shell ${projectOpen ? "is-project-open" : ""}`}>
+      {!projectOpen && skipTargets.map(target => <a key={target.id} className="studio-skip-link" href={`#${target.id}`} onClick={event => skipTo(event, target.id)}>{target.label}</a>)}
       {mobileNav && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
       <aside
         id="studio-navigation"
+        ref={navigationPanel}
         className={`sidebar ${mobileNav ? "open" : ""}`}
       >
         <Link className="wordmark" href="/">
@@ -514,6 +752,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         <Link className="button create-button" href="/">
           <Plus size={18} /> New project
         </Link>
+        <GlobalCommandPalette commands={paletteCommands} triggerClassName="gp-trigger" shortcut={tab !== "clients"} />
         <div className="nav-label">My workspace</div>
         <nav className="studio-nav" aria-label="Workspace">
           {[
@@ -553,9 +792,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           </div>
         </div>
       </aside>
-      <div className="studio-main">
+      <div className="studio-main" inert={mobileNav || undefined}>
         <header className="studio-topbar">
           <button
+            ref={navigationToggle}
             className="icon-button mobile-toggle"
             aria-expanded={mobileNav}
             aria-controls="studio-navigation"
@@ -607,7 +847,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           </div>
         )}
         {!loaded ? (
-          <div className="loading-state">Opening your workspace…</div>
+          <main id="studio-content" tabIndex={-1} className="loading-state">Opening your workspace…</main>
         ) : project ? (
           <ProjectEditor
             key={project.id}
@@ -623,8 +863,11 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
             notify={toast}
           />
         ) : (
-          <div
-            className={`workspace-content ${tab === "projects" && workspace.projects.length === 0 ? "fresh-workspace" : ""}`}
+          // The tab's own content is the page's single main landmark (the device project editor keeps its own layout).
+          <main
+            id="studio-content"
+            tabIndex={-1}
+            className={`workspace-content ${tab === "projects" ? libraryFirst ? "returning-workspace" : "fresh-workspace" : ""}`}
           >
             {tab === "projects" && (
               <>
@@ -639,99 +882,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     <Plus size={17} /> New project
                   </Link>
                 </div>
-                <section
-                  className="studio-composer"
-                  aria-label="Start with a brief"
-                >
-                  <div className="composer-format-tabs">
-                    {(["website", "book", "presentation"] as Kind[]).map(
-                      (k) => {
-                        const Icon = icons[k];
-                        return (
-                          <button
-                            key={k}
-                            className={draftKind === k ? "active" : ""}
-                            onClick={() => setDraftKind(k)}
-                          >
-                            <Icon size={16} />
-                            {kindLabel[k]}
-                          </button>
-                        );
-                      },
-                    )}
-                    <span>Your next project starts here</span>
-                  </div>
-                  <label className="composer-input-label">
-                    <span className="sr-only">Describe your next project</span>
-                    <textarea
-                      id="studio-brief"
-                      value={draftBrief}
-                      maxLength={20000}
-                      onChange={(e) => setDraftBrief(e.target.value)}
-                      placeholder={
-                        draftKind === "website"
-                          ? "Describe the website you want to create…"
-                          : draftKind === "book"
-                            ? "What knowledge do you want to turn into a book?"
-                            : "What would you like your presentation to say?"
-                      }
-                    />
-                  </label>
-                  <div className="composer-bottom">
-                    <ComposerControls mode={creationMode} onMode={setCreationMode} effort={creationEffort} onEffort={setCreationEffort} />
-                    <button
-                      className="button primary"
-                      disabled={!draftBrief.trim()||!composerAccount.ready||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent}
-                      aria-label={creationMode === "plan" ? "Plan this project" : "Create this project"}
-                      onClick={startStudioPrompt}
-                    >
-                      <ArrowUp size={19} />
-                    </button>
-                  </div>
-                  {immediateWebsite&&<GenerationPermissions value={composerPermissions}/>}
-                </section>
-                <div className="composer-note">
-                  {immediateWebsite?"Your website request starts after your brief is saved.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
-                </div>
-                <div
-                  className="brief-suggestions"
-                  aria-label="Brief suggestions"
-                >
-                  {[
-                    {
-                      label: "A website for a client",
-                      kind: "website" as Kind,
-                      brief:
-                        "Help me plan a website for a client. I will provide their business, services, brand direction, and approved content.",
-                    },
-                    {
-                      label: "Turn knowledge into a book",
-                      kind: "book" as Kind,
-                      brief:
-                        "Help me shape my knowledge into a practical book. I will provide the topic, intended reader, and source material.",
-                    },
-                    {
-                      label: "Present an idea clearly",
-                      kind: "presentation" as Kind,
-                      brief:
-                        "Help me structure a presentation that explains my idea clearly. I will provide the audience, purpose, and key points.",
-                    },
-                  ].map((suggestion) => (
-                    <button
-                      type="button"
-                      key={suggestion.kind}
-                      onClick={() => {
-                        setDraftKind(suggestion.kind);
-                        setDraftBrief(suggestion.brief);
-                        document.getElementById("studio-brief")?.focus();
-                      }}
-                    >
-                      {suggestion.label}
-                      <ArrowUpRight size={14} />
-                    </button>
-                  ))}
-                </div>
-                <div className="list-toolbar">
+                {libraryFirst && <div className="list-toolbar" id="studio-library" tabIndex={-1}>
                   <div className="filter-tabs">
                     {["all", "website", "book", "presentation"].map((f) => (
                       <button
@@ -748,16 +899,20 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   <label className="search-field">
                     <Search size={16} />
                     <input
+                      ref={searchInput}
                       aria-label="Search projects"
                       placeholder="Find a project…"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                     />
                   </label>
-                </div>
+                </div>}
                 </>}
-                <AccountProjects search={search} filter={filter} target={accountRoute} onCount={setAccountProjectCount} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
-                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (accountProjectCount ? null : (
+                {/* New users start with a brief; the account list keeps one position so it never reloads when the order changes. */}
+                {!accountRoute?.artifactId && !libraryFirst && <div className="studio-create">{creationEntry}</div>}
+                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} scope={libraryScope} onScopeChange={setLibraryScope}
+                  onClearSearch={() => { setSearch(""); searchInput.current?.focus(); }} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
+                {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (projectsWelcome(workspace.projects.length, accountLibrary) !== "welcome" ? null : (
                   <Empty
                     icon={FolderOpen}
                     title="Your projects will live here."
@@ -816,6 +971,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                       })}
                   </div>
                 ))}
+                {!accountRoute?.artifactId && libraryFirst && <div className="studio-create">{creationEntry}</div>}
                 {!accountRoute?.artifactId && workspace.projects.length === 0 && (
                   <TemplateGallery onChoose={chooseDirection} />
                 )}
@@ -915,18 +1071,30 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     <div className="eyebrow">MAKE YOURSELF AT HOME</div>
                     <h1>Workspace settings.</h1>
                     <p>
-                      Keep your local work safe and control how the studio
-                      feels.
+                      Each setting says where it is stored: on this device
+                      only, or saved to your account.
                     </p>
                   </div>
                 </div>
                 <div className="settings-panel">
                   <section>
-                    <h2>Workspace storage</h2>
+                    <h2>Account projects <StorageLabel where={SETTINGS_STORAGE.accountProjects} /></h2>
                     <p>
-                      This preview stores projects and client details in this
-                      browser on this device. It does not sync to the cloud.
-                      Clearing browser data will remove this workspace.
+                      Projects you create while signed in are saved to your
+                      account and save automatically as you edit. Open them
+                      from Projects on any device where you sign in.
+                    </p>
+                    <Link className="text-link" href="/studio/cloud">Previously saved account records <ArrowUpRight size={14} /></Link>
+                  </section>
+                  <section>
+                    <h2>Drafts on this device <StorageLabel where={SETTINGS_STORAGE.deviceWorkspace} /></h2>
+                    <p>
+                      Drafts and client details stored in this browser, such
+                      as work made while signed out, stay only here. They are not saved to your
+                      account or other devices, and clearing browser data
+                      removes them. Download a backup to keep a copy, or import
+                      them into your account from Previously saved account
+                      records.
                     </p>
                     <div className="button-row">
                       {!persistenceAllowed && (
@@ -979,10 +1147,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     </div>
                   </section>
                   <section>
-                    <h2>Studio sounds</h2>
+                    <h2>Studio sounds <StorageLabel where={SETTINGS_STORAGE.studioSounds} /></h2>
                     <p>
                       A gentle confirmation when you save a version. Always
-                      optional.
+                      optional. This choice applies to this browser only.
                     </p>
                     <button
                       className={`toggle ${workspace.sound ? "enabled" : ""}`}
@@ -996,20 +1164,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     </button>
                   </section>
                   <SiteBadgeSetting />
-                  <section>
-                    <h2>Account storage</h2>
-                    <p>
-                      New projects created while signed in save to your account.
-                      Open them in Projects to edit with automatic saving.
-                      Existing device drafts remain on this browser until you
-                      explicitly import them. Client and import tools remain available below during this transition.
-                    </p>
-                    <Link className="text-link" href="/studio/cloud">Previously saved account records <ArrowUpRight size={14} /></Link>
-                  </section>
                 </div>
               </>
             )}
-          </div>
+          </main>
         )}
       </div>
       {creationView}
@@ -1166,6 +1324,8 @@ function Modal({
     </div>
   );
 }
+/** The creation modal shows each source file's AI state (audit M09); files are left out only in the builder. */
+const NO_SOURCE_EXCLUSIONS: ReadonlySet<string> = new Set();
 const WizardDraftSchema = z
   .object({
     effort: EffortLevelSchema.default(DEFAULT_EFFORT),
@@ -1243,6 +1403,7 @@ function CreationWizard({
   const permissions=useGenerationConsent(account.accountId,initialGenerationConsent);
   const willGenerate=kind==="website"&&(permissions.enabled||!!initialGenerationConsent);
   const sourceAttachments = useFileAttachments(initialAttachmentOwner, `draft:${requestId}`);
+  const sourceReadiness = useSourceReadiness(sourceAttachments.files, NO_SOURCE_EXCLUSIONS);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState("");
@@ -1261,9 +1422,8 @@ function CreationWizard({
     wizardContent.current?.scrollTo({ top: 0, behavior: "instant" });
     wizardContent.current?.querySelector<HTMLElement>("h2")?.focus();
   }, [step]);
-  const [title, setTitle] = useState(
-    initialTitle || (initialBrief.trim() ? `Untitled ${kind}` : ""),
-  );
+  // Only a title the user gave is shown; the placeholder still names the draft seed, so open drafts keep restoring.
+  const [title, setTitle] = useState(() => isPlaceholderTitle(initialTitle) ? "" : initialTitle);
   const [brief, setBrief] = useState(initialBrief);
   const [content, setContent] = useState("");
   const [audience, setAudience] = useState("");
@@ -1303,7 +1463,7 @@ function CreationWizard({
 
           setMode(draft.mode); setRequirements(draft.requirements);
           setOutline(draft.outline);
-          setTitle(draft.title);
+          setTitle(isPlaceholderTitle(draft.title) ? "" : draft.title);
           setBrief(draft.brief);
           setContent(draft.content);
           setAudience(draft.audience);
@@ -1394,8 +1554,10 @@ function CreationWizard({
     savingRef.current = true; setSaving(true); setSaveError("");
     const controller = lifetime.current;
     const current = () => !!controller && !controller.signal.aborted;
-    const values = { effort, kind, title: title.trim() || `Untitled ${kind}`,
-      brief: mode === "plan" && !aiPlan ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n"),
+    const savedBrief = mode === "plan" && !aiPlan ? plan.brief : [brief, requirements && `Requirements: ${requirements}`].filter(Boolean).join("\n\n");
+    // The user's own title is kept exactly; without one, a short title derived from the saved brief (never attachments or source text).
+    const values = { effort, kind, title: creationTitle(title, savedBrief, kind),
+      brief: savedBrief,
       audience, purpose, wording, styleId, clientId, content };
     try {
       if (!account.accountId) throw new Error("Sign in with an active creation plan to continue. Your draft and files are preserved.");
@@ -1459,7 +1621,7 @@ function CreationWizard({
   return (
     <Frame close={() => { if (!savingRef.current) close(); }} title="Create a project">
       <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
-      <AttachmentList files={sourceAttachments.files} />
+      <AttachmentList files={sourceAttachments.files} readiness={sourceReadiness} onRetry={sourceReadiness.retry} readPrefix="When your project builds · " note="Saved on this device with your idea. They’re copied to the project when it opens." />
       {saveError && <p role="alert" className="small-note">{saveError}</p>}
       <div className="wizard-content" ref={wizardContent} inert={saving || uncertain || !account.ready}>
         <h2 tabIndex={-1}>{directStart ? mode === "plan" ? "Let’s shape your idea" : "Opening your project" : "What would you like to make?"}</h2>
@@ -1501,7 +1663,7 @@ function CreationWizard({
         </details>
         <details className="prompt-options">
           <summary><span>Project details</span><span>Optional</span></summary>
-          <label>Project title<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} placeholder="Name it now or later" /></label>
+          <label>Project title<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} placeholder={`Name it now or later · “${fallbackProjectTitle(brief, kind)}”`} /></label>
           <label>Client<select value={clientId} onChange={e => setClient(e.target.value)}><option value="">For myself</option>{clientId && !clients.some(c => c.id === clientId) && <option value={clientId} disabled>Client unavailable — choose another</option>}{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
           <div className="form-grid"><label>Audience<input value={audience} onChange={e => setAudience(e.target.value)} maxLength={1000} placeholder="Who is it for?" /></label><label>Outcome<input value={purpose} onChange={e => setPurpose(e.target.value)} maxLength={2000} placeholder="What should it achieve?" /></label></div>
           <label>Requirements<textarea value={requirements} onChange={e => setRequirements(e.target.value)} maxLength={4000} rows={3} placeholder="Anything to include or avoid" /></label>
@@ -2305,8 +2467,8 @@ function ProjectEditor({
             />}
             {view === "preview" && (
               <div className="preview-disclaimer">
-                This is a local content preview. Publishing, live forms, and
-                client access require configured cloud services.
+                This previews a draft kept on this device. Publishing, live
+                forms and client access need a project saved to your account.
               </div>
             )}
           </div>

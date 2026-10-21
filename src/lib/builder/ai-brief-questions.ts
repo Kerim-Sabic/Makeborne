@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { budgetedStream, ContextMeter, type AnthropicLike } from "@/lib/ai/anthropic-call";
 import type { RunSpend } from "@/lib/ai/run-spend";
-import { briefQuestions, type BriefKind, type BriefQuestion } from "./brief-questions";
+import { answeredQuestionIds, briefQuestions, type BriefKind, type BriefQuestion } from "./brief-questions";
 
 export const QUESTIONS_MODEL = "claude-haiku-5-5";
 export const MAX_AI_QUESTIONS = 4;
@@ -45,8 +45,9 @@ ${brief.slice(0, 6000)}
 </brief>`;
 }
 
-/** Validated, normalised questions; null when the reply is unusable. */
-export function parseQuestions(kind: BriefKind, text: string): BriefQuestion[] | null {
+/** Validated, normalised questions; null when the reply is unusable. With `known`, a standard
+ * question the brief already answers is dropped even if the model asks it (facts are not asked again). */
+export function parseQuestions(kind: BriefKind, text: string, known?: { brief: string; attachments?: number }): BriefQuestion[] | null {
   const match = /\{[\s\S]*\}/.exec(text);
   if (!match) return null;
   let raw: unknown;
@@ -54,12 +55,13 @@ export function parseQuestions(kind: BriefKind, text: string): BriefQuestion[] |
   const reply = AiReply.safeParse(raw);
   if (!reply.success) return null;
   const style = briefQuestions(kind, "").find(question => question.id === "style");
+  const answered = known ? answeredQuestionIds(kind, known.brief, known) : new Set<string>();
   const seen = new Set<string>(), out: BriefQuestion[] = [];
   for (const item of reply.data.questions) {
     const parsed = AiQuestion.safeParse(item);
     if (!parsed.success) continue;
     const id = parsed.data.id.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || `q${out.length + 1}`;
-    if (seen.has(id)) continue;
+    if (seen.has(id) || answered.has(id)) continue;
     seen.add(id);
     if (id === "style" && style) { out.push(style); continue; }
     const labels = new Set<string>();
@@ -87,5 +89,5 @@ export async function aiBriefQuestions(input: { kind: BriefKind; brief: string; 
   const { message } = await budgetedStream({ client, spend: input.spend, meter, models: [QUESTIONS_MODEL], maxTokens: 1_500, minTokens: 600, signal: input.signal,
     params: { output_config: { effort: "low" }, system, messages } });
   const text = (message.content as Array<{ type: string; text?: string }>).filter(block => block.type === "text").map(block => block.text ?? "").join("");
-  return parseQuestions(input.kind, text);
+  return parseQuestions(input.kind, text, { brief: input.brief, attachments: input.attachments });
 }

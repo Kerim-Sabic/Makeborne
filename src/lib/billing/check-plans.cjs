@@ -65,7 +65,10 @@ for (const limit of ["10 credits", "20 credits", "50 credits", "90 credits", "14
 assert.ok(costs.includes("First website: 16–45 credits (20 test websites)"));
 assert.ok(costs.includes("Medium: 8–11 credits (20 test rounds)"));
 assert.equal((costs.match(/test websites/g) || []).length, 1, "measured ranges appear only at the measured effort");
-assert.match(costs, /a plan that doesn’t finish/);
+assert.match(costs, /a plan that fails to finish/);
+assert.match(costs, /If you choose Stop:/);
+assert.match(costs, /confirmed usage is charged once, unused reserved credits are returned/);
+assert.doesNotMatch(costs, /a plan that doesn’t finish/);
 assert.doesNotMatch(costs, /failed runs are free/i);
 const withoutMeasurements = renderToStaticMarkup(React.createElement(BillingCreditCosts, {estimates: null}));
 assert.doesNotMatch(withoutMeasurements, /test websites/);
@@ -74,18 +77,24 @@ const BillingWorkspace = loadComponent("billing-workspace", {
   "./billing-credit-costs": {default: BillingCreditCosts},
   "./brand-mark": {default: () => null},
   "./billing-plans": {default: CreationPlans},
+  "./billing-controls": {default: () => null},
+  "./billing-subscriptions": {default: () => null},
   // The live return component is exercised separately in the browser harness.
   "./billing-topup-return": {default: ({orderId}) => React.createElement("div", {"data-topup-order": orderId})},
+  // Automatic top-up setup renders only behind its qualification flag (check-autotopup.cjs).
+  "./billing-autotopup": {default: () => React.createElement("div", {"data-autotopup-setup": "shown"})},
   "./credit-balance": {default: () => null, creditExpiryLabel: () => "Expiry"},
   "./billing-amount": {formatBillingCredits: value => value},
   "@/lib/billing/view": view,
+  "@/lib/billing/usage-history": require("./usage-history.ts"),
 });
-for (const summary of [view.unavailableBilling, {status: "ready", unit: "whole_customer_credits", available: "0", reserved: "0", used: "0", period: "October 2026", entries: []}]) {
+for (const summary of [view.unavailableBilling, {status: "ready", unit: "whole_customer_credits", available: "0", reserved: "0", used: "0", period: "October 2026", entries: [], history: {periodKey: "2026-10", total: 0, newer: 0, olderCursor: null}}]) {
   const billing = renderToStaticMarkup(React.createElement(BillingWorkspace, {summary, accountPrivileges: {isAdmin: true, unlimitedCredits: true}}));
   assert.doesNotMatch(billing, /generation (?:is still )?disabled|creation services are disabled/i);
   assert.match(billing, /Generation depends on current service availability and safety limits/);
   assert.match(billing, /href="\/studio"/);
   if (summary.status === "unavailable") assert.match(billing, /Reserved and used amounts are unavailable/);
+  else assert.match(billing, /administrator allowance holds and charges no credits/, "a ready, empty allowance history explains why nothing is listed");
 }
 const returnOrder = "abcdefab-1234-4234-8234-123456789abc";
 const returnView = props => renderToStaticMarkup(React.createElement(BillingWorkspace, {summary: view.unavailableBilling, ...props}));

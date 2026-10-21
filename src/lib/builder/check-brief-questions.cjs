@@ -55,4 +55,14 @@ check("every question is complete and option values are unique", () => {
   }
 });
 
+check("F04: a skipped answer never reaches the brief, including on the last question", () => {
+  const questions = briefQuestions("website", "Website for my bakery");
+  const skipped = Object.fromEntries(questions.map(question => [question.id, {}]));
+  assert.equal(briefWithAnswers("Website for my bakery", questions, skipped), "Website for my bakery", "cleared answers add nothing");
+  // The card hands the cleared answers straight to onStart on the last question (mounted journey: scripts/check-brief-skip-browser.cjs).
+  const card = fs.readFileSync(require("node:path").join(__dirname, "..", "..", "components", "brief-questions-card.tsx"), "utf8");
+  assert.ok(card.includes("const cleared: BriefAnswers = { ...answers, [question.id]: {} };"), "skip computes the cleared answers once");
+  assert.ok(card.includes("if (last) onStart(cleared); else setStep(step + 1);"), "the final skip starts with the cleared answers, not the stale closure");
+});
+
 console.log(`\n${passed} brief question checks passed.`);

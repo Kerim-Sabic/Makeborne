@@ -37,7 +37,8 @@ export default function BillingCreditCosts({ estimates }: { estimates: BuilderEs
     </div>
     <ul className="billing-costs-notes">
       <li><strong>Going past a limit needs your approval.</strong> If a request reaches its limit, its finished work is kept and you choose whether to allow more.</li>
-      <li><strong>Not charged:</strong> a request that stops with an error, runs out of time before saving, or whose result can’t be saved; a plan that doesn’t finish; tailored brief questions.</li>
+      <li><strong>Not charged:</strong> a request that stops with an error, runs out of time before saving, or whose result can’t be saved; a plan that fails to finish; tailored brief questions.</li>
+      <li><strong>If you choose Stop:</strong> confirmed usage is charged once, unused reserved credits are returned, and valid partial work can be recovered without another generation charge.</li>
       <li><strong>Charged for what it used:</strong> a request that runs but ends without a usable change, and a design review that finds nothing to fix.</li>
       <li>Measured figures come from October 2026 test builds at Medium effort without AI images. AI images count toward the same request limit.</li>
     </ul>

@@ -128,6 +128,7 @@ export async function reserveCredits(userId: string, amount: number, reference: 
   // The SQL function also waives holds for unlimited accounts without a session.
   const { data, error } = await billingDatabase().rpc("makeborne_credit_reserve", { p_user: id, p_amount: credits, p_reference: ref });
   if (error?.code === "MB402") throw new RequestError("INSUFFICIENT_CREDITS", INSUFFICIENT_MESSAGE, 402);
+  if (error?.code === "MB403") throw new RequestError("CREDIT_USAGE_LIMIT", "Your monthly credit usage limit would be exceeded. Review your limit in Billing before continuing.", 402);
   if (error || !data || typeof data !== "object") unavailable();
   const result = data as Record<string, unknown>;
   if (result.unlimited === true) return { userId: id, reference: ref, amount: 0, exempt: true, reservedAt };

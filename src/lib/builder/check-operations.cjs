@@ -10,7 +10,7 @@ Module._load = function(name, parent, main) {
   if (name === "server-only") return {};
   if (name === "@/lib/cloud/server") return { cloudContext: async () => ({ user: { id: actor }, client: cloudClient }), validId: () => {}, databaseError: error => { if (error) throw Error(error.message ?? error.code); } };
   if (name.startsWith("@/")) return load.call(this, path.join(__dirname, "../..", name.slice(2)), parent, main);
-  if (/(^|\/)billing\/database$/.test(name)) return { billingDatabase: () => ({ rpc: async (name, args) => { calls.push({ name, args }); return handler(name, args); } }) };
+  if (/(^|\/)billing\/database$/.test(name)) return { billingDatabase: () => ({ rpc: (name, args) => { calls.push({ name, args }); const result = Promise.resolve(handler(name, args)); result.abortSignal = () => result; return result; } }) };
   if (/(^|\/)credits\/server$/.test(name)) return { HOLD_LIFETIME_MS: 900000, settleRun() { throw Error("Legacy settlement bypass"); }, releaseRun() { throw Error("Legacy release bypass"); }, holdIsActive() { throw Error("Legacy hold bypass"); } };
   if (name === "./agent" && parent.filename.endsWith("website-run.ts")) return { runBuilder: input => websiteAgent(input) };
   if (name === "./docs-agent" && parent.filename.endsWith("docs-run.ts")) return { runDocumentBuilder: input => documentAgent(input) };
@@ -240,6 +240,61 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
       if (priorKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = priorKey;
       if (priorEnabled === undefined) delete process.env.MAKEBORNE_LIVE_BUILDER_ENABLED; else process.env.MAKEBORNE_LIVE_BUILDER_ENABLED = priorEnabled;
     }
+  });
+  await check("Stop route binds scope and actor, requires same origin and never needs a new credit authorization", async () => {
+    const route = require("../../app/api/build/operations/route.ts");
+    handler = (name,args) => name === "makeborne_ai_operation_cancel" ? {data:status(null,{operation:snapshot({cancelRequested:true})}),error:null} : rpc(name,args);
+    const request = origin => new Request("http://localhost/api/build/operations",{method:"DELETE",headers:{"Content-Type":"application/json",Origin:origin},body:JSON.stringify({workspaceId,artifactId,id:operationId,expectedRevision:2})});
+    assert.equal((await route.DELETE(request("https://foreign.example"))).status,403); assert.equal(calls.length,0);
+    const response=await route.DELETE(request("http://localhost")); assert.equal(response.status,200);
+    assert.deepEqual(calls.map(call=>call.name),["makeborne_ai_operation_read","makeborne_ai_operation_cancel"]);
+    assert.deepEqual(calls[1].args,{p_actor:actor,p_operation:operationId,p_expected_revision:2});
+  });
+  await check("a cancelled provider gate refuses this and every subsequent attempt before a call is sent", async () => {
+    const run=await fresh(),spend=api.createOperationSpend(run,Date.now()+280000);
+    handler=(name,args)=>name==="makeborne_ai_operation_provider_begin"?{data:null,error:{code:"MB499"}}:rpc(name,args);
+    await assert.rejects(spend.begin("anthropic","fixture",1000),error=>error.code==="CANCELLED");assert.equal(spend.stopped,"CANCELLED");
+    const before=calls.length;await assert.rejects(spend.begin("anthropic","fixture",1000),error=>error.code==="CANCELLED");assert.equal(calls.length,before);assert.equal(spend.pendingMicrousd,0);
+  });
+  await check("durable cancellation aborts an active website stream and finalizes confirmed usage with recoverable source", async () => {
+    const input=runnerInput(await fresh());input.compile=async()=>({status:"passed"});
+    handler=(name,args)=>name==="makeborne_ai_operation_read"?{data:status(null,{operation:snapshot({cancelRequested:true})}),error:null}
+      :name==="makeborne_ai_operation_finish"?{data:{...status({runId,charged:2,summary:"Stopped",changed:false,finished:true},{operation:snapshot({status:"cancelled",cancelRequested:true,reservedCredits:0,chargedCredits:2})}),charged:2,outcome:"cancelled"},error:null}:rpc(name,args);
+    let signal;
+    websiteAgent=async input=>{signal=input.signal;input.files.write("src/App.tsx",'export default function App(){return <main>Retained partial</main>}');await new Promise((resolve,reject)=>input.signal.addEventListener("abort",()=>reject(input.signal.reason),{once:true}));};
+    const stream=await events(websiteBuildResponse(input));assert.equal(signal.aborted,true);assert.equal(stream.at(-1).charged,2);assert.equal(stream.at(-1).operation.status,"cancelled");
+    assert.equal(finishCall().args.p_measured_microusd,45000);assert.ok(finishCall().args.p_candidate.content.websiteSource);
+  });
+  await check("unavailable Stop status aborts conservatively and a disposed watcher performs no later poll", async () => {
+    const run=await fresh(),spend=api.createOperationSpend(run,Date.now()+280000),controller=new AbortController();
+    handler=(name,args)=>name==="makeborne_ai_operation_read"?{data:null,error:{code:"unavailable"}}:rpc(name,args);
+    const dispose=api.watchOperationCancellation(run,spend,controller,1);await new Promise(resolve=>setTimeout(resolve,20));
+    assert.equal(controller.signal.aborted,true);assert.equal(controller.signal.reason.code,"SPEND_UNAVAILABLE");assert.equal(spend.stopped,null,"does not fabricate user consent");
+    dispose();const before=calls.length;await new Promise(resolve=>setTimeout(resolve,20));assert.equal(calls.length,before);
+  });
+  await check("Stop interrupts document generation and settles through the same durable operation", async () => {
+    const input=runnerInput(await fresh());
+    handler=(name,args)=>name==="makeborne_ai_operation_read"?{data:status(null,{operation:snapshot({cancelRequested:true})}),error:null}
+      :name==="makeborne_ai_operation_finish"?{data:{...status({runId,charged:2,summary:"Stopped",changed:false,finished:true},{operation:snapshot({status:"cancelled",cancelRequested:true,reservedCredits:0,chargedCredits:2})}),charged:2,outcome:"cancelled"},error:null}:rpc(name,args);
+    documentAgent=async input=>{await new Promise((resolve,reject)=>input.signal.addEventListener("abort",()=>reject(input.signal.reason),{once:true}));};
+    const stream=await events(documentBuildResponse(input));assert.equal(stream.at(-1).operation.status,"cancelled");assert.equal(finishCall().args.p_measured_microusd,45000);assert.equal(stream.at(-1).charged,2);
+  });
+  await check("Stop interrupts Plan mode without bypassing settlement or persisting a partial plan", async () => {
+    const run=await fresh(),spend=api.createOperationSpend(run,Date.now()+280000);spend.confirmedMicrousd=45000;
+    handler=(name,args)=>name==="makeborne_ai_operation_read"?{data:status(null,{operation:snapshot({cancelRequested:true})}),error:null}
+      :name==="makeborne_ai_operation_finish"?{data:{...status({runId,charged:2,summary:"Stopped",changed:false,finished:true},{operation:snapshot({status:"cancelled",cancelRequested:true,reservedCredits:0,chargedCredits:2})}),charged:2,outcome:"cancelled"},error:null}:rpc(name,args);
+    planner=async input=>{await new Promise((resolve,reject)=>input.signal.addEventListener("abort",()=>reject(input.signal.reason),{once:true}));};
+    const stream=await events(planStreamResponse({hold:run.hold,operation:run,spend,context:"",message:"Plan",previousPlan:null,attachments:[],effort:"medium",basedOnVersion:1,previousRevision:0,maxDuration:300,persist:()=>{throw Error("Partial plan saved");}}));
+    assert.equal(stream.at(-1).operation.status,"cancelled");assert.equal(finishCall().args.p_measured_microusd,45000);assert.equal(finishCall().args.p_candidate,null);
+  });
+  await check("settled Stop remains readable after an old-app rollback and new app renders Stopped", async () => {
+    const raw=snapshot({status:"completed",cancelRequested:true,reservedCredits:0,canContinue:false,maximumAdditionalCredits:0});
+    const legacy=contract.OperationSnapshotSchema.omit({cancelRequested:true}).extend({status:require("zod").z.enum(["active","running","paused","completed","expired"])});
+    assert.equal(legacy.parse(raw).status,"completed");assert.equal(legacy.parse(raw).canContinue,false);
+    handler=()=>({data:status({runId,charged:2,changed:false,finished:true},{operation:raw}),error:null});
+    const current=await api.readOperation({actor,workspaceId,artifactId,id:operationId});assert.equal(current.operation.status,"cancelled");assert.equal(current.result.charged,2);assert.equal(calls.length,1);
+    const unchanged=snapshot({status:"completed",reservedCredits:0});handler=()=>({data:status(null,{operation:unchanged}),error:null});
+    assert.equal((await api.readOperation({actor,workspaceId,artifactId,id:operationId})).operation.status,"completed","successful completion cannot be relabelled Stop");
   });
   console.log(`${passed} operation integration groups passed. Database and providers mocked; no network or paid calls.`);
 })().catch(error => { console.error(error); process.exit(1); });

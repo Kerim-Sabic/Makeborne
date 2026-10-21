@@ -4,7 +4,7 @@ import { submitEnquiry } from "./forms.js";
 import { siteNamespacePolicy, classifySiteNamespaceRequest, STAGING_SITE_LABELS } from "./namespace-policy.js";
 import {
   composeSiteDocument, siteDocumentHeaders, siteDocumentPath, siteErrorHeaders, siteErrorPage, siteFileHeaders, siteFilePath,
-  siteOrigin, SITE_CONTENT_TYPES, SITE_LIMITS, siteScriptPath, siteFileContentType, validSiteLabel,
+  siteOrigin, SITE_CONTENT_TYPES, SITE_LIMITS, siteScriptPath, siteFileContentType, validSiteLabel, immutableSiteFile,
 } from "./site-policy.js";
 
 /** Cloudflare Worker for published customer websites.
@@ -73,9 +73,35 @@ function decodeBase64(text) {
   return bytes;
 }
 const hex = buffer => [...new Uint8Array(buffer)].map(byte => byte.toString(16).padStart(2, "0")).join("");
-const notModified = (request, headers) => request.headers.get("If-None-Match") === headers.ETag ? new Response(null, { status: 304, headers }) : null;
+const notModified = (request, headers) => {
+  // GET/HEAD validators use weak comparison. CDN compression can add W/ to
+  // our digest; still require the current authorized resource before this call.
+  const condition = request.headers.get("If-None-Match");
+  if (!condition || !headers.ETag) return null;
+  const matches = condition.trim() === "*" || condition.split(",").some(tag =>
+    tag.trim().replace(/^W\//, "") === headers.ETag.replace(/^W\//, ""));
+  return matches ? new Response(null, { status: 304, headers }) : null;
+};
+
+/** Whether a successful document may be indexed: the namespace allows it and
+ * the page is one the site's sitemap lists. "/" is always listed. Sites published
+ * before per-route output answer every path with their home snapshot and list
+ * only "/", so those copies stay noindex. If the page list can't be read, the
+ * page is still served, only without permission to index it. */
+function documentIndexable(config, slug, pathname) {
+  if (!config.indexable) return Promise.resolve(false);
+  if (pathname === "/") return Promise.resolve(true);
+  return rpc(config, "makeborne_read_site_paths", { p_slug: slug }, 20_000)
+    .then(value => sitePaths(value)?.paths.includes(pathname) ?? false)
+    .catch(error => {
+      console.error(JSON.stringify({ event: "site_index_paths_error", type: error instanceof Error ? error.message.slice(0, 40) : "unknown" }));
+      return false;
+    });
+}
 
 async function serveDocument(request, config, slug, pathname, secure) {
+  // Read in parallel with the document so nested pages add no round trip.
+  const indexable = documentIndexable(config, slug, pathname);
   const site = await rpc(config, "makeborne_read_hosted_site_v3", { p_slug: slug, p_path: pathname }, 24_000_100);
   if (site === null) return failure(404, secure, request.method === "HEAD");
   if (typeof site !== "object" || typeof site.html !== "string" || typeof site.interactive !== "boolean" || !Number.isInteger(site.revision)
@@ -85,7 +111,7 @@ async function serveDocument(request, config, slug, pathname, secure) {
   const interactive = site.interactive && site.script !== null;
   // The owner can remove the badge in Settings; older readers omit the flag, so it stays on.
   const branding = site.branding !== false;
-  const headers = siteDocumentHeaders({ interactive, secure, indexable: config.indexable && pathname === "/", etag: `"${WORKER_VERSION}-${site.revision}-${interactive ? 1 : 0}${branding ? "" : "-u"}"` });
+  const headers = siteDocumentHeaders({ interactive, secure, indexable: await indexable, etag:`"${WORKER_VERSION}-${site.revision}-${interactive ? 1 : 0}${branding ? "" : "-u"}"` });
   const cached = notModified(request, headers);
   if (cached) return cached;
   const html = composeSiteDocument(site.html, { script: site.script, interactive, branding });
@@ -137,17 +163,10 @@ function forCustomHost(response) {
 }
 
 async function serveFile(request, context, config, slug, url, secure, custom = false) {
-  const cache = typeof caches === "undefined" ? null : caches.default;
-  // Namespace-partitioned keys cannot reuse old production bytes on a QA URL
-  // when exact staging routes take over. Request query flags do not select it.
-  // Custom hosts also bind the resolved slug, so a hostname moved to another
-  // site never serves the previous site's cached files.
-  const key = new Request(`${url.origin}${url.pathname}?__mb_namespace=${config.namespace}-v1${custom ? `&__mb_site=${slug}` : ""}`, { method: "GET" });
-  const hit = cache ? await cache.match(key) : null;
-  if (hit) {
-    if (request.headers.get("If-None-Match") === hit.headers.get("ETag")) return new Response(null, { status: 304, headers: hit.headers });
-    return request.method === "HEAD" ? new Response(null, { headers: hit.headers }) : hit;
-  }
+  // Always consult the existing authoritative file read before the edge cache.
+  // It checks live state, hosting access, current manifest and JavaScript consent.
+  // A cache hit must never bypass Take offline or serve a retired script. Reusing
+  // this RPC avoids a second query or a weaker, separately maintained ACL.
   const file = await rpc(config, "makeborne_read_hosted_site_file", { p_slug: slug, p_path: url.pathname }, 3_000_000);
   if (file === null) return failure(404, secure, request.method === "HEAD");
   if (typeof file !== "object" || !ALLOWED_TYPES.has(file.content_type) || typeof file.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(file.sha256)
@@ -155,9 +174,21 @@ async function serveFile(request, context, config, slug, url, secure, custom = f
   // Legacy publishers normalized all raster bytes to WebP while retaining paths.
   if (file.content_type !== siteFileContentType(url.pathname)
     && !(file.content_type === SITE_CONTENT_TYPES.image && /\.(?:png|jpe?g)$/i.test(url.pathname))) throw new Error("invalid_file_type");
+  const headers = siteFileHeaders({ pathname: url.pathname, contentType: file.content_type, secure, etag: `"${file.sha256}"` });
+  const cache = immutableSiteFile(url.pathname) && typeof caches !== "undefined" ? caches.default : null;
+  // v2 ignores all old path-only entries; digest, namespace and site identity
+  // partition byte caches even if a publisher reuses a supposedly hashed path.
+  const key = new Request(`${url.origin}${url.pathname}?__mb_namespace=${config.namespace}-v2&__mb_site=${slug}&sha=${file.sha256}${custom ? "&custom=1" : ""}`, { method: "GET" });
+  const hit = cache ? await cache.match(key) : null;
+  if (hit && hit.headers.get("ETag") === headers.ETag && hit.headers.get("Content-Type") === file.content_type) {
+    const conditional = notModified(request, headers);
+    if (conditional) { await hit.body?.cancel(); return conditional; }
+    if (request.method === "HEAD") { await hit.body?.cancel(); return new Response(null, { headers }); }
+    return new Response(hit.body, { headers });
+  }
+  await hit?.body?.cancel();
   const bytes = decodeBase64(file.body);
   if (hex(await crypto.subtle.digest("SHA-256", bytes)) !== file.sha256) throw new Error("digest_mismatch");
-  const headers = siteFileHeaders({ pathname: url.pathname, contentType: file.content_type, secure, etag: `"${file.sha256}"` });
   const cached = notModified(request, headers);
   if (cached) return cached;
   const response = new Response(bytes, { headers });
@@ -182,11 +213,13 @@ async function serveSite(request, env, context, config, url, slug, secure, head,
   if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405, headers: { ...siteErrorHeaders({ secure, status: 405 }), "Content-Type": "text/plain; charset=utf-8", Allow: "GET, HEAD" } });
   if (url.pathname.length > 240) return failure(404, secure, head);
   if (url.pathname === "/robots.txt") {
-    return new Response(head ? null : robotsDocument(url.origin, config.indexable), { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+    // A custom host serves copies whose canonical is the Makeborne address, so it names no sitemap.
+    return new Response(head ? null : robotsDocument(url.origin, config.indexable, !custom), { headers: { ...siteErrorHeaders({ secure, status: 200 }), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
   }
-  // Pages of the live site for search engines; not offered where indexing is off (staging, local).
+  // Pages of the live site for search engines; not offered where indexing is off (staging, local),
+  // nor on a custom host: its pages name the Makeborne address as canonical, and a sitemap lists canonical URLs only.
   if (url.pathname === "/sitemap.xml") {
-    if (!config.indexable) return failure(404, secure, head);
+    if (!config.indexable || custom) return failure(404, secure, head);
     try {
       const site = sitePaths(await rpc(config, "makeborne_read_site_paths", { p_slug: slug }, 20_000));
       if (!site) return failure(404, secure, head);

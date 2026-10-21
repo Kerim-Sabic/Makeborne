@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import StorageLabel from "./storage-label";
+import { SETTINGS_STORAGE } from "@/lib/settings-storage";
 
 type Badge = { showBadge: boolean; owned: boolean };
 
@@ -47,7 +49,7 @@ export default function SiteBadgeSetting() {
   }
 
   return <section>
-    <h2>Website badge</h2>
+    <h2>Website badge <StorageLabel where={SETTINGS_STORAGE.websiteBadge} /></h2>
     <p>
       A small “Made with Makeborne” link at the bottom of your published websites.
       Paid plans can remove it; the change applies to every website you’ve published.

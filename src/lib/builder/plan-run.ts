@@ -8,7 +8,7 @@ import { estimatePlanCredits, recommendedEffort, type SitePlan, type StoredPlan 
 import { runPlanner, type PlannerEvent } from "./planner";
 import { aiCostUsdPerCredit } from "./pricing";
 import { logAiStop } from "./website-run";
-import { finishOperation, operationFailure, operationTerminal, type OperationRun } from "./operation-server";
+import { watchOperationCancellation, finishOperation, operationFailure, operationTerminal, type OperationRun } from "./operation-server";
 import { StoredPlanSchema } from "./plan";
 
 export type PlanStreamEvent = PlannerEvent
@@ -40,6 +40,7 @@ export function planStreamResponse(input: PlanRunInput): Response {
   const measured = () => spend.customerCredits(rate);
   const encoder = new TextEncoder();
   const controller = new AbortController();
+  const stopWatching = watchOperationCancellation(input.operation, spend, controller);
   const timeout = setTimeout(() => controller.abort(), (input.maxDuration - 20) * 1000);
   const stream = new ReadableStream<Uint8Array>({
     async start(output) {
@@ -89,7 +90,7 @@ export function planStreamResponse(input: PlanRunInput): Response {
         else emit({ type: "error", code: "PLAN_FAILED", message: (error as { code?: string }).code === "REFUSED" ? "This request can't be planned. Try rephrasing it."
           : "Planning hit a problem and stopped. No credits were charged." });
       } finally {
-        clearTimeout(timeout); clearInterval(heartbeat);
+        stopWatching(); clearTimeout(timeout); clearInterval(heartbeat);
         if (open) try { output.close(); } catch { /* client already gone */ }
       }
     },

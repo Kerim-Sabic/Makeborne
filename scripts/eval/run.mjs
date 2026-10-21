@@ -40,7 +40,27 @@ import { exportFixtures, exportRedesigns, withReadOnly } from './lib/fixtures.mj
 const require = createRequire(import.meta.url);
 const { loadApp } = require('./lib/app-modules.cjs');
 
-export const EFFORT = 'medium';
+/** The golden set's frozen effort; --effort high runs a comparison round at High (its own bound from BUILDER_EFFORT). */
+export const DEFAULT_EFFORT = 'medium';
+export const EFFORTS = Object.freeze(['medium', 'high']);
+export let EFFORT = DEFAULT_EFFORT;
+export function setEffort(value) {
+  if (!EFFORTS.includes(value)) throw new Error(`--effort must be one of ${EFFORTS.join(', ')}`);
+  EFFORT = value;
+}
+/** next dev bundler: Turbopack (Next's default) or webpack (needed in worktrees whose node_modules is a junction). */
+let BUNDLER = 'turbopack';
+/**
+ * The .env.local the runner reads ANTHROPIC_API_KEY / OPENAI_API_KEY / MAKEBORNE_IMAGE_MODEL from
+ * (only into its own server process). A git worktree has none of its own: EVAL_ENV_LOCAL names the
+ * primary checkout's file instead of copying keys into the worktree. Values are never printed or stored.
+ */
+export function envLocalFile(env = process.env) {
+  const raw = env.EVAL_ENV_LOCAL?.trim();
+  if (!raw) return path.join(REPO, '.env.local');
+  if (!path.isAbsolute(raw) || path.basename(raw) !== '.env.local') throw new Error('EVAL_ENV_LOCAL must be an absolute path to a file named .env.local');
+  return raw;
+}
 export const NEXT_PORT = 3211;
 const ORIGIN = `http://127.0.0.1:${NEXT_PORT}`;
 const ENV_FILES_NEXT_LOADS = ['.env', '.env.local', '.env.development', '.env.development.local'];
@@ -85,7 +105,7 @@ export function loadBriefs() {
   }
   items.sort((a, b) => a.priority - b.priority);
   if (index.count !== undefined && index.count !== order.length) problems.push(`index count ${index.count} != ${order.length} ids in order`);
-  if (index.effort && index.effort !== EFFORT) problems.push(`index effort ${index.effort} != runner effort ${EFFORT}`);
+  if (index.effort && index.effort !== DEFAULT_EFFORT) problems.push(`index effort ${index.effort} != runner effort ${EFFORT}`);
   return { ok: problems.length === 0 && items.length > 0, present: true, file: rel(file), indexSha256: sha256(raw), frozenAt: index.frozenAt ?? null,
     count: items.length, byKind: countBy(items, item => item.kind), problems, items };
 }
@@ -570,11 +590,11 @@ function envPresence(file, read = readEnvFile) {
 
 /** Read one value from .env.local for the child env only (never logged or stored). */
 function envValue(name, read = readEnvFile) {
-  return parseEnvText(read(path.join(REPO, '.env.local')) ?? '').values.get(name) ?? '';
+  return parseEnvText(read(envLocalFile()) ?? '').values.get(name) ?? '';
 }
 
 export function keyPresence() {
-  const local = envPresence(path.join(REPO, '.env.local'));
+  const local = envPresence(envLocalFile());
   const keys = local ? {
     ANTHROPIC_API_KEY: Boolean(local.ANTHROPIC_API_KEY), OPENAI_API_KEY: Boolean(local.OPENAI_API_KEY), MAKEBORNE_IMAGE_MODEL: Boolean(local.MAKEBORNE_IMAGE_MODEL),
     MAKEBORNE_BUILDER_MODEL: Boolean(local.MAKEBORNE_BUILDER_MODEL), MAKEBORNE_AI_COST_USD_PER_CREDIT: Boolean(local.MAKEBORNE_AI_COST_USD_PER_CREDIT),
@@ -765,7 +785,7 @@ export function serverEnv(stack, { images, rate }, { read = readEnvFile, value =
 
 function startNext(stack, options, logFile) {
   const log = createWriteStream(logFile, { flags: 'a' });
-  const child = spawn(process.execPath, [path.join(REPO, 'node_modules', 'next', 'dist', 'bin', 'next'), 'dev', '--hostname', '127.0.0.1', '--port', String(NEXT_PORT)],
+  const child = spawn(process.execPath, [path.join(REPO, 'node_modules', 'next', 'dist', 'bin', 'next'), 'dev', ...(BUNDLER === 'webpack' ? ['--webpack'] : []), '--hostname', '127.0.0.1', '--port', String(NEXT_PORT)],
     { cwd: REPO, env: serverEnv(stack, options), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   // Two sources share one file: end it only once both pipes are closed (no write after end),
   // so next-dev.log is complete on disk before the final secret scan reads it.
@@ -2199,7 +2219,10 @@ async function liveSelfTest() {
     // detached helper and a failed disable is logged loudly (no database is reached).
     const closedPort = await new Promise(resolve => { const probe = net.createServer().listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => resolve(port)); }); });
     const pgLog = path.join(base, 'watchdog-pg.log');
-    const pgWatch = startWatchdog({ logFile: pgLog, dbUrl: `postgresql://selftest:selftest@127.0.0.1:${closedPort}/postgres` });
+    const refusedDatabase = new URL(`postgresql://127.0.0.1:${closedPort}/postgres`);
+    refusedDatabase.username = 'invalid-test-user';
+    refusedDatabase.password = 'invalid-test-password'; // Deliberately invalid closed-port fixture.
+    const pgWatch = startWatchdog({ logFile: pgLog, dbUrl: refusedDatabase.href });
     await sleep(300);
     pgWatch.child.stdin.end();
     await waitFor(() => existsSync(pgLog) && /DISABLING PROVIDER LIMITS FAILED/.test(readFileSync(pgLog, 'utf8')), 15_000);
@@ -2220,7 +2243,7 @@ async function liveSelfTest() {
 function cli(argv) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     fixtures: { type: 'boolean' }, 'include-redesign': { type: 'boolean' }, live: { type: 'boolean' }, approval: { type: 'string' }, rerun: { type: 'boolean' },
-    only: { type: 'string', multiple: true }, max: { type: 'string' }, images: { type: 'boolean' }, plan: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, plan: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     'selftest-live': { type: 'boolean' }, 'selftest-watchdog-parent': { type: 'boolean' },
   }, strict: true });
   const max = values.max === undefined ? null : Number(values.max);
@@ -2232,6 +2255,11 @@ async function main() {
   // Document exporters read fonts relative to process.cwd(); the server runs from here too.
   process.chdir(REPO);
   const options = cli(process.argv.slice(2));
+  if (options.effort !== undefined) setEffort(options.effort);
+  if (options.bundler !== undefined) {
+    if (!['turbopack', 'webpack'].includes(options.bundler)) throw new Error('--bundler must be turbopack or webpack');
+    BUNDLER = options.bundler;
+  }
   if (options.help) { console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 10).join('\n')); return 0; }
   if (options['selftest-live']) { console.log('run.mjs live-path self-test (fakes only: no DB writes, no server, no provider)'); return liveSelfTest(); }
   if (options['selftest-watchdog-parent']) {

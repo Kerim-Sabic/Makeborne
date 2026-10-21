@@ -40,8 +40,9 @@ const messages: Record<string, string> = {
   OPERATION_CONFLICT: "This request changed. Reload its status before continuing.",
   INSUFFICIENT_CREDITS: "There are not enough available credits to start the next step. Your saved work is safe.",
 };
-async function call(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { data, error } = await billingDatabase().rpc(name, args);
+async function call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const request = billingDatabase().rpc(name, args);
+  const { data, error } = await (signal ? request.abortSignal(signal) : request);
   if (error) {
     if (error.code === "42501") throw new OperationError("OPERATION_FORBIDDEN", "This request is unavailable to this account.", 403);
     if (error.code === "P0002") throw new OperationError("OPERATION_NOT_FOUND", "This request could not be found.", 404);
@@ -56,7 +57,13 @@ async function call(name: string, args: Record<string, unknown>): Promise<Record
 function snapshot(value: unknown): OperationSnapshot {
   const parsed = OperationSnapshotSchema.safeParse(value);
   if (!parsed.success) throw unavailable();
-  return parsed.data;
+  return normalizedSnapshot(parsed.data);
+}
+/** Settled Stops use the legacy wire status so an application rollback can
+ * still read their receipt. Only an explicit, validated marker means Stop. */
+function normalizedSnapshot(value: OperationSnapshot): OperationSnapshot {
+  return value.status === "completed" && value.cancelRequested === true && value.reservedCredits === 0
+    ? { ...value, status: "cancelled" } : value;
 }
 function checkRefusal(data: Record<string, unknown>) {
   if (!data.error) return;
@@ -67,7 +74,7 @@ function checkRefusal(data: Record<string, unknown>) {
 function publicStatus(data: Record<string, unknown>): OperationStatus {
   const parsed = OperationStatusSchema.safeParse({ operation: data.operation, result: data.result ?? null, recovery: data.recovery ?? null });
   if (!parsed.success) throw unavailable();
-  return parsed.data;
+  return { ...parsed.data, operation: normalizedSnapshot(parsed.data.operation) };
 }
 
 /** Bind reference bytes without retaining private uploads in SQL or returning
@@ -78,11 +85,60 @@ function attachmentFingerprint(request: unknown): string {
   return createHash("sha256").update(canonicalSourceJson(attachments)).digest("hex");
 }
 
-export async function readOperation(input: { actor: string; workspaceId: string; artifactId: string; id?: string; actionKey?: string }): Promise<OperationStatus> {
-  const data = await call("makeborne_ai_operation_read", { p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_operation: input.id ?? null, p_action: input.actionKey ?? null });
+export async function readOperation(input: { actor: string; workspaceId: string; artifactId: string; id?: string; actionKey?: string }, signal?: AbortSignal): Promise<OperationStatus> {
+  const data = await call("makeborne_ai_operation_read", { p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_operation: input.id ?? null, p_action: input.actionKey ?? null }, signal);
   checkRefusal(data);
   return publicStatus(data);
 }
+
+export async function cancelOperation(input: { actor: string; workspaceId: string; artifactId: string; id?: string; actionKey?: string; expectedRevision?: number }): Promise<OperationStatus> {
+  // Resolve within the authenticated workspace/artifact before the service-only
+  // RPC. An ID or action key from another project can never stop this request.
+  const current = await readOperation(input);
+  const data = await call("makeborne_ai_operation_cancel", { p_actor: input.actor, p_operation: current.operation.id,
+    p_expected_revision: input.expectedRevision ?? current.operation.revision });
+  checkRefusal(data);
+  return publicStatus(data);
+}
+
+/** Browser disconnects do not cancel paid work. Explicit durable Stop does.
+ * A sequential, bounded poll interrupts an in-flight provider stream; the SQL
+ * provider gate independently denies new calls immediately. An unavailable
+ * cancellation read stops the worker conservatively, never clears the marker. */
+export function watchOperationCancellation(run: OperationRun | undefined, spend: RunSpend, controller: AbortController, pollMs = 1000) {
+  if (!run) return () => undefined;
+  let disposed = false;
+  let timer: ReturnType<typeof setTimeout>;
+  const poll = async () => {
+    try {
+      const status = await readOperation({ actor: run.actor, workspaceId: run.workspaceId, artifactId: run.artifactId, id: run.operation.id }, AbortSignal.timeout(3000));
+      if (disposed) return;
+      if (status.operation.cancelRequested || status.operation.status === "cancelled") {
+        spend.cancel(); controller.abort(new SpendError("CANCELLED", "This request was stopped.")); return;
+      }
+    } catch {
+      if (!disposed) controller.abort(new SpendError("SPEND_UNAVAILABLE", "The operation could not be checked; the worker stopped."));
+      return;
+    }
+    if (!disposed && !controller.signal.aborted) { timer = setTimeout(() => void poll(), pollMs); timer.unref?.(); }
+  };
+  timer = setTimeout(() => void poll(), pollMs); timer.unref?.();
+  return () => { disposed = true; clearTimeout(timer); };
+}
+
+/** The brand kit a request was admitted with, as a content hash ("none" without a kit).
+ * Kits have no revision number, so their canonical content identifies them. */
+export function brandKitFingerprint(kit: object | null): string {
+  return kit ? `sha256:${createHash("sha256").update(canonicalSourceJson(kit)).digest("hex")}` : "none";
+}
+/** The request context recorded once with a new operation. Provenance (advisor brief ids) is kept for the record only. */
+export function operationContext(request: unknown, attachmentsSha256: string): Record<string, unknown> {
+  const body = typeof request === "object" && request !== null ? request as { message?: unknown; plan?: unknown; provenance?: unknown } : null;
+  const brandKit = requestBrandKit(request);
+  return { attachmentsSha256, ...(brandKit ? { brandKit } : {}), ...(body ? { message: body.message ?? "", ...(body.plan ? { plan: body.plan } : {}), ...(body.provenance ? { provenance: body.provenance } : {}) } : {}) };
+}
+const requestBrandKit = (request: unknown) => typeof request === "object" && request !== null && typeof (request as { brandKit?: unknown }).brandKit === "string"
+  ? (request as { brandKit: string }).brandKit : undefined;
 
 /** The server derives the cap, rate, actor and request digest. Client keys only identify replays. */
 export async function beginOperation(input: {
@@ -91,6 +147,7 @@ export async function beginOperation(input: {
 }): Promise<{ run: OperationRun | null; status: OperationStatus }> {
   const digest = createHash("sha256").update(canonicalSourceJson(input.request)).digest("hex");
   const attachmentsSha256 = attachmentFingerprint(input.request);
+  const brandKit = requestBrandKit(input.request);
   let id: string;
   if ("actionKey" in input.envelope) {
     const created = await call("makeborne_ai_operation_create", {
@@ -98,7 +155,7 @@ export async function beginOperation(input: {
       p_action: input.envelope.actionKey, p_kind: input.kind, p_effort: input.effort,
       p_initial_version: input.expectedVersion, p_input_hash: digest, p_credit_cap: input.ceiling,
       p_rate_microusd: Math.round(aiCostUsdPerCredit() * 1_000_000),
-      p_context: { attachmentsSha256, ...(typeof input.request === "object" && input.request ? { message: (input.request as { message?: unknown }).message ?? "", ...((input.request as { plan?: unknown }).plan ? { plan: (input.request as { plan?: unknown }).plan } : {}) } : {}) },
+      p_context: operationContext(input.request, attachmentsSha256),
     });
     checkRefusal(created);
     id = snapshot(created.operation ?? created).id;
@@ -109,6 +166,10 @@ export async function beginOperation(input: {
     checkRefusal(existingData);
     const existing = publicStatus(existingData);
     if (existing.operation.effort !== input.effort) throw new OperationError("OPERATION_CONFLICT", "Continue with the effort originally authorized for this request.", 409, existing.operation);
+    // Every later stage (continuation or review) must use the brand kit the request started with.
+    const startedWith = (existingData.requestContext as { brandKit?: unknown } | null)?.brandKit;
+    if (typeof startedWith === "string" && brandKit !== undefined && startedWith !== brandKit)
+      throw new OperationError("OPERATION_BRAND_CHANGED", "The brand kit changed after this request started, so it was not continued with the new kit. Your saved work is safe. Start a new request to use the updated brand kit.", 409, existing.operation);
     // A visual-review stage deliberately supplies its own current screenshots.
     // Build/plan continuation must preserve the original reference set. Older
     // operations without a reference fingerprint cannot prove that equivalence.
@@ -150,6 +211,7 @@ export function createOperationSpend(run: OperationRun, platformDeadline: number
         p_provider: ticket.provider, p_model: ticket.model, p_bound: ticket.boundMicrousd,
       });
       if (error) {
+        if (error.code === "MB499") throw new SpendError("CANCELLED", "This request was stopped.");
         if (error.code === "MB402") throw new SpendError("PROVIDER_LIMIT", "Today's AI capacity has been reached.");
         if (error.code === "MB423") throw new SpendError("PROVIDER_DISABLED", "AI generation is paused right now.");
         if (error.code === "MB409" || error.code === "PT409") throw new SpendError("HOLD_EXPIRED", "This operation step can no longer make paid calls.");

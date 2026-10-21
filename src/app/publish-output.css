@@ -1,0 +1,22 @@
+/* Output facts outside the publish panel (audit reconciliation): version facts in the
+   editor header, History's Checked marker and font coverage notes in the document preview.
+   Publish-panel styles live in src/components/website-publish.css.
+   Text colours meet 4.5:1 on their backgrounds. */
+
+/* Document preview: characters outside the embedded font subsets. */
+.dp-font-note{display:grid;gap:4px;margin:0;padding:8px 14px;border-bottom:1px solid #ebe8ef;background:#fdf8ec;color:#5a3d00;font-size:12px;line-height:1.5}
+.dp-font-note p{margin:0;overflow-wrap:anywhere}
+
+/* Editor header: saved, checked and live side by side. */
+.version-facts{display:grid;gap:4px;margin-top:4px;min-width:0}
+.version-facts ul{display:flex;flex-wrap:wrap;gap:4px 6px;margin:0;padding:0;list-style:none}
+.version-facts li{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;line-height:1.4;padding:2px 8px;border-radius:999px;background:#f1f0f7;color:#3d3a4a;max-width:100%;white-space:nowrap}
+.version-facts li[data-fact="checked"]{white-space:normal;text-wrap:pretty}
+.version-facts li[data-fact="checked"][data-state="current"],.version-facts li[data-fact="live"][data-state="live"]{background:#edf8f1;color:#1d6339}
+.version-facts li[data-fact="checked"][data-state="older"]{background:#fdf4e3;color:#7a4a00}
+.version-facts-notice{margin:0;font-size:12px;line-height:1.45;color:#7a4a00}.version-facts-notice:empty{display:none}
+.cloud-version-checked{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;vertical-align:middle;background:#eef3fd;color:#244f9e}
+
+/* Document preview: exports are generated outputs, distinct from uploaded source files. */
+.dp-outputs-label{font-size:11px;color:#55556a;white-space:nowrap}
+@container (max-width:600px){.dp-outputs-label{display:none}}
