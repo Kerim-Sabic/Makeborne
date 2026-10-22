@@ -37,7 +37,7 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !ke
 const extras = ["scripts/check-trusted-publication-worker.cjs", "scripts/check-trusted-publication-profiles.cjs", "infra/project-runtime/vercel-publication-check.mjs",
   "infra/customer-sites/check-namespace.mjs", "infra/customer-sites/check-custom-hosts.mjs", "infra/customer-sites/check-analytics.mjs", "infra/customer-sites/check-sitemap.mjs", "infra/customer-sites/check-file-cache.mjs",
   // Generated-site verifier rules and the bounded repair controller (fakes only; the browser half is scripts/check-site-verifier-browser.cjs).
-  "infra/project-runtime/check-site-verifier.mjs"];
+  "infra/project-runtime/check-site-verifier.mjs", "infra/project-runtime/check-site-repair.mjs"];
 const checks = [...findChecks(join(root, "src")), ...extras].sort()
   .filter((file) => all || !excluded.has(file))
   .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)));
