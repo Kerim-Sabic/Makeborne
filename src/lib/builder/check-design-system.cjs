@@ -292,6 +292,7 @@ check("image-led by default: a hero image and the full allowance, sizes per slot
   assert.match(imagery, /Every website gets a strong hero image on the first screen, generated first/);
   assert.match(imagery, /visible on phones without scrolling[^.]*never pushed below all the text and buttons/);
   assert.match(imagery, /hero plus two supporting images/);
+  assert.match(BUILDER_SYSTEM, /At 360px the wordmark, that action and the menu button fit on one row/, "a header row that overflowed at 360 px (W9) in round 2");
   assert.match(imagery, /never instead of it/, "a crafted signature sits with the image, not in place of it");
   // The old steering away from photography is gone.
   for (const old of [/wins over photography/, /Default to illustration/, /at most one or two per page/, /keep photos, if any, to one supporting section/, /reads as stock and lowers the page/])
