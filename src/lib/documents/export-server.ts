@@ -8,6 +8,7 @@ import { bookHtml } from "./render-book";
 import { deckPptx } from "./pptx";
 import { FONTS } from "./theme";
 import { embeddedFontSources } from "./fonts-server";
+import { bookHeadings, bookPagesFromOutline, fixPdfBookmarks, pdfOutline } from "./book-pagination";
 import { chromiumLaunchOptions } from "../server/export";
 import { downloadProjectAsset } from "../cloud/asset-storage";
 
@@ -39,23 +40,32 @@ async function dataUrls(buffers: Record<string, Buffer>) {
 }
 
 /** Print the same HTML the preview shows, in an offline, script-free browser.
- * The document's typefaces are embedded: the serverless Chromium has only Open Sans. */
+ * The document's typefaces are embedded: the serverless Chromium has only Open Sans.
+ * Books print twice (book-pagination.ts): the first PDF's bookmarks give each
+ * chapter's page, and the second adds the contents page numbers and blank
+ * versos so chapter openers fall on right-hand pages. */
 export async function documentPdf(doc: DocumentSource, buffers: Record<string, Buffer>) {
   const images = await dataUrls(buffers);
   // A deck's art direction may add faces (monospaced labels) beyond its pairing.
   const fonts = await embeddedFontSources(doc.kind === "deck" ? deckFaces(doc) : FONTS[doc.theme.fonts].faces);
-  const html = doc.kind === "deck" ? deckHtml(doc, images, "print", fonts) : bookHtml(doc, images, "print", fonts);
   const browser = await chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
   try {
     const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: doc.kind === "deck" ? { width: 1280, height: 720 } : { width: 576, height: 864 } });
     await context.route("**/*", route => route.abort());
     const page = await context.newPage();
     page.setDefaultTimeout(30_000);
-    await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
-    await page.emulateMedia({ media: "print" });
-    // Embedded faces decode asynchronously; print only once they are ready.
-    await page.evaluate(() => document.fonts.ready.then(() => undefined));
-    return Buffer.from(await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: doc.kind === "book" }));
+    const print = async (html: string) => {
+      await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
+      await page.emulateMedia({ media: "print" });
+      // Embedded faces decode asynchronously; print only once they are ready.
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      return Buffer.from(await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: doc.kind === "book" }));
+    };
+    if (doc.kind === "deck") return await print(deckHtml(doc, images, "print", fonts));
+    const first = await print(bookHtml(doc, images, "print", fonts));
+    const pages = bookPagesFromOutline(doc, pdfOutline(first));
+    // Bookmarks carry the headings as written (Chromium drops the space at a soft line break).
+    return fixPdfBookmarks(pages ? await print(bookHtml(doc, images, "print", fonts, pages)) : first, bookHeadings(doc));
   } finally {
     await browser.close();
   }

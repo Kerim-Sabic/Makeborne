@@ -30,6 +30,8 @@ const { bookHtml } = src("render-book.ts");
 const { composeSlide } = src("slide-scene.ts");
 const { deckPptx } = src("pptx.ts");
 const { FONTS } = src("theme.ts");
+let pagination = null;
+try { pagination = src("book-pagination.ts"); } catch { /* older trees print books once */ }
 let imageLuma = null;
 try { ({ imageLuma } = src("image-luma.ts")); } catch { /* older trees have no brightness map */ }
 let fontServer = null;
@@ -295,7 +297,19 @@ function rasterizePdf(pdf, prefix, dpi = 110) {
 
 async function renderBook(browser, name, doc, images, dir, report) {
   const urls = Object.fromEntries(Object.entries(images).map(([key, bytes]) => [key, `data:image/jpeg;base64,${bytes.toString("base64")}`]));
-  const variants = [["print", bookHtml(doc, urls, "print", ...(await printFonts(doc)))]];
+  const fonts = await printFonts(doc);
+  let html = bookHtml(doc, urls, "print", ...fonts);
+  // As the PDF exporter does: a first print's bookmarks give the contents page numbers and the recto blanks.
+  if (pagination) {
+    const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: { width: 576, height: 864 } });
+    await context.route("**/*", route => route.abort());
+    const page = await context.newPage();
+    await page.setContent(html, { waitUntil: "load" }); await page.emulateMedia({ media: "print" }); await page.evaluate(() => document.fonts.ready);
+    const pages = pagination.bookPagesFromOutline(doc, pagination.pdfOutline(await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: true })));
+    await context.close();
+    if (pages) { report.pagination = pages; html = bookHtml(doc, urls, "print", fonts[0], pages); }
+  }
+  const variants = [["print", html]];
   if (serverFonts) variants.push(["server-pdf", serverFontHtml(variants[0][1])]);
   for (const [variant, html] of variants) {
     const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: { width: 576, height: 864 } });
@@ -305,8 +319,10 @@ async function renderBook(browser, name, doc, images, dir, report) {
     await page.emulateMedia({ media: "print" });
     await page.evaluate(() => document.fonts.ready);
     const pdfPath = path.join(dir, variant === "print" ? "book.pdf" : "server-book.pdf");
-    fs.writeFileSync(pdfPath, await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: true }));
+    const printed = Buffer.from(await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: true }));
+    fs.writeFileSync(pdfPath, pagination?.fixPdfBookmarks ? pagination.fixPdfBookmarks(printed, pagination.bookHeadings(doc)) : printed);
     const pages = rasterizePdf(pdfPath, path.join(dir, variant === "print" ? "page" : "server-page"));
+    if (pagination && variant === "print") report.bookmarks = pagination.pdfOutline(fs.readFileSync(pdfPath)).map(entry => `${entry.page}: ${entry.title}`);
     report[variant === "print" ? "pages" : "serverPages"] = pages;
     if (variant === "print") report.fontStacks = await page.evaluate(() => [...new Set([...document.querySelectorAll("h1,h2,h3,p,li,td")].map(element => getComputedStyle(element).fontFamily))]);
     if (variant === "print") fs.writeFileSync(path.join(dir, "book-print.html"), html);

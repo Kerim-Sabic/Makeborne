@@ -1,7 +1,7 @@
 import type { Book } from "./schema";
 import { FONTS, mix, motifOf, readableOn } from "./theme";
 import { fontFaceCss, type FontSources } from "./fonts";
-import { bodyHtml, inlineHtml, parseBookMarkup, plainText, type BookBlock } from "./book-markup";
+import { bodyHtml, checkItem, inlineHtml, noteBlocks, parseBookMarkup, plainText, type BookBlock } from "./book-markup";
 import { esc } from "./chart-svg";
 import type { ImageMap } from "./render-deck";
 import { authoredBookCover } from "./render-book-cover";
@@ -12,7 +12,11 @@ export const BOOK_TRIM = { width: 6, height: 9, top: 0.75, bottom: 0.85, inside:
 /** CSS string literal that can never close the surrounding <style> element. */
 const cssString = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/</g, "\\00003C").replace(/>/g, "\\00003E").replace(/[\n\r]+/g, " ")}"`;
 const ordinal = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
-export const chapterLabel = (book: Book, index: number) => book.chapters[index].label ?? `Chapter ${ordinal[index] ?? index + 1}`;
+/** The chapter's number among the numbered chapters: an Introduction or Appendix with its own label takes no number. */
+export const chapterNumber = (book: Pick<Book, "chapters">, index: number) => book.chapters.slice(0, index + 1).filter(chapter => chapter.label === undefined).length;
+export const chapterLabel = (book: Book, index: number) => { const n = chapterNumber(book, index); return book.chapters[index].label ?? `Chapter ${ordinal[n - 1] ?? n}`; };
+/** Print pagination measured from a first PDF pass (export-server.ts): each chapter's first page, and the chapters whose opener needs a blank page before it to fall on a right-hand page. */
+export type BookPages = { chapters: Record<string, number>; blankBefore: string[] };
 
 /** Cells wrap anywhere so no table is wider than the page, but auto layout would then
  * hand one long cell nearly all the width. Each column instead keeps room for its
@@ -35,21 +39,32 @@ function tableColumnMinimums(rows: string[][]) {
 
 /** A drop cap needs a paragraph long enough to wrap around it. */
 const LEAD_MIN_CHARS = 180;
+const RUN_IN = /^\*\*[^*\n]{1,80}\*\*[:.]?$/;
+/** Tables up to this many body rows are kept on one page. */
+const KEEP_TABLE_ROWS = 10;
+const linesHtml = (text: string) => text.split("\n").map(line => bodyHtml(line)).join("<br>");
+/** Lists; "[ ] item" / "[x] item" entries render as a checklist with boxes. */
+function listHtml(ordered: boolean, items: string[], start?: number) {
+  const checks = items.map(checkItem), checklist = checks.every(Boolean);
+  const li = (item: string, index: number) => { const check = checks[index]; return check ? `<li class="check${check.done ? " done" : ""}"><span class="box" aria-hidden="true">${check.done ? "☑" : "☐"}</span>${bodyHtml(check.text)}</li>` : `<li>${bodyHtml(item)}</li>`; };
+  if (checklist) return `<ul class="checklist">${items.map(li).join("")}</ul>`;
+  return ordered ? `<ol${start ? ` start="${start}"` : ""}>${items.map(li).join("")}</ol>` : `<ul>${items.map(li).join("")}</ul>`;
+}
 function blockHtml(block: BookBlock, book: Book, images: ImageMap, lead = false) {
   switch (block.type) {
-    case "paragraph": return `<p${lead ? ' class="lead"' : ""}>${bodyHtml(block.text)}</p>`;
+    // A short all-bold paragraph is a run-in subhead: it stays with the text it introduces.
+    case "paragraph": return `<p${lead ? ' class="lead"' : RUN_IN.test(block.text) ? ' class="runin"' : ""}>${bodyHtml(block.text)}</p>`;
     case "subheading": return `<h3>${bodyHtml(block.text)}</h3>`;
-    case "quote": return `<blockquote><p>${bodyHtml(block.text)}</p>${block.attribution ? `<span class="attr">\u2014 ${bodyHtml(block.attribution)}</span>` : ""}</blockquote>`;
-    case "list": return block.ordered
-      ? `<ol${block.start ? ` start="${block.start}"` : ""}>${block.items.map(item => `<li>${bodyHtml(item)}</li>`).join("")}</ol>`
-      : `<ul>${block.items.map(item => `<li>${bodyHtml(item)}</li>`).join("")}</ul>`;
+    case "quote": return `<blockquote>${block.text.split(/\n{2,}/).map(paragraph => `<p>${linesHtml(paragraph)}</p>`).join("")}${block.attribution ? `<span class="attr">\u2014 ${bodyHtml(block.attribution)}</span>` : ""}</blockquote>`;
+    case "list": return listHtml(block.ordered, block.items, block.start);
     case "table": {
       const widths = tableColumnMinimums(block.header ? [block.header, ...block.rows] : block.rows);
       const cells = (row: string[], tag: "th" | "td") => `<tr>${row.map((cell, column) => `<${tag}${widths[column] ? ` style="min-width:${widths[column]}pt"` : ""}>${bodyHtml(cell)}</${tag}>`).join("")}</tr>`;
-      return `<div class="table"><table>${block.header ? `<thead>${cells(block.header, "th")}</thead>` : ""}<tbody>${block.rows.map(row => cells(row, "td")).join("")}</tbody></table></div>`;
+      // A short table stays whole; a long one breaks between rows and repeats its header row on the next page.
+      return `<div class="table${block.rows.length > KEEP_TABLE_ROWS ? " long" : ""}"><table>${block.header ? `<thead>${cells(block.header, "th")}</thead>` : ""}<tbody>${block.rows.map(row => cells(row, "td")).join("")}</tbody></table></div>`;
     }
     case "break": return `<div class="break" aria-hidden="true">\u25C6\u2003\u25C6\u2003\u25C6</div>`;
-    case "note": return `<aside class="note">${block.title ? `<strong>${bodyHtml(block.title)}</strong>` : ""}<p>${bodyHtml(block.text)}</p></aside>`;
+    case "note": return `<aside class="note">${block.title ? `<strong>${bodyHtml(block.title)}</strong>` : ""}${noteBlocks(block.text).map(part => part.type === "list" ? listHtml(part.ordered, part.items) : `<p>${part.lines.map(line => bodyHtml(line)).join("<br>")}</p>`).join("")}</aside>`;
     case "pullquote": return `<aside class="pullquote"><p>${bodyHtml(block.text)}</p>${block.attribution ? `<span>— ${bodyHtml(block.attribution)}</span>` : ""}</aside>`;
     case "figure": {
       const src = images[block.image], alt = book.assets.find(asset => asset.name === block.image)?.alt ?? block.caption ?? "";
@@ -61,7 +76,8 @@ function blockHtml(block: BookBlock, book: Book, images: ImageMap, lead = false)
 /** Contents geometry in points. Pages have a fixed height, so entries are packed by
  * their estimated wrapped height (deliberately generous) rather than by count. */
 const CONTENTS = {
-  width: (BOOK_TRIM.width - 2 * (BOOK_TRIM.outside + 0.1)) * 72,
+  // Less the page-number column (.contents .pg), so numbered and unnumbered contents paginate alike.
+  width: (BOOK_TRIM.width - 2 * (BOOK_TRIM.outside + 0.1) - 0.42) * 72,
   roomy: { list: (BOOK_TRIM.height - 1.35 - 1 - 0.5) * 72, title: 12.5, label: 7, pad: 0.22 * 72 + 0.04 * 72 + 1 },
   compact: { list: (BOOK_TRIM.height - 1 - 1 - 0.36) * 72, title: 10.5, label: 6.5, pad: 0.13 * 72 + 1, labelWidth: 1.25 * 72, gap: 0.14 * 72 },
   lineHeight: 1.3, fill: 0.95,
@@ -95,7 +111,7 @@ function paginateContents(book: Book) {
 }
 
 /** `fonts` maps embedded faces to data: URLs where the page cannot fetch same-origin files (the PDF printer). */
-export function bookHtml(book: Book, images: ImageMap, mode: "preview" | "print" = "preview", fontSources?: FontSources) {
+export function bookHtml(book: Book, images: ImageMap, mode: "preview" | "print" = "preview", fontSources?: FontSources, pages?: BookPages) {
   const fonts = FONTS[book.theme.fonts], p = book.theme.palette, motif = motifOf(book.theme);
   const coverArt = book.cover.image ? images[book.cover.image] : undefined;
   const coverInk = coverArt ? "#FFFFFF" : readableOn(p.dark, p.background, "#FFFFFF");
@@ -110,19 +126,23 @@ ${book.author ? `<p class="cover-author">${inlineHtml(book.author)}</p>` : ""}</
   const year = new Date().getFullYear();
   const rights = `<section class="full front rights">${book.dedication ? `<p class="dedication">${inlineHtml(book.dedication)}</p>` : "<span></span>"}<div class="legal"><p>Copyright \u00A9 ${year}${book.author ? ` ${esc(book.author)}` : ""}. All rights reserved.</p><p>Designed and typeset with Makeborne.</p></div></section>`;
   const toc = paginateContents(book);
-  const contents = toc.pages.map((entries, page) => `<section class="full front contents${toc.compact ? " compact" : ""}"><h2>${page ? "Contents, continued" : "Contents"}</h2><ol start="${entries[0] + 1}">${entries.map(index => `<li><a href="#chapter-${esc(book.chapters[index].id)}"><span>${esc(chapterLabel(book, index))}</span>${inlineHtml(book.chapters[index].title)}</a></li>`).join("")}</ol></section>`).join("");
+  // Page numbers only where a measured print pass supplied them (the preview has no pages).
+  const pageOf = (index: number) => { const page = mode === "print" ? pages?.chapters[book.chapters[index].id] : undefined; return page ? `<b class="pg">${page}</b>` : ""; };
+  const contents = toc.pages.map((entries, page) => `<section class="full front contents${toc.compact ? " compact" : ""}"><h2>${page ? "Contents, continued" : "Contents"}</h2><ol start="${entries[0] + 1}">${entries.map(index => `<li><a href="#chapter-${esc(book.chapters[index].id)}"><span>${esc(chapterLabel(book, index))}</span>${pageOf(index)}${inlineHtml(book.chapters[index].title)}</a></li>`).join("")}</ol></section>`).join("");
   const chapters = book.chapters.map((chapter, index) => {
     const art = chapter.image ? images[chapter.image] : undefined;
     const inline = chapter.opening === "inline";
     const artwork = chapter.image ? art ? `<img class="opener-art" src="${esc(art)}" alt="${esc(book.assets.find(asset => asset.name === chapter.image)?.alt ?? "")}">` : `<div class="opener-art ph">${esc(chapter.image)}</div>` : "";
     const heading = `<p class="label">${esc(chapterLabel(book, index))}</p><h2>${inlineHtml(chapter.title)}</h2>${chapter.epigraph ? `<blockquote class="epigraph"><p>${inlineHtml(chapter.epigraph.text)}</p>${chapter.epigraph.attribution ? `<span>\u2014 ${inlineHtml(chapter.epigraph.attribution)}</span>` : ""}</blockquote>` : ""}`;
     const opener = inline ? `<header class="inline-opener">${artwork}${heading}</header>` : `<section class="full opener${chapter.image ? " has-art" : ""}${chapter.label !== undefined ? " custom-label" : ""}" id="chapter-${esc(chapter.id)}">
-${artwork || (chapter.label === undefined ? `<div class="numeral">${index + 1}</div>` : "")}
+${artwork || (chapter.label === undefined ? `<div class="numeral">${chapterNumber(book, index)}</div>` : "")}
 <div class="opener-text">${heading}</div></section>`;
     const blocks = parseBookMarkup(chapter.text);
     const body = blocks.length ? blocks.map((block, at) => blockHtml(block, book, images, at === 0 && block.type === "paragraph" && block.text.length >= LEAD_MIN_CHARS)).join("") : `<p class="pending">This chapter is being written\u2026</p>`;
     const head = mode === "preview" ? `<div class="runhead"><span>${esc(book.title)}</span><span>${esc(chapter.title)}</span></div>` : "";
-    return `${inline ? "" : opener}<section class="chapter"${inline ? ` id="chapter-${esc(chapter.id)}"` : ""} style="page:ch-${index}">${head}${inline ? opener : ""}${body}</section>`;
+    // A recto opener: a blank verso goes before an opener that would otherwise land on a left-hand page.
+    const blank = mode === "print" && !inline && pages?.blankBefore.includes(chapter.id) ? `<section class="full blank" aria-hidden="true"></section>` : "";
+    return `${blank}${inline ? "" : opener}<section class="chapter"${inline ? ` id="chapter-${esc(chapter.id)}"` : ""} style="page:ch-${index}">${head}${inline ? opener : ""}${body}</section>`;
   }).join("");
   const empty = !book.chapters.length ? `<section class="full front waiting"><p>Chapters appear here as they are written.</p></section>` : "";
 
@@ -166,6 +186,9 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .contents a{display:block;color:inherit;text-decoration:none}.contents a:focus-visible{outline:2px solid ${p.accent};outline-offset:3px}
 .contents.compact{padding-top:1in}.contents.compact h2{margin-bottom:.24in}.contents.compact li{font-size:10.5pt;padding:.065in 0}.contents.compact li a{display:flex;align-items:baseline;gap:.14in}
 .contents.compact li span{display:inline;flex:none;width:1.25in;margin:0;font-size:6.5pt}
+.contents .pg{float:right;margin-left:.2in;font-family:${fonts.body};font-size:9pt;font-weight:400;font-variant-numeric:tabular-nums;color:${muted};line-height:inherit}
+.contents.compact .pg{float:none;order:3;margin-left:auto;padding-left:.16in}
+.blank{background:${p.background}}
 .contents li span{display:block;font-family:${fonts.body};font-size:7pt;letter-spacing:.18em;text-transform:uppercase;color:${muted};margin-bottom:.04in}
 .opener{display:flex;flex-direction:column}
 .opener-art{width:100%;height:56%;object-fit:cover;display:block;flex:none}
@@ -181,12 +204,16 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .inline-opener .opener-art{height:2in;margin-bottom:.24in}.inline-opener .epigraph{margin:.2in 0 0}.inline-opener .epigraph p{text-indent:0}
 .epigraph{margin:.3in 0 0;max-width:3.7in;font-family:${fonts.heading};font-style:italic;font-size:9.5pt;line-height:1.5;color:${muted}}.epigraph p{margin:0}
 .epigraph span{display:block;font-style:normal;font-family:${fonts.body};font-size:7pt;letter-spacing:.16em;text-transform:uppercase;margin-top:.08in}
-.chapter{font-size:10.6pt;line-height:1.52;text-align:justify;overflow-wrap:break-word;hyphens:auto;-webkit-hyphens:auto;orphans:2;widows:2;hanging-punctuation:first}
+.chapter{font-size:10.6pt;line-height:1.52;text-align:justify;overflow-wrap:break-word;hyphens:auto;-webkit-hyphens:auto;orphans:3;widows:3;hanging-punctuation:first}
 .chapter p{margin:0;text-indent:1.35em}
 .chapter>p:first-of-type,.chapter h3+p,.chapter .break+p,.chapter figure+p,.chapter blockquote+p,.chapter ul+p,.chapter .table+p,.chapter ol+p,.chapter .note+p,.chapter .runhead+p{text-indent:0}
 .chapter>p.lead::first-letter{initial-letter:3;-webkit-initial-letter:3;font-family:${fonts.heading};color:${p.accent};margin-right:.07em;font-weight:${fonts.headingWeight}}
 .chapter>p.lead::first-line{font-variant-caps:small-caps;letter-spacing:.04em}
+/* A hyphen inside the small-caps first line reads as a typo; the lead paragraph is set without hyphenation. */
+.chapter>p.lead{hyphens:manual;-webkit-hyphens:manual}
 .chapter h3{font-family:${fonts.heading};font-weight:${fonts.headingWeight};font-size:13pt;line-height:1.25;text-align:left;margin:1.6em 0 .55em;break-after:avoid;break-inside:avoid;color:${p.ink}}
+.chapter h3+p,.chapter h3+ul,.chapter h3+ol,.chapter .runin+*{break-before:avoid}
+.chapter p.runin{break-after:avoid;break-inside:avoid;text-indent:0;margin-top:.5em}
 .chapter h3::before{content:"";display:block;width:.3in;height:1.25pt;background:${p.accent};margin:0 0 .5em}
 .chapter blockquote{margin:1em 0 1em .2em;padding-left:.95em;border-left:1.5pt solid ${mix(p.accent, p.background, 0.45)};font-style:italic;text-align:left}.chapter blockquote p{text-indent:0}
 .pullquote{margin:1.5em .3in;padding:.85em 0;border-top:1pt solid ${p.accent};border-bottom:1pt solid ${p.accent};text-align:center;break-inside:avoid;text-indent:0}
@@ -198,13 +225,17 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .chapter figure{margin:1.2em 0;break-inside:avoid;text-align:center}
 .chapter figure img,.chapter figure .ph{width:100%;max-height:4.4in;object-fit:cover;display:block;border-radius:1.5pt}
 .chapter figcaption{font-size:8pt;line-height:1.4;font-style:italic;color:${muted};margin-top:.55em;text-align:center}
-.chapter ul,.chapter ol{margin:.6em 0 .7em 1.25em;padding:0;text-align:left}.chapter li{margin:.22em 0}
+.chapter ul,.chapter ol{margin:.6em 0 .7em 1.25em;padding:0;text-align:left}.chapter li{margin:.22em 0;break-inside:avoid}
+ul.checklist{list-style:none;margin-left:1.5em}li.check{position:relative}li.check .box{position:absolute;left:-1.35em;top:-.05em;color:${p.accent};font-size:1.1em;line-height:1.3}
 /* Ordered markers can contain three digits; keep them inside the clipped page. */
 .chapter ol{margin-left:2.75em}
 .note{background:${p.surface};border-left:2.5pt solid ${p.accent};padding:.75em .95em;margin:1em 0;font-size:9.4pt;line-height:1.45;text-align:left;break-inside:avoid}
-.note strong{display:block;font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;color:${p.accent};margin-bottom:.3em}.note p{text-indent:0}
+.note strong{display:block;font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;color:${p.accent};margin-bottom:.3em}.note p{text-indent:0}.note p+p,.note ul+p,.note ol+p{margin-top:.45em}
+.chapter .note ul,.chapter .note ol{margin:.35em 0 .35em 1.15em}.chapter .note ol{margin-left:1.6em}.chapter .note ul.checklist{margin-left:1.4em}.note li{margin:.12em 0}
 .ph{display:flex;align-items:center;justify-content:center;min-height:2in;background:repeating-linear-gradient(135deg,${mix(p.surface, p.muted, 0.12)} 0 10px,${p.surface} 10px 20px);color:${muted};font-size:9pt}
 .chapter .table{margin:1em 0;break-inside:avoid;text-align:left}
+/* Long tables break between rows (never inside one) and repeat the header row; a whole-table keep left pages empty. */
+.chapter .table.long{break-inside:auto}.chapter thead{display:table-header-group}.chapter tr{break-inside:avoid}
 .chapter table{width:100%;max-width:100%;border-collapse:collapse;font-size:8.6pt;line-height:1.4;font-variant-numeric:tabular-nums}
 .chapter th{font-family:${fonts.body};font-size:7pt;letter-spacing:.12em;text-transform:uppercase;color:${p.accent};font-weight:700;text-align:left;padding:.4em .55em;border-bottom:1pt solid ${p.accent}}
 .chapter th,.chapter td{overflow-wrap:anywhere}

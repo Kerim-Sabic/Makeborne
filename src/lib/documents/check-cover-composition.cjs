@@ -38,8 +38,10 @@ const copy = value => structuredClone(value);
     // Re-pinned 2026-10-21 for the ordered-marker gutter only. Removing that
     // exact CSS rule/comment reproduces both previous full hashes; DOM stays
     // unchanged. check-book-list-markers.cjs reproduces the old clipping.
-    assert.equal(hash(bookHtml(book, {})), "c72ad765545615454bead0921d7ae78c67e9823c559d227bbfcc2fd6056c3660");
-    assert.equal(hash(bookHtml(book, {}, "print")), "183bf9b220227b6c1fab53ba87ed649a2dcc2329b7b30431818148a3afc2c4f8");
+    // Re-pinned 2026-10-22 (book CSS only) for print pagination: widows/orphans 3, long tables breaking between
+    // rows, run-in subheads, checklists, sidebar lists and contents page numbers. The DOM hashes above are unchanged.
+    assert.equal(hash(bookHtml(book, {})), "f5f270e37976e9ea4733ba295d25863be97ab12e86be9bb26612511b3d3b549a");
+    assert.equal(hash(bookHtml(book, {}, "print")), "28389efce40ff950b66c1e5f2ca199ded1d051a1e3928d451640229d83f60460");
     assert.equal(hash(deckHtml(deck, {})), "80e227d515f053200b86463924d1ccbcbc4bdac5257f8f7db4493269b99b6685");
     assert.equal(hash(JSON.stringify(deck.slides.map((s, i) => composeSlide(deck, s, i, 2)))), "eb8405ba973264fa7e5e21657fceb953dc6c1153ee30bcfc028b2477623ddcd2");
   });
