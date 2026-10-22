@@ -1,7 +1,7 @@
 import type { Slide } from "./schema";
 import { FONTS, mix, readableOn, contrast } from "./theme";
 import { H, W, ellipse, estimateLines, glyphWidth, hline, measure, placed, rect, scaled, text, textWidth, tryCompose, vline, line, initials, image, type Ctx, type TextStyle, type ChartColors, type Tone } from "./scene-kit";
-import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, header, headlineUp, label, labelStyle, leadStyle, marker, numberedRows, numeral, numeralMark, numeralStyle, panel, stack, ruleColor } from "./design";
+import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, header, headlineUp, readableMark, label, labelStyle, leadStyle, marker, numberedRows, numeral, numeralMark, numeralStyle, panel, stack, ruleColor } from "./design";
 import { formatValue } from "./chart-svg";
 import { arrowPath } from "./graphics";
 import { path } from "./scene-kit";
@@ -277,10 +277,10 @@ export function chartColors(ctx: Ctx, c: Tone = ctx.c): ChartColors {
   return { ink: c.ink, muted: c.muted, grid: c.rule, series: [c.signal, c.accent2, mix(c.signal, c.bg, 0.5)], highlight: c.signal, highlightInk: c.accent, dim: mix(c.signal, c.bg, ctx.dir.ground === "dark" ? 0.6 : 0.72), background: c.bg };
 }
 const chartStyle = (ctx: Ctx) => ({ mono: ctx.dir.label.font === "mono", radius: ctx.dir.radius >= 20 ? 8 : ctx.dir.radius ? 3 : 0, grid: ctx.dir.id === "data" || ctx.dir.id === "swiss" || ctx.dir.id === "tech" });
-function chartPrim(ctx: Ctx, slide: Slide, box: { x: number; y: number; w: number; h: number }) {
+function chartPrim(ctx: Ctx, slide: Slide, box: { x: number; y: number; w: number; h: number }, textScale = 1) {
   // Below this a chart's bars and labels no longer read (e.g. a long standfirst over a narrowed text zone).
   if (box.h < 180 || box.w < 320) ctx.issues.push("the chart has too little room");
-  ctx.prims.push({ k: "chart", ...box, chart: slide.chart!, colors: chartColors(ctx), style: chartStyle(ctx) });
+  ctx.prims.push({ k: "chart", ...box, chart: slide.chart!, colors: chartColors(ctx), style: { ...chartStyle(ctx), ...(textScale !== 1 ? { text: textScale } : {}) } });
 }
 const focusOf = (slide: Slide) => {
   const chart = slide.chart!, values = chart.series[0].values;
@@ -291,22 +291,48 @@ function source(ctx: Ctx, slide: Slide, x: number, y: number, w: number) {
   if (slide.chart!.source) text(ctx, slide.chart!.source, { x, y, w, h: 20 }, { size: 13, color: ctx.c.muted, italic: true, lh: 1.3, ...(ctx.dir.label.font === "mono" ? { font: "mono" as const, italic: false, size: 12 } : {}) });
 }
 
+/** CHART CALLOUT SIZES. The annotated chart's headline is set 1.12× like points and numbers; its statistic up to
+ * CALLOUT_VALUE px (on one line), its caption at CALLOUT_CAPTION px (in steps to five lines, then down to CALLOUT_CAPTION_MIN), and the
+ * chart's own labels CHART_TEXT_UP× their base sizes in the preview, PDF and PPTX alike. */
+export const CALLOUT_VALUE = 132, CALLOUT_CAPTION = 38, CALLOUT_CAPTION_MIN = 20, CHART_TEXT_UP = 1.25;
+const CALLOUT_CAPTIONS = [CALLOUT_CAPTION, 34, 30, 26, 22];
 export function chartAnnotated(ctx: Ctx, slide: Slide) {
-  const a = area(ctx), c = ctx.c, chart = slide.chart!;
-  const top = header(ctx, slide) + 28, cw = Math.round(a.w * 0.64), bottom = chart.source ? a.b - 22 : a.b;
-  chartPrim(ctx, slide, { x: a.x, y: top, w: cw, h: bottom - top });
-  source(ctx, slide, a.x, a.b - 14, cw);
-  const px = a.x + cw + 48, pw = a.r - px, f = focusOf(slide);
-  divider(ctx, px, a.r, top, true);
-  let y = top + 24;
-  if (chart.type !== "donut" && chart.series.length === 1) {
-    const size = oneLine(ctx, f.value, pw, 96, 40);
-    text(ctx, f.value, { x: px, y, w: pw, h: Math.ceil(size * 1.04) }, valueStyle(ctx, size, c.accent));
-    y += Math.ceil(size * 1.04) + 8;
+  const a = area(ctx), c = ctx.c, chart = slide.chart!, f = focusOf(slide), size = headlineUp(ctx);
+  const cw = Math.round(a.w * 0.62), px = a.x + cw + 48, pw = a.r - px;
+  // The headline shares the chart's column when it keeps 90% of its size there in no more lines; the callout then rises beside it instead of
+  // waiting below a full-width title, and the chart keeps the height.
+  const titleAt = (titleW?: number) => { const sub: Ctx = { ...ctx, prims: [], issues: [] }; header(sub, slide, { size, titleW }); return sub.prims.flatMap(prim => prim.k === "text" && prim.role === "title" ? [{ size: prim.size, lines: prim.text.split("\n").length }] : [])[0] ?? { size: 0, lines: 0 }; };
+  const [inColumn, across] = [titleAt(cw), titleAt()];
+  const beside = ctx.dir.header !== "centered" && inColumn.size >= across.size * 0.9 && inColumn.lines <= across.lines;
+  const top = header(ctx, slide, { size, ...(beside ? { titleW: cw } : {}) }) + 24;
+  const big = cw >= 560 && a.b - top >= 240;
+  chartPrim(ctx, slide, { x: a.x, y: top, w: cw, h: a.b - top }, big ? CHART_TEXT_UP : 1);
+  // The callout ends with the chart (the source line beneath it); it starts level with the chart when it fits, else higher.
+  const end = chart.source ? a.b - 30 : a.b, ceiling = beside ? a.y + 56 : top;
+  const single = chart.type !== "donut" && chart.series.length === 1;
+  const lab = single ? Math.ceil(labelStyle(ctx).size * 1.3) + 24 : 0;
+  // A short caption is set large; a longer one steps down until it takes at most five lines.
+  const captionAt = (px_: number) => ({ ...titleStyle(ctx, px_, { lh: 1.16 }), upper: false });
+  const captionSize = CALLOUT_CAPTIONS.find(step => !slide.body || measure(ctx, slide.body, pw, captionAt(step)) <= Math.ceil(scaled(ctx, step) * 1.16 * 5)) ?? CALLOUT_CAPTIONS[CALLOUT_CAPTIONS.length - 1];
+  const caption = captionAt(captionSize);
+  // The statistic gives way before the caption reaches its minimum.
+  const room = end - ceiling - 32 - lab - (slide.body ? measure(ctx, slide.body, pw, { ...caption, size: scaled(ctx, CALLOUT_CAPTION_MIN) }) : 0);
+  const vSize = single ? Math.max(40, Math.min(oneLine(ctx, f.value, pw, CALLOUT_VALUE, 40), Math.floor(room / 1.04))) : 0, vh = single ? Math.ceil(vSize * 1.04) : 0;
+  const notes = slide.points?.map(point => `${point.title ? `${point.title}: ` : ""}${point.text}`) ?? [];
+  const below = slide.body ? measure(ctx, slide.body, pw, caption) : notes.reduce((sum, note) => sum + measure(ctx, note, pw, bodyStyle(ctx, { size: 22 })) + 14, 0);
+  const need = 24 + (vh ? vh + 8 + lab : 0) + below;
+  let y = Math.max(ceiling, Math.min(top, end - need));
+  divider(ctx, px, a.r, y, true);
+  y += 24;
+  if (single) {
+    // The statistic is the slide's message: its accent reads at 4.5:1 like small text, not only the 3:1 of large type.
+    text(ctx, f.value, { x: px, y, w: pw, h: vh }, valueStyle(ctx, vSize, readableMark(ctx, c.accent)));
+    y += vh + 8;
     y += label(ctx, f.category, { x: px, y, w: pw }) + 24;
   }
-  if (slide.body) text(ctx, slide.body, { x: px, y, w: pw }, { ...titleStyle(ctx, 30, { lh: 1.2 }), maxH: bottom - y, min: 18, upper: false });
-  else if (slide.points) slide.points.forEach(point => { y += text(ctx, `${point.title ? `${point.title}: ` : ""}${point.text}`, { x: px, y, w: pw }, bodyStyle(ctx, { size: 20, color: c.ink, maxH: 120, min: 15 })) + 14; });
+  if (slide.body) text(ctx, slide.body, { x: px, y, w: pw }, { ...caption, maxH: end - y, min: CALLOUT_CAPTION_MIN });
+  else notes.forEach(note => { y += text(ctx, note, { x: px, y, w: pw }, bodyStyle(ctx, { size: 22, color: c.ink, maxH: Math.min(132, end - y), min: 15 })) + 14; });
+  source(ctx, slide, px, a.b - 14, pw);
   footer(ctx);
 }
 

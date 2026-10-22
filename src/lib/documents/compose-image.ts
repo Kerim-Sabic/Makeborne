@@ -8,8 +8,9 @@ import { H, W, image, type Ctx, type Frame, type ImageTreatment, type Prim, type
  *   in the remaining text zone. The rail is 46% of the width when the composition stacks
  *   its title over the content and the copy is short enough to keep its sizes there
  *   (slide-scene.ts), else 38%.
- * - band: a full-width image band across the top (200 px) above a chart, table or diagram,
- *   which stay native and editable.
+ * - band: a full-width image band across the top above a chart, table or diagram, which stay
+ *   native and editable: 200 px, or BAND_CHART_H over a chart, whose headline, plot and callout
+ *   need the height more than the picture does.
  * - full: the image full-bleed with a dark scrim over a declared text-safe zone (the lower
  *   62% of the slide). The scrim's opacity is computed from the image's measured
  *   brightness in that zone (asset.luma, or the brightest case without it) so every text
@@ -22,7 +23,9 @@ export const PLACEMENTS: Partial<Record<Slide["layout"], readonly ImagePlacement
   statement: ["side", "full"], points: ["side"], stats: ["side"], agenda: ["side"], quote: ["side", "full"], section: ["side", "full"],
   chart: ["band", "side"], table: ["band", "side"], diagram: ["band", "side"],
 };
-export const RAIL_W = Math.round(W * 0.38), RAIL_WIDE = Math.round(W * 0.46), RAIL_GAP = 56, BAND_H = 200, BAND_GAP = 32, SCRIM_TOP = Math.round(H * 0.38);
+export const RAIL_W = Math.round(W * 0.38), RAIL_WIDE = Math.round(W * 0.46), RAIL_GAP = 56, BAND_H = 200, BAND_CHART_H = 168, BAND_GAP = 32, SCRIM_TOP = Math.round(H * 0.38);
+
+export const bandHeight = (slide: Pick<Slide, "layout">) => slide.layout === "chart" ? BAND_CHART_H : BAND_H;
 
 /** Whether a slide's image will be shown, and why not when it won't. */
 export function imageSupport(slide: Pick<Slide, "layout" | "image" | "imagePlacement">): { ok: true } | { ok: false; message: string } {
@@ -96,9 +99,10 @@ export function placeImage(ctx: Ctx, slide: Slide, placement: ImagePlacement, tr
     frame = left ? { x: rail + RAIL_GAP, r: W - d.mx, y: d.top, b: d.bottom } : { x: d.mx, r: W - rail - RAIL_GAP, y: d.top, b: d.bottom };
     zone = left ? { x: rail + 1, y: 0, w: W - rail - 1, h: H } : { x: 0, y: 0, w: W - rail - 1, h: H };
   } else if (placement === "band") {
-    imageBox = { x: 0, y: 0, w: W, h: BAND_H };
-    frame = { x: d.mx, r: W - d.mx, y: BAND_H + BAND_GAP, b: d.bottom };
-    zone = { x: 0, y: BAND_H + 1, w: W, h: H - BAND_H - 1 };
+    const band = bandHeight(slide);
+    imageBox = { x: 0, y: 0, w: W, h: band };
+    frame = { x: d.mx, r: W - d.mx, y: band + BAND_GAP, b: d.bottom };
+    zone = { x: 0, y: band + 1, w: W, h: H - band - 1 };
   } else {
     imageBox = { x: 0, y: 0, w: W, h: H };
     frame = { x: d.mx, r: W - d.mx - Math.round(W * 0.14), y: SCRIM_TOP + 36, b: d.bottom };

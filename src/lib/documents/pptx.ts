@@ -32,12 +32,14 @@ function addChart(pptx: PptxGenJS, slide: PptxGenJS.Slide, prim: ChartPrim, font
   const { chart, colors } = prim, multi = chart.series.length > 1;
   const data = chart.series.map(series => ({ name: series.name, labels: chart.categories, values: series.values }));
   const pointColors = chart.categories.map((_, index) => color(chart.highlight === undefined ? colors.series[0] : index === chart.highlight ? colors.highlight : colors.dim));
+  // The preview's label scale (chart-svg.ts), in whole points; the donut keeps its own sizes there too.
+  const k = chart.type === "donut" ? 1 : prim.style?.text ?? 1, size = (points: number) => Math.round(points * k);
   const common = {
     x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h),
-    showLegend: multi, legendPos: "t" as const, legendFontFace: fonts.body, legendFontSize: 11, legendColor: color(colors.ink),
-    catAxisLabelColor: color(colors.muted), catAxisLabelFontFace: fonts.body, catAxisLabelFontSize: 11,
-    valAxisLabelColor: color(colors.muted), valAxisLabelFontFace: fonts.body, valAxisLabelFontSize: 10,
-    dataLabelColor: color(colors.ink), dataLabelFontFace: fonts.body, dataLabelFontSize: 11, dataLabelFontBold: true,
+    showLegend: multi, legendPos: "t" as const, legendFontFace: fonts.body, legendFontSize: size(11), legendColor: color(colors.ink),
+    catAxisLabelColor: color(colors.muted), catAxisLabelFontFace: fonts.body, catAxisLabelFontSize: size(11),
+    valAxisLabelColor: color(colors.muted), valAxisLabelFontFace: fonts.body, valAxisLabelFontSize: size(10),
+    dataLabelColor: color(colors.ink), dataLabelFontFace: fonts.body, dataLabelFontSize: size(11), dataLabelFontBold: true,
     dataLabelFormatCode: numberFormat(chart), valAxisLabelFormatCode: numberFormat(chart),
     altText: `${chart.type} chart: ${chart.categories.join(", ")}`,
   };
