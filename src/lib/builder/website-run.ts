@@ -15,7 +15,8 @@ import { aiCostUsdPerCredit } from "./pricing";
 import { watchOperationCancellation, finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
 import { builtTitle } from "../projects/project-title";
 import { routeDetail, type ModelRoute, type RouteRecord } from "../ai/model-routing";
-import { routedWebsiteStage } from "./website-stage";
+import { refreshContext, repairRequest, routedWebsiteStage } from "./website-stage";
+import type { AttemptRole } from "../ai/model-routing";
 
 export type WebsiteBuildInput = {
   client: SupabaseClient;
@@ -96,12 +97,16 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         emit({ type: "status", message: reviewing ? "Reviewing the design…" : files.files.size ? "Reading your project…" : "Planning your website…" });
         let result;
         const stageDeadline = Date.now() + (input.maxDuration - 20) * 1000;
-        const attempt = (model: string | undefined, deadline: number) => runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
-          request: input.request, context: input.context, attachments: input.attachments, emit, signal: controller.signal,
-          deadline, limits: input.limits, required: input.required, concept: input.concept, contrastCheck: input.contrastCheck,
-          anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile, ...(model ? { model } : {}) });
+        // One attempt of the stage. A repair starts a new conversation from the current files with the evidence to fix;
+        // every attempt is a new conversation, so no model's thinking blocks are replayed to another.
+        const attempt = (plan: { role: AttemptRole; model?: string; deadline: number; repairNotes: string[] }) => runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
+          request: plan.role === "repair" ? repairRequest(input.request, plan.repairNotes) : input.request,
+          context: plan.role === "repair" ? refreshContext(input.context, files) : input.context, attachments: input.attachments, emit, signal: controller.signal,
+          deadline: plan.deadline, limits: input.limits, required: input.required, concept: plan.role !== "repair" && input.concept, contrastCheck: input.contrastCheck,
+          anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile,
+          ...(plan.model ? { model: plan.model } : {}), ...(input.route ? { firstStep: input.route.firstStep } : {}) });
         try {
-          if (!input.route) result = await attempt(undefined, stageDeadline);
+          if (!input.route) result = await attempt({ role: "initial", deadline: stageDeadline, repairNotes: [] });
           else {
             const routed = await routedWebsiteStage({ route: input.route, stage, files, spend, deadline: stageDeadline, signal: controller.signal, emit, compile, attempt });
             result = routed.result; routeRecord = routed.record;

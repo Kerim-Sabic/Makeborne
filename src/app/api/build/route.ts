@@ -24,7 +24,8 @@ import { websiteBuildResponse } from "@/lib/builder/website-run";
 import { providerCapacity, requireProviderCapacity } from "@/lib/ai/live-run";
 import { builderAvailability } from "@/lib/builder/availability";
 import { requirePricedModel } from "@/lib/ai/model-check";
-import { routeModels, routeStage } from "@/lib/ai/model-routing";
+import { routeIssue, routeModels, routeStage, type RouteInput } from "@/lib/ai/model-routing";
+import { buildTaskContract } from "@/lib/builder/task-contract";
 import { SitePlanSchema, StoredPlanSchema, planToBrief } from "@/lib/builder/plan";
 import { approvedMaximumIssue, approvedPlanIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { websiteBrandBlock } from "@/lib/brand/kit";
@@ -117,14 +118,19 @@ export async function POST(request: Request) {
     // A new billable request is bound to the maximum shown at approval; any difference is a new quote.
     const quoteIssue = approvedMaximumIssue(body.operation, body.approvedMaximum, ceiling);
     if (quoteIssue) throw new RequestError("QUOTE_CHANGED", quoteIssue, 409);
-    // The stage's model route (deterministic rules; MAKEBORNE_MODEL_ROUTING off = the builder model for every stage).
-    const route = routeStage(artifact.kind === "website"
-      ? { stage: reviewing ? "review" : body.operation && "kind" in body.operation && body.operation.kind === "continuation" ? "continuation" : "build",
-        request: body.message, files: current.content.websiteSource?.files.length ?? 0, effort: body.effort, attachments: body.attachments.length, plan: Boolean(body.plan) }
-      : { stage: "document", emptyDocument: !current.content.document, effort: body.effort });
-    // Unknown pricing fails closed before anything is reserved or sent (every model the stage may call).
+    // Unknown pricing fails closed before anything is reserved or sent.
     requirePricedModel(builderModel());
-    for (const model of routeModels(route)) requirePricedModel(model);
+    // The stage's routing decision (MAKEBORNE_MODEL_ROUTING off by default = today's behaviour). Every model it may call
+    // must be priced and support the stage before any hold exists; the decision is re-taken below with the operation's state.
+    const routeInput = (extra: Partial<RouteInput> = {}): RouteInput => artifact.kind === "website"
+      ? { stage: reviewing ? "review" : body.operation && "kind" in body.operation && body.operation.kind === "continuation" ? "continuation" : "build", artifact: "website",
+        request: body.message, files: current.content.websiteSource?.files.length ?? 0, projectBytes: (current.content.websiteSource?.files ?? []).reduce((sum, file) => sum + file.content.length, 0),
+        effort: body.effort, attachments: body.attachments.length, plan: Boolean(body.plan),
+        verification: { compile: true, contrast: process.env.MAKEBORNE_CONTRAST_GATE !== "off" }, ...extra }
+      : { stage: "document", artifact: artifact.kind === "book" ? "book" : "deck", emptyDocument: !current.content.document, effort: body.effort, ...extra };
+    for (const model of routeModels(routeStage(routeInput()))) requirePricedModel(model);
+    const routeProblem = routeIssue(routeStage(routeInput()));
+    if (routeProblem) throw new RequestError("MODEL_UNSUPPORTED", "The configured AI model cannot run this step, so the builder is unavailable.", 503);
     // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
     await requireProviderCapacity("anthropic");
     // An approved plan is bound to the exact saved revision the customer reviewed,
@@ -199,6 +205,16 @@ export async function POST(request: Request) {
 
     // Provider dollars: the effort ceiling, independent of the customer's credits (admins included).
     const spend = createOperationSpend(operation, Date.now() + (maxDuration - 20) * 1000);
+    // The decision with the operation's durable state: parent ids, input revision, earlier runs' repair/escalation counts.
+    // The task contract (scope and acceptance checks are router inputs; its limits can only lower the router's).
+    const picked = /([\w./-]+\.(?:tsx|ts|css|html|json|svg|md)) \(line (\d+)\)/.exec(body.message);
+    const contract = buildTaskContract({ artifact: artifact.kind === "website" ? "website" : artifact.kind === "book" ? "book" : "presentation",
+      objective: reviewing ? "refine" : files.files.size || current.content.document ? "edit" : "create", message: body.message,
+      plan: approvedPlan ? planToBrief(approvedPlan) : null, brief: approvedBrief ? { text: approvedBrief.text } : null, design: design ?? null,
+      revision: { expectedVersion: body.expectedVersion }, target: picked ? { file: picked[1], line: Number(picked[2]), label: "" } : null,
+      limits: { capCredits: ceiling, repairs: 1, escalations: 1 } });
+    const route = routeStage(routeInput({ operation: { id: operation.operation.id, runId: operation.id, revision: body.expectedVersion }, previous: operation.priorRoute ?? null,
+      allowanceMicrousd: spend.allowanceMicrousd, deadlineMs: spend.timeLeftMs(), contract }));
 
     // Books and presentations: structured document builder (same credits, versions and SSE contract).
     if (artifact.kind === "book" || artifact.kind === "presentation") {

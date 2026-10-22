@@ -10,7 +10,7 @@ import type { AnthropicLike } from "../ai/anthropic-call";
 import type { ImageClientLike } from "../ai/image-call";
 import { aiCostUsdPerCredit } from "./pricing";
 import { logAiStop, logRoute } from "./website-run";
-import { routeDetail, type ModelRoute, type RouteRecord } from "../ai/model-routing";
+import { routeDetail, type AttemptRole, type ModelRoute, type RouteRecord } from "../ai/model-routing";
 import { routedDocumentStage } from "./document-stage";
 import { aiStop } from "../ai/failure";
 import { DocumentEditor, emptyDocument } from "../documents/editor";
@@ -98,11 +98,14 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         emit({ type: "status", message: fresh ? `Planning your ${artifact.kind}…` : `Reading your ${artifact.kind}…` });
         let result;
         const stageDeadline = Date.now() + (input.maxDuration - 20) * 1000;
-        const attempt = (model: string | undefined, deadline: number) => runDocumentBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, editor, effort: input.effort,
-          spend, request: input.message, context, attachments: input.attachments, emit, signal: controller.signal, deadline,
-          anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, ...(model ? { model } : {}) });
+        // A repair continues from the current document (its context re-read); every attempt is a new conversation.
+        const attempt = (plan: { role: AttemptRole; model?: string; deadline: number; repairNotes: string[] }) => runDocumentBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, editor, effort: input.effort,
+          spend, request: plan.role === "repair" ? `${input.message}\n\nRepair: the previous attempt stopped before the document was complete and checked. Continue from the current document, complete what is missing, then call finish.${plan.repairNotes.length ? `\n- ${plan.repairNotes.join("\n- ")}` : ""}` : input.message,
+          context: plan.role === "repair" ? [documentContext(input, editor, false), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n") : context,
+          attachments: input.attachments, emit, signal: controller.signal, deadline: plan.deadline,
+          anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, ...(plan.model ? { model: plan.model } : {}) });
         try {
-          if (!input.route) result = await attempt(undefined, stageDeadline);
+          if (!input.route) result = await attempt({ role: "initial", deadline: stageDeadline, repairNotes: [] });
           else {
             const routed = await routedDocumentStage({ route: input.route, editor, spend, deadline: stageDeadline, signal: controller.signal, emit, attempt });
             result = routed.result; routeRecord = routed.record;

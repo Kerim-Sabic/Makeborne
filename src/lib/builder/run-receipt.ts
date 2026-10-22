@@ -36,15 +36,15 @@ export type RunMeter = {
   concept?: { chosen: string; runnersUp: string[] };
   /** Generated images: the model the router chose, its quality, size, reason and measured cost. */
   images: ReceiptImage[];
-  /** The text model each step ran on, in order (an escalated step lists its retry too). */
-  models?: ReceiptModel[];
+  /** Each step's task class and attempts, in order (a repair or a retry follows the attempt it continued or replaced). */
+  tasks?: ReceiptTask[];
   /** The changed-file set when the current step's first attempt started (an escalation restarts from it). */
   attemptFiles?: Set<string>;
   attemptItems?: Set<string>;
 };
 
-/** One attempt of one step: its task class and model, as the server announced them (no prompt content). */
-export type ReceiptModel = { stage: string; class: string; label: string; model: string; modelLabel: string; escalated: boolean };
+/** One attempt of one step: its task class and role, as the server announced them (no prompt content, no model or provider names). */
+export type ReceiptTask = { stage: string; class: string; label: string; role: "initial" | "repair" | "escalation" };
 
 export type EnhancedReceipt = { mode: "enhanced" | "edited" | "analysis" | "original"; credits: number | null; improved?: boolean };
 
@@ -66,20 +66,21 @@ export type RunReceipt = {
   concept?: { chosen: string; runnersUp: string[] };
   checks: { ok: boolean; label: string }[];
   images: ReceiptImage[];
-  /** One line per step: the model it ran on and its task class ("Claude Sonnet 5.5 · targeted edit"). */
-  models?: string[];
+  /** One line per step: its task class and how it ended ("Targeted edit, retried once (charged for the retry only)"). */
+  tasks?: string[];
   /** This request saved nothing and the server settled it at zero credits. */
   notCharged: boolean;
 };
 
-/** Receipt lines for the models: one per step, an escalated retry joined to the attempt it replaced. */
-export function modelLines(models: readonly ReceiptModel[]): string[] {
+/** Receipt lines per step: the task class, with a repair or retry joined to the attempt it followed. */
+export function taskLines(tasks: readonly ReceiptTask[]): string[] {
   const lines: string[] = [];
-  for (const item of models) {
-    if (item.escalated && lines.length) lines[lines.length - 1] += `, retried with ${item.modelLabel} (charged for the retry only)`;
-    else lines.push(`${item.modelLabel} · ${item.label}`);
+  for (const item of tasks) {
+    if (item.role === "repair" && lines.length) lines[lines.length - 1] += ", fixed in a second pass";
+    else if (item.role === "escalation" && lines.length) lines[lines.length - 1] += ", retried once (charged for the retry only)";
+    else lines.push(item.label.charAt(0).toUpperCase() + item.label.slice(1));
   }
-  // Consecutive identical steps (e.g. build, continuation on the same model) read as one line with a count.
+  // Consecutive identical steps (e.g. build, continuation) read as one line with a count.
   return lines.reduce<{ text: string; count: number }[]>((out, line) => {
     const last = out.at(-1);
     if (last && last.text === line) last.count++; else out.push({ text: line, count: 1 });
@@ -92,7 +93,7 @@ export function newRunMeter(now = Date.now()): RunMeter {
 }
 
 type StreamEvent = { type?: unknown; path?: unknown; label?: unknown; chosen?: unknown; runnersUp?: unknown; charged?: unknown; changed?: unknown; finished?: unknown; build?: unknown; version?: unknown;
-  model?: unknown; quality?: unknown; size?: unknown; reason?: unknown; costMicrousd?: unknown; stage?: unknown; class?: unknown; modelLabel?: unknown; escalated?: unknown };
+  model?: unknown; quality?: unknown; size?: unknown; reason?: unknown; costMicrousd?: unknown; stage?: unknown; class?: unknown; role?: unknown };
 const text = (value: unknown) => typeof value === "string" && value ? value.slice(0, 300) : null;
 const credits = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 
@@ -110,13 +111,13 @@ export function meterEvent(meter: RunMeter, event: StreamEvent) {
       if (typeof event.label === "string") meter.items.add(event.label);
       break;
     case "route": {
-      const [stage, taskClass, label, model, modelLabel] = [event.stage, event.class, event.label, event.model, event.modelLabel].map(value => typeof value === "string" && value ? value.slice(0, 60) : null);
-      if (!stage || !taskClass || !label || !model || !modelLabel) break;
-      const escalated = event.escalated === true;
-      // An escalated retry restarts the step from its saved files: what the first attempt touched is not a change.
-      if (escalated) { if (meter.attemptFiles) meter.files = new Set(meter.attemptFiles); if (meter.attemptItems) meter.items = new Set(meter.attemptItems); }
-      else { meter.attemptFiles = new Set(meter.files); meter.attemptItems = new Set(meter.items); }
-      (meter.models ??= []).push({ stage, class: taskClass, label, model, modelLabel, escalated });
+      const [stage, taskClass, label] = [event.stage, event.class, event.label].map(value => typeof value === "string" && value ? value.slice(0, 60) : null);
+      const role = event.role === "repair" || event.role === "escalation" ? event.role : "initial";
+      if (!stage || !taskClass || !label) break;
+      // A retry restarts the step from its saved files: what the replaced attempts touched is not a change. A repair continues.
+      if (role === "escalation") { if (meter.attemptFiles) meter.files = new Set(meter.attemptFiles); if (meter.attemptItems) meter.items = new Set(meter.attemptItems); }
+      else if (role === "initial") { meter.attemptFiles = new Set(meter.files); meter.attemptItems = new Set(meter.items); }
+      (meter.tasks ??= []).push({ stage, class: taskClass, label, role });
       break;
     }
     case "concept":
@@ -169,7 +170,7 @@ export function runReceipt(meter: RunMeter, options: { website: boolean; unlimit
     charged, unlimited: options.unlimited, saved: meter.saved, version: meter.version,
     durationMs: Math.max(0, (options.now ?? Date.now()) - meter.started),
     files: [...meter.files].sort(), items: [...meter.items], sources: [...meter.sources], ...(meter.brief ? { brief: meter.brief } : {}), ...(meter.enhanced ? { enhanced: { ...meter.enhanced } } : {}), ...(meter.concept ? { concept: { chosen: meter.concept.chosen, runnersUp: [...meter.concept.runnersUp] } } : {}), checks, images: meter.images.map(image => ({ ...image })),
-    ...(meter.models?.length ? { models: modelLines(meter.models) } : {}),
+    ...(meter.tasks?.length ? { tasks: taskLines(meter.tasks) } : {}),
     notCharged: !options.unlimited && charged === 0 && !meter.saved && meter.failed,
   };
 }

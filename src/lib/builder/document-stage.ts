@@ -1,23 +1,26 @@
 import type { DocBuilderResult } from "./docs-agent";
 import type { DocumentEditor } from "../documents/editor";
 import type { DocumentSource } from "../documents/schema";
-import { runRouted, type ModelRoute, type RouteEvent } from "../ai/model-routing";
+import { documentEvidence, type CheckId } from "./acceptance";
+import { runRouted, type AttemptRole, type RouteEvent, type RoutingDecision } from "../ai/model-routing";
 import type { RunSpend } from "../ai/run-spend";
 
 /**
- * One book or deck stage on its routed model, with at most one escalation to the builder model
- * (../ai/model-routing.ts). A document stage is one pass: a routed attempt that does not finish (or is refused)
- * is retried once from the saved document, and the client's preview is reset first.
- * Shared by the build route (docs-run.ts) and the eval harness, so both run exactly this logic.
+ * One book or deck stage under its routing decision (../ai/model-routing.ts runRouted). A document stage is one pass:
+ * an attempt that does not finish may be repaired once from the current document, then escalated once from the saved
+ * document (the client's preview is reset first). Shared by the build route (docs-run.ts) and the eval harness.
  */
 export function routedDocumentStage(input: {
-  route: ModelRoute; editor: DocumentEditor; spend: RunSpend; deadline: number; signal: AbortSignal;
+  route: RoutingDecision; editor: DocumentEditor; spend: RunSpend; deadline: number; signal: AbortSignal;
   emit: (event: RouteEvent | { type: "status"; message: string } | { type: "document"; document: DocumentSource }) => void;
-  attempt: (model: string, deadline: number) => Promise<DocBuilderResult>;
+  attempt: (plan: { role: AttemptRole; model: string; deadline: number; repairNotes: string[] }) => Promise<DocBuilderResult>;
 }) {
-  const { editor, emit } = input;
+  const { editor, emit, route } = input;
   const saved = structuredClone(editor.doc);
-  return runRouted({ route: input.route, stage: "document", spend: input.spend, deadline: input.deadline, singlePass: true, signal: input.signal, emit, attempt: input.attempt,
-    failed: attempted => attempted.finished ? null : attempted.stopped ? `stopped (${attempted.stopped}) before finishing` : "did not pass the finish checks",
+  return runRouted({ route, stage: "document", spend: input.spend, deadline: input.deadline, signal: input.signal, emit, attempt: input.attempt,
+    evaluate: attempted => {
+      const checks = documentEvidence(attempted.finished, route.inLoopChecks as CheckId[]);
+      return attempted.finished ? { kind: "accept" as const, checks, problems: [] } : { kind: "incomplete" as const, checks, problems: attempted.stopped ? [`stopped (${attempted.stopped}) before finishing`] : [] };
+    },
     reset: () => { editor.restore(saved); emit({ type: "document", document: editor.doc }); } });
 }

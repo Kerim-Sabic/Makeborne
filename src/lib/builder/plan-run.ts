@@ -64,8 +64,8 @@ export function planStreamResponse(input: PlanRunInput): Response {
         if (!input.route) result = await attempt();
         else {
           // A plan stage produces a valid plan or nothing: a routed attempt without one (or refused) is retried once on the builder model.
-          const routed = await runRouted({ route: input.route, stage: "plan", spend, deadline: spend.deadline, singlePass: true, signal: controller.signal, emit, attempt: model => attempt(model),
-            failed: attempted => attempted.plan ? null : "no valid plan", reset: () => undefined });
+          const routed = await runRouted({ route: input.route, stage: "plan", spend, deadline: spend.deadline, signal: controller.signal, emit, attempt: plan => attempt(plan.model),
+            evaluate: attempted => attempted.plan ? { kind: "accept" as const, checks: [], problems: [] } : { kind: "incomplete" as const, checks: [], problems: ["no valid plan"] }, reset: () => undefined });
           result = routed.result; routeRecord = routed.record;
         }
         logRouteOnce();

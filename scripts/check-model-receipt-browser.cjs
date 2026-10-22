@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Mounted LiveBuilder (real live-builder.css, hooks and receipt) for model routing:
- * the receipt names the model and task class of each step from the server's route events; an escalated step reads as the routed
- * attempt "retried with" the builder model, charged for the retry only; files only the failed attempt touched are not listed as
+ * the receipt names the task class of each step from the server's route events (never a model or provider); an escalated step reads as the routed
+ * attempt "retried once", charged for the retry only; files only the failed attempt touched are not listed as
  * changes, and the files the server put back reach the live preview. Every API is routed with fictional data in the test process;
  * no network beyond 127.0.0.1, no AI, no database.
  * Run: node scripts/check-model-receipt-browser.cjs [--engine firefox|webkit] */
@@ -23,7 +23,7 @@ const mocks = {
 };
 const mockFilter = /(?:^|[\\/])(use-plan-mode|plan-card|design-capture|cloud-api)$|^next\/(link|image|navigation)$/;
 const COMPLETE = `${"Ovenbird is a sourdough bakery on Leith Walk run by two bakers who started in a shared kitchen. ".repeat(9)}We want a calm one-page site with our bakes, opening hours, a pre-order form and a map.`;
-const route = (model, label, escalated) => ({ type: "route", stage: "build", class: "new-site", label: "new website", model, modelLabel: label, escalated, reason: escalated ? "escalated: progress does not compile" : "empty project" });
+const route = role => ({ type: "route", stage: "build", class: "new-site", label: "new website", role, escalated: role === "escalation" });
 
 async function bundle() {
   const css = [];
@@ -73,33 +73,33 @@ async function main() {
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
     { // One step on the builder model (routing off): the receipt names the model and the task class.
-      const { context, page, errors } = await openBuilder(browser, origin, [route("claude-opus-5-5", "Claude Opus 5.5", false), { type: "file", path: "src/App.tsx", op: "write", content: "export default function App(){return <main/>}" }]);
+      const { context, page, errors } = await openBuilder(browser, origin, [route("initial"), { type: "file", path: "src/App.tsx", op: "write", content: "export default function App(){return <main/>}" }]);
       await send(page, COMPLETE);
       await page.locator(".lb-receipt").waitFor();
       const text = await receiptText(page);
-      assert.match(text, /Model\s*Claude Opus 5\.5 · new website/); assert.doesNotMatch(text, /retried/);
+      assert.match(text, /Task\s*New website/); assert.doesNotMatch(text, /retried|claude|opus|sonnet/i);
       assert.deepEqual(errors, []);
-      pass("one step: the receipt shows 'Model: Claude Opus 5.5 · new website'");
+      pass("one step: the receipt shows 'Task: New website' and no model or provider name");
       await context.close();
     }
     { // A routed attempt that failed and was retried: one line, charged for the retry only; its stray file is neither a change nor in the preview.
       const { context, page, errors } = await openBuilder(browser, origin, [
-        route("claude-sonnet-5-5", "Claude Sonnet 5.5", false),
+        route("initial"),
         { type: "file", path: "src/Extra.tsx", op: "write", content: "export const Extra = 1;" }, { type: "file", path: "src/App.tsx", op: "write", content: "broken" },
-        { type: "status", message: "Retrying this step with Claude Opus 5.5…" },
+        { type: "status", message: "Retrying this step…" },
         { type: "delete", path: "src/Extra.tsx" }, { type: "delete", path: "src/App.tsx" },
-        route("claude-opus-5-5", "Claude Opus 5.5", true),
+        route("escalation"),
         { type: "file", path: "src/App.tsx", op: "write", content: "export default function App(){return <main/>}" },
       ]);
       await send(page, COMPLETE);
       await page.locator(".lb-receipt").waitFor();
       const text = await receiptText(page);
-      assert.match(text, /Model\s*Claude Sonnet 5\.5 · new website, retried with Claude Opus 5\.5 \(charged for the retry only\)/);
+      assert.match(text, /Task\s*New website, retried once \(charged for the retry only\)/); assert.doesNotMatch(await page.locator("body").innerText(), /claude|opus|sonnet|anthropic/i, "no model or provider name anywhere in the UI");
       assert.match(text, /Charged\s*6 credits/);
       assert.match(text, /Files changed\s*1 file/, "only the retry's change is listed");
       assert.equal(await page.getByTestId("live-files").innerText(), "src/App.tsx", "the preview dropped the failed attempt's file");
       assert.deepEqual(errors, []);
-      pass("an escalated step reads 'Claude Sonnet 5.5 · new website, retried with Claude Opus 5.5 (charged for the retry only)'; the failed attempt's files are gone from the receipt and the preview");
+      pass("an escalated step reads 'New website, retried once (charged for the retry only)'; the failed attempt's files are gone from the receipt and the preview; no model names");
       await context.close();
     }
   } finally { await browser.close(); server.close(); }

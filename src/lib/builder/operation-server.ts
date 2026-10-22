@@ -12,6 +12,7 @@ import { RunSpend, SpendError, type SpendGate } from "../ai/run-spend";
 import { databaseGate, SETTLEMENT_WINDOW_MS, CLOCK_SKEW_MS } from "../ai/live-run";
 import type { CreditHold } from "../credits/server";
 import type { EffortLevel } from "../routing/effort";
+import { priorRoute, type PriorRoute } from "../ai/model-routing";
 import { OperationSnapshotSchema, OperationStatusSchema, type OperationRequest, type OperationSnapshot, type OperationStatus } from "./operation-contract";
 
 const internalSnapshot = OperationSnapshotSchema.extend({ rateMicrousd: z.number().int().positive(), providerRemainingMicrousd: z.number().int().nonnegative() });
@@ -26,6 +27,8 @@ export type OperationRun = {
   originalBrief?: BuildBrief;
   originalDesign?: DesignAnswers;
   finalizationStarted?: boolean;
+  /** Routing counts of the operation's earlier runs (durable: read back from ai_operation_runs results). */
+  priorRoute?: PriorRoute;
 };
 export type OperationCandidate = {
   content: unknown; style: unknown; assetIds: string[]; summary: string; expectedVersion: number;
@@ -154,7 +157,7 @@ export async function beginOperation(input: {
   const digest = createHash("sha256").update(canonicalSourceJson(input.request)).digest("hex");
   const attachmentsSha256 = attachmentFingerprint(input.request);
   const brandKit = requestBrandKit(input.request);
-  let id: string;
+  let id: string, prior: PriorRoute | undefined;
   if ("actionKey" in input.envelope) {
     const created = await call("makeborne_ai_operation_create", {
       p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId,
@@ -171,6 +174,8 @@ export async function beginOperation(input: {
     const existingData = await call("makeborne_ai_operation_read", { p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_operation: id, p_action: null });
     checkRefusal(existingData);
     const existing = publicStatus(existingData);
+    // Repair and escalation counts survive restarts and stages: they are read back from the earlier runs' durable results.
+    prior = priorRoute(existingData.runs);
     if (existing.operation.effort !== input.effort) throw new OperationError("OPERATION_CONFLICT", "Continue with the effort originally authorized for this request.", 409, existing.operation);
     // Every later stage (continuation or review) must use the brand kit the request started with.
     const startedWith = (existingData.requestContext as { brandKit?: unknown } | null)?.brandKit;
@@ -207,7 +212,7 @@ export async function beginOperation(input: {
     originalMessage: typeof (data.requestContext as { message?: unknown } | null)?.message === "string" ? (data.requestContext as { message: string }).message : undefined,
     originalPlan: SitePlanSchema.safeParse((data.requestContext as { plan?: unknown } | null)?.plan).data,
     originalBrief: BuildBriefSchema.safeParse((data.requestContext as { brief?: unknown } | null)?.brief).data,
-    originalDesign: DesignAnswersSchema.safeParse((data.requestContext as { design?: unknown } | null)?.design).data } };
+    originalDesign: DesignAnswersSchema.safeParse((data.requestContext as { design?: unknown } | null)?.design).data, ...(prior ? { priorRoute: prior } : {}) } };
 }
 
 export function createOperationSpend(run: OperationRun, platformDeadline: number): RunSpend {
