@@ -242,7 +242,11 @@ export class DocumentEditor {
     }
     // Visual rhythm is advisory like fit: it blocks the first finish only.
     if (this.doc.kind === "deck") fit.push(...deckRhythmIssues(this.doc).map(issue => `${issue.message}.`));
-    if (fit.length && this.finishAttempts++ === 0) issues.push(...fit.slice(0, 8).map(message => /rhythm/.test(message) ? message : `${message} Shorten the copy or choose a roomier layout.`));
+    // Unfinished fill-in fields block the first finish too: kept only when the user asked to supply them later.
+    const unfinished = placeholderIssues(this.doc);
+    const first = (unfinished.length > 0 || fit.length > 0) && this.finishAttempts++ === 0;
+    if (unfinished.length && first) issues.push(`Unfinished placeholders: ${unfinished.slice(0, 6).join("; ")}. Write the finished content (or omit the field). Keep a clearly marked fill-in field only if the user explicitly asked to supply it later, and say so in your summary.`);
+    if (fit.length && first) issues.push(...fit.slice(0, 8).map(message => /rhythm/.test(message) ? message : `${message} Shorten the copy or choose a roomier layout.`));
     return issues;
   }
 
@@ -268,6 +272,29 @@ export class DocumentEditor {
 
   /** Compact model-facing snapshot of the current document. */
   snapshot() { return JSON.stringify(this.doc); }
+}
+
+/** Bracketed fill-in fields ("[Your name]", "[market size in EUR]", "[x%]") and template instructions ("Replace this with…")
+ * in visible deck or book text. Not flagged: checklist boxes ("[ ]", "[x]"), Markdown links ("[text](url)") and book
+ * directives ("[[figure:…]]"). Speaker notes are the presenter's own and are not scanned. */
+const FILL_IN = /(?<!\[)\[(?!\[)([^\][\n]{1,60})\](?![(\]])/g, TEMPLATE = /\b(?:replace (?:this|with)|lorem ipsum|insert (?:your|the|a)\b)/i;
+export function placeholderIssues(doc: DocumentSource): string[] {
+  const found: string[] = [];
+  const scan = (where: string, value: unknown) => {
+    if (typeof value === "string") {
+      const text = value.replace(/\[\[[\s\S]*?\]\]/g, match => match.replace(/^\[\[(figure|note|pullquote):/, "").replace(/\]\]$/, ""));
+      for (const match of text.matchAll(FILL_IN)) if (!/^\s*[xX✓✔]?\s*$/.test(match[1])) found.push(`${where} "[${match[1]}]"`);
+      if (TEMPLATE.test(text)) found.push(`${where} "${(TEMPLATE.exec(text)?.[0] ?? "").slice(0, 40)}…"`);
+    } else if (Array.isArray(value)) value.forEach(item => scan(where, item));
+    else if (value && typeof value === "object") for (const [key, item] of Object.entries(value)) if (!["id", "notes", "image", "variant", "composition", "layout", "tone"].includes(key)) scan(where, item);
+  };
+  scan("title", [doc.title, doc.subtitle, doc.author]);
+  if (doc.kind === "deck") doc.slides.forEach((slide, index) => scan(`slide ${index + 1}`, slide));
+  else {
+    scan("front matter", [doc.dedication, doc.cover.tagline]);
+    doc.chapters.forEach((chapter, index) => scan(`chapter ${index + 1}`, { label: chapter.label, title: chapter.title, epigraph: chapter.epigraph, text: chapter.text }));
+  }
+  return [...new Set(found)];
 }
 
 /** Layouts that are mostly running text; three in a row read as a document, not a deck. */

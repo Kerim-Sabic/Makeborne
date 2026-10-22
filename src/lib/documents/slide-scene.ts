@@ -41,6 +41,7 @@ const REGISTRY: Record<CompositionId, Composition> = {
   "closing-centered": { kind: "airy", draw: (ctx, s) => T.coverCentered(ctx, s, true) },
   "closing-split": { kind: "field", draw: T.closingSplit },
   "closing-boxed": { kind: "airy", draw: T.closingBoxed },
+  "closing-next": { kind: "dense", accepts: s => (s.points?.length ?? 0) >= 1, draw: T.closingNext },
   "section-numeral": { kind: "airy", draw: T.sectionNumeral },
   "section-field": { kind: "field", draw: T.sectionField },
   "section-split": { kind: "field", draw: T.sectionSplit },
@@ -110,6 +111,8 @@ function run(deck: DeckLike, slide: Slide, index: number, total: number, id: Com
 export function candidates(deck: DeckLike, slide: Slide, index: number, total: number): CompositionId[] {
   const ctx = context(deck, slide, index, total), dir = ctx.dir;
   const ok = (id: CompositionId) => REGISTRY[id].accepts?.(slide, ctx) ?? true;
+  // A closing with next steps is composed around them (its image, if any, takes the side rail).
+  if (slide.layout === "closing" && (slide.points?.length ?? 0) >= 1) return ["closing-next"];
   if ((slide.layout === "cover" || slide.layout === "closing") && slide.image) return ["cover-image"];
   const preferred = (dir.compositions[slide.layout] ?? []).filter(ok);
   const rest = (COMPOSITIONS[slide.layout] as readonly CompositionId[]).filter(id => ok(id) && !preferred.includes(id) && id !== "cover-image");

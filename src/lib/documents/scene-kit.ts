@@ -7,7 +7,9 @@ import type { DirectionSpec, FontRole, Weight } from "./directions";
  * approves in the preview is what they export. */
 export const W = 1280, H = 720;
 
-export type TextPrim = { k: "text"; x: number; y: number; w: number; h: number; text: string; font: FontRole; size: number; weight: Weight; color: string; align: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; lh: number; tracking?: number; upper?: boolean; italic?: boolean; role?: "title" | "body" };
+export type TextPrim = { k: "text"; x: number; y: number; w: number; h: number; text: string; font: FontRole; size: number; weight: Weight; color: string; align: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; lh: number; tracking?: number; upper?: boolean; italic?: boolean; role?: "title" | "body"; list?: TextList };
+/** One text box holding a list: each line of `text` is an item with a hanging marker; items are `gap` px apart. The PPTX writes one bulleted text box. */
+export type TextList = { marker: "dash" | "square"; color: string; indent: number; gap: number };
 export type RectPrim = { k: "rect"; x: number; y: number; w: number; h: number; fill: string; opacity?: number; radius?: number; fade?: "up"; stroke?: string; strokeWidth?: number; noFill?: true };
 export type EllipsePrim = { k: "ellipse"; x: number; y: number; w: number; h: number; fill?: string; stroke?: string; strokeWidth?: number; opacity?: number };
 export type LinePrim = { k: "line"; x1: number; y1: number; x2: number; y2: number; color: string; width: number; arrow?: boolean; opacity?: number; dash?: boolean };
@@ -84,6 +86,33 @@ export function estimateLines(text: string, width: number, size: number, charWid
   }
   return lines;
 }
+/** Explicit, balanced line breaks for display text: the same number of lines the box was fitted for, each as
+ * even as the measurement allows, so the preview, PDF and PPTX break a title at the same words and no line is
+ * left with a single word (PowerPoint has no text-wrap: balance). Text that already has breaks, a single line,
+ * or a word too long for the line keeps its own wrapping. */
+export function balancedBreaks(text: string, width: number, size: number, charWidth: number, mode: MeasureMode = "prop") {
+  if (text.includes("\n")) return text;
+  const words = text.split(/\s+/).filter(Boolean), lines = estimateLines(text, width, size, charWidth, mode);
+  if (lines < 2 || words.length < 2) return text;
+  const space = unitOf(" ", mode), units = words.map(word => { let sum = 0; for (const char of word) sum += unitOf(char, mode); return sum; });
+  const per = (w: number) => w / (size * charWidth);
+  if (Math.max(...units) > per(width)) return text;
+  const wrap = (limit: number) => {
+    const out: string[][] = [[]];
+    let current = 0;
+    words.forEach((word, i) => {
+      if (!out[out.length - 1].length) { out[out.length - 1].push(word); current = units[i]; }
+      else if (current + space + units[i] <= limit) { out[out.length - 1].push(word); current += space + units[i]; }
+      else { out.push([word]); current = units[i]; }
+    });
+    return out;
+  };
+  // Narrowest line length that still sets the text in the same number of lines.
+  let lo = Math.max(...units), hi = per(width);
+  for (let step = 0; step < 24; step++) { const mid = (lo + hi) / 2; if (wrap(mid).length <= lines) hi = mid; else lo = mid; }
+  const balanced = wrap(hi);
+  return balanced.length === lines ? balanced.map(line => line.join(" ")).join("\n") : text;
+}
 /** The widest single word, in px: a word can never wrap, so it must fit the box. */
 export function longestWord(text: string, size: number, charWidth: number, mode: MeasureMode = "prop") {
   let best = 0;
@@ -119,7 +148,7 @@ export type Ctx = {
   frame?: Frame;
 };
 export type Frame = { x: number; r: number; y: number; b: number };
-export type TextStyle = { font?: FontRole; size: number; min?: number; maxH?: number; weight?: Weight; color?: string; align?: TextPrim["align"]; valign?: TextPrim["valign"]; lh?: number; tracking?: number; upper?: boolean; italic?: boolean; role?: TextPrim["role"] };
+export type TextStyle = { font?: FontRole; size: number; min?: number; maxH?: number; weight?: Weight; color?: string; align?: TextPrim["align"]; valign?: TextPrim["valign"]; lh?: number; tracking?: number; upper?: boolean; italic?: boolean; role?: TextPrim["role"]; list?: TextList };
 
 /** Glyph width factor and measuring mode for one text style; bold widens by the
  * pairing's measured bold ratio and letter-spacing widens every glyph. */
@@ -157,14 +186,24 @@ export function text(ctx: Ctx, value: string, box: { x: number; y: number; w: nu
   const font = style.font ?? "body", lh = defaultLh(style);
   const { cw, mode } = glyphWidth(ctx, style);
   const content = style.upper ? value.toUpperCase() : value;
-  const size = style.maxH ? fitSize(content, box.w, style.maxH, style.size, style.min ?? Math.round(style.size * 0.6), lh, cw, mode) : style.size;
-  const raw = textHeight(content, box.w, size, lh, cw, mode), needed = raw + Math.ceil(size * 0.15);
+  // A list's items wrap beside their markers and sit `gap` apart.
+  const mw = box.w - (style.list?.indent ?? 0), gaps = style.list ? style.list.gap * (content.split("\n").length - 1) : 0;
+  const size = style.maxH ? fitSize(content, mw, style.maxH - gaps, style.size, style.min ?? Math.round(style.size * 0.6), lh, cw, mode) : style.size;
+  const raw = textHeight(content, mw, size, lh, cw, mode) + gaps, needed = raw + Math.ceil(size * 0.15);
   const h = box.h ?? needed;
-  if ((box.h !== undefined && raw > box.h + 4) || (style.maxH !== undefined && raw > style.maxH + 4) || box.y + Math.min(h, raw) > H - 12 || longestWord(content, size, cw, mode) > box.w + 2)
+  if ((box.h !== undefined && raw > box.h + 4) || (style.maxH !== undefined && raw > style.maxH + 4) || box.y + Math.min(h, raw) > H - 12 || longestWord(content, size, cw, mode) > mw + 2)
     ctx.issues.push(`"${clip(value)}" is too long for its space`);
   const weight = style.weight ?? (font === "heading" ? FONTS[ctx.theme.fonts].headingWeight as Weight : 400);
-  ctx.prims.push({ k: "text", x: box.x, y: box.y, w: box.w, h: Math.max(h, Math.ceil(size * lh)), text: value, font, size, weight,
-    color: style.color ?? ctx.c.ink, align: style.align ?? "left", valign: style.valign ?? "top", lh, ...(style.tracking !== undefined ? { tracking: style.tracking } : {}), ...(style.upper ? { upper: true } : {}), ...(style.italic ? { italic: true } : {}), ...(style.role ? { role: style.role } : {}) });
+  // Small text in the accent colour (eyebrows, labels, roles) must read at 4.5:1; the accent is only guaranteed 3:1
+  // (enough for large type), so small accent text takes a deeper form of the same hue.
+  let color = style.color ?? ctx.c.ink;
+  if (size < 24 && (color === ctx.c.accent || color === ctx.c.accent2) && contrast(color, ctx.c.bg) < 4.5)
+    color = [0.15, 0.3, 0.45, 0.6, 0.75, 1].map(amount => mix(color, ctx.c.ink, amount)).find(value => contrast(value, ctx.c.bg) >= 4.5) ?? ctx.c.ink;
+  // Titles and display type carry explicit balanced breaks (the same in HTML and PPTX).
+  const display = style.role === "title" || (font === "heading" && size >= 34);
+  const shown = display ? balancedBreaks(value, box.w, size, cw, mode) : value;
+  ctx.prims.push({ k: "text", x: box.x, y: box.y, w: box.w, h: Math.max(h, Math.ceil(size * lh)), text: shown, font, size, weight,
+    color, align: style.align ?? "left", valign: style.valign ?? "top", lh, ...(style.tracking !== undefined ? { tracking: style.tracking } : {}), ...(style.upper ? { upper: true } : {}), ...(style.italic ? { italic: true } : {}), ...(style.role ? { role: style.role } : {}), ...(style.list ? { list: style.list } : {}) });
   return Math.max(h, Math.ceil(size * lh));
 }
 export const rect = (ctx: Ctx, prim: Omit<RectPrim, "k">) => { ctx.prims.push({ k: "rect", ...prim }); };

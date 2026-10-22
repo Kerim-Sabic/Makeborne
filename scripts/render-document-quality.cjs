@@ -87,7 +87,7 @@ function serverFontHtml(html) {
 // ---------- PPTX reconstruction ----------
 const EMU = 9525; // EMU per CSS px at 96 dpi
 const attr = (xml, name) => { const m = new RegExp(`\\b${name}="([^"]*)"`).exec(xml); return m ? m[1] : undefined; };
-const unxml = (value) => value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+const unxml = (value) => value.replace(/&#x([0-9A-Fa-f]+);/g, (_m, hex) => String.fromCodePoint(parseInt(hex, 16))).replace(/&#(\d+);/g, (_m, dec) => String.fromCodePoint(Number(dec))).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 const escHtml = (value) => value.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 function fillOf(xml) {
   // "<a:ln" also prefixes custom-geometry <a:lnTo> points; only the outline element ends the fill.
@@ -150,7 +150,8 @@ async function pptxSlides(bytes) {
               const rPr = /<a:rPr[^>]*?(?:\/>|>[\s\S]*?<\/a:rPr>)/.exec(r)?.[0] ?? "";
               return { text: unxml(/<a:t>([\s\S]*?)<\/a:t>/.exec(r)?.[1] ?? ""), size: Number(attr(rPr, "sz") ?? 1800) / 100, bold: attr(rPr, "b") === "1", italic: attr(rPr, "i") === "1", caps: attr(rPr, "cap") === "all", spc: Number(attr(rPr, "spc") ?? 0) / 100, color: fillOf(rPr)?.color ?? "#000000", face: attr(/<a:latin [^>]*>/.exec(rPr)?.[0] ?? "", "typeface") ?? "Calibri", whole };
             });
-            return { align: attr(pPr, "algn") ?? "l", spacing: pts ? { pts: Number(pts[1]) / 100 } : pct ? { pct: Number(pct[1]) / 100000 } : { pct: 1 }, runs };
+            const bu = /<a:buChar char="([^"]*)"/.exec(pPr)?.[1], buClr = /<a:buClr><a:srgbClr val="([0-9A-Fa-f]{6})"/.exec(pPr)?.[1], after = /<a:spcAft><a:spcPts val="(\d+)"/.exec(pPr);
+            return { marL: Number(attr(pPr, "marL") ?? 0) / EMU, bullet: bu ? { char: unxml(bu), color: buClr ? `#${buClr}` : null } : null, after: after ? Number(after[1]) / 100 * 4 / 3 : 0, align: attr(pPr, "algn") ?? "l", spacing: pts ? { pts: Number(pts[1]) / 100 } : pct ? { pct: Number(pct[1]) / 100000 } : { pct: 1 }, runs };
           }),
         };
       }
@@ -182,7 +183,8 @@ function pptxSlideHtml(slide) {
         const first = p.runs.find(run => !run.br) ?? { size: 18, face: "Calibri" };
         const lineHeight = p.spacing.pts ? `${p.spacing.pts * 4 / 3}px` : `calc(var(--normal-${CSS_ID(first.face)}) * ${p.spacing.pct} * ${first.size * 4 / 3}px)`;
         // The paragraph's own font sets the line strut, as PowerPoint measures lines from the run.
-        return `<div class="para" style="font-family:'${first.face}';font-size:${first.size * 4 / 3}px;text-align:${{ l: "left", ctr: "center", r: "right", just: "justify" }[p.align] ?? "left"};line-height:${lineHeight}">${p.runs.map(run => run.br ? "<br>" : `<span style="font-family:'${run.face}';font-size:${run.size * 4 / 3}px;font-weight:${run.bold ? 700 : 400};font-style:${run.italic ? "italic" : "normal"};${run.caps ? "text-transform:uppercase;" : ""}color:${run.color};letter-spacing:${run.spc * 4 / 3}px">${escHtml(run.text)}</span>`).join("") || "&nbsp;"}</div>`;
+        const marker = p.bullet ? `<span style="position:absolute;left:0;color:${p.bullet.color ?? first.color}">${escHtml(p.bullet.char)}</span>` : "";
+        return `<div class="para" style="position:relative;padding-left:${p.marL}px;margin-bottom:${p.after}px;font-family:'${first.face}';font-size:${first.size * 4 / 3}px;text-align:${{ l: "left", ctr: "center", r: "right", just: "justify" }[p.align] ?? "left"};line-height:${lineHeight}">${marker}${p.runs.map(run => run.br ? "<br>" : `<span style="font-family:'${run.face}';font-size:${run.size * 4 / 3}px;font-weight:${run.bold ? 700 : 400};font-style:${run.italic ? "italic" : "normal"};${run.caps ? "text-transform:uppercase;" : ""}color:${run.color};letter-spacing:${run.spc * 4 / 3}px">${escHtml(run.text)}</span>`).join("") || "&nbsp;"}</div>`;
       }).join("");
       html += `<div class="tb" data-index="${index}" data-box-h="${s.h}" style="position:absolute;${box};padding:${t}px ${r}px ${b}px ${l}px;justify-content:${{ t: "flex-start", ctr: "center", b: "flex-end" }[s.text.anchor] ?? "flex-start"}"><div class="inner">${paragraphs}</div></div>`;
     }

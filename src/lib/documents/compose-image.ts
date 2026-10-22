@@ -37,6 +37,8 @@ export function imageSupport(slide: Pick<Slide, "layout" | "image" | "imagePlace
 }
 /** Placements to try for this slide, the author's choice first; [] when the layout places the image itself or there is none. */
 export function placementsFor(slide: Slide): ImagePlacement[] {
+  // A closing with next steps keeps its image beside them; otherwise cover and closing images are full or half bleed.
+  if (slide.image && slide.layout === "closing" && (slide.points?.length ?? 0) >= 1) return ["side"];
   const placements = slide.image ? PLACEMENTS[slide.layout] : undefined;
   if (!placements) return [];
   return slide.imagePlacement && placements.includes(slide.imagePlacement) ? [slide.imagePlacement, ...placements.filter(p => p !== slide.imagePlacement)] : [...placements];

@@ -221,6 +221,36 @@ export function closingSplit(ctx: Ctx, slide: Slide) {
 
 export function closingBoxed(ctx: Ctx, slide: Slide) { coverBoxed(ctx, slide, true); }
 
+/** The close as a decision: the ask on the left, the agreed next steps numbered on the right (step, then who/when),
+ * and the contact line (the slide body, else the presenter) under a rule. No decorative graphic competes with the ask. */
+export function closingNext(ctx: Ctx, slide: Slide) {
+  const a = area(ctx), c = ctx.c, steps = slide.points ?? [], sub = slide.subtitle;
+  const lw = Math.round(a.w * (a.w < 900 ? 0.46 : 0.42)), rx = a.x + lw + 56, rw = a.r - rx;
+  const contact = slide.body ?? ctx.deck.author, foot = contact ? 64 : 0, bottom = a.b - foot;
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.cover * 0.6, min: 34, sub, subStyle: { size: 22 } }, { x: a.x, y: a.y, w: lw, h: bottom - a.y }, "middle");
+  const numW = 56, tw = rw - numW;
+  const rowsAt = (ts: number, bs: number) => steps.map(step => (step.title ? measure(ctx, step.title, tw, displayStyle(ctx, ts, { role: undefined, lh: 1.14 })) + 6 : 0) + measure(ctx, step.text, tw, { size: bs, lh: 1.4 }) + 36);
+  const sizes = [[30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
+  const [ts, bs] = sizes.find(([t, b]) => rowsAt(t, b).reduce((sum, h) => sum + h, 0) <= bottom - a.y) ?? sizes[sizes.length - 1];
+  const rows = rowsAt(ts, bs), total = rows.reduce((sum, h) => sum + h, 0);
+  if (total > bottom - a.y + 4) ctx.issues.push("the next steps have too much text for the closing slide");
+  let y = a.y + Math.max(0, (bottom - a.y - total) / 2);
+  steps.forEach((step, i) => {
+    divider(ctx, rx, a.r, y, i === 0);
+    const ns = { ...numeralStyle(ctx, 30, { color: c.accent }), lh: 1.1 };
+    text(ctx, numeral(ctx, i), { x: rx, y: y + 18, w: numW - 8, h: Math.ceil(ns.size * 1.15) }, ns);
+    let ty = y + 18;
+    if (step.title) ty += text(ctx, step.title, { x: rx + numW, y: ty, w: tw }, displayStyle(ctx, ts, { role: undefined, lh: 1.14, color: c.ink })) + 6;
+    text(ctx, step.text, { x: rx + numW, y: ty, w: tw }, { size: bs, lh: 1.4, color: step.title ? c.muted : c.ink });
+    y += rows[i];
+  });
+  divider(ctx, rx, a.r, y);
+  if (contact) {
+    hline(ctx, a.x, a.r, a.b - foot + 18, c.rule, 1);
+    text(ctx, contact, { x: a.x, y: a.b - foot + 32, w: a.w, h: 28 }, { ...labelStyle(ctx), upper: false, tracking: 0, size: 17, weight: 600, color: c.ink, maxH: 28, min: 13 });
+  }
+}
+
 /* ---------- sections ---------- */
 
 export function sectionNumeral(ctx: Ctx, slide: Slide) {

@@ -470,10 +470,8 @@ function compareSides(ctx: Ctx, slide: Slide, boxes: { x: number; y: number; w: 
     const b = boxes[i], ink = inks[i];
     let y = b.y + pad;
     y += text(ctx, side.heading, { x: b.x + pad, y, w: b.w - pad * 2 }, titleStyle(ctx, headSize, { color: ink.ink, maxH: 90, min: 22 })) + 26;
-    for (const point of side.points) {
-      line(ctx, b.x + pad, y + size * 0.72, b.x + pad + 16, y + size * 0.72, ink.accent, 3);
-      y += text(ctx, point, { x: b.x + pad + 30, y, w: b.w - pad * 2 - 30 }, bodyStyle(ctx, { size, color: ink.ink })) + 16;
-    }
+    // One text box per side: the items flow as rendered (no gaps from estimated per-item heights) and the PPTX gets one bulleted list.
+    text(ctx, side.points.join("\n"), { x: b.x + pad, y, w: b.w - pad * 2 }, bodyStyle(ctx, { size, color: ink.ink, list: { marker: "dash", color: ink.accent, indent: 30, gap: 16 } }));
   });
 }
 
@@ -500,7 +498,9 @@ export function compareColumns(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, top = header(ctx, slide) + 40, gap = 96, pw = (a.w - gap) / 2, h = a.b - top;
   vline(ctx, a.x + pw + gap / 2, top, a.b, ruleColor(ctx), 1.5);
   divider(ctx, a.x, a.x + pw, top, true); divider(ctx, a.x + pw + gap, a.r, top, true);
-  compareSides(ctx, slide, [{ x: a.x - 0, y: top - 14, w: pw, h }, { x: a.x + pw + gap, y: top - 14, w: pw, h }], [{ ink: c.ink, muted: c.muted, accent: c.muted }, { ink: c.ink, muted: c.muted, accent: c.accent }], 38, 0.0001);
+  // The headings hang below the rules (they used to start 14 px above them, so the rule ran through the heading).
+  const below = 20;
+  compareSides(ctx, slide, [{ x: a.x, y: top + below, w: pw, h: h - below }, { x: a.x + pw + gap, y: top + below, w: pw, h: h - below }], [{ ink: c.ink, muted: c.muted, accent: c.muted }, { ink: c.ink, muted: c.muted, accent: c.accent }], 38, 0.0001);
   footer(ctx);
 }
 

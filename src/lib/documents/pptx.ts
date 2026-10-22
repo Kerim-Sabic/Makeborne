@@ -110,13 +110,13 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
   pptx.subject = deck.subtitle ?? "";
   const fonts = FONTS[deck.theme.fonts];
   const total = deck.slides.length;
-  const caps: Set<string>[] = [];
+  const marks: Marks[] = [];
   for (const [index, source] of deck.slides.entries()) {
     const scene = composeSlide(deck, source, index, total);
     const slide = pptx.addSlide();
     // Accessibility: one shape per slide is the slide title (a title placeholder, see accessible()); capitals are formatting, not baked text.
-    const title = slideTitle(scene.prims, source.title), upper = new Set<string>();
-    caps.push(upper);
+    const title = slideTitle(scene.prims, source.title), mark: Marks = new Map();
+    marks.push(mark);
     let shape = 0;
     slide.background = { color: color(scene.background) };
     for (const prim of scene.prims as Prim[]) {
@@ -165,8 +165,8 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
           // The preview tracks headings tighter by default; PowerPoint needs the same spacing or titles run wider and rewrap.
           const tracking = prim.tracking ?? (heading ? parseFloat(fonts.headingTracking) || 0 : 0);
           const objectName = prim === title ? "Title" : `Text ${++shape}`;
-          if (prim.upper) upper.add(objectName);
-          slide.addText(prim.text, { objectName,
+          if (prim.upper || prim.list) mark.set(objectName, { ...(prim.upper ? { caps: true } : {}), ...(prim.list ? { bullet: color(prim.list.color) } : {}) });
+          const options: PptxGenJS.TextPropsOptions = { objectName,
             x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), margin: 0,
             fontFace: heading ? fonts.pptxHeading : prim.font === "mono" ? PPTX_MONO : fonts.pptxBody, fontSize: pt(prim.size), color: color(prim.color),
             bold, italic: prim.italic ?? false,
@@ -176,14 +176,20 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
             align: prim.align, valign: prim.valign, lineSpacing: pt(prim.size * prim.lh),
             ...(tracking ? { charSpacing: Math.round(tracking * prim.size * 0.75 * 10) / 10 } : {}),
             fit: "shrink", paraSpaceBefore: 0, paraSpaceAfter: 0,
-          });
+          };
+          // Explicit breaks (balanced titles) are soft line breaks inside one paragraph, as in the preview.
+          const lines = prim.text.split("\n"), list = prim.list;
+          // A list is one text box of bulleted paragraphs (hanging indent, the preview's item gap after each).
+          if (list) slide.addText(lines.map((line, i) => ({ text: line, options: { ...options, bullet: { characterCode: list.marker === "dash" ? "2013" : "25A0", indent: pt(list.indent) },
+            paraSpaceAfter: i < lines.length - 1 ? pt(list.gap) : 0, breakLine: i < lines.length - 1 } })), options);
+          else slide.addText(lines.length > 1 ? lines.map((line, i) => ({ text: line, options: { ...options, ...(i ? { softBreakBefore: true } : {}) } })) : prim.text, options);
           break;
         }
       }
     }
     slide.addNotes(source.notes);
   }
-  return withTransitions(Buffer.from(await pptx.write({ outputType: "nodebuffer" }) as ArrayBuffer), caps);
+  return withTransitions(Buffer.from(await pptx.write({ outputType: "nodebuffer" }) as ArrayBuffer), marks);
 }
 
 const DECORATIVE = "makeborne:decorative", FADE = "Scrim fade";
@@ -198,7 +204,9 @@ const DECORATIVE_EXT = '<a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA
  * - the title shape becomes the slide's title placeholder, so the outline, screen readers and the accessibility checker see a title;
  * - text set in capitals keeps its own case with all-caps formatting (cap="all"), so it reads and copies as written;
  * - artwork and shapes without text are marked decorative, and artwork loses pptxgenjs's "preencoded.png" description. */
-export function accessible(xml: string, upper: Set<string>) {
+/** Per-slide text shapes needing package-level formatting: all-caps, and the bullet colour of a list. */
+export type Marks = Map<string, { caps?: boolean; bullet?: string }>;
+export function accessible(xml: string, marks: Marks) {
   return xml.replace(/<p:(sp|pic)>([\s\S]*?)<\/p:\1>/g, (whole, kind: string, body: string) => {
     const name = /<p:cNvPr id="\d+" name="([^"]*)"/.exec(body)?.[1] ?? "";
     if (kind === "pic") return whole.replace(`descr="${DECORATIVE}">`, `descr="">${DECORATIVE_EXT}`);
@@ -210,7 +218,10 @@ export function accessible(xml: string, upper: Set<string>) {
     }
     let out = whole;
     if (name === "Title") out = out.replace("<p:nvPr></p:nvPr>", '<p:nvPr><p:ph type="title"/></p:nvPr>');
-    if (upper.has(name)) out = out.replace(/<a:rPr lang=/g, '<a:rPr cap="all" lang=');
+    const mark = marks.get(name);
+    // List markers take the list's accent colour (pptxgenjs writes them in the text colour).
+    if (mark?.bullet) out = out.split('<a:buSzPct ').join(`<a:buClr><a:srgbClr val="${mark.bullet}"/></a:buClr><a:buSzPct `);
+    if (mark?.caps) out = out.replace(/<a:rPr lang=/g, '<a:rPr cap="all" lang=');
     return out;
   });
 }
@@ -218,10 +229,10 @@ export function accessible(xml: string, upper: Set<string>) {
 /** A gentle fade between slides, matching the presenter view. PptxGenJS has no
  * transition API; <p:transition> is plain PresentationML and must follow
  * <p:clrMapOvr> inside <p:sld>. It changes no geometry, text or fonts. */
-export async function withTransitions(bytes: Buffer, caps: Set<string>[] = []) {
+export async function withTransitions(bytes: Buffer, marks: Marks[] = []) {
   const zip = await JSZip.loadAsync(bytes);
   for (const name of Object.keys(zip.files).filter(entry => /^ppt\/slides\/slide\d+\.xml$/.test(entry))) {
-    const xml = accessible(await zip.file(name)!.async("string"), caps[Number(/(\d+)\.xml$/.exec(name)![1]) - 1] ?? new Set());
+    const xml = accessible(await zip.file(name)!.async("string"), marks[Number(/(\d+)\.xml$/.exec(name)![1]) - 1] ?? new Map());
     zip.file(name, xml);
     if (xml.includes("<p:transition") || !xml.endsWith("</p:clrMapOvr></p:sld>")) continue;
     zip.file(name, xml.replace(/<\/p:clrMapOvr><\/p:sld>$/, '</p:clrMapOvr><p:transition spd="med"><p:fade/></p:transition></p:sld>'));
