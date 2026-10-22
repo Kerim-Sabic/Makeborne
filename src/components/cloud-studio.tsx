@@ -1126,6 +1126,11 @@ const RecoveryDraftSchema = z.object({
   note: z.string().max(2000),
 });
 type RecoveryDraft = z.infer<typeof RecoveryDraftSchema>;
+type WebsiteSource = NonNullable<ArtifactContent["websiteSource"]>;
+/** The files the in-browser preview compiles: the project without its package manifests. */
+const previewFiles = (source: WebsiteSource | undefined) => Object.fromEntries((source?.files ?? [])
+  .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content]));
+const previewAssets = (source: WebsiteSource | undefined) => source?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? [];
 export function CloudEditor({
   accountId,
   workspaceId,
@@ -1584,8 +1589,10 @@ export function CloudEditor({
   const editor = editorEntry(content ?? { kind: artifact.kind, website: undefined, websiteSource: undefined }, role === "reviewer");
   const preview = format ? choosePreview({ kind: artifact.kind, format, builder: useLiveBuilder, canBuild: builder.available, live, generatedVersion: Boolean(generatedVersionId) }) : null;
   const previewDocument = !liveDocument ? undefined : preview === "live" ? live?.document : preview === "document" ? content?.document : undefined;
-  const sourceFiles = useMemo(() => Object.fromEntries((content?.websiteSource?.files ?? [])
-    .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content])), [content?.websiteSource]);
+  const sourceFiles = useMemo(() => previewFiles(content?.websiteSource), [content?.websiteSource]);
+  // An earlier version opened in History renders from its own saved files, read-only.
+  const inspectedSource = inspectedVersion?.content.websiteSource;
+  const inspectedFiles = useMemo(() => previewFiles(inspectedSource), [inspectedSource]);
   // A project created from the home prompt opens with its brief in the builder. The builder may ask its free
   // questions, but paid work starts only from an explicit Send after the maximum is shown (audit M08).
   useEffect(() => {
@@ -1639,7 +1646,7 @@ export function CloudEditor({
       <div className="workbench-layout">
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
-          baseFiles={sourceFiles} baseAssets={content?.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
+          baseFiles={sourceFiles} baseAssets={previewAssets(content?.websiteSource)}
           defaultEffort={project?.effort} disabled={!content || !builder.available || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
           provenance={advisorBrief.provenance} onProvenance={advisorBrief.update}
           kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates}
@@ -1758,7 +1765,7 @@ export function CloudEditor({
         {view === "preview" && preview === "start-builder" && liveDocument && <div className="lp-empty dp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
         {view === "preview" && !liveDocument && (preview === "live" || preview === "website-source") && <LivePreview
           files={live?.files ?? sourceFiles}
-          assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
+          assets={live?.assets ?? previewAssets(content.websiteSource)}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
           routes={!live ? content.websiteSource?.routes : undefined} syncUrl
           visualEdit={content.websiteSource && role !== "reviewer" && !live ? {
@@ -1938,7 +1945,12 @@ export function CloudEditor({
             {inspectedVersion && <section className="account-version-review" aria-label={`Saved version ${inspectedVersion.number}`}>
               <h3>Version {inspectedVersion.number}</h3>
               <p className="small-note" id={`restore-effect-${inspectedVersion.id}`}>This is a saved snapshot.{role !== "reviewer" && inspectedVersion.number < expectedVersion ? ` ${restoreEffect(inspectedVersion.number, expectedVersion, artifact.kind === "website")}` : ""}</p>
-              <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />
+              {/* The saved files and pages of that version, read-only: no click-to-edit, editor URL, scroll memory or saving. Mounted only while History shows. */}
+              {inspectedSource ? view === "history" && <LivePreview key={inspectedVersion.id} files={inspectedFiles} assets={previewAssets(inspectedSource)}
+                scope={{ accountId, workspaceId, artifactId: artifact.id }} routes={inspectedSource.routes} snapshot={inspectedVersion.number} />
+              : inspectedVersion.content.document && artifact.kind !== "website" ? view === "history" && <DocumentPreview key={inspectedVersion.id} document={inspectedVersion.content.document}
+                scope={{ accountId, workspaceId, artifactId: artifact.id }} savedVersion={inspectedVersion.number} canExport />
+              : <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />}
               {role !== "reviewer" && inspectedVersion.number < expectedVersion && <>
                 <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} aria-describedby={`restore-effect-${inspectedVersion.id}`} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
                 {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}

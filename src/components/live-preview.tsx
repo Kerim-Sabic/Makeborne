@@ -49,8 +49,10 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
  * With `visualEdit`, owners and editors can click elements to change text,
  * links, images and style directly in the source — no model call.
  * Page, query, fragment target, title, scroll and focus are tracked apart;
- * `syncUrl` mirrors the page on the editor URL so a reload returns to it. */
-export default function LivePreview({ files, assets, scope, building, onFixError, visualEdit, routes = NO_ROUTES, syncUrl = false, responseTimeoutMs = 10_000 }: {
+ * `syncUrl` mirrors the page on the editor URL so a reload returns to it.
+ * `snapshot` shows an earlier saved version read-only (History): it keeps no
+ * scroll memory, so the editor's own preview is unaffected. */
+export default function LivePreview({ files, assets, scope, building, onFixError, visualEdit, routes = NO_ROUTES, syncUrl = false, snapshot, responseTimeoutMs = 10_000 }: {
   files: Record<string, string>;
   assets: Asset[];
   scope: { accountId: string; workspaceId: string; artifactId: string };
@@ -60,6 +62,8 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   /** Saved page routes of this version. Unknown paths show a not-found state. */
   routes?: PreviewRoute[];
   syncUrl?: boolean;
+  /** The saved version number this read-only preview shows. */
+  snapshot?: number;
   responseTimeoutMs?: number;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -149,7 +153,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   function startState(): PreviewStart {
     const current = pageRef.current;
     let y = scrollY.current;
-    if (y === null) {
+    if (y === null && snapshot === undefined) {
       try {
         const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
         if (saved?.page === formatPreviewPath(current) && Number.isFinite(saved.y)) y = Math.max(0, Math.round(saved.y));
@@ -252,7 +256,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
         if (Number.isFinite(data.y)) {
           scrollY.current = Math.max(0, Math.round(data.y));
           scrollMemory.current.set(formatPreviewPath(next), scrollY.current);
-          try { sessionStorage.setItem(storageKey, JSON.stringify({ page: formatPreviewPath(next), y: scrollY.current })); } catch { /* per-viewer convenience only */ }
+          if (snapshot === undefined) try { sessionStorage.setItem(storageKey, JSON.stringify({ page: formatPreviewPath(next), y: scrollY.current })); } catch { /* per-viewer convenience only */ }
         }
       }
       if (data.type === "rendered" && Number(data.text) > 0) {
@@ -279,7 +283,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     };
     window.addEventListener("message", listen);
     return () => window.removeEventListener("message", listen);
-  }, [inspecting, engine, storageKey, setPage, syncOuter]);
+  }, [inspecting, engine, storageKey, snapshot, setPage, syncOuter]);
 
   // Turning edit mode off clears the selection; the rebuild drops the tags.
   function toggleEditing() {
@@ -334,8 +338,9 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   const pageTitle = previewPageTitle(page, routes, frameTitle);
   const knownRoutes = routes.map(route => ({ ...route, path: normalizePath(route.path) }));
   const editTitle = !visualEdit ? "" : building ? "Wait for the build to finish" : visualEdit.disabledReason ?? (editing ? "Stop editing" : "Click elements in the preview to edit them");
-  const status = building ? "Building live…" : transportError ? "Preview connection lost" : retrying ? "Reconnecting…" : buildError ? "Needs a fix" : inspecting ? (picked ? "Editing" : "Click anything to edit it") : html ? missing ? "Page not found" : "Live preview" : "Preparing preview…";
-  return <section className="lp" aria-label="Website preview" data-preview-path={formatPreviewPath(page)} data-preview-title={pageTitle} data-preview-focus={focusDescriptor || undefined}>
+  const status = building ? "Building live…" : transportError ? "Preview connection lost" : retrying ? "Reconnecting…" : buildError ? "Needs a fix" : inspecting ? (picked ? "Editing" : "Click anything to edit it") : html ? missing ? "Page not found" : snapshot === undefined ? "Live preview" : `Saved version ${snapshot} · read only` : "Preparing preview…";
+  const label = snapshot === undefined ? "Website preview" : `Preview of saved version ${snapshot}`;
+  return <section className="lp" aria-label={label} data-preview-path={formatPreviewPath(page)} data-preview-title={pageTitle} data-preview-focus={focusDescriptor || undefined}>
     <header className="lp-bar">
       <div className="lp-devices" role="group" aria-label="Preview size">
         {([["desktop", Monitor], ["tablet", Tablet], ["mobile", Smartphone]] as const).map(([value, Icon]) =>
@@ -381,13 +386,13 @@ export default function LivePreview({ files, assets, scope, building, onFixError
         {html ? <iframe
           key={frameKey}
           ref={frame}
-          title="Website preview"
+          title={label}
           hidden={missing}
           sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
           referrerPolicy="no-referrer"
           srcDoc={html}
           style={{ width: width ? `${width}px` : "100%" }}
-        /> : <div className="lp-empty">{building || (!buildError && !transportError) ? "Your website will appear here as it's built." : transportError ? "Preview connection lost. Try again re-renders the same saved files." : "The first build needs a fix — ask the builder to repair it."}</div>}
+        /> : <div className="lp-empty">{building || (!buildError && !transportError) ? "Your website will appear here as it's built." : transportError ? "Preview connection lost. Try again re-renders the same saved files." : snapshot !== undefined ? "This saved version can't be shown: it has a build error." : "The first build needs a fix — ask the builder to repair it."}</div>}
         {html && missing && <div className="lp-missing" role="region" aria-labelledby={`lp-missing-${scope.artifactId}`}>
           <h2 id={`lp-missing-${scope.artifactId}`}>Page not found</h2>
           <p><code>{formatPreviewPath(page)}</code> isn&apos;t a page in this saved version of the site. Nothing was created, generated or charged.</p>
