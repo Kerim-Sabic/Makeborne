@@ -1,6 +1,5 @@
 import "server-only";
 import { chromium } from "playwright";
-import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DocumentSource } from "./schema";
 import { deckFaces, deckHtml } from "./render-deck";
@@ -11,6 +10,7 @@ import { embeddedFontSources } from "./fonts-server";
 import { bookHeadings, bookPagesFromOutline, fixPdfBookmarks, pdfOutline } from "./book-pagination";
 import { chromiumLaunchOptions } from "../server/export";
 import { downloadProjectAsset } from "../cloud/asset-storage";
+import { fitArtwork } from "./artwork-fit";
 
 /** Read the document's generated artwork through the caller's RLS-bound client. */
 export async function loadDocumentImages(client: SupabaseClient, workspaceId: string, projectId: string, doc: DocumentSource) {
@@ -29,14 +29,11 @@ export async function loadDocumentImages(client: SupabaseClient, workspaceId: st
   return buffers;
 }
 
-/** Downscale for print: 300 dpi at the largest placement is plenty. */
+/** Downscale for print (300 dpi at the largest placement is plenty) within the export artwork limits: each image under
+ * 3 MB, all together under 12 MB (artwork-fit.ts). */
 async function dataUrls(buffers: Record<string, Buffer>) {
-  const urls: Record<string, string> = {};
-  for (const [name, bytes] of Object.entries(buffers)) {
-    const jpeg = await sharp(bytes, { limitInputPixels: 40_000_000 }).rotate().resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer();
-    urls[name] = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
-  }
-  return urls;
+  const fitted = await fitArtwork(buffers);
+  return Object.fromEntries(Object.entries(fitted).map(([name, jpeg]) => [name, `data:image/jpeg;base64,${jpeg.toString("base64")}`]));
 }
 
 /** Print the same HTML the preview shows, in an offline, script-free browser.

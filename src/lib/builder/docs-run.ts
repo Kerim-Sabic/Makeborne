@@ -12,6 +12,7 @@ import { aiCostUsdPerCredit } from "./pricing";
 import { logAiStop } from "./website-run";
 import { aiStop } from "../ai/failure";
 import { DocumentEditor, emptyDocument } from "../documents/editor";
+import { bookImagePlanFromBrief, deckModeFromBrief } from "../documents/creation-options";
 import { projectDocument, documentAssetIds } from "../documents/project";
 import { wordCount } from "../documents/book-markup";
 import { runDocumentBuilder, type DocBuilderEvent, type DocBuilderRun } from "./docs-agent";
@@ -73,7 +74,12 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
   const rate = input.operation ? input.operation.rateMicrousd / 1e6 : aiCostUsdPerCredit();
   const measured = () => spend.customerCredits(rate);
   const fresh = !current.content.document;
-  const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId));
+  // A new deck is full-image unless the client chose (or asked for) editable text slides; a new book follows the
+  // image plan from its questions or brief (creation-options.ts). Saved documents keep what they have.
+  const options = `${input.project.brief}
+${input.message}`;
+  const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId,
+    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options) } : { slideMode: deckModeFromBrief(options).mode }));
   const context = [documentContext(input, editor, fresh), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n");
   const encoder = new TextEncoder();
   const controller = new AbortController();
