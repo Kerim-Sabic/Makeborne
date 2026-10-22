@@ -22,9 +22,16 @@ function App() {
       onSkip={() => window.events.push({ type: "skip" })} />;
   }
   if (view.kind === "none") return null;
-  const state = view.kind === "ready" ? { status: "ready", enhanced: ENHANCED, text: "Business: Ovenbird\\n1. Hero (#top): Who we are.\\n2. Opening hours (#hours): When we open.", charged: 1 } : view.kind === "blocked" ? { status: "failed", blocking: true, message: "AI is paused right now. Nothing was started or charged." } : { status: view.kind };
+  const key = "00000000-0000-4000-8000-0000000000aa";
+  const state = view.kind === "ready" ? { status: "ready", key, enhanced: ENHANCED, text: "Business: Ovenbird\\n1. Hero (#top): Who we are.\\n2. Opening hours (#hours): When we open.", charged: 0 }
+    : view.kind === "blocked" ? { status: "failed", key: null, charged: 0, blocking: true, message: "AI is paused right now. Nothing was started or charged." }
+    : view.kind === "failed" ? { status: "failed", key, charged: 0, message: "Your brief couldn't be improved just now. Nothing was charged. The build can use your own words." }
+    : view.kind === "unconfirmed" ? { status: "failed", key, charged: null, message: "Improving your brief didn't finish. The build can use your own words." }
+    : view.kind === "checking" ? { status: "checking", key, reason: "unknown", message: "The reply was lost. Checking what happened to your brief's improvement; it will not be run again." }
+    : view.kind === "loading" ? { status: "loading", key } : { status: "offer" };
   return <EnhancedBriefCard key={view.run} state={state} design={{ vibe: "warm", sections: ["hours"] }} maximum={50} busy={false}
-    onStart={brief => window.events.push({ type: "start", brief })} onOriginal={() => window.events.push({ type: "original" })} onCancel={() => window.events.push({ type: "cancel" })} />;
+    onStart={brief => window.events.push({ type: "start", brief })} onOriginal={() => window.events.push({ type: "original" })} onCancel={() => window.events.push({ type: "cancel" })}
+    onImprove={() => window.events.push({ type: "improve" })} onStop={() => window.events.push({ type: "stop" })} onCheck={() => window.events.push({ type: "check" })} />;
 }
 window.events = [];
 createRoot(document.getElementById("root")).render(<App />);`;
@@ -87,7 +94,8 @@ async function main() {
 
     // Enhanced brief: start, edit, original, cancel; focus and keyboard.
     await show("ready");
-    await page.waitForFunction(() => document.activeElement?.textContent === "Enhanced brief", null, { timeout: 3000 }).catch(() => assert.fail("focus moves to the card's heading"));
+    await page.waitForFunction(() => document.activeElement?.textContent === "Improved brief", null, { timeout: 3000 }).catch(() => assert.fail("focus moves to the card's heading"));
+    assert.match(await page.locator(".eb").innerText(), /Improving your brief charged 0 credits\./, "the receipt line comes from the action's verified charge");
     assert.match(await page.locator(".eb").innerText(), /Sections[\s\S]*Hero[\s\S]*Opening hours[\s\S]*Shown as placeholders until you add them[\s\S]*Your answers used[\s\S]*Feel: Warm and crafted/);
     await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
     await page.getByRole("button", { name: "Start building" }).focus(); await page.keyboard.press("Enter");
@@ -107,26 +115,46 @@ async function main() {
     assert.equal((await events())[0].brief.mode, "enhanced", "unchanged text is still the enhanced brief");
     pass("Edit sends the client's edited text as an edited brief; untouched text stays enhanced");
     await show("ready");
-    await page.getByRole("button", { name: "Start with my original · up to 50 credits" }).click();
+    await page.getByRole("button", { name: "Build with my original instead · up to 50 credits" }).click();
+    assert.deepEqual(await events(), [{ type: "original" }]);
+    assert.doesNotMatch(await page.locator("body").innerText(), /refund/i, "using the original never implies a refund");
     await show("ready");
     await page.getByRole("button", { name: "Cancel" }).click();
     assert.deepEqual(await events(), [{ type: "cancel" }]);
     await show("failed");
-    assert.match(await page.locator(".eb").innerText(), /couldn.t be enhanced just now\. Nothing was charged/);
+    assert.match(await page.locator(".eb").innerText(), /couldn.t be improved just now\. Nothing was charged/);
     await page.getByRole("button", { name: "Start building with my brief · up to 50 credits" }).click();
     assert.deepEqual(await events(), [{ type: "original" }]);
+    await show("unconfirmed");
+    assert.doesNotMatch(await page.locator(".eb").innerText(), /Nothing was charged/, "no 'nothing was charged' while the charge is unconfirmed");
+    assert.match(await page.locator(".eb").innerText(), /still being confirmed/);
     await show("blocked");
     assert.match(await page.locator(".eb").innerText(), /AI is paused right now. Nothing was started or charged./, "the server's own reason is shown");
     assert.equal(await page.getByRole("button", { name: /Start building/ }).count(), 0, "no start that would fail for the same reason");
     await show("loading");
-    await page.getByRole("button", { name: "Start with my original · up to 50 credits" }).click();
+    assert.match(await page.locator(".bq-loading").innerText(), /Improving your brief… \(free\)/);
+    await page.getByRole("button", { name: "Stop" }).click();
+    assert.deepEqual(await events(), [{ type: "stop" }]);
+    pass("Build with my original instead (no refund implied), Cancel, a confirmed failure (nothing charged), an unconfirmed outcome (never 'nothing was charged'), a blocking refusal (its reason, no start) and Stop each do one thing");
+
+    // The explicit choice: nothing is sent until the client picks; improving is labelled free beside building now.
+    await show("offer");
+    assert.match(await page.locator(".eb").innerText(), /Improving your brief is free and starts nothing paid/);
+    await page.getByRole("button", { name: "Improve my brief first · free" }).click();
+    assert.deepEqual(await events(), [{ type: "improve" }]);
+    await show("offer");
+    await page.getByRole("button", { name: "Build with my brief · up to 50 credits" }).click();
     assert.deepEqual(await events(), [{ type: "original" }]);
-    pass("Start with my original (with its maximum), Cancel, the failure state (fail open, nothing charged), a blocking refusal (its reason, no start) and the loading skip each do one thing");
+    await show("checking");
+    assert.match(await page.locator(".eb").innerText(), /reply was lost[\s\S]*will not be run again/);
+    await page.getByRole("button", { name: "Check again" }).click();
+    assert.deepEqual(await events(), [{ type: "check" }]);
+    pass("the offer (build now, or 'Improve my brief first · free') and the lost-reply state (check again; never re-run) each do one thing");
 
     // Phone widths: nothing overflows, actions stay at least 44 px tall.
     for (const width of [320, 375]) {
       await page.setViewportSize({ width, height: 800 });
-      for (const [kind, ids] of [["questions", ["sections"]], ["questions", ["colour"]], ["ready"], ["failed"]]) {
+      for (const [kind, ids] of [["questions", ["sections"]], ["questions", ["colour"]], ["ready"], ["failed"], ["offer"], ["checking"]]) {
         await show(kind, ids);
         const metrics = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, width: innerWidth,
           small: [...document.querySelectorAll(".eb-actions button")].filter(button => button.getBoundingClientRect().height < 44).map(button => button.textContent) }));

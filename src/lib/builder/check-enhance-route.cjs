@@ -1,134 +1,170 @@
-/* eslint-disable @typescript-eslint/no-require-imports -- Behavioural checks for POST /api/build/enhance (free prompt help): the route runs with its cloud, credit, capacity and model modules replaced by recording fakes, so its refusals, holds and releases are observed, not read from the source. Offline, no network. */
-const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), Module = require("node:module"), assert = require("node:assert/strict");
-const src = path.join(__dirname, "..", "..");
-const routeFile = path.join(src, "app", "api", "build", "enhance", "route.ts");
+/* eslint-disable @typescript-eslint/no-require-imports -- Behavioural checks for /api/build/enhance (optional, free prompt help) with its durable action store
+ * (an in-memory model of the SQL; check-enhance-durable.cjs also runs against the real SQL). The route runs with authentication, capacity and the
+ * provider replaced by recording fakes, so refusals, holds, Stop, recovery and isolation are observed, not read from the source. Offline, no network. */
+const assert = require("node:assert/strict"), { randomUUID } = require("node:crypto");
+const { memoryStore, provider, loadRoute, offlineEnvironment, client } = require("./enhance-route-fixture.cjs");
 
-// Recording fakes for the route's server dependencies; every other module is the real one.
-const calls = [];
-const state = {};
-function reset(overrides = {}) {
-  calls.length = 0;
-  Object.assign(state, { capacity: null, reserve: null, release: null, enhanced: "ok", role: "owner", kind: "website", ...overrides });
-}
-class RequestError extends Error { constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; } }
-const fakes = {
-  "@/lib/server/http": {
-    RequestError,
-    sameOrigin: () => undefined,
-    boundedJson: async request => request.json(),
-    apiError: error => error instanceof RequestError
-      ? Response.json({ error: { code: error.code, message: error.message } }, { status: error.status })
-      : Response.json({ error: { code: "REQUEST_FAILED", message: String(error?.message ?? error) } }, { status: 500 }),
-  },
-  "@/lib/cloud/server": {
-    validId: () => undefined, databaseError: error => { if (error) throw error; },
-    cloudContext: async () => ({ user: { id: "u1" }, workspace: { role: state.role }, client: { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: "a1", kind: state.kind, title: "Fixture" }, error: null }) }) }) }) }) } }),
-  },
-  "@/lib/credits/server": {
-    HOLD_LIFETIME_MS: 15 * 60_000,
-    reserveCredits: async (user, amount, reference) => { calls.push(["reserve", amount]); if (state.reserve) throw state.reserve; return { userId: user, reference, amount, exempt: false, reservedAt: Date.now() }; },
-    releaseRun: async (hold, measured, reason) => { calls.push(["release", reason]); if (state.release) throw state.release; },
-    settleRun: async () => { calls.push(["settle"]); return { outcome: "settled", charged: 1 }; },
-  },
-  "@/lib/ai/live-run": {
-    CLOCK_SKEW_MS: 1000, SETTLEMENT_WINDOW_MS: 60_000, databaseGate: () => ({ check: async () => undefined }),
-    requireProviderCapacity: async () => { calls.push(["capacity"]); if (state.capacity) throw state.capacity; },
-  },
-  "@/lib/ai/model-check": { requirePricedModel: () => undefined },
-  "@/lib/builder/website-run": { logAiStop: () => { calls.push(["stop"]); return null; } },
-  "@/lib/builder/brief-enhancer": {
-    ENHANCER_MODEL: "claude-haiku-5-5",
-    enhanceBrief: async input => { calls.push(["enhance", input.mode]); if (state.enhanced === "throw") throw new Error("provider"); if (state.enhanced === null) { input.onReply?.('{"business":"SECRET-CLIENT-TEXT"', "max_tokens"); return null; } return briefFixture; },
-    unusableReason: text => (text.endsWith("}") ? "fields" : "invalid JSON"),
-  },
-};
-const briefFixture = {
-  business: "A bakery.", workingName: null, goal: "Sell bread.", primaryAction: { label: "Pre-order", kind: "buy" }, audience: "Locals.",
-  sections: [{ name: "Bakes", anchor: "bakes", purpose: "The bread.", include: [] }], tone: "loud", toneWhy: "Food.",
-  imagery: { plan: "illustration", notes: "Drawn loaves.", textInImage: null }, factsGiven: [], factsMissing: [], conflicts: [], constraints: [], answersUsed: [],
-};
-const load = Module._load;
-Module._load = function(name, parent, main) {
-  if (name === "server-only") return {};
-  if (parent?.filename === routeFile && fakes[name]) return fakes[name];
-  if (name.startsWith("@/")) return load.call(this, path.join(src, `${name.slice(2)}.ts`), parent, main);
-  return load.call(this, name, parent, main);
-};
-require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
-globalThis.fetch = async () => { throw new Error("Network forbidden"); };
-process.env.MAKEBORNE_LIVE_BUILDER_ENABLED = "true";
-process.env.ANTHROPIC_API_KEY = "sk-offline-never-sent";
-const { POST } = require(routeFile);
-const { ENHANCER_CREDITS } = require("./enhanced-brief.ts");
-
-const body = brief => ({ workspaceId: "00000000-0000-4000-8000-000000000001", artifactId: "00000000-0000-4000-8000-000000000002", brief, original: brief });
-const post = brief => POST(new Request("http://127.0.0.1:3000/api/build/enhance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body(brief)) }));
+offlineEnvironment();
+const ids = { user: randomUUID(), other: randomUUID(), reviewer: randomUUID(), rich: randomUUID(), workspace: randomUUID(), artifact: randomUUID(), deck: randomUUID(), otherWorkspace: randomUUID(), otherArtifact: randomUUID() };
+const store = memoryStore();
+store.seed({ owner: ids.user, workspace: ids.workspace, artifact: ids.artifact, credits: 10, members: { [ids.other]: "editor", [ids.reviewer]: "reviewer", [ids.rich]: "editor" }, unlimited: [ids.rich] });
+store.seed({ owner: ids.other, workspace: ids.otherWorkspace, artifact: ids.otherArtifact, members: { [ids.user]: "editor" } });
+store.state.artifacts.set(ids.deck, { workspace: ids.workspace, kind: "presentation" });
+const p = provider();
+const context = { user: ids.user, contexts: [], roles: { [`${ids.reviewer}:${ids.workspace}`]: "reviewer" },
+  artifacts: { [ids.artifact]: { workspace: ids.workspace, kind: "website" }, [ids.deck]: { workspace: ids.workspace, kind: "presentation" }, [ids.otherArtifact]: { workspace: ids.otherWorkspace, kind: "website" } } };
+const holder = { route: loadRoute({ store, provider: p, context }) };
+const api = client(holder, { workspace: ids.workspace, artifact: ids.artifact });
 const short = "Website for my bakery", detailed = "word ".repeat(80).trim();
+const as = async (user, fn) => { const previous = context.user; context.user = user; try { return await fn(); } finally { context.user = previous; } };
+const quiet = async fn => { const logged = [], error = console.error; console.error = line => logged.push(String(line)); try { return { value: await fn(), logged }; } finally { console.error = error; } };
+const claims = () => store.state.rpcLog.filter(name => name === "makeborne_brief_enhance_claim").length;
+const waitFor = async test => { for (let i = 0; i < 400 && !test(); i++) await new Promise(resolve => setTimeout(resolve, 5)); assert.ok(test(), "timed out"); };
 
 let passed = 0;
-async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}`); }
+async function check(name, fn) { p.behaviour = "ok"; p.during = null; context.capacityError = null; await fn(); passed++; console.log(`PASS ${name}`); }
 
 (async () => {
-  await check("a detailed brief is analysed (never rewritten) inside a one-credit hold that is released, never settled; the reply says charged 0", async () => {
-    reset();
-    const response = await post(detailed), value = await response.json();
-    assert.equal(response.status, 200);
-    assert.equal(value.mode, "analyze"); assert.equal(value.charged, 0);
-    assert.deepEqual(calls, [["capacity"], ["reserve", ENHANCER_CREDITS], ["enhance", "analyze"], ["release", "brief_analysis"]]);
+  await check("a detailed brief is read (analyze), a short one improved (enhance): one held credit, released and verified, never settled; charged 0 from the durable record", async () => {
+    for (const [brief, mode] of [[detailed, "analyze"], [short, "enhance"]]) {
+      const key = randomUUID(), before = store.available(ids.user), calls = p.calls;
+      const reply = await api.post(key, brief);
+      assert.equal(reply.status, 200); assert.equal(reply.body.mode, mode); assert.equal(reply.body.charged, 0);
+      assert.equal(reply.body.action.status, "completed"); assert.equal(reply.body.action.billing, "released"); assert.equal(reply.body.action.chargedCredits, 0); assert.equal(reply.body.action.holdCredits, 1);
+      assert.equal(p.calls - calls, 1); assert.equal(store.available(ids.user), before);
+      assert.equal(store.action(key).hold, 1); assert.equal(store.releases(store.action(key).reference), 1);
+      assert.ok(!store.state.outcomes.some(item => item.reference === store.action(key).reference && item.outcome === "settled"), "never settled");
+      assert.ok(!("reference" in reply.body.action) && !("id" in reply.body.action) && !("fence" in reply.body.action), "no internal identifiers in the reply");
+    }
   });
-  await check("a short brief is enhanced; still released and never charged", async () => {
-    reset();
-    const value = await (await post(short)).json();
-    assert.equal(value.mode, "enhance"); assert.equal(value.charged, 0);
-    assert.ok(!calls.some(([kind]) => kind === "settle"));
-    assert.deepEqual(calls.at(-1), ["release", "brief_enhance"]);
-  });
-  await check("an unusable or failed reading releases the hold and says nothing was charged", async () => {
-    for (const enhanced of [null, "throw"]) {
-      reset({ enhanced });
-      const logged = [], error = console.error;
-      console.error = line => logged.push(String(line));
-      let response;
-      try { response = await post(short); } finally { console.error = error; }
-      // Every failure is logged with its shape or cause, never the client's text.
-      assert.ok(logged.some(line => enhanced === null ? /brief_enhance_unusable/.test(line) && /"stop":"max_tokens"/.test(line) && /invalid JSON/.test(line) : /brief_enhance_failed/.test(line) && /Error: provider/.test(line)), logged.join("\n"));
+  await check("an unusable or failed reading: 503 ENHANCE_UNAVAILABLE, 'Nothing was charged' only because the release was verified; logged without the client's text", async () => {
+    for (const behaviour of ["null", "throw"]) {
+      p.behaviour = behaviour;
+      const key = randomUUID();
+      const { value: reply, logged } = await quiet(() => api.post(key));
+      assert.equal(reply.status, 503); assert.equal(reply.body.error.code, "ENHANCE_UNAVAILABLE"); assert.match(reply.body.error.message, /Nothing was charged/);
+      assert.equal(reply.body.action.chargedCredits, 0); assert.equal(reply.body.action.billing, "released");
+      assert.ok(logged.some(line => behaviour === "null" ? /brief_enhance_unusable/.test(line) && /invalid JSON/.test(line) : /brief_enhance_failed/.test(line) && /provider overloaded/.test(line)), logged.join("\n"));
       assert.ok(!logged.some(line => /SECRET-CLIENT-TEXT/.test(line)), "no reply content in the log");
-      const value = await response.json();
-      assert.equal(response.status, 503); assert.equal(value.error.code, "ENHANCE_UNAVAILABLE"); assert.match(value.error.message, /Nothing was charged/);
-      assert.deepEqual(calls.at(-1), ["release", "brief_enhance_unusable"]);
     }
   });
-  await check("no room for the hold (no credits, or the monthly limit): the reading does not run and the reply says why, plainly", async () => {
-    for (const [code, words] of [["INSUFFICIENT_CREDITS", /no credits left[\s\S]*add credits/], ["CREDIT_USAGE_LIMIT", /monthly credit usage limit[\s\S]*Billing/]]) {
-      reset({ reserve: new RequestError(code, "raw", 402) });
-      const response = await post(detailed), value = await response.json();
-      assert.equal(response.status, 402); assert.equal(value.error.code, code);
-      assert.match(value.error.message, /wasn't read: reading it is free/); assert.match(value.error.message, words);
-      assert.ok(!calls.some(([kind]) => kind === "enhance" || kind === "release"), "no provider call and nothing to release");
-    }
-  });
-  await check("a paused provider or a reached daily cap refuses before any hold, with the server's own code", async () => {
-    reset({ capacity: new RequestError("AI_PAUSED", "AI is paused.", 503) });
-    const value = await (await post(short)).json();
-    assert.equal(value.error.code, "AI_PAUSED");
-    assert.deepEqual(calls, [["capacity"]]);
-  });
-  await check("a failed release is logged, not turned into a failed reading (the database reclaims the hold unspent)", async () => {
-    reset({ release: new Error("db down") });
-    const logged = [], error = console.error;
-    console.error = line => logged.push(String(line));
+  await check("no room for the hold (no credits): 402 with the reason, no provider call and no action left behind", async () => {
+    const user = store.state.users.get(ids.user), saved = user.available;
+    user.available = 0;
+    const key = randomUUID(), calls = p.calls;
     try {
-      const response = await post(detailed);
-      assert.equal(response.status, 200);
-      assert.ok(logged.some(line => /credit_release_failed/.test(line) && /brief_analysis/.test(line)), logged.join("\n"));
-    } finally { console.error = error; }
+      const reply = await api.post(key);
+      assert.equal(reply.status, 402); assert.equal(reply.body.error.code, "INSUFFICIENT_CREDITS");
+      assert.match(reply.body.error.message, /wasn't improved: improving it is free[\s\S]*no credits left[\s\S]*Nothing was charged/);
+      assert.equal(p.calls, calls); assert.equal(store.action(key), undefined);
+    } finally { user.available = saved; }
   });
-  await check("reviewers and non-website projects are refused before any hold", async () => {
-    reset({ role: "reviewer" });
-    assert.equal((await (await post(short)).json()).error.code, "EDITOR_REQUIRED");
-    reset({ kind: "presentation" });
-    assert.equal((await (await post(short)).json()).error.code, "NOT_FOUND");
-    assert.ok(!calls.some(([kind]) => kind === "reserve"));
+  await check("a paused provider refuses before any claim or hold, with the server's own code", async () => {
+    const { RequestError } = require("../server/http.ts");
+    context.capacityError = () => new RequestError("AI_PAUSED", "AI is paused right now.", 503);
+    const before = claims();
+    const reply = await api.post(randomUUID());
+    assert.equal(reply.body.error.code, "AI_PAUSED"); assert.equal(claims(), before);
   });
-  console.log(`${passed} enhance route checks passed (fakes only, no network).`);
+  await check("reviewers, decks/books and unauthenticated requests are refused before any claim; a missing Idempotency-Key too", async () => {
+    const before = claims(), calls = p.calls;
+    assert.equal((await as(ids.reviewer, () => api.post(randomUUID()))).body.error.code, "EDITOR_REQUIRED");
+    const deck = await holder.route.POST(new Request("http://127.0.0.1:3000/api/build/enhance", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      body: JSON.stringify({ workspaceId: ids.workspace, artifactId: ids.deck, brief: short }) }));
+    assert.equal(deck.status, 404);
+    assert.equal((await as(null, () => api.post(randomUUID()))).status, 401);
+    const keyless = await api.post(undefined);
+    assert.equal(keyless.status, 400); assert.equal(keyless.body.error.code, "IDEMPOTENCY_KEY_REQUIRED");
+    assert.equal(claims(), before); assert.equal(p.calls, calls);
+  });
+  await check("Stop before the request arrived: recorded; the late request never starts (409 ENHANCE_CANCELLED, no hold, no provider call)", async () => {
+    const key = randomUUID(), calls = p.calls, holds = store.holds(ids.user).length;
+    const stopped = await api.stop(key);
+    assert.equal(stopped.body.action.status, "cancelled"); assert.equal(stopped.body.action.chargedCredits, 0); assert.equal(stopped.body.action.billing, "none");
+    const late = await api.post(key);
+    assert.equal(late.status, 409); assert.equal(late.body.error.code, "ENHANCE_CANCELLED"); assert.equal(late.body.replayed, true);
+    assert.equal(p.calls, calls); assert.equal(store.holds(ids.user).length, holds);
+  });
+  await check("Stop between the claim and the provider: no provider contact; the hold is returned (charged 0)", async () => {
+    const key = randomUUID(), calls = p.calls, before = store.available(ids.user);
+    store.after("makeborne_brief_enhance_claim", async () => { await api.stop(key); });
+    const reply = await api.post(key);
+    assert.equal(reply.status, 409); assert.equal(reply.body.action.status, "cancelled"); assert.equal(reply.body.action.chargedCredits, 0);
+    assert.equal(p.calls, calls, "the provider was never contacted"); assert.equal(store.available(ids.user), before);
+  });
+  await check("Stop during the provider's work: the durable Stop interrupts it; cancelled, no result, charged 0; a disconnect alone would not have stopped it", async () => {
+    const key = randomUUID(), before = store.available(ids.user);
+    p.behaviour = "wait";
+    const pending = api.post(key);
+    await waitFor(() => p.waiting.length > 0);
+    const stopping = await api.stop(key);
+    assert.equal(stopping.status, 202); assert.equal(stopping.body.action.cancelRequested, true);
+    const reply = await pending;
+    p.waiting.length = 0;
+    assert.equal(reply.status, 409); assert.equal(reply.body.error.code, "ENHANCE_CANCELLED"); assert.equal(reply.body.text, undefined);
+    assert.equal(reply.body.action.chargedCredits, 0); assert.equal(store.available(ids.user), before);
+    assert.equal(store.releases(store.action(key).reference), 1);
+  });
+  await check("a browser disconnect is not a Stop: the reading finishes and its result is recoverable by key", async () => {
+    const key = randomUUID(), disconnect = new AbortController();
+    p.behaviour = "wait";
+    const pending = holder.route.POST(new Request("http://127.0.0.1:3000/api/build/enhance", { method: "POST", signal: disconnect.signal,
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify({ workspaceId: ids.workspace, artifactId: ids.artifact, brief: short }) }));
+    await waitFor(() => p.waiting.length > 0);
+    disconnect.abort();
+    await new Promise(resolve => setTimeout(resolve, 60));
+    p.behaviour = "ok"; p.release();
+    await pending;
+    const status = await api.get(key);
+    assert.equal(status.body.action.status, "completed"); assert.match(status.body.text, /Ovenbird/);
+  });
+  await check("Stop after completion keeps the result and its receipt", async () => {
+    const key = randomUUID();
+    assert.equal((await api.post(key)).status, 200);
+    const stopped = await api.stop(key);
+    assert.equal(stopped.status, 200); assert.equal(stopped.body.action.status, "completed"); assert.match(stopped.body.text, /Ovenbird/); assert.equal(stopped.body.charged, 0);
+  });
+  await check("status endpoint: authenticated, scoped to the account and project; reviewers refused; unknown keys are not found; reading never runs anything", async () => {
+    const key = randomUUID();
+    await api.post(key);
+    const calls = p.calls;
+    const mine = await api.get(key);
+    assert.equal(mine.status, 200); assert.equal(mine.body.action.status, "completed"); assert.match(mine.body.text, /Ovenbird/);
+    assert.equal((await as(ids.other, () => api.get(key))).status, 404, "another account in the same workspace cannot read it");
+    assert.equal((await api.get(key, { workspaceId: ids.otherWorkspace, artifactId: ids.otherArtifact })).status, 404, "nor through another project");
+    assert.equal((await as(ids.reviewer, () => api.get(key))).body.error.code, "EDITOR_REQUIRED");
+    assert.equal((await as(null, () => api.get(key))).status, 401);
+    assert.equal((await as(ids.other, () => api.stop(key))).body.action.status, "cancelled", "another account's Stop is its own (empty) action");
+    assert.equal((await api.get(key)).body.action.status, "completed", "and leaves this one untouched");
+    assert.equal((await api.recover(randomUUID())).body.error.code, "ENHANCE_NOT_FOUND");
+    assert.equal((await api.get(randomUUID())).body.error.code, "ENHANCE_NOT_FOUND");
+    assert.equal(p.calls, calls); assert.ok(context.contexts.slice(-3).every(item => item.write === false), "status, Stop and recovery need no paid membership");
+  });
+  await check("a worker that vanished (its outcome could not be saved): the reply says it couldn't be saved; after the lease the hold is returned once (expired, charged 0); no second run", async () => {
+    const key = randomUUID(), before = store.available(ids.user), calls = p.calls;
+    store.fail("makeborne_brief_enhance_record", "before", 1);
+    const { value: reply } = await quiet(() => api.post(key));
+    assert.equal(reply.status, 503); assert.equal(reply.body.error.code, "ENHANCE_STATUS_UNAVAILABLE"); assert.doesNotMatch(reply.body.error.message, /Nothing was charged/);
+    assert.equal((await api.get(key)).body.action.status, "running");
+    assert.equal((await api.post(key)).status, 202, "a retry replays the running action");
+    store.tamper.ageLease(key, 181_000);
+    const expired = await api.get(key);
+    assert.equal(expired.body.action.status, "expired"); assert.equal(expired.body.action.chargedCredits, 0); assert.match(expired.body.error.message, /hold was returned and nothing was charged/);
+    assert.equal(store.available(ids.user), before); assert.equal(store.releases(store.action(key).reference), 1); assert.equal(p.calls - calls, 1);
+  });
+  await check("an unlimited account holds nothing (exempt) and still gets one durable action", async () => {
+    const key = randomUUID();
+    const reply = await as(ids.rich, () => api.post(key));
+    assert.equal(reply.status, 200); assert.equal(reply.body.action.billing, "exempt"); assert.equal(reply.body.action.holdCredits, 0); assert.equal(reply.body.charged, 0);
+    assert.equal((await as(ids.rich, () => api.post(key))).body.replayed, true);
+  });
+  await check("the provider gate is the action's: every provider call in these checks went through it, bounded by the one-credit cap", async () => {
+    assert.ok(store.state.calls.length > 0);
+    for (const call of store.state.calls) {
+      const owner = [...store.state.actions.values()].find(item => item.reference === call.reference);
+      assert.ok(owner && call.bound <= owner.cap, "each call belongs to one action and fits its cap");
+    }
+    assert.ok(store.state.rpcLog.includes("makeborne_brief_enhance_provider_begin"));
+  });
+  console.log(`${passed} enhance route checks passed (durable store model, fakes only, no network).`);
 })().catch(error => { console.error(error); process.exit(1); });

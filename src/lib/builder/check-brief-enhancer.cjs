@@ -95,16 +95,12 @@ const reply = {
     assert.ok(prompt.length < 12_500, "the brief is truncated");
   });
 
-  await check("prompt help is free: one-credit hold only (its refusals, release and no-charge are checked behaviourally in check-enhance-route.cjs); detailed briefs are analysed, not rewritten", () => {
+  await check("prompt help is free and optional: a one-credit hold only (behaviour: check-enhance-route.cjs, check-enhance-durable.cjs; the explicit opt-in and the direct build: scripts/check-enhance-flow-browser.cjs)", () => {
     assert.equal(ENHANCER_CREDITS, 1);
     const client = fs.readFileSync(path.join(src, "components", "live-builder.tsx"), "utf8");
     assert.match(client, /const shownMaximum = ceiling;/, "the shown maximum is the build's own ceiling (prompt help is free)");
-    assert.match(client, /\/api\/build\/enhance/);
-    // Only short briefs are enhanced: detailed ones lost every blind comparison with the enhancement; they get a free analysis instead.
+    // Only short briefs are offered the improvement: detailed ones lost every blind comparison with it, and the reading of detailed briefs did not measurably help (design round 4).
     assert.equal(ENHANCE_MAX_WORDS, 60); assert.ok(shouldEnhance("bakery site") && shouldEnhance("word ".repeat(60)) && !shouldEnhance("word ".repeat(61)) && !shouldEnhance("  "));
-    assert.match(client, /if \(!shouldEnhance\(original\)\) \{[\s\S]{0,400}setAnalyzing\(\{ text, design \}\)/, "a detailed brief is analysed automatically");
-    assert.match(client, /brief: \{ mode: "analysis", text: ready\.text \}/);
-    assert.match(client, /Skip and start/);
   });
 
   await check("analysis of a detailed brief keeps the client's words authoritative and invents nothing", () => {
