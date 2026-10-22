@@ -10,7 +10,7 @@ const { DocumentEditor, DocToolError, emptyDocument } = require("./editor.ts");
 const { DIRECTIONS, DIRECTION_SPECS } = require("./directions.ts");
 const { imageSupport, scrimOpacity, zoneBrightness, RAIL_W, RAIL_WIDE, BAND_H, BAND_CHART_H, SCRIM_TOP } = require("./compose-image.ts");
 const { numeralMark, BADGE_RATIO, BADGE_MIN, BADGE_MAX, FIGURE_RATIO } = require("./design.ts");
-const { POINT_ROWS_STACKED, CALLOUT_VALUE, CALLOUT_CAPTION_MIN, CHART_TEXT_UP } = require("./compose-content.ts");
+const { POINT_ROWS_STACKED, CALLOUT_VALUE, CALLOUT_CAPTION_MIN, CHART_TEXT_UP, BAND_CHART_MIN } = require("./compose-content.ts");
 const { CLOSING_STEPS_STACKED } = require("./compose-title.ts");
 const { imageLuma } = require("./image-luma.ts");
 const { contrast, luminance } = require("./theme.ts");
@@ -96,7 +96,8 @@ const imageOf = (scene, name) => scene.prims.find(prim => prim.k === "image" && 
       const img = imageOf(scene, "band-art"), band = layout === "chart" ? BAND_CHART_H : BAND_H;
       assert.deepEqual([img.y, img.w, img.h], [0, W, band]);
       assert.ok(scene.prims.filter(prim => prim !== img).every(prim => (prim.k === "line" ? Math.min(prim.y1, prim.y2) : prim.y) >= band), `${layout} content overlaps the band`);
-      if (layout === "chart") assert.ok(scene.prims.some(prim => prim.k === "chart" && prim.h >= 180));
+      // Under the band a chart keeps BAND_CHART_MIN of height, or the slide takes the side rail instead.
+      if (layout === "chart") assert.ok(scene.prims.some(prim => prim.k === "chart" && prim.h >= BAND_CHART_MIN));
     }
   });
   await check("image-led lists and charts: badge or figure numerals at heading scale, larger item type that steps down to its minimum, a larger band chart", async () => {

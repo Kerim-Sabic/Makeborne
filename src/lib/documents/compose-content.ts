@@ -5,6 +5,9 @@ import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, he
 import { formatValue } from "./chart-svg";
 import { arrowPath } from "./graphics";
 import { path } from "./scene-kit";
+import { BAND_CHART_H } from "./compose-image";
+/** The least plot height a chart keeps under an image band. */
+export const BAND_CHART_MIN = 260;
 
 /** Points, agenda, numbers, charts, diagrams, comparisons, people, pricing and tables. */
 
@@ -280,6 +283,8 @@ const chartStyle = (ctx: Ctx) => ({ mono: ctx.dir.label.font === "mono", radius:
 function chartPrim(ctx: Ctx, slide: Slide, box: { x: number; y: number; w: number; h: number }, textScale = 1) {
   // Below this a chart's bars and labels no longer read (e.g. a long standfirst over a narrowed text zone).
   if (box.h < 180 || box.w < 320) ctx.issues.push("the chart has too little room");
+  // Under an image band the plot must stay tall, or the side rail (a full-height chart) is the better placement.
+  else if ((ctx.frame?.y ?? 0) >= BAND_CHART_H && box.h < BAND_CHART_MIN) ctx.issues.push("the chart has too little room under the image band");
   ctx.prims.push({ k: "chart", ...box, chart: slide.chart!, colors: chartColors(ctx), style: { ...chartStyle(ctx), ...(textScale !== 1 ? { text: textScale } : {}) } });
 }
 const focusOf = (slide: Slide) => {
@@ -294,8 +299,9 @@ function source(ctx: Ctx, slide: Slide, x: number, y: number, w: number) {
 /** CHART CALLOUT SIZES. The annotated chart's headline is set 1.12× like points and numbers; its statistic up to
  * CALLOUT_VALUE px (on one line), its caption at CALLOUT_CAPTION px (in steps to five lines, then down to CALLOUT_CAPTION_MIN), and the
  * chart's own labels CHART_TEXT_UP× their base sizes in the preview, PDF and PPTX alike. */
-export const CALLOUT_VALUE = 132, CALLOUT_CAPTION = 38, CALLOUT_CAPTION_MIN = 20, CHART_TEXT_UP = 1.25;
-const CALLOUT_CAPTIONS = [CALLOUT_CAPTION, 34, 30, 26, 22];
+export const CALLOUT_VALUE = 132, CALLOUT_CAPTION = 38, CALLOUT_CAPTION_MIN = 18, CHART_TEXT_UP = 1.25;
+// A caption longer than five lines even at 22 px is set as before: from 30 px, fitted to the height left.
+const CALLOUT_CAPTIONS = [CALLOUT_CAPTION, 34, 30, 26, 22], CALLOUT_CAPTION_LONG = 30;
 export function chartAnnotated(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, chart = slide.chart!, f = focusOf(slide), size = headlineUp(ctx);
   const cw = Math.round(a.w * 0.62), px = a.x + cw + 48, pw = a.r - px;
@@ -306,14 +312,16 @@ export function chartAnnotated(ctx: Ctx, slide: Slide) {
   const beside = ctx.dir.header !== "centered" && inColumn.size >= across.size * 0.9 && inColumn.lines <= across.lines;
   const top = header(ctx, slide, { size, ...(beside ? { titleW: cw } : {}) }) + 24;
   const big = cw >= 560 && a.b - top >= 240;
-  chartPrim(ctx, slide, { x: a.x, y: top, w: cw, h: a.b - top }, big ? CHART_TEXT_UP : 1);
-  // The callout ends with the chart (the source line beneath it); it starts level with the chart when it fits, else higher.
-  const end = chart.source ? a.b - 30 : a.b, ceiling = beside ? a.y + 56 : top;
+  // The source line goes under the callout when it fits there on one line (the plot then reaches the bottom), else under the chart.
+  const sourceBeside = !!chart.source && textWidth(ctx, chart.source, ctx.dir.label.font === "mono" ? { font: "mono", size: 12 } : { size: 13, italic: true }) <= pw;
+  chartPrim(ctx, slide, { x: a.x, y: top, w: cw, h: (chart.source && !sourceBeside ? a.b - 22 : a.b) - top }, big ? CHART_TEXT_UP : 1);
+  // The callout ends with the chart; it starts level with the chart when it fits, else higher.
+  const end = sourceBeside ? a.b - 30 : a.b, ceiling = beside ? a.y + 56 : top;
   const single = chart.type !== "donut" && chart.series.length === 1;
   const lab = single ? Math.ceil(labelStyle(ctx).size * 1.3) + 24 : 0;
   // A short caption is set large; a longer one steps down until it takes at most five lines.
   const captionAt = (px_: number) => ({ ...titleStyle(ctx, px_, { lh: 1.16 }), upper: false });
-  const captionSize = CALLOUT_CAPTIONS.find(step => !slide.body || measure(ctx, slide.body, pw, captionAt(step)) <= Math.ceil(scaled(ctx, step) * 1.16 * 5)) ?? CALLOUT_CAPTIONS[CALLOUT_CAPTIONS.length - 1];
+  const captionSize = CALLOUT_CAPTIONS.find(step => !slide.body || measure(ctx, slide.body, pw, captionAt(step)) <= Math.ceil(scaled(ctx, step) * 1.16 * 5)) ?? CALLOUT_CAPTION_LONG;
   const caption = captionAt(captionSize);
   // The statistic gives way before the caption reaches its minimum.
   const room = end - ceiling - 32 - lab - (slide.body ? measure(ctx, slide.body, pw, { ...caption, size: scaled(ctx, CALLOUT_CAPTION_MIN) }) : 0);
@@ -332,7 +340,7 @@ export function chartAnnotated(ctx: Ctx, slide: Slide) {
   }
   if (slide.body) text(ctx, slide.body, { x: px, y, w: pw }, { ...caption, maxH: end - y, min: CALLOUT_CAPTION_MIN });
   else notes.forEach(note => { y += text(ctx, note, { x: px, y, w: pw }, bodyStyle(ctx, { size: 22, color: c.ink, maxH: Math.min(132, end - y), min: 15 })) + 14; });
-  source(ctx, slide, px, a.b - 14, pw);
+  if (sourceBeside) source(ctx, slide, px, a.b - 14, pw); else source(ctx, slide, a.x, a.b - 14, cw);
   footer(ctx);
 }
 
