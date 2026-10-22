@@ -79,8 +79,12 @@ export function coverCentered(ctx: Ctx, slide: Slide, closing = false) {
   const r = 30;
   if (ctx.dir.id === "organic") { path(ctx, archPath({ x: W / 2 - 26, y: 140, w: 52, h: 70 }), { fill: ctx.c.signal }); hline(ctx, W / 2 - 60, W / 2 + 60, 210, c.ink, 1.5); }
   else if (ctx.dir.id === "luxury" || ctx.dir.id === "editorial") {
-    ellipse(ctx, { x: W / 2 - r, y: 150, w: r * 2, h: r * 2, stroke: c.accent, strokeWidth: 1 });
-    path(ctx, [{ op: "M", x: W / 2, y: 172 }, { op: "L", x: W / 2 + 8, y: 180 }, { op: "L", x: W / 2, y: 188 }, { op: "L", x: W / 2 - 8, y: 180 }, { op: "Z" }], { fill: c.accent });
+    // The emblem is chosen by the deck's seed: a ringed diamond, a pair of rules with a diamond, or three rings.
+    const emblem = ctx.seed % 3;
+    if (emblem === 0) ellipse(ctx, { x: W / 2 - r, y: 150, w: r * 2, h: r * 2, stroke: c.accent, strokeWidth: 1 });
+    if (emblem === 1) { hline(ctx, W / 2 - 90, W / 2 - 20, 180, c.accent, 1); hline(ctx, W / 2 + 20, W / 2 + 90, 180, c.accent, 1); }
+    if (emblem === 2) [-34, 0, 34].forEach(dx => ellipse(ctx, { x: W / 2 + dx - 12, y: 168, w: 24, h: 24, stroke: c.accent, strokeWidth: 1 }));
+    else path(ctx, [{ op: "M", x: W / 2, y: 172 }, { op: "L", x: W / 2 + 8, y: 180 }, { op: "L", x: W / 2, y: 188 }, { op: "L", x: W / 2 - 8, y: 180 }, { op: "Z" }], { fill: c.accent });
   } else rect(ctx, { x: W / 2 - 24, y: 176, w: 48, h: 4, fill: c.signal });
   stack(ctx, { title: slide.title, size: closing ? ctx.dir.sizes.cover * 0.8 : ctx.dir.sizes.cover, min: 40, sub, subW: 760, align: "center" }, { x: 170, y: 232, w: W - 340, h: 330 }, "middle");
   if (ctx.deck.author && !closing) label(ctx, ctx.deck.author, { x: 240, y: 604, w: 800 }, { align: "center" });
@@ -120,10 +124,11 @@ export function coverGlow(ctx: Ctx, slide: Slide, closing = false) {
   const a = area(ctx), c = ctx.c, p = ctx.theme.palette, sub = subOf(slide);
   glowField(ctx, { x: 480, y: 0, w: 800, h: H }, [p.accent, p.accent2]);
   dotField(ctx, { x: 560, y: 40, w: 680, h: 640 }, c.ink, 0.3, true, 22);
-  const r = 230, cx = 930, cy = 330;
+  // The orbit's centre, size and the marker's angle follow the deck's seed.
+  const r = 200 + (ctx.seed % 4) * 15, cx = 880 + ((ctx.seed >> 2) % 5) * 22, cy = 300 + ((ctx.seed >> 5) % 4) * 18, angle = -Math.PI / 4 + ((ctx.seed >> 7) % 6) * 0.45;
   ellipse(ctx, { x: cx - r, y: cy - r, w: r * 2, h: r * 2, stroke: c.rule, strokeWidth: 1 });
   ellipse(ctx, { x: cx - r * 0.6, y: cy - r * 0.6, w: r * 1.2, h: r * 1.2, stroke: c.rule, strokeWidth: 1 });
-  ellipse(ctx, { x: cx + r * 0.7 - 5, y: cy - r * 0.72 - 5, w: 10, h: 10, fill: c.accent });
+  ellipse(ctx, { x: cx + r * Math.cos(angle) - 5, y: cy + r * Math.sin(angle) - 5, w: 10, h: 10, fill: c.accent });
   metaRow(ctx, slide, a.y, false);
   stack(ctx, { title: slide.title, size: closing ? ctx.dir.sizes.cover * 0.78 : ctx.dir.sizes.cover, min: 40, sub }, { x: a.x, y: a.y + 80, w: 760, h: H - 150 - (a.y + 80) }, closing ? "middle" : "bottom");
   hline(ctx, a.x, a.r, H - 84, c.rule, 1);
@@ -141,22 +146,25 @@ export function coverBoxed(ctx: Ctx, slide: Slide, closing = false) {
   }
   const right = ctx.deck.author || (closing ? "" : deckLabel(ctx, slide));
   if (right) label(ctx, right, { x: W - 48 - 520, y: 52, w: 520 }, { align: "right" });
-  const bandTop = 560;
+  // The ruled band's height and the column split follow the deck's seed.
+  const bandTop = 540 + (ctx.seed % 3) * 20, split = 820 + ((ctx.seed >> 3) % 4) * 40;
   hline(ctx, x0, x1, bandTop, c.ink, bw);
-  vline(ctx, 880, bandTop, H - x0, c.ink, bw);
+  vline(ctx, split, bandTop, H - x0, c.ink, bw);
   display(ctx, slide.title, { x: 48, y: 120, w: W - 96, h: bandTop - 120 - 24 }, closing ? ctx.dir.sizes.cover * 0.8 : ctx.dir.sizes.cover, { min: 44, valign: "bottom" });
-  if (sub) text(ctx, sub, { x: 48, y: bandTop + 22, w: 800, h: H - x0 - bandTop - 38 }, { ...leadStyle(ctx), size: 22, min: 16, maxH: H - x0 - bandTop - 38, color: c.ink });
-  rect(ctx, { x: 880 + bw, y: bandTop + bw / 2, w: x1 - 880 - bw - bw / 2, h: H - x0 - bandTop - bw, fill: c.signal });
-  path(ctx, arrowPath(1010, bandTop + 10, 110, 45), { fill: readableOn(c.signal, c.ink, c.bg) });
+  if (sub) text(ctx, sub, { x: 48, y: bandTop + 22, w: split - 80, h: H - x0 - bandTop - 38 }, { ...leadStyle(ctx), size: 22, min: 16, maxH: H - x0 - bandTop - 38, color: c.ink });
+  rect(ctx, { x: split + bw, y: bandTop + bw / 2, w: x1 - split - bw - bw / 2, h: H - x0 - bandTop - bw, fill: c.signal });
+  path(ctx, arrowPath(split + (x1 - split) / 2 - 55, bandTop + 10, 110, 45), { fill: readableOn(c.signal, c.ink, c.bg) });
 }
 
 export function coverArch(ctx: Ctx, slide: Slide, closing = false) {
   const a = area(ctx), c = ctx.c, p = ctx.theme.palette, sub = subOf(slide), gx = Math.round(W * 0.56);
   if (ctx.dir.id === "luxury") {
-    const aw = 300, ah = 470, ax = gx + (W - gx - aw) / 2, ay = (H - ah) / 2 + 10;
+    // Width, height and the inner mark follow the deck's seed, so two luxury decks do not share one window.
+    const v = ctx.seed % 4, aw = [300, 260, 340, 280][v], ah = [470, 500, 440, 480][v], ax = gx + (W - gx - aw) / 2, ay = (H - ah) / 2 + 10;
     path(ctx, archPath({ x: ax, y: ay, w: aw, h: ah }), { stroke: c.accent, strokeWidth: 1 });
     path(ctx, archPath({ x: ax + 22, y: ay + 22, w: aw - 44, h: ah - 22 }), { fill: c.surface });
-    ellipse(ctx, { x: ax + aw / 2 - 40, y: ay + 110, w: 80, h: 80, stroke: c.accent, strokeWidth: 1 });
+    if (v % 2) hline(ctx, ax + 60, ax + aw - 60, ay + 150, c.accent, 1);
+    else ellipse(ctx, { x: ax + aw / 2 - 40, y: ay + 110 + v * 20, w: 80, h: 80, stroke: c.accent, strokeWidth: 1 });
     hline(ctx, ax - 60, ax + aw + 60, ay + ah, c.rule, 1);
   } else graphic(ctx, "arches", { x: gx, y: 70, w: W - gx - 40, h: H - 150 });
   void p;

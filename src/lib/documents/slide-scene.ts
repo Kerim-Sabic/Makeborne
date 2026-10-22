@@ -140,7 +140,9 @@ function choose(deck: DeckLike, slide: Slide, index: number, total: number, prev
     return best();
   }
   // The direction's signature composition comes first; later slides of the same layout cycle through the rest.
-  const start = options.length ? roleCount % options.length : 0;
+  // A cover starts from a composition picked by the deck's own title, so unrelated decks in one direction do not open alike.
+  const shift = slide.layout === "cover" ? hash(`${deck.title}|${directionOf(deck.theme).id}`) % 7 : 0;
+  const start = options.length ? (roleCount + shift) % options.length : 0;
   const order = options.map((_, i) => options[(start + i) % options.length]);
   // Then repeats the rhythm rules allowed, then any other composition of the layout the copy fits; a placement is exhausted before the next is tried.
   const others = requiresImage ? [] : (COMPOSITIONS[slide.layout] as readonly CompositionId[]).filter(id => id !== "cover-image" && !order.includes(id) && (REGISTRY[id].accepts?.(slide, context(deck, slide, index, total)) ?? true));

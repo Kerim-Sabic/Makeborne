@@ -91,5 +91,16 @@ const textOf = xml => [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(match => mat
       assert.ok(!scene.prims.some(prim => prim.k === "art"), `${direction}: no decorative artwork competes with the ask`);
     }
   });
+  await check("unrelated decks in one direction do not open with the same cover art", () => {
+    const titles = ["Coastal homes, powered by second-life batteries", "Keep the Wheels Turning", "Harbour Light Ferries", "A Quieter Kitchen", "Night Market Lanterns", "The Repair Table"];
+    for (const direction of DIRECTIONS) {
+      const art = new Set(titles.map(title => {
+        const deck = deckOf(direction, [{ id: "cover", layout: "cover", tone: "dark", title, subtitle: "Season review", notes: "n" }], { title });
+        const scene = composeSlide(deck, deck.slides[0], 0, 1);
+        return `${scene.composition}|${JSON.stringify(scene.prims.filter(prim => prim.k !== "text").map(prim => [prim.k, Math.round(prim.x ?? prim.x1), Math.round(prim.y ?? prim.y1)]))}`;
+      }));
+      assert.ok(art.size >= 3, `${direction}: only ${art.size} distinct covers for ${titles.length} decks`);
+    }
+  });
   console.log(`\n${count} deck text checks passed.`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

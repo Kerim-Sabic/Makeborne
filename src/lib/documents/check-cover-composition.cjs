@@ -35,8 +35,8 @@ const copy = value => structuredClone(value);
     assert.equal(hash(dom(bookHtml(book, {}))), "17a7ef025d71b8621e2162c22fe13b3062596f6d5636e41bd07b6426758ee61e");
     assert.equal(hash(dom(bookHtml(book, {}, "print"))), "70e2e3e9a3805c3b9981614329280c2d405b56d52f6596e8ea71b025340f12cd");
     // Re-pinned 2026-10-22 (deck) for explicit balanced title breaks, set in the scene and shared by HTML and PPTX
-    // (titles now carry explicit line breaks and the CSS text-wrap: balance is gone), and small accent text deepened to 4.5:1.
-    assert.equal(hash(dom(deckHtml(deck, {}))), "3305ceecdf1f6f03e630c7cd5a6fe887d35e0d36c51cd3142cd5bb3f63317b08");
+    // (titles now carry explicit line breaks and the CSS text-wrap: balance is gone), and small accent text deepened to 4.5:1, and seeded cover art (the cover starts from a composition picked by the deck title; emblems, orbits, arches, stripes and ruled bands vary by seed).
+    assert.equal(hash(dom(deckHtml(deck, {}))), "17a76c210d466a66834d8c69af8e4cdb80b94ace46edc92404be9250106f078f");
     // Re-pinned 2026-10-21 for the ordered-marker gutter only. Removing that
     // exact CSS rule/comment reproduces both previous full hashes; DOM stays
     // unchanged. check-book-list-markers.cjs reproduces the old clipping.
@@ -44,8 +44,8 @@ const copy = value => structuredClone(value);
     // rows, run-in subheads, checklists, sidebar lists and contents page numbers. The DOM hashes above are unchanged.
     assert.equal(hash(bookHtml(book, {})), "f5f270e37976e9ea4733ba295d25863be97ab12e86be9bb26612511b3d3b549a");
     assert.equal(hash(bookHtml(book, {}, "print")), "28389efce40ff950b66c1e5f2ca199ded1d051a1e3928d451640229d83f60460");
-    assert.equal(hash(deckHtml(deck, {})), "db327ef8f2c8b5cf51142731bd9babc89606ab46e346f5919035c59a2b6a407b");
-    assert.equal(hash(JSON.stringify(deck.slides.map((s, i) => composeSlide(deck, s, i, 2)))), "0950455ca68cbe5124dd4a3780a1f429ba25893b3e3e1a1362245b63fd873270");
+    assert.equal(hash(deckHtml(deck, {})), "a966b9cf1140ff03e3c69407690dd852d3979fcf8e0938eb78fcd8c0dac80dda");
+    assert.equal(hash(JSON.stringify(deck.slides.map((s, i) => composeSlide(deck, s, i, 2)))), "e7ed212fe3227b8184f008e819965cfae71a25559a959fbe920c03b543a06655");
   });
   await check("three synthetic subject compositions stay editable, distinct and within both canvases", async () => {
     const signatures = new Set();
