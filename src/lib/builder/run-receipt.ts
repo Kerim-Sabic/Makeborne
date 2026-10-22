@@ -28,14 +28,17 @@ export type RunMeter = {
   sources: string[];
   /** The advisor brief this request came from ("Mira’s brief · revision 2"), when it carried one. */
   brief?: string;
-  /** Which brief the first build used ("original" when it was not read: skipped, failed or not offered). Reading or
-   * enhancing the brief is free, so `credits` is always 0; it stays for receipts recorded before that. */
-  enhanced?: { mode: "enhanced" | "edited" | "analysis" | "original"; credits: number };
+  /** Which brief the first build used ("original": the client's own words). `improved`: the client asked for the free
+   * brief improvement first; `credits` is that improvement's charge from its durable action (0 today), or null while
+   * it is still being confirmed. It stays on the build's receipt whichever brief was then used. */
+  enhanced?: EnhancedReceipt;
   /** The concept the first build chose, and its runners-up (names). */
   concept?: { chosen: string; runnersUp: string[] };
   /** Generated images: the model the router chose, its quality, size, reason and measured cost. */
   images: ReceiptImage[];
 };
+
+export type EnhancedReceipt = { mode: "enhanced" | "edited" | "analysis" | "original"; credits: number | null; improved?: boolean };
 
 export type ReceiptImage = { path: string; model: string | null; quality: string | null; size: string | null; reason: string | null; costMicrousd: number | null };
 
@@ -51,7 +54,7 @@ export type RunReceipt = {
   sources: string[];
   /** The advisor brief recorded with this request, when there was one. */
   brief?: string;
-  enhanced?: { mode: "enhanced" | "edited" | "analysis" | "original"; credits: number };
+  enhanced?: EnhancedReceipt;
   concept?: { chosen: string; runnersUp: string[] };
   checks: { ok: boolean; label: string }[];
   images: ReceiptImage[];
