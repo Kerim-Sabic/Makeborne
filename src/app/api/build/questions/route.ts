@@ -63,8 +63,11 @@ export async function POST(request: Request) {
       catch (cause) { logAiStop(hold.reference, cause); }
       finally {
         clearTimeout(timeout);
-        // Never charged: the measured provider cost is recorded as absorbed.
-        await releaseRun(hold, spend.confirmedMicrousd / 1e6 / rate, "brief_questions", { kind: "brief_questions", calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd }).catch(() => undefined);
+        // Never charged: the measured provider cost is recorded as absorbed. releaseRun takes whole credits (a fractional
+        // value was refused and the hold lapsed for 15 minutes with no outcome). A failed release is logged, not hidden;
+        // the hold then lapses unspent.
+        await releaseRun(hold, spend.customerCredits(rate), "brief_questions", { kind: "brief_questions", calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd })
+          .catch(cause => console.error(JSON.stringify({ event: "brief_questions_release_failed", reference: hold.reference, code: (cause as { code?: string })?.code ?? null })));
       }
       if (!questions) throw new RequestError("QUESTIONS_UNAVAILABLE", "Tailored questions couldn't be prepared. Nothing was charged.", 503);
       return Response.json({ questions }, { headers: { "Cache-Control": "no-store" } });
