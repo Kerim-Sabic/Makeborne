@@ -1,7 +1,7 @@
 /** Offline checks for the bounded site-repair controller and its request builder. verify() and repair() are
  * fakes over an in-memory "site" (a set of defects); no browser, provider or network is used. */
 import assert from 'node:assert/strict';
-import {buildRepairRequest, mergeRecheck, repairUntilVerified, MAX_ATTEMPTS} from './site-repair.mjs';
+import {acceptance, buildRepairRequest, mergeRecheck, repairUntilVerified, MAX_ATTEMPTS} from './site-repair.mjs';
 
 let groups = 0;
 const check = async (name, fn) => { await fn(); groups++; console.log(`PASS ${name}`); };
@@ -63,7 +63,8 @@ await check('loop: repairs within the attempt limit, rechecks only affected chec
   const initial = {version: {id: 1, defects: new Set(['overflow:/:360x740', 'navigation:/:1440x900'])}};
   const outcome = await repairUntilVerified({initial, verify: fakeVerify(verifies), repair: fixOne(repairs), attempts: 2});
   assert.equal(outcome.status, 'repaired');
-  assert.equal(outcome.stoppedBy, 'passed');
+  // No failures remain, but the checks carried from version 2 were not rerun on 3: that is not enough coverage to accept.
+  assert.equal(outcome.stoppedBy, 'coverage');
   assert.equal(outcome.version.id, 3);
   assert.equal(outcome.previousVersion, initial.version);
   assert.deepEqual([...initial.version.defects].sort(), ['navigation:/:1440x900', 'overflow:/:360x740'], 'the initial version is never modified');
@@ -130,6 +131,59 @@ await check('loop: an already passing site is verified without any repair', asyn
   assert.equal(outcome.status, 'verified');
   assert.equal(repairs.length, 0);
   await assert.rejects(repairUntilVerified({initial: {}, verify: fakeVerify([]), repair: fixOne([])}), /REPAIR_INPUT_INVALID/);
+});
+
+await check('acceptance (Codex review): a report of only not_checked results, an empty report or a budget-stopped report is never verified', async () => {
+  // Codex's reproduction: one route-load result, not_checked because capture was unavailable.
+  const unavailable = {identity: {artifactId: 'a1', version: 1}, results: [{...result('route-load:/:390x844', 'not_checked'), reason: 'capture unavailable'}]};
+  const outcome = await repairUntilVerified({initial: {version: {id: 1, defects: new Set()}, report: unavailable}, verify: fakeVerify([]), repair: fixOne([])});
+  assert.equal(outcome.status, 'unverified');
+  assert.equal(outcome.stoppedBy, 'coverage');
+  assert.equal(outcome.acceptance.accepted, false);
+  assert.ok(outcome.acceptance.blocking.some(item => /no route was seen to render/.test(item.reason)));
+  for (const report of [{identity: {}, results: []}, {identity: {}, results: [result('route-load:/:390x844', 'passed')], budget: {stopped: 'time'}}]) {
+    const verdict = await repairUntilVerified({initial: {version: {id: 1, defects: new Set()}, report}, verify: fakeVerify([]), repair: fixOne([])});
+    assert.notEqual(verdict.status, 'verified');
+  }
+  assert.match(acceptance({results: []}).blocking[0].reason, /no results/);
+  assert.match(acceptance({results: [result('route-load:/:390x844', 'passed')], budget: {stopped: 'steps'}}).blocking.map(item => item.reason).join(' '), /stopped early \(steps\)/);
+});
+
+await check('acceptance: only explicitly not-applicable results may stay not_checked; the version check counts unless the digest is optional', async () => {
+  const base = [result('route-load:/:390x844', 'passed'), {...result('external-links:/:1440x900', 'not_checked'), reason: 'external links are listed, not followed'},
+    {...result('mobile-menu:/:390x844', 'not_checked'), reason: 'the navigation needs no toggle at this width'}];
+  assert.equal(acceptance({results: base}).accepted, true);
+  const primary = [...base, {...result('keyboard-reach:/:390x844', 'not_checked'), reason: 'nothing to reach'}];
+  assert.equal(acceptance({results: primary}).accepted, false, "'nothing to reach' is not a pass");
+  const version = [...base, {...result('version::', 'not_checked'), reason: 'no publication digest was given to compare'}];
+  assert.equal(acceptance({results: version}).accepted, false, 'by default the version must be checked');
+  assert.equal(acceptance({results: version}, {digest: 'optional'}).accepted, true);
+  const carried = [...base.slice(0, 1), {...result('external-links:/:1440x900', 'not_checked'), reason: 'not rechecked', previous: {status: 'not_checked', version: 1}}];
+  assert.equal(acceptance({results: carried}).accepted, false, 'a result carried from another version is never accepted');
+});
+
+await check('a timed-out repair or verify is cancelled through its signal, not just abandoned', async () => {
+  let signalSeen = null, abortedReason = null;
+  const outcome = await repairUntilVerified({initial: {version: {id: 1, defects: new Set(['overflow:/:360x740'])}}, verify: fakeVerify([]),
+    repair: (request, {signal}) => { signalSeen = signal; return new Promise((_, reject) => signal.addEventListener('abort', () => { abortedReason = signal.reason?.code; reject(signal.reason); })); },
+    budget: {timeMs: 200}});
+  assert.equal(outcome.stoppedBy, 'budget');
+  assert.ok(signalSeen instanceof AbortSignal, 'repair receives a signal');
+  assert.equal(signalSeen.aborted, true, 'the signal is aborted when the time is up');
+  assert.equal(abortedReason, 'REPAIR_BUDGET');
+  const calls = [];
+  await repairUntilVerified({initial: {version: {id: 1, defects: new Set()}}, verify: async (version, options) => { calls.push(options.signal instanceof AbortSignal); return fakeVerify([])(version, options); }, repair: fixOne([])});
+  assert.deepEqual(calls, [true], 'verify receives a signal too');
+});
+
+await check('fullRecheck: a repair that breaks something that passed before is a regression; the previous version is kept', async () => {
+  const breaksMenu = async (request, {version}) => { const defects = new Set(version.defects); for (const id of request.affected) defects.delete(id); defects.add('mobile-menu-escape:/:390x844'); return {version: {id: version.id + 1, defects}}; };
+  const initial = {version: {id: 1, defects: new Set(['overflow:/:360x740'])}};
+  const outcome = await repairUntilVerified({initial, verify: fakeVerify([]), repair: breaksMenu, fullRecheck: true});
+  assert.equal(outcome.status, 'regressed');
+  assert.equal(outcome.version, initial.version, 'the best valid checkpoint is returned');
+  assert.equal(outcome.candidateVersion.id, 2);
+  assert.deepEqual(outcome.regressions, ['mobile-menu-escape:/:390x844']);
 });
 
 console.log(`${groups} site-repair groups passed.`);

@@ -63,19 +63,55 @@ export function mergeRecheck(previous, recheck, affected, {version, previousVers
   return {...(recheck ?? previous), identity: {...previous.identity, ...(recheck?.identity ?? {}), version}, results, summary, recheckOf: affected, carriedFrom: previousVersion};
 }
 
-const timed = (promise, ms) => {
+/**
+ * Acceptance coverage (Codex's independent review, 22 October): "no failures" is not "verified". A report is accepted
+ * only when it is non-empty, was not stopped by its budget, rendered at least one route (a passed route-load), has no
+ * failure, and every not_checked result is explicitly not applicable under this policy. The version check counts unless
+ * the caller marks the publication digest optional (an operator run with nothing published yet).
+ */
+export const NOT_APPLICABLE = Object.freeze([
+  {check: 'external-links', reason: null, why: 'external, tel: and mailto: links are listed, never followed, by design'},
+  {check: 'mobile-menu', reason: /needs no toggle|no navigation to open/, why: 'the navigation is visible without a toggle at this width'},
+  {check: 'mobile-menu-escape', reason: /needs no toggle|no navigation to open/, why: 'there is no menu to close at this width'},
+]);
+export function acceptance(report, {digest = 'required'} = {}) {
+  const results = Array.isArray(report?.results) ? report.results : [];
+  const blocking = [];
+  if (!results.length) blocking.push({id: null, reason: 'the report has no results'});
+  if (report?.budget?.stopped) blocking.push({id: null, reason: `the verification stopped early (${report.budget.stopped})`});
+  if (!results.some(result => result.check === 'route-load' && result.status === 'passed')) blocking.push({id: null, reason: 'no route was seen to render'});
+  for (const result of results) {
+    if (result.status === 'failed') blocking.push({id: result.id, reason: 'failed'});
+    else if (result.status === 'not_checked') {
+      const allowed = NOT_APPLICABLE.some(rule => rule.check === result.check && !result.previous && (!rule.reason || rule.reason.test(result.reason ?? '')))
+        || (result.check === 'version' && digest === 'optional' && !result.previous);
+      if (!allowed) blocking.push({id: result.id, reason: result.previous ? `not rechecked on this version (was ${result.previous.status})` : `not checked: ${result.reason ?? 'no reason given'}`});
+    }
+  }
+  return {accepted: blocking.length === 0, blocking};
+}
+
+/** Bounds a call AND cancels it: the callee gets a signal that aborts when the time is up (a race alone leaves the work running). */
+const timed = (run, ms) => {
+  const controller = new AbortController();
   let timer;
-  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(Error('REPAIR_BUDGET'), {code: 'REPAIR_BUDGET'})), Math.max(0, ms)); })]).finally(() => clearTimeout(timer));
+  const budget = new Promise((_, reject) => {
+    timer = setTimeout(() => { const error = Object.assign(Error('REPAIR_BUDGET'), {code: 'REPAIR_BUDGET'}); controller.abort(error); reject(error); }, Math.max(0, ms));
+  });
+  return Promise.race([Promise.resolve().then(() => run(controller.signal)), budget]).finally(() => clearTimeout(timer));
 };
 const versionLabel = version => (version && typeof version === 'object' ? (version.id ?? version.version ?? null) : version);
 const versionKey = version => JSON.stringify(versionLabel(version) ?? version);
 
 /**
- * verify(version, {only, remainingMs}) → report (only: result ids to recheck; undefined = everything).
- * repair(request, {version, attempt, remainingMs}) → {version} with a NEW version (never the current one).
- * Returns {status, version, previousVersion, report, attempts, stoppedBy}. status: verified | repaired | improved | unchanged.
+ * verify(version, {only, remainingMs, signal}) → report (only: result ids to recheck; undefined = everything).
+ * repair(request, {version, attempt, remainingMs, signal}) → {version} with a NEW version (never the current one).
+ * Both must stop when `signal` aborts (the time budget ran out).
+ * Returns {status, version, previousVersion, report, attempts, stoppedBy, acceptance, regressions?, candidateVersion?}.
+ * status: verified | repaired | improved | unchanged | unverified (no failures, but too little coverage to accept)
+ * | regressed (a full recheck found checks that passed before now failing: the previous version is returned).
  */
-export async function repairUntilVerified({initial, verify, repair, attempts = 2, budget = {}, fullRecheck = false, now = Date.now}) {
+export async function repairUntilVerified({initial, verify, repair, attempts = 2, budget = {}, fullRecheck = false, digest = 'required', now = Date.now}) {
   if (typeof verify !== 'function' || typeof repair !== 'function' || !initial || initial.version === undefined) throw Error('REPAIR_INPUT_INVALID');
   const limit = Math.max(0, Math.min(MAX_ATTEMPTS, Number.isInteger(attempts) ? attempts : 2));
   const deadline = now() + Math.max(0, budget.timeMs ?? 600_000);
@@ -83,24 +119,26 @@ export async function repairUntilVerified({initial, verify, repair, attempts = 2
   const seen = new Set([versionKey(initial.version)]);
   const log = [];
   let current = {version: initial.version, report: initial.report ?? null};
-  let stoppedBy = null, accepted = 0;
+  let stoppedBy = null, accepted = 0, initialReport = null, regressions = [], candidateVersion;
   try {
-    if (!current.report) current.report = await timed(verify(current.version, {only: undefined, remainingMs: remaining()}), remaining());
+    if (!current.report) current.report = await timed(signal => verify(current.version, {only: undefined, remainingMs: remaining(), signal}), remaining());
+    initialReport = current.report;
     for (let attempt = 1; ; attempt++) {
       const failures = current.report.results.filter(result => result.status === 'failed');
-      if (!failures.length) { stoppedBy = 'passed'; break; }
+      // Nothing to repair. Accepted only with enough coverage: a repair cannot turn not_checked results into passes.
+      if (!failures.length) { stoppedBy = acceptance(current.report, {digest}).accepted ? 'passed' : 'coverage'; break; }
       if (attempt > limit) { stoppedBy = 'attempts'; break; }
       if (remaining() <= 0) { stoppedBy = 'budget'; break; }
       const request = buildRepairRequest(current.report);
       const entry = {attempt, request: {affected: request.affected, issues: request.issues.length, omitted: request.omitted.length}, candidate: null, accepted: false, reason: null, recheck: null};
       log.push(entry);
-      const result = await timed(Promise.resolve(repair(request, {version: current.version, attempt, remainingMs: remaining()})), remaining());
+      const result = await timed(signal => repair(request, {version: current.version, attempt, remainingMs: remaining(), signal}), remaining());
       const candidate = result?.version;
       if (candidate === undefined || candidate === null || seen.has(versionKey(candidate))) { entry.reason = 'the repair returned no new version (the current version is kept; nothing is overwritten)'; continue; }
       seen.add(versionKey(candidate));
       entry.candidate = candidate;
       if (remaining() <= 0) { entry.reason = 'no time left to recheck the candidate'; stoppedBy = 'budget'; break; }
-      const recheck = await timed(verify(candidate, {only: request.affected, remainingMs: remaining()}), remaining());
+      const recheck = await timed(signal => verify(candidate, {only: request.affected, remainingMs: remaining(), signal}), remaining());
       const merged = mergeRecheck(current.report, recheck, request.affected, {version: versionLabel(candidate), previousVersion: versionLabel(current.version)});
       const rechecked = merged.results.filter(item => request.affected.includes(item.id));
       const fixed = rechecked.filter(item => item.status === 'passed').length, still = rechecked.filter(item => item.status === 'failed').length;
@@ -112,7 +150,14 @@ export async function repairUntilVerified({initial, verify, repair, attempts = 2
         current = {version: candidate, report: merged};
       } else entry.reason = `the candidate fixed ${fixed} of ${request.affected.length} affected check(s); the previous version is kept`;
     }
-    if (fullRecheck && accepted && remaining() > 0) current.report = await timed(verify(current.version, {only: undefined, remainingMs: remaining()}), remaining());
+    if (fullRecheck && accepted && remaining() > 0) {
+      const full = await timed(signal => verify(current.version, {only: undefined, remainingMs: remaining(), signal}), remaining());
+      // A repair that broke something that passed before is not progress: keep the best valid checkpoint.
+      const passedBefore = new Set((initialReport?.results ?? []).filter(result => result.status === 'passed').map(result => result.id));
+      regressions = full.results.filter(result => result.status === 'failed' && passedBefore.has(result.id)).map(result => result.id);
+      if (regressions.length) { candidateVersion = current.version; current = {version: initial.version, report: initialReport}; }
+      else current.report = full;
+    }
   } catch (error) {
     if (error.code !== 'REPAIR_BUDGET') throw error;
     stoppedBy = 'budget';
@@ -121,6 +166,11 @@ export async function repairUntilVerified({initial, verify, repair, attempts = 2
   const failed = report ? report.results.filter(result => result.status === 'failed').length : null;
   // Complete: every result in the report was produced on the reported version (nothing carried from an earlier one).
   const complete = !!report && !report.results.some(result => result.previous);
-  const status = report && failed === 0 && complete ? 'verified' : accepted && failed === 0 ? 'repaired' : accepted ? 'improved' : 'unchanged';
-  return {status, version: current.version, previousVersion: initial.version, report, attempts: log, stoppedBy};
+  const covered = report ? acceptance(report, {digest}) : {accepted: false, blocking: [{id: null, reason: 'no report'}]};
+  const status = regressions.length ? 'regressed'
+    : report && failed === 0 && complete && covered.accepted ? 'verified'
+    : accepted && failed === 0 ? 'repaired' : accepted ? 'improved'
+    : report && failed === 0 ? 'unverified' : 'unchanged';
+  return {status, version: current.version, previousVersion: initial.version, report, attempts: log, stoppedBy, acceptance: covered,
+    ...(regressions.length ? {regressions, candidateVersion} : {})};
 }
