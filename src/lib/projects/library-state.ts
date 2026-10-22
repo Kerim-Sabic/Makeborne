@@ -62,6 +62,8 @@ export function projectsWelcome(deviceProjectCount: number, status: AccountLibra
  * area instead of the prompt-first welcome it might have to replace.
  */
 export type LibraryLayout = "library-first" | "prompt-first" | "pending";
+/** The longest a first visit shows the neutral loading area before falling back to the prompt-first welcome. */
+export const PENDING_LAYOUT_MS = 6000;
 export function libraryLayout(deviceProjectCount: number, status: AccountLibraryStatus, remembered: boolean | null): LibraryLayout {
   if (deviceProjectCount > 0) return "library-first";
   switch (status.state) {

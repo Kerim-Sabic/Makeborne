@@ -117,7 +117,12 @@ check("studio and list are wired through the status, with Retry on failure", () 
 });
 
 check("studio orders the page by the layout without remounting the account list", () => {
-  assert.match(studio, /const layout = libraryLayout\(workspace\.projects\.length, accountLibrary, libraryHint\);\s*const libraryFirst = layout === "library-first", layoutPending = layout === "pending";/);
+  assert.match(studio, /const decided = libraryLayout\(workspace\.projects\.length, accountLibrary, libraryHint\);/);
+  // Pending is bounded (a stalled list must not hide the welcome) and skipped when the visit came to create something.
+  assert.match(studio, /const createIntent = Boolean\(advisorHandoff\) \|\| homeHandoff \|\| directStart \|\| Boolean\(creating\);/);
+  assert.match(studio, /const layout = decided === "pending" && \(pendingExpired \|\| createIntent\) \? "prompt-first" : decided;\s*const libraryFirst = layout === "library-first", layoutPending = layout === "pending";/);
+  assert.match(studio, /window\.setTimeout\(\(\) => setPendingExpired\(true\), PENDING_LAYOUT_MS\)/);
+  assert.ok(context.exports.PENDING_LAYOUT_MS > 0 && context.exports.PENDING_LAYOUT_MS <= 8000, "the wait is bounded");
   // Pending (first visit, list unknown): the list stays mounted (it decides the layout) but out of view, and no welcome or creation entry is guessed.
   assert.match(studio, /<div className="account-projects-host" hidden=\{layoutPending && !accountRoute\?\.artifactId\}><AccountProjects /);
   assert.match(studio, /layoutPending \? <div className="library-pending" role="status" aria-busy="true">/);

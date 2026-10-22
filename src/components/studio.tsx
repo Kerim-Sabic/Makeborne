@@ -69,7 +69,7 @@ import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
 import { studioSkipTargets } from "@/lib/studio-skip-links";
 import { creationTitle, fallbackProjectTitle, isPlaceholderTitle, placeholderTitle } from "@/lib/projects/project-title";
-import { libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
+import { PENDING_LAYOUT_MS, libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { PREVIEW_HISTORY_KEY } from "@/lib/builder/preview-route";
 import { opensAccountProject, readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
@@ -174,6 +174,15 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     // An unknown account (still checking, or the check failed) may use the last account's answer; signed out uses none.
     setLibraryHint(readLibraryHint(() => localStorage, accountId ?? (next.state === "unavailable" ? null : undefined)));
   }, []);
+  // A first visit waits for the account list before choosing the layout, but never longer than PENDING_LAYOUT_MS (a stalled
+  // list must not hide the welcome), and never when the visit came to create something (a handoff, a create link, home).
+  const [pendingExpired, setPendingExpired] = useState(false);
+  const pendingLayout = libraryLayout(workspace.projects.length, accountLibrary, libraryHint) === "pending";
+  useEffect(() => {
+    if (!pendingLayout || pendingExpired) return;
+    const timer = window.setTimeout(() => setPendingExpired(true), PENDING_LAYOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [pendingLayout, pendingExpired]);
   const [notice, setNotice] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
   const [saveInvalid, setSaveInvalid] = useState(false);
@@ -616,7 +625,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   // Open editors hide the navigation rail, so there is nothing to bypass there.
   const projectOpen = Boolean(project || accountRoute?.artifactId || (!loaded && initialProjectOpen));
   // Returning users see their library first; new users (and unknown first visits) keep the prompt-first entry.
-  const layout = libraryLayout(workspace.projects.length, accountLibrary, libraryHint);
+  const decided = libraryLayout(workspace.projects.length, accountLibrary, libraryHint);
+  const createIntent = Boolean(advisorHandoff) || homeHandoff || directStart || Boolean(creating);
+  const layout = decided === "pending" && (pendingExpired || createIntent) ? "prompt-first" : decided;
   const libraryFirst = layout === "library-first", layoutPending = layout === "pending";
   // "Start something new" joins the page below the list only once the list is known, so a loading list never pushes it around.
   const listSettled = accountLibrary.state !== "checking" && accountLibrary.state !== "loading";
