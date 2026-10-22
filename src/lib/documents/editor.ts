@@ -8,6 +8,7 @@ import { composeSlide } from "./slide-scene";
 import { directionOf } from "./directions";
 import { parseBookMarkup, wordCount } from "./book-markup";
 import { CoverCompositionSchema } from "./composition-schema";
+import { imageSupport } from "./compose-image";
 
 export class DocToolError extends Error {}
 
@@ -51,7 +52,7 @@ const DESCRIPTIONS: Record<DocToolName, string> = {
   edit_chapter: "Replace an exact passage in a chapter's text (old_string must match exactly and be unique unless replace_all). Use for targeted edits, cuts and rewrites inside long chapters.",
   delete_chapter: "Remove a chapter.",
   move_chapter: 'Move a chapter after another chapter id, or to "start".',
-  generate_image: "Generate one original image and register it under `name` for use in slides, the cover, chapter openers or figures. The theme's imageStyle is appended automatically so all art is consistent. Never ask for text, letters, logos or watermarks.",
+  generate_image: "Generate one original image and register it under `name` for use in slides, the cover, chapter openers or figures. The theme's imageStyle is appended automatically so all art is consistent. Never ask for text, letters, logos or watermarks. Slides show an image on cover, closing, image and split layouts, beside statement, points, stats, agenda, quote and section slides (side rail, portrait; statement, quote and section may also be full-bleed), and as a top band over chart, table and diagram slides (landscape); compare, team, pricing and canvas slides do not show a slide image.",
   finish: "Call once the document is complete and checked. Give a short, friendly summary (2–4 sentences, no markup) of what you made or changed.",
 };
 
@@ -140,6 +141,9 @@ export class DocumentEditor {
   writeSlide(input: z.infer<typeof DocToolInputs.write_slide>) {
     const deck = this.deck();
     if (deck.slides.length >= 40 && !deck.slides.some(slide => slide.id === input.slide.id)) throw new DocToolError("A presentation can have at most 40 slides.");
+    // Refused before any image is generated for it: a placed image is always shown.
+    const support = imageSupport(input.slide as Slide);
+    if (!support.ok) throw new DocToolError(`Slide ${input.slide.id}: ${support.message}.`);
     const { list, index, replaced } = this.place(deck.slides, input.slide as Slide, input.after);
     this.commit({ ...deck, slides: list });
     const composed = composeSlide(this.deck(), this.deck().slides[index], index, list.length).composition;
@@ -220,7 +224,9 @@ export class DocumentEditor {
       const deck = this.doc;
       if (!deck.slides.length) issues.push("The presentation has no slides yet.");
       deck.slides.forEach((slide, index) => {
-        if (slide.image && !this.hasImage(slide.image)) issues.push(`Slide ${index + 1} (${slide.id}) uses image "${slide.image}", which was not generated. Generate it or change the slide.`);
+        const support = imageSupport(slide);
+        if (!support.ok) issues.push(`Slide ${index + 1} (${slide.id}): ${support.message}.`);
+        else if (slide.image && !this.hasImage(slide.image)) issues.push(`Slide ${index + 1} (${slide.id}) uses image "${slide.image}", which was not generated. Generate it or change the slide.`);
         for (const person of slide.people ?? []) if (person.image && !this.hasImage(person.image)) issues.push(`Slide ${index + 1} (${slide.id}) uses portrait "${person.image}", which was not generated. Generate it or remove that image field.`);
         const scene = composeSlide(deck, slide, index, deck.slides.length);
         if (scene.issues.length) fit.push(`Slide ${index + 1} (${slide.id}): ${scene.issues[0]}.`);

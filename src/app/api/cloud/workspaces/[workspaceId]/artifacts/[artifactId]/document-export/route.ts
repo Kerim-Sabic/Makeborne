@@ -35,7 +35,8 @@ export async function GET(request: Request, context: { params: Promise<{ workspa
     active++; reserved = true;
     const buffers = await loadDocumentImages(client, workspaceId, artifact.project_id, doc);
     let bytes: Buffer;
-    try { bytes = format === "pdf" ? await documentPdf(doc, buffers) : await documentPptx(doc, buffers); }
+    const missing: string[] = [];
+    try { bytes = format === "pdf" ? await documentPdf(doc, buffers) : await documentPptx(doc, buffers, missing); }
     catch (error) {
       console.error("document export failed", error instanceof Error ? error.message : error);
       throw new RequestError("EXPORT_FAILED", "The export could not finish. Your document is unchanged; please try again.", 500);
@@ -44,6 +45,8 @@ export async function GET(request: Request, context: { params: Promise<{ workspa
     return new Response(new Uint8Array(bytes), { headers: {
       "Content-Type": format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "Content-Disposition": `attachment; filename="${filename}.${format}"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+      // Images the deck places but whose files were unavailable: left out of the PPTX, named here for the client to report.
+      ...(missing.length ? { "X-Makeborne-Missing-Images": missing.join(",").slice(0, 900) } : {}),
     } });
   } catch (error) {
     return cloudError(error);

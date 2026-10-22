@@ -8,12 +8,13 @@ import { DocToolError, DocToolInputs, DocumentEditor, docToolDefinitions } from 
 import type { DocumentSource } from "../documents/schema";
 import { MIN_STEP_TOKENS, builderModel, isProviderOrSpendError } from "./agent";
 import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage } from "./images";
-import { BUILDER_EFFORT, aiCostUsdPerCredit } from "./pricing";
+import { BUILDER_EFFORT, DOCUMENT_IMAGE_CAP, aiCostUsdPerCredit, documentImageMax } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
 import { imageCallBoundMicrousd } from "../ai/prices";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BOOK_SYSTEM, DECK_SYSTEM } from "./docs-prompt";
+import { imageLuma } from "../documents/image-luma";
 
 /** Events streamed to the chat. Shares the website builder's text/status/
  * usage/done/error shapes, plus live document snapshots. */
@@ -88,7 +89,12 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   // The configured image model, or null when images are off (see imageConfiguration).
   const imageModelId = policy.maxImages > 0 ? imageConfiguration().model : null;
   const imageBound = imageModelId ? imageCallBoundMicrousd(imageModelId, "medium", IMAGE_SIZES.portrait, "x".repeat(4000)) : Infinity;
-  const imageLimit = imageModelId ? Math.min(policy.maxImages, Math.max(0, Math.floor(spend.allowanceMicrousd / imageBound / 3))) : 0;
+  // Images may take at most a third of the run's allowance; within that a deck may have one per slide and a book a cover plus
+  // one opener per chapter (documentImageMax, counted from the document as it grows during the run).
+  const imageBudget = imageModelId ? Math.max(0, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
+  const items = () => run.editor.doc.kind === "deck" ? run.editor.doc.slides.length : run.editor.doc.chapters.length;
+  const imageLimitNow = () => Math.min(imageBudget, documentImageMax(run.editor.kind, run.effort, items()));
+  const imageLimit = Math.min(imageBudget, documentImageMax(run.editor.kind, run.effort, DOCUMENT_IMAGE_CAP));
   const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
   const storeImage = run.storeImage ?? ((request: { name: string; prompt: string; model: string }, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes));
   const kind = run.editor.kind;
@@ -100,7 +106,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
 
   const messages: BetaMessageParam[] = [{ role: "user", content: [
     ...run.attachments,
-    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run)` : "unavailable — design without images"}.\n\n<request>\n${run.request}\n</request>` },
+    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${imageLimit > policy.maxImages ? `, about one per ${kind === "deck" ? "slide" : "chapter plus the cover"}` : ""})` : "unavailable — design without images"}.\n\n<request>\n${run.request}\n</request>` },
   ] }];
 
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
@@ -195,7 +201,8 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
         if (use.name === "generate_image") {
           const input = DocToolInputs.generate_image.parse(use.input);
           if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Design without images."); continue; }
-          if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("The image budget for this run is used up. Reuse existing images or remove the image field."); continue; }
+          if (imagesUsed >= imageLimitNow() && imagesUsed < imageLimit) { fail(`Images follow the document: about one per ${kind === "deck" ? "slide" : "chapter plus the cover"}. Write the ${kind === "deck" ? "slides" : "chapters"} that will show images first, then generate them.`); continue; }
+          if (imagesUsed >= imageLimitNow() || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("The image budget for this run is used up. Reuse existing images or remove the image field."); continue; }
           const prompt = run.editor.imagePrompt(input.prompt);
           let job: { done: Promise<Buffer> };
           try {
@@ -207,8 +214,9 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
           }
           imagesUsed++;
           run.emit({ type: "image_start", name: input.name, prompt: input.prompt });
-          imageJobs.push(job.done.then(bytes => storeImage({ name: input.name, prompt, model: imageModelId }, bytes)).then(asset => {
-            run.editor.addAsset({ name: input.name, id: asset.id, aspect: input.aspect, alt: input.alt, prompt: input.prompt });
+          // The brightness map sizes the scrim under any text set over this image (documents/compose-image.ts).
+          imageJobs.push(job.done.then(bytes => Promise.all([storeImage({ name: input.name, prompt, model: imageModelId }, bytes), imageLuma(bytes).catch(() => undefined)])).then(([asset, luma]) => {
+            run.editor.addAsset({ name: input.name, id: asset.id, aspect: input.aspect, alt: input.alt, prompt: input.prompt, ...(luma ? { luma } : {}) });
             run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id });
             run.emit({ type: "document", document: run.editor.doc });
             ok(`Image "${input.name}" is ready (${input.aspect}). Reference it by name.`);

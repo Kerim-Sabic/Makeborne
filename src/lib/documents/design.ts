@@ -8,7 +8,10 @@ import type { Weight } from "./directions";
  * content headers, footers, panels and numerals. Compositions use these so one
  * composition reads differently in every art direction. */
 
-export const area = (ctx: Ctx) => ({ x: ctx.dir.mx, y: ctx.dir.top, w: W - 2 * ctx.dir.mx, r: W - ctx.dir.mx, b: ctx.dir.bottom });
+export const area = (ctx: Ctx) => {
+  const f = ctx.frame, x = f?.x ?? ctx.dir.mx, r = f?.r ?? W - ctx.dir.mx;
+  return { x, y: f?.y ?? ctx.dir.top, w: r - x, r, b: f?.b ?? ctx.dir.bottom };
+};
 const headingWeight = (ctx: Ctx) => FONTS[ctx.theme.fonts].headingWeight as Weight;
 
 export function labelStyle(ctx: Ctx, extra: Partial<TextStyle> = {}): TextStyle {
@@ -164,7 +167,8 @@ export function signature(ctx: Ctx, draw: boolean) {
     return 90;
   }
   if (d.id === "tech") {
-    if (draw) ctx.prims.unshift({ k: "art", x: W - 520, y: 0, w: 520, h: 320, svg: `<defs><radialGradient id="sg${ctx.index}" cx="85%" cy="0%" r="80%"><stop offset="0" stop-color="${p.accent}" stop-opacity="0.32"/><stop offset="1" stop-color="${p.accent}" stop-opacity="0"/></radialGradient></defs><rect width="520" height="320" fill="url(#sg${ctx.index})"/>` });
+    // The corner glow would sit on the slide's image when it shares the canvas.
+    if (draw && !ctx.frame) ctx.prims.unshift({ k: "art", x: W - 520, y: 0, w: 520, h: 320, svg: `<defs><radialGradient id="sg${ctx.index}" cx="85%" cy="0%" r="80%"><stop offset="0" stop-color="${p.accent}" stop-opacity="0.32"/><stop offset="1" stop-color="${p.accent}" stop-opacity="0"/></radialGradient></defs><rect width="520" height="320" fill="url(#sg${ctx.index})"/>` });
     return 0;
   }
   return 0;
@@ -175,20 +179,24 @@ export function footer(ctx: Ctx) {
   // Architectural sheets carry crop marks; technical decks carry corner brackets.
   if (ctx.dir.id === "architect" || ctx.dir.id === "tech") {
     const m = 20, l = ctx.dir.id === "architect" ? 18 : 12, color = ctx.dir.id === "architect" ? ctx.c.ink : ctx.c.rule;
-    for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) { line(ctx, x, y, x + dx * l, y, color, 1); line(ctx, x, y, x, y + dy * l, color, 1); }
+    // Marks stay off a slide image that shares the canvas (only the text zone's corners).
+    const f = ctx.frame, free = (x: number, y: number) => !f || (x >= f.x - ctx.dir.mx && x <= f.r + ctx.dir.mx && y >= f.y - ctx.dir.top);
+    for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) if (free(x, y)) { line(ctx, x, y, x + dx * l, y, color, 1); line(ctx, x, y, x, y + dy * l, color, 1); }
   }
   const d = ctx.dir, c = ctx.c, a = area(ctx), page = String(ctx.index + 1).padStart(2, "0"), total = String(ctx.total).padStart(2, "0");
   const title = ctx.deck.title.length > 80 ? `${ctx.deck.title.slice(0, 78)}…` : ctx.deck.title, y = 672;
+  // Running titles keep clear of the folio in a narrowed text zone.
+  const tw = (wide: number) => Math.min(wide, a.w - 150);
   const small = (value: string, box: { x: number; w: number; align?: TextPrim["align"] }, extra: Partial<TextStyle> = {}) => text(ctx, value, { x: box.x, y, w: box.w, h: 20 }, { size: 13, color: c.muted, align: box.align ?? "left", lh: 1.3, ...extra });
   switch (d.footer) {
-    case "running": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: 760 }); small(`${page} / ${total}`, { x: a.r - 120, w: 120, align: "right" }, { weight: 600 }); return;
-    case "folio": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: 760 }, { upper: true, tracking: 0.14, size: 12 }); small(page, { x: a.r - 80, w: 80, align: "right" }, { font: "heading", size: 16, italic: true, color: c.ink }); return;
+    case "running": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: tw(760) }); small(`${page} / ${total}`, { x: a.r - 120, w: 120, align: "right" }, { weight: 600 }); return;
+    case "folio": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: tw(760) }, { upper: true, tracking: 0.14, size: 12 }); small(page, { x: a.r - 80, w: 80, align: "right" }, { font: "heading", size: 16, italic: true, color: c.ink }); return;
     case "corner": small(page, { x: a.r - 80, w: 80, align: "right" }, { weight: 700, color: c.ink, size: 15 }); return;
     case "center": small(`—  ${page}  —`, { x: W / 2 - 100, w: 200, align: "center" }, { tracking: 0.3, size: 12 }); return;
-    case "mono": rect(ctx, { x: a.x, y: y + 5, w: 8, h: 8, fill: c.accent }); small(`${page}/${total}`, { x: a.x + 18, w: 120 }, { font: "mono" }); small(title, { x: a.r - 700, w: 700, align: "right" }, { font: "mono", upper: true, size: 12 }); return;
-    case "bar": hline(ctx, a.x, a.r, 656, c.ink, d.rule?.width ?? 4); small(title, { x: a.x, w: 800 }, { font: "mono", upper: true, color: c.ink, weight: 700 }); small(`[${page}]`, { x: a.r - 120, w: 120, align: "right" }, { font: "mono", color: c.ink, weight: 700 }); return;
-    case "pill": small(title, { x: a.x, w: 760 }); rect(ctx, { x: a.r - 56, y: y - 6, w: 56, h: 30, fill: c.surface, radius: 15 }); text(ctx, page, { x: a.r - 56, y: y - 6, w: 56, h: 30 }, { size: 13, weight: 700, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); return;
-    case "box": small(title, { x: a.x, w: 760 }, { font: "mono", upper: true, size: 12 }); rect(ctx, { x: a.r - 52, y: y - 6, w: 52, h: 30, fill: c.bg, noFill: true, stroke: c.ink, strokeWidth: 1 }); text(ctx, page, { x: a.r - 52, y: y - 6, w: 52, h: 30 }, { font: "mono", size: 13, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); line(ctx, a.r - 72, y + 9, a.r - 60, y + 9, c.ink, 1); return;
+    case "mono": rect(ctx, { x: a.x, y: y + 5, w: 8, h: 8, fill: c.accent }); small(`${page}/${total}`, { x: a.x + 18, w: 120 }, { font: "mono" }); small(title, { x: a.r - tw(700), w: tw(700), align: "right" }, { font: "mono", upper: true, size: 12 }); return;
+    case "bar": hline(ctx, a.x, a.r, 656, c.ink, d.rule?.width ?? 4); small(title, { x: a.x, w: tw(800) }, { font: "mono", upper: true, color: c.ink, weight: 700 }); small(`[${page}]`, { x: a.r - 120, w: 120, align: "right" }, { font: "mono", color: c.ink, weight: 700 }); return;
+    case "pill": small(title, { x: a.x, w: tw(760) }); rect(ctx, { x: a.r - 56, y: y - 6, w: 56, h: 30, fill: c.surface, radius: 15 }); text(ctx, page, { x: a.r - 56, y: y - 6, w: 56, h: 30 }, { size: 13, weight: 700, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); return;
+    case "box": small(title, { x: a.x, w: tw(760) }, { font: "mono", upper: true, size: 12 }); rect(ctx, { x: a.r - 52, y: y - 6, w: 52, h: 30, fill: c.bg, noFill: true, stroke: c.ink, strokeWidth: 1 }); text(ctx, page, { x: a.r - 52, y: y - 6, w: 52, h: 30 }, { font: "mono", size: 13, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); line(ctx, a.r - 72, y + 9, a.r - 60, y + 9, c.ink, 1); return;
     default: return;
   }
 }

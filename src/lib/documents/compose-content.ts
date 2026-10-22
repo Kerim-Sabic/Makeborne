@@ -277,6 +277,8 @@ export function chartColors(ctx: Ctx, c: Tone = ctx.c): ChartColors {
 }
 const chartStyle = (ctx: Ctx) => ({ mono: ctx.dir.label.font === "mono", radius: ctx.dir.radius >= 20 ? 8 : ctx.dir.radius ? 3 : 0, grid: ctx.dir.id === "data" || ctx.dir.id === "swiss" || ctx.dir.id === "tech" });
 function chartPrim(ctx: Ctx, slide: Slide, box: { x: number; y: number; w: number; h: number }) {
+  // Below this a chart's bars and labels no longer read (e.g. a long standfirst over a narrowed text zone).
+  if (box.h < 180 || box.w < 320) ctx.issues.push("the chart has too little room");
   ctx.prims.push({ k: "chart", ...box, chart: slide.chart!, colors: chartColors(ctx), style: chartStyle(ctx) });
 }
 const focusOf = (slide: Slide) => {
@@ -391,6 +393,7 @@ export function diagramBlocks(ctx: Ctx, slide: Slide) {
   const top = header(ctx, slide) + 32, gap = 12, colW = (a.w - gap * (n - 1)) / n, detailSize = n <= 4 ? 20 : 18;
   const detailRow = Math.max(0, ...d.items.map(item => item.detail ? measure(ctx, item.detail, colW - 8, bodyStyle(ctx, { size: detailSize })) : 0));
   const base = a.b - detailRow - (detailRow ? 22 : 0), maxH = base - top, minH = Math.max(150, maxH * 0.42);
+  if (minH > maxH) ctx.issues.push("the diagram blocks have no room under the title");
   d.items.forEach((item, i) => {
     const h = n === 1 ? maxH : minH + (maxH - minH) * i / (n - 1), x = a.x + i * (colW + gap), y = base - h;
     // Steps grow in height and in colour: tints of the signal colour, or the full palette in colour-block decks.

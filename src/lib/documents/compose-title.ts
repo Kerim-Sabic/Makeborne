@@ -1,6 +1,7 @@
 import type { Slide } from "./schema";
-import { mix, contrast, readableOn } from "./theme";
-import { H, W, ellipse, hline, image, line, measure, rect, scaled, text, toneColors, vline, type Ctx, type ImageTreatment } from "./scene-kit";
+import { mix, contrast, luminance, readableOn } from "./theme";
+import { H, W, ellipse, hline, image, line, measure, rect, scaled, text, toneColors, vline, type Ctx, type ImageTreatment, type RectPrim } from "./scene-kit";
+import { scrimOpacity, zoneBrightness } from "./compose-image";
 import { area, display, divider, fitDisplay, footer, label, labelStyle, labelWidth, leadStyle, numeral, numeralStyle, sectionNumber, stack, displayStyle } from "./design";
 import { archPath, arrowPath, graphic, glowField, dotField } from "./graphics";
 import { path } from "./scene-kit";
@@ -168,11 +169,20 @@ export function coverArch(ctx: Ctx, slide: Slide, closing = false) {
 export function coverImage(ctx: Ctx, slide: Slide, closing = false) {
   const a = area(ctx), sub = subOf(slide), name = slide.image!, mode = ctx.dir.image;
   if (mode === "full" || mode === "duotone" || mode === "mono") {
-    image(ctx, name, { x: 0, y: 0, w: W, h: H }, { treatment: treatment(ctx) });
-    rect(ctx, { x: 0, y: 260, w: W, h: H - 260, fill: "#000000", opacity: 0.72, fade: "up" });
-    const white = "#FFFFFF";
-    if (slide.eyebrow) label(ctx, slide.eyebrow, { x: a.x, y: 48, w: 700 }, { color: white });
-    stack(ctx, { title: slide.title, size: ctx.dir.sizes.cover * (closing ? 0.7 : 0.8), min: 40, sub, titleColor: white, subStyle: { color: "#EDEDED" } }, { x: a.x, y: 200, w: a.w * 0.8, h: H - 56 - 200 }, "bottom");
+    const tr = treatment(ctx), box = { x: 0, y: 0, w: W, h: H };
+    image(ctx, name, box, { crop: "center", ...(tr ? { treatment: tr } : {}) });
+    // A solid scrim behind the text block, sized from the image's measured brightness there, with a soft fade above it.
+    const fade: RectPrim = { k: "rect", x: 0, y: 0, w: W, h: 140, fill: "#000000", opacity: 0.6, fade: "up" }, scrim: RectPrim = { k: "rect", x: 0, y: 0, w: W, h: H, fill: "#000000", opacity: 0.6 };
+    ctx.prims.push(fade, scrim);
+    const white = "#FFFFFF", start = ctx.prims.length;
+    // The eyebrow sits with the title on the scrim, not alone on the bare image.
+    const s = stack(ctx, { label: slide.eyebrow, labelColor: white, title: slide.title, size: ctx.dir.sizes.cover * (closing ? 0.7 : 0.8), min: 40, sub, titleColor: white, subStyle: { color: "#EDEDED" } }, { x: a.x, y: 160, w: a.w * 0.8, h: H - 56 - 160 }, "bottom");
+    const top = Math.max(0, s.top - 36), zone = { x: 0, y: top, w: W, h: H - top };
+    const dimmest = Math.min(1, ...ctx.prims.slice(start).flatMap(prim => prim.k === "text" ? [luminance(prim.color)] : []));
+    const opacity = Math.round(scrimOpacity(zoneBrightness(ctx.deck.assets.find(asset => asset.name === name), box, zone, tr), dimmest) * 100) / 100;
+    Object.assign(scrim, { y: top, h: H - top, opacity });
+    if (top >= 140) Object.assign(fade, { y: top - 140, opacity }); else fade.opacity = 0;
+    if (!fade.opacity) ctx.prims.splice(ctx.prims.indexOf(fade), 1);
     return;
   }
   const left = slide.imageSide === "left", ix = left ? 0 : W / 2, tx = left ? W / 2 + 56 : a.x, tw = W / 2 - 56 - a.x;

@@ -61,7 +61,8 @@ export async function documentPdf(doc: DocumentSource, buffers: Record<string, B
   }
 }
 
-export async function documentPptx(doc: DocumentSource, buffers: Record<string, Buffer>) {
+/** `missing` receives the names of images the deck places but whose bytes could not be loaded (they are left out, not drawn as boxes). */
+export async function documentPptx(doc: DocumentSource, buffers: Record<string, Buffer>, missing: string[] = []) {
   if (doc.kind !== "deck") throw new Error("PPTX is available for presentations.");
-  return deckPptx(doc, buffers);
+  return deckPptx(doc, buffers, missing);
 }

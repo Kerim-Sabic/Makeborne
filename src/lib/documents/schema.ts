@@ -42,11 +42,15 @@ export const AssetSchema = z.object({
   aspect: z.enum(["landscape", "portrait", "square"]),
   alt: z.string().trim().max(300).default(""),
   prompt: z.string().max(3000).default(""),
+  /** Measured brightness of the image: an 8×8 grid (row-major) of each cell's 98th-percentile brightest channel, 0–255. Text over the image gets a scrim sized from it; without it the brightest case is assumed. */
+  luma: z.array(z.number().int().min(0).max(255)).length(64).optional(),
 }).strict();
 export type DocumentAsset = z.infer<typeof AssetSchema>;
 
 const line = (max: number) => z.string().trim().min(1).max(max);
 
+export const IMAGE_PLACEMENTS = ["side", "band", "full"] as const;
+export type ImagePlacement = (typeof IMAGE_PLACEMENTS)[number];
 export const SLIDE_LAYOUTS = ["cover", "section", "statement", "points", "split", "stats", "chart", "diagram", "compare", "quote", "image", "closing", "team", "pricing", "table", "agenda", "canvas"] as const;
 export const ChartSchema = z.object({
   type: z.enum(["bar", "column", "line", "donut"]),
@@ -131,6 +135,7 @@ export const SlideSchema = z.object({
   table: TableSchema.optional().describe("table layout: a compact comparison or breakdown"),
   image: ImageName.optional(),
   imageSide: z.enum(["left", "right"]).optional(),
+  imagePlacement: z.enum(IMAGE_PLACEMENTS).optional().describe("How a text, number or chart slide shows its image: side (a 38% image rail beside the content), band (a top image band above a chart, table or diagram), full (full-bleed with a dark scrim behind the text; statement, quote and section only). Omit for the layout's default."),
   composition: CoverCompositionSchema.optional().describe("Optional authored geometry for a cover or closing slide. Omit to keep the existing layout."),
   variant: z.enum(ALL_COMPOSITIONS as [string, ...string[]]).optional().describe("Pin one of the art direction's compositions for this layout; omit to let the engine vary them."),
   blocks: z.array(BlockSchema).min(1).max(14).optional().describe("canvas layout: text and shape blocks on the 12×8 grid"),

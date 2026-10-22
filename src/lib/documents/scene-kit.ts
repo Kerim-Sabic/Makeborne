@@ -1,4 +1,4 @@
-import type { Chart, Deck, Slide, Theme } from "./schema";
+import type { Chart, Deck, ImagePlacement, Slide, Theme } from "./schema";
 import { FONTS, contrast, mix, readableOn } from "./theme";
 import type { DirectionSpec, FontRole, Weight } from "./directions";
 
@@ -23,7 +23,7 @@ export type ChartColors = { ink: string; muted: string; grid: string; series: st
 export type ChartStyle = { mono?: boolean; radius: number; grid: boolean };
 export type ChartPrim = { k: "chart"; x: number; y: number; w: number; h: number; chart: Chart; colors: ChartColors; style?: ChartStyle };
 export type Prim = TextPrim | RectPrim | EllipsePrim | LinePrim | ImagePrim | ChartPrim | PathPrim | ArtPrim;
-export type SlideScene = { background: string; prims: Prim[]; issues: string[]; composition?: string };
+export type SlideScene = { background: string; prims: Prim[]; issues: string[]; composition?: string; imagePlacement?: ImagePlacement };
 
 /** `accent` is always readable as text on `bg` (≥3:1); `signal` is the raw brand accent for large fills and marks. */
 export type Tone = { bg: string; ink: string; muted: string; accent: string; accent2: string; surface: string; rule: string; strong: string; onStrong: string; signal: string };
@@ -115,7 +115,10 @@ export type Ctx = {
   index: number; total: number; deck: Pick<Deck, "title" | "assets" | "author">; tone: Slide["tone"]; slide: Slide;
   /** Seeded per deck and slide, so generative art is stable across renders. */
   seed: number; sections: SectionRef[];
+  /** The text zone when the slide's image takes part of the canvas (a side rail, a top band or a full-bleed scrim). Compositions lay out inside it. */
+  frame?: Frame;
 };
+export type Frame = { x: number; r: number; y: number; b: number };
 export type TextStyle = { font?: FontRole; size: number; min?: number; maxH?: number; weight?: Weight; color?: string; align?: TextPrim["align"]; valign?: TextPrim["valign"]; lh?: number; tracking?: number; upper?: boolean; italic?: boolean; role?: TextPrim["role"] };
 
 /** Glyph width factor and measuring mode for one text style; bold widens by the
@@ -177,7 +180,9 @@ export function path(ctx: Ctx, d: PathSeg[], style: { fill?: string; stroke?: st
 }
 export const art = (ctx: Ctx, box: { x: number; y: number; w: number; h: number }, svg: string, opacity?: number) => { ctx.prims.push({ k: "art", ...box, svg, ...(opacity !== undefined ? { opacity } : {}) }); };
 export function image(ctx: Ctx, name: string, box: { x: number; y: number; w: number; h: number }, extra: Partial<ImagePrim> = {}) {
-  ctx.prims.push({ k: "image", ...box, name, alt: ctx.deck.assets.find(asset => asset.name === name)?.alt ?? "", ...extra });
+  // Alt text: the asset's own, else its prompt's opening (an image is never announced by its file name).
+  const asset = ctx.deck.assets.find(entry => entry.name === name), prompt = (asset?.prompt ?? "").split(/\n/)[0].trim();
+  ctx.prims.push({ k: "image", ...box, name, alt: asset?.alt || (prompt.length > 160 ? `${prompt.slice(0, 157)}…` : prompt), ...extra });
 }
 
 /** Move composed primitives. */

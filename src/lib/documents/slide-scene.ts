@@ -6,6 +6,8 @@ import { hash, metrics, toneColors, type Ctx, type SlideScene } from "./scene-ki
 import * as T from "./compose-title";
 import * as C from "./compose-content";
 import * as M from "./compose-media";
+import { placeImage, placementsFor } from "./compose-image";
+import type { ImagePlacement } from "./schema";
 
 /** Every deck slide is composed once into absolute primitives on a 1280×720
  * canvas by its art direction. The HTML preview/PDF and the editable PPTX both
@@ -97,10 +99,12 @@ function context(deck: DeckLike, slide: Slide, index: number, total: number): Ct
   return { theme: deck.theme, dir, m: metrics(deck.theme), c: toneColors(deck.theme, slide.tone, dir.ground), prims: [], issues: [], index, total, deck, tone: slide.tone, slide,
     seed: hash(`${deck.title}|${slide.id}|${dir.id}`), sections };
 }
-function run(deck: DeckLike, slide: Slide, index: number, total: number, id: CompositionId): SlideScene {
+function run(deck: DeckLike, slide: Slide, index: number, total: number, id: CompositionId, placement?: ImagePlacement): SlideScene {
   const ctx = context(deck, slide, index, total);
+  const placed = placement ? placeImage(ctx, slide, placement, T.treatment(ctx)) : undefined;
   REGISTRY[id].draw(ctx, slide);
-  return { background: ctx.c.bg, prims: ctx.prims, issues: [...new Set(ctx.issues)], composition: id };
+  placed?.finish(ctx);
+  return { background: ctx.c.bg, prims: ctx.prims, issues: [...new Set(ctx.issues)], composition: id, ...(placement ? { imagePlacement: placement } : {}) };
 }
 /** Compositions a slide may take in this deck, the direction's preference first. */
 export function candidates(deck: DeckLike, slide: Slide, index: number, total: number): CompositionId[] {
@@ -119,24 +123,35 @@ function choose(deck: DeckLike, slide: Slide, index: number, total: number, prev
   const requiresImage = Boolean(slide.image && (slide.layout === "cover" || slide.layout === "closing"));
   // Image-bearing covers have a semantic image requirement. A decorative
   // variant cannot override that requirement and silently discard a paid asset.
+  // A text, number or chart slide with an image places it on a rail, band or scrim; the composition then keeps to the text zone.
+  const placements = placementsFor(slide), passes: (ImagePlacement | undefined)[] = placements.length ? placements : [undefined];
+  const fitsPass = (id: CompositionId, placement: ImagePlacement | undefined) => placement !== "full" || REGISTRY[id].kind === "airy";
+  const tried: Planned[] = [];
+  const attempt = (id: CompositionId, placement: ImagePlacement | undefined) => { const planned = { id, scene: run(deck, slide, index, total, id, placement) }; tried.push(planned); return planned.scene.issues.length ? undefined : planned; };
+  const best = () => tried.sort((a, b) => a.scene.issues.length - b.scene.issues.length)[0];
+  // Image-bearing covers have a semantic image requirement. A decorative
+  // variant cannot override that requirement and silently discard a paid asset.
   if (slide.variant && (!requiresImage || slide.variant === "cover-image") && (REGISTRY[slide.variant as CompositionId].accepts?.(slide, context(deck, slide, index, total)) ?? true)) {
-    const id = slide.variant as CompositionId;
-    return { id, scene: run(deck, slide, index, total, id) };
+    const id = slide.variant as CompositionId, ways = passes.filter(placement => fitsPass(id, placement));
+    for (const placement of ways.length ? ways : passes.slice(0, 1)) { const ok = attempt(id, placement); if (ok) return ok; }
+    return best();
   }
   // The direction's signature composition comes first; later slides of the same layout cycle through the rest.
   const start = options.length ? roleCount % options.length : 0;
   const order = options.map((_, i) => options[(start + i) % options.length]);
-  const tried: Planned[] = [];
-  for (const id of order) {
-    if (previous && (id === previous.id || (REGISTRY[id].kind === "field" && REGISTRY[previous.id].kind === "field" && order.length > 1))) continue;
-    const scene = run(deck, slide, index, total, id);
-    if (!scene.issues.length) return { id, scene };
-    tried.push({ id, scene });
-  }
-  // Then repeats the rhythm rules allowed, then any other composition of the layout the copy fits.
+  // Then repeats the rhythm rules allowed, then any other composition of the layout the copy fits; a placement is exhausted before the next is tried.
   const others = requiresImage ? [] : (COMPOSITIONS[slide.layout] as readonly CompositionId[]).filter(id => id !== "cover-image" && !order.includes(id) && (REGISTRY[id].accepts?.(slide, context(deck, slide, index, total)) ?? true));
-  for (const id of [...order, ...others]) if (!tried.some(entry => entry.id === id)) { const scene = run(deck, slide, index, total, id); if (!scene.issues.length) return { id, scene }; tried.push({ id, scene }); }
-  return tried.sort((a, b) => a.scene.issues.length - b.scene.issues.length)[0] ?? { id: order[0], scene: run(deck, slide, index, total, order[0]) };
+  for (const placement of passes) {
+    for (const id of order) {
+      if (!fitsPass(id, placement) || (previous && (id === previous.id || (REGISTRY[id].kind === "field" && REGISTRY[previous.id].kind === "field" && order.length > 1)))) continue;
+      const ok = attempt(id, placement); if (ok) return ok;
+    }
+    for (const id of [...order, ...others]) {
+      if (!fitsPass(id, placement) || tried.some(entry => entry.id === id && entry.scene.imagePlacement === placement)) continue;
+      const ok = attempt(id, placement); if (ok) return ok;
+    }
+  }
+  return best() ?? { id: order[0], scene: run(deck, slide, index, total, order[0], passes[0]) };
 }
 /** The composition of every slide in a deck (memoised per deck object). */
 export function planDeck(deck: Deck): Planned[] {

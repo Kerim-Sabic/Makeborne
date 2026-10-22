@@ -30,6 +30,8 @@ const { bookHtml } = src("render-book.ts");
 const { composeSlide } = src("slide-scene.ts");
 const { deckPptx } = src("pptx.ts");
 const { FONTS } = src("theme.ts");
+let imageLuma = null;
+try { ({ imageLuma } = src("image-luma.ts")); } catch { /* older trees have no brightness map */ }
 let fontServer = null;
 try { fontServer = src("fonts-server.ts"); } catch { /* the pre-change tree has no embedded document fonts */ }
 const modulesRoot = path.dirname(path.dirname(path.dirname(require.resolve("playwright/package.json"))));
@@ -124,6 +126,8 @@ async function pptxSlides(bytes) {
         if (target) { const file = zip.file(path.posix.normalize(path.posix.join("ppt/slides", target))); if (file) shape.src = `data:image/${/\.png$/i.test(target) ? "png" : "jpeg"};base64,${await file.async("base64")}`; }
       } else if (type === "p:graphicFrame") shape.chart = /c:chart/.test(body);
       const spPr = /<p:spPr>([\s\S]*?)<\/p:spPr>/.exec(body)?.[1] ?? "";
+      const grad = /<a:gradFill[\s\S]*?<a:gs pos="100000"><a:srgbClr val="([0-9A-Fa-f]{6})"><a:alpha val="(\d+)"\/>/.exec(spPr);
+      if (grad) shape.gradient = { color: `#${grad[1]}`, alpha: Number(grad[2]) / 100000 };
       shape.fill = fillOf(spPr.replace(/<a:ln(?: [^>]*)?>[\s\S]*?<\/a:ln>|<a:ln(?: [^>]*)?\/>/, ""));
       const ln = /<a:ln(?: [^>]*)?>([\s\S]*?)<\/a:ln>/.exec(spPr) ?? /<a:ln(?: [^>]*)?\/>/.exec(spPr);
       if (ln && ln[1] && !/<a:noFill\/>/.test(ln[1])) shape.line = { ...fillOf(ln[1]), width: Number(attr(ln[0], "w") ?? 12700) / EMU };
@@ -142,7 +146,7 @@ async function pptxSlides(bytes) {
             const runs = [...p.matchAll(/<a:r>([\s\S]*?)<\/a:r>|<a:br\/>/g)].map(([whole, r]) => {
               if (!r) return { br: true };
               const rPr = /<a:rPr[^>]*?(?:\/>|>[\s\S]*?<\/a:rPr>)/.exec(r)?.[0] ?? "";
-              return { text: unxml(/<a:t>([\s\S]*?)<\/a:t>/.exec(r)?.[1] ?? ""), size: Number(attr(rPr, "sz") ?? 1800) / 100, bold: attr(rPr, "b") === "1", italic: attr(rPr, "i") === "1", spc: Number(attr(rPr, "spc") ?? 0) / 100, color: fillOf(rPr)?.color ?? "#000000", face: attr(/<a:latin [^>]*>/.exec(rPr)?.[0] ?? "", "typeface") ?? "Calibri", whole };
+              return { text: unxml(/<a:t>([\s\S]*?)<\/a:t>/.exec(r)?.[1] ?? ""), size: Number(attr(rPr, "sz") ?? 1800) / 100, bold: attr(rPr, "b") === "1", italic: attr(rPr, "i") === "1", caps: attr(rPr, "cap") === "all", spc: Number(attr(rPr, "spc") ?? 0) / 100, color: fillOf(rPr)?.color ?? "#000000", face: attr(/<a:latin [^>]*>/.exec(rPr)?.[0] ?? "", "typeface") ?? "Calibri", whole };
             });
             return { align: attr(pPr, "algn") ?? "l", spacing: pts ? { pts: Number(pts[1]) / 100 } : pct ? { pct: Number(pct[1]) / 100000 } : { pct: 1 }, runs };
           }),
@@ -166,7 +170,8 @@ function pptxSlideHtml(slide) {
       const [x1, x2] = s.flipH ? [s.x + s.w, s.x] : [s.x, s.x + s.w], [y1, y2] = s.flipV ? [s.y + s.h, s.y] : [s.y, s.y + s.h];
       return s.line ? `<svg style="position:absolute;left:0;top:0;width:1280px;height:720px;overflow:visible"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${s.line.color}" stroke-opacity="${s.line.alpha}" stroke-width="${s.line.width}"/></svg>` : "";
     }
-    const shapeStyle = [box, s.fill ? `background:${s.fill.color};` + (s.fill.alpha < 1 ? `opacity:${s.fill.alpha}` : "") : "", s.line ? `outline:${s.line.width}px solid ${s.line.color};outline-offset:-${s.line.width / 2}px` : "",
+    const rgbaOf = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
+    const shapeStyle = [box, s.gradient ? `background:linear-gradient(to bottom,${rgbaOf(s.gradient.color, 0)} 0%,${rgbaOf(s.gradient.color, s.gradient.alpha * 0.75)} 55%,${rgbaOf(s.gradient.color, s.gradient.alpha)} 100%)` : s.fill ? `background:${s.fill.color};` + (s.fill.alpha < 1 ? `opacity:${s.fill.alpha}` : "") : "", s.line ? `outline:${s.line.width}px solid ${s.line.color};outline-offset:-${s.line.width / 2}px` : "",
       s.prst === "ellipse" ? "border-radius:50%" : s.prst === "roundRect" ? `border-radius:${(s.radius ?? 0.1667) * Math.min(s.w, s.h)}px` : ""].filter(Boolean).join(";");
     let html = `<div style="position:absolute;${shapeStyle}"></div>`;
     if (s.text && s.text.paragraphs.some(p => p.runs.some(r => r.text))) {
@@ -175,7 +180,7 @@ function pptxSlideHtml(slide) {
         const first = p.runs.find(run => !run.br) ?? { size: 18, face: "Calibri" };
         const lineHeight = p.spacing.pts ? `${p.spacing.pts * 4 / 3}px` : `calc(var(--normal-${CSS_ID(first.face)}) * ${p.spacing.pct} * ${first.size * 4 / 3}px)`;
         // The paragraph's own font sets the line strut, as PowerPoint measures lines from the run.
-        return `<div class="para" style="font-family:'${first.face}';font-size:${first.size * 4 / 3}px;text-align:${{ l: "left", ctr: "center", r: "right", just: "justify" }[p.align] ?? "left"};line-height:${lineHeight}">${p.runs.map(run => run.br ? "<br>" : `<span style="font-family:'${run.face}';font-size:${run.size * 4 / 3}px;font-weight:${run.bold ? 700 : 400};font-style:${run.italic ? "italic" : "normal"};color:${run.color};letter-spacing:${run.spc * 4 / 3}px">${escHtml(run.text)}</span>`).join("") || "&nbsp;"}</div>`;
+        return `<div class="para" style="font-family:'${first.face}';font-size:${first.size * 4 / 3}px;text-align:${{ l: "left", ctr: "center", r: "right", just: "justify" }[p.align] ?? "left"};line-height:${lineHeight}">${p.runs.map(run => run.br ? "<br>" : `<span style="font-family:'${run.face}';font-size:${run.size * 4 / 3}px;font-weight:${run.bold ? 700 : 400};font-style:${run.italic ? "italic" : "normal"};${run.caps ? "text-transform:uppercase;" : ""}color:${run.color};letter-spacing:${run.spc * 4 / 3}px">${escHtml(run.text)}</span>`).join("") || "&nbsp;"}</div>`;
       }).join("");
       html += `<div class="tb" data-index="${index}" data-box-h="${s.h}" style="position:absolute;${box};padding:${t}px ${r}px ${b}px ${l}px;justify-content:${{ t: "flex-start", ctr: "center", b: "flex-end" }[s.text.anchor] ?? "flex-start"}"><div class="inner">${paragraphs}</div></div>`;
     }
@@ -320,6 +325,8 @@ async function renderBook(browser, name, doc, images, dir, report) {
       const doc = DocumentSourceSchema.parse(JSON.parse(fs.readFileSync(path.join(fixturesDir, file), "utf8")));
       const dir = path.join(outDir, name); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
       const images = {}; for (const asset of doc.assets) images[asset.name] = await artwork(asset, doc.theme);
+      // Measured brightness, as the builder stores it for generated images (scrims over text are sized from it).
+      if (imageLuma) for (const asset of doc.assets) if (!asset.luma) asset.luma = await imageLuma(images[asset.name]);
       const report = { fixture: name, kind: doc.kind, fonts: doc.theme.fonts };
       if (doc.kind === "deck") await renderDeck(browser, name, doc, images, dir, report);
       else await renderBook(browser, name, doc, images, dir, report);
