@@ -183,7 +183,7 @@ function pick<T>(options: Weighted<T>, byte: number): T {
 }
 
 /** The image plan when images are on and the client did not answer the imagery question: image-led by
- * default (a hero image plus two supporting images), with the kind that suits the subject. */
+ * default (a hero image plus an image for most other sections), with the kind that suits the subject. */
 const DEFAULT_IMAGERY: Record<Industry, string> = {
   food: "photographs: the hero shows the dishes or the room; supporting shots of the kitchen at work and a close detail of ingredients or the table",
   saas: "a crafted product UI mock as the hero object, with a photograph of the physical place the product serves (one illustration technique when it has none)",
@@ -274,7 +274,7 @@ export function designSeedBlock(input: { seed: string; brief: string; images: bo
       : design.logoColours ? "- Colour: take the palette from the client's logo (client's answer)."
       : `- Palette family: lean the ground tint and accent toward ${seed.palette}, adjusted to the subject.`,
     imagery ? `- Imagery: ${IMAGERY_NOTES[imagery]}${design.imagery ? " (client's answer)" : ""}.`
-      : input.images ? `- Imagery: image-led: a hero image on the first screen plus two supporting images in other sections; ${DEFAULT_IMAGERY[seed.industry]}.` : "",
+      : input.images ? `- Imagery: image-led: a hero image on the first screen plus an image for most other sections (the whole allowance); ${DEFAULT_IMAGERY[seed.industry]}.` : "",
     design.goal ? `- Primary action: ${GOAL_NOTES[design.goal]} (client's answer).` : "",
     `- Headline device: ${seed.headline}.`,
     "- Motif: one quiet visual motif drawn from this business's own working objects (a ledger page, a receipt, a timetable, a map, a menu card, a ticket, a plan drawing), used consistently and drawn with care, never as clip-art.",

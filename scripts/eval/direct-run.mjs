@@ -116,7 +116,7 @@ try {
     const reservation = await budget.reserve({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. ${values.effort}` });
     // Images: the run's whole image allowance (max images x the dearest allowed medium bound) reserved under the OpenAI sub-cap.
     const imageModels = imagesModule ? imagesModule.imageConfiguration().models : [];
-    const imageBoundUsd = imageModels.length ? policy.maxImages * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
+    const imageBoundUsd = imageModels.length ? (policy.maxWebsiteImages ?? policy.maxImages) * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
     const imageReservation = imageBoundUsd ? await budget.reserve({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
     let openaiMicrousd = 0, openaiUncertain = false;
     const imageBytes = new Map();

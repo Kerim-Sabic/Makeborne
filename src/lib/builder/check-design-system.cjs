@@ -291,7 +291,8 @@ check("image-led by default: a hero image and the full allowance, sizes per slot
   assert.match(imagery, /^Image-led by default\./);
   assert.match(imagery, /Every website gets a strong hero image on the first screen, generated first/);
   assert.match(imagery, /visible on phones without scrolling[^.]*never pushed below all the text and buttons/);
-  assert.match(imagery, /hero plus two supporting images/);
+  assert.match(imagery, /allows about six: the hero plus one image for most other sections/);
+  assert.match(imagery, /two to four of them on one gallery/);
   assert.match(BUILDER_SYSTEM, /At 360px the wordmark, that action and the menu button fit on one row/, "a header row that overflowed at 360 px (W9) in round 2");
   assert.match(imagery, /never instead of it/, "a crafted signature sits with the image, not in place of it");
   // The old steering away from photography is gone.
@@ -314,7 +315,7 @@ check("image-led by default: a hero image and the full allowance, sizes per slot
   assert.match(BUILDER_SYSTEM, /If image generation is unavailable, build a strong typographic and graphic design/);
   // The seed carries an image plan by default when images are on, and none when they are off or the client chose type.
   for (const brief of ["A neighbourhood restaurant in Bristol", "Heating and plumbing repairs in Saint Paul", "A family dental clinic in Leeds", "SaaS tool for invoices"]) {
-    assert.match(designSeedBlock({ seed: "img", brief, images: true }), /- Imagery: image-led: a hero image on the first screen plus two supporting images/, brief);
+    assert.match(designSeedBlock({ seed: "img", brief, images: true }), /- Imagery: image-led: a hero image on the first screen plus an image for most other sections \(the whole allowance\)/, brief);
     assert.doesNotMatch(designSeedBlock({ seed: "img", brief, images: false }), /image-led/, brief);
   }
   assert.doesNotMatch(designSeedBlock({ seed: "img", brief: "A bakery", images: true, design: { imagery: "type" } }), /image-led/);

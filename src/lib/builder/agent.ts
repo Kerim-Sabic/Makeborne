@@ -125,12 +125,14 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const spend = run.spend;
   // The configured image model, or null when images are off (see imageConfiguration).
   // The routable image models (ordered allowlist), or none when images are off (see imageConfiguration).
-  const imageModels = policy.maxImages > 0 ? imageConfiguration().models ?? [] : [];
+  // Websites have their own image allowance; a run's limits (0 on review passes, type-only designs) still win.
+  const maxImages = run.limits?.maxImages ?? policy.maxWebsiteImages;
+  const imageModels = maxImages > 0 ? imageConfiguration().models ?? [] : [];
   const imageModelId = imageModels[0] ?? null;
   // One image's worst case; images may use at most a third of the run's allowance.
   // Sizing the run's image allowance: the dearest allowed model at medium portrait with a full prompt.
   const imageBound = imageModels.length ? Math.max(...imageModels.map(model => imageCallBoundMicrousd(model, "medium", IMAGE_SIZES.portrait, "x".repeat(3400)))) : Infinity;
-  const imageLimit = imageModelId ? Math.min(policy.maxImages, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
+  const imageLimit = imageModelId ? Math.min(maxImages, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
   const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
   // Website images also get responsive copies (srcset) while they fit the site's image budget.
   const storeImage = run.storeImage ?? ((request: GeneratedImageRequest, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes,
@@ -261,6 +263,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const input = ToolInputs.generate_image.parse(use.input);
             if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Use CSS, typography and inline SVG."); break; }
             if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
+            if (!responsive.siteImageFits([...run.files.assets.values()])) { fail("This site already holds as many images as a published site can carry. Reuse an existing image or use CSS/SVG artwork."); break; }
             if (run.files.assets.has(`public/images/${input.name}.webp`)) { fail(`An image named ${input.name} already exists at /images/${input.name}.webp. Reuse it or choose a new name.`); break; }
             const kind = input.kind ?? "photo";
             const route = routeImage({ kind, aspect: input.aspect, text: input.text ?? null, textPlacement: input.textPlacement }, input.prompt, imageModels);
