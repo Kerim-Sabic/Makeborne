@@ -142,7 +142,8 @@ async function main() {
     const handle = await page.locator(`[data-card="${artifactId}"] iframe`).elementHandle({ timeout });
     const frame = await handle.contentFrame();
     await frame.waitForLoadState();
-    return frame.evaluate(() => document.body.innerText);
+    // Slide titles carry explicit balanced line breaks; compare the words, not where they wrap.
+    return frame.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
   };
   const description = (page, artifactId) => page.evaluate(id => { const button = document.querySelector(`[data-card="${id}"] button`); const target = button && document.getElementById(button.getAttribute("aria-describedby") ?? ""); return target ? target.textContent : null; }, artifactId);
   const tagCards = page => page.evaluate(() => { for (const card of document.querySelectorAll(".account-project-card")) { const title = card.querySelector("strong")?.textContent ?? ""; const match = Object.entries(window.cardTitles ?? {}).find(([, value]) => value === title); if (match) card.setAttribute("data-card", match[0]); } });
