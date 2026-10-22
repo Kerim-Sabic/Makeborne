@@ -57,3 +57,37 @@ These steps are for Codex, after Kerim approves this concrete release candidate:
 5. Promote.
 
 **Rollback:** this slice has no migration or data change, so rollback is a redeploy of the previous build. Briefs already saved keep working.
+
+## Brief enhancer repair (Codex E1–E4), 22 October 2026
+
+Commits a2a1a8f (migration + SQL check), f7e0a77 (route), e3fd743 (studio), 6d9d859 (tests). The intermediate commits are not individually green; the route test is updated only in the last one. Status: implemented and tested locally. **Keep the enhancer out of any release candidate until Codex has rechecked it.**
+
+- **Migration:** `supabase/migrations/20261022100000_brief_enhancement_actions.sql` (table `makeborne_private.brief_enhancements`; LF-frozen, sha256 begins `75dca905`).
+  - Applied only to the isolated local stack, inside a transaction.
+  - RLS is on and browser roles have no grants. The service role reaches the table only through security-definer entry points with `search_path=''`.
+- **Setting:** `MAKEBORNE_ENHANCE_STOP_POLL_MS`, optional, default 1000.
+- **E1 durable replay.** One row per (account, Idempotency-Key), bound to workspace, website and the sha256 of the normalised body. The claim and the 1-credit hold happen in one transaction. Repeats, parallel requests (6 requests over 3 route instances) and restarts produce one provider call and one hold. The same key with a changed body gets 409.
+- **E2 settlement.** A missing, released or lapsed hold returns 409 `ENHANCE_BILLING_REVIEW` with no result and no re-charge. A failing release returns 503 `ENHANCE_BILLING_PENDING`. An idempotent PATCH completes it, and the release happens exactly once even with racing recoveries.
+- **E3 release failure.** No swallowed errors. An unconfirmed release is stored durably and shown as billing `held` by GET. The copy never says "Nothing was charged" while the release is unconfirmed.
+- **E4 optionality and receipts.**
+  - A complete prompt builds directly, with no enhance request.
+  - A short brief offers "Build with my brief · up to N credits" or "Improve my brief first · free"; nothing is sent until one is chosen.
+  - A lost reply shows "checking" and is recovered by re-reading the same key, never by re-running. Reload works the same way, and Stop is durable.
+  - Cancelling after a completed improvement keeps its receipt. "Build with my original instead" implies no refund.
+  - The build receipt carries the improvement's charge from the stored record (0 credits today, by the owner's pricing decision).
+- **Checks:**
+  - `npm test` 189/189.
+  - `check-enhance-route.cjs` 14/14 (Stop at four points; account, workspace and role isolation).
+  - `check-enhance-durable.cjs` 10/10, both in memory and against real local SQL (`MAKEBORNE_VERIFY_ENHANCE_DB`); its fixtures are removed afterwards.
+  - `supabase/check-brief-enhancements.sql` 7/7 groups.
+  - `check-enhance-flow-browser.cjs` 5/5 and `check-enhanced-brief-browser.cjs` 8/8 in Chromium, Firefox and WebKit.
+  - tsc, eslint and `next build --webpack` pass. A stale webpack cache was moved aside, not deleted.
+- **Limits:**
+  - The route tests use an in-memory model of the SQL; the real SQL is covered by the SQL check and the durable check's database mode.
+  - The provider gate is proven in SQL only, because provider limits on the shared stack were not changed.
+  - A `needs_review` action needs an operator to resolve it.
+  - The browser checks use routed, fictional APIs.
+- **For Codex:**
+  - Rehearse the migration on staging and record its hash.
+  - Independently re-run the durable check against real SQL.
+  - One bounded paid staging journey (proposed: at most 5 improvement calls of about $0.001 each, under a $0.10 cap), covering one completed run, one Stop mid-run and one forced release failure followed by recovery; confirm one `live_provider_calls` row per action.
