@@ -1,20 +1,24 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import type { BetaContentBlock, BetaContentBlockParam, BetaMessageParam, BetaRawMessageStreamEvent, BetaToolResultBlockParam, BetaToolUnion, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { BetaContentBlock, BetaContentBlockParam, BetaImageBlockParam, BetaMessageParam, BetaRawMessageStreamEvent, BetaTextBlockParam, BetaToolResultBlockParam, BetaToolUnion, BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { z } from "zod";
 import type { EffortLevel } from "../routing/effort";
 import { DocToolError, DocToolInputs, DocumentEditor, docToolDefinitions } from "../documents/editor";
-import type { DocumentSource } from "../documents/schema";
+import type { DocumentSource, Slide } from "../documents/schema";
 import { MIN_STEP_TOKENS, builderModel, isProviderOrSpendError } from "./agent";
 import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage } from "./images";
-import { BUILDER_EFFORT, DOCUMENT_IMAGE_CAP, aiCostUsdPerCredit, documentImageMax } from "./pricing";
+import { routeImage } from "./image-router";
+import { BOOK_IMAGE_CAP, BUILDER_EFFORT, DECK_ART_IMAGE_CAP, DOCUMENT_IMAGE_CAP, aiCostUsdPerCredit, bookImageMax, deckArtImageMax, deckArtSlidesFor, documentImageMax } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
-import { imageCallBoundMicrousd } from "../ai/prices";
+import { imageCallBoundMicrousd, type ImageQuality } from "../ai/prices";
 import { SpendError, type RunSpend } from "../ai/run-spend";
-import { BOOK_SYSTEM, DECK_SYSTEM } from "./docs-prompt";
+import { BOOK_SYSTEM, DECK_ART_SYSTEM, DECK_SYSTEM } from "./docs-prompt";
 import { imageLuma } from "../documents/image-luma";
+import { ART_CROP, ART_SOURCE, artAlt, artPrompt, artTextIssues, compareSlideText, describeComparison, slideNumerals, slideText, textKey, verifiedArt } from "../documents/slide-art";
+import { bookImagePlanText, bookPlan, plannedBookImages } from "../documents/book-images";
 
 /** Events streamed to the chat. Shares the website builder's text/status/
  * usage/done/error shapes, plus live document snapshots. */
@@ -27,10 +31,14 @@ export type DocBuilderEvent =
   | { type: "document"; document: DocumentSource; focus?: string }
   | { type: "image_start"; name: string; prompt: string }
   | { type: "image"; path: string; url: string; assetId: string }
+  | { type: "check"; record: CheckRecord }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
   | { type: "done"; version: number; summary: string; charged: number }
   | { type: "error"; code: string; message: string; retryable?: boolean };
+
+/** One outcome of the vision check: a full-image slide's text gate or a generated image's artifact check. */
+export type CheckRecord = { target: "slide" | "image"; id: string; attempt: number; outcome: "passed" | "retry" | "fallback" | "dropped" | "unchecked"; problems: string[] };
 
 export type DocBuilderRun = {
   client: SupabaseClient;
@@ -49,10 +57,19 @@ export type DocBuilderRun = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: (request: { name: string; prompt: string; model: string }, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
+  /** Image models to route among (tests); production reads the allowlist (imageConfiguration). */
+  imageModels?: string[];
 };
-export type DocBuilderResult = { summary: string; credits: number; usd: number; finished: boolean; stopped: string | null };
+export type DocBuilderResult = { summary: string; credits: number; usd: number; finished: boolean; stopped: string | null; checks: CheckRecord[] };
 
 const LIVE_TOOLS = new Set(["set_theme", "set_deck_details", "set_book_details", "write_slide", "delete_slide", "move_slide", "write_chapter", "edit_chapter", "delete_chapter", "move_chapter"]);
+/** Full-image slides: medium quality renders crisp slide type (A/B of 22 Oct 2026: correct spelling of 12-word lines and
+ * chart labels at medium, at a quarter of high's price) and is the only quality with a measured 1536x1024 bound besides high. */
+export const ART_QUALITY: ImageQuality = "medium";
+/** Attempts per slide or image: the first, then one regeneration with a corrected prompt. */
+export const CHECK_ATTEMPTS = 2;
+/** Longest side of an image sent back to the model for its check. */
+const VISION_EDGE = 1280;
 
 /** Human label for an in-flight or finished tool call, shown in the chat. */
 export function describeTool(name: string, input: Record<string, unknown> | null, editor: DocumentEditor): string {
@@ -76,9 +93,27 @@ export function describeTool(name: string, input: Record<string, unknown> | null
   }
 }
 
+/** A JPEG for the model to look at (at most 1280 px on the long edge). */
+async function visionBlock(bytes: Buffer): Promise<BetaImageBlockParam | BetaTextBlockParam> {
+  try {
+    const jpeg = await sharp(bytes, { limitInputPixels: 40_000_000 }).rotate().resize({ width: VISION_EDGE, height: VISION_EDGE, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+    return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: jpeg.toString("base64") } };
+  } catch {
+    return { type: "text", text: "(The image could not be decoded for viewing; treat it as failed.)" };
+  }
+}
+/** The 16:9 slide cut from a generated 3:2 canvas (the prompt keeps the top and bottom 8% empty). */
+export async function cropSlide(bytes: Buffer) {
+  const meta = await sharp(bytes).metadata();
+  const image = sharp(bytes, { limitInputPixels: 40_000_000 }).rotate();
+  return (meta.width === ART_SOURCE.width && meta.height === ART_SOURCE.height ? image.extract(ART_CROP) : image.resize(ART_CROP.width, ART_CROP.height, { fit: "cover" })).png().toBuffer();
+}
+const artName = (id: string) => `art-${id}`.slice(0, 49).replace(/-+$/, "");
+
 /** Agentic edit loop for presentations and books. Structural tools are applied
  * the moment their input finishes streaming, so the preview updates slide by
- * slide; generate_image runs at the end of the step; finish validates. */
+ * slide; images and full-image slides run at the end of the step and come back
+ * to the model as images to check; finish validates. */
 export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilderResult> {
   const policy = BUILDER_EFFORT[run.effort];
   const model = builderModel();
@@ -86,28 +121,206 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 600_000 }) as unknown as AnthropicLike);
   const rate = aiCostUsdPerCredit();
   const spend = run.spend;
-  // The configured image model, or null when images are off (see imageConfiguration).
-  const imageModelId = policy.maxImages > 0 ? imageConfiguration().model : null;
-  const imageBound = imageModelId ? imageCallBoundMicrousd(imageModelId, "medium", IMAGE_SIZES.portrait, "x".repeat(4000)) : Infinity;
-  // Images may take at most a third of the run's allowance; within that a deck may have one per slide and a book a cover plus
-  // one opener per chapter (documentImageMax, counted from the document as it grows during the run).
+  const kind = run.editor.kind;
+  // The configured image models, or none when images are off (see imageConfiguration).
+  const configured = policy.maxImages > 0 && !run.imageModels ? imageConfiguration() : null;
+  const allowed: string[] = policy.maxImages > 0 ? run.imageModels ?? (configured?.models?.length ? [...configured.models] : configured?.model ? [configured.model] : []) : [];
+  const imageModelId = allowed[0] ?? null;
+  // Full-image slides need a model that renders text exactly where asked (router: sunburst first, then flare).
+  const deck = () => run.editor.doc.kind === "deck" ? run.editor.doc : null;
+  const artWanted = kind === "deck" && deck()?.art?.mode === "image";
+  const artRoute = artWanted ? routeImage({ kind: "illustration", aspect: "landscape", text: "slide text", textPlacement: "exact" }, "slide", allowed) : null;
+  const artModel = artRoute?.ok ? artRoute.model : null;
+  const art = Boolean(artWanted && artModel);
+  run.editor.artAvailable = art;
+  const imageBound = art ? imageCallBoundMicrousd(artModel!, ART_QUALITY, IMAGE_SIZES.landscape, "x".repeat(4500))
+    : imageModelId ? imageCallBoundMicrousd(imageModelId, "medium", IMAGE_SIZES.portrait, "x".repeat(4000)) : Infinity;
+  // Images may take at most a third of the run's allowance. Within that: a full-image deck one render per slide plus
+  // retries (deckArtImageMax); an editable deck one image per slide; a book its image plan plus regenerations.
   const imageBudget = imageModelId ? Math.max(0, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
   const items = () => run.editor.doc.kind === "deck" ? run.editor.doc.slides.length : run.editor.doc.chapters.length;
-  const imageLimitNow = () => Math.min(imageBudget, documentImageMax(run.editor.kind, run.effort, items()));
-  const imageLimit = Math.min(imageBudget, documentImageMax(run.editor.kind, run.effort, DOCUMENT_IMAGE_CAP));
+  const bookCap = () => {
+    const doc = run.editor.doc;
+    if (doc.kind !== "book") return 0;
+    if (bookPlan(doc).placement === "none") return 0;
+    return run.effort === "light" ? policy.maxImages : bookImageMax(Math.max(plannedBookImages(doc).total, bookPlan(doc).placement === "cover" ? 1 : doc.chapters.length + 1));
+  };
+  const imageLimitNow = () => Math.min(imageBudget, art ? deckArtImageMax(items()) : kind === "book" ? bookCap() : documentImageMax(kind, run.effort, items()));
+  const bookCeiling = kind === "book" && run.editor.doc.kind === "book" && bookPlan(run.editor.doc).placement === "none" ? 0 : run.effort === "light" ? policy.maxImages : BOOK_IMAGE_CAP;
+  const imageLimit = Math.min(imageBudget, art ? DECK_ART_IMAGE_CAP : kind === "book" ? bookCeiling : documentImageMax(kind, run.effort, DOCUMENT_IMAGE_CAP));
   const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
   const storeImage = run.storeImage ?? ((request: { name: string; prompt: string; model: string }, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes));
-  const kind = run.editor.kind;
-  const tools = docToolDefinitions(kind, imageLimit > 0) as unknown as BetaToolUnion[];
-  const system = [{ type: "text" as const, text: kind === "deck" ? DECK_SYSTEM : BOOK_SYSTEM }];
+  const tools = docToolDefinitions(kind, imageLimit > 0, art && imageLimit > 0) as unknown as BetaToolUnion[];
+  const system = [{ type: "text" as const, text: kind === "deck" ? (art ? `${DECK_SYSTEM}\n\n${DECK_ART_SYSTEM}` : DECK_SYSTEM) : BOOK_SYSTEM }];
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
-  let imagesUsed = 0, summary = "", finished = false, malformedTurns = 0;
+  let imagesUsed = 0, summary = "", finished = false, malformedTurns = 0, blockedFinishes = 0;
+  const checks: CheckRecord[] = [];
+  const record = (entry: CheckRecord) => { checks.push(entry); run.emit({ type: "check", record: entry }); };
+  /** Renders waiting for check_slide, by slide id. */
+  const pendingArt = new Map<string, { key: string; prompt: string; attempts: number; bytes: Buffer; problems: string[] }>();
+  /** Generated images waiting for check_image, by name. */
+  const pendingImages = new Map<string, { input: z.infer<typeof DocToolInputs.generate_image>; attempts: number }>();
 
+  const renders = imageLimit > 0 && art ? Math.min(imageBudget, DECK_ART_IMAGE_CAP) : 0;
+  const imageLine = art
+    ? imageLimit > 0
+      ? `Full-image slides: on (each slide is one generated image including its text; model ${artModel}). This run can afford up to ${renders} slide renders (first attempts, regenerations and any text-free photos for fallback slides together), so plan at most ${deckArtSlidesFor(renders)} slides${deckArtSlidesFor(renders) < 8 ? " (fewer than a usual deck: the run's credit maximum cannot pay for more renders; say so in your summary if the client asked for more slides)" : ""}.`
+      : "Full-image slides: the run's budget cannot pay for slide renders. Design editable text slides (no art fields, no images) and say so in your summary."
+    : artWanted ? "Full-image slides are not available here (no text-capable image model is enabled). Design editable text slides; say so in your summary."
+    : `Image generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${imageLimit > policy.maxImages ? `, about one per ${kind === "deck" ? "slide" : "chapter plus the cover"}` : ""})` : "unavailable — design without images"}.`;
+  const planLine = run.editor.doc.kind === "book" ? `\n\n${bookImagePlanText(run.editor.doc)}${imageLimit > 0 ? ` Up to ${imageLimit} image generations this run, regenerations included.` : bookPlan(run.editor.doc).placement === "none" ? "" : " Image generation is unavailable this run: design without images and say so in your summary."}` : "";
   const messages: BetaMessageParam[] = [{ role: "user", content: [
     ...run.attachments,
-    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${imageLimit > policy.maxImages ? `, about one per ${kind === "deck" ? "slide" : "chapter plus the cover"}` : ""})` : "unavailable — design without images"}.\n\n<request>\n${run.request}\n</request>` },
+    { type: "text", text: `${run.context}\n\n${imageLine}${planLine}\n\n<request>\n${run.request}\n</request>` },
   ] }];
+
+  /** Reserve and start one image; null (with a reason) when the budget or the plan does not allow it. */
+  async function startImage(prompt: string, size: (typeof IMAGE_SIZES)[keyof typeof IMAGE_SIZES], modelId: string, quality: ImageQuality) {
+    if (!imageClient) return { error: "Image generation is unavailable." } as const;
+    if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) return { error: "The image budget for this run is used up." } as const;
+    try {
+      const job = await startBudgetedImage({ client: imageClient, spend, model: modelId, prompt, size, quality, signal: run.signal });
+      imagesUsed++;
+      return { job } as const;
+    } catch (error) {
+      return { error: error instanceof SpendError && !error.graceful ? `${error.message}` : "The image budget for this run is used up." } as const;
+    }
+  }
+
+  const slideOf = (id: string) => deck()?.slides.find(slide => slide.id === id);
+  const slideNumber = (id: string) => (deck()?.slides.findIndex(slide => slide.id === id) ?? -1) + 1;
+  /** Why a slide cannot be rendered now, or null. */
+  function renderRefusal(slide: Slide | undefined, id: string) {
+    const doc = deck();
+    if (!slide || !doc) return `No slide with id "${id}".`;
+    if (!doc.art?.system) return "Set art_system with set_deck_details first: it is the design system every slide is generated in.";
+    if (!slide.art) return `Slide ${slideNumber(id)} has no art plan: rewrite it with art {frame, brief}.`;
+    if (pendingArt.has(id)) return `Slide ${slideNumber(id)} is waiting for check_slide.`;
+    if (verifiedArt(doc, slide)) return `Slide ${slideNumber(id)} already has a verified render for its current text.`;
+    const text = artTextIssues(slide);
+    if (text.length) return `Slide ${slideNumber(id)} has too much text for one image: ${text.join("; ")}. Shorten it with write_slide, or leave it as an editable slide.`;
+    const index = doc.slides.indexOf(slide);
+    for (const neighbour of [doc.slides[index - 1], doc.slides[index + 1]]) {
+      if (!neighbour) continue;
+      const frame = doc.art.renders.find(entry => entry.slide === neighbour.id && entry.outcome === "passed")?.frame ?? neighbour.art?.frame;
+      if (neighbour.layout === slide.layout) return `Slide ${slideNumber(id)} uses the ${slide.layout} layout like slide ${slideNumber(neighbour.id)} beside it; full-image decks never repeat a layout on consecutive slides. Change one of them.`;
+      if (frame === slide.art.frame) return `Slide ${slideNumber(id)} uses the ${slide.art.frame} frame like slide ${slideNumber(neighbour.id)} beside it. Give one of them a different frame and brief.`;
+    }
+    return null;
+  }
+  /** The content block for one render to check. */
+  async function renderContent(id: string, bytes: Buffer, attempt: number): Promise<(BetaTextBlockParam | BetaImageBlockParam)[]> {
+    const slide = slideOf(id)!;
+    const words = slideText(slide).map(line => `- ${line.role}: "${line.text}"`).join("\n");
+    return [{ type: "text", text: `Slide ${slideNumber(id)} (${id}), attempt ${attempt} of ${CHECK_ATTEMPTS}. It must show exactly these words and nothing else:\n${words}\nLook at the image and call check_slide for "${id}": transcript = every word and number you can actually read, verbatim (with any misspelling, missing or extra letter), in reading order; artifacts = any garbled or malformed glyph, stray or extra text, cut-off text, text closer than 5% to an edge, poor contrast, warped or plastic people, oversaturation, HDR glow, clip-art icons, random gradients, or a composition that repeats its neighbour; verdict pass only if every word is exactly right and it looks like professional editorial design.` },
+      await visionBlock(bytes)];
+  }
+  /** Start one slide render; resolves to the tool-result blocks (the image to check, or why it failed). */
+  async function renderSlide(id: string, attempt: number, fix?: string): Promise<(BetaTextBlockParam | BetaImageBlockParam)[]> {
+    const doc = deck()!, slide = slideOf(id)!;
+    const prompt = artPrompt(doc, slide, fix);
+    const started = await startImage(prompt, IMAGE_SIZES.landscape, artModel!, ART_QUALITY);
+    if ("error" in started) return [{ type: "text", text: `Slide ${slideNumber(id)} (${id}) was not rendered: ${started.error} It stays an editable text slide.` }];
+    run.emit({ type: "image_start", name: artName(id), prompt: `Slide ${slideNumber(id)}: ${slide.title}` });
+    const key = textKey(slide);
+    try {
+      const bytes = await cropSlide(await started.job.done);
+      pendingArt.set(id, { key, prompt, attempts: attempt, bytes, problems: [] });
+      return renderContent(id, bytes, attempt);
+    } catch {
+      return [{ type: "text", text: `Rendering slide ${slideNumber(id)} (${id}) failed at the image service. It stays an editable text slide unless you render it again.` }];
+    }
+  }
+  /** Keep a slide as an editable live-text slide after a failed gate; the deck is never shown with wrong words. */
+  function fallback(id: string, attempts: number, problems: string[]) {
+    pendingArt.delete(id);
+    const slide = slideOf(id);
+    if (!slide) return;
+    run.editor.recordRender({ slide: id, frame: slide.art?.frame, attempts, outcome: "fallback", problems: problems.slice(0, 6).map(item => item.slice(0, 300)) });
+    record({ target: "slide", id, attempt: attempts, outcome: "fallback", problems });
+    run.emit({ type: "document", document: run.editor.doc, focus: id });
+  }
+  async function checkSlide(input: z.infer<typeof DocToolInputs.check_slide>): Promise<{ ok: boolean; content: string | (BetaTextBlockParam | BetaImageBlockParam)[] }> {
+    const pending = pendingArt.get(input.id), slide = slideOf(input.id);
+    if (!pending || !slide) return { ok: false, content: `No render of "${input.id}" is waiting for a check. Render it with render_slides first.` };
+    if (textKey(slide) !== pending.key) { pendingArt.delete(input.id); return { ok: false, content: `Slide ${slideNumber(input.id)} changed after it was rendered; render it again.` }; }
+    const comparison = compareSlideText(slideText(slide).map(line => line.text), input.transcript, { numerals: slideNumerals(slide) });
+    const problems = [...input.artifacts, ...(comparison.ok ? [] : [describeComparison(comparison)])];
+    if (input.verdict === "pass" && comparison.ok && !input.artifacts.length) {
+      const name = artName(input.id);
+      try {
+        const asset = await storeImage({ name, prompt: pending.prompt, model: artModel! }, pending.bytes);
+        run.editor.addAsset({ name, id: asset.id, aspect: "landscape", alt: artAlt(slide).slice(0, 300), prompt: pending.prompt.slice(0, 3000) });
+        run.editor.recordRender({ slide: input.id, frame: slide.art?.frame, image: name, verified: pending.key, attempts: pending.attempts, outcome: "passed", problems: [] });
+        pendingArt.delete(input.id);
+        record({ target: "slide", id: input.id, attempt: pending.attempts, outcome: "passed", problems: [] });
+        run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id });
+        run.emit({ type: "document", document: run.editor.doc, focus: input.id });
+        return { ok: true, content: `Slide ${slideNumber(input.id)} passed the text gate and is shown as its full image.` };
+      } catch {
+        fallback(input.id, pending.attempts, ["the render could not be stored"]);
+        return { ok: false, content: `Slide ${slideNumber(input.id)} passed but could not be stored; it stays an editable text slide.` };
+      }
+    }
+    if (input.verdict === "pass" && !comparison.ok) problems.unshift("your transcript does not match the slide's words");
+    if (pending.attempts < CHECK_ATTEMPTS) {
+      record({ target: "slide", id: input.id, attempt: pending.attempts, outcome: "retry", problems });
+      pendingArt.delete(input.id);
+      const fix = [input.fix, comparison.ok ? "" : `Text errors: ${describeComparison(comparison)}. Spell every word exactly as listed; add no other words.`, input.artifacts.length ? `Visual problems: ${input.artifacts.join("; ")}.` : ""].filter(Boolean).join(" ");
+      const content = await renderSlide(input.id, pending.attempts + 1, fix);
+      if (!pendingArt.has(input.id)) { fallback(input.id, pending.attempts, problems); return { ok: true, content: [...content, { type: "text", text: "It is kept as an editable text slide." }] }; }
+      return { ok: true, content: [{ type: "text", text: `Slide ${slideNumber(input.id)} failed (${problems.join("; ").slice(0, 400)}) and was regenerated with a corrected prompt. Check the new attempt:` }, ...content] };
+    }
+    fallback(input.id, pending.attempts, problems);
+    return { ok: true, content: `Slide ${slideNumber(input.id)} failed the gate twice (${problems.join("; ").slice(0, 400)}). It is now an editable live-text slide in the deck's art direction, so the deck is never wrong. If it would read better with a text-free photo, you may generate one (generate_image, then check_image) and set it on the slide where its layout allows.` };
+  }
+
+  /** One generate_image call: the stored image comes back to the model to check (check_image). */
+  async function generate(input: z.infer<typeof DocToolInputs.generate_image>, attempt: number, fix?: string): Promise<{ ok: boolean; content: string | (BetaTextBlockParam | BetaImageBlockParam)[] }> {
+    const prompt = run.editor.imagePrompt(fix ? `${input.prompt}\n\nCORRECTION — the previous attempt had these problems; avoid them: ${fix}` : input.prompt);
+    const started = await startImage(prompt, IMAGE_SIZES[input.aspect], imageModelId!, "medium");
+    if ("error" in started) return { ok: false, content: `${started.error} Continue without this image (reuse an existing one or remove the reference).` };
+    run.emit({ type: "image_start", name: input.name, prompt: input.prompt });
+    try {
+      const bytes = await started.job.done;
+      // The brightness map sizes the scrim under any text set over this image (documents/compose-image.ts).
+      const [asset, luma] = await Promise.all([storeImage({ name: input.name, prompt, model: imageModelId! }, bytes), imageLuma(bytes).catch(() => undefined)]);
+      run.editor.addAsset({ name: input.name, id: asset.id, aspect: input.aspect, alt: input.alt, prompt: input.prompt, ...(luma ? { luma } : {}) });
+      run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id });
+      run.emit({ type: "document", document: run.editor.doc });
+      pendingImages.set(input.name, { input, attempts: attempt });
+      return { ok: true, content: [{ type: "text", text: `Image "${input.name}" is ready (${input.aspect}), attempt ${attempt} of ${CHECK_ATTEMPTS}. Reference it by name. Look at it and call check_image for "${input.name}": artifacts = any garbled pseudo-text or letters, warped hands, faces or objects, plastic or uncanny people, extra limbs, oversaturation, HDR glow, clip-art, random gradients, or a subject that does not do its job (${input.alt.slice(0, 160)}); verdict pass only if it looks like real, professional ${kind === "book" ? "book art" : "editorial imagery"}.` }, await visionBlock(bytes)] };
+    } catch {
+      return { ok: false, content: `Image generation for "${input.name}" failed. Continue without it (remove the reference).` };
+    }
+  }
+  async function checkImage(input: z.infer<typeof DocToolInputs.check_image>): Promise<{ ok: boolean; content: string | (BetaTextBlockParam | BetaImageBlockParam)[] }> {
+    const pending = pendingImages.get(input.name);
+    if (!pending) return { ok: false, content: `No image "${input.name}" is waiting for a check.` };
+    pendingImages.delete(input.name);
+    if (input.verdict === "pass" && !input.artifacts.length) { record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "passed", problems: [] }); return { ok: true, content: `Image "${input.name}" passed.` }; }
+    const problems = input.artifacts.length ? input.artifacts : ["failed the visual check"];
+    if (pending.attempts < CHECK_ATTEMPTS) {
+      record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "retry", problems });
+      const result = await generate(pending.input, pending.attempts + 1, [input.fix, problems.join("; ")].filter(Boolean).join(" "));
+      if (pendingImages.has(input.name)) return { ok: true, content: [{ type: "text", text: `Image "${input.name}" failed (${problems.join("; ").slice(0, 300)}) and was regenerated with a corrected prompt.` }, ...(typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : result.content)] };
+      // Could not regenerate: the failed image is not kept.
+    }
+    run.editor.dropImage(input.name);
+    record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "dropped", problems });
+    run.emit({ type: "document", document: run.editor.doc });
+    return { ok: true, content: `Image "${input.name}" failed its check ${pending.attempts < CHECK_ATTEMPTS ? "and could not be regenerated" : "twice"}; it was removed with every reference to it and the layout closes up around it. Do not reference it again.` };
+  }
+
+  /** At the end of a run: slides never rendered or checked are recorded as editable fallbacks; unchecked images are logged. */
+  function settlePending(reason: string) {
+    for (const [id, pending] of pendingArt) fallback(id, pending.attempts, [reason]);
+    const doc = deck();
+    if (doc && art && doc.art) for (const slide of doc.slides) if (!verifiedArt(doc, slide) && !doc.art.renders.some(entry => entry.slide === slide.id)) fallback(slide.id, 0, ["not rendered: " + reason]);
+    for (const [name, pending] of pendingImages) record({ target: "image", id: name, attempt: pending.attempts, outcome: "unchecked", problems: [reason] });
+    pendingImages.clear();
+  }
 
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
     const deadline = Math.min(run.deadline, spend.deadline);
@@ -166,7 +379,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
       usage();
       if (error instanceof SpendError && error.graceful) break;
       console.error("document builder step failed", error instanceof Error ? `${error.name}: ${error.message.slice(0, 300)}` : error);
-      if (isProviderOrSpendError(error) || run.signal.aborted || ++malformedTurns > 2) throw error;
+      if (isProviderOrSpendError(error) || run.signal.aborted || ++malformedTurns > 2) { settlePending("the run stopped"); throw error; }
       run.emit({ type: "status", message: "Retrying an incomplete step…" });
       // Tool calls that completed before the step broke are already applied; don't redo them.
       const done = [...applied.values()].filter(result => result.ok).map(result => result.text);
@@ -191,8 +404,9 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     const imageJobs: Promise<void>[] = [];
     let finishUse: BetaToolUseBlock | undefined;
     for (const use of uses) {
-      const ok = (text: string) => results.push({ type: "tool_result", tool_use_id: use.id, content: text });
+      const ok = (text: string | (BetaTextBlockParam | BetaImageBlockParam)[]) => results.push({ type: "tool_result", tool_use_id: use.id, content: text });
       const fail = (text: string) => { results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: text }); run.emit({ type: "tool_error", tool: use.name, message: text }); };
+      const settle = (result: { ok: boolean; content: string | (BetaTextBlockParam | BetaImageBlockParam)[] }): void => { if (result.ok || typeof result.content !== "string") ok(result.content); else fail(result.content); };
       const early = applied.get(use.id);
       if (early) { if (early.ok) ok(early.text); else fail(early.text); continue; }
       if (truncated) { fail("Your response hit the output limit before this tool call completed. Write fewer or shorter items per step."); continue; }
@@ -201,28 +415,30 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
         if (use.name === "generate_image") {
           const input = DocToolInputs.generate_image.parse(use.input);
           if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Design without images."); continue; }
-          if (imagesUsed >= imageLimitNow() && imagesUsed < imageLimit) { fail(`Images follow the document: about one per ${kind === "deck" ? "slide" : "chapter plus the cover"}. Write the ${kind === "deck" ? "slides" : "chapters"} that will show images first, then generate them.`); continue; }
+          if (imagesUsed >= imageLimitNow() && imagesUsed < imageLimit) { fail(kind === "book" ? `The image plan allows about ${imageLimitNow()} images for the book as written so far. Write the chapters and figures that will show images first, then generate them; never add filler images.` : `Images follow the document: about one per slide. Write the slides that will show images first, then generate them.`); continue; }
           if (imagesUsed >= imageLimitNow() || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("The image budget for this run is used up. Reuse existing images or remove the image field."); continue; }
-          const prompt = run.editor.imagePrompt(input.prompt);
-          let job: { done: Promise<Buffer> };
-          try {
-            // The image's bound is reserved before the provider is contacted.
-            job = await startBudgetedImage({ client: imageClient, spend, model: imageModelId, prompt, size: IMAGE_SIZES[input.aspect], quality: "medium", signal: run.signal });
-          } catch (error) {
-            fail(error instanceof SpendError && !error.graceful ? `${error.message} Continue without this image.` : "The image budget for this run is used up. Reuse existing images or remove the image field.");
-            continue;
-          }
-          imagesUsed++;
-          run.emit({ type: "image_start", name: input.name, prompt: input.prompt });
-          // The brightness map sizes the scrim under any text set over this image (documents/compose-image.ts).
-          imageJobs.push(job.done.then(bytes => Promise.all([storeImage({ name: input.name, prompt, model: imageModelId }, bytes), imageLuma(bytes).catch(() => undefined)])).then(([asset, luma]) => {
-            run.editor.addAsset({ name: input.name, id: asset.id, aspect: input.aspect, alt: input.alt, prompt: input.prompt, ...(luma ? { luma } : {}) });
-            run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id });
-            run.emit({ type: "document", document: run.editor.doc });
-            ok(`Image "${input.name}" is ready (${input.aspect}). Reference it by name.`);
-          }, () => fail(`Image generation for "${input.name}" failed. Continue without it (remove the reference).`)));
+          imageJobs.push(generate(input, 1).then(settle));
           continue;
         }
+        if (use.name === "check_image") { const input = DocToolInputs.check_image.parse(use.input); imageJobs.push(checkImage(input).then(settle)); continue; }
+        if (use.name === "render_slides") {
+          const input = DocToolInputs.render_slides.parse(use.input);
+          if (!art) { fail("This deck does not use full-image slides."); continue; }
+          const refusals: string[] = [], started: Promise<(BetaTextBlockParam | BetaImageBlockParam)[]>[] = [];
+          for (const id of [...new Set(input.ids)]) {
+            const refusal = renderRefusal(slideOf(id), id);
+            if (refusal) { refusals.push(refusal); continue; }
+            if (imagesUsed + started.length >= imageLimitNow()) { refusals.push(`Slide ${slideNumber(id)} was not rendered: this run's render budget is used up; it stays an editable text slide.`); continue; }
+            started.push(renderSlide(id, 1));
+          }
+          imageJobs.push(Promise.all(started).then(blocks => {
+            const flat = blocks.flat();
+            if (!flat.length) { fail(refusals.join("\n") || "Nothing to render."); return; }
+            ok([...(refusals.length ? [{ type: "text" as const, text: `Not rendered:\n- ${refusals.join("\n- ")}` }] : []), ...flat]);
+          }));
+          continue;
+        }
+        if (use.name === "check_slide") { const input = DocToolInputs.check_slide.parse(use.input); imageJobs.push(checkSlide(input).then(settle)); continue; }
         const text = run.editor.apply(use.name, use.input);
         run.emit({ type: "document", document: run.editor.doc });
         ok(text);
@@ -237,6 +453,9 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
         const input = DocToolInputs.finish.parse(finishUse.input);
         const problems = run.editor.problems();
         if (results.some(result => result.is_error)) problems.unshift("A tool failed in this step. Correct that tool input before declaring the document complete.");
+        const waiting = [...[...pendingArt.keys()].map(id => `slide ${slideNumber(id)} (check_slide)`), ...[...pendingImages.keys()].map(name => `image "${name}" (check_image)`)];
+        // Checks block the first finish; a second finish keeps the deck correct by itself (unchecked renders become editable slides).
+        if (waiting.length && blockedFinishes++ === 0) problems.unshift(`Check these before finishing: ${waiting.join(", ")}.`);
         if (problems.length) {
           results.push({ type: "tool_result", tool_use_id: finishUse.id, is_error: true, content: `Not finished yet. Fix these, then call finish again:\n- ${problems.join("\n- ")}` });
           run.emit({ type: "tool_error", tool: "finish", message: problems[0] });
@@ -253,7 +472,8 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
       messages.push({ role: "user", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }
   }
-  return { summary, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, stopped: spend.stopped };
+  settlePending(finished ? "the run finished before it was checked" : "the run ended before it was checked");
+  return { summary, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, stopped: spend.stopped, checks };
 }
 
 function toolMessage(name: string, error: unknown) {

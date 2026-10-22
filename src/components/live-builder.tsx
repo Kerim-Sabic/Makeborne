@@ -356,6 +356,14 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
               live.document = event.document; live.focus = event.focus;
               onLive({ ...live, building: true });
               break;
+            case "check": {
+              // The vision check on a full-image slide (its text gate) or a generated image.
+              const record = event.record as { target: "slide" | "image"; id: string; outcome: string };
+              const what = record.target === "slide" ? `slide ${record.id}` : `image ${record.id}`;
+              const label = { passed: record.target === "slide" ? `Checked ${what}: every word correct` : `Checked ${what}: looks right`, retry: `Checked ${what}: regenerating to fix it`, fallback: `Kept ${what} as an editable text slide`, dropped: `Removed ${what}: it failed its check`, unchecked: `Kept ${what} unchecked` }[record.outcome] ?? `Checked ${what}`;
+              activity({ kind: "image", label, done: true }, `check:${record.id}:${record.outcome}`);
+              break;
+            }
             case "item_start": activity({ kind: "file", label: event.label, done: false }, `item:${event.key}`); break;
             case "item": activity({ kind: "file", label: event.label, done: true }, `item:${event.key}`); break;
             case "tool_error": activity({ kind: "note", label: "Fixing an issue…", done: true }); break;

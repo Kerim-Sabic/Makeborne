@@ -51,7 +51,7 @@ export class ContextMeter {
       this.counted = true;
       return this.base;
     }
-    return this.base + messages.slice(this.baseLength).reduce<number>((total, message) => total + utf8Bytes(JSON.stringify(message)) + 64, 0);
+    return this.base + messages.slice(this.baseLength).reduce<number>((total, message) => total + messageBound(message) + 64, 0);
   }
 
   /** Call right after appending the assistant reply: everything so far is covered by this usage. */
@@ -61,6 +61,24 @@ export class ContextMeter {
     this.baseLength = messages.length;
     this.counted = true;
   }
+}
+
+/** Most input tokens one base64 image block can cost. The provider prices an image at about width × height / 750
+ * tokens after scaling it to at most ~1.15 megapixels (about 1,600 tokens); 4,800 also covers models that read images
+ * at higher resolution. Callers send images of at most 1280 × 720 (1,229 tokens by that formula). */
+export const IMAGE_BLOCK_TOKEN_BOUND = 4_800;
+/** A message's input-token bound: UTF-8 bytes of its JSON, except that each base64 image counts at IMAGE_BLOCK_TOKEN_BOUND
+ * (its bytes would overstate it roughly a hundredfold and starve the run's budget). */
+function messageBound(message: unknown) {
+  let images = 0;
+  const json = JSON.stringify(message, (key, value) => {
+    if (value && typeof value === "object" && (value as { type?: unknown }).type === "base64" && typeof (value as { data?: unknown }).data === "string" && /^image\//.test(String((value as { media_type?: unknown }).media_type))) {
+      images++;
+      return { ...(value as object), data: "" };
+    }
+    return value;
+  });
+  return utf8Bytes(json) + images * IMAGE_BLOCK_TOKEN_BOUND;
 }
 
 export type BudgetedStream = {

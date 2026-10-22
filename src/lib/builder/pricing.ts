@@ -50,5 +50,22 @@ export function documentImageMax(kind: "deck" | "book", effort: EffortLevel, ite
   if (effort === "light") return base;
   return Math.max(base, Math.min(DOCUMENT_IMAGE_CAP, kind === "deck" ? items : items + 1));
 }
+/** Full-image decks (owner decision, 22 Oct 2026): every slide is one generated image, so a deck run may make one render
+ * per slide plus a second attempt for about half of them (the text gate regenerates a slide once) and two images for
+ * slides that fall back to editable text, at most DECK_ART_IMAGE_CAP. This raises only the image COUNT: every render is
+ * still reserved against the run's allowance (the credit maximum shown before the run, unchanged), the document builder
+ * still keeps all images within a third of that allowance, and when that third is smaller the deck is planned with
+ * fewer slides rather than exceeding it. */
+export const DECK_ART_IMAGE_CAP = 40;
+export function deckArtImageMax(slides: number) {
+  return Math.min(DECK_ART_IMAGE_CAP, slides + Math.ceil(slides / 2) + 2);
+}
+/** Slides a full-image deck can afford with `renders` images: one each, plus retries for about one slide in four. */
+export const deckArtSlidesFor = (renders: number) => Math.max(0, Math.floor((renders - 1) / 1.25));
+/** Books: the client's image plan (documents/book-images.ts) plus one regeneration for about one image in four. */
+export const BOOK_IMAGE_CAP = 30;
+export function bookImageMax(planned: number) {
+  return Math.min(BOOK_IMAGE_CAP, planned + Math.ceil(planned / 4));
+}
 /** Smallest balance worth starting a run with. */
 export const MINIMUM_RUN_CREDITS = 2;

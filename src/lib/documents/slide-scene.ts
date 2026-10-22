@@ -8,6 +8,7 @@ import * as C from "./compose-content";
 import * as M from "./compose-media";
 import { RAIL_WIDE, placeImage, placementsFor } from "./compose-image";
 import type { ImagePlacement } from "./schema";
+import { artScene } from "./slide-art";
 
 /** Every deck slide is composed once into absolute primitives on a 1280×720
  * canvas by its art direction. The HTML preview/PDF and the editable PPTX both
@@ -93,7 +94,7 @@ const REGISTRY: Record<CompositionId, Composition> = {
 };
 export const compositionKind = (id: CompositionId) => REGISTRY[id].kind;
 
-type DeckLike = Pick<Deck, "title" | "theme" | "assets" | "author"> & { slides?: Slide[] };
+type DeckLike = Pick<Deck, "title" | "theme" | "assets" | "author"> & { slides?: Slide[]; art?: Deck["art"] };
 function context(deck: DeckLike, slide: Slide, index: number, total: number): Ctx {
   const dir = directionOf(deck.theme);
   const sections = (deck.slides ?? []).flatMap((entry, i) => entry.layout === "section" ? [{ index: i, title: entry.title }] : []);
@@ -193,6 +194,9 @@ export function planDeck(deck: Deck): Planned[] {
 }
 
 export function composeSlide(deck: DeckLike, slide: Slide, index: number, total: number): SlideScene {
+  // A full-image slide whose render passed the text gate for its current words (slide-art.ts).
+  const art = artScene(deck, slide);
+  if (art) return art;
   if (slide.composition && (slide.layout === "cover" || slide.layout === "closing")) return slideCoverScene(deck.theme, slide, deck.assets, deck.author);
   if (deck.slides && deck.slides[index] === slide) return clone(planDeck(deck as Deck)[index].scene);
   // A slide outside its deck (e.g. a draft being checked): plan it after its would-be predecessor.

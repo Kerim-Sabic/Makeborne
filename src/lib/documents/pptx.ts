@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import sharp from "sharp";
 import type { Deck } from "./schema";
 import { FONTS } from "./theme";
+import { ART_COMPOSITION, artAlt } from "./slide-art";
 import { composeSlide, H, W, type ArtPrim, type ChartPrim, type ImagePrim, type PathPrim, type Prim, type TextPrim } from "./slide-scene";
 
 /** Office face for monospaced labels (the preview and PDF embed JetBrains Mono). */
@@ -84,6 +85,18 @@ async function cropped(image: Buffer, prim: ImagePrim) {
   return `data:image/jpeg;base64,${bytes.toString("base64")}`;
 }
 
+/** A full-image slide at its generated resolution (never enlarged), cut to 16:9, as JPEG under `maxBytes` (the export
+ * artwork limits: 3 MB per image, 12 MB for a deck's slide images together). */
+async function fullSlide(image: Buffer, maxBytes = 3_000_000) {
+  const meta = await sharp(image, { limitInputPixels: 40_000_000 }).metadata();
+  let width = Math.min(1920, meta.width ?? 1536), bytes: Buffer;
+  for (let quality = 90; ; quality -= 8) {
+    bytes = await sharp(image, { limitInputPixels: 40_000_000 }).rotate().resize(width, Math.round(width * H / W), { fit: "cover", position: "centre" }).jpeg({ quality, mozjpeg: true }).toBuffer();
+    if (bytes.length <= maxBytes || quality <= 58) { if (bytes.length <= maxBytes || width <= 960) break; width = Math.round(width * 0.8); quality = 98; }
+  }
+  return `data:image/jpeg;base64,${bytes.toString("base64")}`;
+}
+
 /** Generative artwork (gradients, patterns) has no native PPTX equivalent: embed it rendered at 2×. */
 async function artImage(prim: ArtPrim) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(prim.w * 2)}" height="${Math.round(prim.h * 2)}" viewBox="0 0 ${prim.w} ${prim.h}"><g opacity="${prim.opacity ?? 1}">${prim.svg}</g></svg>`;
@@ -113,6 +126,7 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
   const fonts = FONTS[deck.theme.fonts];
   const total = deck.slides.length;
   const marks: Marks[] = [];
+  const artSlides = Math.max(1, deck.slides.filter((slide, index) => composeSlide(deck, slide, index, total).composition === ART_COMPOSITION).length);
   for (const [index, source] of deck.slides.entries()) {
     const scene = composeSlide(deck, source, index, total);
     const slide = pptx.addSlide();
@@ -121,6 +135,19 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
     marks.push(mark);
     let shape = 0;
     slide.background = { color: color(scene.background) };
+    if (scene.composition === ART_COMPOSITION) {
+      // A full-image slide: the verified picture full-bleed at its own resolution, its exact words as the picture's
+      // description and at the top of the speaker notes, and the title in a title placeholder just below the slide
+      // (Microsoft's documented way to give a slide an accessible title that is not shown or printed).
+      const prim = scene.prims[0] as ImagePrim, bytes = images[prim.name], words = artAlt(source);
+      if (bytes) slide.addImage({ data: await fullSlide(bytes, Math.min(3_000_000, Math.floor(12_000_000 / artSlides))), x: 0, y: 0, w: inch(W), h: inch(H), altText: words, objectName: `Image ${prim.name}` });
+      else if (!missing.includes(prim.name)) missing.push(prim.name);
+      slide.addText(source.title, { objectName: "Title", x: 0, y: inch(H) + 0.15, w: inch(W), h: 0.6, margin: 0, fontFace: fonts.pptxHeading, fontSize: 20, color: color(deck.theme.palette.ink) });
+      slide.addNotes(`Slide text: ${words}
+
+${source.notes}`);
+      continue;
+    }
     for (const prim of scene.prims as Prim[]) {
       switch (prim.k) {
         case "rect":

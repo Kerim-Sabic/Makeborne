@@ -116,6 +116,31 @@ export const TableSchema = z.object({
   if (table.highlight !== undefined && table.highlight >= table.columns.length) ctx.addIssue({ code: "custom", path: ["highlight"], message: "highlight must be a valid column index." });
 });
 
+/** Full-image slides (slide-art.ts): the composition frame each slide is generated in. */
+export const SLIDE_FRAMES = ["full-bleed", "split", "type-poster", "big-number", "chart-feature", "card-grid", "timeline", "quote", "comparison", "inset-frame", "collage", "diagram"] as const;
+export type SlideFrame = (typeof SLIDE_FRAMES)[number];
+/** A full-image slide's plan, written by the designer with the slide. */
+export const SlideArtSchema = z.object({
+  frame: z.enum(SLIDE_FRAMES).describe("The composition this slide is generated in; consecutive slides never share one"),
+  brief: z.string().trim().min(20).max(900).describe("This slide's own composition: where the type block sits and how large, the focal subject or graphic, crop, light, and how it differs from the slides around it. No words to render here; the slide's fields are the text."),
+}).strict();
+export const SLIDE_MODES = ["image", "live"] as const;
+/** A full-image deck's design system and its verified renders (set by the builder, never by the model). */
+export const DeckArtSchema = z.object({
+  mode: z.enum(SLIDE_MODES).describe("image: every slide is one generated picture that includes its text; live: editable text slides"),
+  system: z.string().trim().max(1600).default("").describe("The deck's design system for every generated slide: grid, type style, palette use, photographic or illustrative language, recurring motif"),
+  renders: z.array(z.object({
+    slide: ItemId,
+    frame: z.enum(SLIDE_FRAMES).optional(),
+    image: ImageName.optional(),
+    /** textKey() of the slide's words the image was verified against. */
+    verified: z.string().max(80).optional(),
+    attempts: z.number().int().min(0).max(9),
+    outcome: z.enum(["passed", "fallback"]),
+    problems: z.array(z.string().max(300)).max(6).default([]),
+  }).strict()).max(40).default([]),
+}).strict();
+
 export const SlideSchema = z.object({
   id: ItemId,
   layout: z.enum(SLIDE_LAYOUTS),
@@ -139,6 +164,7 @@ export const SlideSchema = z.object({
   composition: CoverCompositionSchema.optional().describe("Optional authored geometry for a cover or closing slide. Omit to keep the existing layout."),
   variant: z.enum(ALL_COMPOSITIONS as [string, ...string[]]).optional().describe("Pin one of the art direction's compositions for this layout; omit to let the engine vary them."),
   blocks: z.array(BlockSchema).min(1).max(14).optional().describe("canvas layout: text and shape blocks on the 12×8 grid"),
+  art: SlideArtSchema.optional().describe("Full-image decks only: this slide's composition frame and brief"),
   notes: z.string().trim().min(1, "Every slide needs speaker notes.").max(3000),
 }).strict().superRefine((slide, ctx) => {
   if (slide.composition && slide.layout !== "cover" && slide.layout !== "closing") ctx.addIssue({ code: "custom", path: ["composition"], message: "Authored composition is supported only on cover and closing slides." });
@@ -185,6 +211,8 @@ export const DeckSchema = z.object({
   theme: ThemeSchema,
   slides: z.array(SlideSchema).max(40),
   assets: z.array(AssetSchema).max(60),
+  /** Absent on decks saved before full-image slides: they keep editable text slides. */
+  art: DeckArtSchema.optional(),
 }).strict();
 export type Deck = z.infer<typeof DeckSchema>;
 
@@ -200,6 +228,17 @@ export const ChapterSchema = z.object({
 }).strict();
 export type Chapter = z.infer<typeof ChapterSchema>;
 
+/** How a book is illustrated (asked when the book is created; default cover and chapter openers). */
+export const BOOK_IMAGE_PLACEMENTS = ["none", "cover", "openers", "every", "rich"] as const;
+export const BOOK_IMAGE_STYLES = ["photo", "illustration", "technique", "auto"] as const;
+export const BookImagePlanSchema = z.object({
+  placement: z.enum(BOOK_IMAGE_PLACEMENTS).describe("none; cover only; cover and chapter openers; openers plus one image about every N pages; richly illustrated (about one per spread)"),
+  everyPages: z.number().int().min(2).max(40).optional().describe("placement every: about one image per this many pages"),
+  style: z.enum(BOOK_IMAGE_STYLES).default("auto"),
+  technique: z.string().trim().max(120).optional().describe("The one technique or medium named by the client, e.g. botanical watercolour"),
+}).strict();
+export type BookImagePlan = z.infer<typeof BookImagePlanSchema>;
+
 export const BookSchema = z.object({
   kind: z.literal("book"),
   schemaVersion: z.literal(1),
@@ -211,6 +250,8 @@ export const BookSchema = z.object({
   theme: ThemeSchema,
   chapters: z.array(ChapterSchema).max(40),
   assets: z.array(AssetSchema).max(60),
+  /** Absent on books saved before the image plan: cover and chapter openers. */
+  imagePlan: BookImagePlanSchema.optional(),
 }).strict();
 export type Book = z.infer<typeof BookSchema>;
 

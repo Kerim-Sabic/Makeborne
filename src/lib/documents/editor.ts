@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
-  AssetSchema, BookSchema, ChapterSchema, CHAPTER_TEXT_LIMIT, DeckSchema, DOCUMENT_BYTE_LIMIT, DocumentSourceSchema, ImageName, ItemId, SlideSchema, ThemeSchema,
-  type Book, type Deck, type DocumentAsset, type DocumentSource, type Slide,
+  AssetSchema, BookImagePlanSchema, BookSchema, ChapterSchema, CHAPTER_TEXT_LIMIT, DeckSchema, DOCUMENT_BYTE_LIMIT, DocumentSourceSchema, ImageName, ItemId, SLIDE_MODES, SlideSchema, ThemeSchema,
+  type Book, type BookImagePlan, type Deck, type DocumentAsset, type DocumentSource, type Slide,
 } from "./schema";
 import { defaultTheme, themeIssues } from "./theme";
 import { composeSlide } from "./slide-scene";
@@ -9,15 +9,21 @@ import { directionOf } from "./directions";
 import { parseBookMarkup, wordCount } from "./book-markup";
 import { CoverCompositionSchema } from "./composition-schema";
 import { imageSupport } from "./compose-image";
+import { artPlanIssues, artTextIssues, textKey, verifiedArt, type ArtRender } from "./slide-art";
+import { bookImageIssues } from "./book-images";
 
 export class DocToolError extends Error {}
 
 const position = z.string().max(48).optional().describe('Insert after this id, or "start". Omit to keep an existing item in place or append a new one.');
-const DeckDetails = z.object({ title: z.string().trim().min(1).max(160), subtitle: z.string().trim().max(220).optional(), author: z.string().trim().max(120).optional() }).strict();
+const DeckDetails = z.object({ title: z.string().trim().min(1).max(160), subtitle: z.string().trim().max(220).optional(), author: z.string().trim().max(120).optional(),
+  art_system: z.string().trim().min(40).max(1600).optional().describe("Full-image decks: the one design system every generated slide follows (grid, type style described precisely, palette use, photographic or illustrative language, recurring motif). Omit to keep the current one."),
+  slide_mode: z.enum(SLIDE_MODES).optional().describe("image = each slide is one generated picture including its text; live = editable text slides. Change only when the user asks. Omit to keep."),
+}).strict();
 const BookDetails = z.object({
   title: z.string().trim().min(1).max(160), subtitle: z.string().trim().max(220).optional(), author: z.string().trim().max(120).optional(),
   dedication: z.string().trim().max(400).optional(), cover_image: ImageName.optional(), tagline: z.string().trim().max(160).optional(),
   cover_composition: CoverCompositionSchema.nullable().optional().describe("Authored portrait cover geometry. Omit to preserve the current composition; null explicitly restores the legacy cover."),
+  image_plan: BookImagePlanSchema.optional().describe("How the book is illustrated. Change only when the user asks for more, fewer or different images. Omit to keep."),
 }).strict();
 
 /** Tool inputs validated before any change is applied. */
@@ -34,12 +40,27 @@ export const DocToolInputs = {
   delete_chapter: z.object({ id: ItemId }).strict(),
   move_chapter: z.object({ id: ItemId, after: z.string().max(48) }).strict(),
   generate_image: z.object({ name: ImageName, prompt: z.string().min(20).max(3000), aspect: z.enum(["landscape", "portrait", "square"]), alt: z.string().trim().min(3).max(300) }).strict(),
+  render_slides: z.object({ ids: z.array(ItemId).min(1).max(12) }).strict(),
+  check_slide: z.object({ id: ItemId,
+    transcript: z.string().max(4000).describe("Every word, number and symbol you can read in the rendered slide, verbatim and in reading order, including any misspelling or stray letters. Never copy the intended text; read the image."),
+    artifacts: z.array(z.string().trim().min(3).max(240)).max(8).describe("Visual problems you see; empty when there are none"),
+    verdict: z.enum(["pass", "fail"]),
+    fix: z.string().trim().max(700).optional().describe("For a failed render: what the next attempt must change (layout, spacing, a word to spell out, an element to remove)"),
+  }).strict(),
+  check_image: z.object({ name: ImageName,
+    artifacts: z.array(z.string().trim().min(3).max(240)).max(8).describe("Visual problems you see; empty when there are none"),
+    verdict: z.enum(["pass", "fail"]),
+    fix: z.string().trim().max(700).optional().describe("For a failed image: what the next attempt must change"),
+  }).strict(),
   finish: z.object({ summary: z.string().trim().min(1).max(2000) }).strict(),
 } as const;
 export type DocToolName = keyof typeof DocToolInputs;
 
-export const DECK_TOOLS: DocToolName[] = ["set_theme", "set_deck_details", "write_slide", "delete_slide", "move_slide", "generate_image", "finish"];
-export const BOOK_TOOLS: DocToolName[] = ["set_theme", "set_book_details", "write_chapter", "edit_chapter", "delete_chapter", "move_chapter", "generate_image", "finish"];
+export const DECK_TOOLS: DocToolName[] = ["set_theme", "set_deck_details", "write_slide", "delete_slide", "move_slide", "render_slides", "check_slide", "generate_image", "check_image", "finish"];
+export const BOOK_TOOLS: DocToolName[] = ["set_theme", "set_book_details", "write_chapter", "edit_chapter", "delete_chapter", "move_chapter", "generate_image", "check_image", "finish"];
+/** Tools the agent runs itself (images and the checks); apply() refuses them. */
+export const AGENT_TOOLS = new Set<string>(["generate_image", "check_image", "render_slides", "check_slide", "finish"]);
+const IMAGE_TOOLS = new Set<string>(["generate_image", "check_image"]), ART_TOOLS = new Set<string>(["render_slides", "check_slide"]);
 
 const DESCRIPTIONS: Record<DocToolName, string> = {
   set_theme: "Set the visual theme: a 7-color palette (contrast is checked), a font pairing, the art direction (presentations) or decorative motif (books), the mood, and one image style that every generated image will share. Call it first on a new document and whenever the user asks for a different look; changing the direction recomposes every slide.",
@@ -53,11 +74,14 @@ const DESCRIPTIONS: Record<DocToolName, string> = {
   delete_chapter: "Remove a chapter.",
   move_chapter: 'Move a chapter after another chapter id, or to "start".',
   generate_image: "Generate one original image and register it under `name` for use in slides, the cover, chapter openers or figures. The theme's imageStyle is appended automatically so all art is consistent. Never ask for text, letters, logos or watermarks. Slides show an image on cover, closing, image and split layouts, beside statement, points, stats, agenda, quote and section slides (side rail, portrait; statement, quote and section may also be full-bleed), and as a top band over chart, table and diagram slides (landscape); compare, team, pricing and canvas slides do not show a slide image.",
+  render_slides: "Full-image decks: generate these slides, each as one finished 16:9 image that includes its own text, from the deck's art_system, the slide's art {frame, brief} and the slide's exact words. Renders run in parallel; each comes back as an image for you to check with check_slide. A slide whose neighbour has the same layout or frame, or with too much text for an image, is refused.",
+  check_slide: "Full-image decks: the text gate for one rendered slide. Read the image yourself and report the words you actually see (transcript), any visual problems (artifacts) and your verdict. Makeborne also compares your transcript with the slide's words. A failed first attempt is regenerated once with your fix; a second failure keeps the slide as an editable live-text slide, so the deck is never wrong.",
+  check_image: "Check one generated image before relying on it: report visual problems (garbled pseudo-text, warped hands or faces, plastic or uncanny people, extra limbs, oversaturation, HDR glow, clip-art, random gradients, a subject that does not fit its job) and a verdict. A failed first attempt is regenerated once with your fix; a second failure removes the image and every reference to it, keeping the layout intact.",
   finish: "Call once the document is complete and checked. Give a short, friendly summary (2–4 sentences, no markup) of what you made or changed.",
 };
 
-export function docToolDefinitions(kind: "deck" | "book", images: boolean) {
-  return (kind === "deck" ? DECK_TOOLS : BOOK_TOOLS).filter(name => images || name !== "generate_image").map(name => {
+export function docToolDefinitions(kind: "deck" | "book", images: boolean, art = false) {
+  return (kind === "deck" ? DECK_TOOLS : BOOK_TOOLS).filter(name => (images || !IMAGE_TOOLS.has(name)) && (art || !ART_TOOLS.has(name))).map(name => {
     const schema = z.toJSONSchema(DocToolInputs[name], { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
     delete schema.$schema;
     // Let the provider validate complete JSON arguments. Eager input streaming
@@ -69,11 +93,13 @@ export function docToolDefinitions(kind: "deck" | "book", images: boolean) {
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
-export function emptyDocument(kind: "deck" | "book", title: string, styleId?: string): DocumentSource {
+/** A new document. A new deck records its slide mode (full-image by default; editable text when chosen) and a new
+ * book its image plan; documents saved before these options keep editable slides and cover-plus-openers. */
+export function emptyDocument(kind: "deck" | "book", title: string, styleId?: string, options: { slideMode?: "image" | "live"; imagePlan?: BookImagePlan } = {}): DocumentSource {
   const theme = defaultTheme(kind, styleId);
   return kind === "deck"
-    ? { kind: "deck", schemaVersion: 1, title: title.slice(0, 160) || "Untitled presentation", theme, slides: [], assets: [] }
-    : { kind: "book", schemaVersion: 1, title: title.slice(0, 160) || "Untitled book", cover: {}, theme, chapters: [], assets: [] };
+    ? { kind: "deck", schemaVersion: 1, title: title.slice(0, 160) || "Untitled presentation", theme, slides: [], assets: [], ...(options.slideMode ? { art: { mode: options.slideMode, system: "", renders: [] } } : {}) }
+    : { kind: "book", schemaVersion: 1, title: title.slice(0, 160) || "Untitled book", cover: {}, theme, chapters: [], assets: [], ...(options.imagePlan ? { imagePlan: options.imagePlan } : {}) };
 }
 
 /** Mutable working copy of one document during a builder run. Every operation
@@ -81,6 +107,8 @@ export function emptyDocument(kind: "deck" | "book", title: string, styleId?: st
 export class DocumentEditor {
   doc: DocumentSource;
   changed = false;
+  /** False when no text-capable image model is enabled: full-image slides cannot be rendered and are drawn as editable slides. */
+  artAvailable = true;
   private finishAttempts = 0;
   constructor(doc: DocumentSource) { this.doc = DocumentSourceSchema.parse(structuredClone(doc)); }
 
@@ -128,12 +156,15 @@ export class DocumentEditor {
   }
   setDeckDetails(input: z.infer<typeof DeckDetails>) {
     const deck = this.deck();
-    this.commit({ ...deck, title: input.title, subtitle: input.subtitle, author: input.author });
-    return "Presentation details saved.";
+    const mode = input.slide_mode ?? deck.art?.mode;
+    const art = mode ? { mode, system: input.art_system ?? deck.art?.system ?? "", renders: deck.art?.renders ?? [] } : undefined;
+    this.commit({ ...deck, title: input.title, subtitle: input.subtitle, author: input.author, ...(art ? { art } : {}) });
+    return `Presentation details saved.${art?.mode === "image" && !art.system ? " Set art_system (the deck's design system) before rendering slides." : ""}`;
   }
   setBookDetails(input: z.infer<typeof BookDetails>) {
     const book = this.book();
-    this.commit({ ...book, title: input.title, subtitle: input.subtitle, author: input.author, dedication: input.dedication,
+    const imagePlan = input.image_plan ?? book.imagePlan;
+    this.commit({ ...book, title: input.title, subtitle: input.subtitle, author: input.author, dedication: input.dedication, ...(imagePlan ? { imagePlan } : {}),
       cover: { ...(input.cover_image ? { image: input.cover_image } : {}), ...(input.tagline ? { tagline: input.tagline } : {}),
         ...((input.cover_composition === undefined ? book.cover.composition : input.cover_composition) ? { composition: input.cover_composition ?? book.cover.composition } : {}) } });
     return `Book details saved.${input.cover_image && !this.hasImage(input.cover_image) ? ` Generate the image "${input.cover_image}" (portrait) before finishing.` : ""}`;
@@ -146,6 +177,9 @@ export class DocumentEditor {
     if (!support.ok) throw new DocToolError(`Slide ${input.slide.id}: ${support.message}.`);
     const { list, index, replaced } = this.place(deck.slides, input.slide as Slide, input.after);
     this.commit({ ...deck, slides: list });
+    // A rewritten slide keeps its verified render only while its words are unchanged; a stale render is dropped.
+    const render = this.deck().art?.renders.find(entry => entry.slide === input.slide.id);
+    if (render && render.verified !== textKey(this.deck().slides[index])) this.dropRender(input.slide.id);
     const composed = composeSlide(this.deck(), this.deck().slides[index], index, list.length).composition;
     return `${replaced ? "Updated" : "Added"} slide ${index + 1} of ${list.length} (${input.slide.layout}${composed && !this.deck().slides[index].composition ? ` as ${composed}` : ""}).${this.slideWarnings(this.deck(), index)}`;
   }
@@ -155,14 +189,22 @@ export class DocumentEditor {
     for (const person of slide.people ?? []) if (person.image && !this.hasImage(person.image)) notes.push(`portrait "${person.image}" does not exist yet; generate it or drop the image field`);
     const rhythm = deckRhythmIssues(deck).find(issue => issue.slides.includes(index));
     if (rhythm) notes.push(rhythm.message);
-    const scene = composeSlide(deck, slide, index, deck.slides.length);
-    if (scene.issues.length) notes.push(`text may not fit: ${scene.issues.slice(0, 3).join("; ")}. Tighten the copy`);
+    if (deck.art?.mode === "image") {
+      if (!slide.art) notes.push("add art {frame, brief}: this deck renders every slide as one image");
+      const text = artTextIssues(slide);
+      if (text.length) notes.push(`too much text for a full-image slide (${text.join("; ")})`);
+      const plan = artPlanIssues(deck).find(issue => issue.slides.includes(index));
+      if (plan) notes.push(plan.message);
+    } else {
+      const scene = composeSlide(deck, slide, index, deck.slides.length);
+      if (scene.issues.length) notes.push(`text may not fit: ${scene.issues.slice(0, 3).join("; ")}. Tighten the copy`);
+    }
     return notes.length ? ` Check: ${notes.join(". ")}.` : "";
   }
   deleteSlide(id: string) {
     const deck = this.deck();
     if (!deck.slides.some(slide => slide.id === id)) throw new DocToolError(`No slide with id "${id}".`);
-    this.commit({ ...deck, slides: deck.slides.filter(slide => slide.id !== id) });
+    this.commit({ ...deck, slides: deck.slides.filter(slide => slide.id !== id), ...(deck.art ? { art: { ...deck.art, renders: deck.art.renders.filter(entry => entry.slide !== id) } } : {}) });
     return `Deleted slide ${id}.`;
   }
   moveSlide(id: string, after: string) {
@@ -206,13 +248,45 @@ export class DocumentEditor {
     return `Moved chapter ${id}.`;
   }
   hasImage(name: string) { return this.doc.assets.some(asset => asset.name === name); }
+  /** Full-image decks: record one slide's text-gate outcome (builder only; the model never writes renders). */
+  recordRender(render: ArtRender) {
+    const deck = this.deck();
+    if (!deck.art) throw new DocToolError("This presentation does not use full-image slides.");
+    this.commit({ ...deck, art: { ...deck.art, renders: [...deck.art.renders.filter(entry => entry.slide !== render.slide), render] } });
+  }
+  private dropRender(id: string) {
+    const deck = this.deck();
+    if (deck.art) this.commit({ ...deck, art: { ...deck.art, renders: deck.art.renders.filter(entry => entry.slide !== id) } });
+  }
+  /** Remove an image that failed its check and every reference to it. The layout stays intact: a chapter opener or
+   * the cover is set without a picture, a figure line disappears, a slide's rail or band closes up. */
+  dropImage(name: string) {
+    const assets = this.doc.assets.filter(asset => asset.name !== name);
+    if (this.doc.kind === "book") {
+      const chapters = this.doc.chapters.map(chapter => {
+        const text = chapter.text.split("\n").filter(line => !line.trim().startsWith(`[[figure:${name}|`) && line.trim() !== `[[figure:${name}]]`).join("\n").replace(/\n{3,}/g, "\n\n");
+        const { image, ...rest } = chapter;
+        return { ...(image === name ? rest : chapter), text };
+      });
+      const { image, ...cover } = this.doc.cover;
+      this.commit({ ...this.doc, assets, chapters, cover: image === name ? cover : this.doc.cover } as DocumentSource);
+    } else {
+      const slides = this.doc.slides.map(slide => {
+        if (slide.image !== name || ["split", "image"].includes(slide.layout)) return slide;
+        const { image, imagePlacement, ...rest } = slide;
+        void image; void imagePlacement;
+        return rest as Slide;
+      });
+      this.commit({ ...this.doc, assets, slides } as DocumentSource);
+    }
+  }
   addAsset(asset: DocumentAsset) {
     const parsed = AssetSchema.parse(asset);
     this.commit({ ...this.doc, assets: [...this.doc.assets.filter(entry => entry.name !== parsed.name), parsed] } as DocumentSource);
   }
   imagePrompt(prompt: string) {
     const style = this.doc.theme.imageStyle;
-    return `${prompt.trim()}${style ? `\n\nArt direction (keep consistent across the whole ${this.kind === "book" ? "book" : "presentation"}): ${style}` : ""}\n\nNo text, letters, numbers, captions, logos or watermarks anywhere in the image.`;
+    return `${prompt.trim()}${style ? `\n\nArt direction (keep consistent across the whole ${this.kind === "book" ? "book" : "presentation"}): ${style}` : ""}\n\nAvoid the AI look: no oversaturated colour, HDR glow, lens flare, plastic-looking or posed stock people, clip-art, random gradients or bokeh; photographs read as real editorial photography, illustration as one consistent hand.\n\nNo text, letters, numbers, captions, logos or watermarks anywhere in the image.`;
   }
 
   /** Blocking problems for finish. Layout fit warnings block once; a second
@@ -241,18 +315,30 @@ export class DocumentEditor {
       });
     }
     // Visual rhythm is advisory like fit: it blocks the first finish only.
-    if (this.doc.kind === "deck") fit.push(...deckRhythmIssues(this.doc).map(issue => `${issue.message}.`));
+    if (this.doc.kind === "deck" && this.doc.art?.mode === "image") {
+      const deck = this.doc;
+      fit.push(...artPlanIssues(deck).map(issue => `rhythm: ${issue.message}.`));
+      deck.slides.forEach((slide, index) => {
+        const render = deck.art!.renders.find(entry => entry.slide === slide.id);
+        if (this.artAvailable && !verifiedArt(deck, slide) && render?.outcome !== "fallback") fit.push(`Slide ${index + 1} (${slide.id}) has no verified full-image render yet; call render_slides for it (an unrendered slide is shown as an editable text slide).`);
+      });
+    } else if (this.doc.kind === "deck") fit.push(...deckRhythmIssues(this.doc).map(issue => `${issue.message}.`));
+    if (this.doc.kind === "book") {
+      const plan = bookImageIssues(this.doc);
+      issues.push(...plan.blocking);
+      fit.push(...plan.advisory);
+    }
     // Unfinished fill-in fields block the first finish too: kept only when the user asked to supply them later.
     const unfinished = placeholderIssues(this.doc);
     const first = (unfinished.length > 0 || fit.length > 0) && this.finishAttempts++ === 0;
     if (unfinished.length && first) issues.push(`Unfinished placeholders: ${unfinished.slice(0, 6).join("; ")}. Write the finished content (or omit the field). Keep a clearly marked fill-in field only if the user explicitly asked to supply it later, and say so in your summary.`);
-    if (fit.length && first) issues.push(...fit.slice(0, 8).map(message => /rhythm/.test(message) ? message : `${message} Shorten the copy or choose a roomier layout.`));
+    if (fit.length && first) issues.push(...fit.slice(0, 8).map(message => /rhythm|render|image/.test(message) ? message : `${message} Shorten the copy or choose a roomier layout.`));
     return issues;
   }
 
   /** Apply one validated tool call. generate_image and finish are handled by the agent. */
   apply(name: string, rawInput: unknown): string {
-    if (!(name in DocToolInputs) || name === "generate_image" || name === "finish") throw new DocToolError(`Unknown tool ${name}.`);
+    if (!(name in DocToolInputs) || AGENT_TOOLS.has(name)) throw new DocToolError(`Unknown tool ${name}.`);
     if (!(this.kind === "deck" ? DECK_TOOLS : BOOK_TOOLS).includes(name as DocToolName)) throw new DocToolError(`${name} is not available for a ${this.kind === "deck" ? "presentation" : "book"}.`);
     const input = DocToolInputs[name as DocToolName].parse(rawInput) as never;
     switch (name as DocToolName) {
