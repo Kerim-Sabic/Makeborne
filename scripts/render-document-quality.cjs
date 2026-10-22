@@ -9,7 +9,8 @@
 // exporter sees it: @sparticuz/chromium on Linux ships only Open Sans, so every
 // system family in the stacks is unavailable there.
 //
-// Usage: node scripts/render-document-quality.cjs --fixtures <dir> --out <dir> [--only a,b] [--server-fonts]
+// Usage: node scripts/render-document-quality.cjs --fixtures <dir> --out <dir> [--only a,b] [--server-fonts] [--images <dir>]
+// --images: real artwork for a fixture, <dir>/<asset name>.webp|.png|.jpg, used instead of the stand-in where present.
 const fs = require("node:fs"), path = require("node:path"), zlib = require("node:zlib"), Module = require("node:module"), { spawnSync } = require("node:child_process");
 const ts = require("typescript");
 const args = process.argv.slice(2), arg = (name, fallback) => { const at = args.indexOf(`--${name}`); return at >= 0 ? args[at + 1] : fallback; };
@@ -18,6 +19,9 @@ const fixturesDir = path.resolve(arg("fixtures", path.join(app, "work/generation
 const outDir = path.resolve(arg("out", path.join(app, "work/generation-quality-20261014/documents/out")));
 const only = arg("only", "") ? arg("only").split(",") : null;
 const serverFonts = args.includes("--server-fonts");
+const imagesDir = arg("images", "") ? path.resolve(arg("images")) : null;
+/** Real artwork from --images (as JPEG, like the exporter), else null. */
+const realArtwork = async (asset) => { const file = imagesDir && ["webp", "png", "jpg"].map(ext => path.join(imagesDir, `${asset.name}.${ext}`)).find(fs.existsSync); return file ? require("sharp")(file).jpeg({ quality: 88 }).toBuffer() : null; };
 
 global.fetch = () => { throw new Error("Network access is forbidden in this harness."); };
 const load = Module._load;
@@ -249,7 +253,8 @@ async function renderDeck(browser, name, doc, images, dir, report) {
     const usedFonts = await page.evaluate(() => [...new Set([...document.querySelectorAll(".t")].map(element => getComputedStyle(element).fontFamily))]);
     report[variant === "print" ? "htmlOverflow" : "serverOverflow"] = overflow;
     report[variant === "print" ? "htmlFontStacks" : "serverFontStacks"] = usedFonts;
-    if (variant === "print") fs.writeFileSync(path.join(dir, "deck.pdf"), await page.pdf({ printBackground: true, preferCSSPageSize: true }));
+    // server-deck.pdf: what the production printer embeds (only the @font-face faces exist there).
+    fs.writeFileSync(path.join(dir, variant === "print" ? "deck.pdf" : "server-deck.pdf"), await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true }));
     if (variant === "print") fs.writeFileSync(path.join(dir, "deck-print.html"), html.length < 4e6 ? html : html.slice(0, 2000));
     await context.close();
   }
@@ -342,7 +347,7 @@ async function renderBook(browser, name, doc, images, dir, report) {
       if (only && !only.includes(name)) continue;
       const doc = DocumentSourceSchema.parse(JSON.parse(fs.readFileSync(path.join(fixturesDir, file), "utf8")));
       const dir = path.join(outDir, name); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
-      const images = {}; for (const asset of doc.assets) images[asset.name] = await artwork(asset, doc.theme);
+      const images = {}; for (const asset of doc.assets) images[asset.name] = (await realArtwork(asset)) ?? await artwork(asset, doc.theme);
       // Measured brightness, as the builder stores it for generated images (scrims over text are sized from it).
       if (imageLuma) for (const asset of doc.assets) if (!asset.luma) asset.luma = await imageLuma(images[asset.name]);
       const report = { fixture: name, kind: doc.kind, fonts: doc.theme.fonts };

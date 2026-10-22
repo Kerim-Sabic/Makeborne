@@ -19,9 +19,9 @@ const {inspectFont} = require("./font-cmap.cjs");
 const portable = require("../../../infra/project-runtime/font-portability.cjs");
 const builderFonts = require("./fonts.ts");
 const {ProjectFiles} = require("./files.ts");
-const {DOCUMENT_FACES, FACE_SUBSETS, faceFile, faceKey, facePublicUrl, faceStyles, fontFaceCss} = require("../documents/fonts.ts");
+const {DOCUMENT_FACES, FACE_SUBSETS, PRINT_WEIGHTS, faceFile, faceKey, facePublicUrl, faceStyles, fontFaceCss, hasStaticCuts, staticFaceFile} = require("../documents/fonts.ts");
 const {embeddedFontSources} = require("../documents/fonts-server.ts");
-const {DocumentSourceSchema} = require("../documents/schema.ts");
+const {DocumentSourceSchema, FONT_PAIRINGS} = require("../documents/schema.ts");
 const {FONTS} = require("../documents/theme.ts");
 const {deckHtml, deckFaces} = require("../documents/render-deck.ts"), {bookHtml} = require("../documents/render-book.ts");
 const {deckPptx} = require("../documents/pptx.ts");
@@ -105,9 +105,29 @@ function pdfFonts(bytes) {
       if (range[3].startsWith("[")) for (const item of range[3].matchAll(/<([0-9A-Fa-f]+)>/g)) for (const char of decode(item[1])) drawn.add(char);
       else { const first = parseInt(range[3].slice(1, -1), 16); for (let code = first; code <= first + high - low; code++) drawn.add(String.fromCharCode(code)); }
     }
-    fonts.push({name: name.replace(/^[A-Z]{6}\+/, ""), drawn});
+    // Type0 fonts carry their outline format on the descendant (CIDFontType2 = TrueType outlines).
+    const subtype = /\/Subtype\s*\/(\w+)/.exec(object.body)?.[1], descendant = /\/DescendantFonts\s*\[\s*(\d+) 0 R/.exec(object.body)?.[1];
+    fonts.push({name: name.replace(/^[A-Z]{6}\+/, ""), drawn, subtype: descendant ? `${subtype}/${/\/Subtype\s*\/(\w+)/.exec(objects.get(Number(descendant)).body)[1]}` : subtype});
   }
   return fonts;
+}
+const squash = name => name.replace(/[-_ ]/g, "").toLowerCase();
+/** The catalogue face (DOCUMENT_FACES) a PDF font name belongs to, or undefined (Office/system faces). */
+const catalogueFace = name => Object.values(DOCUMENT_FACES).find(face => squash(name).startsWith(squash(face.family)));
+/** Type 3 fonts carry no outlines a prepress check accepts. Every catalogue face must embed as CID TrueType;
+ * the one known exception is the condensed Archivo heading (font-stretch below 100%), which has no static cut
+ * (fonts.ts REMAINING GAP), so it is allowed only where the document sets condensed text. */
+function assertNoType3(label, bytes, {condensed = false} = {}) {
+  const text = bytes.toString("latin1"), fonts = pdfFonts(bytes);
+  // Every font dictionary is accounted for: none is skipped for lacking a ToUnicode map (text stays extractable).
+  assert.equal(fonts.length, (text.match(/\/Type\s*\/Font\b/g) || []).length - (text.match(/\/DescendantFonts/g) || []).length, `${label}: every font has a ToUnicode map`);
+  const catalogue = fonts.filter(font => catalogueFace(font.name));
+  for (const font of catalogue) {
+    assert.ok(font.drawn.size > 0, `${label}: ${font.name} maps its glyphs to Unicode`);
+    if (font.subtype === "Type3" && condensed && catalogueFace(font.name).id === "archivo") continue;
+    assert.equal(font.subtype, "Type0/CIDFontType2", `${label}: catalogue face ${font.name} is embedded as ${font.subtype}, expected CID TrueType (static cut)`);
+  }
+  return catalogue.map(font => `${font.name}=${font.subtype}`);
 }
 function assertPdf(label, bytes, families) {
   const fonts = pdfFonts(bytes);
@@ -156,25 +176,35 @@ function assertPdf(label, bytes, families) {
   });
 
   await check("documents embed, preview and trace both subset files of every face", async () => {
-    const config = fs.readFileSync(path.join(repo, "next.config.ts"), "utf8");
-    assert.match(config, /\.flatMap\(\(file\) => \["latin", "latin-ext"\]\.map\(\(subset\) => `\.\/node_modules\/\$\{file\.replace\("SUBSET", subset\)\}`\)\)/);
+    // The export route traces what the PDF printer reads (check-design-quality.cjs proves the full list).
+    const traced = require(path.join(repo, "next.config.ts")).default.outputFileTracingIncludes["/api/cloud/workspaces/*/artifacts/*/document-export"];
     for (const [id, face] of Object.entries(DOCUMENT_FACES)) {
-      assert.ok(config.includes(`"${face.pkg}/${id}/files/${id}-SUBSET-${face.axis}-*.woff2"`), `${id} traced into the export route`);
+      const printed = hasStaticCuts(id) ? PRINT_WEIGHTS.map(weight => `./node_modules/@fontsource/${id}/files/${id}-SUBSET-${weight}-*.woff2`) : [`./node_modules/${face.pkg}/${id}/files/${id}-SUBSET-${face.axis}-*.woff2`];
+      for (const glob of printed) for (const subset of FACE_SUBSETS) assert.ok(traced.includes(glob.replace("SUBSET", subset)), `${glob} (${subset}) traced into the export route`);
       for (const style of faceStyles(id)) for (const subset of FACE_SUBSETS) {
         assert.ok(fs.existsSync(path.join(repo, "node_modules", face.pkg, id, "files", faceFile(id, style, subset))), `${id} ${style} ${subset} installed`);
         assert.ok(fs.existsSync(path.join(repo, "public", facePublicUrl(id, style, subset))), `${id} ${style} ${subset} served`);
+        if (hasStaticCuts(id)) for (const weight of PRINT_WEIGHTS) assert.ok(fs.existsSync(path.join(repo, "node_modules/@fontsource", id, "files", staticFaceFile(id, style, weight, subset))), `${id} ${style} ${weight} ${subset} static cut installed`);
       }
     }
+    // Print sources are the static cuts at the print weights, never the variable files (Chromium writes those as Type 3).
     const sources = await embeddedFontSources(["fraunces", "inter"], repo);
-    assert.deepEqual(Object.keys(sources).sort(), ["fraunces:italic", "fraunces:italic:latin-ext", "fraunces:normal", "fraunces:normal:latin-ext", "inter:italic", "inter:italic:latin-ext", "inter:normal", "inter:normal:latin-ext"]);
+    assert.deepEqual(Object.keys(sources).sort(), ["fraunces", "inter"].flatMap(id => ["italic", "normal"].flatMap(style => PRINT_WEIGHTS.flatMap(weight => FACE_SUBSETS.map(subset => faceKey(id, style, subset, weight))))).sort());
     const css = fontFaceCss(["fraunces"], sources);
-    assert.equal((css.match(/@font-face/g) || []).length, 4);
+    assert.equal((css.match(/@font-face/g) || []).length, 2 * 2 * PRINT_WEIGHTS.length, "one rule per style, subset and weight");
+    for (const weight of PRINT_WEIGHTS) assert.ok(css.includes(`font-family:"Fraunces";font-style:normal;font-weight:${weight};font-display:block;src:url(data:font/woff2;base64,`), `Fraunces ${weight} static cut declared`);
+    assert.doesNotMatch(css, /font-weight:\d+ \d+/, "no variable range in print");
     assert.ok(css.indexOf(`unicode-range:${portable.UNICODE_RANGES["latin-ext"]}`) < css.indexOf(`unicode-range:${portable.UNICODE_RANGES.latin}`), "extended rule precedes the base rule");
+    // Archivo keeps its variable file for condensed widths only; normal-width text matches the static cuts.
+    const archivo = fontFaceCss(["archivo"], await embeddedFontSources(["archivo"], repo));
+    assert.equal((archivo.match(/font-stretch:62% 99%;/g) || []).length, 4, "condensed variable rule per style and subset");
+    assert.equal((archivo.match(/font-weight:(400|600|700);font-display/g) || []).length, 2 * 2 * PRINT_WEIGHTS.length);
     const preview = fontFaceCss(["inter"]);
-    assert.match(preview, /url\(\/builder-runtime\/fonts\/inter-latin-ext-normal\.woff2\) format\("woff2"\);unicode-range:U\+0100-/);
+    assert.match(preview, /font-weight:100 900;font-display:block;src:url\(\/builder-runtime\/fonts\/inter-latin-ext-normal\.woff2\) format\("woff2"\);unicode-range:U\+0100-/);
     assert.match(preview, /url\(\/builder-runtime\/fonts\/inter-normal\.woff2\) format\("woff2"\);unicode-range:U\+0000-00FF/);
     // A missing extended file drops only that rule: the base face keeps working.
-    assert.equal((fontFaceCss(["inter"], {[faceKey("inter", "normal")]: sources["inter:normal"]}).match(/@font-face/g) || []).length, 1);
+    const regular = faceKey("inter", "normal", "latin", 400);
+    assert.equal((fontFaceCss(["inter"], {[regular]: sources[regular]}).match(/@font-face/g) || []).length, 1);
   });
 
   await check("portable builds link both subsets per style with their unicode-ranges", () => {
@@ -314,6 +344,38 @@ function assertPdf(label, bytes, families) {
       await context.close();
       assert.throws(() => assertPdf("latin-only control", control, families), /is drawn by embedded/);
       report["book-pdf-latin-only-control"] = pdfFonts(control).filter(font => [...font.drawn].some(char => REGIONAL.includes(char)) && !families.some(family => font.name.startsWith(family))).map(font => font.name);
+    });
+
+    await check("book and deck PDFs embed every catalogue face as CID TrueType, never Type 3", async () => {
+      // Every face at every print weight and style, as the printer declares them (on this OS the Office faces
+      // would otherwise draw the legacy pairings, so the specimen sets each catalogue family directly).
+      const ids = Object.keys(DOCUMENT_FACES), sources = await embeddedFontSources(ids, repo);
+      const lines = ids.flatMap(id => faceStyles(id).flatMap(style => (hasStaticCuts(id) ? PRINT_WEIGHTS : [400]).map(weight => `<p style="font-family:'${DOCUMENT_FACES[id].family}';font-style:${style};font-weight:${weight}">${id} ${style} ${weight} ${SAMPLE}</p>`)));
+      const specimen = await open(`<!doctype html><meta charset="utf-8"><style>${fontFaceCss(ids, sources)}body{font-size:14px}</style>${lines.join("")}`, {javaScriptEnabled: false, media: "print"});
+      const specimenPdf = await specimen.page.pdf({printBackground: true});
+      await specimen.context.close();
+      const drawn = assertNoType3("specimen", specimenPdf);
+      for (const face of Object.values(DOCUMENT_FACES)) assert.ok(drawn.some(entry => catalogueFace(entry) === face), `${face.family} is drawn in the specimen`);
+      report["pdf-subtypes-specimen"] = drawn;
+      // The production printer path for one book and one deck, and every pairing's print HTML.
+      for (const [label, doc] of [["book", bookDoc], ["deck", deckDoc]]) report[`${label}-pdf-subtypes`] = assertNoType3(`${label} PDF`, await documentPdf(doc, {}));
+      for (const fonts of FONT_PAIRINGS) {
+        const deckSource = DocumentSourceSchema.parse(fixtures.deck(fonts)), bookSource = DocumentSourceSchema.parse(fixtures.book(fonts));
+        const deckPage = await open(deckHtml(deckSource, {}, "print", await embeddedFontSources(deckFaces(deckSource), repo)), {viewport: {width: 1280, height: 720}, javaScriptEnabled: false, media: "print"});
+        const deckBytes = await deckPage.page.pdf({printBackground: true, preferCSSPageSize: true, tagged: true});
+        await deckPage.context.close();
+        report[`deck-${fonts}-pdf-subtypes`] = assertNoType3(`${fonts} deck PDF`, deckBytes, {condensed: Boolean(FONTS[fonts].headingStretch)});
+        const bookPage = await open(bookHtml(bookSource, {}, "print", await embeddedFontSources(FONTS[fonts].faces, repo)), {viewport: {width: 576, height: 864}, javaScriptEnabled: false, media: "print"});
+        const bookBytes = await bookPage.page.pdf({printBackground: true, preferCSSPageSize: true, tagged: true});
+        await bookPage.context.close();
+        report[`book-${fonts}-pdf-subtypes`] = assertNoType3(`${fonts} book PDF`, bookBytes);
+      }
+      // Control: the variable files (what main embedded) print as Type 3, which this check catches.
+      const variable = Object.fromEntries(FACE_SUBSETS.flatMap(subset => faceStyles("inter").map(style => [faceKey("inter", style, subset), `data:font/woff2;base64,${fs.readFileSync(path.join(repo, "node_modules", DOCUMENT_FACES.inter.pkg, "inter", "files", faceFile("inter", style, subset))).toString("base64")}`])));
+      const control = await open(`<!doctype html><meta charset="utf-8"><style>${fontFaceCss(["inter"], variable)}</style><p style="font-family:Inter">${SAMPLE}</p>`, {javaScriptEnabled: false, media: "print"});
+      const controlPdf = await control.page.pdf();
+      await control.context.close();
+      assert.throws(() => assertNoType3("variable control", controlPdf), /embedded as Type3/);
     });
   } finally {
     await browser.close();

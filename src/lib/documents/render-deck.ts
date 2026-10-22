@@ -57,7 +57,7 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
         : `<div class="p ph${kind}" style="${box(prim)}${shape}${motion}"><span>${esc(prim.alt || prim.name)}</span></div>`;
     }
     case "chart":
-      return `<div class="p${kind}" style="${box(prim)}${motion}">${chartSvg(prim.chart, prim.w, prim.h, prim.colors, { heading: fonts.heading, body: prim.style?.mono ? MONO_STACK : fonts.body }, prim.style)}</div>`;
+      return `<div class="p${kind}" style="${box(prim)}${motion}">${chartSvg(prim.chart, prim.w, prim.h, prim.colors, { heading: fonts.heading, body: prim.style?.mono ? MONO_STACK : fonts.body, headingWeight: fonts.headingWeight }, prim.style)}</div>`;
     case "text": {
       const family = prim.font === "heading" ? "var(--heading)" : prim.font === "mono" ? "var(--mono)" : "var(--body)";
       const style = [box(prim), `font-family:${family}`, `font-size:${cq(prim.size)}`, `line-height:${prim.lh}`,

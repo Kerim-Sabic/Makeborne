@@ -514,7 +514,7 @@ function monogram(ctx: Ctx, person: NonNullable<Slide["people"]>[number], i: num
   const fill = fills[i % fills.length];
   if (square) rect(ctx, { x, y, w: s, h: s, fill, ...(ctx.dir.panel === "heavy" ? { stroke: c.ink, strokeWidth: 3 } : {}) });
   else ellipse(ctx, { x, y, w: s, h: s, fill });
-  text(ctx, initials(person.name), { x, y, w: s, h: s }, { font: "heading", size: Math.round(s * 0.36), weight: 700, align: "center", valign: "middle", color: readableOn(fill, i % 2 ? c.accent2 : c.accent, c.ink, c.bg, "#FFFFFF"), lh: 1 });
+  text(ctx, initials(person.name), { x, y, w: s, h: s }, { font: "heading", size: Math.round(s * 0.36), weight: valueWeight(ctx), align: "center", valign: "middle", color: readableOn(fill, i % 2 ? c.accent2 : c.accent, c.ink, c.bg, "#FFFFFF"), lh: 1 });
 }
 
 export function teamRow(ctx: Ctx, slide: Slide) {

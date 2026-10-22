@@ -16,10 +16,11 @@ const trim = (value: string, max: number) => value.length > max ? `${value.slice
 
 /** Native-looking SVG chart for the preview and PDF; the PPTX writer emits a
  * real editable chart with the same data, colors and emphasis. */
-export function chartSvg(chart: Chart, width: number, height: number, colors: ChartColors, fonts: { heading: string; body: string }, style: ChartStyle = { radius: 3, grid: false }) {
+export function chartSvg(chart: Chart, width: number, height: number, colors: ChartColors, fonts: { heading: string; body: string; headingWeight?: number }, style: ChartStyle = { radius: 3, grid: false }) {
   const parts: string[] = [], rx = style.radius;
+  // A light display face (Instrument Serif has one weight) keeps its own weight: never a synthesized bold.
   const t = (x: number, y: number, value: string, size: number, color: string, anchor: "start" | "middle" | "end" = "middle", weight = 400, font = fonts.body) =>
-    parts.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${size}" fill="${color}" text-anchor="${anchor}" font-weight="${weight}" font-family="${esc(font)}">${esc(value)}</text>`);
+    parts.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${size}" fill="${color}" text-anchor="${anchor}" font-weight="${font === fonts.heading && fonts.headingWeight !== undefined && fonts.headingWeight < 600 ? fonts.headingWeight : weight}" font-family="${esc(font)}">${esc(value)}</text>`);
   const multi = chart.series.length > 1;
   const legendH = multi ? 34 : 0;
   if (multi) {
