@@ -242,6 +242,15 @@ async function main() {
       await banner.waitFor();
       assert.equal(await banner.locator("strong").innerText(), "Version 3 has a build error");
       await previewFactIs(page, "Preview: build error");
+      // The same version opened in History names itself too, and offers nothing to run from there.
+      await tab(page, "History");
+      await versionRow(page, 3).getByRole("button", { name: "Preview version 3" }).click();
+      const snapshotProblem = page.getByRole("region", { name: "Saved version 3" }).getByRole("alert");
+      await snapshotProblem.waitFor();
+      assert.equal(await snapshotProblem.locator("strong").innerText(), "Version 3 has a build error");
+      assert.equal(await snapshotProblem.getByRole("button").count(), 0, "no restore or Fix it inside a read-only snapshot");
+      await tab(page, "Preview");
+      await banner.waitFor();
       const restore = banner.getByRole("button", { name: "Restore version 2" }), fix = banner.getByRole("button", { name: "Fix it" });
       assert.match(await page.locator(`#${await restore.getAttribute("aria-describedby")}`).innerText(), /^Restore saves a copy of version 2 as new version 4\. It uses no AI and no credits/);
       assert.match(await page.locator(`#${await fix.getAttribute("aria-describedby")}`).innerText(), /Nothing is sent until you choose Send/);

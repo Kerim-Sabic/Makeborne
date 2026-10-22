@@ -1976,7 +1976,7 @@ export function CloudEditor({
               <p className="small-note" id={`restore-effect-${inspectedVersion.id}`}>This is a saved snapshot.{role !== "reviewer" && inspectedVersion.number < expectedVersion ? ` ${restoreEffect(inspectedVersion.number, expectedVersion, artifact.kind === "website")}` : ""}</p>
               {/* The saved files and pages of that version, read-only: no click-to-edit, editor URL, scroll memory or saving. Mounted only while History shows. */}
               {inspectedSource ? view === "history" && <LivePreview key={inspectedVersion.id} files={inspectedFiles} assets={previewAssets(inspectedSource)}
-                scope={{ accountId, workspaceId, artifactId: artifact.id }} routes={inspectedSource.routes} snapshot={inspectedVersion.number} />
+                scope={{ accountId, workspaceId, artifactId: artifact.id }} routes={inspectedSource.routes} snapshot={inspectedVersion.number} subject={{ version: inspectedVersion.number, unsaved: false }} />
               : inspectedVersion.content.document && artifact.kind !== "website" ? view === "history" && <DocumentPreview key={inspectedVersion.id} document={inspectedVersion.content.document}
                 scope={{ accountId, workspaceId, artifactId: artifact.id }} savedVersion={inspectedVersion.number} canExport />
               : <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />}
