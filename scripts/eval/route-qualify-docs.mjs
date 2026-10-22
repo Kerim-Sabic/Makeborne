@@ -63,7 +63,7 @@ for (const id of only) {
     const artifact = { id: 'eval', project_id: id, kind, title: brief.title, current_version: 0 };
     const current = { number: 0, assetIds: [], content: { title: brief.title, sections: [] }, style: {} };
     const context = documentContext({ artifact, project: { brief: brief.brief, styleId: 'automatic' }, current, versions: [], brand: null }, editor, true);
-    const route = routing.routeStage({ stage: 'document', emptyDocument: true, effort: values.effort }, ENV[arm]);
+    const route = routing.routeStage({ stage: 'document', artifact: kind === 'book' ? 'book' : 'deck', emptyDocument: true, effort: values.effort }, ENV[arm]);
     const reservation = await budget.reserveScoped({ scope: values.scope, kind: 'routing-document', ref: `${values.run}/${id}/${arm}`, boundUsd: capMicrousd / 1e6, provider: 'anthropic', unique: true, note: `${values.approval}. ${arm} ${values.effort} first ${kind}` });
     const spend = new RunSpend({ run: `${values.run}/${id}/${arm}`, providerCapMicrousd: capMicrousd, customerCapMicrousd: capMicrousd, gate: memoryGate(), deadline: Date.now() + STAGE_MS });
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), STAGE_MS), started = Date.now();
@@ -71,7 +71,7 @@ for (const id of only) {
     const emit = event => { if (['tool_error', 'status', 'item', 'route'].includes(event.type)) events.push({ type: event.type, label: event.label, tool: event.tool, message: event.message?.slice?.(0, 300), model: event.model, escalated: event.escalated, reason: event.reason }); };
     let result = null, record = null, error = null;
     try {
-      const attempt = (model, deadline) => runDocumentBuilder({ client: null, scope: { workspaceId: 'eval', projectId: id }, editor, effort: values.effort, spend, request: brief.brief, context, attachments: [], emit, signal: controller.signal, deadline, model });
+      const attempt = plan => runDocumentBuilder({ client: null, scope: { workspaceId: 'eval', projectId: id }, editor, effort: values.effort, spend, request: plan.role === 'repair' ? `${brief.brief}\n\nRepair: the previous attempt stopped before the document was complete and checked. Continue from the current document, complete what is missing, then call finish.` : brief.brief, context: plan.role === 'repair' ? documentContext({ artifact, project: { brief: brief.brief, styleId: 'automatic' }, current, versions: [], brand: null }, editor, false) : context, attachments: [], emit, signal: controller.signal, deadline: plan.deadline, model: plan.model });
       ({ result, record } = await routedDocumentStage({ route, editor, spend, deadline: Date.now() + STAGE_MS, signal: controller.signal, emit, attempt }));
     } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; record = caught.route ?? record; }
     finally { clearTimeout(timer); }

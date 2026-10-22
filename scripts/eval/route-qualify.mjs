@@ -26,7 +26,7 @@ if (process.env.EVAL_SPEND_APPROVED !== 'yes' || !values.approval?.trim()) throw
 if (!/^[a-z0-9-]+$/.test(values.run ?? '')) throw new Error('--run must be a plain id');
 if (!values.scope) throw new Error('--scope is required (the owner-approved scoped allowance for this qualification)');
 const arms = values.arms.split(',').map(arm => arm.trim());
-if (!arms.length || arms.some(arm => !['opus', 'routed'].includes(arm))) throw new Error('--arms takes opus and/or routed');
+if (!arms.length || arms.some(arm => !['opus', 'shadow', 'routed'].includes(arm))) throw new Error('--arms takes opus, shadow and/or routed');
 process.chdir(REPO);
 
 const require = createRequire(`${REPO}/scripts/eval/package.json`);
@@ -47,7 +47,8 @@ Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_C
 for (const name of ['MAKEBORNE_BUILDER_MODEL', 'MAKEBORNE_MODEL_ROUTING']) delete process.env[name];
 
 const { runBuilder } = loadApp('src/lib/builder/agent.ts');
-const { routedWebsiteStage } = loadApp('src/lib/builder/website-stage.ts');
+const { routedWebsiteStage, repairRequest } = loadApp('src/lib/builder/website-stage.ts');
+const { buildTaskContract } = loadApp('src/lib/builder/task-contract.ts');
 const routing = loadApp('src/lib/ai/model-routing.ts');
 const { renderedContrastCheck } = loadApp('src/lib/builder/contrast-gate.ts');
 const { ProjectFiles } = loadApp('src/lib/builder/files.ts');
@@ -64,7 +65,9 @@ const casesFile = path.resolve(values.cases ?? path.join(REPO, 'scripts/eval/rou
 const only = (values.only ?? '').split(',').map(id => id.trim()).filter(Boolean);
 const cases = JSON.parse(fs.readFileSync(casesFile, 'utf8')).cases.filter(item => !only.length || only.includes(item.id));
 if (!cases.length) throw new Error('no case selected');
-const ENV = { opus: {}, routed: { MAKEBORNE_MODEL_ROUTING: 'on', MAKEBORNE_ROUTE_TARGETED_EDIT: ROUTED_MODEL } };
+// opus: routing off (today). shadow: off execution, the on-decision recorded. routed: the policy executes (on), Sonnet allowed for edits.
+const ROUTES = { MAKEBORNE_ROUTE_TARGETED_EDIT: ROUTED_MODEL, MAKEBORNE_ROUTE_EDIT: ROUTED_MODEL };
+const ENV = { opus: {}, shadow: { MAKEBORNE_MODEL_ROUTING: 'shadow', ...ROUTES }, routed: { MAKEBORNE_MODEL_ROUTING: 'on', ...ROUTES } };
 const dirOf = arm => path.join(REPO, 'outputs', 'eval', 'runs', `${values.run}-${arm}`);
 const writeJson = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value, null, 2)); };
 
@@ -114,17 +117,23 @@ try {
       if (fs.existsSync(path.join(itemDir, 'cost.json'))) { console.log(`${testCase.id} ${arm}: already run, skipped`); continue; }
       const files = new ProjectFiles(source);
       const before = new Map(files.files), checkpoint = files.checkpoint();
-      const route = routing.routeStage({ stage: 'build', request: testCase.request, files: files.files.size, effort: values.effort, attachments: 0 }, ENV[arm]);
-      if (route.class !== 'targeted-edit') throw new Error(`${testCase.id}: classified as ${route.class}, not targeted-edit; fix the case`);
+      // The build route's decision on the same inputs, with the task contract (scope and checks) it builds.
+      const picked = /([\w./-]+\.(?:tsx|ts|css|html|json|svg|md)) \(line (\d+)\)/.exec(testCase.request);
+      const contract = buildTaskContract({ artifact: 'website', objective: 'edit', message: testCase.request, revision: { expectedVersion: item.origin?.version ?? 1 },
+        target: picked ? { file: picked[1], line: Number(picked[2]), label: '' } : null, limits: { capCredits: policy.ceilingCredits, repairs: 1, escalations: 1 } });
+      const route = routing.routeStage({ stage: 'build', artifact: 'website', request: testCase.request, files: files.files.size, projectBytes: [...files.files.values()].reduce((sum, content) => sum + content.length, 0),
+        effort: values.effort, attachments: 0, verification: { compile: true, contrast: true }, contract, operation: { id: null, runId: null, revision: item.origin?.version ?? null } }, ENV[arm]);
       const reservation = await budget.reserveScoped({ scope: values.scope, kind: 'routing-edit', ref: `${values.run}/${testCase.id}/${arm}`, boundUsd: capMicrousd / 1e6, provider: 'anthropic', unique: true, note: `${values.approval}. ${arm} ${values.effort} targeted edit` });
       const spend = new RunSpend({ run: `${values.run}/${testCase.id}/${arm}`, providerCapMicrousd: capMicrousd, customerCapMicrousd: capMicrousd, gate: memoryGate(), deadline: Date.now() + STAGE_MS });
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), STAGE_MS);
       const events = [], started = Date.now();
-      const emit = event => { if (['tool_error', 'status', 'file', 'delete', 'route'].includes(event.type)) events.push({ type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300), model: event.model, class: event.class, escalated: event.escalated, reason: event.reason }); };
+      const emit = event => { if (['tool_error', 'status', 'file', 'delete', 'route'].includes(event.type)) events.push({ type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300), class: event.class, role: event.role }); };
       let result = null, record = null, error = null, outcome = 'ok';
       try {
-        const attempt = (model, deadline) => runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: testCase.id }, files, effort: values.effort, spend, request: testCase.request,
-          context: context({ item, files, history }), attachments: [], emit, signal: controller.signal, deadline, contrastCheck, compile: compileVerdict, model });
+        // As website-run.ts: a repair starts a new conversation from the current files with the evidence to fix.
+        const attempt = plan => runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: testCase.id }, files, effort: values.effort, spend,
+          request: plan.role === 'repair' ? repairRequest(testCase.request, plan.repairNotes) : testCase.request,
+          context: context({ item, files, history }), attachments: [], emit, signal: controller.signal, deadline: plan.deadline, contrastCheck, compile: compileVerdict, model: plan.model, firstStep: route.firstStep });
         ({ result, record } = await routedWebsiteStage({ route, stage: 'build', files, spend, deadline: Date.now() + STAGE_MS, signal: controller.signal, emit, compile: compileVerdict, attempt }));
       } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; record = caught.route ?? record; }
       finally { clearTimeout(timer); }
@@ -142,7 +151,7 @@ try {
       let saved; try { saved = files.toSource(); } catch (invalid) { files.restore(checkpoint); saved = files.toSource(); outcome = `invalid source (${String(invalid.message).slice(0, 120)}): saved website kept`; kept = false; }
       const changes = changeStats(before, files.files);
       writeJson(path.join(itemDir, 'item.json'), { ...baseItem, origin: { type: 'live', stack: 'none (direct runBuilder; edit of a saved isolated-stack website)', artifactId: item.origin?.artifactId ?? null, version: item.origin?.version ?? null, path: path.relative(REPO, siteDir) },
-        generation: { arm, effort: values.effort, mode: 'edit (direct)', images: 'off', route: { class: route.class, model: route.model, escalation: route.escalation, reason: route.reason } } });
+        generation: { arm, effort: values.effort, mode: 'edit (direct)', images: 'off', route: { policy: route.policyVersion, mode: route.mode, class: route.class, model: route.model, escalation: route.escalation, codes: route.reasonCodes, limits: route.limits, shadow: route.shadow, contract: contract.version, checks: route.requiredChecks } } });
       fs.writeFileSync(path.join(itemDir, 'source.json'), JSON.stringify(saved));
       copyAssets(path.join(siteDir, 'assets'), path.join(itemDir, 'assets'));
       const cost = { boundUsd: capMicrousd / 1e6, reservationId: reservation, actualUsd: uncertain ? null : spend.providerMicrousd / 1e6, chargedCredits: spend.customerCredits(RATE), absorbedUsd: spend.absorbedMicrousd / 1e6,

@@ -28,7 +28,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' }, variant: { type: 'string', default: 'original' }, route: { type: 'string' }, scope: { type: 'string' } } });
+const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' }, variant: { type: 'string', default: 'original' }, route: { type: 'string' }, scope: { type: 'string' }, 'first-step': { type: 'string' } } });
 // This harness: the ledger, the run outputs and the secret scan always go through it.
 const DQ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPO = path.resolve(values.repo ?? DQ);
@@ -38,7 +38,7 @@ if (!['medium', 'high'].includes(values.effort)) throw new Error('--effort must 
 if (!['original', 'enhanced', 'answered', 'questions'].includes(values.variant)) throw new Error('--variant must be original, enhanced, answered or questions');
 if (values.route !== undefined && !/^[a-z-]+=[a-z0-9.-]+(?:,[a-z-]+=[a-z0-9.-]+)*$/.test(values.route)) throw new Error('--route takes <class>=<model>[,<class>=<model>...]');
 if (values.scope !== undefined && !/^[a-z0-9][a-z0-9-]{2,63}$/.test(values.scope)) throw new Error('--scope must be a scoped allowance name');
-const routeEnv = values.route ? { MAKEBORNE_MODEL_ROUTING: 'on', ...Object.fromEntries(values.route.split(',').map(item => item.split('=')).map(([taskClass, model]) => [`MAKEBORNE_ROUTE_${taskClass.toUpperCase().replace(/-/g, '_')}`, model])) } : null;
+const routeEnv = values.route || values['first-step'] ? { MAKEBORNE_MODEL_ROUTING: 'on', ...(values['first-step'] ? { MAKEBORNE_ROUTE_FIRST_STEP: values['first-step'] } : {}), ...Object.fromEntries((values.route ?? '').split(',').filter(Boolean).map(item => item.split('=')).map(([taskClass, model]) => [`MAKEBORNE_ROUTE_${taskClass.toUpperCase().replace(/-/g, '_')}`, model])) } : null;
 const only = (values.only ?? '').split(',').map(id => id.trim()).filter(Boolean);
 if (!only.length || only.length > 8) throw new Error('--only takes 1 to 8 brief ids');
 process.chdir(REPO);
@@ -67,7 +67,7 @@ delete process.env.MAKEBORNE_BUILDER_MODEL;
 
 const { runBuilder } = loadApp('src/lib/builder/agent.ts');
 const routing = routeEnv ? loadApp('src/lib/ai/model-routing.ts') : null;
-const { routedWebsiteStage } = routeEnv ? loadApp('src/lib/builder/website-stage.ts') : {};
+const { routedWebsiteStage, repairRequest } = routeEnv ? loadApp('src/lib/builder/website-stage.ts') : {};
 /** Ledger reservations: the scoped allowance when --scope is given, else the design cap (unchanged). */
 const reserve = args => values.scope ? budget.reserveScoped({ ...args, scope: values.scope }) : budget.reserve(args);
 // Older trees (--repo at a base commit) have no contrast gate: they run without it, as they shipped.
@@ -190,20 +190,21 @@ try {
       const before = new Set(files.changed); files.changed.clear();
       const saved = new Map(files.files);
       let result = null, error = null, routeRecord = null;
-      const emit = event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file' || event.type === 'route') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300), ...(event.type === 'route' ? { model: event.model, class: event.class, escalated: event.escalated, reason: event.reason } : {}) }); };
+      const emit = event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file' || event.type === 'route') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300), ...(event.type === 'route' ? { class: event.class, role: event.role } : {}) }); };
       // Like the route: the concept step on a first build (nothing written yet, no plan); the context is read at call time.
       const firstBuild = name === 'build' && !files.files.size;
-      const attempt = (model, deadline) => runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history, prep }), required, contrastCheck,
-        concept: firstBuild, attachments: extra.attachments ?? [], emit,
-        signal: controller.signal, deadline, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage } : {}), ...(model ? { model } : {}) });
+      // The build route's decision (src/lib/ai/model-routing.ts) on the same inputs, when routing is on for this run.
+      const routeKind = name === 'review' ? 'review' : name.startsWith('continuation') ? 'continuation' : 'build';
+      const route = routeEnv ? routing.routeStage({ stage: routeKind, artifact: 'website', request, files: files.files.size, projectBytes: [...files.files.values()].reduce((sum, content) => sum + content.length, 0), effort: values.effort,
+        attachments: routeKind === 'build' ? (extra.attachments ?? []).length : 0, verification: { compile: true, contrast: Boolean(contrastCheck) } }, routeEnv) : null;
+      const attempt = plan => runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend,
+        request: plan.role === 'repair' ? repairRequest(request, plan.repairNotes) : request, context: context({ brief, files, history, prep }), required, contrastCheck,
+        concept: firstBuild && plan.role !== 'repair', attachments: extra.attachments ?? [], emit,
+        signal: controller.signal, deadline: plan.deadline, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage } : {}),
+        ...(plan.model ? { model: plan.model } : {}), ...(route ? { firstStep: route.firstStep } : {}) });
       try {
-        if (!routeEnv) result = await attempt(undefined, Date.now() + STAGE_MS);
-        else {
-          // The build route's classification and single escalation (src/lib/builder/website-stage.ts), same inputs.
-          const routeKind = name === 'review' ? 'review' : name.startsWith('continuation') ? 'continuation' : 'build';
-          const route = routing.routeStage({ stage: routeKind, request, files: files.files.size, effort: values.effort, attachments: routeKind === 'build' ? (extra.attachments ?? []).length : 0 }, routeEnv);
-          ({ result, record: routeRecord } = await routedWebsiteStage({ route, stage: routeKind, files, spend, deadline: Date.now() + STAGE_MS, signal: controller.signal, emit, compile: compileVerdict, attempt }));
-        }
+        if (!route) result = await attempt({ role: 'initial', deadline: Date.now() + STAGE_MS, repairNotes: [] });
+        else ({ result, record: routeRecord } = await routedWebsiteStage({ route, stage: routeKind, files, spend, deadline: Date.now() + STAGE_MS, signal: controller.signal, emit, compile: compileVerdict, attempt }));
       } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; routeRecord = caught.route ?? routeRecord; }
       finally { clearTimeout(timer); }
       spentMicrousd += spend.providerMicrousd;
