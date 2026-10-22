@@ -309,7 +309,7 @@ HOSTED ENQUIRY FORM: For a contact or enquiry form only, the published interacti
 FIRST BUILD CHECKLIST:
 1. Concept, type pairing (within the font budget), palette tokens, grid, first-screen archetype and signature moment decided; design seed considered; defaults check passed.
 2. A tokens stylesheet (colour, type scale, space, radius, shadow, motion), base styles (box-sizing, body font and colour, img max-width, ::selection, :focus-visible, .sr-only) and the motion stylesheet and useReveal hook.
-3. Header: a typographic wordmark in the display face, navigation, the primary action, a <details> menu on mobile; on phones the primary action (a compact button, or the phone number for call-first businesses) stays visible in the sticky header beside the menu.
+3. Header: a typographic wordmark in the display face, navigation, the primary action, a <details> menu on mobile that closes on Escape (onKeyDown on the <details>: if the key is Escape and it is open, close it and focus its <summary>) and when one of its links is chosen; on phones the primary action (a compact button, or the phone number for call-first businesses) stays visible in the sticky header beside the menu.
 4. First screen: one focal point, a clear h1, the primary action and a real image, cut-out or crafted visual; not a centred stack.
 5. Enough purposeful sections to satisfy this brief, with varied rhythm. Five to eight is a useful starting point for a substantial business site, not a quota for a minimal page. Choose layouts from the content; do not force a colour-flooded section, bento or marquee where it serves no purpose.
 6. A footer with real utility (contact details, hours or links, small print).
