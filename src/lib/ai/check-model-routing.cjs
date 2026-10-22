@@ -240,6 +240,17 @@ const routedEnv = { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_TARGETED_EDIT
     assert.equal(receipt.charged, done.charged);
   });
 
+  await check("finish gate: a finish sent with a failed edit in the same step is refused (seen in qualification: an absolute path, then finish)", async () => {
+    const anthropic = provider((model, messages) => /tool call in this step failed/.test(lastUserText(messages))
+      ? { content: [tool("write_file", { path: "src/App.tsx", content: GOOD }), tool("finish", { summary: "Changed the heading.", title: "Example" })] }
+      : /Not finished yet/.test(lastUserText(messages)) ? { content: [tool("finish", { summary: "Changed the heading.", title: "Example" })] }
+      : { content: [tool("edit_file", { path: "/src/App.tsx", old_string: "Hello", new_string: "Fresh bread daily" }), tool("finish", { summary: "Changed the heading.", title: "Example" })] });
+    const result = await websiteStage({ route: routing.routeStage({ stage: "build", files: 4, request: "Make the heading say Fresh bread daily", effort: "light" }, routedEnv), anthropic });
+    assert.equal(result.stream.at(-1).type, "done"); assert.equal(result.finish.args.p_detail.route.escalation, null, "fixed by the routed model itself after the gate");
+    assert.equal(result.finish.args.p_candidate.content.websiteSource.files.find(file => file.path === "src/App.tsx").content, GOOD, "the saved version has the change the summary claims");
+    assert.ok(result.stream.some(event => event.type === "tool_error" && event.tool === "finish" && /tool call in this step failed/.test(event.message)));
+  });
+
   await check("a refusal on the routed model escalates; a failure on the escalation is final (no third attempt)", async () => {
     const refusing = provider((model, messages) => model === SONNET ? { content: [], stop: "refusal" } : editor(GOOD)(model, messages));
     const ok = await websiteStage({ route: routing.routeStage({ stage: "build", files: 4, request: "Bigger heading", effort: "light" }, routedEnv), anthropic: refusing });

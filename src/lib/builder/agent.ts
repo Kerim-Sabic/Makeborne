@@ -306,6 +306,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
           case "finish": {
             const input = ToolInputs.finish.parse(use.input);
             const problems = run.files.problems();
+            // A finish sent alongside a failed edit would save the project without that change (and claim it was made).
+            const failedTools = results.filter(result => result.is_error).length;
+            if (failedTools) problems.unshift(`${failedTools === 1 ? "A tool call" : `${failedTools} tool calls`} in this step failed, so ${failedTools === 1 ? "that change was" : "those changes were"} not applied. Fix ${failedTools === 1 ? "it" : "them"} using the tool results, check the result, then call finish again.`);
             // A first build records its concepts before it can finish (once: a repeat is accepted).
             const noConcept = "Before finishing a first build, call the concept tool once with 2-3 genuinely distinct concepts, scored on the rubric, and keep building the strongest.";
             if (run.concept && !concept && !qualityReported.has(noConcept)) { qualityReported.add(noConcept); problems.push(noConcept); }
