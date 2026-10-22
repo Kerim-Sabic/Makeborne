@@ -68,3 +68,21 @@ The alternative was stored raster thumbnails (PNG/WebP per saved version) instea
   On the 82-project fixture, a full scroll leaves 27 mounted frames (82 before this change) and 1.3 MB of frame HTML in the DOM (about 10 MB before).
 - **Operational cost.** Rasters would need storage objects per version, a generation trigger and queue, a backfill for existing projects, invalidation on every save, deletion on revoke or delete, and monitoring. That is new infrastructure for appearance alone.
 - **Revisit when:** workspaces routinely exceed about 200 projects (the in-memory cache bound), measured scroll jank appears on low-end devices, or previews must appear outside the app (email, shared links). The next step would rasterise the already-sanitised capture inside the existing sandbox, not add a server renderer.
+
+## Larger parity features — status, 22 October 2026
+
+Status words as above. "Live" means in production main d066f23. Each row was checked in source on main and on Claude's branches, not taken from earlier reports.
+
+| Feature | Status | What exists | Gap / next step |
+|---|---|---|---|
+| Durable instruction queue | **absent** | With AI off, follow-ups are kept as notes in this browser tab only ("Saved in this tab · not applied"). Nothing is queued server-side. | Durable, authorised queue (S5). Enqueueing must take no hold; each item runs only on explicit start. |
+| Independent drafts with explicit acceptance | **absent** | Linear version history with restore and compare. Earlier versions can be previewed read-only (`feature/editor-quality`, implemented + local). | Draft branches per request with isolation, conflicts and acceptance (S6). |
+| Scoped project/workspace knowledge | **absent** | Brand kits (identity only, fingerprinted per run). Per-request attachments (PNG/JPEG/WebP/GIF/PDF/TXT/MD). | Scoped, revocable knowledge sources with provenance (S7). |
+| Versioned reusable design systems | **absent** | Style presets and the automatic design seed (`feature/creation-quality`, implemented + local). Brand kits are not versioned design systems. | Versioned tokens and components across projects (S7). |
+| Richer visual editing, multi-element selection, annotations | **partial** | Live: free single-element visual edits, Undo, edit target bound to its version. On `feature/editor-quality` (implemented + local): readable selection labels, keyboard selection and Escape, "Saved as version N · Undo", undo surviving a tab switch. | Multi-element selection and annotations are **absent**. |
+| GitHub | **partial** (push only) | Code on main: GitHub App connection and a full-source push to a per-website branch (`github_website_links`). Production availability depends on the `MAKEBORNE_GITHUB_*` settings, which were not verified in this pass. | Pull, branch choice, conflicts and two-way sync are **absent** (S8). Verify current behaviour first. |
+| Native CSV/XLSX/DOCX/PPTX ingestion | **absent** (refused honestly) | Live M09: these files are refused per file with a reason. Decks export to PPTX; that is export, not ingestion. | Bounded parsers with provenance (S10). |
+| Customer-app databases, auth, storage, server functions | **absent** | Makeborne's own database and the enquiry gateway are not customer backends. No toggle exists, and none should be added. | Architecture decision first (S9), then explicit infrastructure approval. |
+| Project ownership transfer and portable client handoff | **partial** | Source download (`website-source-download.tsx`), GitHub push, client review links and publishing. No workspace-member invite or ownership-transfer routes exist on main. | Transfer and handoff package are **absent**. They need an authorisation design (who may transfer, billing and data retention). |
+
+None of these is in the core gallery/creation candidate. Each is a separate increment after the core journey is stable.
