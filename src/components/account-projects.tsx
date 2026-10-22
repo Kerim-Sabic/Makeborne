@@ -234,9 +234,10 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
   const ready = Boolean(snapshot) || early;
   const controls = listShown && (ready || workspaces.length > 1) ? <div className="account-projects-controls">
     {workspaces.length > 1 && <label className="library-select"><span>Workspace</span><select disabled={busy} value={snapshot?.workspace.id ?? ""} onChange={event => { if (scope.client !== "all") setScope({ ...scope, client: "all" }); navigate({ workspaceId: event.target.value, artifactId: null }); }}>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>}
-    {snapshot && (snapshot.clients.length > 0 || scope.client !== "all") && <label className="library-select"><span>Client</span><select disabled={busy || Boolean(query)} value={scope.client} onChange={event => setScope({ ...scope, client: event.target.value })}>
+    {/* In the page toolbar the client filter keeps its place from the first paint (disabled until there are clients to filter by), so the toolbar never grows a row. */}
+    {(controlsSlot !== undefined ? ready : snapshot && (snapshot.clients.length > 0 || scope.client !== "all")) && <label className="library-select" title={snapshot && !snapshot.clients.length && scope.client === "all" ? "No clients in this workspace yet" : undefined}><span>Client</span><select disabled={!snapshot || busy || Boolean(query) || (!snapshot.clients.length && scope.client === "all")} value={scope.client} onChange={event => setScope({ ...scope, client: event.target.value })}>
       <option value="all">All clients</option><option value="none">No client</option>{!knownClient && <option value={scope.client}>Client not in this workspace</option>}
-      {snapshot.clients.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+      {snapshot?.clients.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
     {ready && <label className="library-select"><span>Sort</span><select disabled={!snapshot || busy || Boolean(query)} value={scope.sort} onChange={event => setScope({ ...scope, sort: event.target.value as LibrarySort })}>
       {(Object.keys(LIBRARY_SORTS) as LibrarySort[]).map(key => <option key={key} value={key}>{LIBRARY_SORTS[key]}</option>)}</select></label>}
     {ready && <div className="account-projects-view" role="group" aria-label="Layout">

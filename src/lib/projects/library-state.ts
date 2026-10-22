@@ -57,16 +57,18 @@ export function projectsWelcome(deviceProjectCount: number, status: AccountLibra
  * the prompt-first entry. While the account list is still unknown (checking,
  * loading, failed) the page keeps what this account showed last time on this
  * device, so a returning user's page does not jump on every visit and a
- * refresh or failed reload never flips it. A first visit stays prompt-first.
+ * refresh or failed reload never flips it. With no memory yet (a first visit
+ * on this device) the answer is pending: the page shows a neutral loading
+ * area instead of the prompt-first welcome it might have to replace.
  */
-export type LibraryLayout = "library-first" | "prompt-first";
+export type LibraryLayout = "library-first" | "prompt-first" | "pending";
 export function libraryLayout(deviceProjectCount: number, status: AccountLibraryStatus, remembered: boolean | null): LibraryLayout {
   if (deviceProjectCount > 0) return "library-first";
   switch (status.state) {
     case "loaded": return status.count > 0 ? "library-first" : "prompt-first";
     case "unavailable": return "prompt-first";
     case "checking":
-    case "loading":
+    case "loading": return remembered === null ? "pending" : remembered ? "library-first" : "prompt-first";
     case "failed": return remembered ? "library-first" : "prompt-first";
   }
 }

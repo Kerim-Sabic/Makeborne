@@ -173,3 +173,6 @@
   .account-project-menu-list, .library-rename { border: 1px solid CanvasText; }
   .account-project-card:has(.account-project-open:focus-visible) { outline-color: Highlight; }
 }
+/* First visit on this device while the account list is unknown: a neutral loading area, neither the welcome nor the library. */
+.library-pending { padding-top: 8px; }
+.library-pending .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

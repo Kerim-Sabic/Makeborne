@@ -616,7 +616,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   // Open editors hide the navigation rail, so there is nothing to bypass there.
   const projectOpen = Boolean(project || accountRoute?.artifactId || (!loaded && initialProjectOpen));
   // Returning users see their library first; new users (and unknown first visits) keep the prompt-first entry.
-  const libraryFirst = libraryLayout(workspace.projects.length, accountLibrary, libraryHint) === "library-first";
+  const layout = libraryLayout(workspace.projects.length, accountLibrary, libraryHint);
+  const libraryFirst = layout === "library-first", layoutPending = layout === "pending";
+  // "Start something new" joins the page below the list only once the list is known, so a loading list never pushes it around.
+  const listSettled = accountLibrary.state !== "checking" && accountLibrary.state !== "loading";
   const skipTargets = studioSkipTargets({ loaded, tab, composerVisible: tab === "projects" && !accountRoute?.artifactId, library: libraryFirst ? "first" : "none" });
   // One creation entry: above the library for new users, below it for returning users.
   const creationEntry = <>
@@ -875,7 +878,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           <main
             id="studio-content"
             tabIndex={-1}
-            className={`workspace-content ${tab === "projects" ? libraryFirst ? "returning-workspace" : "fresh-workspace" : ""}`}
+            className={`workspace-content ${tab === "projects" ? libraryFirst || layoutPending ? "returning-workspace" : "fresh-workspace" : ""}`}
           >
             {tab === "projects" && (
               <>
@@ -886,6 +889,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   <Link className="button primary" href="/">
                     <Plus size={17} /> New project
                   </Link>
+                </div> : layoutPending ? <div className="library-pending" role="status" aria-busy="true">
+                  {/* A first visit on this device: whether this account has saved work is not known yet, so neither the welcome nor the library is guessed. */}
+                  <span className="sr-only">Loading your projects…</span>
+                  <div className="library-skeleton" aria-hidden="true">{Array.from({ length: 8 }, (_, index) => <span key={index} className="library-skeleton-card"><span className="library-skeleton-thumb" /><span className="library-skeleton-line" /><span className="library-skeleton-line short" /></span>)}</div>
                 </div> : <div className="page-heading">
                   <div>
                     <div className="eyebrow">YOUR CREATION STUDIO</div>
@@ -928,9 +935,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                 </div>}
                 </>}
                 {/* New users start with a brief; the account list keeps one position so it never reloads when the order changes. */}
-                {!accountRoute?.artifactId && !libraryFirst && <div className="studio-create">{creationEntry}</div>}
-                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} scope={libraryScope} onScopeChange={setLibraryScope} controlsSlot={libraryFirst && !accountRoute?.artifactId ? libraryControls : undefined}
-                  onClearSearch={() => { setSearch(""); searchInput.current?.focus(); }} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
+                {!accountRoute?.artifactId && layout === "prompt-first" && <div className="studio-create">{creationEntry}</div>}
+                {/* While the layout is pending the list still loads (it decides the layout) but stays out of view, so showing it later moves nothing. */}
+                <div className="account-projects-host" hidden={layoutPending && !accountRoute?.artifactId}><AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} scope={libraryScope} onScopeChange={setLibraryScope} controlsSlot={libraryFirst && !accountRoute?.artifactId ? libraryControls : undefined}
+                  onClearSearch={() => { setSearch(""); searchInput.current?.focus(); }} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} /></div>
                 {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (projectsWelcome(workspace.projects.length, accountLibrary) !== "welcome" ? null : (
                   <Empty
                     icon={FolderOpen}
@@ -991,14 +999,14 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   </div>
                 ))}
                 {/* Returning users: creation stays on the page as a secondary destination below their work; inspiration lives in Styles. */}
-                {!accountRoute?.artifactId && libraryFirst && <section className="library-secondary" aria-labelledby="library-start-heading">
+                {!accountRoute?.artifactId && libraryFirst && listSettled && <section className="library-secondary" aria-labelledby="library-start-heading">
                   <div className="library-secondary-heading">
                     <h2 id="library-start-heading">Start something new</h2>
                     <button type="button" className="text-link" onClick={() => navigate("styles")}>Browse creative directions <ArrowUpRight size={14} aria-hidden="true" /></button>
                   </div>
                   <div className="studio-create">{creationEntry}</div>
                 </section>}
-                {!accountRoute?.artifactId && !libraryFirst && workspace.projects.length === 0 && (
+                {!accountRoute?.artifactId && layout === "prompt-first" && workspace.projects.length === 0 && (
                   <TemplateGallery onChoose={chooseDirection} />
                 )}
               </>

@@ -73,12 +73,16 @@ check("saved projects put the library first; known-empty and local-only stay pro
   assert.equal(libraryLayout(0, { state: "unavailable", reason: "cloud-off" }, true), "prompt-first");
   assert.equal(libraryLayout(0, { state: "unavailable", reason: "signed-out" }, true), "prompt-first", "a signed-out page never uses an account's memory");
 });
-check("unknown states never flip the page: they keep this account's last answer, and a first visit stays prompt-first", () => {
+check("unknown states never flip the page: they keep this account's last answer; with no memory the page waits instead of guessing", () => {
   for (const status of [{ state: "checking" }, { state: "loading" }, { state: "failed" }]) {
     assert.equal(libraryLayout(0, status, true), "library-first", `${status.state} keeps a returning layout (refresh, load more, failed reload)`);
     assert.equal(libraryLayout(0, status, false), "prompt-first");
-    assert.equal(libraryLayout(0, status, null), "prompt-first", "no memory: prompt-first, as before");
   }
+  assert.equal(libraryLayout(0, { state: "checking" }, null), "pending", "first visit: unknown is not empty");
+  assert.equal(libraryLayout(0, { state: "loading" }, null), "pending");
+  assert.equal(libraryLayout(0, { state: "failed" }, null), "prompt-first", "a failed list with no memory falls back to the welcome");
+  assert.equal(libraryLayout(0, { state: "loaded", count: 0 }, null), "prompt-first", "a genuinely new account is prompt-first");
+  assert.equal(libraryLayout(0, { state: "unavailable", reason: "signed-out" }, null), "prompt-first", "signed out is prompt-first");
 });
 check("layout memory holds one account's yes/no only and tolerates blocked storage", () => {
   const data = new Map();
@@ -113,19 +117,22 @@ check("studio and list are wired through the status, with Retry on failure", () 
 });
 
 check("studio orders the page by the layout without remounting the account list", () => {
-  assert.match(studio, /const libraryFirst = libraryLayout\(workspace\.projects\.length, accountLibrary, libraryHint\) === "library-first";/);
+  assert.match(studio, /const layout = libraryLayout\(workspace\.projects\.length, accountLibrary, libraryHint\);\s*const libraryFirst = layout === "library-first", layoutPending = layout === "pending";/);
+  // Pending (first visit, list unknown): the list stays mounted (it decides the layout) but out of view, and no welcome or creation entry is guessed.
+  assert.match(studio, /<div className="account-projects-host" hidden=\{layoutPending && !accountRoute\?\.artifactId\}><AccountProjects /);
+  assert.match(studio, /layoutPending \? <div className="library-pending" role="status" aria-busy="true">/);
   assert.equal((studio.match(/<AccountProjects /g) ?? []).length, 1, "one account list position: changing the order never refetches it");
-  assert.match(studio, /!libraryFirst && <div className="studio-create">\{creationEntry\}<\/div>\}\s*<AccountProjects /, "new users: creation above the list");
+  assert.match(studio, /layout === "prompt-first" && <div className="studio-create">\{creationEntry\}<\/div>\}[\s\S]{0,400}<AccountProjects /, "new users: creation above the list");
   const after = studio.slice(studio.indexOf("<AccountProjects "));
   // Returning users: creation stays on the page as a secondary destination below their projects (S1), and inspiration lives in Styles.
-  assert.match(after, /libraryFirst && <section className="library-secondary" aria-labelledby="library-start-heading">[\s\S]{0,400}<div className="studio-create">\{creationEntry\}<\/div>\s*<\/section>\}\s*\{!accountRoute\?\.artifactId && !libraryFirst && workspace\.projects\.length === 0 && \(\s*<TemplateGallery/, "returning users: creation stays on the page, below their projects; the gallery is for new users");
+  assert.match(after, /libraryFirst && listSettled && <section className="library-secondary" aria-labelledby="library-start-heading">[\s\S]{0,400}<div className="studio-create">\{creationEntry\}<\/div>\s*<\/section>\}\s*\{!accountRoute\?\.artifactId && layout === "prompt-first" && workspace\.projects\.length === 0 && \(\s*<TemplateGallery/, "returning users: creation stays on the page, below their projects; the gallery is for new users");
   assert.equal((studio.match(/\{creationEntry\}/g) ?? []).length, 2, "exactly one composer is mounted in either order");
   assert.match(after, /onClick=\{\(\) => navigate\("styles"\)\}>Browse creative directions/, "inspiration stays one step away for returning users");
   // One heading and one primary action for returning users; the prompt-first welcome only for new users.
   assert.match(studio, /\{libraryFirst \? <div className="page-heading library-heading">\s*<h1>Projects<\/h1>\s*<Link className="button primary" href="\/">/);
   assert.match(studio, /: <div className="page-heading">\s*<div>\s*<div className="eyebrow">YOUR CREATION STUDIO<\/div>\s*<h1>What will you make next\?<\/h1>/);
   assert.doesNotMatch(projects, /SAVED TO YOUR ACCOUNT|Your saved projects<\/h2>/, "no second heading above the list");
-  assert.match(studio, /libraryFirst \? "returning-workspace" : "fresh-workspace"/);
+  assert.match(studio, /libraryFirst \|\| layoutPending \? "returning-workspace" : "fresh-workspace"/, "the pending shell uses the library's own spacing");
   assert.match(studio, /writeLibraryHint\(\(\) => localStorage, accountId, next\.count > 0\)/, "memory only changes on loaded data");
   // Explicit creation links are untouched: New project still goes to the prompt-first home.
   assert.match(studio, /<Link className="button primary" href="\/">\s*<Plus size=\{17\} \/> New project/);
