@@ -2,7 +2,7 @@ import type { Slide } from "./schema";
 import { mix, contrast, luminance, readableOn } from "./theme";
 import { H, W, ellipse, hline, image, line, measure, rect, scaled, text, toneColors, tryCompose, vline, type Ctx, type ImageTreatment, type RectPrim } from "./scene-kit";
 import { scrimOpacity, zoneBrightness } from "./compose-image";
-import { area, display, divider, fitDisplay, footer, label, labelStyle, labelWidth, leadStyle, numeral, numeralStyle, readableMark, sectionNumber, stack, displayStyle } from "./design";
+import { area, display, divider, fitDisplay, footer, label, labelStyle, labelWidth, leadStyle, numberedRows, numeral, numeralStyle, sectionNumber, stack, displayStyle } from "./design";
 import { archPath, arrowPath, graphic, glowField, dotField } from "./graphics";
 import { path } from "./scene-kit";
 import type { GraphicKind } from "./directions";
@@ -263,11 +263,17 @@ export function closingNext(ctx: Ctx, slide: Slide) {
   if (area(ctx).w < 760 && tryCompose(ctx, sub => closingNextLayout(sub, slide, true))) return;
   closingNextLayout(ctx, slide, false);
 }
+/** NEXT-STEP SIZES ([step, who/when], largest first; the last step is the minimum). */
+export const CLOSING_STEPS_STACKED = [[40, 25], [38, 24], [36, 24], [34, 23], [32, 22], [30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
+export const CLOSING_STEPS = [[34, 23], [32, 22], [30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
 function closingNextLayout(ctx: Ctx, slide: Slide, stacked: boolean) {
   const a = area(ctx), c = ctx.c, steps = slide.points ?? [], sub = slide.subtitle;
   const contact = slide.body ?? ctx.deck.author, foot = contact ? 64 : 0, bottom = a.b - foot;
   // At most three lines: in a narrow column the ask is set smaller rather than one word per line.
-  const askSize = ctx.dir.sizes.cover * (stacked ? 0.6 : 0.66), maxTitleH = Math.ceil(scaled(ctx, askSize) * ctx.dir.display.lh * 3.2);
+  const askSize = ctx.dir.sizes.cover * (stacked ? 0.6 : 0.66), lines = (count: number) => Math.ceil(scaled(ctx, askSize) * ctx.dir.display.lh * (count + 0.2));
+  // Above the steps the ask takes two lines when it keeps 85% of its size there, so the steps keep theirs; else three.
+  const twoLines = stacked && fitDisplay(ctx, slide.title, area(ctx).w, lines(2), askSize, 36).size >= scaled(ctx, askSize) * 0.85;
+  const maxTitleH = lines(twoLines ? 2 : 3);
   const ask = { label: slide.eyebrow, title: slide.title, size: askSize, min: stacked ? 36 : 34, sub, subStyle: { size: 22 }, maxTitleH };
   let rx: number, top: number;
   if (stacked) {
@@ -278,23 +284,11 @@ function closingNextLayout(ctx: Ctx, slide: Slide, stacked: boolean) {
     stack(ctx, ask, { x: a.x, y: a.y, w: lw, h: bottom - a.y }, "middle");
     rx = a.x + lw + 56; top = a.y;
   }
-  const rw = a.r - rx, numW = 56, tw = rw - numW;
-  const rowsAt = (ts: number, bs: number) => steps.map(step => (step.title ? measure(ctx, step.title, tw, displayStyle(ctx, ts, { role: undefined, lh: 1.14 })) + 6 : 0) + measure(ctx, step.text, tw, { size: bs, lh: 1.4 }) + (stacked ? 30 : 36));
-  const sizes = [...(stacked ? [[34, 23], [32, 22]] : []), [30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
-  const [ts, bs] = sizes.find(([t, b]) => rowsAt(t, b).reduce((sum, h) => sum + h, 0) <= bottom - top) ?? sizes[sizes.length - 1];
-  const rows = rowsAt(ts, bs), total = rows.reduce((sum, h) => sum + h, 0);
-  if (total > bottom - top + 4) ctx.issues.push("the next steps have too much text for the closing slide");
-  let y = top + (stacked ? 0 : Math.max(0, (bottom - top - total) / 2));
-  steps.forEach((step, i) => {
-    divider(ctx, rx, a.r, y, i === 0);
-    const ns = { ...numeralStyle(ctx, 30, { color: readableMark(ctx, c.accent) }), lh: 1.1 };
-    text(ctx, numeral(ctx, i), { x: rx, y: y + 18, w: numW - 8, h: Math.ceil(ns.size * 1.15) }, ns);
-    let ty = y + 18;
-    if (step.title) ty += text(ctx, step.title, { x: rx + numW, y: ty, w: tw }, displayStyle(ctx, ts, { role: undefined, lh: 1.14, color: c.ink })) + 6;
-    text(ctx, step.text, { x: rx + numW, y: ty, w: tw }, { size: bs, lh: 1.4, color: step.title ? c.muted : c.ink });
-    y += rows[i];
-  });
-  divider(ctx, rx, a.r, y);
+  // The steps are numbered with figures at heading scale (a decision list, not a set of reasons).
+  const rows = numberedRows(ctx, steps, { x: rx, r: a.r, top, bottom, mark: "figure", markColor: c.accent, sizes: stacked ? CLOSING_STEPS_STACKED : CLOSING_STEPS,
+    title: ts => displayStyle(ctx, ts, { role: undefined, lh: 1.14, color: c.ink }), body: (bs, titled) => ({ size: bs, lh: 1.4, color: titled ? c.muted : c.ink }),
+    pad: stacked ? [28, 56] : [36, 64], anchor: stacked ? 0 : 0.5, closeRule: !contact });
+  if (!rows.fits) ctx.issues.push("the next steps have too much text for the closing slide");
   if (contact) {
     hline(ctx, a.x, a.r, a.b - foot + 18, c.rule, 1);
     text(ctx, contact, { x: a.x, y: a.b - foot + 32, w: a.w, h: 28 }, { ...labelStyle(ctx), upper: false, tracking: 0, size: 17, weight: 600, color: c.ink, maxH: 28, min: 13 });

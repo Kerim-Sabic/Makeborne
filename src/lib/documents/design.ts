@@ -61,6 +61,82 @@ export function numeralStyle(ctx: Ctx, size: number, extra: Partial<TextStyle> =
   const n = ctx.dir.numerals, color = n.color === "accent" ? ctx.c.accent : n.color === "muted" ? ctx.c.muted : ctx.c.ink;
   return { font: n.font, size: n.font === "heading" ? scaled(ctx, size) : Math.round(size * 0.82), weight: n.weight ?? (n.font === "mono" ? 400 : headingWeight(ctx)), color, lh: 1, ...extra };
 }
+
+/* ---------- numbered rows (points, next steps) ---------- */
+
+/** How a numbered list marks its items: a filled badge carrying a live numeral (a circle, or a square in
+ * directions without rounding), or a figure at heading scale where the numerals are the direction's ornament
+ * (luxury's roman figures, architect's light numerals). Either way the numeral is real text, editable in PPTX. */
+export type NumeralMark = "circle" | "square" | "figure";
+export const numeralMark = (ctx: Ctx): NumeralMark => ctx.dir.id === "luxury" || ctx.dir.id === "architect" ? "figure" : ctx.dir.radius ? "circle" : "square";
+/** NUMBERED ROW SIZES. A badge is 1.4× the item title (40–60 px) and its numeral half the badge; a figure is
+ * 1.2× the item title. Both are measured from the item title actually set, so long items step down together. */
+export const BADGE_RATIO = 1.4, BADGE_MIN = 40, BADGE_MAX = 60, FIGURE_RATIO = 1.2, SPREAD_CLEAR = 28;
+export type NumberedRowsSpec = {
+  x: number; r: number; top: number; bottom: number; mark: NumeralMark;
+  /** The mark's hue (default: the direction's numeral colour); it is deepened until it reads at 4.5:1. */
+  markColor?: string;
+  /** [item title, supporting text] sizes, largest first: the largest step whose rows fit is set, else the last. */
+  sizes: number[][];
+  title: (size: number) => TextStyle; body: (size: number, titled: boolean) => TextStyle;
+  /** Padding per row (above plus below its content): at least pad[0]; spare height spreads the rows up to pad[1]. */
+  pad: [number, number];
+  /** Share of the height still left after spreading that goes above the list. */
+  anchor: number;
+  /** false when a rule below the list (e.g. the closing slide's contact line) already closes it. */
+  closeRule?: boolean;
+};
+/** Numbered rows between hairlines, filling the column: the numeral mark, then the item title and its supporting
+ * text beside it. Returns whether the smallest step still fits. */
+export function numberedRows(ctx: Ctx, items: { title?: string; text: string }[], spec: NumberedRowsSpec) {
+  const c = ctx.c, n = items.length, avail = spec.bottom - spec.top, numerals = items.map((_, i) => numeral(ctx, i));
+  const base = numeralStyle(ctx, 0), ink = readableMark(ctx, spec.markColor ?? base.color ?? c.ink);
+  const layout = ([t, b]: number[]) => {
+    const ts = spec.title(t), bs = (titled: boolean) => spec.body(b, titled), lineH = ts.size * (ts.lh ?? 1.14);
+    const badge = spec.mark === "figure" ? 0 : Math.max(BADGE_MIN, Math.min(BADGE_MAX, Math.round(ts.size * BADGE_RATIO)));
+    const figure: TextStyle = { ...base, size: Math.round(ts.size * FIGURE_RATIO), color: ink, lh: 1.05 };
+    // Office faces run wider than the measurement for some figures (roman numerals in Palatino): a figure keeps 15% in hand.
+    const numW = badge ? badge + 24 : Math.max(48, ...numerals.map(value => Math.ceil(textWidth(ctx, value, figure) * 1.15) + 24)), tw = spec.r - spec.x - numW;
+    const rows = items.map(item => {
+      const first = item.title ? lineH : (bs(false).size * (bs(false).lh ?? 1.4));
+      // A badge centres on the first line; a figure shares the item title's baseline.
+      const offset = badge ? Math.max(0, (badge - first) / 2) : 0;
+      const content = offset + (item.title ? measure(ctx, item.title, tw, ts) + 6 : 0) + measure(ctx, item.text, tw, bs(!!item.title));
+      return { offset, h: Math.ceil(Math.max(badge || figure.size * 1.05, content)) };
+    });
+    return { ts, bs, lineH, badge, figure, numW, tw, rows, sum: rows.reduce((s, row) => s + row.h, 0) };
+  };
+  const fitsAt = (step: number[]) => layout(step).sum + n * spec.pad[0] <= avail;
+  const step = spec.sizes.find(fitsAt) ?? spec.sizes[spec.sizes.length - 1], L = layout(step);
+  // Spreading stops short of the bottom, so the closing rule never doubles the footer's.
+  const pad = Math.max(spec.pad[0], Math.min(spec.pad[1], (avail - SPREAD_CLEAR - L.sum) / Math.max(1, n)));
+  const total = L.sum + n * pad;
+  let y = spec.top + Math.max(0, (avail - total) * spec.anchor);
+  items.forEach((item, i) => {
+    divider(ctx, spec.x, spec.r, y, i === 0);
+    const inner = y + pad / 2, row = L.rows[i], tx = spec.x + L.numW;
+    let ty = inner + row.offset;
+    if (L.badge) {
+      const d = L.badge, s = Math.round(d * 0.72), fill = ink;
+      if (spec.mark === "circle") ellipse(ctx, { x: spec.x, y: inner, w: d, h: d, fill });
+      else rect(ctx, { x: spec.x, y: inner, w: d, h: d, fill });
+      // The numeral sits inside the badge's inscribed square: the badge colour reads at 4.5:1 on the slide, so the slide colour reads at 4.5:1 on it.
+      // Half the badge (less in mono), smaller still where two figures in a wide face would not fit the square.
+      const style: TextStyle = { ...base, size: Math.round(d * (base.font === "mono" ? 0.42 : 0.5)), color: c.bg, align: "center", valign: "middle", lh: 1 };
+      while (style.size > 12 && textWidth(ctx, numerals[i], style) > s - 4) style.size--;
+      text(ctx, numerals[i], { x: spec.x + (d - s) / 2, y: inner + (d - s) / 2, w: s, h: s }, style);
+    } else {
+      const fy = ty + L.ts.size * 0.07 - (L.figure.size - L.ts.size) * 0.8;
+      text(ctx, numerals[i], { x: spec.x, y: fy, w: L.numW - 10, h: Math.ceil(L.figure.size * 1.05) }, L.figure);
+    }
+    if (item.title) ty += text(ctx, item.title, { x: tx, y: ty, w: L.tw }, L.ts) + 6;
+    // Supporting text breaks at balanced points too (no lone last word), the same in HTML and PPTX.
+    text(ctx, item.text, { x: tx, y: ty, w: L.tw }, { ...L.bs(!!item.title), balance: true });
+    y += row.h + pad;
+  });
+  if (n && spec.closeRule !== false) divider(ctx, spec.x, spec.r, y);
+  return { fits: fitsAt(step), title: L.ts.size, body: L.bs(true).size, mark: L.badge || L.figure.size };
+}
 /** The deck's chapter number for a section slide (its eyebrow when that is short and numeric). */
 export function sectionNumber(ctx: Ctx, slide: Slide) {
   if (slide.eyebrow && slide.eyebrow.length <= 4) return slide.eyebrow;
@@ -69,14 +145,16 @@ export function sectionNumber(ctx: Ctx, slide: Slide) {
 }
 
 /** Title block of a content slide in the direction's manner; returns where content may start. */
-export function header(ctx: Ctx, slide: Slide, opts: { x?: number; w?: number; size?: number; standfirst?: string; maxLines?: number } = {}) {
+/** opts.titleW keeps the headline within that width of the header's left edge (the furniture still spans w), so a column beside it stays clear. */
+export function header(ctx: Ctx, slide: Slide, opts: { x?: number; w?: number; size?: number; standfirst?: string; maxLines?: number; titleW?: number } = {}) {
   const a = area(ctx), d = ctx.dir, c = ctx.c, x = opts.x ?? a.x, w = opts.w ?? a.w, size = opts.size ?? d.sizes.headline;
   const center = d.header === "centered";
   let y = a.y;
   const eyebrow = slide.eyebrow;
   // Directions with a brand device in the top-right corner keep the headline clear of it.
   const device = signature(ctx, opts.x === undefined && opts.w === undefined && !center);
-  const titleBox = (tx: number, ty: number, tw0: number) => {
+  const titleBox = (tx: number, ty: number, tw00: number) => {
+    const tw0 = opts.titleW ? Math.min(tw00, x + opts.titleW - tx) : tw00;
     const tw = tw0 - (device && tx + tw0 > W - ctx.dir.mx - device ? device : 0);
     const max = Math.ceil(scaled(ctx, size) * d.display.lh * (opts.maxLines ?? 2) + 6);
     const fit = fitDisplay(ctx, slide.title, tw, max, size, 30);

@@ -156,7 +156,8 @@ export type Ctx = {
   frame?: Frame;
 };
 export type Frame = { x: number; r: number; y: number; b: number };
-export type TextStyle = { font?: FontRole; size: number; min?: number; maxH?: number; weight?: Weight; color?: string; align?: TextPrim["align"]; valign?: TextPrim["valign"]; lh?: number; tracking?: number; upper?: boolean; italic?: boolean; role?: TextPrim["role"]; list?: TextList };
+/** balance: explicit balanced line breaks (as display type always gets), e.g. for a list item's supporting text. */
+export type TextStyle = { font?: FontRole; size: number; min?: number; maxH?: number; weight?: Weight; color?: string; align?: TextPrim["align"]; valign?: TextPrim["valign"]; lh?: number; tracking?: number; upper?: boolean; italic?: boolean; role?: TextPrim["role"]; list?: TextList; balance?: boolean };
 
 /** Glyph width factor and measuring mode for one text style; bold widens by the
  * pairing's measured bold ratio and letter-spacing widens every glyph. */
@@ -208,7 +209,7 @@ export function text(ctx: Ctx, value: string, box: { x: number; y: number; w: nu
   if (size < 24 && (color === ctx.c.accent || color === ctx.c.accent2) && contrast(color, ctx.c.bg) < 4.5)
     color = [0.15, 0.3, 0.45, 0.6, 0.75, 1].map(amount => mix(color, ctx.c.ink, amount)).find(value => contrast(value, ctx.c.bg) >= 4.5) ?? ctx.c.ink;
   // Titles and display type carry explicit balanced breaks (the same in HTML and PPTX).
-  const display = style.role === "title" || (font === "heading" && size >= 20);
+  const display = style.role === "title" || (font === "heading" && size >= 20) || (style.balance && !style.list);
   const shown = display ? balancedBreaks(value, box.w, size, cw, mode) : value;
   ctx.prims.push({ k: "text", x: box.x, y: box.y, w: box.w, h: Math.max(h, Math.ceil(size * lh)), text: shown, font, size, weight,
     color, align: style.align ?? "left", valign: style.valign ?? "top", lh, ...(style.tracking !== undefined ? { tracking: style.tracking } : {}), ...(style.upper ? { upper: true } : {}), ...(style.italic ? { italic: true } : {}), ...(style.role ? { role: style.role } : {}), ...(style.list ? { list: style.list } : {}) });

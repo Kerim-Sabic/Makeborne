@@ -1,7 +1,7 @@
 import type { Slide } from "./schema";
 import { FONTS, mix, readableOn, contrast } from "./theme";
 import { H, W, ellipse, estimateLines, glyphWidth, hline, measure, placed, rect, scaled, text, textWidth, tryCompose, vline, line, initials, image, type Ctx, type TextStyle, type ChartColors, type Tone } from "./scene-kit";
-import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, header, headlineUp, readableMark, label, labelStyle, leadStyle, marker, numeral, numeralStyle, panel, stack, ruleColor } from "./design";
+import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, header, headlineUp, label, labelStyle, leadStyle, marker, numberedRows, numeral, numeralMark, numeralStyle, panel, stack, ruleColor } from "./design";
 import { formatValue } from "./chart-svg";
 import { arrowPath } from "./graphics";
 import { path } from "./scene-kit";
@@ -43,49 +43,25 @@ export function pointsColumns(ctx: Ctx, slide: Slide) {
 
 /** Beside an image rail a title column would be a word per line: the title runs across the top, the rows below. */
 function pointsRowsStacked(ctx: Ctx, slide: Slide) {
-  const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
-  const top = header(ctx, slide, { size: headlineUp(ctx), maxLines: 3, standfirst: slide.body }) + 28, band = a.b - top;
-  const numW = 56, tw = a.w - numW;
-  const rowsAt = (ts: number, bs: number) => points.map(point => Math.max(36, (point.title ? measure(ctx, point.title, tw, titleStyle(ctx, ts)) + 6 : 0) + measure(ctx, point.text, tw, bodyStyle(ctx, { size: bs }))) + 34);
-  const sum = (rows: number[]) => rows.reduce((s, h) => s + h, 0);
-  const [ts, bs] = steps([[34, 24], [32, 23], [30, 22], [28, 21], [26, 20], [24, 19], [22, 18]], ([t, b]) => sum(rowsAt(t, b)) <= band);
-  const rows = rowsAt(ts, bs), total = sum(rows);
-  if (total > band + 4) ctx.issues.push("the points have too much text beside the image");
-  let y = top + Math.max(0, (band - total) * 0.3);
-  points.forEach((point, i) => {
-    divider(ctx, a.x, a.r, y, i === 0);
-    const inner = y + 18, base = numeralStyle(ctx, 26), ns = { ...base, color: readableMark(ctx, base.color ?? c.ink), lh: 1.1 };
-    text(ctx, numeral(ctx, i), { x: a.x, y: inner + 2, w: numW - 8, h: Math.ceil(ns.size * 1.15) }, ns);
-    let ty = inner;
-    if (point.title) ty += text(ctx, point.title, { x: a.x + numW, y: ty, w: tw }, titleStyle(ctx, ts)) + 6;
-    text(ctx, point.text, { x: a.x + numW, y: ty, w: tw }, bodyStyle(ctx, { size: bs, color: point.title ? c.muted : c.ink }));
-    y += rows[i];
-  });
-  if (n) divider(ctx, a.x, a.r, y);
+  const a = area(ctx), c = ctx.c, points = slide.points!;
+  const top = header(ctx, slide, { size: headlineUp(ctx), maxLines: 3, standfirst: slide.body }) + 24;
+  const rows = numberedRows(ctx, points, { x: a.x, r: a.r, top, bottom: a.b, mark: numeralMark(ctx), sizes: POINT_ROWS_STACKED,
+    title: ts => titleStyle(ctx, ts), body: (bs, titled) => bodyStyle(ctx, { size: bs, color: titled ? c.muted : c.ink }), pad: [28, 64], anchor: 0.3 });
+  if (!rows.fits) ctx.issues.push("the points have too much text beside the image");
   footer(ctx);
 }
+/** POINT ROW SIZES ([item title, supporting text], largest first; the last step is the minimum). Beside an image
+ * rail the rows run the width of the text column, so they start larger than in the two-column composition. */
+export const POINT_ROWS_STACKED = [[40, 25], [38, 25], [36, 24], [34, 24], [32, 23], [30, 22], [28, 21], [26, 20], [24, 19], [22, 18]];
+export const POINT_ROWS = [[34, 23], [32, 22], [30, 22], [27, 21], [24, 20], [22, 19], [20, 18]];
 
 export function pointsRows(ctx: Ctx, slide: Slide) {
   if (area(ctx).w < 760 && tryCompose(ctx, sub => pointsRowsStacked(sub, slide))) return;
   const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
-  const lw = Math.round(a.w * 0.36), rx = a.x + lw + 56, rw = a.r - rx;
+  const lw = Math.round(a.w * 0.36), rx = a.x + lw + 56;
   stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.headline, min: 32, sub: slide.body, subStyle: { size: 22 } }, { x: a.x, y: a.y, w: lw, h: a.b - a.y }, "top");
-  const numW = 64, tw = rw - numW;
-  const rowsAt = (ts: number, bs: number) => points.map(point => Math.max(36, (point.title ? measure(ctx, point.title, tw, titleStyle(ctx, ts)) + 6 : 0) + measure(ctx, point.text, tw, bodyStyle(ctx, { size: bs }))) + 40);
-  const [ts, bs] = steps([[30, 22], [27, 21], [24, 20], [22, 19], [20, 18]], ([t, b]) => rowsAt(t, b).reduce((s, h) => s + h, 0) <= a.b - a.y);
-  const rows = rowsAt(ts, bs), total = rows.reduce((s, h) => s + h, 0);
-  let y = a.y + Math.max(0, (a.b - a.y - total) * (n <= 3 ? 0.35 : 0));
-  points.forEach((point, i) => {
-    divider(ctx, rx, a.r, y, i === 0);
-    const inner = y + 20;
-    const ns = { ...numeralStyle(ctx, 26), lh: 1.1 };
-    text(ctx, numeral(ctx, i), { x: rx, y: inner + 2, w: numW - 8, h: Math.ceil(ns.size * 1.15) }, ns);
-    let ty = inner;
-    if (point.title) ty += text(ctx, point.title, { x: rx + numW, y: ty, w: tw }, titleStyle(ctx, ts)) + 6;
-    text(ctx, point.text, { x: rx + numW, y: ty, w: tw }, bodyStyle(ctx, { size: bs, color: point.title ? c.muted : c.ink }));
-    y += rows[i];
-  });
-  if (n) divider(ctx, rx, a.r, y);
+  numberedRows(ctx, points, { x: rx, r: a.r, top: a.y, bottom: a.b, mark: numeralMark(ctx), sizes: POINT_ROWS,
+    title: ts => titleStyle(ctx, ts), body: (bs, titled) => bodyStyle(ctx, { size: bs, color: titled ? c.muted : c.ink }), pad: [36, 72], anchor: n <= 3 ? 0.35 : 0 });
   footer(ctx);
 }
 

@@ -122,12 +122,14 @@ export function candidates(deck: DeckLike, slide: Slide, index: number, total: n
 type Planned = { id: CompositionId; scene: SlideScene };
 /** Compositions that stack their title over the content, so a 46% rail still leaves a readable column. */
 const WIDE_RAIL_COMPOSITIONS = new Set<CompositionId>(["points-rows", "closing-next", "statement-centered", "statement-hero", "statement-hanging", "quote-centered"]);
-const textSizes = (scene: SlideScene) => scene.prims.flatMap(prim => prim.k === "text" ? [{ size: prim.size, title: prim.role === "title", lines: prim.text.split("\n").length }] : []);
-/** The wide-rail scene sets its title at least 90% as large, in no more lines, and no text smaller than the standard one. */
+const textSizes = (scene: SlideScene) => scene.prims.flatMap(prim => prim.k === "text" ? [{ size: prim.size, title: prim.role === "title", lines: prim.text.split("\n").length, text: prim.text.replace(/\s+/g, " ").trim() }] : []);
+/** The wide-rail scene sets its title at least 90% as large, in no more lines, and no other text smaller than the standard one
+ * (each text against itself: item titles and their supporting text, not just the smallest size on the slide, which is the folio). */
 function keepsSizes(wide: SlideScene, standard: SlideScene) {
   const [a, b] = [textSizes(wide), textSizes(standard)], title = (sizes: typeof a) => Math.max(0, ...sizes.filter(entry => entry.title).map(entry => entry.size));
   const lines = (sizes: typeof a) => Math.max(0, ...sizes.filter(entry => entry.title).map(entry => entry.lines));
-  return title(a) >= title(b) * 0.9 && lines(a) <= lines(b) && Math.min(...a.map(entry => entry.size)) >= Math.min(...b.map(entry => entry.size));
+  const others = b.filter(entry => !entry.title).every(entry => (a.find(other => !other.title && other.text === entry.text)?.size ?? 0) >= entry.size);
+  return title(a) >= title(b) * 0.9 && lines(a) <= lines(b) && others && Math.min(...a.map(entry => entry.size)) >= Math.min(...b.map(entry => entry.size));
 }
 const plans = new WeakMap<object, { slides: Slide[]; plan: Planned[] }>();
 function choose(deck: DeckLike, slide: Slide, index: number, total: number, previous: Planned | undefined, roleCount: number): Planned {
