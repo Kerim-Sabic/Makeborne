@@ -94,7 +94,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.equal(text.type, "text");
     assert.match(text.text, /^Image ready\. Use src="\/images\/hero-bench\.webp" width="1536" height="1024"/);
     assert.ok(text.text.includes(IMAGE_INSPECTION));
-    assert.match(text.text, /malformed hands/); assert.match(text.text, /gibberish lettering/); assert.match(text.text, /plastic skin/); assert.match(text.text, /wrong subject/); assert.match(text.text, /house style and palette/);
+    assert.match(text.text, /malformed hands/); assert.match(text.text, /gibberish lettering/); assert.match(text.text, /plastic skin/); assert.match(text.text, /wrong subject/); assert.match(text.text, /a break with the set/); assert.match(text.text, /3D render beside illustrations/);
     assert.match(text.text, /replaces="hero-bench"/); assert.match(text.text, /regenerated at most once/);
     assert.match(text.text, /focal point/); assert.match(text.text, /object-position per breakpoint/); assert.match(text.text, /calm side/);
     assert.ok(files.assets.has("public/images/hero-bench.webp"));
@@ -209,7 +209,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.match(checkConcept({ ...base, imagePlan: { ...plan, shots: [...plan.shots, ...plan.shots, ...plan.shots, shot("extra", "Another distinct job here")] } }, { images: 6 }).problem, /allows 6/);
     assert.match(checkConcept({ ...base, imagePlan: { ...plan, shots: [plan.shots[0], shot("gallery", "Show the craft of truing a wheel by hand")] } }, { images: 6 }).problem, /do the same job/);
     const note = imagePlanNote(plan);
-    assert.match(note, /2 images/); assert.ok(note.includes(plan.houseStyle)); assert.match(note, /inspect each image/);
+    assert.match(note, /2 images/); assert.ok(note.includes(plan.houseStyle)); assert.match(note, /inspect each one/); assert.match(note, /all the calls in one response/);
   });
 
   await check("the concept with an image plan reaches the model and the run events", async () => {
