@@ -290,6 +290,7 @@ check("image-led by default: a hero image and the full allowance, sizes per slot
   const imagery = between(BUILDER_SYSTEM, "IMAGERY:", "\nCONVERSION:");
   assert.match(imagery, /^Image-led by default\./);
   assert.match(imagery, /Every website gets a strong hero image on the first screen, generated first/);
+  assert.match(imagery, /visible on phones without scrolling[^.]*never pushed below all the text and buttons/);
   assert.match(imagery, /hero plus two supporting images/);
   assert.match(imagery, /never instead of it/, "a crafted signature sits with the image, not in place of it");
   // The old steering away from photography is gone.
@@ -302,6 +303,7 @@ check("image-led by default: a hero image and the full allowance, sizes per slot
   assert.match(imagery, /follow the brief's own instruction \(simple drawings, marked placeholders, no stock photos presented as their work\)/);
   assert.match(imagery, /caption every generated mood or context image visibly as "Illustrative image"/);
   assert.match(imagery, /no identifiable people presented as named staff/);
+  assert.match(imagery, /never put a person's name in the caption or on a card beside a generated image of people/);
   assert.match(imagery, /Never logos or brand marks/);
   assert.match(BUILDER_SYSTEM, /Text never sits directly on an illustration, photograph or pattern: put it on a solid panel or a scrim/);
   // Weight: the platform's srcset is used through sizes; grain is discouraged; the unavailable path is unchanged.
