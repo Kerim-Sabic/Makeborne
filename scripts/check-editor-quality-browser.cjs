@@ -201,6 +201,8 @@ async function main() {
       const review = page.getByRole("region", { name: "Saved version 1" });
       const snapshot = review.getByRole("region", { name: "Preview of saved version 1" });
       await snapshot.waitFor();
+      // It opens directly under the row it was asked for, not after the whole list.
+      assert.equal(await versionRow(page, 1).evaluate(row => row.nextElementSibling?.getAttribute("aria-label")), "Saved version 1", "the preview follows its own row");
       const frame = review.frameLocator('iframe[title="Preview of saved version 1"]');
       await frame.locator("h1", { hasText: HEADLINES[0] }).waitFor();
       assert.equal(await snapshot.getByRole("status").first().innerText(), "Saved version 1 · read only");

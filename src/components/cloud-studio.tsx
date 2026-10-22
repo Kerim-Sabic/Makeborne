@@ -53,7 +53,7 @@ import { api, CloudError, setCloudAccount } from "./cloud-api";
 import { useLiveVersion } from "./use-live-version";
 import { useCheckRecord } from "./use-check-record";
 import VersionFactsBar from "./version-facts";
-import { useCallback, useEffect, useEffectEvent, useMemo, useState, useRef } from "react";
+import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useState, useRef } from "react";
 import {
   ArrowLeft,
   ArrowUp,
@@ -1629,6 +1629,21 @@ export function CloudEditor({
     } catch { /* storage unavailable: the user can send the brief manually */ }
   }, [useLiveBuilder, builder.available, format, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
   const PreviewIcon = artifact.kind === "website" ? PanelsTopLeft : artifact.kind === "book" ? BookOpen : Presentation;
+  // The inspected version opens directly under its row in History, where it was asked for.
+  const versionReview = inspectedVersion && <section className="account-version-review" aria-label={`Saved version ${inspectedVersion.number}`}>
+    <h3>Version {inspectedVersion.number}</h3>
+    <p className="small-note" id={`restore-effect-${inspectedVersion.id}`}>This is a saved snapshot.{role !== "reviewer" && inspectedVersion.number < expectedVersion ? ` ${restoreEffect(inspectedVersion.number, expectedVersion, artifact.kind === "website")}` : ""}</p>
+    {/* The saved files and pages of that version, read-only: no click-to-edit, editor URL, scroll memory or saving. Mounted only while History shows. */}
+    {inspectedSource ? view === "history" && <LivePreview key={inspectedVersion.id} files={inspectedFiles} assets={previewAssets(inspectedSource)}
+      scope={{ accountId, workspaceId, artifactId: artifact.id }} routes={inspectedSource.routes} snapshot={inspectedVersion.number} subject={{ version: inspectedVersion.number, unsaved: false }} />
+    : inspectedVersion.content.document && artifact.kind !== "website" ? view === "history" && <DocumentPreview key={inspectedVersion.id} document={inspectedVersion.content.document}
+      scope={{ accountId, workspaceId, artifactId: artifact.id }} savedVersion={inspectedVersion.number} canExport />
+    : <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />}
+    {role !== "reviewer" && inspectedVersion.number < expectedVersion && <>
+      <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} aria-describedby={`restore-effect-${inspectedVersion.id}`} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
+      {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
+    </>}
+  </section>;
   return (
     <section className="cloud-editor workspace-workbench cloud-workbench">
       <div className="editor-heading cloud-workbench-heading">
@@ -1960,8 +1975,8 @@ export function CloudEditor({
               [...versions]
                 .sort((a, b) => b.number - a.number)
                 .filter(v => !filteringCheckpoints || checkpoints.list.some(item => item.versionId === v.id))
-                .map((v) => (
-                  <div className="cloud-version" key={v.id}>
+                .map((v) => (<Fragment key={v.id}>
+                  <div className="cloud-version">
                     <strong>Version {v.number}{v.number === liveVersion && <span className="cloud-version-live">Live</span>}{artifact.kind === "website" && v.number === checkRecord?.version && <span className="cloud-version-checked" title="The latest check in this tab ran on this version">Checked</span>}{v.number === expectedVersion && <span className="cloud-version-current">Current</span>}</strong>
                     <p>{v.changeSummary}</p>
                     <small>{new Date(v.createdAt).toLocaleString()}</small>
@@ -1969,22 +1984,9 @@ export function CloudEditor({
                     {v.number < Math.max(...versions.map(version => version.number)) && <button type="button" className="button secondary small" onClick={() => setComparing({ from: v.number, to: Math.max(...versions.map(version => version.number)) })}>Compare with latest</button>}
                     <CheckpointControl version={v} checkpoint={checkpoints.list.find(item => item.versionId === v.id)} onSave={(name, note) => checkpoints.save(v, name, note)} onRemove={() => checkpoints.remove(v.id)} />
                   </div>
-                ))
+                  {inspectedVersion?.id === v.id && versionReview}
+                </Fragment>))
             )}
-            {inspectedVersion && <section className="account-version-review" aria-label={`Saved version ${inspectedVersion.number}`}>
-              <h3>Version {inspectedVersion.number}</h3>
-              <p className="small-note" id={`restore-effect-${inspectedVersion.id}`}>This is a saved snapshot.{role !== "reviewer" && inspectedVersion.number < expectedVersion ? ` ${restoreEffect(inspectedVersion.number, expectedVersion, artifact.kind === "website")}` : ""}</p>
-              {/* The saved files and pages of that version, read-only: no click-to-edit, editor URL, scroll memory or saving. Mounted only while History shows. */}
-              {inspectedSource ? view === "history" && <LivePreview key={inspectedVersion.id} files={inspectedFiles} assets={previewAssets(inspectedSource)}
-                scope={{ accountId, workspaceId, artifactId: artifact.id }} routes={inspectedSource.routes} snapshot={inspectedVersion.number} subject={{ version: inspectedVersion.number, unsaved: false }} />
-              : inspectedVersion.content.document && artifact.kind !== "website" ? view === "history" && <DocumentPreview key={inspectedVersion.id} document={inspectedVersion.content.document}
-                scope={{ accountId, workspaceId, artifactId: artifact.id }} savedVersion={inspectedVersion.number} canExport />
-              : <AccountPreview artworkScope={{ accountId, workspaceId, artifactId: artifact.id }} key={inspectedVersion.id} content={inspectedVersion.content} style={inspectedVersion.style} dirty={false} />}
-              {role !== "reviewer" && inspectedVersion.number < expectedVersion && <>
-                <button type="button" className="button secondary" disabled={dirty || busy || savePaused || uncertainSave || conflict || !!recovery} aria-describedby={`restore-effect-${inspectedVersion.id}`} onClick={() => restoreVersion(inspectedVersion)}>Restore as new version</button>
-                {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
-              </>}
-            </section>}
             {nextOffset !== null && (
               <button
                 className="button secondary small"
