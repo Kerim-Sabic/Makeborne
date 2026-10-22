@@ -84,6 +84,8 @@ export class DocumentEditor {
   constructor(doc: DocumentSource) { this.doc = DocumentSourceSchema.parse(structuredClone(doc)); }
 
   get kind() { return this.doc.kind; }
+  /** Starts again from `doc`, as a fresh editor would (an escalated stage restarts from the saved document). */
+  restore(doc: DocumentSource) { this.doc = DocumentSourceSchema.parse(structuredClone(doc)); this.changed = false; this.finishAttempts = 0; }
   private commit(next: DocumentSource) {
     const parsed = DocumentSourceSchema.safeParse(next);
     if (!parsed.success) throw new DocToolError(parsed.error.issues.slice(0, 3).map(issue => `${issue.path.join(".")}: ${issue.message}`).join(" "));

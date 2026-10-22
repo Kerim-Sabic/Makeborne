@@ -34,10 +34,16 @@ export class RunSpend {
   confirmedMicrousd = 0;
   uncertainMicrousd = 0;
   pendingMicrousd = 0;
+  /** Confirmed cost the platform absorbs: a routed attempt that failed and was retried on the primary
+   * model (see ../ai/model-routing.ts). It stays provider spend and counts against both limits, but it is
+   * never charged to the customer. */
+  absorbedMicrousd = 0;
   stopped: SpendStop | null = null;
   readonly calls: CallRecord[] = [];
   private readonly now: () => number;
   private readonly id: () => string;
+  /** A temporary lower allowance for one routed attempt (null: none). It can only lower, never raise, the run's limits. */
+  private attemptCapMicrousd: number | null = null;
 
   constructor(private readonly options: {
     run: string; providerCapMicrousd: number; customerCapMicrousd: number | null; gate: SpendGate;
@@ -55,10 +61,25 @@ export class RunSpend {
   get deadline() { return this.options.deadline; }
   /** Time a call may still run: providers are given this as a hard timeout. */
   timeLeftMs() { return Math.max(0, this.options.deadline - this.now()); }
-  get allowanceMicrousd() { return Math.min(this.options.providerCapMicrousd, this.options.customerCapMicrousd ?? Infinity); }
+  get allowanceMicrousd() { return Math.min(this.options.providerCapMicrousd, this.options.customerCapMicrousd ?? Infinity, this.attemptCapMicrousd ?? Infinity); }
+  /** The run's full allowance, ignoring a routed attempt's temporary cap. */
+  get runAllowanceMicrousd() { return Math.min(this.options.providerCapMicrousd, this.options.customerCapMicrousd ?? Infinity); }
   get remainingMicrousd() { return Math.max(0, this.allowanceMicrousd - this.confirmedMicrousd - this.uncertainMicrousd - this.pendingMicrousd); }
   /** Provider dollars this run has incurred or may have incurred. */
   get providerMicrousd() { return this.confirmedMicrousd + this.uncertainMicrousd; }
+  /** What settlement may charge the customer: confirmed cost minus what the platform absorbs. */
+  get chargeableMicrousd() { return Math.max(0, this.confirmedMicrousd - this.absorbedMicrousd); }
+
+  /** Lowers the allowance for one routed attempt to `capMicrousd` (total run spend, not per attempt); null lifts it. */
+  capAttempt(capMicrousd: number | null) {
+    if (capMicrousd !== null && !(capMicrousd >= 0)) throw new Error("Invalid attempt cap.");
+    this.attemptCapMicrousd = capMicrousd;
+  }
+  /** Marks confirmed cost as absorbed by the platform (never more than is confirmed). */
+  absorb(microusd: number) {
+    if (!(microusd >= 0)) throw new Error("Invalid absorbed amount.");
+    this.absorbedMicrousd = Math.min(this.confirmedMicrousd, this.absorbedMicrousd + Math.ceil(microusd));
+  }
 
   cancel() { this.stopped = "CANCELLED"; }
   /** A call produced more than its bound allowed (e.g. image output tokens): no further calls in this run. */
@@ -103,9 +124,9 @@ export class RunSpend {
     await this.options.gate.finish(ticket.id, { actualMicrousd: outcome.actualMicrousd === null ? null : Math.ceil(outcome.actualMicrousd), partialMicrousd: partial, detail: outcome.detail });
   }
 
-  /** Customer-chargeable usage in credits: confirmed cost only, rounded up. */
+  /** Customer-chargeable usage in credits: confirmed cost (less any absorbed attempt) only, rounded up. */
   customerCredits(usdPerCredit: number) {
-    return Math.max(0, Math.ceil(this.confirmedMicrousd / 1e6 / usdPerCredit - 1e-9));
+    return Math.max(0, Math.ceil(this.chargeableMicrousd / 1e6 / usdPerCredit - 1e-9));
   }
 }
 

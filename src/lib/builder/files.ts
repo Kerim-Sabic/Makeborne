@@ -82,6 +82,23 @@ export class ProjectFiles {
     this.assets.set(asset.path, asset);
   }
 
+  /** The whole working copy, to put back with restore() (an escalated stage starts again from it). */
+  checkpoint() {
+    return { files: new Map(this.files), assets: new Map(this.assets), routes: [...this.routes], design: this.design, changed: new Set(this.changed) };
+  }
+
+  /** Puts a checkpoint back. Returns what differs from the current copy, so the client can be told. */
+  restore(saved: ReturnType<ProjectFiles["checkpoint"]>) {
+    const written: string[] = [], deleted: string[] = [];
+    for (const [path, content] of saved.files) if (this.files.get(path) !== content) written.push(path);
+    for (const path of this.files.keys()) if (!saved.files.has(path)) deleted.push(path);
+    this.files.clear(); for (const [path, content] of saved.files) this.files.set(path, content);
+    this.assets.clear(); for (const [path, asset] of saved.assets) this.assets.set(path, asset);
+    this.routes = [...saved.routes]; this.design = saved.design;
+    this.changed.clear(); for (const path of saved.changed) this.changed.add(path);
+    return { written, deleted };
+  }
+
   totalBytes() {
     let total = 0;
     for (const content of this.files.values()) total += bytes(content);
