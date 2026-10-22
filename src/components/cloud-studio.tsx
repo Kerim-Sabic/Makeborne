@@ -31,6 +31,7 @@ import type { EditTarget } from "@/lib/builder/edit-intent";
 import type { EffortLevel } from "@/lib/routing/effort";
 import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
+import { newVisualEditSession, type VisualEditSession } from "@/lib/builder/visual-edit-session";
 import WorkbenchMore from "./workbench-more";
 import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
 import { previewFileRevision } from "@/lib/builder/preview-revision";
@@ -1218,8 +1219,14 @@ export function CloudEditor({
   const [versions, setVersions] = useState<ArtifactVersion[]>([]);
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
+  // Click-to-edit edit mode, Undo and selection for this website (this editor is keyed by account, workspace and
+  // artifact, so they start empty for any other). Kept here because switching tabs unmounts the preview.
+  const [visualSession, setVisualSession] = useState<VisualEditSession>(newVisualEditSession);
+  // The last click-to-edit change: the edit revision it made and, once saved, the version it saved as.
+  const [visualSave, setVisualSave] = useState<{ revision: number; version: number | null } | null>(null);
   const load = useCallback(async () => {
     setBusy(true);
+    setVisualSave(null);
     try {
       const result = await api<{
         artifact: CloudArtifact;
@@ -1457,6 +1464,7 @@ export function CloudEditor({
       setVersions((v) => [...v.filter(version => version.id !== result.version.id), result.version]);
       const settlement = settleAccountSave(savingRevision, editRevision.current, result.mutation.replayed);
       const hasNewerEdits = settlement.newerEdits;
+      setVisualSave(current => current && current.version === null && current.revision <= savingRevision ? { ...current, version: result.version.number } : current);
       setDirty(hasNewerEdits);
       if (!hasNewerEdits) setLockChangePending(false);
       setRecovery(null);
@@ -1603,6 +1611,9 @@ export function CloudEditor({
   const [previewBuild, setPreviewBuild] = useState<{ revision: string; ok: boolean } | null>(null);
   const previewRevision = useMemo(() => live?.building ? "" : previewFileRevision(live?.files ?? sourceFiles), [live?.building, live?.files, sourceFiles]);
   const previewFact = { building: Boolean(live?.building), failed: previewBuild?.ok === false && previewBuild.revision === previewRevision, draft: dirty || Boolean(live) };
+  // Shown in the click-to-edit panel: saving, not saved (a notice above explains why), or the version the edit saved as while it is current.
+  const visualStatus = !visualSave ? undefined : visualSave.version === null ? savePaused || conflict || uncertainSave || recovery ? "Not saved yet. See the notice above." : "Saving your edit…"
+    : visualSave.version === expectedVersion && !dirty ? `Saved as version ${visualSave.version}` : undefined;
   // A project created from the home prompt opens with its brief in the builder. The builder may ask its free
   // questions, but paid work starts only from an explicit Send after the maximum is shown (audit M08).
   useEffect(() => {
@@ -1657,7 +1668,9 @@ export function CloudEditor({
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={previewAssets(content?.websiteSource)}
-          defaultEffort={project?.effort} disabled={!content || !builder.available || dirty || busy || conflict || uncertainSave || !!recovery} disabledReason={dirty || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
+          // A pending autosave only holds Send: typing goes on. A save that needs review (paused, conflict, unconfirmed, recovery) still locks the composer.
+          defaultEffort={project?.effort} disabled={!content || !builder.available || savePaused || conflict || uncertainSave || !!recovery} disabledReason={savePaused || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting}
+          sendBlocked={dirty ? "Saving your edit…" : busy ? "Loading saved versions…" : null} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
           provenance={advisorBrief.provenance} onProvenance={advisorBrief.update}
           kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }}
@@ -1788,7 +1801,9 @@ export function CloudEditor({
             onApply: (next, summary) => {
               if (uncertainSave || conflict || recovery || lockChangePending) return;
               editRevision.current++; setContent(current => current ? { ...current, websiteSource: next } : current); setDirty(true); setNote(summary);
+              setVisualSave({ revision: editRevision.current, version: null });
             },
+            session: visualSession, onSession: setVisualSession, status: visualStatus,
             // The request is bound to the saved file the element was picked from.
             onAsk: useLiveBuilder ? (text: string, target?: AskTarget) => setBuilderPrefill({ key: crypto.randomUUID(), text,
               ...(target && sourceFiles[target.path] !== undefined ? { target: { ...target, source: sourceFiles[target.path], version: expectedVersion } } : {}) }) : undefined,

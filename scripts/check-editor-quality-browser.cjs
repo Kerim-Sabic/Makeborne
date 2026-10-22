@@ -14,6 +14,7 @@ const ids = { account: "11111111-1111-4111-8111-111111111111", workspace: "22222
 const load = Module._load;
 Module._load = function(name, parent, main) {
   if (name === "server-only") return {};
+  if (name.startsWith("@/")) return load.call(this, path.join(root, "src", `${name.slice(2)}.ts`), parent, main);
   if (name === "esbuild-wasm" && /browser-bundler/.test(parent?.filename ?? "")) return { ...load.call(this, name, parent, main), initialize: async () => {} };
   return load.call(this, name, parent, main);
 };
@@ -173,6 +174,20 @@ async function main() {
   const tab = (page, name) => page.getByRole("navigation", { name: "Project view" }).getByRole("button", { name, exact: true }).click();
   const mainFrame = page => page.frameLocator('iframe[title="Website preview"]');
   const previewFactIs = (page, text) => page.waitForFunction(expected => document.querySelector('.version-facts li[data-fact="preview"]')?.textContent === expected, text);
+  const panel = page => page.getByRole("complementary", { name: "Edit selected element" });
+  /** Edit mode on, then the home page heading picked with the mouse. */
+  async function pickHeading(page) {
+    await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
+    await page.getByRole("region", { name: "Website preview" }).getByRole("button", { name: "Edit", exact: true }).click();
+    await panel(page).waitFor();
+    await mainFrame(page).locator("h1[data-mb-loc]").click();
+    await panel(page).getByRole("textbox", { name: "Element text" }).waitFor();
+  }
+  async function editHeading(page, text) {
+    await panel(page).getByRole("textbox", { name: "Element text" }).fill(text);
+    await panel(page).getByRole("button", { name: "Apply text" }).click();
+  }
+  const statusIs = (page, text) => page.waitForFunction(expected => document.querySelector(".ve-status")?.textContent === expected, text);
   const versionRow = (page, number) => page.locator(".cloud-version").filter({ has: page.locator("strong", { hasText: new RegExp(`^Version ${number}(?!\\d)`) }) });
 
   try {
@@ -285,6 +300,51 @@ async function main() {
       state.hold.release();
       await previewFactIs(page, "Preview: version 4");
       assert.equal(state.saves.length, 1);
+    });
+    await scenario("click-to-edit says where the edit saved, and its Undo and selection survive switching tabs", {}, async (page, state) => {
+      await pickHeading(page);
+      await editHeading(page, "Stoneware, made slowly");
+      await statusIs(page, "Saving your edit… · Undo");
+      await statusIs(page, "Saved as version 4 · Undo");
+      assert.equal(state.saves.length, 1);
+      assert.match(state.saves[0].content.websiteSource.files.find(file => file.path === "src/App.tsx").content, /<h1>Stoneware, made slowly<\/h1>/);
+      // Another tab unmounts the preview; coming back restores edit mode, the selection and Undo.
+      await tab(page, "History");
+      await page.getByRole("heading", { name: "Version history" }).waitFor();
+      assert.equal(await page.locator('iframe[title="Website preview"]').count(), 0, "the preview frame is not kept running in another tab");
+      await tab(page, "Preview");
+      await panel(page).waitFor();
+      await statusIs(page, "Saved as version 4 · Undo");
+      await page.waitForFunction(() => document.querySelector('textarea[aria-label="Element text"]')?.value === "Stoneware, made slowly");
+      assert.equal(await panel(page).getByRole("button", { name: "Undo last edit" }).count(), 1);
+      await panel(page).locator(".ve-status").getByRole("button", { name: "Undo" }).click();
+      await statusIs(page, "Saved as version 5");
+      await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
+      assert.equal(state.saves.length, 2);
+      assert.match(state.saves[1].content.websiteSource.files.find(file => file.path === "src/App.tsx").content, new RegExp(`<h1>${HEADLINES[2]}</h1>`), "Undo saved the earlier text as a new version");
+      assert.equal(state.saves[1].changeSummary, "Undid a visual edit");
+      assert.equal(await panel(page).getByRole("button", { name: "Undo last edit" }).count(), 0, "nothing left to undo");
+    });
+
+    await scenario("while an edit is saving the builder keeps taking text; only Send waits, with the reason", {}, async (page, state) => {
+      state.hold = deferred();
+      await pickHeading(page);
+      await editHeading(page, "Stoneware, made slowly");
+      await statusIs(page, "Saving your edit… · Undo");
+      await page.waitForFunction(() => document.querySelector(".lb-notice")?.textContent === "Saving your edit…");
+      const composer = page.getByRole("textbox", { name: "Message the builder" }), send = page.getByRole("button", { name: "Send", exact: true });
+      assert.equal(await composer.isEnabled(), true, "typing is not blocked by the autosave");
+      await composer.click(); await page.keyboard.type("Make the navigation sticky.");
+      assert.equal(await composer.inputValue(), "Make the navigation sticky.");
+      assert.equal(await send.isDisabled(), true, "Send waits for the save");
+      await page.keyboard.press("Enter");
+      assert.equal(await composer.inputValue(), "Make the navigation sticky.", "Enter doesn't send or clear the text while saving");
+      state.hold.release();
+      await statusIs(page, "Saved as version 4 · Undo");
+      await page.waitForFunction(() => !document.querySelector('button[aria-label="Send"]')?.disabled);
+      assert.equal(await page.locator(".lb-notice").count(), 0, "the reason goes once saved");
+      assert.equal(await composer.inputValue(), "Make the navigation sticky.");
+      assert.deepEqual(state.builds, []);
     });
   } finally { await browser.close(); server.close(); }
   if (failures.length) { console.log(`\n${failures.length} mounted editor quality checks failed.`); process.exitCode = 1; }

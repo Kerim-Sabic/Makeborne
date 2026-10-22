@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import dynamic from "next/dynamic";
 import { AlertTriangle, CornerDownLeft, Maximize2, Monitor, MousePointerClick, RotateCw, Smartphone, Tablet, Wand2 } from "lucide-react";
 import { bundleProject } from "@/lib/builder/browser-bundler";
@@ -7,7 +7,8 @@ import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { HOME, PREVIEW_HISTORY_KEY, PREVIEW_PATH_PARAM, formatPreviewPath, frameHashFor, isMissingPage, normalizePath, parseFrameHash, parsePreviewPath, preparePreviewDocument, previewPageTitle, samePage, withPreviewPathParam,
   type PreviewPage, type PreviewRoute, type PreviewStart } from "@/lib/builder/preview-route";
 import { PREVIEW_ACTIONS, previewProblemTitle, type PreviewProblem, type PreviewSubject } from "@/lib/builder/action-semantics";
-import type { ElementDescription, ElementLoc, StyleField, VisualEdit } from "@/lib/builder/visual-edit";
+import type { ElementDescription, StyleField, VisualEdit } from "@/lib/builder/visual-edit";
+import { newVisualEditSession, type VisualEditSession } from "@/lib/builder/visual-edit-session";
 import type { WebsiteProjectSource } from "@/lib/projects/website-source";
 import type { PickedElement } from "./visual-editor-panel";
 import { readCloudImage } from "./cloud-api";
@@ -22,12 +23,18 @@ type Device = "desktop" | "tablet" | "mobile";
 const WIDTHS: Record<Device, number | null> = { desktop: null, tablet: 820, mobile: 390 };
 const STYLE_KEYS: StyleField[] = ["color", "backgroundColor", "fontSize", "fontWeight", "textAlign", "padding", "margin", "borderRadius"];
 const NO_ROUTES: PreviewRoute[] = [];
+const NO_HISTORY: VisualEditSession["history"] = [];
 /** "", "#" and "#/" all show the home page. */
 const frameHashKey = (hash: string) => hash === "" || hash === "#" || hash === "#/" ? "#/" : hash;
 
 /** Saved project source plus where click-to-edit changes go. */
 export type VisualEditHost = {
   source: WebsiteProjectSource;
+  /** Kept by the host for this website so edit mode, Undo and the selection survive another tab unmounting the preview. */
+  session?: VisualEditSession;
+  onSession?: Dispatch<SetStateAction<VisualEditSession>>;
+  /** How the last click-to-edit change stands, e.g. "Saved as version 4", shown in the edit panel with Undo. */
+  status?: string;
   /** Set while editing would conflict with saving, building or review state. */
   disabledReason?: string;
   onApply: (next: WebsiteProjectSource, summary: string) => void;
@@ -108,14 +115,22 @@ export default function LivePreview({ files, assets, scope, building, subject = 
   const retryingRef = useRef(false);
   const setPage = useCallback((next: PreviewPage) => { pageRef.current = next; setPageState(next); }, []);
 
-  // Click-to-edit state. `inspecting` drives the tagged build.
-  const [editing, setEditing] = useState(false);
+  // Click-to-edit state. `inspecting` drives the tagged build. Edit mode, Undo and the selected element are a
+  // session: the host's when it keeps them across tabs (another tab unmounts this preview), else this preview's own.
+  const [ownSession, setOwnSession] = useState<VisualEditSession>(newVisualEditSession);
+  const session = visualEdit?.session ?? ownSession, updateSession = visualEdit?.onSession ?? setOwnSession;
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; });
+  const editing = session.editing;
+  const setEditing = useCallback((on: boolean) => updateSession(current => ({ ...current, editing: on })), [updateSession]);
   const [engine, setEngine] = useState<EditEngine | null>(null);
   const [picked, setPicked] = useState<PickedElement | null>(null);
   const [editNote, setEditNote] = useState("");
-  const [history, setHistory] = useState<{ source: WebsiteProjectSource; loc: ElementLoc | null; index: number }[]>([]);
-  const produced = useRef<WebsiteProjectSource | null>(null);
-  const restore = useRef<{ loc: string | null; index: number; y: number }>({ loc: null, index: 0, y: 0 });
+  // Undo only covers this session's own edits, and only while the source is still the one the last of them produced.
+  const source = visualEdit?.source;
+  const history = source && session.produced === source ? session.history : NO_HISTORY;
+  // Where the frame was scrolled in edit mode, so a rebuild brings the selection back in place.
+  const editScroll = useRef(0);
   const inspecting = editing && Boolean(visualEdit) && !visualEdit?.disabledReason && !building;
 
   useEffect(() => {
@@ -123,13 +138,7 @@ export default function LivePreview({ files, assets, scope, building, subject = 
     let cancelled = false;
     import("@/lib/builder/visual-edit").then(module => { if (!cancelled) setEngine(module); }, () => { if (!cancelled) { setEditing(false); setEditNote("Click-to-edit could not start in this browser."); } });
     return () => { cancelled = true; };
-  }, [inspecting, engine]);
-
-  // Undo only covers this session's own edits on the current source.
-  const source = visualEdit?.source;
-  useEffect(() => {
-    if (source && source !== produced.current) { produced.current = null; setHistory([]); }
-  }, [source]);
+  }, [inspecting, engine, setEditing]);
 
   // Load project images once per asset id and keep them as data URLs.
   const assetKey = assets.map(asset => `${asset.id}:${asset.path}`).sort().join("|");
@@ -252,8 +261,8 @@ export default function LivePreview({ files, assets, scope, building, subject = 
       const data = event.data;
       if (data.type === "ready") responded.current = true;
       if (data.type === "runtime-error") setRuntimeError(String(data.message).slice(0, 600));
-      if (data.type === "ready" && inspecting) (event.source as Window).postMessage({ source: "makeborne-host", type: "edit-mode", on: true, ...restore.current }, "*");
-      if (data.type === "scroll" && Number.isFinite(data.y)) restore.current.y = Math.max(0, Math.round(data.y));
+      if (data.type === "ready" && inspecting) (event.source as Window).postMessage({ source: "makeborne-host", type: "edit-mode", on: true, ...sessionRef.current.selection, y: editScroll.current }, "*");
+      if (data.type === "scroll" && Number.isFinite(data.y)) editScroll.current = Math.max(0, Math.round(data.y));
       if (data.type === "location" && typeof data.hash === "string") {
         const key = frameHashKey(data.hash);
         const current = pageRef.current;
@@ -278,14 +287,14 @@ export default function LivePreview({ files, assets, scope, building, subject = 
         const target = parsePreviewPath(data.href);
         if (target) goRef.current(target);
       }
-      if (data.type === "deselect") { setPicked(null); restore.current.loc = null; }
+      if (data.type === "deselect") { setPicked(null); updateSession(current => ({ ...current, selection: { ...current.selection, loc: null } })); }
       if (data.type === "select" && engine) {
         const loc = engine.parseLoc(data.loc);
         if (!loc) return;
         const style: PickedElement["style"] = {};
         for (const key of STYLE_KEYS) if (typeof data.style?.[key] === "string") style[key] = data.style[key].slice(0, 80);
         const index = Number.isInteger(data.index) ? Math.max(0, data.index) : 0;
-        restore.current = { ...restore.current, loc: engine.formatLoc(loc), index };
+        updateSession(current => ({ ...current, selection: { loc: engine.formatLoc(loc), index } }));
         setPicked({ loc, index, count: Number.isInteger(data.count) ? data.count : 1, tag: String(data.tag ?? "").slice(0, 20),
           text: String(data.text ?? "").slice(0, 2000), hasParent: data.hasParent === true, style });
         setEditNote("");
@@ -293,11 +302,11 @@ export default function LivePreview({ files, assets, scope, building, subject = 
     };
     window.addEventListener("message", listen);
     return () => window.removeEventListener("message", listen);
-  }, [inspecting, engine, storageKey, snapshot, setPage, syncOuter]);
+  }, [inspecting, engine, updateSession, storageKey, snapshot, setPage, syncOuter]);
 
   // Turning edit mode off clears the selection; the rebuild drops the tags.
   function toggleEditing() {
-    if (editing) { setEditing(false); setPicked(null); setEditNote(""); restore.current = { loc: null, index: 0, y: restore.current.y }; return; }
+    if (editing) { updateSession(current => ({ ...current, editing: false, selection: { loc: null, index: 0 } })); setPicked(null); setEditNote(""); return; }
     setEditNote(""); setEditing(true);
   }
 
@@ -311,10 +320,9 @@ export default function LivePreview({ files, assets, scope, building, subject = 
     if (!engine || !visualEdit || !picked || visualEdit.disabledReason) return;
     const result = engine.applyVisualEdit(visualEdit.source, edit, projectImages.map(image => image.path));
     if (!result.ok) { setEditNote(result.message); return; }
-    setHistory(entries => [...entries.slice(-29), { source: visualEdit.source, loc: picked.loc, index: picked.index }]);
-    produced.current = result.source;
     const loc = engine.remapLoc(picked.loc, result.change);
-    restore.current = { ...restore.current, loc: loc ? engine.formatLoc(loc) : null, index: picked.index };
+    updateSession(current => ({ ...current, history: [...history.slice(-29), { source: visualEdit.source, loc: picked.loc, index: picked.index }], produced: result.source,
+      selection: { loc: loc ? engine.formatLoc(loc) : null, index: picked.index } }));
     setPicked(loc ? { ...picked, loc, text: edit.kind === "text" ? edit.value : picked.text } : null);
     setEditNote("");
     visualEdit.onApply(result.source, result.summary);
@@ -323,9 +331,7 @@ export default function LivePreview({ files, assets, scope, building, subject = 
     if (!engine || !visualEdit || visualEdit.disabledReason) return;
     const last = history.at(-1);
     if (!last) return;
-    setHistory(entries => entries.slice(0, -1));
-    produced.current = last.source;
-    restore.current = { ...restore.current, loc: last.loc ? engine.formatLoc(last.loc) : null, index: last.index };
+    updateSession(current => ({ ...current, history: history.slice(0, -1), produced: last.source, selection: { loc: last.loc ? engine.formatLoc(last.loc) : null, index: last.index } }));
     setPicked(null);
     visualEdit.onApply(last.source, "Undid a visual edit");
   }
@@ -416,7 +422,7 @@ export default function LivePreview({ files, assets, scope, building, subject = 
             <li key={route.path}><button type="button" className="lp-missing-link" onClick={() => go({ path: route.path, query: "", target: "" })}>{route.title || route.path} <span>{route.path}</span></button></li>)}</ul>}
         </div>}
       </div>
-      {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} note={editNote} canUndo={history.length > 0}
+      {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} note={editNote} status={visualEdit?.status} canUndo={history.length > 0}
         onEdit={apply} onUndo={undo} onClose={toggleEditing}
         onParent={() => toFrame({ type: "select-parent" })}
         onAsk={visualEdit?.onAsk} />}

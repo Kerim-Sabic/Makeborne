@@ -111,7 +111,7 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled: locked, disabledReason, sendBlocked = null, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback or an advisor brief (with its mode and effort). Never sent automatically. */
   prefill?: { key: string; text: string; target?: EditTarget; mode?: "create" | "plan"; effort?: EffortLevel } | null;
@@ -128,7 +128,9 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   baseFiles: Record<string, string>; baseAssets: { id: string; path: string }[];
   defaultEffort?: EffortLevel; disabled?: boolean;
   /** Shown while disabled, when the reason is something the user can act on. */
-  disabledReason?: string; autoStart?: string | null;
+  disabledReason?: string;
+  /** Why a request must wait while typing may go on (e.g. an edit is still saving): blocks sending only, never the text. */
+  sendBlocked?: string | null; autoStart?: string | null;
   /** "plan" starts the first message in Plan mode (from a Plan-first creation). */
   autoStartMode?: "create" | "plan";
   onLive: (update: LiveUpdate | null) => void;
@@ -139,6 +141,9 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   estimates?: BuilderEstimates | null;
 }) {
   const copy = COPY[kind], website = kind === "website";
+  // Every request waits while locked or blocked; only `locked` stops typing.
+  const disabled = Boolean(locked) || Boolean(sendBlocked);
+  const blockedReason = locked ? disabledReason : sendBlocked ?? undefined;
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [effort, setEffort] = useState<EffortLevel>(defaultEffort ?? "medium");
@@ -719,6 +724,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     proceed(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode, answers && questions && website ? designAnswers(questions, answers) : {}, text);
   };
   const submit = (text: string) => {
+    if (disabled) return;
     // A selected element must still be exactly what the user saw; otherwise refuse instead of editing another one.
     const issue = targetIssue(target, text, baseFiles, version);
     if (issue) { setNotice(issue); return; }
@@ -941,7 +947,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         note="Saved on this device for this project. Leave out skips a file for this request only; × deletes the saved copy. Continuing uses the original request’s files." />
       <p className="lb-plan-note lb-source-formats">AI sources: PNG, JPEG, WebP, GIF, PDF, TXT or Markdown · up to 5 files, 3 MB combined. Text: up to 200,000 characters.</p>
       {sources.error && <p className="lb-notice" role="alert">{sources.error}</p>}
-      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
+      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || locked || operationRunning || Boolean(previewingRecovery)}
         onChange={event => setDraft(event.target.value)}
         onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(draft); } }} />
       <div className="lb-controls">
@@ -973,7 +979,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         {/* Phones: one line instead of the three above (limit, measured range, balance). */}
         <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
       </div>
-      {(notice || (disabled && disabledReason)) && <p className="lb-notice" role="status">{notice || disabledReason}</p>}
+      {(notice || blockedReason) && <p className="lb-notice" role="status">{notice || blockedReason}</p>}
     </form>
   </aside>;
 }

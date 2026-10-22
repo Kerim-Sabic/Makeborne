@@ -123,7 +123,10 @@ const ROUTES = [{ path: "/", title: "Home" }, { path: "/collections", title: "Co
     assert.match(builder, /if \(!operation \|\| busy \|\| disabled \|\| authorizing\.current \|\| !operation\.canContinue \|\| operation\.kind !== "build"\) return;/, "Continue keeps its guard");
     assert.match(builder, /previewingRecovery\?\.runId !== buildRecovery\.runId \|\| previewingRecovery\.version !== version \|\| busy \|\| disabled \|\| authorizing\.current\) return;/, "recovery save keeps its version fence");
     assert.match(builder, /\(busy \|\| operationRunning\) \? <button type="button" className="lb-stop" disabled=\{cancelling \|\| operation\?\.cancelRequested === true\}/, "Stop replaces Send while running and cannot be sent twice");
-    assert.match(builder, /<textarea ref=\{composer\}[^>]*disabled=\{busy \|\| preparingSources \|\| !sources\.ready \|\| sources\.busy \|\| disabled \|\| operationRunning/, "composer stays disabled while running");
+    assert.match(builder, /<textarea ref=\{composer\}[^>]*disabled=\{busy \|\| preparingSources \|\| !sources\.ready \|\| sources\.busy \|\| locked \|\| operationRunning/, "composer stays disabled while running");
+    // A pending autosave (sendBlocked) leaves the text editable but holds every request: `disabled` guards them all.
+    assert.ok(builder.includes("const disabled = Boolean(locked) || Boolean(sendBlocked);"), "requests wait while sending is blocked");
+    assert.match(builder, /const submit = \(text: string\) => \{\r?\n    if \(disabled\) return;/, "Enter can't send while sending is blocked");
     assert.match(builder, /operation\?\.kind === "build" && operation\.canContinue && operation\.status !== "running"/, "Continue is never offered for a running request");
     const studio = fs.readFileSync(path.join(root, "src/components/cloud-studio.tsx"), "utf8");
     assert.match(studio, /disabled=\{dirty \|\| busy \|\| savePaused \|\| uncertainSave \|\| conflict \|\| !!recovery\} aria-describedby=\{`restore-effect-/, "Restore keeps its draft/save guard");

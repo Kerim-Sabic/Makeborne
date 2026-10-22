@@ -29,8 +29,10 @@ export type Swatch = { label: string; value: string };
 /** The picked element an "Ask the builder" request refers to, so the request can be bound to it. */
 export type AskTarget = { path: string; line: number; label: string };
 
-export default function VisualEditorPanel({ picked, description, images, swatches = [], note, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
-  picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; swatches?: Swatch[]; note: string; canUndo: boolean;
+export default function VisualEditorPanel({ picked, description, images, swatches = [], note, status, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
+  picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; swatches?: Swatch[]; note: string;
+  /** How the last change stands (saving, or the version it saved as). */
+  status?: string; canUndo: boolean;
   onEdit: (edit: VisualEdit) => void; onParent: () => void; onClose: () => void; onUndo: () => void; onAsk?: (text: string, target?: AskTarget) => void;
 }) {
   return <aside className="ve" aria-label="Edit selected element">
@@ -40,6 +42,7 @@ export default function VisualEditorPanel({ picked, description, images, swatche
       <button type="button" className="ve-icon" onClick={onClose} aria-label="Stop editing" title="Stop editing"><X size={15} /></button>
     </header>
     {note && <p className="ve-note" role="alert">{note}</p>}
+    <p className="ve-status" role="status">{status && <>{status}{canUndo && <> · <button type="button" className="ve-link" onClick={onUndo}>Undo</button></>}</>}</p>
     {!picked || !description
       ? <div className="ve-empty"><p>Click any text, image, link or section in the preview to change it.</p><p className="ve-muted">Edits save automatically as a new version and don&apos;t use credits.</p></div>
       : <Inspector key={`${picked.loc.path}@${picked.loc.offset}:${picked.index}:${"value" in description.text ? description.text.value : "parts" in description.text ? description.text.parts.join("|") : ""}`}
