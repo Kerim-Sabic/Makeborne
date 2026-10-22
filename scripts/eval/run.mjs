@@ -11,7 +11,7 @@
 //   --image-models a,b (with --images): the server's ordered image allowlist (MAKEBORNE_IMAGE_MODELS) when .env.local names no model
 //   --enhance (with --live, websites in Create mode): the studio's enhanced-brief step first: POST /api/build/enhance
 //     (its own eval reservation, kind runner-enhancer, at the 1-credit hold; settled from the provider-call ledger by the
-//     route's hold reference), then the build with { brief: { mode: "enhanced", text } }, as the studio's Start building does.
+//     durable action's Idempotency-Key), then the build with { brief: { mode: "enhanced", text } }, as the studio's Start building does.
 //
 // The live path drives the same HTTP routes, in the same order, with the same
 // bodies as the studio (src/components/live-builder.tsx): plan -> approved
@@ -1367,13 +1367,13 @@ async function signIn(browser, fixture) {
       await context.request.get(`${ORIGIN}/api/credits`, { headers: { 'X-Makeborne-Account': fixture.userId } });
       refreshedAt = Date.now();
     },
-    async fetch(pathname, { method = 'GET', body, idempotent = false, timeoutMs = 120_000 } = {}) {
+    async fetch(pathname, { method = 'GET', body, idempotent = false, idempotencyKey = null, timeoutMs = 120_000 } = {}) {
       await session.refresh();
       const cookies = await context.cookies(ORIGIN);
       const response = await fetch(`${ORIGIN}${pathname}`, {
         method, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs),
         headers: { Origin: ORIGIN, Cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; '), 'X-Makeborne-Account': fixture.userId,
-          ...(body ? { 'Content-Type': 'application/json' } : {}), ...(idempotent ? { 'Idempotency-Key': randomUUID() } : {}) },
+          ...(body ? { 'Content-Type': 'application/json' } : {}), ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : idempotent ? { 'Idempotency-Key': randomUUID() } : {}) },
         body: body ? JSON.stringify(body) : undefined,
       });
       // Keep any rotated auth cookie in the shared jar.
@@ -1519,10 +1519,11 @@ async function assetData(session, workspaceId, artifactId, assets, variant) {
   return list;
 }
 
-/** The enhanced-brief call's provider dollars, from the provider-call ledger by its hold reference (read-only). */
-async function enhancerLedger(reference) {
+/** The enhanced-brief call's provider dollars, from the provider-call ledger by its durable action's hold reference (read-only). */
+async function enhancerLedger(actionKey) {
   return withReadOnly('release-auth', async client => {
-    const { rows } = await client.query(`select status, bound_microusd::text bound, charged_microusd::text charged from makeborne_private.live_provider_calls where run_reference = $1`, [reference]);
+    const { rows } = await client.query(`select c.status, c.bound_microusd::text bound, c.charged_microusd::text charged from makeborne_private.live_provider_calls c
+      join makeborne_private.brief_enhancements e on e.reference = c.run_reference where e.action_key = $1`, [actionKey]);
     return { calls: rows.length, open: rows.filter(row => row.status === 'open' || row.status === 'uncertain').length, actualMicrousd: rows.reduce((sum, row) => sum + Number(row.charged ?? row.bound), 0) };
   });
 }
@@ -1605,13 +1606,15 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
     if (enhancerBoundUsd) {
       const enhancerReservation = await reserveFn({ kind: 'runner-enhancer', ref: brief.id, boundUsd: enhancerBoundUsd, note: `${runId} brief enhancer`, unique: !rerun });
       control.open.add(enhancerReservation);
-      const response = await session.fetch('/api/build/enhance', { method: 'POST', body: { ...base, brief: message, original: brief.brief.trim().slice(0, 8000), ...(design && Object.keys(design).length ? { design } : {}) } });
+      // The studio's explicit "Improve my brief first" choice: one durable action per Idempotency-Key.
+      const enhanceKey = randomUUID();
+      const response = await session.fetch('/api/build/enhance', { method: 'POST', idempotencyKey: enhanceKey, body: { ...base, brief: message, original: brief.brief.trim().slice(0, 8000), ...(design && Object.keys(design).length ? { design } : {}) } });
       const value = await response.json().catch(() => null);
       item.requests.push({ stage: 'enhance', method: 'POST', path: '/api/build/enhance', status: response.status });
-      const usable = response.ok && typeof value?.text === 'string' && typeof value?.reference === 'string';
+      const usable = response.ok && typeof value?.text === 'string' && value?.action?.status === 'completed';
       writeJson(path.join(item.dir, 'enhanced.json'), { status: response.status, enhanced: value?.enhanced ?? null, text: value?.text ?? null, charged: value?.charged ?? null, providerMicrousd: value?.providerMicrousd ?? null, error: usable ? null : value?.error ?? null });
       // Settled from the provider-call ledger; a failed enhancement names no reference, so its full bound stays counted.
-      const ledger = usable ? await enhancerLedger(value.reference).catch(() => null) : null;
+      const ledger = usable ? await enhancerLedger(enhanceKey).catch(() => null) : null;
       await settleFn(enhancerReservation, ledger && !ledger.open && ledger.calls ? { actualUsd: usd(ledger.actualMicrousd), detail: { calls: ledger.calls } } : { unknown: true, detail: { status: response.status, reason: usable ? 'ledger unreadable or open' : 'enhancement failed (fail open)' } });
       control.open.delete(enhancerReservation);
       cost.enhancer = { boundUsd: enhancerBoundUsd, reservationId: enhancerReservation, status: response.status, usable, actualUsd: ledger && !ledger.open ? usd(ledger.actualMicrousd) : null, charged: value?.charged ?? null };
