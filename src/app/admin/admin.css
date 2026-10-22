@@ -1,6 +1,6 @@
 /* Admin console. Light, quiet surfaces; data first. Minimum text size 12px. */
 .mbo-shell{--ink:#1f2130;--muted:#6b6f80;--faint:#8b8f9e;--line:#e6e7ee;--soft:#f6f6fa;--accent:#5b4bc4;--accent-soft:#efecfd;--good:#2f7a57;--good-soft:#e9f6ef;--warn:#94620b;--warn-soft:#fdf4e2;--bad:#b0343d;--bad-soft:#fdecee;
-  min-height:100vh;background:#f7f8fa;color:var(--ink);font-family:var(--font-inter),system-ui,sans-serif;font-size:14px;line-height:1.5}
+  min-height:calc(100vh / var(--ui-zoom, 1));background:#f7f8fa;color:var(--ink);font-family:var(--font-inter),system-ui,sans-serif;font-size:14px;line-height:1.5}
 .mbo-shell *{box-sizing:border-box}
 .mbo-shell a{color:inherit;text-decoration:none}
 .mbo-shell button,.mbo-shell input,.mbo-shell summary{font:inherit}
@@ -8,7 +8,7 @@
 .mbo-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mbo-skip{position:fixed;left:16px;top:-100px;background:#fff;border:1px solid #bbb;padding:10px 14px;border-radius:8px;z-index:20}.mbo-skip:focus{top:12px}
 
-.mbo-topbar{height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 max(24px,calc((100vw - 1240px)/2));background:#fff;border-bottom:1px solid var(--line)}
+.mbo-topbar{height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 max(24px,calc((calc(100vw / var(--ui-zoom, 1)) - 1240px)/2));background:#fff;border-bottom:1px solid var(--line)}
 .mbo-brand{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:650;letter-spacing:-.4px}.mbo-brand>svg{width:26px;height:26px}
 .mbo-brand>span{display:flex;align-items:center;gap:10px}.mbo-brand small{font-size:13px;font-weight:500;color:var(--muted)}.mbo-brand-divider{color:#c9cad3;font-weight:300}
 .mbo-top-actions{display:flex;align-items:center;gap:20px;font-size:13px;color:var(--muted);min-width:0}
@@ -16,7 +16,7 @@
 .mbo-environment{display:flex;align-items:center;gap:7px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mbo-environment>span{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent)}
 
 .mbo-tabs{position:sticky;top:0;z-index:5;background:#ffffffeb;backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-.mbo-tabs>div{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding:0 max(16px,calc((100vw - 1240px)/2 - 8px))}
+.mbo-tabs>div{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding:0 max(16px,calc((calc(100vw / var(--ui-zoom, 1)) - 1240px)/2 - 8px))}
 .mbo-tabs a{position:relative;display:flex;align-items:center;gap:7px;padding:14px 12px;font-size:14px;font-weight:500;color:var(--muted);white-space:nowrap;transition:color .15s}
 .mbo-tabs a:hover{color:var(--ink)}
 .mbo-tabs a[aria-current=page]{color:var(--ink)}.mbo-tabs a[aria-current=page]::after{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:2px;border-radius:2px;background:var(--accent)}
@@ -100,7 +100,7 @@ a.mbo-kpi:hover{border-color:#cfc8f2;box-shadow:0 6px 18px #2b1f7a0d}
 .mbo-pager a,.mbo-pager .is-disabled{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--line);border-radius:9px}
 .mbo-pager a:hover{border-color:#cfc8f2;color:var(--ink)}.mbo-pager .is-disabled{opacity:.45}
 
-.mbo-detail{position:sticky;top:64px;max-height:calc(100vh - 84px);overflow:auto;animation:mbo-in .2s ease-out}
+.mbo-detail{position:sticky;top:64px;max-height:calc(calc(100vh / var(--ui-zoom, 1)) - 84px);overflow:auto;animation:mbo-in .2s ease-out}
 .mbo-detail h2{overflow-wrap:anywhere}
 .mbo-id{margin:4px 0 0;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--faint);overflow-wrap:anywhere}
 .mbo-close{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:9px;color:var(--muted)}.mbo-close:hover{background:var(--soft);color:var(--ink)}

@@ -1,8 +1,8 @@
 /* A project opens as a conversation beside its working canvas. */
-.studio-shell.is-project-open { display:flow-root; background:#fff; min-height:100dvh; }
+.studio-shell.is-project-open { display:flow-root; background:#fff; min-height:calc(100dvh / var(--ui-zoom, 1)); }
 .studio-shell.is-project-open > .sidebar,
 .studio-shell.is-project-open .studio-topbar { display:none; }
-.studio-shell.is-project-open .studio-main { width:100%; margin:0; padding:0; min-height:100dvh; background:#fff; }
+.studio-shell.is-project-open .studio-main { width:100%; margin:0; padding:0; min-height:calc(100dvh / var(--ui-zoom, 1)); background:#fff; }
 .studio-shell.is-project-open .workspace-content { max-width:none; margin:0; padding:0; }
 .studio-shell.is-project-open .editor { margin:0; padding:0; }
 .studio-shell.is-project-open .editor-heading { display:flex; align-items:center; gap:12px; min-height:64px; padding:10px 20px; margin:0; border:0; border-bottom:1px solid #eae8ee; border-radius:0; background:#fff; box-shadow:none; }
@@ -12,7 +12,11 @@
 .studio-shell.is-project-open .editor-heading p { margin:3px 0 0; font-size:12px; color:var(--text-muted); line-height:15px; }
 .studio-shell.is-project-open .editor-heading .button { width:auto; min-height:33px; padding:7px 12px; font-size:12px; border-radius:8px; }
 .studio-shell.is-project-open .editor-actions { gap:7px; }
-.workbench-layout { display:grid; grid-template-columns:350px minmax(0,1fr); height:calc(100dvh - 65px); min-height:540px; }
+.workbench-layout { display:grid; grid-template-columns:350px minmax(0,1fr); height:calc(calc(100dvh / var(--ui-zoom, 1)) - 65px); min-height:540px; }
+/* The open editor fills the screen: its heading takes the height it needs (it grows when the version facts wrap) and the
+   workbench takes the rest, instead of assuming a fixed heading height. */
+.studio-shell.is-project-open .cloud-workbench { display:flex; flex-direction:column; height:calc(100dvh / var(--ui-zoom, 1)); }
+.studio-shell.is-project-open .cloud-workbench > .workbench-layout { flex:1 1 0; height:auto; }
 .workbench-stage { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; background:#f6f5f8; }
 .build-conversation { min-width:0; min-height:0; display:flex; flex-direction:column; border-right:1px solid #e9e6ed; background:#fff; }
 .build-conversation-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex:0 0 51px; padding:0 22px; }
@@ -80,7 +84,7 @@ p.build-state-card { display:block; }
 .studio-shell.is-project-open .artifact-canvas { min-height:100%; height:auto; padding:0; border:1px solid #e6e1ea; border-radius:10px; overflow:hidden; background:#fff; }
 .studio-shell.is-project-open .preview-only .artifact-canvas { min-height:100%; max-width:none; width:100%; margin:0; }
 .studio-shell.is-project-open .review-layout { flex:1; overflow:auto; min-height:0; padding:24px; background:#fff; }
-.workbench-empty { display:flex; flex-direction:column; justify-content:center; align-items:center; min-height:calc(100dvh - 156px); padding:45px 24px; text-align:center; background:radial-gradient(ellipse at 50% 37%,#f7f2fb 0%,#fff 56%); }
+.workbench-empty { display:flex; flex-direction:column; justify-content:center; align-items:center; min-height:calc(calc(100dvh / var(--ui-zoom, 1)) - 156px); padding:45px 24px; text-align:center; background:radial-gradient(ellipse at 50% 37%,#f7f2fb 0%,#fff 56%); }
 .workbench-empty-icon { display:grid; place-items:center; width:70px; height:70px; margin-bottom:25px; border:1px solid #e8dfee; border-radius:21px; background:linear-gradient(145deg,#fff,#f1eaf7); color:var(--text-muted); box-shadow:0 8px 24px #8d6da40a; }
 .workbench-empty-eyebrow { font-size:12px; font-weight:550; letter-spacing:.13em; color:var(--text-muted); }
 .workbench-empty h2 { margin:15px 0 13px; font-size:28px; line-height:1.2; font-weight:450; letter-spacing:-1px; color:#62516e; }
@@ -99,7 +103,7 @@ p.build-state-card { display:block; }
   /* Phones: the preview comes first and fills the screen under the project
      heading. The conversation becomes a compact bar (toggle + composer) at the
      bottom; opening it grows the bar upwards like a sheet. */
-  .workbench-layout { display:flex; flex-direction:column; height:calc(100dvh - var(--workbench-heading, 64px)); min-height:460px; }
+  .workbench-layout { display:flex; flex-direction:column; height:calc(calc(100dvh / var(--ui-zoom, 1)) - var(--workbench-heading, 64px)); min-height:460px; }
   .cloud-workbench .workbench-layout { --workbench-heading:62px; }
   .workbench-stage { order:-1; flex:1 1 auto; min-height:220px; }
   .workbench-layout > .build-conversation, .workbench-layout > .lb { flex:0 1 auto; min-height:0; max-height:78%; }

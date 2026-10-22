@@ -1,5 +1,5 @@
 /* Contain the oversized decorative hero backdrop; tables keep their own scroll area. */
-.page{min-height:100vh;overflow-x:clip;background:#fdfcfe;color:#28262f;font-family:var(--font-inter),Arial,sans-serif}
+.page{min-height:calc(100vh / var(--ui-zoom, 1));overflow-x:clip;background:#fdfcfe;color:#28262f;font-family:var(--font-inter),Arial,sans-serif}
 .skip{position:absolute;left:20px;top:-80px;z-index:2;padding:12px 20px;background:#fff;border:1px solid #dbd7e5;border-radius:10px}
 .skip:focus{top:16px}
 .header{display:flex;align-items:center;justify-content:space-between;gap:24px;max-width:1180px;margin:auto;padding:24px 40px;border-bottom:1px solid #eeecf2}
@@ -16,8 +16,8 @@
 
 /* Hub */
 .hero{position:relative;isolation:isolate;padding:56px 0 34px;text-align:center}
-.hero::before{content:"";position:absolute;inset:-40px -10vw auto;height:360px;z-index:-1;background:radial-gradient(40% 60% at 25% 40%,#dfe6ff 0,transparent 70%),radial-gradient(35% 55% at 78% 30%,#ffe3d6 0,transparent 70%)}
-.hero h1{font-size:clamp(38px,5.4vw,60px);line-height:1.06;letter-spacing:-2.6px;font-weight:500;margin:14px 0 12px}
+.hero::before{content:"";position:absolute;inset:-40px calc(-10vw / var(--ui-zoom, 1)) auto;height:360px;z-index:-1;background:radial-gradient(40% 60% at 25% 40%,#dfe6ff 0,transparent 70%),radial-gradient(35% 55% at 78% 30%,#ffe3d6 0,transparent 70%)}
+.hero h1{font-size:clamp(38px,calc(5.4vw / var(--ui-zoom, 1)),60px);line-height:1.06;letter-spacing:-2.6px;font-weight:500;margin:14px 0 12px}
 .hero>p{font-size:16px;line-height:1.7;color:#6f6879;margin:0 auto 26px;max-width:560px}
 .section{padding:44px 0 0}
 .sectionHead{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px}
@@ -40,7 +40,7 @@
 
 /* Article */
 .article{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:56px;padding-top:30px}
-.article header h1{font-size:clamp(32px,4.4vw,46px);line-height:1.1;letter-spacing:-1.6px;font-weight:500;margin:14px 0 10px}
+.article header h1{font-size:clamp(32px,calc(4.4vw / var(--ui-zoom, 1)),46px);line-height:1.1;letter-spacing:-1.6px;font-weight:500;margin:14px 0 10px}
 .meta{font-size:13px;color:#857d91;margin:0 0 22px}
 .answer{margin:0 0 30px;padding:20px 22px;border-radius:16px;background:linear-gradient(135deg,#f6f4ff,#fbf7ff);border:1px solid #e6def6;font-size:16px;line-height:1.7;color:#2c2540}
 .answer strong{display:block;font-size:11px;letter-spacing:1.3px;text-transform:uppercase;color:#6a4fa5;margin-bottom:6px}

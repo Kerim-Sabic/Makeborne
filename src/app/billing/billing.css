@@ -1,4 +1,4 @@
-.billing-shell{min-height:100vh;background:linear-gradient(180deg,#f8f7fc 0,#fff 520px);color:#292531;padding:0 40px 24px;font-family:var(--font-inter),Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.billing-shell{min-height:calc(100vh / var(--ui-zoom, 1));background:linear-gradient(180deg,#f8f7fc 0,#fff 520px);color:#292531;padding:0 40px 24px;font-family:var(--font-inter),Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .billing-top{height:84px;max-width:1120px;margin:auto;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eae7ef;gap:20px}
 .billing-brand{display:inline-flex;align-items:center;gap:9px;font-size:22px;font-weight:650;letter-spacing:-.8px}
 .billing-back{display:inline-flex;align-items:center;gap:8px;min-height:40px;font-size:12px;color:#766e81}
@@ -10,7 +10,7 @@
 .billing-unlimited-topups h2{font-size:15px;font-weight:500;letter-spacing:-.2px;color:#655073;margin:0 0 5px}
 .billing-unlimited-topups p{font-size:12px;line-height:1.7;margin:0}
 .billing-main{max-width:1080px;margin:50px auto 0}
-.billing-heading h1{margin:13px 0 12px;font-size:clamp(34px,4vw,44px);font-weight:500;letter-spacing:-1.8px;line-height:1.12}
+.billing-heading h1{margin:13px 0 12px;font-size:clamp(34px,calc(4vw / var(--ui-zoom, 1)),44px);font-weight:500;letter-spacing:-1.8px;line-height:1.12}
 .billing-heading p{margin:0;color:#7a7283;font-size:14px;line-height:1.6}
 .billing-eyebrow{display:block;font-size:9px;font-weight:550;letter-spacing:1.5px;color:#81768f;line-height:1.6}
 .billing-section-nav{display:flex;gap:27px;border-bottom:1px solid #eae7ef;margin:31px 0 34px}
