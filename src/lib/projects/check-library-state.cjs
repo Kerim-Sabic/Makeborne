@@ -125,7 +125,7 @@ check("studio orders the page by the layout without remounting the account list"
   assert.ok(context.exports.PENDING_LAYOUT_MS > 0 && context.exports.PENDING_LAYOUT_MS <= 8000, "the wait is bounded");
   // Pending (first visit, list unknown): the list stays mounted (it decides the layout) but out of view, and no welcome or creation entry is guessed.
   assert.match(studio, /<div className="account-projects-host" hidden=\{layoutPending && !accountRoute\?\.artifactId\}><AccountProjects /);
-  assert.match(studio, /layoutPending \? <div className="library-pending" role="status" aria-busy="true">/);
+  assert.match(studio, /layoutPending \? <div className="library-pending library-columns" role="status" aria-busy="true">/);
   assert.equal((studio.match(/<AccountProjects /g) ?? []).length, 1, "one account list position: changing the order never refetches it");
   assert.match(studio, /layout === "prompt-first" && <div className="studio-create">\{creationEntry\}<\/div>\}[\s\S]{0,400}<AccountProjects /, "new users: creation above the list");
   const after = studio.slice(studio.indexOf("<AccountProjects "));

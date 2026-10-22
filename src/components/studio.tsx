@@ -900,7 +900,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   <Link className="button primary" href="/">
                     <Plus size={17} /> New project
                   </Link>
-                </div> : layoutPending ? <div className="library-pending" role="status" aria-busy="true">
+                </div> : layoutPending ? <div className="library-pending library-columns" role="status" aria-busy="true">
                   {/* A first visit on this device: whether this account has saved work is not known yet, so neither the welcome nor the library is guessed. */}
                   <span className="sr-only">Loading your projects…</span>
                   <div className="library-skeleton" aria-hidden="true">{Array.from({ length: 8 }, (_, index) => <span key={index} className="library-skeleton-card"><span className="library-skeleton-thumb" /><span className="library-skeleton-line" /><span className="library-skeleton-line short" /></span>)}</div>

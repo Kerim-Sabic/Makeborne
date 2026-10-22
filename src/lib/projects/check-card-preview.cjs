@@ -183,7 +183,7 @@ check("source guards: sandboxed, non-focusable frames; no persistent cache; no s
   assert.match(projects, /if \(snapshot\) retainCardPreviews\(snapshot\.artifacts\.map\(artifact => artifact\.id\)\);/);
   assert.match(projects, /useEffect\(\(\) => \(\) => clearCardPreviews\(\), \[\]\);/);
   assert.match(projects, /if \(!append\) \{ clearCardPreviews\(\);/);
-  assert.match(projects, /<button type="button" className="account-project-open" aria-describedby=\{described\}/);
+  assert.match(projects, /<a className="account-project-link" href=\{projectHref\(inWorkspace, artifact\.id\)\} aria-describedby=\{described\}/);
   assert.match(migration, /revoke all on public\.artifact_card_previews from public, anon, authenticated, service_role;/);
   assert.match(migration, /revoke all on function public\.makeborne_save_artifact_card_preview\([^)]*\) from public, anon, authenticated;/);
   assert.doesNotMatch(migration, /grant [^;]* to (anon|authenticated)/i);

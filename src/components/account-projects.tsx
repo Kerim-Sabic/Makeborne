@@ -8,20 +8,23 @@ import { ArrowRight, ExternalLink, LayoutGrid, Link2, List, Pencil, RefreshCw, X
 import { createClient } from "@/lib/supabase/client";
 import type { CloudArtifact, CloudWorkspace, CloudWorkspaceSnapshot } from "@/lib/cloud/contracts";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
-import { kindLabel } from "./studio-model";
+import { icons, kindLabel } from "./studio-model";
 import PendingCloudWrites from "./pending-cloud-writes";
 import LibraryCardPreview from "./library-card-preview";
 import { clearCardPreviews, retainCardPreviews, setCardPreviewScope } from "./card-preview-store";
 import { readCardMeta } from "./card-preview-api";
 import { DEFAULT_LIBRARY_SCOPE, LIBRARY_SORTS, PUBLICATION_LABEL, PUBLICATION_SHORT, cardFacts, cardMetaChunks, libraryListPath, libraryScopeKey, liveAddress, publicationDetail, readLibraryView, writeLibraryView, type CardMetaItem, type LibraryScope, type LibrarySort, type LibraryView } from "@/lib/projects/library-card-meta";
 import { accountLibraryStatus, type AccountLibraryStatus } from "@/lib/projects/library-state";
-import { libraryDate, savedSourceMeta } from "@/lib/projects/project-labels";
+import { libraryDate, savedAgo, savedSourceMeta } from "@/lib/projects/project-labels";
+import { projectInitial } from "@/lib/projects/library-grid";
 import { isPlaceholderTitle } from "@/lib/projects/project-title";
 import { CardActionsMenu, RenameProjectDialog, type CardAction } from "./library-card-actions";
 import { currentMatches, failedSearch, firstPage, idleTitleSearch, loadedTitleMatches, nextPage, normalizeTitleQuery, titleSearchKey, titleSearchNotice, titleSearchPath, type TitleSearch, type TitleSearchPage } from "@/lib/projects/title-search";
 
 const AccountEditor = dynamic(() => import("./cloud-studio").then(module => module.CloudEditor), { loading: () => <p role="status">Opening project…</p> });
 type Snapshot = CloudWorkspaceSnapshot & { pagination: { artifacts: { nextOffset: number | null; total: number } } };
+/** A card's own address (the same one Open navigates to), so it can also be opened in a new tab or copied. */
+const projectHref = (workspaceId: string, artifactId: string) => { try { return studioHref({ tab: "projects", projectId: null, clientId: null, account: { workspaceId, artifactId } }); } catch { return "/studio?tab=projects"; } };
 const deviceStorage = () => { try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; } };
 type CardMetaState = { scope: string | null; items: Map<string, CardMetaItem>; failed: boolean };
 const noCardMeta: CardMetaState = { scope: null, items: new Map(), failed: false };
@@ -67,6 +70,9 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
   const [renaming, setRenaming] = useState<{ artifact: CloudArtifact; workspaceId: string; trigger: HTMLButtonElement } | null>(null);
   // Results of card actions (renamed, link copied or not), announced politely; errors as alerts.
   const [notice, setNotice] = useState<{ text: string; tone: "status" | "alert"; link?: string } | null>(null);
+  // Grid cards say how long ago each project was saved; the clock is read once a minute, not per card.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);
   const loadedCount = snapshot ? snapshot.artifacts.length : null;
   const failed = Boolean(message) && !snapshot;
   const status = useMemo(() => accountLibraryStatus({ cloud, authReady, accountId, busy, loadedCount, noWorkspace, failed }), [cloud, authReady, accountId, busy, loadedCount, noWorkspace, failed]);
@@ -252,7 +258,7 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
     <button type="button" className="button secondary small" onClick={retryCapabilities}><RefreshCw size={14} /> Retry</button>
   </section>;
   // In the library-first layout (a page toolbar is given), loading keeps the shape of the list it is about to show, so nothing below it jumps.
-  const placeholder = controlsSlot !== undefined ? <div className={`library-skeleton${view === "list" ? " list" : ""}`} aria-hidden="true">{Array.from({ length: view === "list" ? 16 : 12 }, (_, index) => <span key={index} className="library-skeleton-card"><span className="library-skeleton-thumb" /><span className="library-skeleton-line" /><span className="library-skeleton-line short" /></span>)}</div> : null;
+  const placeholder = controlsSlot !== undefined ? <div className="library-columns"><div className={`library-skeleton${view === "list" ? " list" : ""}`} aria-hidden="true">{Array.from({ length: view === "list" ? 16 : 12 }, (_, index) => <span key={index} className="library-skeleton-card"><span className="library-skeleton-thumb" /><span className="library-skeleton-line" /><span className="library-skeleton-line short" /></span>)}</div></div> : null;
   if (!accountId && !target && !authReady) return <>{controlsSlot !== undefined && toolbarControls}<p className="account-projects-checking" role="status">Checking for saved projects…</p>{placeholder}</>;
   if (!accountId) return target ? <section className={`account-projects${target.artifactId ? " account-project-open" : ""}`} aria-label="Open saved project">
     <h2>{authReady ? "Sign in to open this project" : "Checking your account…"}</h2>
@@ -309,7 +315,7 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
         {searchReady && <p role="status">{searchReady.total === 0 ? `No saved project titles in ${snapshot.workspace.name} contain “${query}”.` : `${searchReady.total} saved ${searchReady.total === 1 ? "project" : "projects"} in ${snapshot.workspace.name} with “${query}” in the title.`}</p>}
         {searchReady?.total === 0 && onClearSearch && <button type="button" className="button secondary small" onClick={onClearSearch}>Clear search</button>}
       </div>}
-      {visible.length > 0 && <div className={`account-project-grid${view === "list" ? " list" : ""}`} role="list" aria-label={`${visible.length} ${visible.length === 1 ? "project" : "projects"}`}>{visible.map(artifact => {
+      {visible.length > 0 && <div className="library-columns"><div className={`account-project-grid${view === "list" ? " list" : ""}`} role="list" aria-label={`${visible.length} ${visible.length === 1 ? "project" : "projects"}`}>{visible.map(artifact => {
         const meta = savedSourceMeta(artifact, libraryDate), described = `card-preview-${artifact.id}`, facts = cardFacts(shownMeta.items, artifact);
         const state = facts?.publication.state, address = liveAddress(facts), untitled = isPlaceholderTitle(artifact.title), inWorkspace = snapshot!.workspace.id;
         const open = () => navigate({ workspaceId: inWorkspace, artifactId: artifact.id });
@@ -317,16 +323,23 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
         const actions: CardAction[] = [{ id: "open", label: "Open", icon: <ArrowRight size={15} aria-hidden="true" />, onSelect: open },
           ...(snapshot!.workspace.role !== "reviewer" && artifact.currentVersion > 0 ? [{ id: "rename", label: untitled ? "Name this project…" : "Rename…", icon: <Pencil size={15} aria-hidden="true" />, onSelect: (trigger: HTMLButtonElement) => setRenaming({ artifact, workspaceId: inWorkspace, trigger }) }] : []),
           ...(address ? [{ id: "copy", label: "Copy live link", icon: <Link2 size={15} aria-hidden="true" />, onSelect: (trigger: HTMLButtonElement) => void copyLiveLink(address, trigger) }, { id: "visit", label: "Open live site", icon: <ExternalLink size={15} aria-hidden="true" />, href: address }] : [])];
+        const Mark = icons[artifact.kind], initial = projectInitial(artifact.title, untitled), ago = savedAgo(artifact, now);
         return <div className={`account-project-card${untitled ? " untitled" : ""}`} role="listitem" key={artifact.id}>
           <LibraryCardPreview accountId={accountId} workspaceId={inWorkspace} artifact={artifact} canCapture={snapshot!.workspace.role !== "reviewer"} descriptionId={described} />
-          <button type="button" className="account-project-open" aria-describedby={described} disabled={busy} onClick={open}>
+          {/* One link per card (it covers the whole card): a plain click opens the project here; a modified or middle click opens its address in a new tab. */}
+          <a className="account-project-link" href={projectHref(inWorkspace, artifact.id)} aria-describedby={described} aria-disabled={busy || undefined}
+            onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); if (!busy) open(); }}>
+            <span className={`account-project-avatar ${artifact.kind}`} aria-hidden="true">{initial ?? <Mark size={14} />}</span>
             <strong className="account-project-title" title={artifact.title}>{artifact.title}</strong>
-            <small className="account-project-line account-project-about">{facts?.client && <span className="account-project-client"><span className="sr-only">Client: </span>{facts.client.name}<span className="account-project-sep" aria-hidden="true"> · </span></span>}<span className="account-project-kind">{kindLabel[artifact.kind]}</span></small>
-            <small className="account-project-line account-project-saved"><time dateTime={meta.at}>{meta.label}</time></small>
+            <span className="account-project-meta">
+              <small className="account-project-line account-project-about">{facts?.client && <span className="account-project-client"><span className="sr-only">Client: </span>{facts.client.name}<span className="account-project-sep" aria-hidden="true"> · </span></span>}<span className="account-project-kind">{kindLabel[artifact.kind]}</span></small>
+              <span className="account-project-sep grid-only" aria-hidden="true"> · </span>
+              <small className="account-project-line account-project-saved"><time dateTime={meta.at} title={view === "list" ? undefined : meta.label}>{view === "list" ? meta.label : ago.label}</time></small>
+            </span>
             {facts && state && <small className="account-project-facts"><span className={`account-project-state ${state}`} title={publicationDetail(state, artifact.currentVersion, facts.publication.liveVersion)}>{view === "list" ? PUBLICATION_LABEL[state] : PUBLICATION_SHORT[state]}</span></small>}
-          </button>
+          </a>
           <CardActionsMenu label={`Actions for ${artifact.title}`} actions={actions} disabled={busy} />
-        </div>; })}</div>}
+        </div>; })}</div></div>}
       {!busy && !query && !visible.length && (snapshot || noWorkspace) && <p className="account-projects-empty">{snapshot ? "No saved projects match this view." : "No account workspace was found. Your device projects remain below."}</p>}
       {searchReady?.more === "error" && <p role="alert">More matches couldn’t load. Try again.</p>}
       {searchReady?.nextCursor && <button className="button secondary small" type="button" disabled={searchReady.more === "loading"} onClick={() => void moreMatches()}>{searchReady.more === "loading" ? "Loading more matches…" : "Show more matches"}</button>}

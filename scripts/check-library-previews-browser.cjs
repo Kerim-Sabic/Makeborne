@@ -13,6 +13,7 @@ const load = Module._load;
 Module._load = function(name, parent, main) { return name === "server-only" ? {} : load.call(this, name, parent, main); };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
 const { emptyDocument } = require(path.join(root, "src/lib/documents/editor.ts"));
+const { libraryColumns } = require(path.join(root, "src/lib/projects/library-grid.ts"));
 const { DeckSchema, BookSchema } = require(path.join(root, "src/lib/documents/schema.ts"));
 const deck = DeckSchema.parse({ ...emptyDocument("deck", "Harbour Pitch"), slides: [
   { id: "s1", layout: "cover", title: "HARBOUR OPENING SLIDE", notes: "Open." },
@@ -164,7 +165,7 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
     await frame.waitForLoadState();
     return frame.evaluate(() => document.body.innerText);
   };
-  const description = (page, artifactId) => page.evaluate(id => { const button = document.querySelector(`[data-card="${id}"] .account-project-open`); const target = button && document.getElementById(button.getAttribute("aria-describedby") ?? ""); return target ? target.textContent : null; }, artifactId);
+  const description = (page, artifactId) => page.evaluate(id => { const button = document.querySelector(`[data-card="${id}"] .account-project-link`); const target = button && document.getElementById(button.getAttribute("aria-describedby") ?? ""); return target ? target.textContent : null; }, artifactId);
   const tagCards = page => page.evaluate(() => { for (const card of document.querySelectorAll(".account-project-card")) { const title = card.querySelector("strong")?.textContent ?? ""; const match = Object.entries(window.cardTitles ?? {}).find(([, value]) => value === title); if (match) card.setAttribute("data-card", match[0]); } });
   const waitCards = async (page, count) => { await page.waitForFunction(n => document.querySelectorAll(".account-project-card").length === n, count, { timeout }); await tagCards(page); };
   const DECK = "d0000000-0000-4000-8000-000000000001", BOOK = "d0000000-0000-4000-8000-000000000002", SITE = "d0000000-0000-4000-8000-000000000003", NEW = "d0000000-0000-4000-8000-000000000004", SRC = "d0000000-0000-4000-8000-000000000005";
@@ -206,7 +207,7 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
       // Version 3's answer is still in flight (and will race its cancellation) when version 4 is saved and the list refreshes.
       await page.evaluate(([i, id]) => { window.ignoreAbort = true; window.listings[i.A].artifacts[i.W1][0] = window.artifact(id, "presentation", "Harbour Pitch", 4); }, [ids, DECK]);
       await page.getByRole("button", { name: "Refresh" }).click();
-      await page.waitForFunction(() => document.body.innerText.includes("Version 4"), null, { timeout });
+      await page.waitForFunction(() => [...document.querySelectorAll(".account-project-card time")].some(time => /^Version 4 /.test(time.title)), null, { timeout });
       await tagCards(page);
       await page.evaluate(id => window.settle(id, 2, window.answer(window.pendingFor(id, 2)[0].request, { format: "book", book: window.fixtures.book, chapterCount: 0 }, { kind: "book" })), BOOK);
       // The freed slot goes to the queued website card. Its server answer names another version than the card asked for: refused outright.
@@ -364,8 +365,8 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
       assert.equal(await facts(BOOK), "Draft"); assert.equal(await client(BOOK), "Client: Moss Press ·");
       assert.equal(await page.locator(`[data-card="${SITE}"] .account-project-state`).getAttribute("title"), "Version 4 is live. Version 5 is saved but not published.", "the exact versions are one hover away");
       assert.equal(await page.locator(`[data-card="${NEW}"] .account-project-facts`).count(), 0, "facts for another version than the card names are not shown");
-      assert.match(await page.locator(`[data-card="${SITE}"] .account-project-open`).innerText(), /Live · unpublished changes[\s\S]*|Acme Clinic/, "part of the card's accessible name");
-      assert.match(await page.locator(`[data-card="${SITE}"] .account-project-open`).innerText(), /Acme Clinic/);
+      assert.match(await page.locator(`[data-card="${SITE}"] .account-project-link`).innerText(), /Live · unpublished changes[\s\S]*|Acme Clinic/, "part of the card's accessible name");
+      assert.match(await page.locator(`[data-card="${SITE}"] .account-project-link`).innerText(), /Acme Clinic/);
       await page.getByRole("button", { name: "List", exact: true }).click();
       assert.equal(await facts(SITE), "Live · newer changes not published", "the list view shows the full label");
       assert.equal(await page.locator(".account-project-menu").count(), 4, "one action menu per card");
@@ -434,8 +435,8 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
       await page.focus("#before");
       const stops = [];
       for (let n = 0; n < 26; n++) { await page.keyboard.press("Tab"); stops.push(await page.evaluate(() => { const e = document.activeElement; return e.id || e.className || e.tagName; })); if (stops.at(-1) === "after") break; }
-      const cardStops = stops.filter(stop => /^account-project-(open|menu)$/.test(stop));
-      assert.equal(cardStops.join(","), Array(4).fill("account-project-open,account-project-menu").join(","), `each card: open, then its menu: ${stops.join(" > ")}`);
+      const cardStops = stops.filter(stop => /^account-project-(link|menu)$/.test(stop));
+      assert.equal(cardStops.join(","), Array(4).fill("account-project-link,account-project-menu").join(","), `each card: open, then its menu: ${stops.join(" > ")}`);
       assert.ok(!stops.some(stop => /IFRAME|library-card/.test(stop)), "the preview frame is never focused");
       assert.equal(stops.at(-1), "after");
       for (const width of [1440, 800, 375, 320]) {
@@ -460,21 +461,24 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
       return { columns: [...tops.values()][0], gridWidth: Math.round(box(document.querySelector(".account-project-grid")).width),
         previews: [...new Set(cards.map(card => Math.round(box(card.querySelector(".library-card-thumb")).height * 10) / 10))],
         previewRatios: [...new Set(cards.map(card => { const b = box(card.querySelector(".library-card-thumb")); return Math.round(b.width / b.height * 100) / 100; }))],
-        heights: [...new Set(cards.map(card => Math.round(box(card).height)))], titleLines: Math.max(...titlesOf.map(t => t.lines)), fullNames: titlesOf.every(t => t.full === t.text),
+        heights: [...new Set(cards.map(card => Math.round(box(card).height)))],
+        chipsOnPreview: cards.every(card => { const chip = card.querySelector(".account-project-state"), t = box(card.querySelector(".library-card-thumb")); if (!chip) return true; const c = box(chip); return c.left >= t.left + 4 && c.bottom <= t.bottom - 4 && c.bottom >= t.bottom - 16 && c.right <= t.right; }), titleLines: Math.max(...titlesOf.map(t => t.lines)), fullNames: titlesOf.every(t => t.full === t.text),
         overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
     });
-    await scenario("grid geometry: one preview shape, one card height, two-line titles, columns from the list's own width", geometrySetup, async page => {
+    await scenario("grid geometry: one preview shape, one card height, one-line titles, columns from the list's own width", geometrySetup, async page => {
       await page.waitForFunction(n => document.querySelectorAll(".account-project-card").length === n, GEO.length, { timeout });
-      for (const [width, expected] of [[1440, 5], [1024, 4], [800, 3], [375, 1], [320, 1]]) {
+      for (const [width, expected] of [[1440, 4], [1024, 3], [800, 2], [375, 1], [320, 1]]) {
         await page.setViewportSize({ width, height: 900 });
         await page.waitForTimeout(150);
         const m = await measure(page);
-        // auto-fill of 232px minimum tracks with 20px gaps inside the list's own width (viewport minus the 24px page padding here).
-        assert.equal(m.columns, Math.max(1, Math.min(expected, Math.floor((m.gridWidth + 20) / 252))), `${width}px: columns follow the list width (${m.gridWidth}px → ${m.columns})`);
+        // The list's own width picks the columns (viewport minus the page padding here), by the steps the stylesheet shares with libraryColumns.
+        assert.equal(m.columns, libraryColumns(m.gridWidth), `${width}px: columns follow the list width (${m.gridWidth}px → ${m.columns})`);
+        assert.equal(m.columns, expected, `${width}px: ${expected} columns`);
         assert.equal(m.previews.length, 1, `${width}px: every preview has the same height (${m.previews})`);
         assert.deepEqual(m.previewRatios, [1.6], `${width}px: every preview is 16:10`);
         assert.equal(m.heights.length, 1, `${width}px: every card has the same height (${m.heights})`);
-        assert.ok(m.titleLines <= 2, `${width}px: titles are clamped to two lines (${m.titleLines})`);
+        assert.equal(m.titleLines, 1, `${width}px: titles keep to one line (${m.titleLines})`);
+        assert.ok(m.chipsOnPreview, `${width}px: the state chip sits inside the preview's bottom-left corner`);
         assert.ok(m.fullNames, "the full name stays available on every title");
         assert.ok(m.overflow <= 0, `${width}px: no horizontal overflow (${m.overflow})`);
       }
@@ -568,7 +572,8 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
       assert.equal(await page.evaluate(() => window.apiCalls.some(call => /\/projects\//.test(call.path))), false, "the project record is not touched");
       assert.equal(await page.getByRole("dialog").count(), 0);
       assert.equal(await page.locator(`.account-project-card:has-text("Clinic Site — York") .account-project-title`).getAttribute("title"), "Clinic Site — York");
-      assert.match(await page.locator(`.account-project-card:has-text("Clinic Site — York")`).innerText(), /Version 6 · saved/);
+      assert.match(await page.locator(`.account-project-card:has-text("Clinic Site — York") time`).getAttribute("title"), /^Version 6 · saved/, "the full label is the time's tooltip");
+      assert.match(await page.locator(`.account-project-card:has-text("Clinic Site — York") time`).innerText(), /^Saved (just now|\d+ (minute|hour|day)s? ago|yesterday|on .+)$/, "and the card says how long ago it was saved");
       assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Actions for Clinic Site — York", "focus returns to the card's menu");
       // The renamed card names Version 6, so its preview is read again for that version.
       await page.waitForFunction(id => window.previewRequests.some(entry => entry.request.artifactId === id && entry.request.versionNumber === 6), SITE, { timeout });
@@ -587,7 +592,7 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
       await dialog.getByText("This project was saved again since the library loaded, so it wasn’t renamed. Refresh the library and try again.").waitFor({ timeout });
       assert.equal(await page.locator(`[data-card="${DECK}"] .account-project-title`).textContent(), "Harbour Pitch", "the card keeps its name");
       await dialog.getByRole("button", { name: "Refresh library" }).click();
-      await page.waitForFunction(() => document.body.innerText.includes("Version 4 · saved"), null, { timeout });
+      await page.waitForFunction(() => [...document.querySelectorAll(".account-project-card time")].some(time => /^Version 4 · saved/.test(time.title)), null, { timeout });
       assert.equal(await page.getByRole("dialog").count(), 0);
       // Stale before writing: the detail read already shows a newer version.
       await tagCards(page);

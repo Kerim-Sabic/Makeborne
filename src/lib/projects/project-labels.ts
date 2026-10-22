@@ -38,3 +38,38 @@ export function libraryDate(iso: string, now: Date = new Date()): string {
   if (days === 1) return `yesterday, ${time()}`;
   return value.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(value.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
 }
+
+/**
+ * How long ago, in words, for the line under a grid card's title: "just now",
+ * "5 minutes ago", "3 hours ago", "yesterday", "4 days ago", then the day
+ * itself ("on Oct 3") once it is a week or more old. A time ahead of this clock
+ * by more than a few minutes is named by its day rather than called "just now".
+ */
+export function relativeTime(iso: string, now: Date = new Date()): string {
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) return "at an unknown time";
+  const day = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const onDay = () => `on ${value.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(value.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) })}`;
+  const seconds = (now.getTime() - value.getTime()) / 1000;
+  if (seconds < -300) return onDay();
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+  const days = Math.max(1, Math.round((day(now) - day(value)) / 86_400_000));
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return onDay();
+}
+
+/**
+ * The grid card's short time line. Like `savedSourceMeta`, it names what the
+ * date measures: the saved-source time ("Saved 5 minutes ago"), or, with no
+ * saved version yet, when the project was created. The full label (version and
+ * time of day) stays in the line's tooltip and the list view.
+ */
+export function savedAgo(artifact: { currentVersion: number; createdAt: string; updatedAt: string }, now: Date = new Date()): SavedSourceMeta {
+  if (artifact.currentVersion < 1) return { label: `Created ${relativeTime(artifact.createdAt, now)}`, at: artifact.createdAt };
+  return { label: `Saved ${relativeTime(artifact.updatedAt, now)}`, at: artifact.updatedAt };
+}
