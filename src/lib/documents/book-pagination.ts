@@ -1,5 +1,5 @@
 import type { Book } from "./schema";
-import type { BookPages } from "./render-book";
+import { BODY_TYPE_PT, type BookPages } from "./render-book";
 import { parseBookMarkup, plainText, smartPunctuation } from "./book-markup";
 
 /** Print pagination for books, measured rather than guessed. Chromium cannot
@@ -9,6 +9,23 @@ import { parseBookMarkup, plainText, smartPunctuation } from "./book-markup";
  * chapter's first page, and the second print adds the contents page numbers
  * and a blank verso before any opener that would fall on a left-hand page.
  * Neither changes how the text flows, so the measured pages hold. */
+
+/** BOOK LENGTH RULE. A requested length in pages counts every page of the exported PDF except the cover: the title,
+ * copyright and contents pages, each chapter opener (a full page, sometimes preceded by a blank verso so it opens on a
+ * right-hand page) and any end matter all count. A length is reached with content (sections, examples, chapters), never
+ * by shrinking type or cutting what the reader needs: the body is always set at BODY_TYPE_PT. */
+export { BODY_TYPE_PT };
+/** Words on a full 6×9 text page at 10.6 pt, measured on rendered books (headings, lists and sidebars included). */
+export const WORDS_PER_TEXT_PAGE = 230;
+/** Pages that count towards a requested length. */
+export const countedPages = (pdfPages: number) => Math.max(0, pdfPages - 1);
+/** How a requested page count divides into front matter, openers and text, and about how many words fill it. */
+export function bookLengthPlan(pages: number, chapters: number, pageOpeners = chapters) {
+  const front = 2 + (chapters >= 2 ? Math.ceil(chapters / 12) : 0);
+  const openers = pageOpeners + Math.round(pageOpeners / 2);
+  const textPages = Math.max(0, pages - front - openers);
+  return { front, openers, textPages, words: textPages * WORDS_PER_TEXT_PAGE };
+}
 
 /** Bookmarks of a Chromium (Skia) PDF in reading order, with 1-based page numbers. */
 export function pdfOutline(pdf: Buffer): { title: string; page: number; level: number }[] {

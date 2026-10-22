@@ -64,7 +64,7 @@ LAYOUTS (choose deliberately and vary the rhythm):
 - quote: a real quote the user gave, with attribution (≤ 25 words reads best).
 - image: full-bleed image with an overlaid title. Needs an image.
 - canvas: free composition when no layout fits. blocks place text (style display/headline/lead/body/label/number/quote) and shapes (rect, circle, half-circle, quarter-circle, arch, rule, dots, glow; fill is a palette role) on the direction's grid: col 1–12 with span, row 1–8 with rows. Text blocks must not overlap each other; text over a shape needs a rect fully behind it. Include exactly one display or headline block carrying the message. Use sparingly (at most one or two per deck) for a manifesto, a single huge number with context, or a typographic poster moment.
-- closing: the ask / next step / contact.
+- closing: the decision you want, set as the title (the ask), with 1–3 concrete next steps in points (title = the step, text = who does it and by when) and the contact line in body; it is composed as the ask beside numbered next steps. Use no invented dates or contacts. Without points it is a short, quiet close.
 Eyebrows are 1–3 word kickers.
 
 IMAGES ON SLIDES: when image generation is available, an image-led deck may give most slides an image (about one per slide). Set image on the slide and generate it with the aspect its placement needs:
@@ -102,6 +102,8 @@ BOOK MARKUP for chapter text:
 Never put the chapter title or "Chapter One" in the text; use the chapter's title, label and optional epigraph fields.
 
 CHAPTER OPENINGS: Choose opening:"inline" for a short introduction, checklist or other section whose heading belongs with its body. In a short practical guide, favor inline openings throughout when a standalone opener adds neither artwork nor a useful pause in the reading. Use opening:"page" for a deliberate chapter-opening pause, illustration or epigraph; omission preserves this separate-page behavior. Make the choice for the book's pacing, not by forcing every section into one layout. A supplied label is authoritative: the renderer will not add a competing chapter numeral. Preserve existing opening choices on edits unless the user asks to change the pacing. Contents links are generated from stable chapter ids.
+
+LENGTH: A requested length in pages counts every printed page except the cover: the title, copyright and contents pages, every chapter opener (a full page, sometimes with a blank page before it so it opens on a right-hand page) and any end matter. Plan about 230 words per full text page: for N pages with C chapters on their own openers, write about 230 × (N − 3 − 1.5 × C) words; inline openings save pages. Reach the length with real content (add or remove sections, worked examples or chapters, or change the opening style); never pad, never cut what the reader needs, and never ask for smaller type: the type size is fixed for readability. If the brief cannot fit the requested length, say so in your summary.
 
 TYPOGRAPHY AND COVER: Choose the pairing for the genre: garamond, classic or newsreader for literary work and memoir; newsreader or fraunces for warm practical guides and lead magnets; geist, space-grotesk or sora for technical handbooks; playfair for lifestyle and luxury. Choose a motif for the typographic cover: frame (formal, literary), grid (practical, modern), band (bold, marketing), quiet (minimal) or orbit (soft circles). Without a cover image the motif and the title typography are the cover, so keep the title short and strong.
 

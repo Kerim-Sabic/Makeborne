@@ -96,5 +96,17 @@ const book = (chapters, extra = {}) => DocumentSourceSchema.parse({ kind: "book"
       rows.forEach(row => { const at = Number(row.slice(0, 10)); assert.match(text.slice(at, at + 20), /^\d+ 0 obj/); });
     } finally { await browser.close(); }
   });
+  await check("a requested length counts every page but the cover, and is never met by shrinking the type", () => {
+    const { bookLengthPlan, countedPages, WORDS_PER_TEXT_PAGE, BODY_TYPE_PT } = require("./book-pagination.ts");
+    assert.equal(countedPages(47), 46, "the cover does not count");
+    assert.deepEqual(bookLengthPlan(47, 8), { front: 3, openers: 12, textPages: 32, words: 32 * WORDS_PER_TEXT_PAGE });
+    assert.deepEqual(bookLengthPlan(20, 4, 0), { front: 3, openers: 0, textPages: 17, words: 17 * WORDS_PER_TEXT_PAGE }, "inline openings save pages");
+    const short = bookHtml(book([{ id: "a", title: "A", text: "Short." }]), {}, "print");
+    const long = bookHtml(book(Array.from({ length: 30 }, (_, i) => ({ id: `c${i}`, title: `Chapter ${i}`, text: "Words. ".repeat(4000) }))), {}, "print");
+    for (const html of [short, long]) assert.ok(html.includes(`.chapter{font-size:${BODY_TYPE_PT}pt;`));
+    const prompt = fs.readFileSync(require.resolve("../builder/docs-prompt.ts"), "utf8");
+    assert.match(prompt, /LENGTH: A requested length in pages counts every printed page except the cover/);
+    assert.match(prompt, /never ask for smaller type/);
+  });
   console.log(`\n${count} book output checks passed.`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

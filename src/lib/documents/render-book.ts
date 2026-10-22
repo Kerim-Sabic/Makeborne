@@ -1,5 +1,5 @@
 import type { Book } from "./schema";
-import { FONTS, mix, motifOf, readableOn } from "./theme";
+import { FONTS, contrast, mix, motifOf, readableOn } from "./theme";
 import { fontFaceCss, type FontSources } from "./fonts";
 import { bodyHtml, checkItem, inlineHtml, noteBlocks, parseBookMarkup, plainText, type BookBlock } from "./book-markup";
 import { esc } from "./chart-svg";
@@ -37,6 +37,8 @@ function tableColumnMinimums(rows: string[][]) {
   return wanted.map(width => Math.floor(width * scale + padding));
 }
 
+/** Body type size: fixed for readability; a length target is never met by shrinking it (book-pagination.ts BOOK LENGTH RULE). */
+export const BODY_TYPE_PT = 10.6;
 /** A drop cap needs a paragraph long enough to wrap around it. */
 const LEAD_MIN_CHARS = 180;
 const RUN_IN = /^\*\*[^*\n]{1,80}\*\*[:.]?$/;
@@ -152,6 +154,9 @@ ${artwork || (chapter.label === undefined ? `<div class="numeral">${chapterNumbe
   const folio = `font-family:${fonts.body};font-size:8.5pt;color:${muted};vertical-align:top;padding-top:.22in`;
   const none = "@top-left{content:none}@top-right{content:none}@bottom-left{content:none}@bottom-right{content:none}";
   const bandInk = readableOn(p.accent, "#FFFFFF", "#111111");
+  // Small labels (7–8 pt) need 4.5:1; the brand accent may only reach 3:1, so they take a deeper form of the same hue.
+  const smallAccent = (bg: string) => [0, 0.15, 0.3, 0.45, 0.6, 0.8, 1].map(amount => mix(p.accent, p.ink, amount)).find(value => contrast(value, bg) >= 4.5) ?? p.ink;
+  const labelInk = smallAccent(p.background), noteInk = smallAccent(p.surface);
   const shared = `${fontFaceCss(fonts.faces, fontSources)}*{box-sizing:border-box}html,body{margin:0}
 body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased;font-kerning:normal;font-variant-ligatures:common-ligatures}
 .full{position:relative;width:${T.width}in;height:${T.height}in;overflow:hidden;background:${p.background}}
@@ -181,7 +186,7 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .dedication{font-family:${fonts.heading};font-style:italic;font-size:11.5pt;line-height:1.55;max-width:3.6in;margin:0}
 .legal{font-size:7.5pt;line-height:1.6;color:${muted}}.legal p{margin:0}
 .contents{justify-content:flex-start;align-items:stretch;text-align:left;padding-top:1.35in}
-.contents h2{font-family:${fonts.body};font-size:8pt;letter-spacing:.26em;text-transform:uppercase;color:${p.accent};margin:0 0 .36in;font-weight:700}
+.contents h2{font-family:${fonts.body};font-size:8pt;letter-spacing:.26em;text-transform:uppercase;color:${labelInk};margin:0 0 .36in;font-weight:700}
 .contents ol{list-style:none;margin:0;padding:0}.contents li{overflow-wrap:anywhere;font-family:${fonts.heading};font-size:12.5pt;line-height:1.3;padding:.11in 0;border-bottom:.5pt solid ${mix(muted, p.background, 0.6)}}
 .contents a{display:block;color:inherit;text-decoration:none}.contents a:focus-visible{outline:2px solid ${p.accent};outline-offset:3px}
 .contents.compact{padding-top:1in}.contents.compact h2{margin-bottom:.24in}.contents.compact li{font-size:10.5pt;padding:.065in 0}.contents.compact li a{display:flex;align-items:baseline;gap:.14in}
@@ -196,15 +201,15 @@ body{font-family:${fonts.body};color:${p.ink};-webkit-font-smoothing:antialiased
 .opener-text{padding:.42in ${T.outside}in 0 ${T.inside}in}
 .opener:not(.has-art) .opener-text{padding-top:.2in}
 .opener.custom-label:not(.has-art) .opener-text{padding-top:2in}
-.opener .label{font-size:7.5pt;letter-spacing:.26em;text-transform:uppercase;color:${p.accent};font-weight:700;margin:0 0 .14in}
+.opener .label{font-size:7.5pt;letter-spacing:.26em;text-transform:uppercase;color:${labelInk};font-weight:700;margin:0 0 .14in}
 .opener h2{font-family:${fonts.heading};font-weight:${fonts.headingWeight};font-size:23pt;line-height:1.1;letter-spacing:${fonts.headingTracking};margin:0;text-wrap:balance;overflow-wrap:anywhere}
 .inline-opener{margin:0 0 .28in;text-align:left;break-inside:avoid;break-after:avoid}
-.inline-opener .label{font-size:7.5pt;letter-spacing:.26em;text-transform:uppercase;color:${p.accent};font-weight:700;margin:0 0 .14in;text-indent:0}
+.inline-opener .label{font-size:7.5pt;letter-spacing:.26em;text-transform:uppercase;color:${labelInk};font-weight:700;margin:0 0 .14in;text-indent:0}
 .inline-opener h2{font-family:${fonts.heading};font-weight:${fonts.headingWeight};font-size:23pt;line-height:1.1;letter-spacing:${fonts.headingTracking};margin:0;text-wrap:balance;overflow-wrap:anywhere}
 .inline-opener .opener-art{height:2in;margin-bottom:.24in}.inline-opener .epigraph{margin:.2in 0 0}.inline-opener .epigraph p{text-indent:0}
 .epigraph{margin:.3in 0 0;max-width:3.7in;font-family:${fonts.heading};font-style:italic;font-size:9.5pt;line-height:1.5;color:${muted}}.epigraph p{margin:0}
 .epigraph span{display:block;font-style:normal;font-family:${fonts.body};font-size:7pt;letter-spacing:.16em;text-transform:uppercase;margin-top:.08in}
-.chapter{font-size:10.6pt;line-height:1.52;text-align:justify;overflow-wrap:break-word;hyphens:auto;-webkit-hyphens:auto;orphans:3;widows:3;hanging-punctuation:first}
+.chapter{font-size:${BODY_TYPE_PT}pt;line-height:1.52;text-align:justify;overflow-wrap:break-word;hyphens:auto;-webkit-hyphens:auto;orphans:3;widows:3;hanging-punctuation:first}
 .chapter p{margin:0;text-indent:1.35em}
 .chapter>p:first-of-type,.chapter h3+p,.chapter .break+p,.chapter figure+p,.chapter blockquote+p,.chapter ul+p,.chapter .table+p,.chapter ol+p,.chapter .note+p,.chapter .runhead+p{text-indent:0}
 .chapter>p.lead::first-letter{initial-letter:3;-webkit-initial-letter:3;font-family:${fonts.heading};color:${p.accent};margin-right:.07em;font-weight:${fonts.headingWeight}}
@@ -230,14 +235,14 @@ ul.checklist{list-style:none;margin-left:1.5em}li.check{position:relative}li.che
 /* Ordered markers can contain three digits; keep them inside the clipped page. */
 .chapter ol{margin-left:2.75em}
 .note{background:${p.surface};border-left:2.5pt solid ${p.accent};padding:.75em .95em;margin:1em 0;font-size:9.4pt;line-height:1.45;text-align:left;break-inside:avoid}
-.note strong{display:block;font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;color:${p.accent};margin-bottom:.3em}.note p{text-indent:0}.note p+p,.note ul+p,.note ol+p{margin-top:.45em}
+.note strong{display:block;font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;color:${noteInk};margin-bottom:.3em}.note p{text-indent:0}.note p+p,.note ul+p,.note ol+p{margin-top:.45em}
 .chapter .note ul,.chapter .note ol{margin:.35em 0 .35em 1.15em}.chapter .note ol{margin-left:1.6em}.chapter .note ul.checklist{margin-left:1.4em}.note li{margin:.12em 0}
 .ph{display:flex;align-items:center;justify-content:center;min-height:2in;background:repeating-linear-gradient(135deg,${mix(p.surface, p.muted, 0.12)} 0 10px,${p.surface} 10px 20px);color:${muted};font-size:9pt}
 .chapter .table{margin:1em 0;break-inside:avoid;text-align:left}
 /* Long tables break between rows (never inside one) and repeat the header row; a whole-table keep left pages empty. */
 .chapter .table.long{break-inside:auto}.chapter thead{display:table-header-group}.chapter tr{break-inside:avoid}
 .chapter table{width:100%;max-width:100%;border-collapse:collapse;font-size:8.6pt;line-height:1.4;font-variant-numeric:tabular-nums}
-.chapter th{font-family:${fonts.body};font-size:7pt;letter-spacing:.12em;text-transform:uppercase;color:${p.accent};font-weight:700;text-align:left;padding:.4em .55em;border-bottom:1pt solid ${p.accent}}
+.chapter th{font-family:${fonts.body};font-size:7pt;letter-spacing:.12em;text-transform:uppercase;color:${labelInk};font-weight:700;text-align:left;padding:.4em .55em;border-bottom:1pt solid ${p.accent}}
 .chapter th,.chapter td{overflow-wrap:anywhere}
 .chapter td{padding:.42em .55em;border-bottom:.5pt solid ${mix(muted, p.background, 0.6)};vertical-align:top}
 .chapter tbody tr:last-child td{border-bottom:none}
