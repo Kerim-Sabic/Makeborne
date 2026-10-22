@@ -111,7 +111,15 @@ export function balancedBreaks(text: string, width: number, size: number, charWi
   let lo = Math.max(...units), hi = per(width);
   for (let step = 0; step < 24; step++) { const mid = (lo + hi) / 2; if (wrap(mid).length <= lines) hi = mid; else lo = mid; }
   const balanced = wrap(hi);
-  return balanced.length === lines ? balanced.map(line => line.join(" ")).join("\n") : text;
+  if (balanced.length !== lines) return text;
+  // A short word alone on a line ("a", "of", "to") joins a neighbour when the line still fits.
+  const width_ = (words_: string[]) => words_.reduce((sum, word, i) => { let u = 0; for (const char of word) u += unitOf(char, mode); return sum + u + (i ? space : 0); }, 0);
+  for (let i = 0; i < balanced.length; i++) {
+    if (balanced.length < 2 || balanced[i].length !== 1 || [...balanced[i][0]].length > 3) continue;
+    if (i + 1 < balanced.length && width_([...balanced[i], ...balanced[i + 1]]) <= per(width)) { balanced[i + 1] = [...balanced[i], ...balanced[i + 1]]; balanced.splice(i, 1); i--; }
+    else if (i > 0 && width_([...balanced[i - 1], ...balanced[i]]) <= per(width)) { balanced[i - 1] = [...balanced[i - 1], ...balanced[i]]; balanced.splice(i, 1); i--; }
+  }
+  return balanced.map(line => line.join(" ")).join("\n");
 }
 /** The widest single word, in px: a word can never wrap, so it must fit the box. */
 export function longestWord(text: string, size: number, charWidth: number, mode: MeasureMode = "prop") {
@@ -200,7 +208,7 @@ export function text(ctx: Ctx, value: string, box: { x: number; y: number; w: nu
   if (size < 24 && (color === ctx.c.accent || color === ctx.c.accent2) && contrast(color, ctx.c.bg) < 4.5)
     color = [0.15, 0.3, 0.45, 0.6, 0.75, 1].map(amount => mix(color, ctx.c.ink, amount)).find(value => contrast(value, ctx.c.bg) >= 4.5) ?? ctx.c.ink;
   // Titles and display type carry explicit balanced breaks (the same in HTML and PPTX).
-  const display = style.role === "title" || (font === "heading" && size >= 34);
+  const display = style.role === "title" || (font === "heading" && size >= 20);
   const shown = display ? balancedBreaks(value, box.w, size, cw, mode) : value;
   ctx.prims.push({ k: "text", x: box.x, y: box.y, w: box.w, h: Math.max(h, Math.ceil(size * lh)), text: shown, font, size, weight,
     color, align: style.align ?? "left", valign: style.valign ?? "top", lh, ...(style.tracking !== undefined ? { tracking: style.tracking } : {}), ...(style.upper ? { upper: true } : {}), ...(style.italic ? { italic: true } : {}), ...(style.role ? { role: style.role } : {}), ...(style.list ? { list: style.list } : {}) });

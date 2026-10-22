@@ -235,7 +235,9 @@ export function closingNext(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, steps = slide.points ?? [], sub = slide.subtitle;
   const lw = Math.round(a.w * (a.w < 900 ? 0.46 : 0.42)), rx = a.x + lw + 56, rw = a.r - rx;
   const contact = slide.body ?? ctx.deck.author, foot = contact ? 64 : 0, bottom = a.b - foot;
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.cover * 0.6, min: 34, sub, subStyle: { size: 22 } }, { x: a.x, y: a.y, w: lw, h: bottom - a.y }, "middle");
+  // At most three lines: in a narrow column the ask is set smaller rather than one word per line.
+  const askSize = ctx.dir.sizes.cover * 0.6;
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size: askSize, min: 34, sub, subStyle: { size: 22 }, maxTitleH: Math.ceil(scaled(ctx, askSize) * ctx.dir.display.lh * 3.2) }, { x: a.x, y: a.y, w: lw, h: bottom - a.y }, "middle");
   const numW = 56, tw = rw - numW;
   const rowsAt = (ts: number, bs: number) => steps.map(step => (step.title ? measure(ctx, step.title, tw, displayStyle(ctx, ts, { role: undefined, lh: 1.14 })) + 6 : 0) + measure(ctx, step.text, tw, { size: bs, lh: 1.4 }) + 36);
   const sizes = [[30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
