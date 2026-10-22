@@ -10,10 +10,10 @@ import type { DocumentSource, Slide } from "../documents/schema";
 import { MIN_STEP_TOKENS, builderModel, isProviderOrSpendError } from "./agent";
 import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage } from "./images";
 import { routeImage } from "./image-router";
-import { BOOK_IMAGE_CAP, BUILDER_EFFORT, DECK_ART_IMAGE_CAP, DOCUMENT_IMAGE_CAP, aiCostUsdPerCredit, bookImageMax, deckArtImageMax, deckArtSlidesFor, documentImageMax } from "./pricing";
-import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
+import { ART_EXPECTED_RENDER_USD, ART_IMAGE_SHARE, BOOK_IMAGE_CAP, BUILDER_EFFORT, DECK_ART_IMAGE_CAP, DOCUMENT_IMAGE_CAP, aiCostUsdPerCredit, bookImageMax, deckArtImageMax, deckArtSlidesFor, documentImageMax } from "./pricing";
+import { ContextMeter, IMAGE_BLOCK_TOKEN_BOUND, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
-import { imageCallBoundMicrousd, type ImageQuality } from "../ai/prices";
+import { imageCallBoundMicrousd, maxInputTokenMicrousd, maxOutputTokenMicrousd, type ImageQuality } from "../ai/prices";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BOOK_SYSTEM, DECK_ART_SYSTEM, DECK_SYSTEM } from "./docs-prompt";
 import { imageLuma, imageShade } from "../documents/image-luma";
@@ -138,7 +138,14 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     : imageModelId ? imageCallBoundMicrousd(imageModelId, "medium", IMAGE_SIZES.portrait, "x".repeat(4000)) : Infinity;
   // Images may take at most a third of the run's allowance. Within that: a full-image deck one render per slide plus
   // retries (deckArtImageMax); an editable deck one image per slide; a book its image plan plus regenerations.
-  const imageBudget = imageModelId ? Math.max(0, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
+  // A full-image deck is not limited by a count: its images may use ART_IMAGE_SHARE of the allowance (checked on every
+  // call against reserved bounds plus settled costs, see imageShareLeft), and the deck is planned at any length.
+  const imageBudget = art ? DECK_ART_IMAGE_CAP : imageModelId ? Math.max(0, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
+  /** Image spend of this run so far: settled costs plus the worst-case bounds of calls still running. */
+  let imageMicrousd = 0, imagesInFlight = 0, lastContext = 0;
+  /** What the next turn that checks `images` renders may cost at worst (its context, each image at its token bound, a
+   * check turn's output): an image starts only if this still fits after its own bound, so the gate can always run. */
+  const checkReserve = (images: number) => Math.ceil((lastContext + 4000 + images * IMAGE_BLOCK_TOKEN_BOUND) * maxInputTokenMicrousd(model) + 4096 * maxOutputTokenMicrousd(model));
   const items = () => run.editor.doc.kind === "deck" ? run.editor.doc.slides.length : run.editor.doc.chapters.length;
   const bookCap = () => {
     const doc = run.editor.doc;
@@ -172,10 +179,12 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   /** Images that passed check_image this run. */
   const passedImages = new Set<string>();
 
-  const renders = imageLimit > 0 && art ? Math.min(imageBudget, DECK_ART_IMAGE_CAP) : 0;
+  const expected = deckArtSlidesFor(spend.allowanceMicrousd / 1e6);
+  const waitingSlides = () => deck()?.art?.renders.filter(entry => entry.deferred).map(entry => entry.slide) ?? [];
+  const deferredAtStart = art ? waitingSlides() : [];
   const imageLine = art
     ? imageLimit > 0
-      ? `Full-image slides: on (each slide is one generated image including its text; model ${artModel}). This run can afford up to ${renders} slide renders (first attempts, regenerations and any text-free photos for fallback slides together), so plan at most ${deckArtSlidesFor(renders)} slides${deckArtSlidesFor(renders) < 8 ? " (fewer than a usual deck: the run's credit maximum cannot pay for more renders; say so in your summary if the client asked for more slides)" : ""}.`
+      ? `Full-image slides: on (each slide is one generated image including its text; model ${artModel}). Plan the deck at the length the brief needs: there is no slide limit. This request's credits cover about ${expected} renders (first attempts and regenerations); if the deck needs more, render the slides that fit and finish: the rest are saved as waiting and rendered when the client continues.${deferredAtStart.length ? ` CONTINUATION: ${(deck()?.slides.length ?? 0) - deferredAtStart.length} of ${deck()?.slides.length ?? 0} slides are done; these slides are waiting to be rendered: ${deferredAtStart.join(", ")}. Render them with render_slides (no need to rewrite them unless the request asks), check them, then finish.` : ""}`
       : "Full-image slides: the run's budget cannot pay for slide renders. Design editable text slides (no art fields, no images) and say so in your summary."
     : artWanted ? "Full-image slides are not available here (no text-capable image model is enabled). Design editable text slides; say so in your summary."
     : `Image generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${imageLimit > policy.maxImages ? `, about one per ${kind === "deck" ? "slide" : "chapter plus the cover"}` : ""})` : "unavailable — design without images"}.`;
@@ -188,16 +197,28 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   /** Reserve and start one image; null (with a reason) when the budget or the plan does not allow it. */
   async function startImage(prompt: string, size: (typeof IMAGE_SIZES)[keyof typeof IMAGE_SIZES], modelId: string, quality: ImageQuality) {
     if (!imageClient) return { error: "Image generation is unavailable." } as const;
-    if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) return { error: "The image budget for this run is used up." } as const;
+    if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1 || !imageShareLeft(imageCallBoundMicrousd(modelId, quality, size, prompt))
+      || spend.remainingMicrousd - imageCallBoundMicrousd(modelId, quality, size, prompt) < checkReserve(imagesInFlight + pendingArt.size + pendingImages.size + 1)) return { error: "The image budget for this run is used up." } as const;
     try {
+      const bound = imageCallBoundMicrousd(modelId, quality, size, prompt);
       const job = await startBudgetedImage({ client: imageClient, spend, model: modelId, prompt, size, quality, signal: run.signal });
       imagesUsed++;
+      // Counted at its worst case until the call reports its cost.
+      imageMicrousd += bound;
+      imagesInFlight++;
+      void job.detail.then(detail => { imageMicrousd += (detail.costMicrousd ?? bound) - bound; imagesInFlight--; });
       return { job } as const;
     } catch (error) {
       return { error: error instanceof SpendError && !error.graceful ? `${error.message}` : "The image budget for this run is used up." } as const;
     }
   }
 
+  /** Full-image decks: images stay within ART_IMAGE_SHARE of the allowance; other documents keep the third above. */
+  function imageShareLeft(bound: number) {
+    return !art || imageMicrousd + bound <= spend.allowanceMicrousd * ART_IMAGE_SHARE;
+  }
+  const canAffordImage = () => Boolean(imageClient) && imagesUsed < imageLimit && spend.remainingMicrousd - imageBound >= spend.allowanceMicrousd * 0.1 && imageShareLeft(imageBound)
+    && spend.remainingMicrousd - imageBound >= checkReserve(imagesInFlight + pendingArt.size + pendingImages.size + 1);
   const slideOf = (id: string) => deck()?.slides.find(slide => slide.id === id);
   const slideNumber = (id: string) => (deck()?.slides.findIndex(slide => slide.id === id) ?? -1) + 1;
   /** Why a slide cannot be rendered now, or null. */
@@ -260,15 +281,19 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     }
   }
   /** Keep a slide as an editable live-text slide after a failed gate; the deck is never shown with wrong words. */
-  function fallback(id: string, attempts: number, problems: string[]) {
+  function fallback(id: string, attempts: number, problems: string[], options: { deferred?: boolean } = {}) {
     pendingArt.delete(id);
     const slide = slideOf(id);
     if (!slide) return;
-    run.editor.recordRender({ slide: id, frame: slide.art?.frame, attempts, outcome: "fallback", problems: problems.slice(0, 6).map(item => item.slice(0, 300)) });
+    // A slide waiting for the client's Continue borrows a checked plate of this deck, so it already reads as one family.
+    const shared = options.deferred ? deck()?.art?.renders.find(entry => entry.plate && run.editor.hasImage(entry.plate))?.plate : undefined;
+    run.editor.recordRender({ slide: id, frame: slide.art?.frame, attempts, outcome: "fallback", problems: problems.slice(0, 6).map(item => item.slice(0, 300)), ...(options.deferred ? { deferred: true } : {}), ...(shared ? { plate: shared } : {}) });
     record({ target: "slide", id, attempt: attempts, outcome: "fallback", problems });
     run.emit({ type: "document", document: run.editor.doc, focus: id });
-    if (!platesWanted.includes(id)) platesWanted.push(id);
+    if (!options.deferred && !platesWanted.includes(id)) platesWanted.push(id);
   }
+  /** The request's credits are used up before this slide was rendered: it waits for the client's Continue. */
+  const defer = (id: string) => fallback(id, 0, ["waiting to render: this request's credits are used up; Continue renders it"], { deferred: true });
   /** A text-free plate for an editable slide: the same art system, the live text's area kept calm. Checked like book images. */
   async function makePlate(id: string, attempt: number, fix?: string): Promise<(BetaTextBlockParam | BetaImageBlockParam)[]> {
     const doc = deck(), slide = slideOf(id);
@@ -384,7 +409,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   function settlePending(reason: string) {
     for (const [id, pending] of pendingArt) fallback(id, pending.attempts, [reason]);
     const doc = deck();
-    if (doc && art && doc.art) for (const slide of doc.slides) if (!verifiedArt(doc, slide) && !doc.art.renders.some(entry => entry.slide === slide.id)) fallback(slide.id, 0, ["not rendered as a full image; kept as an editable text slide"]);
+    if (doc && art && doc.art) for (const slide of doc.slides) if (!verifiedArt(doc, slide) && !doc.art.renders.some(entry => entry.slide === slide.id)) defer(slide.id);
     for (const [name, pending] of pendingImages) record({ target: "image", id: name, attempt: pending.attempts, outcome: "unchecked", problems: [reason] });
     pendingImages.clear();
   }
@@ -458,6 +483,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     const content = message.content as BetaContentBlock[];
     messages.push({ role: "assistant", content: content as BetaContentBlockParam[] });
     meter.afterReply(message.usage, messages);
+    lastContext = message.usage.input_tokens + (message.usage.cache_read_input_tokens ?? 0) + (message.usage.cache_creation_input_tokens ?? 0) + message.usage.output_tokens;
 
     if (message.stop_reason === "refusal") throw Object.assign(new Error("The request was declined by the model's safety policy."), { code: "REFUSED" });
     const uses = content.filter((block): block is BetaToolUseBlock => block.type === "tool_use");
@@ -495,7 +521,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
           for (const id of [...new Set(input.ids)]) {
             const refusal = renderRefusal(slideOf(id), id);
             if (refusal) { refusals.push(refusal); continue; }
-            if (imagesUsed + started.length >= imageLimitNow()) { refusals.push(`Slide ${slideNumber(id)} was not rendered: this run's render budget is used up; it stays an editable text slide.`); continue; }
+            if (imagesUsed + started.length >= imageLimitNow() || !canAffordImage()) { defer(id); refusals.push(`Slide ${slideNumber(id)} was not rendered: this request's credits are used up. It is saved as waiting and rendered when the client continues.`); continue; }
             started.push(renderSlide(id, 1));
           }
           imageJobs.push(Promise.all(started).then(async blocks => {
@@ -522,7 +548,10 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
         if (results.some(result => result.is_error)) problems.unshift("A tool failed in this step. Correct that tool input before declaring the document complete.");
         // Slides the designer left unrendered stay editable text: each gets its plate now, checked before the deck is finished.
         const doc0 = deck();
-        if (art && doc0?.art && blockedFinishes < 2) for (const slide of doc0.slides) if (!verifiedArt(doc0, slide) && !pendingArt.has(slide.id) && !doc0.art.renders.some(entry => entry.slide === slide.id)) fallback(slide.id, 0, ["not rendered as a full image; kept as an editable text slide"]);
+        // Unrendered slides the run can no longer pay to render (or to plate) wait for the client's Continue instead.
+        if (art && doc0?.art && blockedFinishes < 2) for (const slide of doc0.slides) if (!verifiedArt(doc0, slide) && !pendingArt.has(slide.id) && !doc0.art.renders.some(entry => entry.slide === slide.id && !entry.deferred)) {
+          if (canAffordImage() && !doc0.art.renders.some(entry => entry.slide === slide.id && entry.deferred)) fallback(slide.id, 0, ["not rendered as a full image; kept as an editable text slide"]); else if (!doc0.art.renders.some(entry => entry.slide === slide.id)) defer(slide.id);
+        }
         const plates = blockedFinishes < 2 ? await platesFor() : [];
         const waiting = [...[...pendingArt.keys()].map(id => `slide ${slideNumber(id)} (check_slide)`), ...[...pendingImages.keys()].map(name => `image "${name}" (check_image)`)];
         // Checks block the first finish; a second finish keeps the deck correct by itself (unchecked renders become editable slides).
@@ -551,6 +580,13 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     }
   }
   settlePending(finished ? "the run finished before it was checked" : "the run ended before it was checked");
+  // A full-image deck with slides still waiting is saved progress, not a finished deck: the client's Continue renders the rest.
+  const left = art ? waitingSlides() : [];
+  if (left.length) {
+    const total = deck()?.slides.length ?? 0, credits = Math.ceil(left.length * (ART_EXPECTED_RENDER_USD + 0.03) / rate);
+    summary = `${total - left.length} of ${total} slides rendered. Continue to render the remaining ${left.length} (about ${credits} credits); until then they show as editable text slides in the deck's style.${summary ? `\n\n${summary}` : ""}`;
+    finished = false;
+  }
   return { summary, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, stopped: spend.stopped, checks };
 }
 

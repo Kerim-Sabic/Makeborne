@@ -56,12 +56,23 @@ export function documentImageMax(kind: "deck" | "book", effort: EffortLevel, ite
  * still reserved against the run's allowance (the credit maximum shown before the run, unchanged), the document builder
  * still keeps all images within a third of that allowance, and when that third is smaller the deck is planned with
  * fewer slides rather than exceeding it. */
-export const DECK_ART_IMAGE_CAP = 40;
+export const DECK_ART_IMAGE_CAP = 64;
 export function deckArtImageMax(slides: number) {
   return Math.min(DECK_ART_IMAGE_CAP, slides + Math.ceil(slides / 2) + 2);
 }
-/** Slides a full-image deck can afford with `renders` images: one each, plus retries for about one slide in four. */
-export const deckArtSlidesFor = (renders: number) => Math.max(0, Math.floor((renders - 1) / 1.25));
+/** Owner decision (Kerim, 23 Oct 2026: "it doesnt matter how many slides if they have credits they can"): a full-image
+ * deck is planned at the length the brief needs. Only PLANNING uses the expected cost of a render (measured about
+ * $0.015 on 22 Oct 2026; $0.025 with regenerations, conservatively); every call still reserves its worst-case bound
+ * before the provider is contacted and the run still stops before its credit ceiling (run-spend.ts, unchanged).
+ * A deck that needs more than one request's ceiling is saved with its remaining slides waiting, and the client's
+ * Continue (the operation spine's continuation, which authorises more of their own credits) renders the rest. */
+export const ART_EXPECTED_RENDER_USD = 0.025;
+/** Share of a full-image deck run's allowance its images may use (reserved worst-case bounds plus settled costs). The
+ * rest pays Claude: a deck's writing and check turns measured $0.43–0.67 for 8–10 slides at bounds far below a medium
+ * run's $1.50, and the run keeps a tenth in reserve for finish. Books and editable decks keep a third. */
+export const ART_IMAGE_SHARE = 0.7;
+/** Slides one run can expect to render within its image share (planning only; never a cap on the deck's length). */
+export const deckArtSlidesFor = (allowanceUsd: number) => Math.max(0, Math.floor(allowanceUsd * ART_IMAGE_SHARE / ART_EXPECTED_RENDER_USD + 1e-9));
 /** Books: the client's image plan (documents/book-images.ts) plus one regeneration for about one image in four. */
 export const BOOK_IMAGE_CAP = 30;
 export function bookImageMax(planned: number) {

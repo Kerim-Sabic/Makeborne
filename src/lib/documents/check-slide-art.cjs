@@ -14,10 +14,11 @@ const { deckPptx } = require("./pptx.ts");
 const { deckHtml } = require("./render-deck.ts");
 const { runDocumentBuilder, CHECK_ATTEMPTS } = require("../builder/docs-agent.ts");
 const { RunSpend, memoryGate } = require("../ai/run-spend.ts");
+const { imageCallBoundMicrousd } = require("../ai/prices.ts");
 const { ContextMeter, IMAGE_BLOCK_TOKEN_BOUND } = require("../ai/anthropic-call.ts");
 const { contrast, mix } = require("./theme.ts");
 const { briefWithAnswers, standardQuestion } = require("../builder/brief-questions.ts");
-const { BUILDER_EFFORT, deckArtImageMax, deckArtSlidesFor } = require("../builder/pricing.ts");
+const { ART_IMAGE_SHARE, BUILDER_EFFORT, deckArtImageMax, deckArtSlidesFor } = require("../builder/pricing.ts");
 
 let count = 0;
 async function check(name, fn) { await fn(); count++; console.log(`PASS ${name}`); }
@@ -82,13 +83,15 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.match(runSource, /slideMode: deckModeFromBrief\(options\)\.mode/, "new decks take their mode from the brief and answers");
   });
 
-  await check("full-image decks can afford a render per slide plus retries within a third of the unchanged allowance", () => {
+  await check("full-image decks: no slide limit from the image heuristic; images may use 70% of the unchanged allowance", () => {
     assert.equal(deckArtImageMax(10), 17);
-    assert.equal(deckArtSlidesFor(17), 12);
+    assert.equal(ART_IMAGE_SHARE, 0.7);
+    assert.equal(deckArtSlidesFor(1.5), 42, "a medium run ($1.50) expects about 42 renders at $0.025 within its 70% share");
     assert.deepEqual(Object.fromEntries(Object.entries(BUILDER_EFFORT).map(([level, policy]) => [level, policy.ceilingCredits])), { light: 20, medium: 50, high: 90, super_high: 140, ultra: 240 }, "credit ceilings unchanged");
     const agent = fs.readFileSync(require.resolve("../builder/docs-agent.ts"), "utf8");
-    assert.match(agent, /Math\.floor\(spend\.allowanceMicrousd \/ imageBound \/ 3\)/, "images still take at most a third of the allowance");
-    assert.match(agent, /plan at most \$\{deckArtSlidesFor\(renders\)\} slides/, "a smaller allowance plans fewer slides");
+    assert.doesNotMatch(agent, /plan at most/, "the designer is never told to plan fewer slides");
+    assert.match(agent, /there is no slide limit/);
+    assert.match(agent, /Math\.floor\(spend\.allowanceMicrousd \/ imageBound \/ 3\)/, "books and editable decks keep a third");
   });
 
   await check("the text gate compares words as read back, ignoring case, quotes and punctuation, never misspellings or numbers", () => {
@@ -292,6 +295,67 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.match(prompt, /top 14% and bottom 14% of the canvas hold no words at all/);
     assert.match(prompt, /keeps 6\.5% clear above the first line/);
     assert.equal(ART_SAFE_MARGIN_PCT, 6.5);
+  });
+
+  // ---- Any deck length (owner, 23 Oct 2026): an 18-slide plan at medium; continuation renders the rest; no credits leaves editable slides ----
+  const FRAMES = ["type-poster", "split", "full-bleed", "card-grid", "inset-frame", "collage"];
+  const WORDS = ["harbour", "ferry", "evening", "quiet", "crossing", "lantern", "tide", "deck", "pier", "rope", "beacon", "island", "current", "keel", "mast", "sail", "wake", "quay"];
+  const longSlides = count => Array.from({ length: count }, (_, i) => i % 2
+    ? { id: `s${i + 1}`, layout: "points", title: `Why the ${WORDS[i]} matters`, points: [{ title: "Calm", text: `Riders like the ${WORDS[i]}` }, { title: "Clear", text: "Plans stay simple" }], art: { frame: FRAMES[i % 6], brief: "Type block on the left third; a quiet harbour photograph fills the rest." }, notes: "x" }
+    : { id: `s${i + 1}`, layout: "statement", title: `The ${WORDS[i]} sets the tone`, art: { frame: FRAMES[i % 6], brief: "A single large statement set across the upper half over a calm field." }, notes: "x" });
+  const checksFor = slides => slides.map(slide => toolUse("check_slide", { id: slide.id, transcript: transcriptOf(slide), artifacts: [], verdict: "pass" }));
+  const gateSpend = credits => { const gate = memoryGate(); return { gate, spend: new RunSpend({ run: `long-${Math.random()}`, providerCapMicrousd: Math.floor(credits * 0.03 * 1e6), customerCapMicrousd: null, gate, deadline: Date.now() + 280_000 }) }; };
+
+  await check("an 18-slide full-image deck at medium is planned and rendered in full; every call still reserves its worst case", async () => {
+    const slides = longSlides(18), local = new DocumentEditor(emptyDocument("deck", "Harbour Light", undefined, { slideMode: "image" }));
+    const pictures = fakeImages(), { gate, spend } = gateSpend(BUILDER_EFFORT.medium.ceilingCredits);
+    const fake = fakeAnthropic([
+      [toolUse("set_theme", THEME), toolUse("set_deck_details", { title: "Harbour Light", art_system: SYSTEM }), ...slides.map(slide => toolUse("write_slide", { slide }))],
+      [toolUse("render_slides", { ids: slides.slice(0, 12).map(slide => slide.id) }), toolUse("render_slides", { ids: slides.slice(12).map(slide => slide.id) })],
+      checksFor(slides), [toolUse("finish", { summary: "Eighteen slides." })], [toolUse("finish", { summary: "Eighteen slides." })],
+    ]);
+    const result = await run(local, fake, pictures, { spend, effort: "medium" });
+    assert.doesNotMatch(JSON.stringify(fake.log.streams[0].messages[0]), /plan at most/);
+    assert.equal(result.finished, true);
+    assert.equal(local.doc.art.renders.filter(entry => entry.outcome === "passed").length, 18, "all 18 slides are full images");
+    const openai = gate.log.begin.filter(call => call.provider === "openai").map(call => call.boundMicrousd).sort((a, b) => a - b);
+    const expected = pictures.log.prompts.map(prompt => imageCallBoundMicrousd("gpt-image-2.5-sunburst", "medium", "1536x1024", prompt)).sort((a, b) => a - b);
+    assert.deepEqual(openai, expected, "each render reserved exactly its worst-case bound before the provider was called");
+  });
+
+  await check("a deck larger than one request's credits saves its renders, waits, and a continuation renders the rest; no credits leaves editable slides", async () => {
+    const slides = longSlides(8), first = new DocumentEditor(emptyDocument("deck", "Harbour Light", undefined, { slideMode: "image" }));
+    const small = gateSpend(10);
+    const fake = fakeAnthropic([
+      [toolUse("set_theme", THEME), toolUse("set_deck_details", { title: "Harbour Light", art_system: SYSTEM }), ...slides.map(slide => toolUse("write_slide", { slide }))],
+      [toolUse("render_slides", { ids: slides.map(slide => slide.id) })],
+      params => { const text = JSON.stringify(params.messages.at(-1)); return checksFor(slides.filter(slide => text.includes(`check_slide for \\"${slide.id}\\"`))); },
+      [toolUse("finish", { summary: "Done for now." })], [toolUse("finish", { summary: "Done for now." })], [toolUse("finish", { summary: "Done for now." })],
+    ]);
+    const one = await run(first, fake, fakeImages(), { spend: small.spend, effort: "medium" });
+    const waiting = first.doc.art.renders.filter(entry => entry.deferred).map(entry => entry.slide);
+    const done = first.doc.art.renders.filter(entry => entry.outcome === "passed").length;
+    assert.ok(done >= 1 && waiting.length >= 1 && done + waiting.length === 8, `rendered ${done}, waiting ${waiting.length}`);
+    assert.equal(one.finished, false, "saved progress, not a finished deck");
+    assert.match(one.summary, new RegExp(`^${done} of 8 slides rendered\\. Continue to render the remaining ${waiting.length} \\(about \\d+ credits\\)`));
+    for (const id of waiting) { const index = first.doc.slides.findIndex(slide => slide.id === id); assert.notEqual(composeSlide(first.doc, first.doc.slides[index], index, 8).composition, ART_COMPOSITION, "a waiting slide shows as editable text"); }
+
+    // Not enough credits to continue: the waiting slides stay editable and the deck stays whole.
+    const broke = new DocumentEditor(first.doc);
+    const none = await run(broke, fakeAnthropic([[toolUse("render_slides", { ids: waiting })], [toolUse("finish", { summary: "x" })], [toolUse("finish", { summary: "x" })], [toolUse("finish", { summary: "x" })]]), fakeImages(), { spend: gateSpend(2).spend, effort: "medium" });
+    assert.equal(none.finished, false);
+    assert.deepEqual(broke.doc.art.renders.filter(entry => entry.deferred).map(entry => entry.slide).sort(), [...waiting].sort());
+    assert.ok(broke.doc.slides.every((slide, index) => composeSlide(broke.doc, slide, index, 8).prims.some(prim => prim.k === "image" || prim.k === "text")), "every slide still draws");
+
+    // The client's Continue (a new stage with its own allowance) renders exactly the waiting slides.
+    const second = new DocumentEditor(first.doc), pictures = fakeImages();
+    const cont = fakeAnthropic([[toolUse("render_slides", { ids: waiting })], checksFor(slides.filter(slide => waiting.includes(slide.id))), [toolUse("finish", { summary: "All eight." })], [toolUse("finish", { summary: "All eight." })]]);
+    const two = await run(second, cont, pictures, { spend: gateSpend(50).spend, effort: "medium" });
+    assert.match(JSON.stringify(cont.log.streams[0].messages[0]), new RegExp(`CONTINUATION: ${done} of 8 slides are done`));
+    assert.equal(pictures.log.prompts.length, waiting.length, "only the waiting slides are rendered");
+    assert.equal(two.finished, true);
+    assert.equal(second.doc.art.renders.filter(entry => entry.outcome === "passed").length, 8);
+    assert.ok(!second.doc.art.renders.some(entry => entry.deferred));
   });
 
   await check("the decoder fixes the live b01 caption (c0182ba)", () => {

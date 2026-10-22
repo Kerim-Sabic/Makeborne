@@ -139,6 +139,8 @@ export const DeckArtSchema = z.object({
     image: ImageName.optional(),
     /** A slide kept as editable text: the checked, text-free background plate in the deck's art direction. */
     plate: ImageName.optional(),
+    /** Not rendered yet because the request's credits ran out: the client's Continue renders it. */
+    deferred: z.boolean().optional(),
     /** textKey() of the slide's words the image was verified against. */
     verified: z.string().max(80).optional(),
     attempts: z.number().int().min(0).max(9),

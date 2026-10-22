@@ -271,9 +271,9 @@ const imageOf = (scene, name) => scene.prims.find(prim => prim.k === "image" && 
       assert.equal(documentImageMax("deck", effort, 1), BUILDER_EFFORT[effort].maxImages, `${effort} floor`);
       assert.equal(documentImageMax("book", effort, 7), 8, `${effort}: cover + 7 openers`);
     }
-    // The run still bounds images by its spend allowance (a third of it) before this count applies.
+    // The run still bounds images by its spend allowance (a third of it; full-image decks ART_IMAGE_SHARE, check-slide-art.cjs) before this count applies.
     const agent = fs.readFileSync(require.resolve("../builder/docs-agent.ts"), "utf8");
-    assert.match(agent, /imageBudget = imageModelId \? Math\.max\(0, Math\.floor\(spend\.allowanceMicrousd \/ imageBound \/ 3\)\)/);
+    assert.match(agent, /imageModelId \? Math\.max\(0, Math\.floor\(spend\.allowanceMicrousd \/ imageBound \/ 3\)\)/);
     assert.match(agent, /imagesUsed >= imageLimitNow\(\)/);
   });
   console.log(`\n${count} slide image checks passed.`);
