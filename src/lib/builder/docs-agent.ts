@@ -339,7 +339,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   function settlePending(reason: string) {
     for (const [id, pending] of pendingArt) fallback(id, pending.attempts, [reason]);
     const doc = deck();
-    if (doc && art && doc.art) for (const slide of doc.slides) if (!verifiedArt(doc, slide) && !doc.art.renders.some(entry => entry.slide === slide.id)) fallback(slide.id, 0, ["not rendered: " + reason]);
+    if (doc && art && doc.art) for (const slide of doc.slides) if (!verifiedArt(doc, slide) && !doc.art.renders.some(entry => entry.slide === slide.id)) fallback(slide.id, 0, ["not rendered as a full image; kept as an editable text slide"]);
     for (const [name, pending] of pendingImages) record({ target: "image", id: name, attempt: pending.attempts, outcome: "unchecked", problems: [reason] });
     pendingImages.clear();
   }
@@ -477,7 +477,11 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
         if (results.some(result => result.is_error)) problems.unshift("A tool failed in this step. Correct that tool input before declaring the document complete.");
         const waiting = [...[...pendingArt.keys()].map(id => `slide ${slideNumber(id)} (check_slide)`), ...[...pendingImages.keys()].map(name => `image "${name}" (check_image)`)];
         // Checks block the first finish; a second finish keeps the deck correct by itself (unchecked renders become editable slides).
-        if (waiting.length && blockedFinishes++ === 0) problems.unshift(`Check these before finishing: ${waiting.join(", ")}.`);
+        // Claims on slides that stay editable text (placeholders, fallbacks) are checked too, once: they are not rendered, so render_slides never saw them.
+        const doc = deck(), claims = art && doc ? doc.slides.flatMap((slide, index) => verifiedArt(doc, slide) ? [] : slideClaimIssues(slide, source).map(claim => `Slide ${index + 1} (${slide.id}): ${claim}.`)) : [];
+        const firstBlock = (waiting.length || claims.length) && blockedFinishes++ === 0;
+        if (firstBlock && claims.length) problems.unshift(...claims.slice(0, 6));
+        if (firstBlock && waiting.length) problems.unshift(`Check these before finishing: ${waiting.join(", ")}.`);
         if (problems.length) {
           results.push({ type: "tool_result", tool_use_id: finishUse.id, is_error: true, content: `Not finished yet. Fix these, then call finish again:\n- ${problems.join("\n- ")}` });
           run.emit({ type: "tool_error", tool: "finish", message: problems[0] });

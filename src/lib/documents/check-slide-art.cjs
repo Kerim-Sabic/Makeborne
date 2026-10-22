@@ -234,6 +234,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     const render = local.doc.art.renders.find(entry => entry.slide === "ask");
     assert.equal(render.outcome, "fallback");
     assert.ok(render.problems.some(problem => /claim: "raised"/.test(problem)));
+    assert.match(JSON.stringify(fake.log.streams[4].messages.at(-1)), /Slide 1 \(ask\): \\"raised\\" states something/, "the first finish names the claim on the editable slide too");
   });
 
   await check("placeholders are never baked into a slide image: the slide stays editable text so the client can type the value", async () => {
