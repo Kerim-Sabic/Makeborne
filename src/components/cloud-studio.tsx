@@ -40,6 +40,7 @@ import { choosePreview, editorEntry, hasBuilderSource, savedFormat } from "@/lib
 import { BUILDER_OFF, BUILDER_WAITING_COPY, parseBuilderAvailability, type BuilderAvailability } from "@/lib/builder/availability";
 import "@/app/live-builder.css";
 import { captureProjectPublication, captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
+import "@/app/build-workspace.css";
 import "@/app/cloud-workbench.css";
 const WebsiteSourceEditor = dynamic(() => import("./website-source-editor"), {ssr: false, loading: () => <p role="status">Opening code editor…</p>});
 import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
@@ -77,6 +78,8 @@ import {
   Users,
   MessageSquareText,
   GitCompareArrows,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { clearAccountLocalData } from "@/lib/account-local-data";
@@ -1132,6 +1135,8 @@ type WebsiteSource = NonNullable<ArtifactContent["websiteSource"]>;
 /** The files the in-browser preview compiles: the project without its package manifests. */
 const previewFiles = (source: WebsiteSource | undefined) => Object.fromEntries((source?.files ?? [])
   .filter(file => file.path !== "package.json" && file.path !== "package-lock.json").map(file => [file.path, file.content]));
+/** Device-local editor preference: whether the desktop conversation column is hidden. */
+const CHAT_HIDDEN_KEY = "makeborne.editor-chat-hidden.v1";
 const previewAssets = (source: WebsiteSource | undefined) => source?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? [];
 export function CloudEditor({
   accountId,
@@ -1200,6 +1205,32 @@ export function CloudEditor({
   const [removedSection, setRemovedSection] = useState<RemovedAccountSection | null>(null);
   const [removedBlock, setRemovedBlock] = useState<RemovedAccountBlock | null>(null);
   const [inspectedVersion, setInspectedVersion] = useState<ArtifactVersion | null>(null);
+  // Desktop: the conversation can be hidden so the preview takes the full width (remembered on this device; phones keep their sheet).
+  // The editor only mounts in the browser, after the project has loaded, so the preference is read on first render.
+  const [chatHidden, setChatHidden] = useState(() => { try { return typeof window !== "undefined" && localStorage.getItem(CHAT_HIDDEN_KEY) === "1"; } catch { return false; } });
+  const chatToggle = useRef<HTMLButtonElement>(null);
+  const toggleChat = useCallback(() => setChatHidden(hidden => {
+    const next = !hidden;
+    try { localStorage.setItem(CHAT_HIDDEN_KEY, next ? "1" : "0"); } catch { /* a convenience only */ }
+    // Hiding the chat while typing in it would leave focus nowhere visible.
+    if (next && document.activeElement?.closest(".workbench-layout > :is(.build-conversation, .lb)")) chatToggle.current?.focus();
+    return next;
+  }), []);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "." || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.defaultPrevented) return;
+      event.preventDefault(); toggleChat();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleChat]);
+  const skipTo = (target: "stage" | "message") => (event: { preventDefault(): void }) => {
+    event.preventDefault();
+    if (target === "message") {
+      if (chatHidden) toggleChat();
+      window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".workbench-layout > :is(.build-conversation, .lb) textarea:not([disabled])")?.focus());
+    } else document.getElementById("editor-stage")?.focus();
+  };
   const [comparing, setComparing] = useState<{ from: number; to: number } | null>(null);
   // Personal checkpoints (labels only) and a request to open a file at a line in Code (audit M11).
   const checkpoints = useVersionCheckpoints({ accountId, workspaceId, artifactId: artifact.id });
@@ -1646,6 +1677,8 @@ export function CloudEditor({
   </section>;
   return (
     <section className="cloud-editor workspace-workbench cloud-workbench">
+      <a className="studio-skip-link" href="#editor-stage" onClick={skipTo("stage")}>Skip to the preview</a>
+      <a className="studio-skip-link" href="#editor-stage" onClick={skipTo("message")}>Skip to the message box</a>
       <div className="editor-heading cloud-workbench-heading">
         <button
           className="icon-button"
@@ -1679,7 +1712,7 @@ export function CloudEditor({
           {!content ? "Loading…" : busy ? "Saving…" : savePaused ? "Retry save" : "Save now"}
         </button>
       </div>
-      <div className="workbench-layout">
+      <div className={`workbench-layout${chatHidden ? " chat-hidden" : ""}`}>
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
           baseFiles={sourceFiles} baseAssets={previewAssets(content?.websiteSource)}
@@ -1691,9 +1724,11 @@ export function CloudEditor({
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }}
           brandKit={brandKitName} onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
-        <div className="workbench-stage cloud-workbench-stage">
+        <div className="workbench-stage cloud-workbench-stage" id="editor-stage" tabIndex={-1}>
           <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
             <div>
+              <button ref={chatToggle} type="button" className="workbench-chat-hide" aria-pressed={chatHidden} aria-keyshortcuts="Control+Period Meta+Period"
+                title={`${chatHidden ? "Show" : "Hide"} the conversation (Ctrl+.)`} onClick={toggleChat}>{chatHidden ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}<span className="workbench-tab-label">{chatHidden ? "Show chat" : "Hide chat"}</span></button>
               {/* Under 960px the labels collapse to icons (still the accessible name); see cloud-workbench.css. */}
               <button type="button" aria-pressed={view === "preview"} title="Preview" onClick={() => setView("preview")}><Eye size={15} /><span className="workbench-tab-label">Preview</span></button>
               <button type="button" aria-pressed={view === "edit"} title={editor.label} onClick={() => setView("edit")}><PencilLine size={15} /><span className="workbench-tab-label">{editor.label}</span></button>

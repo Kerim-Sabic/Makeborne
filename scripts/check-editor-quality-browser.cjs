@@ -402,6 +402,29 @@ async function main() {
       await page.waitForTimeout(300);
       assert.equal(await panel(page).count(), 0, "outside edit mode, focus selects nothing");
     });
+    await scenario("desktop: Hide chat gives the preview the full width and Ctrl+. brings it back; skip links reach the preview and the message box", {}, async page => {
+      await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
+      const conversation = page.locator(".workbench-layout > :is(.build-conversation, .lb)"), stage = page.locator("#editor-stage");
+      const toggle = page.getByRole("button", { name: "Hide chat" });
+      const before = await stage.evaluate(node => node.getBoundingClientRect().width);
+      await conversation.locator("textarea").first().focus();
+      await toggle.click();
+      await conversation.waitFor({ state: "hidden" });
+      assert.ok(await stage.evaluate(node => node.getBoundingClientRect().width) > before + 200, "the preview takes the freed width");
+      assert.equal(await page.getByRole("button", { name: "Show chat" }).getAttribute("aria-pressed"), "true");
+      await page.keyboard.press("Control+Period");
+      await conversation.waitFor({ state: "visible" });
+      const links = page.locator("a.studio-skip-link");
+      assert.deepEqual(await links.allInnerTexts(), ["Skip to the preview", "Skip to the message box"]);
+      await links.nth(0).focus(); await page.keyboard.press("Enter");
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "editor-stage");
+      await page.getByRole("button", { name: "Hide chat" }).click();
+      await links.nth(1).focus(); await page.keyboard.press("Enter");
+      // The message box link shows the chat first when it is hidden.
+      await conversation.waitFor({ state: "visible" });
+      await page.waitForFunction(() => document.activeElement?.tagName === "TEXTAREA");
+      await page.evaluate(() => localStorage.removeItem("makeborne.editor-chat-hidden.v1"));
+    });
   } finally { await browser.close(); server.close(); }
   if (failures.length) { console.log(`\n${failures.length} mounted editor quality checks failed.`); process.exitCode = 1; }
   else console.log(`\nAll mounted editor quality checks passed (${engineLabel}, routed API, nothing built or published).`);
