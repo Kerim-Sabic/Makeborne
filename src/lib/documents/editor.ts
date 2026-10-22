@@ -9,7 +9,7 @@ import { directionOf } from "./directions";
 import { parseBookMarkup, wordCount } from "./book-markup";
 import { CoverCompositionSchema } from "./composition-schema";
 import { imageSupport } from "./compose-image";
-import { artPlaceholders, artPlanIssues, artTextIssues, textKey, verifiedArt, type ArtRender } from "./slide-art";
+import { artFontsFor, artPlaceholders, artPlanIssues, artTextIssues, textKey, verifiedArt, type ArtRender } from "./slide-art";
 import { bookImageIssues } from "./book-images";
 
 export class DocToolError extends Error {}
@@ -148,7 +148,9 @@ export class DocumentEditor {
     const motif = input.motif ?? this.doc.theme.motif;
     // Art directions compose slides; books keep their motif-based covers.
     const direction = this.doc.kind === "deck" ? input.direction ?? this.doc.theme.direction : undefined;
-    const theme = { palette: input.palette, fonts: input.fonts, mood: input.mood ?? this.doc.theme.mood, imageStyle: input.imageStyle ?? this.doc.theme.imageStyle, ...(motif ? { motif } : {}), ...(direction ? { direction } : {}) };
+    // A full-image deck's editable slides use the pairing mapped from its art system, whatever set_theme names.
+    const artFonts = this.doc.kind === "deck" && this.doc.art?.mode === "image" ? this.doc.art.fonts : undefined;
+    const theme = { palette: input.palette, fonts: artFonts ?? input.fonts, mood: input.mood ?? this.doc.theme.mood, imageStyle: input.imageStyle ?? this.doc.theme.imageStyle, ...(motif ? { motif } : {}), ...(direction ? { direction } : {}) };
     const issues = themeIssues(theme);
     if (issues.length) throw new DocToolError(`Palette contrast is too low: ${issues.join(" ")} Adjust the colors and call set_theme again.`);
     this.commit({ ...this.doc, theme } as DocumentSource);
@@ -157,8 +159,11 @@ export class DocumentEditor {
   setDeckDetails(input: z.infer<typeof DeckDetails>) {
     const deck = this.deck();
     const mode = input.slide_mode ?? deck.art?.mode;
-    const art = mode ? { mode, system: input.art_system ?? deck.art?.system ?? "", renders: deck.art?.renders ?? [] } : undefined;
-    this.commit({ ...deck, title: input.title, subtitle: input.subtitle, author: input.author, ...(art ? { art } : {}) });
+    const system = input.art_system ?? deck.art?.system ?? "";
+    // Editable slides of a full-image deck set their live text in the bundled faces closest to the art system's type.
+    const fonts = mode === "image" && system ? artFontsFor(system, deck.theme.fonts) : deck.art?.fonts;
+    const art = mode ? { mode, system, ...(fonts ? { fonts } : {}), renders: deck.art?.renders ?? [] } : undefined;
+    this.commit({ ...deck, title: input.title, subtitle: input.subtitle, author: input.author, ...(art ? { art } : {}), ...(fonts && mode === "image" ? { theme: { ...deck.theme, fonts } } : {}) });
     return `Presentation details saved.${art?.mode === "image" && !art.system ? " Set art_system (the deck's design system) before rendering slides." : ""}`;
   }
   setBookDetails(input: z.infer<typeof BookDetails>) {

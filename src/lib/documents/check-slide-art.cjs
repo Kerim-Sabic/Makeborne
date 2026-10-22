@@ -6,7 +6,7 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const JSZip = require("jszip"), sharp = require("sharp");
 const { DocumentEditor, emptyDocument, unescapeLiterals } = require("./editor.ts");
 const { composeSlide, H } = require("./slide-scene.ts");
-const { ART_COMPOSITION, artAlt, artPlaceholders, artPlanIssues, artPrompt, artTextIssues, compareSlideText, slideClaimIssues, slideText, textKey, verifiedArt } = require("./slide-art.ts");
+const { ART_COMPOSITION, ART_SAFE_MARGIN_PCT, artAlt, artFontsFor, plateRange, plateScrim, artPlaceholders, artPlanIssues, artPrompt, artTextIssues, compareSlideText, slideClaimIssues, slideText, textKey, verifiedArt } = require("./slide-art.ts");
 const { deckModeFromBrief, bookImagePlanFromBrief } = require("./creation-options.ts");
 const { bookImageIssues, bookImagePlanText, plannedBookImages } = require("./book-images.ts");
 const { fitArtwork, ARTWORK_IMAGE_LIMIT, ARTWORK_TOTAL_LIMIT } = require("./artwork-fit.ts");
@@ -15,6 +15,7 @@ const { deckHtml } = require("./render-deck.ts");
 const { runDocumentBuilder, CHECK_ATTEMPTS } = require("../builder/docs-agent.ts");
 const { RunSpend, memoryGate } = require("../ai/run-spend.ts");
 const { ContextMeter, IMAGE_BLOCK_TOKEN_BOUND } = require("../ai/anthropic-call.ts");
+const { contrast, mix } = require("./theme.ts");
 const { briefWithAnswers, standardQuestion } = require("../builder/brief-questions.ts");
 const { BUILDER_EFFORT, deckArtImageMax, deckArtSlidesFor } = require("../builder/pricing.ts");
 
@@ -128,18 +129,19 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
       toolUse("check_slide", { id: "demand", transcript: transcriptOf(SLIDES[2]), artifacts: ["the 240 column is drawn taller than 320"], verdict: "fail", fix: "Draw the columns in exact proportion." })],
     [toolUse("check_slide", { id: "why", transcript: transcriptOf(SLIDES[1]), artifacts: [], verdict: "pass" }),
       toolUse("check_slide", { id: "demand", transcript: misspell(SLIDES[2]), artifacts: [], verdict: "fail" })],
-    [toolUse("finish", { summary: "Three slides." })],
+    [toolUse("check_image", { name: "plate-demand", artifacts: [], verdict: "pass" }), toolUse("finish", { summary: "Three slides." })],
     [toolUse("finish", { summary: "Three slides: two full images, one editable fallback." })],
   ]);
   const result = await run(editor, anthropic, images);
 
   await check("text gate: a correct render passes; a misspelling is regenerated once and passes; a second failure falls back to live text", () => {
     assert.equal(result.finished, true);
-    assert.deepEqual(result.checks.map(entry => `${entry.id}:${entry.attempt}:${entry.outcome}`).sort(), ["cover:1:passed", "demand:1:retry", "demand:2:fallback", "why:1:retry", "why:2:passed"]);
+    assert.deepEqual(result.checks.map(entry => `${entry.id}:${entry.attempt}:${entry.outcome}`).sort(), ["cover:1:passed", "demand:1:retry", "demand:2:fallback", "plate-demand:1:passed", "why:1:retry", "why:2:passed"]);
     assert.ok(result.checks.find(entry => entry.id === "why" && entry.outcome === "retry").problems.some(problem => /missing or misspelled/.test(problem)), "the programmatic comparison catches a misspelling the model called a pass");
     const renders = Object.fromEntries(editor.doc.art.renders.map(entry => [entry.slide, entry]));
     assert.deepEqual([renders.cover.outcome, renders.cover.attempts, renders.why.outcome, renders.why.attempts, renders.demand.outcome, renders.demand.attempts], ["passed", 1, "passed", 2, "fallback", 2]);
-    assert.equal(images.log.prompts.length, 5, "three first attempts and two regenerations, no more");
+    assert.equal(images.log.prompts.length, 6, "three first attempts, two regenerations and one plate for the fallback slide, no more");
+    assert.match(images.log.prompts[5], /text-free background plate[\s\S]*RESERVED AREA: from \d+% to \d+% across[\s\S]*Absolutely no text/, "the plate reserves the live text's area");
     assert.ok(images.log.prompts[3].includes("CORRECTION") || images.log.prompts[4].includes("CORRECTION"));
     assert.ok(images.log.prompts.slice(3).some(prompt => /missing or misspelled/.test(prompt)), "the corrected prompt names the misspelling");
     assert.ok(images.log.prompts.slice(3).some(prompt => /exact proportion/.test(prompt)), "the model's fix reaches the corrected prompt");
@@ -160,6 +162,12 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.equal(composeSlide(deck, deck.slides[0], 0, 3).composition, ART_COMPOSITION);
     assert.equal(composeSlide(deck, deck.slides[1], 1, 3).composition, ART_COMPOSITION);
     assert.notEqual(composeSlide(deck, deck.slides[2], 2, 3).composition, ART_COMPOSITION, "fallback: live text");
+    const plated = composeSlide(deck, deck.slides[2], 2, 3);
+    assert.equal(deck.art.renders.find(entry => entry.slide === "demand").plate, "plate-demand", "the checked plate is recorded");
+    assert.match(plated.composition, /^plate-/);
+    assert.deepEqual([plated.prims[0].k, plated.prims[0].name, plated.prims[0].w], ["image", "plate-demand", 1280], "the plate is full-bleed behind the live layout");
+    assert.equal(deck.art.fonts, "newsreader", "the art system's 'high-contrast editorial serif' maps to the bundled Newsreader pairing");
+    assert.equal(deck.theme.fonts, "newsreader", "and every editable slide uses it");
     assert.ok(composeSlide(deck, deck.slides[2], 2, 3).prims.some(prim => prim.k === "text" && prim.text.replace(/\n/g, " ").includes("Demand doubles")));
     const copy = new DocumentEditor(deck);
     copy.apply("write_slide", { slide: { ...SLIDES[1], title: "Evening riders want quiet crossings" } });
@@ -174,7 +182,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     const html = deckHtml(deck, { "art-cover": "data:image/png;base64,AAAA", "art-why": "data:image/png;base64,AAAA" }, "print");
     assert.ok(html.includes(`alt="${artAlt(deck.slides[0]).replace(/"/g, "&quot;")}"`));
     assert.ok(html.includes("left:0.0000%;top:0.0000%;width:100.0000%;height:100.0000%"));
-    const pptx = await deckPptx(deck, { "art-cover": bytes, "art-why": bytes });
+    const pptx = await deckPptx(deck, { "art-cover": bytes, "art-why": bytes, "plate-demand": bytes });
     const zip = await JSZip.loadAsync(pptx);
     const slide1 = await zip.file("ppt/slides/slide1.xml").async("string");
     assert.match(slide1, /<p:pic>/);
@@ -186,6 +194,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.ok(notes.some(xml => xml.includes("Slide text: Night crossings for Harbour Light")), "speaker notes start with the slide's exact words");
     const slide3 = await zip.file("ppt/slides/slide3.xml").async("string");
     assert.ok(!/<p:pic>[\s\S]*Image art-demand/.test(slide3) && slide3.includes("Demand doubles"), "the fallback slide is native editable text");
+    assert.match(slide3, /name="Image plate-demand"/, "over its plate as a picture");
   });
 
   await check("render_slides refuses consecutive repeats and wordy slides before any image is paid for", async () => {
@@ -198,7 +207,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
       [toolUse("finish", { summary: "x" })], [toolUse("finish", { summary: "x" })],
     ]);
     await run(local, fake, pictures);
-    assert.equal(pictures.log.prompts.length, 0);
+    assert.equal(pictures.log.prompts.filter(prompt => !/background plate/.test(prompt)).length, 0, "no slide render was paid for");
     const reply = JSON.stringify(fake.log.streams[2].messages.at(-1));
     assert.match(reply, /never repeat a layout on consecutive slides/);
     assert.match(reply, /too much text for one image/);
@@ -229,7 +238,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
       [toolUse("finish", { summary: "x" })], [toolUse("finish", { summary: "x" })],
     ]);
     await run(local, fake, pictures, { request: D02 });
-    assert.equal(pictures.log.prompts.length, 0, "no image for a slide with an unsupported claim");
+    assert.equal(pictures.log.prompts.filter(prompt => !/background plate/.test(prompt)).length, 0, "no slide render for a slide with an unsupported claim");
     assert.match(JSON.stringify(fake.log.streams[2].messages.at(-1)), /was not rendered: .*raised/);
     const render = local.doc.art.renders.find(entry => entry.slide === "ask");
     assert.equal(render.outcome, "fallback");
@@ -250,10 +259,28 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
       [toolUse("render_slides", { ids: ["team"] })], [toolUse("finish", { summary: "x" })], [toolUse("finish", { summary: "x" })],
     ]);
     await run(local, fake, pictures, { request: D02 });
-    assert.equal(pictures.log.prompts.length, 0);
+    assert.equal(pictures.log.prompts.length, 1, "no slide render; one text-free plate");
+    assert.match(pictures.log.prompts[0], /text-free background plate/);
     assert.equal(local.doc.art.renders.find(entry => entry.slide === "team").outcome, "fallback");
     assert.notEqual(composeSlide(local.doc, local.doc.slides[0], 0, 1).composition, ART_COMPOSITION, "drawn as editable text");
     assert.ok(composeSlide(local.doc, local.doc.slides[0], 0, 1).prims.some(prim => prim.k === "text" && prim.text.includes("[Founder names and roles]")), "with the field the client can fill in");
+  });
+
+  await check("editable slides of a full-image deck: art-system fonts, text kept at 4.5:1 over the plate, safe margins in the prompt", () => {
+    assert.equal(artFontsFor("Condensed DIN-style headlines, a clean sans for body", "editorial"), "archivo");
+    assert.equal(artFontsFor("Titles in Fraunces, sentence case; Inter for labels", "editorial"), "fraunces");
+    assert.equal(artFontsFor("A characterful ink-trap grotesk for titles", "editorial"), "bricolage");
+    assert.equal(artFontsFor("No type notes here", "geist"), "geist", "nothing to map: keep the theme's pairing");
+    const calm = { luma: Array(64).fill(246), shade: Array(64).fill(236) }, busy = { luma: Array(64).fill(250), shade: Array(64).fill(40) };
+    const box = { x: 100, y: 100, w: 600, h: 120 };
+    assert.equal(plateScrim("#14181F", "#F6F3EE", plateRange(calm, box)), 0, "dark text on a calm light field needs no scrim");
+    const alpha = plateScrim("#14181F", "#F6F3EE", plateRange(busy, box));
+    assert.ok(alpha > 0.5, `a busy area gets a scrim (${alpha})`);
+    assert.ok(contrast("#14181F", mix("#282828", "#F6F3EE", alpha)) >= 4.5 && contrast("#14181F", mix("#FAFAFA", "#F6F3EE", alpha)) >= 4.5, "and the text reaches 4.5:1 over its darkest and brightest pixels");
+    const prompt = artPrompt({ ...editor.doc }, editor.doc.slides[0]);
+    assert.match(prompt, /top 14% and bottom 14% of the canvas hold no words at all/);
+    assert.match(prompt, /keeps 6\.5% clear above the first line/);
+    assert.equal(ART_SAFE_MARGIN_PCT, 6.5);
   });
 
   await check("the decoder fixes the live b01 caption (c0182ba)", () => {

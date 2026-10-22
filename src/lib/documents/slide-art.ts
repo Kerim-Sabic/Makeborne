@@ -1,8 +1,8 @@
-import type { Deck, Slide, SlideFrame } from "./schema";
-import { FONTS } from "./theme";
+import type { Deck, FontPairing, Slide, SlideFrame } from "./schema";
+import { FONTS, contrast, mix } from "./theme";
 import { directionOf } from "./directions";
 import { formatValue } from "./chart-svg";
-import { W, H, type SlideScene } from "./scene-kit";
+import { W, H, type Prim, type RectPrim, type SlideScene } from "./scene-kit";
 
 /** Full-image slides (owner, Kerim, 22 Oct 2026: "for presentations i want each slide full image gen ... each slide
  * fully unique nice modern not looking ai slop and text also generated"). Each slide of a deck in image mode is one
@@ -17,6 +17,9 @@ export const ART_COMPOSITION = "full-image";
 export const ART_SOURCE = { width: 1536, height: 1024 } as const;
 export const ART_CROP = { left: 0, top: 80, width: 1536, height: 864 } as const;
 /** Image slides read in seconds and image models misspell long text: these are the hard limits a render needs. */
+/** Clear space on the finished slide above the first line of text and below the last (the gate enforces it), and the
+ * same margin on the 1536×1024 canvas the prompt describes: 80 px cropped + 6.5% of 864 px ≈ 136 px ≈ 14%. */
+export const ART_SAFE_MARGIN_PCT = 6.5, ART_CANVAS_MARGIN_PCT = 14;
 export const ART_TITLE_WORDS = 10, ART_BODY_WORDS = 35, ART_TARGET_TITLE = 8, ART_TARGET_BODY = 25;
 
 export const FRAME_NOTES: Record<SlideFrame, string> = {
@@ -112,12 +115,101 @@ export function verifiedArt(deck: DeckLike, slide: Slide): string | null {
   return deck.assets.some(asset => asset.name === render.image) ? render.image : null;
 }
 
-/** The scene of a verified full-image slide: the picture, full-bleed. Its words are the picture's description. */
-export function artScene(deck: DeckLike & Pick<Deck, "theme">, slide: Slide): SlideScene | null {
+/** The scene of a full-image deck's slide: a verified render, the picture full-bleed (its words are its description);
+ * or, for a slide kept as editable text that has a checked plate, the editable layout (`live`) set over the plate in
+ * the deck's art direction. Null: the editable layout as usual. */
+export function artScene<D extends DeckLike & Pick<Deck, "theme">>(deck: D, slide: Slide, live?: (deck: D) => SlideScene): SlideScene | null {
   const image = verifiedArt(deck, slide);
-  if (!image) return null;
-  return { background: deck.theme.palette.dark, composition: ART_COMPOSITION, issues: [],
+  if (image) return { background: deck.theme.palette.dark, composition: ART_COMPOSITION, issues: [],
     prims: [{ k: "image", x: 0, y: 0, w: W, h: H, name: image, alt: artAlt(slide), crop: "center" }] };
+  const render = deck.art?.mode === "image" ? deck.art.renders.find(entry => entry.slide === slide.id && entry.outcome === "fallback") : undefined;
+  const plate = render?.plate ? deck.assets.find(asset => asset.name === render.plate) : undefined;
+  if (!plate || !live) return null;
+  return plateScene(live({ ...deck, art: undefined }), plate);
+}
+
+export const PLATE_COMPOSITION = "plate";
+/** WCAG AA for the live text set over a plate. */
+export const PLATE_CONTRAST = 4.5;
+const gray = (value: number) => `#${Math.round(value).toString(16).padStart(2, "0").repeat(3)}`.toUpperCase();
+type Box = { x: number; y: number; w: number; h: number };
+/** The plate's brightest and darkest pixels under a box (the plate fills the 16:9 slide; luma and shade are 8×8 grids of it). */
+export function plateRange(plate: { luma?: number[]; shade?: number[] }, box: Box) {
+  const cell = (value: number, size: number) => Math.max(0, Math.min(7, Math.floor(value / size * 8)));
+  const u0 = cell(box.x, W), u1 = cell(box.x + box.w - 1e-6, W), v0 = cell(box.y, H), v1 = cell(box.y + box.h - 1e-6, H);
+  let bright = 0, dark = 255;
+  for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) { bright = Math.max(bright, plate.luma?.[v * 8 + u] ?? 255); dark = Math.min(dark, plate.shade?.[v * 8 + u] ?? 0); }
+  return { bright, dark };
+}
+/** Opacity of a `ground` scrim behind text of `color` so it reaches PLATE_CONTRAST over every pixel of the plate under it; 0 when none is needed. */
+export function plateScrim(color: string, ground: string, range: { bright: number; dark: number }) {
+  for (const alpha of [0, 0.55, 0.7, 0.8, 0.88, 0.94, 1]) {
+    if ([range.bright, range.dark].every(value => contrast(color, mix(gray(value), ground, alpha)) >= PLATE_CONTRAST)) return alpha;
+  }
+  return 1;
+}
+/** The editable layout over its plate: full-canvas colour fields give way to the plate, and every text or chart that is
+ * not already on an opaque panel gets a scrim of its own ground at the opacity its contrast needs (measured from the
+ * plate's luma and shade grids, the same rule as text over slide images in compose-image.ts). */
+function plateScene(scene: SlideScene, plate: { name: string; luma?: number[]; shade?: number[] }): SlideScene {
+  const full = (prim: Prim) => prim.k === "rect" && !prim.noFill && (prim.opacity ?? 1) >= 0.95 && prim.w * prim.h >= W * H * 0.95;
+  const ground = (scene.prims.find(full) as RectPrim | undefined)?.fill ?? scene.background;
+  const panels: Box[] = [];
+  const prims: Prim[] = [{ k: "image", x: 0, y: 0, w: W, h: H, name: plate.name, alt: "", crop: "center" }];
+  for (const prim of scene.prims) {
+    if (full(prim)) continue;
+    if (prim.k === "rect" && !prim.noFill && (prim.opacity ?? 1) >= 0.95 && !prim.fade) panels.push(prim);
+    if (prim.k === "text" || prim.k === "chart") {
+      const onPanel = panels.some(panel => prim.x >= panel.x - 1 && prim.y >= panel.y - 1 && prim.x + prim.w <= panel.x + panel.w + 1 && prim.y + prim.h <= panel.y + panel.h + 1);
+      const color = prim.k === "text" ? prim.color : prim.colors.ink;
+      const pad = 14, box = { x: Math.max(0, prim.x - pad), y: Math.max(0, prim.y - pad), w: Math.min(W, prim.w + 2 * pad), h: Math.min(H, prim.h + 2 * pad) };
+      const alpha = onPanel ? 0 : plateScrim(color, ground, plateRange(plate, box));
+      if (alpha > 0) prims.push({ k: "rect", ...box, fill: ground, opacity: alpha, radius: 6 });
+    }
+    prims.push(prim);
+  }
+  return { ...scene, prims, composition: `${PLATE_COMPOSITION}-${scene.composition ?? "layout"}` };
+}
+
+/** The prompt for a text-free plate behind an editable slide: same design system and palette, the area where the live
+ * text goes left as a calm, nearly plain field. `text` is that area on the slide (px of the 1280×720 canvas). */
+export function platePrompt(deck: Pick<Deck, "theme" | "slides" | "title"> & { art?: Deck["art"] }, slide: Slide, text: Box, fix?: string) {
+  const index = deck.slides.findIndex(entry => entry.id === slide.id), total = deck.slides.length;
+  const { palette, imageStyle } = deck.theme;
+  const ground = slide.tone === "dark" ? palette.dark : slide.tone === "accent" ? palette.accent : palette.background;
+  // Slide px to canvas %: the 1536×1024 canvas is cropped to the slide's 1536×864 band starting 80 px down.
+  const pctX = (x: number) => Math.round(x / W * 100), pctY = (y: number) => Math.round((ART_CROP.top + y / H * ART_CROP.height) / ART_SOURCE.height * 100);
+  return [
+    `A text-free background plate for slide ${index + 1} of ${total} of the presentation "${deck.title}": the artwork behind a slide whose words are set separately as live text. It belongs to the same deck as the other slides.`,
+    `DECK DESIGN SYSTEM (the same on every slide): ${deck.art?.system ?? ""}`,
+    `Palette: ground ${ground}, surface ${palette.surface}, ink ${palette.ink}, accent ${palette.accent}, second accent ${palette.accent2}, dark ${palette.dark}.${imageStyle ? ` Imagery: ${imageStyle}.` : ""}`,
+    `RESERVED AREA: from ${pctX(text.x)}% to ${pctX(text.x + text.w)}% across and from ${pctY(text.y)}% to ${pctY(text.y + text.h)}% down the canvas the slide's text will be set. Keep that area a calm, nearly plain field of ${ground} with at most a faint paper grain: no objects, lines, patterns or strong tone changes inside it. Put the imagery, the recurring motif and any texture in the rest of the canvas, quietly, so it frames the text.`,
+    "Absolutely no text, letters, numbers, labels, logos, charts, tables, icons or user interface anywhere. The top 8% and bottom 8% of the canvas are cropped away: continue the background there.",
+    "Avoid the AI look: no oversaturated colour, HDR glow, lens flare, plastic or posed people, clip-art or random gradients.",
+    fix ? `CORRECTION — the previous attempt had these problems; fix them: ${fix}` : "",
+  ].filter(Boolean).join("\n\n");
+}
+
+/** The pairing for a deck's editable slides, from the art system's type description: the bundled faces closest to it,
+ * named first, then by style. The same pairing is recorded on deck.art and used for every editable slide. */
+export function artFontsFor(system: string, current: FontPairing): FontPairing {
+  const text = system.toLowerCase();
+  const named: [RegExp, FontPairing][] = [[/fraunces/, "fraunces"], [/newsreader/, "newsreader"], [/playfair/, "playfair"], [/instrument serif/, "instrument"], [/archivo/, "archivo"],
+    [/bricolage/, "bricolage"], [/space grotesk/, "space-grotesk"], [/\bsora\b/, "sora"], [/\bgeist\b/, "geist"], [/garamond/, "garamond"]];
+  const styles: [RegExp, FontPairing][] = [
+    [/condensed|compressed|narrow|din\b|industrial|poster grotesk/, "archivo"],
+    [/ink[- ]trap|quirky|characterful (sans|grotesk)/, "bricolage"],
+    [/didone|fashion|luxury serif|hairline serif/, "playfair"],
+    [/soft serif|warm serif|wonky|chunky serif/, "fraunces"],
+    [/high[- ]contrast (editorial )?serif|editorial serif|text serif|newspaper|book serif|literary/, "newsreader"],
+    [/tall (display )?serif|display serif/, "instrument"],
+    [/techno|monospace|mono labels|grotesk with (a )?technical/, "space-grotesk"],
+    [/wide geometric|geometric sans|futur/, "sora"],
+    [/swiss|neo-grotesk|neutral grotesk|precise sans/, "geist"],
+    [/serif/, "newsreader"],
+    [/grotesk|sans/, "geist"],
+  ];
+  return (named.find(([pattern]) => pattern.test(text)) ?? styles.find(([pattern]) => pattern.test(text)))?.[1] ?? current;
 }
 
 /** Alt text and searchable text of a full-image slide: its exact words in reading order. */
@@ -178,7 +270,7 @@ export function artPrompt(deck: Pick<Deck, "theme" | "slides" | "title"> & { art
     `Palette: background ${palette.background}, surface ${palette.surface}, ink ${palette.ink}, muted ${palette.muted}, accent ${palette.accent}, second accent ${palette.accent2}, dark ${palette.dark}. Typography: ${pairing.label} style (${pairing.voice}); headings in the heading face, everything else in the body face, set crisply with real kerning.${imageStyle ? ` Imagery: ${imageStyle}.` : ""}`,
     `THIS SLIDE: ${ROLE_GUIDE[slide.layout] ?? slide.layout}. Composition "${slide.art?.frame ?? "split"}" — ${FRAME_NOTES[slide.art?.frame ?? "split"]}. ${slide.art?.brief ?? ""} Ground: ${ground}.`,
     `TEXT: render exactly these words, each once, spelled exactly letter for letter, with their capitalisation and punctuation, and no other words, letters or numbers anywhere:\n${text}${chart}`,
-    "Keep every word and every important element inside the central 84% of the height: leave the top 8% and bottom 8% of the canvas as plain continuation of the background (the slide is cropped to 16:9). Keep text at least 5% from the left and right edges.",
+    `SAFE MARGINS: the top ${ART_CANVAS_MARGIN_PCT}% and bottom ${ART_CANVAS_MARGIN_PCT}% of the canvas hold no words at all, not even a small label or eyebrow (the top and bottom 8% are cropped away to make the 16:9 slide, and the finished slide keeps ${ART_SAFE_MARGIN_PCT}% clear above the first line and below the last); continue the background there. Keep text at least 6% from the left and right edges.`,
     "Avoid the AI look: no oversaturated colour, no HDR glow, no lens flare, no plastic-looking or posed stock people, no clip-art or emoji icons, no random gradients or bokeh, no fake user interface, no watermark, logo, page number, signature or lorem ipsum. Photographs look like real editorial photography; illustration is one consistent hand.",
     fix ? `CORRECTION — the previous attempt of this slide had these problems; fix them: ${fix}` : "",
   ].filter(Boolean).join("\n\n");

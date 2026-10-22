@@ -16,8 +16,9 @@ import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
 import { imageCallBoundMicrousd, type ImageQuality } from "../ai/prices";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BOOK_SYSTEM, DECK_ART_SYSTEM, DECK_SYSTEM } from "./docs-prompt";
-import { imageLuma } from "../documents/image-luma";
-import { ART_CROP, ART_SOURCE, artAlt, artPrompt, artTextIssues, artPlaceholders, compareSlideText, describeComparison, slideClaimIssues, slideNumerals, slideText, textKey, verifiedArt } from "../documents/slide-art";
+import { imageLuma, imageShade } from "../documents/image-luma";
+import { composeSlide } from "../documents/slide-scene";
+import { ART_CROP, ART_SAFE_MARGIN_PCT, ART_SOURCE, artAlt, platePrompt, artPrompt, artTextIssues, artPlaceholders, compareSlideText, describeComparison, slideClaimIssues, slideNumerals, slideText, textKey, verifiedArt } from "../documents/slide-art";
 import { bookImagePlanText, bookPlan, plannedBookImages } from "../documents/book-images";
 
 /** Events streamed to the chat. Shares the website builder's text/status/
@@ -163,8 +164,11 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   const claimStrikes = new Map<string, number>();
   /** Everything the client gave (brief, answers, files as text, the current document): the source every slide claim must trace to. */
   const source = [run.request, run.context, ...run.attachments.flatMap(block => block.type === "document" && block.source.type === "text" ? [block.source.data] : block.type === "text" ? [block.text] : [])].join("\n");
-  /** Generated images waiting for check_image, by name. */
-  const pendingImages = new Map<string, { input: z.infer<typeof DocToolInputs.generate_image>; attempts: number }>();
+  /** Generated images and slide plates waiting for check_image, by name: what a pass keeps, a failure regenerates, a second failure drops. */
+  type Checked = { ok: boolean; content: string | (BetaTextBlockParam | BetaImageBlockParam)[] };
+  const pendingImages = new Map<string, { attempts: number; accept: () => void; retry: (fix: string) => Promise<Checked>; drop: () => void }>();
+  /** Slides that just became editable text in a full-image deck: each gets a text-free plate in the deck's art direction. */
+  const platesWanted: string[] = [];
 
   const renders = imageLimit > 0 && art ? Math.min(imageBudget, DECK_ART_IMAGE_CAP) : 0;
   const imageLine = art
@@ -234,7 +238,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   async function renderContent(id: string, bytes: Buffer, attempt: number): Promise<(BetaTextBlockParam | BetaImageBlockParam)[]> {
     const slide = slideOf(id)!;
     const words = slideText(slide).map(line => `- ${line.role}: "${line.text}"`).join("\n");
-    return [{ type: "text", text: `Slide ${slideNumber(id)} (${id}), attempt ${attempt} of ${CHECK_ATTEMPTS}. It must show exactly these words and nothing else:\n${words}\nLook at the image and call check_slide for "${id}": transcript = every word and number you can actually read, verbatim with its exact capitalisation (with any misspelling, missing or extra letter, or odd capital), in reading order; artifacts = any garbled or malformed glyph, stray or extra text, cut-off text, text closer than 5% to an edge, poor contrast, warped or plastic people, oversaturation, HDR glow, clip-art icons, random gradients, or a composition that repeats its neighbour; verdict pass only if every word is exactly right and it looks like professional editorial design.` },
+    return [{ type: "text", text: `Slide ${slideNumber(id)} (${id}), attempt ${attempt} of ${CHECK_ATTEMPTS}. It must show exactly these words and nothing else:\n${words}\nLook at the image and call check_slide for "${id}": transcript = every word and number you can actually read, verbatim with its exact capitalisation (with any misspelling, missing or extra letter, or odd capital), in reading order; artifacts = any garbled or malformed glyph, stray or extra text, cut-off text, any word or label closer than ${ART_SAFE_MARGIN_PCT}% of the slide height to the top or bottom edge or closer than 5% to a side, poor contrast, warped or plastic people, oversaturation, HDR glow, clip-art icons, random gradients, or a composition that repeats its neighbour; verdict pass only if every word is exactly right and it looks like professional editorial design.` },
       await visionBlock(bytes)];
   }
   /** Start one slide render; resolves to the tool-result blocks (the image to check, or why it failed). */
@@ -261,6 +265,38 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     run.editor.recordRender({ slide: id, frame: slide.art?.frame, attempts, outcome: "fallback", problems: problems.slice(0, 6).map(item => item.slice(0, 300)) });
     record({ target: "slide", id, attempt: attempts, outcome: "fallback", problems });
     run.emit({ type: "document", document: run.editor.doc, focus: id });
+    if (!platesWanted.includes(id)) platesWanted.push(id);
+  }
+  /** A text-free plate for an editable slide: the same art system, the live text's area kept calm. Checked like book images. */
+  async function makePlate(id: string, attempt: number, fix?: string): Promise<(BetaTextBlockParam | BetaImageBlockParam)[]> {
+    const doc = deck(), slide = slideOf(id);
+    if (!doc || !slide || !artModel || !imageClient) return [];
+    const index = doc.slides.indexOf(slide), live = composeSlide({ ...doc, art: undefined }, slide, index, doc.slides.length);
+    const boxes = live.prims.filter(prim => prim.k === "text" || prim.k === "chart" || prim.k === "rect" && prim.w * prim.h < 1280 * 720 * 0.9).map(prim => prim as { x: number; y: number; w: number; h: number });
+    const area = boxes.length ? { x: Math.min(...boxes.map(b => b.x)), y: Math.min(...boxes.map(b => b.y)), w: 0, h: 0 } : { x: 80, y: 80, w: 1120, h: 560 };
+    if (boxes.length) { area.w = Math.max(...boxes.map(b => b.x + b.w)) - area.x; area.h = Math.max(...boxes.map(b => b.y + b.h)) - area.y; }
+    const prompt = platePrompt(doc, slide, area, fix);
+    const started = await startImage(prompt, IMAGE_SIZES.landscape, artModel, ART_QUALITY);
+    if ("error" in started) return [{ type: "text", text: `No background plate for slide ${slideNumber(id)}: ${started.error} It keeps the plain editable layout.` }];
+    const name = `plate-${id}`.slice(0, 49).replace(/-+$/, "");
+    run.emit({ type: "image_start", name, prompt: `Background for slide ${slideNumber(id)}: ${slide.title}` });
+    try {
+      const bytes = await cropSlide(await started.job.done);
+      const [asset, luma, shade] = await Promise.all([storeImage({ name, prompt, model: artModel }, bytes), imageLuma(bytes), imageShade(bytes)]);
+      run.editor.addAsset({ name, id: asset.id, aspect: "landscape", alt: "", prompt: prompt.slice(0, 3000), luma, shade });
+      pendingImages.set(name, { attempts: attempt,
+        accept: () => { const render = deck()?.art?.renders.find(entry => entry.slide === id && entry.outcome === "fallback"); if (render) run.editor.recordRender({ ...render, plate: name }); run.emit({ type: "document", document: run.editor.doc, focus: id }); },
+        retry: async correction => { const content = await makePlate(id, attempt + 1, correction); return { ok: content.length > 0, content: content.length ? content : "The plate could not be regenerated." }; },
+        drop: () => run.editor.dropImage(name) });
+      return [{ type: "text", text: `Slide ${slideNumber(id)} (${id}) stays editable text; this is its text-free background plate in the deck's art direction (attempt ${attempt} of ${CHECK_ATTEMPTS}). The live text will sit over the calm area. Call check_image for "${name}": artifacts = any letters, numbers or pseudo-text, a busy or patterned area where the text goes, a look that does not match the deck's other slides, or AI artifacts; verdict pass only if it is a calm, professional background of this deck.` }, await visionBlock(bytes)];
+    } catch {
+      return [{ type: "text", text: `The background plate for slide ${slideNumber(id)} failed at the image service; it keeps the plain editable layout.` }];
+    }
+  }
+  /** Plates for every slide that became editable text since the last call (one image each, within the image budget). */
+  async function platesFor(): Promise<(BetaTextBlockParam | BetaImageBlockParam)[]> {
+    const ids = platesWanted.splice(0).filter(id => deck()?.art?.renders.some(entry => entry.slide === id && entry.outcome === "fallback" && !entry.plate));
+    return (await Promise.all(ids.map(id => makePlate(id, 1)))).flat();
   }
   async function checkSlide(input: z.infer<typeof DocToolInputs.check_slide>): Promise<{ ok: boolean; content: string | (BetaTextBlockParam | BetaImageBlockParam)[] }> {
     const pending = pendingArt.get(input.id), slide = slideOf(input.id);
@@ -291,11 +327,11 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
       pendingArt.delete(input.id);
       const fix = [input.fix, comparison.ok ? "" : `Text errors: ${describeComparison(comparison)}. Spell every word exactly as listed; add no other words.`, input.artifacts.length ? `Visual problems: ${input.artifacts.join("; ")}.` : ""].filter(Boolean).join(" ");
       const content = await renderSlide(input.id, pending.attempts + 1, fix);
-      if (!pendingArt.has(input.id)) { fallback(input.id, pending.attempts, problems); return { ok: true, content: [...content, { type: "text", text: "It is kept as an editable text slide." }] }; }
+      if (!pendingArt.has(input.id)) { fallback(input.id, pending.attempts, problems); return { ok: true, content: [...content, { type: "text", text: "It is kept as an editable text slide." }, ...await platesFor()] }; }
       return { ok: true, content: [{ type: "text", text: `Slide ${slideNumber(input.id)} failed (${problems.join("; ").slice(0, 400)}) and was regenerated with a corrected prompt. Check the new attempt:` }, ...content] };
     }
     fallback(input.id, pending.attempts, problems);
-    return { ok: true, content: `Slide ${slideNumber(input.id)} failed the gate twice (${problems.join("; ").slice(0, 400)}). It is now an editable live-text slide in the deck's art direction, so the deck is never wrong. If it would read better with a text-free photo, you may generate one (generate_image, then check_image) and set it on the slide where its layout allows.` };
+    return { ok: true, content: [{ type: "text", text: `Slide ${slideNumber(input.id)} failed the gate twice (${problems.join("; ").slice(0, 400)}). It is now an editable live-text slide, set over a text-free plate in the deck's art direction, so the deck is never wrong.` }, ...await platesFor()] };
   }
 
   /** One generate_image call: the stored image comes back to the model to check (check_image). */
@@ -311,7 +347,8 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
       run.editor.addAsset({ name: input.name, id: asset.id, aspect: input.aspect, alt: input.alt, prompt: input.prompt, ...(luma ? { luma } : {}) });
       run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id });
       run.emit({ type: "document", document: run.editor.doc });
-      pendingImages.set(input.name, { input, attempts: attempt });
+      pendingImages.set(input.name, { attempts: attempt, accept: () => undefined, retry: correction => generate(input, attempt + 1, correction),
+        drop: () => { run.editor.dropImage(input.name); run.emit({ type: "document", document: run.editor.doc }); } });
       return { ok: true, content: [{ type: "text", text: `Image "${input.name}" is ready (${input.aspect}), attempt ${attempt} of ${CHECK_ATTEMPTS}. Reference it by name. Look at it and call check_image for "${input.name}": artifacts = any garbled pseudo-text or letters, warped hands, faces or objects, plastic or uncanny people, extra limbs, oversaturation, HDR glow, clip-art, random gradients, or a subject that does not do its job (${input.alt.slice(0, 160)}); verdict pass only if it looks like real, professional ${kind === "book" ? "book art" : "editorial imagery"}.` }, await visionBlock(bytes)] };
     } catch {
       return { ok: false, content: `Image generation for "${input.name}" failed. Continue without it (remove the reference).` };
@@ -321,15 +358,15 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     const pending = pendingImages.get(input.name);
     if (!pending) return { ok: false, content: `No image "${input.name}" is waiting for a check.` };
     pendingImages.delete(input.name);
-    if (input.verdict === "pass" && !input.artifacts.length) { record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "passed", problems: [] }); return { ok: true, content: `Image "${input.name}" passed.` }; }
+    if (input.verdict === "pass" && !input.artifacts.length) { pending.accept(); record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "passed", problems: [] }); return { ok: true, content: `Image "${input.name}" passed.` }; }
     const problems = input.artifacts.length ? input.artifacts : ["failed the visual check"];
     if (pending.attempts < CHECK_ATTEMPTS) {
       record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "retry", problems });
-      const result = await generate(pending.input, pending.attempts + 1, [input.fix, problems.join("; ")].filter(Boolean).join(" "));
+      const result = await pending.retry([input.fix, problems.join("; ")].filter(Boolean).join(" "));
       if (pendingImages.has(input.name)) return { ok: true, content: [{ type: "text", text: `Image "${input.name}" failed (${problems.join("; ").slice(0, 300)}) and was regenerated with a corrected prompt.` }, ...(typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : result.content)] };
       // Could not regenerate: the failed image is not kept.
     }
-    run.editor.dropImage(input.name);
+    pending.drop();
     record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "dropped", problems });
     run.emit({ type: "document", document: run.editor.doc });
     return { ok: true, content: `Image "${input.name}" failed its check ${pending.attempts < CHECK_ATTEMPTS ? "and could not be regenerated" : "twice"}; it was removed with every reference to it and the layout closes up around it. Do not reference it again.` };
@@ -453,8 +490,8 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
             if (imagesUsed + started.length >= imageLimitNow()) { refusals.push(`Slide ${slideNumber(id)} was not rendered: this run's render budget is used up; it stays an editable text slide.`); continue; }
             started.push(renderSlide(id, 1));
           }
-          imageJobs.push(Promise.all(started).then(blocks => {
-            const flat = blocks.flat();
+          imageJobs.push(Promise.all(started).then(async blocks => {
+            const flat = [...blocks.flat(), ...await platesFor()];
             if (!flat.length) { fail(refusals.join("\n") || "Nothing to render."); return; }
             ok([...(refusals.length ? [{ type: "text" as const, text: `Not rendered:\n- ${refusals.join("\n- ")}` }] : []), ...flat]);
           }));
@@ -475,15 +512,22 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
         const input = DocToolInputs.finish.parse(finishUse.input);
         const problems = run.editor.problems();
         if (results.some(result => result.is_error)) problems.unshift("A tool failed in this step. Correct that tool input before declaring the document complete.");
+        // Slides the designer left unrendered stay editable text: each gets its plate now, checked before the deck is finished.
+        const doc0 = deck();
+        if (art && doc0?.art && blockedFinishes < 2) for (const slide of doc0.slides) if (!verifiedArt(doc0, slide) && !pendingArt.has(slide.id) && !doc0.art.renders.some(entry => entry.slide === slide.id)) fallback(slide.id, 0, ["not rendered as a full image; kept as an editable text slide"]);
+        const plates = blockedFinishes < 2 ? await platesFor() : [];
         const waiting = [...[...pendingArt.keys()].map(id => `slide ${slideNumber(id)} (check_slide)`), ...[...pendingImages.keys()].map(name => `image "${name}" (check_image)`)];
         // Checks block the first finish; a second finish keeps the deck correct by itself (unchecked renders become editable slides).
         // Claims on slides that stay editable text (placeholders, fallbacks) are checked too, once: they are not rendered, so render_slides never saw them.
         const doc = deck(), claims = art && doc ? doc.slides.flatMap((slide, index) => verifiedArt(doc, slide) ? [] : slideClaimIssues(slide, source).map(claim => `Slide ${index + 1} (${slide.id}): ${claim}.`)) : [];
-        const firstBlock = (waiting.length || claims.length) && blockedFinishes++ === 0;
+        // Checks block up to two finishes (a plate made at the first may still need its check); claims block once.
+        const firstBlock = (waiting.length || claims.length) && blockedFinishes++ < (waiting.length ? 2 : 1);
         if (firstBlock && claims.length) problems.unshift(...claims.slice(0, 6));
         if (firstBlock && waiting.length) problems.unshift(`Check these before finishing: ${waiting.join(", ")}.`);
         if (problems.length) {
-          results.push({ type: "tool_result", tool_use_id: finishUse.id, is_error: true, content: `Not finished yet. Fix these, then call finish again:\n- ${problems.join("\n- ")}` });
+          const text = `Not finished yet. Fix these, then call finish again:\n- ${problems.join("\n- ")}`;
+          // Plates made at this finish come back with it to be checked (one tool result per call).
+          results.push(plates.length ? { type: "tool_result", tool_use_id: finishUse.id, content: [{ type: "text", text }, ...plates] } : { type: "tool_result", tool_use_id: finishUse.id, is_error: true, content: text });
           run.emit({ type: "tool_error", tool: "finish", message: problems[0] });
         } else { summary = input.summary; finished = true; results.push({ type: "tool_result", tool_use_id: finishUse.id, content: "Saved." }); }
       } catch (error) { results.push({ type: "tool_result", tool_use_id: finishUse.id, is_error: true, content: toolMessage("finish", error) }); }

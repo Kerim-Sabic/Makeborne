@@ -195,7 +195,7 @@ export function planDeck(deck: Deck): Planned[] {
 
 export function composeSlide(deck: DeckLike, slide: Slide, index: number, total: number): SlideScene {
   // A full-image slide whose render passed the text gate for its current words (slide-art.ts).
-  const art = artScene(deck, slide);
+  const art = artScene(deck, slide, plain => composeSlide(plain, slide, index, total));
   if (art) return art;
   if (slide.composition && (slide.layout === "cover" || slide.layout === "closing")) return slideCoverScene(deck.theme, slide, deck.assets, deck.author);
   if (deck.slides && deck.slides[index] === slide) return clone(planDeck(deck as Deck)[index].scene);

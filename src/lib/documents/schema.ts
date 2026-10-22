@@ -44,6 +44,8 @@ export const AssetSchema = z.object({
   prompt: z.string().max(3000).default(""),
   /** Measured brightness of the image: an 8×8 grid (row-major) of each cell's 98th-percentile brightest channel, 0–255. Text over the image gets a scrim sized from it; without it the brightest case is assumed. */
   luma: z.array(z.number().int().min(0).max(255)).length(64).optional(),
+  /** The darker counterpart of luma: each cell's 2nd-percentile darkest channel, 0–255 (plates under dark text). */
+  shade: z.array(z.number().int().min(0).max(255)).length(64).optional(),
 }).strict();
 export type DocumentAsset = z.infer<typeof AssetSchema>;
 
@@ -129,10 +131,14 @@ export const SLIDE_MODES = ["image", "live"] as const;
 export const DeckArtSchema = z.object({
   mode: z.enum(SLIDE_MODES).describe("image: every slide is one generated picture that includes its text; live: editable text slides"),
   system: z.string().trim().max(1600).default("").describe("The deck's design system for every generated slide: grid, type style, palette use, photographic or illustrative language, recurring motif"),
+  /** The pairing every editable slide of this deck uses, mapped from the art system's type description (slide-art.ts artFontsFor). */
+  fonts: FontPairingSchema.optional(),
   renders: z.array(z.object({
     slide: ItemId,
     frame: z.enum(SLIDE_FRAMES).optional(),
     image: ImageName.optional(),
+    /** A slide kept as editable text: the checked, text-free background plate in the deck's art direction. */
+    plate: ImageName.optional(),
     /** textKey() of the slide's words the image was verified against. */
     verified: z.string().max(80).optional(),
     attempts: z.number().int().min(0).max(9),
