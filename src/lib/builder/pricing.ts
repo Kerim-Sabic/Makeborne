@@ -40,5 +40,15 @@ export const BUILDER_EFFORT: Record<EffortLevel, { intensity: "low" | "medium" |
   super_high: { intensity: "xhigh", maxTurns: 20, maxImages: 6, ceilingCredits: 140, maxTokens: 96000 },
   ultra: { intensity: "max", maxTurns: 28, maxImages: 8, ceilingCredits: 240, maxTokens: 128000 },
 };
+/** Most images one presentation or book run may place: a 12-slide deck needs about one image per slide, a book a cover and an
+ * opener per chapter. From medium effort up a deck may have one per slide and a book one per chapter plus the cover, at most
+ * DOCUMENT_IMAGE_CAP; light keeps its effort count. Every image is still reserved against the run's spend allowance (the
+ * credit maximum shown before the run), and the document builder also limits images to a third of that allowance. */
+export const DOCUMENT_IMAGE_CAP = 16;
+export function documentImageMax(kind: "deck" | "book", effort: EffortLevel, items: number) {
+  const base = BUILDER_EFFORT[effort].maxImages;
+  if (effort === "light") return base;
+  return Math.max(base, Math.min(DOCUMENT_IMAGE_CAP, kind === "deck" ? items : items + 1));
+}
 /** Smallest balance worth starting a run with. */
 export const MINIMUM_RUN_CREDITS = 2;

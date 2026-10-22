@@ -143,5 +143,20 @@ const imageOf = (scene, name) => scene.prims.find(prim => prim.k === "image" && 
     const xml = await (await JSZip.loadAsync(await deckPptx(deck, {}))).file("ppt/slides/slide1.xml").async("string");
     for (const pic of xml.match(/<p:pic>[\s\S]*?<\/p:pic>/g) ?? []) assert.match(pic, /descr=""><a:extLst><a:ext uri="\{C183D7F6-B498-43B3-948B-1728B52AA6E4\}"><adec:decorative/);
   });
+  await check("an image-led deck may have one image per slide from medium effort (16 at most); a book a cover plus one per chapter", () => {
+    const { documentImageMax, DOCUMENT_IMAGE_CAP, BUILDER_EFFORT } = require("../builder/pricing.ts");
+    assert.equal(DOCUMENT_IMAGE_CAP, 16);
+    assert.equal(documentImageMax("deck", "light", 12), BUILDER_EFFORT.light.maxImages, "light keeps its count");
+    for (const effort of ["medium", "high", "super_high", "ultra"]) {
+      assert.equal(documentImageMax("deck", effort, 12), 12, effort);
+      assert.equal(documentImageMax("deck", effort, 30), 16, `${effort} cap`);
+      assert.equal(documentImageMax("deck", effort, 1), BUILDER_EFFORT[effort].maxImages, `${effort} floor`);
+      assert.equal(documentImageMax("book", effort, 7), 8, `${effort}: cover + 7 openers`);
+    }
+    // The run still bounds images by its spend allowance (a third of it) before this count applies.
+    const agent = fs.readFileSync(require.resolve("../builder/docs-agent.ts"), "utf8");
+    assert.match(agent, /imageBudget = imageModelId \? Math\.max\(0, Math\.floor\(spend\.allowanceMicrousd \/ imageBound \/ 3\)\)/);
+    assert.match(agent, /imagesUsed >= imageLimitNow\(\)/);
+  });
   console.log(`\n${count} slide image checks passed.`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
