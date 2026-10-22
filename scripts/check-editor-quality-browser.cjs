@@ -53,6 +53,8 @@ const websiteSource = appCode => ({ schemaVersion: 1, toolchainId: "react-vite-v
     "src/main.tsx": 'import { createRoot } from "react-dom/client";\nimport App from "./App";\ncreateRoot(document.getElementById("root")!).render(<App />);\n' })
     .sort(([a], [b]) => a < b ? -1 : 1).map(([file, content]) => ({ path: file, content })) });
 const HEADLINES = ["Handmade ceramics", "Handmade ceramics for daily use", "Stoneware made slowly"];
+/** A version whose App.tsx doesn't compile: an unclosed JSX element. */
+const BROKEN = app(HEADLINES[2]).replace("<p>Small-batch stoneware from Leith.</p>", "<p>Small-batch stoneware from Leith.");
 
 /* ---------- Fictional book: two saved versions of a live-built document ---------- */
 const { emptyDocument } = require(path.join(root, "src/lib/documents/editor.ts"));
@@ -67,6 +69,8 @@ const version = (artifact, number, content, summary) => ({ id: versionId(artifac
 const siteVersions = (current = 3, lastCode = null) => Array.from({ length: current }, (_, index) => version(ids.site, index + 1,
   { schemaVersion: 1, kind: "website", title: "Stillform", sections: [], websiteSource: websiteSource(index === current - 1 && lastCode ? lastCode : app(HEADLINES[Math.min(index, 2)])) }, `Saved version ${index + 1}`));
 const bookVersions = () => BOOK_CHAPTERS.map((chapter, index) => version(ids.book, index + 1, { schemaVersion: 1, kind: "book", title: "Field Notes on Clay", sections: [], document: book(chapter) }, `Wrote ${chapter}`));
+/** A save response the scenario releases when it is ready. */
+const deferred = () => { let release; const promise = new Promise(resolve => { release = resolve; }); return { promise, release }; };
 const artifactOf = (id, kind, current) => ({ id, projectId: ids.project, kind, title: kind === "book" ? "Field Notes on Clay" : "Stillform", currentVersion: current, createdAt: "2026-10-10T09:00:00.000Z", updatedAt: "2026-10-20T09:00:00.000Z" });
 
 const fixture = `import React from "react";import{createRoot}from"react-dom/client";import{CloudEditor}from"./src/components/cloud-studio";import{setCloudAccount}from"./src/components/cloud-api";
@@ -215,6 +219,52 @@ async function main() {
       assert.equal(await frame.getByText(`${BOOK_CHAPTERS[1]} begins at the wheel.`).count(), 0, "version 1's own text, not the current version's");
       assert.match(await review.getByRole("group", { name: "Generated outputs from saved version 1" }).innerText(), /v1/);
       assert.equal(await review.getByRole("button", { name: "Restore as new version" }).count(), 1);
+    });
+
+    await scenario("a saved version that doesn't build is named, offers its previous version, and Fix it only drafts a request", { lastCode: BROKEN }, async (page, state) => {
+      const banner = page.getByRole("alert").filter({ hasText: "has a build error" });
+      await banner.waitFor();
+      assert.equal(await banner.locator("strong").innerText(), "Version 3 has a build error");
+      const restore = banner.getByRole("button", { name: "Restore version 2" }), fix = banner.getByRole("button", { name: "Fix it" });
+      assert.match(await page.locator(`#${await restore.getAttribute("aria-describedby")}`).innerText(), /^Restore saves a copy of version 2 as new version 4\. It uses no AI and no credits/);
+      assert.match(await page.locator(`#${await fix.getAttribute("aria-describedby")}`).innerText(), /Nothing is sent until you choose Send/);
+      // Fix it: the request waits in the composer with its maximum; nothing is sent.
+      await fix.click();
+      const composer = page.getByRole("textbox", { name: "Message the builder" });
+      await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message the builder"]')?.value.startsWith("Fix the build error in version 3: "));
+      assert.match(await composer.inputValue(), /^Fix the build error in version 3: .*src\/App\.tsx/);
+      assert.equal(await composer.evaluate(field => field === document.activeElement), true, "the composer takes focus for review");
+      assert.equal(await page.getByRole("button", { name: "Send", exact: true }).isEnabled(), true, "Send is the person's choice");
+      assert.match(await page.locator(".lb-limit").innerText(), /^Up to \d+ credits for this request/);
+      await page.waitForTimeout(500);
+      assert.deepEqual(state.builds, [], "Fix it sent nothing");
+      assert.deepEqual(state.saves, []);
+      // Restore: History's restore, saved as a new version, after one explicit click.
+      await restore.click();
+      await page.waitForFunction(() => window.__notices.some(note => note.startsWith("Version 2 restored into your editor.")));
+      await mainFrame(page).locator("h1", { hasText: HEADLINES[1] }).waitFor();
+      await page.waitForFunction(() => document.querySelector(".editor-heading p")?.textContent.startsWith("Version 4"));
+      assert.equal(state.saves.length, 1);
+      assert.equal(state.saves[0].expectedVersion, 3);
+      assert.deepEqual(state.saves[0].content.websiteSource, state.versions[1].content.websiteSource, "version 2's source, saved as version 4");
+      assert.equal(await page.getByRole("alert").filter({ hasText: "build error" }).count(), 0, "the restored version builds");
+    });
+
+    await scenario("a build error in unsaved edits says so instead of naming the saved version", { lastCode: BROKEN }, async (page, state) => {
+      // An edit in Code that keeps the error, while its save is held open.
+      state.hold = deferred();
+      await page.getByRole("alert").filter({ hasText: "Version 3 has a build error" }).waitFor();
+      await tab(page, "Code");
+      await page.getByRole("button", { name: "src/App.tsx", exact: true }).click();
+      await page.locator(".cm-content").click();
+      await page.keyboard.press("End"); await page.keyboard.type(" ");
+      await tab(page, "Preview");
+      const banner = page.getByRole("alert").filter({ hasText: "build error" });
+      await page.waitForFunction(() => [...document.querySelectorAll('[role="alert"] strong')].some(node => node.textContent === "Your unsaved edits have a build error"));
+      assert.equal(await banner.getByRole("button", { name: "Restore version 2" }).isDisabled(), true, "restoring waits for the save");
+      assert.match(await banner.innerText(), /Finish saving or resolve your current draft before restoring\./);
+      state.hold.release();
+      await page.waitForFunction(() => [...document.querySelectorAll('[role="alert"] strong')].some(node => node.textContent === "Version 4 has a build error"));
     });
   } finally { await browser.close(); server.close(); }
   if (failures.length) { console.log(`\n${failures.length} mounted editor quality checks failed.`); process.exitCode = 1; }

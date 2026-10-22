@@ -43,7 +43,7 @@ const WebsiteSourceEditor = dynamic(() => import("./website-source-editor"), {ss
 import { appendAccountSection, appendAccountBlock, appendAccountImage, moveAccountSection, removeAccountSection, restoreAccountSection, type RemovedAccountSection } from "@/lib/cloud/section-actions";
 import AccountStyleEditor from "./account-style-editor";
 import { prepareVersionRestore } from "@/lib/cloud/version-restore";
-import { restoreEffect } from "@/lib/builder/action-semantics";
+import { fixErrorRequest, restoreEffect } from "@/lib/builder/action-semantics";
 import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type RemovedAccountBlock } from "@/lib/cloud/block-actions";
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
@@ -1593,6 +1593,11 @@ export function CloudEditor({
   // An earlier version opened in History renders from its own saved files, read-only.
   const inspectedSource = inspectedVersion?.content.websiteSource;
   const inspectedFiles = useMemo(() => previewFiles(inspectedSource), [inspectedSource]);
+  // What the website preview shows: the saved version, the unsaved edits on top of it, or builder output (neither).
+  const previewSubject = live ? null : { version: expectedVersion, unsaved: dirty };
+  // A saved version that doesn't build can go back to the one before it, through History's restore.
+  const previousVersion = !live && role !== "reviewer" ? versions.find(version => version.number === expectedVersion - 1) : undefined;
+  const restoreBlocked = dirty || busy || savePaused || uncertainSave || conflict || !!recovery;
   // A project created from the home prompt opens with its brief in the builder. The builder may ask its free
   // questions, but paid work starts only from an explicit Send after the maximum is shown (audit M08).
   useEffect(() => {
@@ -1767,7 +1772,11 @@ export function CloudEditor({
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? previewAssets(content.websiteSource)}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
-          routes={!live ? content.websiteSource?.routes : undefined} syncUrl
+          routes={!live ? content.websiteSource?.routes : undefined} syncUrl subject={previewSubject}
+          // Fix it only drafts the request in the composer; Send (with its maximum shown) is still the person's choice.
+          onFixError={useLiveBuilder && builder.available ? problem => setBuilderPrefill({ key: crypto.randomUUID(), text: fixErrorRequest(problem, previewSubject) }) : undefined}
+          recover={previousVersion ? { label: `Restore version ${previousVersion.number}`, effect: restoreEffect(previousVersion.number, expectedVersion, true),
+            blocked: restoreBlocked ? "Finish saving or resolve your current draft before restoring." : undefined, onRestore: () => restoreVersion(previousVersion) } : undefined}
           visualEdit={content.websiteSource && role !== "reviewer" && !live ? {
             source: content.websiteSource,
             disabledReason: uncertainSave || conflict || recovery ? "Resolve the save notice above before editing." : lockChangePending ? "Saving content protection…" : undefined,

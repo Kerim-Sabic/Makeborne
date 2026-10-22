@@ -102,6 +102,16 @@ const ROUTES = [{ path: "/", title: "Home" }, { path: "/collections", title: "Co
     assert.match(actions.CHECK_EFFECT, /never starts, repeats or charges/);
     assert.match(actions.PREVIEW_ACTIONS.retryPreview.effect, /same saved files\. No AI call, no credits/);
     assert.match(actions.PREVIEW_ACTIONS.fixError.effect, /new AI request that uses credits/);
+    assert.match(actions.PREVIEW_ACTIONS.fixError.effect, /Nothing is sent until you choose Send/, "Fix it only drafts the request");
+    assert.equal(actions.previewProblemTitle("build", { version: 7, unsaved: false }), "Version 7 has a build error");
+    assert.equal(actions.previewProblemTitle("build", { version: 7, unsaved: true }), "Your unsaved edits have a build error", "never blames the saved version for unsaved edits");
+    assert.equal(actions.previewProblemTitle("runtime", { version: 7, unsaved: false }), "Version 7 hit an error while running");
+    assert.equal(actions.previewProblemTitle("build", null), "The site has a build error", "builder output is no saved version");
+    const long = `src/App.tsx:9:4: ERROR: Unexpected "}" ${"x".repeat(400)}\n    at line two`;
+    const request = actions.fixErrorRequest({ kind: "build", message: `\n${long}` }, { version: 7, unsaved: false });
+    assert.match(request, /^Fix the build error in version 7: src\/App\.tsx:9:4: ERROR: Unexpected "\}" x+…$/);
+    assert.ok(request.length < 360, "short: the first line, trimmed");
+    assert.equal(actions.fixErrorRequest({ kind: "runtime", message: "" }, { version: 2, unsaved: true }), "Fix the error while running in my unsaved edits.");
     const labels = ["Stop", "Retry Stop", "Approve allowance & continue", "Preview retained draft", "Save reviewed draft", "Check saved result & charge", "Restore as new version", actions.PREVIEW_ACTIONS.retryPreview.label, actions.PREVIEW_ACTIONS.fixError.label];
     assert.equal(new Set(labels).size, labels.length, "no two actions share a label");
   });

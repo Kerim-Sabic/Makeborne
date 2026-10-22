@@ -6,7 +6,7 @@ import { bundleProject } from "@/lib/builder/browser-bundler";
 import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { HOME, PREVIEW_HISTORY_KEY, PREVIEW_PATH_PARAM, formatPreviewPath, frameHashFor, isMissingPage, normalizePath, parseFrameHash, parsePreviewPath, preparePreviewDocument, previewPageTitle, samePage, withPreviewPathParam,
   type PreviewPage, type PreviewRoute, type PreviewStart } from "@/lib/builder/preview-route";
-import { PREVIEW_ACTIONS } from "@/lib/builder/action-semantics";
+import { PREVIEW_ACTIONS, previewProblemTitle, type PreviewProblem, type PreviewSubject } from "@/lib/builder/action-semantics";
 import type { ElementDescription, ElementLoc, StyleField, VisualEdit } from "@/lib/builder/visual-edit";
 import type { WebsiteProjectSource } from "@/lib/projects/website-source";
 import type { PickedElement } from "./visual-editor-panel";
@@ -52,12 +52,17 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
  * `syncUrl` mirrors the page on the editor URL so a reload returns to it.
  * `snapshot` shows an earlier saved version read-only (History): it keeps no
  * scroll memory, so the editor's own preview is unaffected. */
-export default function LivePreview({ files, assets, scope, building, onFixError, visualEdit, routes = NO_ROUTES, syncUrl = false, snapshot, responseTimeoutMs = 10_000 }: {
+export default function LivePreview({ files, assets, scope, building, subject = null, onFixError, recover, visualEdit, routes = NO_ROUTES, syncUrl = false, snapshot, responseTimeoutMs = 10_000 }: {
   files: Record<string, string>;
   assets: Asset[];
   scope: { accountId: string; workspaceId: string; artifactId: string };
   building?: boolean;
-  onFixError?: (message: string) => void;
+  /** What these files are, so an error names the version (or the unsaved edits) it belongs to. */
+  subject?: PreviewSubject | null;
+  /** Hands the error to the builder composer for review; it never sends a request. */
+  onFixError?: (problem: PreviewProblem) => void;
+  /** Offered with a build error: restore an earlier saved version (the host's restore, one explicit click). */
+  recover?: { label: string; effect: string; blocked?: string; onRestore: () => void };
   visualEdit?: VisualEditHost;
   /** Saved page routes of this version. Unknown paths show a not-found state. */
   routes?: PreviewRoute[];
@@ -374,8 +379,13 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     </div>}
     {problem && !building && !transportError && <div className="lp-problem" role="alert">
       <AlertTriangle size={16} />
-      <div><strong>{buildError ? "The site has a build error" : "The site hit an error while running"}</strong><pre>{problem}</pre></div>
-      {onFixError && <button type="button" className="button primary small" title={PREVIEW_ACTIONS.fixError.effect} onClick={() => onFixError(problem)}><Wand2 size={14} />{PREVIEW_ACTIONS.fixError.label}</button>}
+      <div><strong>{previewProblemTitle(buildError ? "build" : "runtime", subject)}</strong><pre>{problem}</pre>
+        {buildError && recover && <p className="lp-problem-note" id={`lp-recover-${scope.artifactId}`}>{recover.blocked ?? recover.effect}</p>}
+        {onFixError && <p className="lp-problem-note" id={`lp-fix-${scope.artifactId}`}>{PREVIEW_ACTIONS.fixError.effect}</p>}</div>
+      <div className="lp-problem-actions">
+        {buildError && recover && <button type="button" className="button secondary small" disabled={Boolean(recover.blocked)} aria-describedby={`lp-recover-${scope.artifactId}`} onClick={recover.onRestore}>{recover.label}</button>}
+        {onFixError && <button type="button" className="button primary small" aria-describedby={`lp-fix-${scope.artifactId}`} onClick={() => onFixError({ kind: buildError ? "build" : "runtime", message: problem })}><Wand2 size={14} />{PREVIEW_ACTIONS.fixError.label}</button>}
+      </div>
     </div>}
     {missingImages > 0 && !building && <div className="lp-problem" role="status"><AlertTriangle size={16} /><div>{missingImages === 1 ? "One project image" : `${missingImages} project images`} couldn&apos;t be loaded, so the preview shows the rest.</div>
       <button type="button" className="button secondary small" onClick={() => setImageAttempt(attempt => attempt + 1)}>Load images again</button></div>}
