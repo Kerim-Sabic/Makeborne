@@ -353,6 +353,8 @@ export default function LivePreview({ files, assets, scope, building, subject = 
   const missing = isMissingPage(page, routes);
   const pageTitle = previewPageTitle(page, routes, frameTitle);
   const knownRoutes = routes.map(route => ({ ...route, path: normalizePath(route.path) }));
+  // The page a picked element is on, by its saved route name (the document title is often the same on every page).
+  const editPage = { title: knownRoutes.find(route => route.path === page.path)?.title || (page.path === "/" ? "Home" : page.path), path: page.path };
   const editTitle = !visualEdit ? "" : building ? "Wait for the build to finish" : visualEdit.disabledReason ?? (editing ? "Stop editing" : "Click elements in the preview to edit them");
   const status = building ? "Building live…" : transportError ? "Preview connection lost" : retrying ? "Reconnecting…" : buildError ? "Needs a fix" : inspecting ? (picked ? "Editing" : "Click anything to edit it") : html ? missing ? "Page not found" : snapshot === undefined ? "Live preview" : `Saved version ${snapshot} · read only` : "Preparing preview…";
   const label = snapshot === undefined ? "Website preview" : `Preview of saved version ${snapshot}`;
@@ -422,7 +424,7 @@ export default function LivePreview({ files, assets, scope, building, subject = 
             <li key={route.path}><button type="button" className="lp-missing-link" onClick={() => go({ path: route.path, query: "", target: "" })}>{route.title || route.path} <span>{route.path}</span></button></li>)}</ul>}
         </div>}
       </div>
-      {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} note={editNote} status={visualEdit?.status} canUndo={history.length > 0}
+      {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} note={editNote} status={visualEdit?.status} page={editPage} canUndo={history.length > 0}
         onEdit={apply} onUndo={undo} onClose={toggleEditing}
         onParent={() => toFrame({ type: "select-parent" })}
         onAsk={visualEdit?.onAsk} />}

@@ -346,6 +346,25 @@ async function main() {
       assert.equal(await composer.inputValue(), "Make the navigation sticky.");
       assert.deepEqual(state.builds, []);
     });
+    await scenario("a picked element is named as a person would, with its file and line underneath; Ask keeps the exact request", {}, async page => {
+      await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
+      await page.getByRole("region", { name: "Website preview" }).getByRole("combobox", { name: "Preview page" }).selectOption("/workshops");
+      await mainFrame(page).locator("h1", { hasText: "Explore our workshops" }).waitFor();
+      await page.getByRole("region", { name: "Website preview" }).getByRole("button", { name: "Edit", exact: true }).click();
+      await mainFrame(page).locator("h1[data-mb-loc]", { hasText: "Explore our workshops" }).click();
+      const label = panel(page).locator(".ve-label");
+      await label.waitFor();
+      assert.equal(await label.innerText(), 'Heading "Explore our workshops" on Workshops (/workshops)');
+      const line = source => source.split("\n").findIndex(text => text.includes("<h1>Explore our workshops</h1>")) + 1;
+      assert.equal(await panel(page).locator(".ve-element-row").textContent(), `<h1>src/App.tsx · line ${line(app(HEADLINES[2]))}`);
+      await panel(page).getByRole("button", { name: "Ask the builder" }).click();
+      const composer = page.getByRole("textbox", { name: "Message the builder" });
+      await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message the builder"]')?.value.startsWith("Change the <h1>"));
+      assert.equal(await composer.inputValue(), `Change the <h1> "Explore our workshops" in src/App.tsx (line ${line(app(HEADLINES[2]))}): `, "the request text the builder receives is unchanged");
+      const target = page.locator(".lb-target > span");
+      assert.equal(await target.evaluate(node => node.firstChild.textContent + node.childNodes[1].textContent), 'Editing Heading "Explore our workshops" on Workshops (/workshops)');
+      assert.equal(await target.locator("small").innerText(), `src/App.tsx (line ${line(app(HEADLINES[2]))}) · selected in version 3`);
+    });
   } finally { await browser.close(); server.close(); }
   if (failures.length) { console.log(`\n${failures.length} mounted editor quality checks failed.`); process.exitCode = 1; }
   else console.log(`\nAll mounted editor quality checks passed (${engineLabel}, routed API, nothing built or published).`);

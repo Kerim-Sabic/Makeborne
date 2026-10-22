@@ -198,4 +198,14 @@ check("stale selections and managed files fail closed", () => {
   assert.match(applyVisualEdit(source, { kind: "text", loc: { path: "src/Missing.tsx", offset: 0 }, value: "x" }).message, /changed since you selected/);
 });
 
+check("a picked element is named by kind, a few words and its page; unknown tags stay generic", () => {
+  const { elementLabel, elementKind, shortText } = require("./element-label.ts");
+  assert.equal(elementLabel({ tag: "h1", text: "Explore our workshops", page: { title: "Workshops", path: "/workshops" } }), 'Heading "Explore our workshops" on Workshops (/workshops)');
+  assert.equal(elementLabel({ tag: "a", text: "  Book\n a   class ", page: { title: "Home", path: "/" } }), 'Link "Book a class" on Home (/)', "whitespace collapses");
+  assert.equal(elementLabel({ tag: "img", text: "", page: { title: "/menu", path: "/menu" } }), "Image on /menu", "no words, and a title that is only the path, stay short");
+  assert.equal(elementLabel({ tag: "section", text: "Wheel throwing on Saturday mornings, with tea and clay included", page: null }), 'Section "Wheel throwing on Saturday mornings…"', "cut at a word, without trailing punctuation");
+  assert.equal(elementKind("CUSTOM-THING"), "Element");
+  assert.equal(shortText("x".repeat(80)).length, 40, "an unbroken word is cut, with an ellipsis");
+});
+
 console.log(`\n${passed} visual edit checks passed.`);

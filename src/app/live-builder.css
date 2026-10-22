@@ -43,6 +43,7 @@
 .lb-pending > .lb-pending-text { display:block; flex:1 1 0; min-width:0; }
 .lb-pending button:disabled { opacity:.55; cursor:default; }
 .lb-target span { min-width:0; flex:1 1 auto; }
+.lb-target small { display:block; color:#7a6d85; font-size:11px; }
 .lb-unsent { margin:0 0 6px; }
 .lb-limit { margin:6px 2px 0; color:#71617f; font-size:12px; line-height:1.5; }
 .lb-estimate .lb-limit { margin-bottom:0; color:#4c3e57; font-weight:550; }

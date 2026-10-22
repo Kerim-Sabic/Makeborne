@@ -9,7 +9,7 @@ function Host() {
   const [version, setVersion] = useState(Number(new URLSearchParams(location.search).get("v") ?? 1));
   const [dirty, setDirty] = useState(false);
   const [prefill, setPrefill] = useState(null);
-  const pick = source => setPrefill({ key: crypto.randomUUID(), text: 'Change the <h1> "Hello" in src/App.tsx (line 1): ', target: { path: "src/App.tsx", line: 1, label: "the <h1>", source, version } });
+  const pick = source => setPrefill({ key: crypto.randomUUID(), text: 'Change the <h1> "Hello" in src/App.tsx (line 1): ', target: { path: "src/App.tsx", line: 1, label: 'Heading "Hello" on Home (/)', source, version } });
   return <div style={{ display: "grid", gap: 8, maxWidth: 520 }}>
     <p data-testid="host">Host version {version}</p>
     <button type="button" onClick={() => setDirty(value => !value)}>Toggle dirty draft</button>
@@ -147,7 +147,8 @@ async function main() {
     });
     await scenario("picked-element-bound-to-its-file", {}, async (page, current) => {
       await page.getByRole("button", { name: "Pick stale element" }).click();
-      await page.getByText("Editing the <h1> · src/App.tsx (line 1) · selected in version 1").waitFor();
+      // The readable label, with the file and line as the detail underneath.
+      await page.waitForFunction(() => { const span = document.querySelector(".lb-target > span"); return span?.textContent === 'Editing Heading "Hello" on Home (/)src/App.tsx (line 1) · selected in version 1' && span.querySelector("small")?.textContent === "src/App.tsx (line 1) · selected in version 1"; });
       await composer(page).press("End"); await composer(page).pressSequentially("bigger");
       await page.getByRole("button", { name: "Send", exact: true }).click();
       await page.getByText(/changed after you selected it/).waitFor();
@@ -157,7 +158,7 @@ async function main() {
       await composer(page).press("End"); await composer(page).pressSequentially("bigger");
       current.reply = () => ({ hold: true });
       await page.getByRole("button", { name: "Send", exact: true }).click();
-      await page.getByText("Sending “Change the <h1> \"Hello\" in src/App.tsx (line 1): bigger” · based on version 1 · the <h1> · src/App.tsx (line 1)").waitFor();
+      await page.getByText("Sending “Change the <h1> \"Hello\" in src/App.tsx (line 1): bigger” · based on version 1 · Heading \"Hello\" on Home (/) · src/App.tsx (line 1)").waitFor();
       await page.getByText("0 / 20 credits", { exact: true }).waitFor();
       assert.equal(current.builds.length, 1); assert.equal(current.builds[0].expectedVersion, 1);
     });
@@ -216,7 +217,7 @@ async function main() {
     }, undefined, "?auto=A%20fictional%20bakery%20site");
     await scenario("phone-width-intent-controls-fit", { reply: () => ({ hold: true }) }, async page => {
       await page.getByRole("button", { name: "Pick current element" }).click();
-      await page.getByText(/Editing the <h1>/).waitFor();
+      await page.getByText(/Editing Heading "Hello"/).waitFor();
       await composer(page).press("End"); await composer(page).pressSequentially("a much longer instruction that wraps across several lines on a phone");
       // Enter sends: at phone width the focused composer shrinks on blur, which moves the Send button under a mouse press.
       await composer(page).press("Enter");

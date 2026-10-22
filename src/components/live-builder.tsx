@@ -935,7 +935,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         <span><button type="button" disabled={busy || Boolean(draft.trim())} onClick={() => { setDraft(earlier.text); setEarlier(null); if (pendingScope) clearPendingRequest(browserStorage(), pendingScope); }}>Put it back in the composer</button>
         <button type="button" onClick={() => { setEarlier(null); if (pendingScope) clearPendingRequest(browserStorage(), pendingScope); }}>Dismiss</button></span>
       </div>}
-      {target && draft.includes(targetReference(target)) && <p className="lb-target"><span>Editing {target.label} · {targetReference(target)} · selected in version {target.version}</span>
+      {target && draft.includes(targetReference(target)) && <p className="lb-target"><span>Editing {target.label}<small>{targetReference(target)} · selected in version {target.version}</small></span>
         <button type="button" onClick={() => setTarget(null)}>Clear target</button></p>}
       {provenance && <p className="lb-provenance" data-status={provenance.status}><span>{provenance.status === "pending" ? `From ${provenanceLabel(provenance.provenance)} · recorded with your next request. The advice itself changed nothing here.` : `Started from ${provenanceLabel(provenance.provenance)}`}</span>
         {provenance.status === "pending" && onProvenance && <button type="button" disabled={busy} onClick={() => onProvenance(null)}>Don’t record</button>}</p>}

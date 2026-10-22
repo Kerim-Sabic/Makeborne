@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlignCenter, AlignLeft, AlignRight, ChevronsUp, MessageSquarePlus, MousePointerClick, RotateCcw, Trash2, Undo2, X } from "lucide-react";
 import type { ElementDescription, ElementLoc, StyleField, VisualEdit } from "@/lib/builder/visual-edit";
+import { elementLabel } from "@/lib/builder/element-label";
 import "@/app/visual-editor.css";
 
 /** What the preview reported about the clicked element. */
@@ -29,8 +30,10 @@ export type Swatch = { label: string; value: string };
 /** The picked element an "Ask the builder" request refers to, so the request can be bound to it. */
 export type AskTarget = { path: string; line: number; label: string };
 
-export default function VisualEditorPanel({ picked, description, images, swatches = [], note, status, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
+export default function VisualEditorPanel({ picked, description, images, swatches = [], note, status, page, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
   picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; swatches?: Swatch[]; note: string;
+  /** The preview page the element is on, for its readable name. */
+  page?: { title: string; path: string };
   /** How the last change stands (saving, or the version it saved as). */
   status?: string; canUndo: boolean;
   onEdit: (edit: VisualEdit) => void; onParent: () => void; onClose: () => void; onUndo: () => void; onAsk?: (text: string, target?: AskTarget) => void;
@@ -46,12 +49,12 @@ export default function VisualEditorPanel({ picked, description, images, swatche
     {!picked || !description
       ? <div className="ve-empty"><p>Click any text, image, link or section in the preview to change it.</p><p className="ve-muted">Edits save automatically as a new version and don&apos;t use credits.</p></div>
       : <Inspector key={`${picked.loc.path}@${picked.loc.offset}:${picked.index}:${"value" in description.text ? description.text.value : "parts" in description.text ? description.text.parts.join("|") : ""}`}
-        picked={picked} description={description} images={images} swatches={swatches} onEdit={onEdit} onParent={onParent} onAsk={onAsk} />}
+        picked={picked} description={description} images={images} swatches={swatches} page={page} onEdit={onEdit} onParent={onParent} onAsk={onAsk} />}
   </aside>;
 }
 
-function Inspector({ picked, description, images, swatches, onEdit, onParent, onAsk }: {
-  picked: PickedElement; description: ElementDescription; images: ProjectImage[]; swatches: Swatch[];
+function Inspector({ picked, description, images, swatches, page, onEdit, onParent, onAsk }: {
+  picked: PickedElement; description: ElementDescription; images: ProjectImage[]; swatches: Swatch[]; page?: { title: string; path: string };
   onEdit: (edit: VisualEdit) => void; onParent: () => void; onAsk?: (text: string, target?: AskTarget) => void;
 }) {
   const loc = picked.loc;
@@ -61,12 +64,14 @@ function Inspector({ picked, description, images, swatches, onEdit, onParent, on
   const [alt, setAlt] = useState(description.alt && "value" in description.alt ? description.alt.value ?? "" : "");
   const [confirmRemove, setConfirmRemove] = useState(false);
   const snippet = picked.text.length > 60 ? `${picked.text.slice(0, 60)}…` : picked.text;
+  // What a person would call it; the tag, file and line are the detail underneath.
+  const label = elementLabel({ tag: description.tag, text: picked.text || (description.alt && "value" in description.alt ? description.alt.value ?? "" : ""), page });
   const style = (field: StyleField, value: string) => onEdit({ kind: "style", loc, style: { [field]: value } });
 
   return <div className="ve-body">
     <section className="ve-element">
-      <div className="ve-element-row"><code className="ve-tag">&lt;{description.tag}&gt;</code>{snippet && <span className="ve-snippet">{snippet}</span>}</div>
-      <p className="ve-muted">{loc.path} · line {description.line}</p>
+      <p className="ve-label">{label}</p>
+      <p className="ve-muted ve-element-row"><code className="ve-tag">&lt;{description.tag}&gt;</code><span>{loc.path} · line {description.line}</span></p>
       {picked.count > 1 && <p className="ve-shared">This element repeats {picked.count} times on the page. Changes apply to every copy.</p>}
       {picked.hasParent && <button type="button" className="ve-link" onClick={onParent}><ChevronsUp size={13} />Select the surrounding element</button>}
     </section>
@@ -144,7 +149,7 @@ function Inspector({ picked, description, images, swatches, onEdit, onParent, on
     </section>
 
     <footer className="ve-actions">
-      {onAsk && <button type="button" className="ve-secondary" onClick={() => onAsk(`Change the <${description.tag}>${snippet ? ` "${snippet}"` : ""} in ${loc.path} (line ${description.line}): `, { path: loc.path, line: description.line, label: `the <${description.tag}>` })}>
+      {onAsk && <button type="button" className="ve-secondary" onClick={() => onAsk(`Change the <${description.tag}>${snippet ? ` "${snippet}"` : ""} in ${loc.path} (line ${description.line}): `, { path: loc.path, line: description.line, label })}>
         <MessageSquarePlus size={14} />Ask the builder</button>}
       {description.removable && (confirmRemove
         ? <span className="ve-confirm" role="group" aria-label="Confirm removal"><button type="button" className="ve-danger" onClick={() => onEdit({ kind: "remove", loc })}>Remove{picked.count > 1 ? ` all ${picked.count}` : ""}</button><button type="button" className="ve-secondary" onClick={() => setConfirmRemove(false)}>Keep</button></span>
