@@ -30,15 +30,22 @@ export type Swatch = { label: string; value: string };
 /** The picked element an "Ask the builder" request refers to, so the request can be bound to it. */
 export type AskTarget = { path: string; line: number; label: string };
 
-export default function VisualEditorPanel({ picked, description, images, swatches = [], note, status, page, canUndo, onEdit, onParent, onClose, onUndo, onAsk }: {
+export default function VisualEditorPanel({ picked, description, images, swatches = [], note, status, page, canUndo, onEdit, onParent, onClose, onDeselect, onUndo, onAsk }: {
   picked: PickedElement | null; description: ElementDescription | null; images: ProjectImage[]; swatches?: Swatch[]; note: string;
   /** The preview page the element is on, for its readable name. */
   page?: { title: string; path: string };
   /** How the last change stands (saving, or the version it saved as). */
   status?: string; canUndo: boolean;
-  onEdit: (edit: VisualEdit) => void; onParent: () => void; onClose: () => void; onUndo: () => void; onAsk?: (text: string, target?: AskTarget) => void;
+  onEdit: (edit: VisualEdit) => void; onParent: () => void; onClose: () => void; onDeselect: () => void; onUndo: () => void; onAsk?: (text: string, target?: AskTarget) => void;
 }) {
-  return <aside className="ve" aria-label="Edit selected element">
+  const panel = useRef<HTMLElement>(null);
+  // Escape clears the selection (focus stays in the panel), then leaves edit mode (the host returns focus to Edit).
+  const escape = (event: React.KeyboardEvent) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    event.preventDefault();
+    if (picked) { onDeselect(); panel.current?.focus(); } else onClose();
+  };
+  return <aside ref={panel} className="ve" aria-label="Edit selected element" tabIndex={-1} onKeyDown={escape}>
     <header className="ve-top">
       <span className="ve-title"><MousePointerClick size={14} />Click to edit</span>
       {canUndo && <button type="button" className="ve-icon" onClick={onUndo} aria-label="Undo last edit" title="Undo last edit"><Undo2 size={15} /></button>}
@@ -47,7 +54,7 @@ export default function VisualEditorPanel({ picked, description, images, swatche
     {note && <p className="ve-note" role="alert">{note}</p>}
     <p className="ve-status" role="status">{status && <>{status}{canUndo && <> · <button type="button" className="ve-link" onClick={onUndo}>Undo</button></>}</>}</p>
     {!picked || !description
-      ? <div className="ve-empty"><p>Click any text, image, link or section in the preview to change it.</p><p className="ve-muted">Edits save automatically as a new version and don&apos;t use credits.</p></div>
+      ? <div className="ve-empty"><p>Click any text, image, link or section in the preview to change it, or move to a link or button with Tab.</p><p className="ve-muted">Edits save automatically as a new version and don&apos;t use credits.</p></div>
       : <Inspector key={`${picked.loc.path}@${picked.loc.offset}:${picked.index}:${"value" in description.text ? description.text.value : "parts" in description.text ? description.text.parts.join("|") : ""}`}
         picked={picked} description={description} images={images} swatches={swatches} page={page} onEdit={onEdit} onParent={onParent} onAsk={onAsk} />}
   </aside>;

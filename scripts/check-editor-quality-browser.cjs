@@ -365,6 +365,32 @@ async function main() {
       assert.equal(await target.evaluate(node => node.firstChild.textContent + node.childNodes[1].textContent), 'Editing Heading "Explore our workshops" on Workshops (/workshops)');
       assert.equal(await target.locator("small").innerText(), `src/App.tsx (line ${line(app(HEADLINES[2]))}) · selected in version 3`);
     });
+    await scenario("keyboard: focusing an element in edit mode selects it; Escape in the panel deselects, then leaves edit mode with focus on Edit", {}, async page => {
+      await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
+      const edit = page.getByRole("region", { name: "Website preview" }).getByRole("button", { name: "Edit", exact: true });
+      await edit.click();
+      await panel(page).waitFor();
+      await mainFrame(page).locator("a[data-mb-loc]").first().waitFor();
+      // Keyboard focus, as Tab gives it, selects without a click.
+      await mainFrame(page).getByRole("link", { name: "Workshops" }).focus();
+      await page.waitForFunction(() => document.querySelector(".ve-label")?.textContent === 'Link "Workshops" on Home (/)');
+      await mainFrame(page).getByRole("link", { name: "Home" }).focus();
+      await page.waitForFunction(() => document.querySelector(".ve-label")?.textContent === 'Link "Home" on Home (/)');
+      assert.equal(await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).count(), 1, "focus selected without following the link");
+      // Escape in the panel: first the selection goes, then edit mode.
+      await panel(page).getByRole("textbox", { name: "Link address" }).focus();
+      await page.keyboard.press("Escape");
+      await panel(page).locator(".ve-empty").waitFor();
+      assert.equal(await panel(page).evaluate(node => node === document.activeElement), true, "focus stays in the panel after deselecting");
+      await page.keyboard.press("Escape");
+      await panel(page).waitFor({ state: "detached" });
+      assert.equal(await edit.evaluate(node => node === document.activeElement), true, "focus returns to Edit");
+      assert.equal(await edit.getAttribute("aria-pressed"), "false");
+      await mainFrame(page).locator("h1:not([data-mb-loc])", { hasText: HEADLINES[2] }).waitFor();
+      await mainFrame(page).getByRole("link", { name: "Workshops" }).focus();
+      await page.waitForTimeout(300);
+      assert.equal(await panel(page).count(), 0, "outside edit mode, focus selects nothing");
+    });
   } finally { await browser.close(); server.close(); }
   if (failures.length) { console.log(`\n${failures.length} mounted editor quality checks failed.`); process.exitCode = 1; }
   else console.log(`\nAll mounted editor quality checks passed (${engineLabel}, routed API, nothing built or published).`);

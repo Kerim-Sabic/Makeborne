@@ -60,6 +60,9 @@ const ROUTES = [{ path: "/", title: "Home" }, { path: "/collections", title: "Co
     assert.match(shim, /password\|hidden\|file/, "passwords, hidden and file fields are never kept");
     assert.match(shim, /post\(\{type:"form-blocked"\}\)/);
     assert.doesNotMatch(shim, /\.submit\(\)|requestSubmit/, "the runtime never submits a form");
+    assert.match(shim, /document\.addEventListener\("focusin",function\(e\)\{if\(!editing\)return;var el=within\(e\.target\);if\(el&&el!==chosen\)select\(el\)\},true\);/, "keyboard focus selects, in edit mode only");
+    const hostListeners = shim.match(/addEventListener\("message",function\(e\)\{[^;]*/g) ?? [];
+    assert.ok(hostListeners.length >= 3 && hostListeners.every(listener => listener.includes("e.source!==parent")), "every host message must come from the editor window");
   });
   await check("a failed runtime fetch is a transport failure that Try again can recover from", async () => {
     const origin = "http://runtime.test", runtime = path.join(root, "public", "builder-runtime");

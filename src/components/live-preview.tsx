@@ -309,6 +309,10 @@ export default function LivePreview({ files, assets, scope, building, subject = 
     if (editing) { updateSession(current => ({ ...current, editing: false, selection: { loc: null, index: 0 } })); setPicked(null); setEditNote(""); return; }
     setEditNote(""); setEditing(true);
   }
+  // Leaving edit mode from the panel (its close button or Escape) returns focus to Edit, which stays on screen.
+  const editButton = useRef<HTMLButtonElement>(null);
+  function closePanel() { toggleEditing(); editButton.current?.focus(); }
+  function deselect() { toFrame({ type: "deselect" }); setPicked(null); updateSession(current => ({ ...current, selection: { ...current.selection, loc: null } })); }
 
   const description: ElementDescription | null = useMemo(() => engine && picked && source ? engine.describeElement(source, picked.loc, picked.text) : null, [engine, picked, source]);
   const projectImages = useMemo(() => (source?.assets ?? []).filter(asset => !responsive.isVariantPath(asset.path)).map(asset => {
@@ -371,7 +375,7 @@ export default function LivePreview({ files, assets, scope, building, subject = 
       </select>}
       <span className="lp-status" role="status">{status}</span>
       <div className="lp-actions">
-        {visualEdit && <button type="button" className="lp-edit" aria-pressed={inspecting} disabled={!editing && (Boolean(visualEdit.disabledReason) || Boolean(building) || !html)} title={editTitle} onClick={toggleEditing}>
+        {visualEdit && <button ref={editButton} type="button" className="lp-edit" aria-pressed={inspecting} disabled={!editing && (Boolean(visualEdit.disabledReason) || Boolean(building) || !html)} title={editTitle} onClick={toggleEditing}>
           <MousePointerClick size={14} />{inspecting ? "Done" : "Edit"}</button>}
         {knownRoutes.length > 0 && <button type="button" aria-label="Go to a page path" aria-expanded={pathOpen} title="Open a page or section by its path" onClick={() => { setPathOpen(open => !open); setPathError(""); }}><CornerDownLeft size={15} /></button>}
         <button type="button" aria-label="Reload preview" title={PREVIEW_ACTIONS.reload.effect} onClick={() => setReloadKey(key => key + 1)}><RotateCw size={15} /></button>
@@ -425,7 +429,7 @@ export default function LivePreview({ files, assets, scope, building, subject = 
         </div>}
       </div>
       {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} note={editNote} status={visualEdit?.status} page={editPage} canUndo={history.length > 0}
-        onEdit={apply} onUndo={undo} onClose={toggleEditing}
+        onEdit={apply} onUndo={undo} onClose={closePanel} onDeselect={deselect}
         onParent={() => toFrame({ type: "select-parent" })}
         onAsk={visualEdit?.onAsk} />}
     </div>
