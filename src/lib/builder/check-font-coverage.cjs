@@ -326,7 +326,9 @@ function assertPdf(label, bytes, families) {
     const zip = await JSZip.loadAsync(bytes);
     const slides = await Promise.all(Object.keys(zip.files).filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name)).map(name => zip.file(name).async("string")));
     const xml = slides.join("");
-    assert.ok(xml.includes(SAMPLE.normalize("NFC")), "slide XML carries the NFC text unchanged");
+    // Display text carries explicit balanced line breaks (<a:br/> between runs); the words themselves are unchanged NFC.
+    const runs = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(match => match[1]).join(" ");
+    assert.ok(runs.includes(SAMPLE.normalize("NFC")), "slide XML carries the NFC text unchanged");
     const faces = [...new Set([...xml.matchAll(/<a:latin typeface="([^"]+)"/g)].map(match => match[1]))];
     assert.deepEqual(faces.sort(), [FONTS.fraunces.pptxHeading, FONTS.fraunces.pptxBody].sort());
     // Office faces are not embedded; where this OS has them, prove their own coverage.

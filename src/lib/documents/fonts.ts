@@ -10,7 +10,15 @@
  * editable file, and slide layout is fitted against the wider of the two. */
 import { FONT_SUBSETS, UNICODE_RANGES, type FontSubset } from "../builder/fonts";
 
-export type DocumentFace = { id: string; family: string; pkg: "@fontsource" | "@fontsource-variable"; axis: string; weight: string; italic: boolean; stretch?: string };
+/* KNOWN GAP (print/PDF): Chromium's PDF backend embeds variable fonts as Type 3 (outlines without hinting; some
+ * prepress checks reject them). Static instances would embed as TrueType/CID fonts, but only bebas-neue,
+ * dm-serif-display and instrument-serif are installed as static @fontsource packages. Embedding static faces for
+ * print needs, with owner approval (new dependencies, OFL-1.1, version 5.x to match): @fontsource/fraunces,
+ * @fontsource/inter, @fontsource/newsreader, @fontsource/playfair-display, @fontsource/cormorant,
+ * @fontsource/space-grotesk, @fontsource/bricolage-grotesque, @fontsource/sora, @fontsource/geist-sans (Fontsource's
+ * static Geist package name to be confirmed), @fontsource/dm-sans, @fontsource/plus-jakarta-sans, @fontsource/outfit,
+ * @fontsource/archivo and @fontsource/jetbrains-mono; then fonts-server.ts would read their per-weight files for PDFs. */
+export type DocumentFace ={ id: string; family: string; pkg: "@fontsource" | "@fontsource-variable"; axis: string; weight: string; italic: boolean; stretch?: string };
 
 export const DOCUMENT_FACES = {
   fraunces: { id: "fraunces", family: "Fraunces", pkg: "@fontsource-variable", axis: "opsz", weight: "100 900", italic: true },
