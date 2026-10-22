@@ -191,10 +191,19 @@ const normalise = (value: string) => value.toLowerCase()
 export function textTokens(value: string) {
   return normalise(value).split(/\s+/).map(token => token.replace(/^[^\p{L}\p{N}$€£¥%#+]+|[^\p{L}\p{N}%+]+$/gu, "")).filter(token => token && /[\p{L}\p{N}]/u.test(token));
 }
-export type TextComparison = { ok: boolean; missing: string[]; extra: string[] };
+export type TextComparison = { ok: boolean; missing: string[]; extra: string[]; casing: string[] };
 /** The text gate's programmatic half: the words read back from the rendered slide (by the vision model) against the
  * slide's own words, as multisets (reading order on a designed slide is not fixed). Any missing, misspelled, extra or
  * changed word or number fails. */
+/** Lines of at most this many words (eyebrows, short labels, step titles) are also checked for capitalisation. */
+export const CASED_LINE_WORDS = 3;
+/** Case-preserving words of a text (the same splitting as textTokens). */
+const casedTokens = (value: string) => value.replace(/[\u2018\u2019\u201a\u201b\u2032`´]/g, "'").replace(/[\u201c\u201d\u201e\u2033]/g, '"').replace(/[\u2010-\u2015\u2212]/g, "-").replace(/\u00a0/g, " ")
+  .split(/\s+/).map(token => token.replace(/^[^\p{L}\p{N}$€£¥%#+]+|[^\p{L}\p{N}%+]+$/gu, "")).filter(token => token && /[\p{L}\p{N}]/u.test(token));
+/** How a word may be set and still be the same word: as written, in capitals (eyebrows are often set in caps), or with a
+ * capital first letter (title-case styling). Anything else, such as "iT" for "it", is a rendering error. */
+const casingOk = (want: string, seen: string) => seen === want || seen === want.toUpperCase() || seen === want.charAt(0).toUpperCase() + want.slice(1);
+
 export function compareSlideText(expected: readonly string[], transcript: string, options: { numerals?: number } = {}): TextComparison {
   const want = new Map<string, number>();
   for (const token of expected.flatMap(textTokens)) want.set(token, (want.get(token) ?? 0) + 1);
@@ -206,7 +215,23 @@ export function compareSlideText(expected: readonly string[], transcript: string
     if (left > 0) want.set(token, left - 1); else if (!numerals.delete(token.replace(/^0+(?=\d)/, ""))) extra.push(token);
   }
   const missing = [...want].flatMap(([token, count]) => Array(count).fill(token) as string[]);
-  return { ok: !missing.length && !extra.length, missing, extra };
+  // Capitalisation. The word comparison above ignores case on purpose: a vision transcript of long body text varies in
+  // case (small caps, all-caps headings, a sentence read as title case) and failing on that would regenerate correct
+  // slides. Short lines are where a model's casing errors show and are easy to read reliably (live run of 22 Oct 2026:
+  // the eyebrow "How it works" rendered as "How iT works" and passed), so on lines of up to CASED_LINE_WORDS words every
+  // word must be set as written, in capitals or with a capital first letter (casingOk); some form of it in the
+  // transcript must be acceptable.
+  const seen = casedTokens(transcript), casing: string[] = [];
+  for (const line of expected) {
+    const words = casedTokens(line);
+    if (!words.length || words.length > CASED_LINE_WORDS) continue;
+    for (const word of words) {
+      if (!/\p{L}/u.test(word)) continue;
+      const forms = seen.filter(token => token.toLowerCase() === word.toLowerCase());
+      if (forms.length && !forms.some(form => casingOk(word, form))) casing.push(`"${forms[0]}" for "${word}"`);
+    }
+  }
+  return { ok: !missing.length && !extra.length && !casing.length, missing, extra, casing };
 }
 
 /** How many step numerals an ordered slide may show beside its words (points, steps, timelines and next steps). */
@@ -218,6 +243,60 @@ export function slideNumerals(slide: Slide) {
 /** A plain description of a failed comparison, for the corrected prompt and the record. */
 export function describeComparison(result: TextComparison) {
   return [result.missing.length ? `missing or misspelled: ${result.missing.slice(0, 12).map(word => `"${word}"`).join(", ")}` : "",
-    result.extra.length ? `extra or wrong words: ${result.extra.slice(0, 12).map(word => `"${word}"`).join(", ")}` : ""].filter(Boolean).join("; ");
+    result.extra.length ? `extra or wrong words: ${result.extra.slice(0, 12).map(word => `"${word}"`).join(", ")}` : "",
+    result.casing?.length ? `wrong capitalisation: ${result.casing.slice(0, 8).join(", ")}` : ""].filter(Boolean).join("; ");
+}
+
+/** Fill-in fields a client would have to type later ("[€ TBD]", "[Founder names and roles]", "TBC", "XX%"). Baked into a
+ * generated image they could never be edited, so such a slide is never rendered as one image. */
+const PLACEHOLDER = /(?<!\[)\[(?!\[)[^\][\n]{1,60}\](?!\()|\b(?:TBD|TBC|TBA|N\/A|XX+|lorem ipsum)\b|\?\?+|_{3,}/i;
+export function artPlaceholders(slide: Slide): string[] {
+  return slideText(slide).flatMap(line => { const match = PLACEHOLDER.exec(line.text); return match ? [`${line.role}: "${match[0]}"`] : []; });
+}
+
+/** Status words that state a fact about the client's business: on a slide each must be the brief's own word in the
+ * same form ("raised" is not "raising"), or the slide claims something the client never said. */
+export const CLAIM_WORDS = ["raised", "funded", "backed", "invested", "proven", "award", "awards", "award-winning", "certified", "accredited", "guaranteed", "patented", "patent", "profitable",
+  "revenue", "launched", "signed", "contracted", "customers", "clients", "partners", "partnered", "subscribers", "sold", "trusted", "leading", "#1", "best-selling", "bestselling"] as const;
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
+  sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, dozen: 12, half: 50, quarter: 25 };
+/** Numeric values in a text: "€1.2M" and "EUR 1.2M" are 1,200,000, "12,000" is 12,000, "31%" is 31, "six" is 6. */
+export function numbersIn(text: string): number[] {
+  const out: number[] = [];
+  // A digit run glued to letters before it ("Q1", "H2", "B2B") is a label, not a figure.
+  for (const match of text.matchAll(/(?<![\p{L}\d.,])(\d+(?:[.,]\d+)*)\s*(k|thousand|m|mn|million|bn|b|billion)?\b/giu)) {
+    const digits = match[1], unit = (match[2] ?? "").toLowerCase();
+    // "1,200" is a thousands separator; "1,5" a decimal comma; "1.2" a decimal point.
+    const value = /^\d{1,3}(,\d{3})+$/.test(digits) ? Number(digits.replace(/,/g, "")) : Number(digits.replace(",", "."));
+    const scale = unit === "k" || unit === "thousand" ? 1e3 : unit === "m" || unit === "mn" || unit === "million" ? 1e6 : unit === "b" || unit === "bn" || unit === "billion" ? 1e9 : 1;
+    if (Number.isFinite(value)) out.push(Math.round(value * scale * 1000) / 1000);
+  }
+  for (const word of text.toLowerCase().match(/\b[a-z]+\b/g) ?? []) if (word in NUMBER_WORDS) out.push(NUMBER_WORDS[word]);
+  return out;
+}
+/** Labels that make a slide's figures examples rather than claims. */
+const ILLUSTRATIVE = /\b(illustrative|illustration only|fictional|hypothetical|example|sample|for discussion)\b/i;
+/** The claims check: every number on a slide is in the source (the brief, the client's answers and files, the current
+ * document) unless the slide labels its figures illustrative or fictional, step numerals and an index base of 100
+ * aside; every status word (CLAIM_WORDS) is the source's own word in the same form. */
+export function slideClaimIssues(slide: Slide, source: string): string[] {
+  const issues: string[] = [];
+  const lines = slideText(slide), text = lines.map(line => line.text).join(" \n ");
+  const known = new Set(numbersIn(source));
+  const sourceWords = new Set(source.toLowerCase().match(/[#\p{L}\p{N}][\p{L}\p{N}-]*/gu) ?? []);
+  if (!ILLUSTRATIVE.test(text)) {
+    const numerals = slideNumerals(slide), index = /\bindex(ed)?\b/i.test(`${text} ${slide.notes}`);
+    for (const line of lines) for (const value of numbersIn(line.text)) {
+      if (known.has(value) || (Number.isInteger(value) && value >= 1 && value <= numerals) || (index && value === 100)) continue;
+      // A percentage may be the brief's own percentage of a quantity it gives (e.g. 31% of 40 homes) only if stated; otherwise it is new.
+      issues.push(`${line.role} "${line.text}" has ${value.toLocaleString("en-US")}, which is not in the brief: use the client's figure, or label the figures illustrative`);
+    }
+  }
+  for (const word of text.toLowerCase().match(/[#\p{L}\p{N}][\p{L}\p{N}-]*/gu) ?? []) {
+    if (!(CLAIM_WORDS as readonly string[]).includes(word) || sourceWords.has(word)) continue;
+    const stem = word.replace(/-.*$/, "").slice(0, 4), near = [...sourceWords].filter(entry => entry.startsWith(stem)).slice(0, 3);
+    issues.push(`"${word}" states something the brief does not${near.length ? ` (it says ${near.map(entry => `"${entry}"`).join(", ")})` : ""}: use the brief's own status`);
+  }
+  return [...new Set(issues)];
 }
 

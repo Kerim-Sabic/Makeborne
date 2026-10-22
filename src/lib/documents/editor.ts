@@ -9,7 +9,7 @@ import { directionOf } from "./directions";
 import { parseBookMarkup, wordCount } from "./book-markup";
 import { CoverCompositionSchema } from "./composition-schema";
 import { imageSupport } from "./compose-image";
-import { artPlanIssues, artTextIssues, textKey, verifiedArt, type ArtRender } from "./slide-art";
+import { artPlaceholders, artPlanIssues, artTextIssues, textKey, verifiedArt, type ArtRender } from "./slide-art";
 import { bookImageIssues } from "./book-images";
 
 export class DocToolError extends Error {}
@@ -195,6 +195,8 @@ export class DocumentEditor {
       if (text.length) notes.push(`too much text for a full-image slide (${text.join("; ")})`);
       const plan = artPlanIssues(deck).find(issue => issue.slides.includes(index));
       if (plan) notes.push(plan.message);
+      const placeholders = artPlaceholders(slide);
+      if (placeholders.length) notes.push(`a fill-in field (${placeholders.join("; ")}) cannot be baked into an image: omit the unknown value or this slide stays editable text`);
     } else {
       const scene = composeSlide(deck, slide, index, deck.slides.length);
       if (scene.issues.length) notes.push(`text may not fit: ${scene.issues.slice(0, 3).join("; ")}. Tighten the copy`);

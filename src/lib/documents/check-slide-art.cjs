@@ -4,9 +4,9 @@ const load = Module._load;
 Module._load = function(name, parent, main) { return name === "server-only" ? {} : load.call(this, name, parent, main); };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
 const JSZip = require("jszip"), sharp = require("sharp");
-const { DocumentEditor, emptyDocument } = require("./editor.ts");
+const { DocumentEditor, emptyDocument, unescapeLiterals } = require("./editor.ts");
 const { composeSlide, H } = require("./slide-scene.ts");
-const { ART_COMPOSITION, artAlt, artPlanIssues, artPrompt, artTextIssues, compareSlideText, slideText, textKey, verifiedArt } = require("./slide-art.ts");
+const { ART_COMPOSITION, artAlt, artPlaceholders, artPlanIssues, artPrompt, artTextIssues, compareSlideText, slideClaimIssues, slideText, textKey, verifiedArt } = require("./slide-art.ts");
 const { deckModeFromBrief, bookImagePlanFromBrief } = require("./creation-options.ts");
 const { bookImageIssues, bookImagePlanText, plannedBookImages } = require("./book-images.ts");
 const { fitArtwork, ARTWORK_IMAGE_LIMIT, ARTWORK_TOTAL_LIMIT } = require("./artwork-fit.ts");
@@ -63,7 +63,7 @@ function fakeImages() {
 let stored = 0;
 const storeImage = async request => ({ id: `00000000-0000-4000-8000-${String(++stored).padStart(12, "0")}`, path: `public/images/${request.name}.webp`, sha256: "a".repeat(64), bytes: 9, mediaType: "image/webp", url: `/images/${request.name}.webp` });
 const spendFor = (credits = 90) => new RunSpend({ run: `slide-art-${Math.random()}`, providerCapMicrousd: Math.floor(credits * 0.03 * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 280_000 });
-const run = (editor, anthropic, images, extra = {}) => runDocumentBuilder({ client: null, scope: { workspaceId: "w", projectId: "p" }, editor, effort: "high", spend: spendFor(), request: "Make the deck", context: "", attachments: [],
+const run = (editor, anthropic, images, extra = {}) => runDocumentBuilder({ client: null, scope: { workspaceId: "w", projectId: "p" }, editor, effort: "high", spend: spendFor(), request: "Make the Harbour Light deck: an evening ferry pilot with two late sailings and one extra crew; evening riders want calm crossings and demand doubles by August (use illustrative monthly figures).", context: "", attachments: [],
   emit: () => {}, signal: new AbortController().signal, deadline: Date.now() + 280_000, anthropic: anthropic.client, imageClient: images.client, storeImage, imageModels: ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"], ...extra });
 const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array.isArray(block.content) ? block.content : []).filter(block => block.type === "image");
 
@@ -92,7 +92,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
 
   await check("the text gate compares words as read back, ignoring case, quotes and punctuation, never misspellings or numbers", () => {
     const expected = ["Night crossings for Harbour Light", "May", "180", "“Calm decks”", "— Rider survey"];
-    assert.ok(compareSlideText(expected, "NIGHT CROSSINGS FOR HARBOUR LIGHT. may 180 \"Calm decks\" - Rider survey").ok);
+    assert.ok(compareSlideText(expected, "NIGHT CROSSINGS FOR HARBOUR LIGHT. May 180 \"Calm decks\" - Rider survey").ok);
     assert.deepEqual(compareSlideText(expected, "Night crosings for Harbour Light May 180 Calm decks Rider survey").missing, ["crossings"]);
     assert.deepEqual(compareSlideText(expected, "Night crossings for Harbour Light May 18O Calm decks Rider survey").extra, ["18o"]);
     assert.deepEqual(compareSlideText(expected, "Night crossings for Harbour Light May 180 Calm decks Rider survey Lorem").extra, ["lorem"]);
@@ -202,6 +202,66 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     const reply = JSON.stringify(fake.log.streams[2].messages.at(-1));
     assert.match(reply, /never repeat a layout on consecutive slides/);
     assert.match(reply, /too much text for one image/);
+  });
+
+  await check("casing: short lines must keep their capitalisation (capitals or a capital first letter allowed); long text stays case-insensitive", () => {
+    assert.deepEqual(compareSlideText(["How it works", "Three steps from sign-up to riding"], "How iT works Three steps from sign-up to riding").casing, ['"iT" for "it"'], "the live d01 eyebrow");
+    assert.ok(compareSlideText(["How it works"], "HOW IT WORKS").ok && compareSlideText(["How it works"], "How It Works").ok);
+    assert.ok(compareSlideText(["Three steps from sign-up to riding"], "THREE STEPS FROM SIGN-UP TO RIDING").ok, "long lines ignore case");
+  });
+
+  const D02 = JSON.parse(fs.readFileSync(require.resolve("../../../scripts/eval/briefs/d02-tidewater-seed-pitch.json"), "utf8")).brief;
+  const ASK = { id: "ask", layout: "diagram", eyebrow: "The ask", title: "€1.2M takes Tidewater to 500 homes", diagram: { kind: "timeline", items: [{ label: "2025", detail: "40-home pilot, Split" }, { label: "Seed", detail: "€1.2M raised" }, { label: "End of 2027", detail: "500 homes" }] },
+    art: { frame: "timeline", brief: "A thin terracotta line crosses the slide with three dated stops; a coastline photo in the lower third." }, notes: "The ask." };
+  await check("claims: every figure and status on a slide traces to the brief (the live d02 '€1.2M raised' case)", async () => {
+    assert.ok(slideClaimIssues(ASK, D02).some(issue => /"raised" states something the brief does not \(it says "raising"\)/.test(issue)));
+    assert.deepEqual(slideClaimIssues({ ...ASK, diagram: { ...ASK.diagram, items: [ASK.diagram.items[0], { label: "Seed", detail: "Raising €1.2M now" }, ASK.diagram.items[2]] } }, D02), [], "the brief's own status passes");
+    const invented = slideClaimIssues({ ...ASK, title: "€2M takes Tidewater to 900 homes" }, D02).join(" ");
+    assert.ok(/has 2,000,000/.test(invented) && /has 900/.test(invented), "figures that are not in the brief fail");
+    assert.deepEqual(slideClaimIssues({ id: "team", layout: "stats", title: "Six builders, two from the EV industry", stats: [{ value: "6", label: "Team members" }, { value: "2", label: "EV battery engineers" }], notes: "x" }, D02), [], "number words in the brief count");
+    assert.deepEqual(slideClaimIssues({ id: "c", layout: "chart", title: "Visits grow each quarter", chart: { type: "column", categories: ["Q1", "Q2"], series: [{ name: "Visits", values: [12, 18] }], source: "Illustrative data" }, notes: "x" }, "A deck."), [], "labelled illustrative figures and Q1 labels pass");
+    // End to end: refused before any image is paid for; refused again unchanged, the slide stays editable text.
+    const local = new DocumentEditor(emptyDocument("deck", "Tidewater", undefined, { slideMode: "image" }));
+    const pictures = fakeImages();
+    const fake = fakeAnthropic([
+      [toolUse("set_theme", THEME), toolUse("set_deck_details", { title: "Tidewater", art_system: SYSTEM }), toolUse("write_slide", { slide: ASK })],
+      [toolUse("render_slides", { ids: ["ask"] })], [toolUse("render_slides", { ids: ["ask"] })],
+      [toolUse("finish", { summary: "x" })], [toolUse("finish", { summary: "x" })],
+    ]);
+    await run(local, fake, pictures, { request: D02 });
+    assert.equal(pictures.log.prompts.length, 0, "no image for a slide with an unsupported claim");
+    assert.match(JSON.stringify(fake.log.streams[2].messages.at(-1)), /was not rendered: .*raised/);
+    const render = local.doc.art.renders.find(entry => entry.slide === "ask");
+    assert.equal(render.outcome, "fallback");
+    assert.ok(render.problems.some(problem => /claim: "raised"/.test(problem)));
+  });
+
+  await check("placeholders are never baked into a slide image: the slide stays editable text so the client can type the value", async () => {
+    const team = { id: "team", layout: "stats", eyebrow: "Team", title: "Six builders, two from the EV industry", body: "[Founder names and roles]", stats: [{ value: "6", label: "Team members" }, { value: "2", label: "EV battery engineers" }],
+      art: { frame: "big-number", brief: "Two huge terracotta numerals on warm stone; a photo of hands at work on a battery on the left." }, notes: "x" };
+    assert.deepEqual(artPlaceholders(team), ['body: "[Founder names and roles]"']);
+    assert.ok(artPlaceholders({ ...team, body: undefined, stats: [{ value: "[€ TBD]", label: "Market size" }] }).length);
+    assert.ok(artPlaceholders({ ...team, body: "Market size TBD" }).length && !artPlaceholders({ ...team, body: undefined }).length);
+    const local = new DocumentEditor(emptyDocument("deck", "Tidewater", undefined, { slideMode: "image" }));
+    const pictures = fakeImages();
+    const fake = fakeAnthropic([
+      [toolUse("set_theme", THEME), toolUse("set_deck_details", { title: "Tidewater", art_system: SYSTEM }), toolUse("write_slide", { slide: team })],
+      [toolUse("render_slides", { ids: ["team"] })], [toolUse("finish", { summary: "x" })], [toolUse("finish", { summary: "x" })],
+    ]);
+    await run(local, fake, pictures, { request: D02 });
+    assert.equal(pictures.log.prompts.length, 0);
+    assert.equal(local.doc.art.renders.find(entry => entry.slide === "team").outcome, "fallback");
+    assert.notEqual(composeSlide(local.doc, local.doc.slides[0], 0, 1).composition, ART_COMPOSITION, "drawn as editable text");
+    assert.ok(composeSlide(local.doc, local.doc.slides[0], 0, 1).prims.some(prim => prim.k === "text" && prim.text.includes("[Founder names and roles]")), "with the field the client can fill in");
+  });
+
+  await check("the decoder fixes the live b01 caption (c0182ba)", () => {
+    const caption = "The real problem behind the request: a small wrapped loaf in a busy caf\\u00e9 display, its label too small and detailed to read.";
+    assert.ok(caption.includes("\\u00e9"));
+    assert.equal(unescapeLiterals(caption), "The real problem behind the request: a small wrapped loaf in a busy café display, its label too small and detailed to read.");
+    const book = new DocumentEditor(emptyDocument("book", "The Useful Client Brief"));
+    book.apply("write_chapter", { chapter: { id: "what", title: "What a Brief Is For", text: `A brief.\n\n[[figure:cafe-counter|${caption}]]` } });
+    assert.match(book.doc.chapters[0].text, /\[\[figure:cafe-counter\|The real problem behind the request: a small wrapped loaf in a busy café display,/);
   });
 
   await check("the context meter bounds an image block by its token cost, not its base64 bytes", async () => {

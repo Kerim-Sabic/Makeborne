@@ -17,7 +17,7 @@ import { imageCallBoundMicrousd, type ImageQuality } from "../ai/prices";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BOOK_SYSTEM, DECK_ART_SYSTEM, DECK_SYSTEM } from "./docs-prompt";
 import { imageLuma } from "../documents/image-luma";
-import { ART_CROP, ART_SOURCE, artAlt, artPrompt, artTextIssues, compareSlideText, describeComparison, slideNumerals, slideText, textKey, verifiedArt } from "../documents/slide-art";
+import { ART_CROP, ART_SOURCE, artAlt, artPrompt, artTextIssues, artPlaceholders, compareSlideText, describeComparison, slideClaimIssues, slideNumerals, slideText, textKey, verifiedArt } from "../documents/slide-art";
 import { bookImagePlanText, bookPlan, plannedBookImages } from "../documents/book-images";
 
 /** Events streamed to the chat. Shares the website builder's text/status/
@@ -159,6 +159,10 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   const record = (entry: CheckRecord) => { checks.push(entry); run.emit({ type: "check", record: entry }); };
   /** Renders waiting for check_slide, by slide id. */
   const pendingArt = new Map<string, { key: string; prompt: string; attempts: number; bytes: Buffer; problems: string[] }>();
+  /** Claims-check refusals per slide: the second keeps the slide as an editable text slide. */
+  const claimStrikes = new Map<string, number>();
+  /** Everything the client gave (brief, answers, files as text, the current document): the source every slide claim must trace to. */
+  const source = [run.request, run.context, ...run.attachments.flatMap(block => block.type === "document" && block.source.type === "text" ? [block.source.data] : block.type === "text" ? [block.text] : [])].join("\n");
   /** Generated images waiting for check_image, by name. */
   const pendingImages = new Map<string, { input: z.infer<typeof DocToolInputs.generate_image>; attempts: number }>();
 
@@ -200,6 +204,23 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     if (verifiedArt(doc, slide)) return `Slide ${slideNumber(id)} already has a verified render for its current text.`;
     const text = artTextIssues(slide);
     if (text.length) return `Slide ${slideNumber(id)} has too much text for one image: ${text.join("; ")}. Shorten it with write_slide, or leave it as an editable slide.`;
+    // A fill-in field baked into an image could never be typed in by the client: the slide stays editable text.
+    const placeholders = artPlaceholders(slide);
+    if (placeholders.length) {
+      fallback(id, 0, [`placeholder in a full-image slide: ${placeholders.join("; ")}`]);
+      return `Slide ${slideNumber(id)} contains a fill-in field (${placeholders.join("; ")}). It is kept as an editable text slide so the client can type the value. To make it a full image instead, rewrite it so the unknown value is simply omitted (no brackets, TBD or XX) and render it again.`;
+    }
+    // Claims: every figure and status on the slide must trace to the client's own words.
+    const claims = slideClaimIssues(slide, source);
+    if (claims.length) {
+      const strikes = (claimStrikes.get(id) ?? 0) + 1;
+      claimStrikes.set(id, strikes);
+      if (strikes >= CHECK_ATTEMPTS) {
+        fallback(id, 0, claims.map(claim => `claim: ${claim}`));
+        return `Slide ${slideNumber(id)} still makes claims the brief does not support (${claims.join("; ")}). It is kept as an editable text slide; correct its words with write_slide before finishing.`;
+      }
+      return `Slide ${slideNumber(id)} was not rendered: ${claims.join("; ")}. Rewrite it with write_slide so every figure and status is the client's own (or labelled illustrative), then render it again.`;
+    }
     const index = doc.slides.indexOf(slide);
     for (const neighbour of [doc.slides[index - 1], doc.slides[index + 1]]) {
       if (!neighbour) continue;
@@ -213,7 +234,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   async function renderContent(id: string, bytes: Buffer, attempt: number): Promise<(BetaTextBlockParam | BetaImageBlockParam)[]> {
     const slide = slideOf(id)!;
     const words = slideText(slide).map(line => `- ${line.role}: "${line.text}"`).join("\n");
-    return [{ type: "text", text: `Slide ${slideNumber(id)} (${id}), attempt ${attempt} of ${CHECK_ATTEMPTS}. It must show exactly these words and nothing else:\n${words}\nLook at the image and call check_slide for "${id}": transcript = every word and number you can actually read, verbatim (with any misspelling, missing or extra letter), in reading order; artifacts = any garbled or malformed glyph, stray or extra text, cut-off text, text closer than 5% to an edge, poor contrast, warped or plastic people, oversaturation, HDR glow, clip-art icons, random gradients, or a composition that repeats its neighbour; verdict pass only if every word is exactly right and it looks like professional editorial design.` },
+    return [{ type: "text", text: `Slide ${slideNumber(id)} (${id}), attempt ${attempt} of ${CHECK_ATTEMPTS}. It must show exactly these words and nothing else:\n${words}\nLook at the image and call check_slide for "${id}": transcript = every word and number you can actually read, verbatim with its exact capitalisation (with any misspelling, missing or extra letter, or odd capital), in reading order; artifacts = any garbled or malformed glyph, stray or extra text, cut-off text, text closer than 5% to an edge, poor contrast, warped or plastic people, oversaturation, HDR glow, clip-art icons, random gradients, or a composition that repeats its neighbour; verdict pass only if every word is exactly right and it looks like professional editorial design.` },
       await visionBlock(bytes)];
   }
   /** Start one slide render; resolves to the tool-result blocks (the image to check, or why it failed). */
@@ -246,6 +267,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     if (!pending || !slide) return { ok: false, content: `No render of "${input.id}" is waiting for a check. Render it with render_slides first.` };
     if (textKey(slide) !== pending.key) { pendingArt.delete(input.id); return { ok: false, content: `Slide ${slideNumber(input.id)} changed after it was rendered; render it again.` }; }
     const comparison = compareSlideText(slideText(slide).map(line => line.text), input.transcript, { numerals: slideNumerals(slide) });
+    // The image must say only what the slide says; the slide was checked against the brief before it was rendered.
     const problems = [...input.artifacts, ...(comparison.ok ? [] : [describeComparison(comparison)])];
     if (input.verdict === "pass" && comparison.ok && !input.artifacts.length) {
       const name = artName(input.id);
