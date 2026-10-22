@@ -24,6 +24,7 @@ import { websiteBuildResponse } from "@/lib/builder/website-run";
 import { providerCapacity, requireProviderCapacity } from "@/lib/ai/live-run";
 import { builderAvailability } from "@/lib/builder/availability";
 import { requirePricedModel } from "@/lib/ai/model-check";
+import { routeModels, routeStage } from "@/lib/ai/model-routing";
 import { SitePlanSchema, StoredPlanSchema, planToBrief } from "@/lib/builder/plan";
 import { approvedMaximumIssue, approvedPlanIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { websiteBrandBlock } from "@/lib/brand/kit";
@@ -116,8 +117,14 @@ export async function POST(request: Request) {
     // A new billable request is bound to the maximum shown at approval; any difference is a new quote.
     const quoteIssue = approvedMaximumIssue(body.operation, body.approvedMaximum, ceiling);
     if (quoteIssue) throw new RequestError("QUOTE_CHANGED", quoteIssue, 409);
-    // Unknown pricing fails closed before anything is reserved or sent.
+    // The stage's model route (deterministic rules; MAKEBORNE_MODEL_ROUTING off = the builder model for every stage).
+    const route = routeStage(artifact.kind === "website"
+      ? { stage: reviewing ? "review" : body.operation && "kind" in body.operation && body.operation.kind === "continuation" ? "continuation" : "build",
+        request: body.message, files: current.content.websiteSource?.files.length ?? 0, effort: body.effort, attachments: body.attachments.length, plan: Boolean(body.plan) }
+      : { stage: "document", emptyDocument: !current.content.document, effort: body.effort });
+    // Unknown pricing fails closed before anything is reserved or sent (every model the stage may call).
     requirePricedModel(builderModel());
+    for (const model of routeModels(route)) requirePricedModel(model);
     // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
     await requireProviderCapacity("anthropic");
     // An approved plan is bound to the exact saved revision the customer reviewed,
@@ -196,12 +203,12 @@ export async function POST(request: Request) {
     // Books and presentations: structured document builder (same credits, versions and SSE contract).
     if (artifact.kind === "book" || artifact.kind === "presentation") {
       const response = documentBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, project, current, versions, brand,
-        message: body.message, effort: body.effort, attachments, maxDuration });
+        message: body.message, effort: body.effort, attachments, maxDuration, route });
       reserved = null;
       return response;
     }
 
-    const response = websiteBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
+    const response = websiteBuildResponse({ client, hold, spend, operation, route, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
       message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments,
       limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
       // First build: the concept step (2-3 concepts scored on the rubric, the strongest built) inside this run.

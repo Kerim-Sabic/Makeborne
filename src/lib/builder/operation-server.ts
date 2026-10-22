@@ -274,7 +274,7 @@ export function operationTerminal(status: OperationStatus): Record<string, unkno
  * issuing a contradictory release or claiming that nothing was charged. */
 export async function operationFailure(run: OperationRun, spend: RunSpend, detail: Record<string, unknown>, candidate?: OperationCandidate): Promise<Record<string, unknown>> {
   try {
-    if (!run.finalizationStarted) return operationTerminal(await finishOperation(run, spend.confirmedMicrousd, "failed", detail, candidate));
+    if (!run.finalizationStarted) return operationTerminal(await finishOperation(run, spend.chargeableMicrousd, "failed", detail, candidate));
     const status = await readOperation({ actor: run.actor, workspaceId: run.workspaceId, artifactId: run.artifactId, id: run.operation.id });
     if (status.result?.runId === run.id) return operationTerminal(status);
     return operationTerminal({ ...status, result: null });

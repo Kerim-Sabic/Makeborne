@@ -78,6 +78,7 @@ function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "bo
       {receipt.brief && <div><dt>Brief</dt><dd>From {receipt.brief}</dd></div>}
       {receipt.concept && <div><dt>Concept</dt><dd>{receipt.concept.chosen}{receipt.concept.runnersUp.length ? ` · also considered: ${receipt.concept.runnersUp.join(", ")}` : ""}</dd></div>}
       {receipt.enhanced && <div><dt>{receipt.brief ? "Brief used" : "Brief"}</dt><dd>{briefReceipt(receipt.enhanced)}</dd></div>}
+      {!!receipt.models?.length && <div><dt>Model</dt><dd>{receipt.models.join("; ")}</dd></div>}
       <div><dt>{kind === "website" ? "Files changed" : "Changes"}</dt><dd>{changes.length ? <details><summary>{changes.length} {noun}{changes.length === 1 ? "" : "s"}</summary><ul>{changes.slice(0, 40).map(item => <li key={item}>{item}</li>)}{changes.length > 40 && <li>and {changes.length - 40} more</li>}</ul></details> : "None"}</dd></div>
     </dl>
     {!!receipt.checks.length && <ul className="lb-receipt-checks">{receipt.checks.map(check => <li key={check.label} data-ok={check.ok}>{check.ok ? <Check size={13} aria-label="Passed" /> : <TriangleAlert size={13} aria-label="Needs attention" />}<span>{check.label}</span></li>)}</ul>}
@@ -289,6 +290,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       return { ...turn, activity: [...turn.activity, { id: key ?? newId(), ...item }] };
     });
     const touched = new Set<string>();
+    let attemptTouched = new Set<string>();
     let result: RunResult | null = null, finished = false, refused = false;
     let latestOperation: OperationSnapshot | null = null;
     const envelope = payload.operation as OperationRequest | undefined;
@@ -330,6 +332,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
           if (meter) meterEvent(meter, event);
           switch (event.type) {
             case "operation": break;
+            // An escalated retry restarts the step from its saved files (the server re-sends what it put back).
+            case "route": if (event.escalated === true) { touched.clear(); for (const path of attemptTouched) touched.add(path); } else attemptTouched = new Set(touched); break;
             case "text": update(replyId, turn => ({ ...turn, text: turn.text + event.delta })); break;
             case "status": activity({ kind: "note", label: event.message, done: false }, "status"); break;
             case "file_start": activity({ kind: "file", label: `${event.op === "edit" ? "Editing" : "Writing"} ${event.path}`, done: false }, `file:${event.path}`); break;

@@ -14,6 +14,8 @@ import { compileVerdict } from "./compile";
 import { aiCostUsdPerCredit } from "./pricing";
 import { watchOperationCancellation, finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
 import { builtTitle } from "../projects/project-title";
+import { routeDetail, type ModelRoute, type RouteRecord } from "../ai/model-routing";
+import { routedWebsiteStage } from "./website-stage";
 
 export type WebsiteBuildInput = {
   client: SupabaseClient;
@@ -45,7 +47,15 @@ export type WebsiteBuildInput = {
   imageClient?: ImageClientLike;
   storeImage?: BuilderRun["storeImage"];
   compile?: BuilderRun["compile"];
+  /** The stage's model route (../ai/model-routing.ts). Absent: the builder model, one attempt, as before. */
+  route?: ModelRoute;
 };
+
+/** Operator telemetry for one routed stage: class, models, outcome, cost and time. No prompt content. */
+export function logRoute(reference: string, stage: string, record: RouteRecord | null | undefined) {
+  const detail = routeDetail(record);
+  if (detail) console.info(JSON.stringify({ event: "ai_model_route", reference, stage, ...detail }));
+}
 
 /** Logs a spending-control stop privately (operator diagnostics stay out of the response). */
 export function logAiStop(reference: string, error: unknown) {
@@ -63,7 +73,11 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
   const { client, hold, spend, artifact, current, files, reviewing } = input;
   const compile = input.compile ?? compileVerdict;
   const rate = input.operation ? input.operation.rateMicrousd / 1e6 : aiCostUsdPerCredit();
+  // Customer charge: confirmed cost, less a failed routed attempt that was escalated (absorbed by the platform).
   const measured = () => spend.customerCredits(rate);
+  const stage = reviewing ? "review" : input.route?.class === "continuation" ? "continuation" : "build";
+  let routeRecord: RouteRecord | null = null, routeLogged = false;
+  const logRouteOnce = () => { if (!routeLogged) { routeLogged = true; logRoute(hold.reference, stage, routeRecord); } };
   const encoder = new TextEncoder();
   // The run continues even if the browser disconnects, so paid work is saved.
   const controller = new AbortController();
@@ -81,25 +95,34 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         if (input.operation) emit({ type: "operation", operation: input.operation.operation });
         emit({ type: "status", message: reviewing ? "Reviewing the design…" : files.files.size ? "Reading your project…" : "Planning your website…" });
         let result;
+        const stageDeadline = Date.now() + (input.maxDuration - 20) * 1000;
+        const attempt = (model: string | undefined, deadline: number) => runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
+          request: input.request, context: input.context, attachments: input.attachments, emit, signal: controller.signal,
+          deadline, limits: input.limits, required: input.required, concept: input.concept, contrastCheck: input.contrastCheck,
+          anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile, ...(model ? { model } : {}) });
         try {
-          result = await runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
-            request: input.request, context: input.context, attachments: input.attachments, emit, signal: controller.signal,
-            deadline: Date.now() + (input.maxDuration - 20) * 1000, limits: input.limits, required: input.required, concept: input.concept, contrastCheck: input.contrastCheck,
-            anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile });
+          if (!input.route) result = await attempt(undefined, stageDeadline);
+          else {
+            const routed = await routedWebsiteStage({ route: input.route, stage, files, spend, deadline: stageDeadline, signal: controller.signal, emit, compile, attempt });
+            result = routed.result; routeRecord = routed.record;
+          }
         } catch (error) {
+          routeRecord = (error as { route?: RouteRecord } | null)?.route ?? routeRecord;
           // A step was cut off (time limit or provider error): keep finished work if it is valid.
           if (!files.changed.size || (error as { code?: string }).code === "REFUSED" || aiStop(error)) throw error;
           try { files.toSource(); } catch { throw error; }
           emit({ type: "status", message: "Saving the work finished so far…" });
           result = { summary: "Saved the progress made so far.", title: undefined, credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, build: null, stopped: spend.stopped };
         }
-        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped };
+        logRouteOnce();
+        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped,
+          ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
         if (reviewing && !files.changed.size) {
           // The review found nothing to fix (or ran out of room before editing):
           // charge for the look it took, keep the current version.
           const summary = result.finished ? result.summary || "No changes needed in the captured views." : "The review ran out of room before making changes. Your website is unchanged.";
           if (input.operation) {
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "review_no_change", { ...detail, version: artifact.current_version, summary, changed: false, finished: result.finished })));
+            emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, "review_no_change", { ...detail, version: artifact.current_version, summary, changed: false, finished: result.finished })));
             return;
           }
           const settled = await settleRun(hold, measured(), { ...detail, kind: "review_no_change" });
@@ -121,7 +144,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
             // that needed no change is a completed request and stays chargeable.
             // That includes a run that called finish but left no source that compiles; a finished request that needed no
             // change never reaches here (it has a source and is saved as a completed, chargeable request).
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "failed", { ...detail, code: "BUILD_INCOMPLETE", message: `The builder ${result.finished ? "finished without a website that compiles" : "stopped before a usable change was ready"}. Nothing was charged. Your previous saved version is safe.`, version: artifact.current_version, changed: false, finished: false })));
+            emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, "failed", { ...detail, code: "BUILD_INCOMPLETE", message: `The builder ${result.finished ? "finished without a website that compiles" : "stopped before a usable change was ready"}. Nothing was charged. Your previous saved version is safe.`, version: artifact.current_version, changed: false, finished: false })));
             return;
           }
           await releaseRun(hold, measured(), "incomplete_nothing_saved", { ...detail, kind: "incomplete" });
@@ -130,7 +153,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         }
         if (input.operation) {
           const summary = result.summary || (result.finished ? "Updated the website." : "Saved the progress made so far.");
-          emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished, build }, {
+          emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished, build }, {
             content: { schemaVersion: 1, kind: "website", title: builtTitle(current.content.title, reviewing ? "" : result.title, input.projectBrief ?? "", "website").slice(0, 200), sections: [], websiteSource: source },
             style: current.style, assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])],
             summary: `${reviewing ? "Design review" : input.message.slice(0, 600)} → ${summary}`.slice(0, 2000), expectedVersion: artifact.current_version,
@@ -160,6 +183,8 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         const settled = await settleRun(hold, measured(), { ...detail, kind: "saved" });
         emit({ type: "done", version: saved.data.version.version_number ?? artifact.current_version + 1, summary, charged: settled.charged, changed: true, finished: result.finished, build });
       } catch (error) {
+        routeRecord = (error as { route?: RouteRecord } | null)?.route ?? routeRecord;
+        logRouteOnce();
         if (input.operation) {
           const stop = logAiStop(hold.reference, error);
           let candidate: OperationCandidate | undefined;
@@ -170,7 +195,8 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
               assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])],
               summary: verdict.status === "passed" ? "Recovered the work completed before the builder stopped." : "Recovered the work completed before the builder stopped. Its build could not be checked.", expectedVersion: artifact.current_version };
           } catch { /* Only validated source that does not fail to build is offered for recovery. */ }
-          emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false }, candidate));
+          emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false,
+            ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) }, candidate));
           return;
         }
         await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped }).catch(() => undefined);

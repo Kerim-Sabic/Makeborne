@@ -7,7 +7,8 @@ import { releaseRun, settleRun, type CreditHold } from "../credits/server";
 import { estimatePlanCredits, recommendedEffort, type SitePlan, type StoredPlan } from "./plan";
 import { runPlanner, type PlannerEvent } from "./planner";
 import { aiCostUsdPerCredit } from "./pricing";
-import { logAiStop } from "./website-run";
+import { logAiStop, logRoute } from "./website-run";
+import { routeDetail, runRouted, type ModelRoute, type RouteRecord } from "../ai/model-routing";
 import { watchOperationCancellation, finishOperation, operationFailure, operationTerminal, type OperationRun } from "./operation-server";
 import { StoredPlanSchema } from "./plan";
 
@@ -31,6 +32,8 @@ export type PlanRunInput = {
   persist: (stored: StoredPlan) => Promise<boolean>;
   maxDuration: number;
   anthropic?: AnthropicLike;
+  /** The stage's model route (../ai/model-routing.ts). Absent: the builder model, one attempt, as before. */
+  route?: ModelRoute;
 };
 
 /** One planning run (SSE). Charges the measured usage only when a valid plan is produced; otherwise releases the hold. */
@@ -38,6 +41,8 @@ export function planStreamResponse(input: PlanRunInput): Response {
   const { hold, spend } = input;
   const rate = input.operation ? input.operation.rateMicrousd / 1e6 : aiCostUsdPerCredit();
   const measured = () => spend.customerCredits(rate);
+  let routeRecord: RouteRecord | null = null, routeLogged = false;
+  const logRouteOnce = () => { if (!routeLogged) { routeLogged = true; logRoute(hold.reference, "plan", routeRecord); } };
   const encoder = new TextEncoder();
   const controller = new AbortController();
   const stopWatching = watchOperationCancellation(input.operation, spend, controller);
@@ -53,12 +58,22 @@ export function planStreamResponse(input: PlanRunInput): Response {
       try {
         if (input.operation) emit({ type: "operation", operation: input.operation.operation });
         emit({ type: "status", message: input.context.includes("<current_files>(empty") ? "Studying your brief…" : "Reading your project…" });
-        const result = await runPlanner({ context: input.context, request: input.message, previousPlan: input.previousPlan, attachments: input.attachments,
-          effort: input.effort, spend, emit, signal: controller.signal, anthropic: input.anthropic });
-        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped };
+        const attempt = (model?: string) => runPlanner({ context: input.context, request: input.message, previousPlan: input.previousPlan, attachments: input.attachments,
+          effort: input.effort, spend, emit, signal: controller.signal, anthropic: input.anthropic, ...(model ? { model } : {}) });
+        let result;
+        if (!input.route) result = await attempt();
+        else {
+          // A plan stage produces a valid plan or nothing: a routed attempt without one (or refused) is retried once on the builder model.
+          const routed = await runRouted({ route: input.route, stage: "plan", spend, deadline: spend.deadline, singlePass: true, signal: controller.signal, emit, attempt: model => attempt(model),
+            failed: attempted => attempted.plan ? null : "no valid plan", reset: () => undefined });
+          result = routed.result; routeRecord = routed.record;
+        }
+        logRouteOnce();
+        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped,
+          ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
         if (!result.plan) {
           if (input.operation) {
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "failed", { ...detail, code: "PLAN_INCOMPLETE", message: "A complete plan was not produced. This step was not charged.", changed: false, finished: false })));
+            emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, "failed", { ...detail, code: "PLAN_INCOMPLETE", message: "A complete plan was not produced. This step was not charged.", changed: false, finished: false })));
             return;
           }
           await releaseRun(hold, measured(), "plan_incomplete", detail);
@@ -67,7 +82,7 @@ export function planStreamResponse(input: PlanRunInput): Response {
         }
         if (input.operation) {
           const stored: StoredPlan = { plan: result.plan, status: "draft", basedOnVersion: input.basedOnVersion, revision: input.previousRevision + 1, charged: 0 };
-          const finalized = await finishOperation(input.operation, spend.confirmedMicrousd, "plan", { ...detail, finished: true, changed: true }, { stored });
+          const finalized = await finishOperation(input.operation, spend.chargeableMicrousd, "plan", { ...detail, finished: true, changed: true }, { stored });
           const savedPlan = StoredPlanSchema.safeParse(finalized.result?.stored);
           if (savedPlan.success) emit({ type: "plan", stored: savedPlan.data, estimate: estimatePlanCredits(result.plan), recommended: recommendedEffort(result.plan), persisted: finalized.result?.persisted === true, operation: finalized.operation });
           emit(operationTerminal(finalized));
@@ -79,9 +94,12 @@ export function planStreamResponse(input: PlanRunInput): Response {
         emit({ type: "plan", stored, estimate: estimatePlanCredits(result.plan), recommended: recommendedEffort(result.plan), persisted });
         emit({ type: "done", charged: settled.charged });
       } catch (error) {
+        routeRecord = (error as { route?: RouteRecord } | null)?.route ?? routeRecord;
+        logRouteOnce();
         if (input.operation) {
           const stop = logAiStop(hold.reference, error);
-          emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "PLAN_FAILED", message: stop?.message ?? "Planning stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false }));
+          emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "PLAN_FAILED", message: stop?.message ?? "Planning stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false,
+            ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) }));
           return;
         }
         await releaseRun(hold, measured(), "plan_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped }).catch(() => undefined);

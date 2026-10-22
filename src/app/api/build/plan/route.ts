@@ -22,6 +22,7 @@ import { OperationError, beginOperation, brandKitFingerprint, createOperationSpe
 import { approvedMaximumIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
 import { requirePricedModel } from "@/lib/ai/model-check";
+import { routeModels, routeStage } from "@/lib/ai/model-routing";
 import { AdvisorProvenanceSchema } from "@/lib/experts/advisor-brief";
 
 export const runtime = "nodejs";
@@ -152,6 +153,8 @@ export async function POST(request: Request) {
 
     // Unknown pricing fails closed before anything is reserved or sent.
     requirePricedModel(builderModel());
+    const route = routeStage({ stage: "plan", effort: body.effort });
+    for (const model of routeModels(route)) requirePricedModel(model);
     // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
     await requireProviderCapacity("anthropic");
     // Resolved before admission and fingerprinted into the request (see /api/build).
@@ -201,7 +204,7 @@ export async function POST(request: Request) {
     const spend = createOperationSpend(operation, Date.now() + (maxDuration - 20) * 1000);
     const response = planStreamResponse({ hold, spend, operation, context, message: body.message, previousPlan: body.previousPlan ?? null, attachments, effort: body.effort,
       basedOnVersion: artifact.current_version, previousRevision: existing?.revision ?? 0,
-      persist: async stored => { await writePlan(client, body.workspaceId, body.artifactId, user.id, stored); return true; }, maxDuration });
+      persist: async stored => { await writePlan(client, body.workspaceId, body.artifactId, user.id, stored); return true; }, maxDuration, route });
     reserved = null;
     return response;
   } catch (error) {

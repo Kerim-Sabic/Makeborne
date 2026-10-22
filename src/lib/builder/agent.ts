@@ -108,6 +108,8 @@ export type BuilderRun = {
   storeImage?: (request: GeneratedImageRequest, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
   /** Compile check at finish (tests inject one); production bundles with esbuild. */
   compile?: (files: ReadonlyMap<string, string>) => Promise<CompileVerdict>;
+  /** The model this stage runs on (see ../ai/model-routing.ts); default: the builder model. */
+  model?: string;
 };
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds.
@@ -118,7 +120,7 @@ export type BuilderResult = { summary: string; title?: string; credits: number; 
  * calls finish with a project that passes static checks and compiles, or the budget runs out. */
 export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const policy = { ...BUILDER_EFFORT[run.effort], ...run.limits };
-  const model = builderModel();
+  const model = run.model ?? builderModel();
   const models = builderModels(model);
   const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 600_000 }) as unknown as AnthropicLike);
   const rate = aiCostUsdPerCredit();

@@ -28,6 +28,8 @@ export type PlannerRun = {
   emit: (event: PlannerEvent) => void;
   signal: AbortSignal;
   anthropic?: AnthropicLike;
+  /** The model this stage runs on (see ../ai/model-routing.ts); default: the builder model. */
+  model?: string;
 };
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds. */
@@ -70,7 +72,7 @@ const MILESTONES: [string, string][] = [
  * plan when the model did not produce a valid plan (the caller charges nothing). */
 export async function runPlanner(run: PlannerRun): Promise<PlannerResult> {
   const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 240_000 }) as unknown as AnthropicLike);
-  const model = builderModel();
+  const model = run.model ?? builderModel();
   const models = builderModels(model);
   const rate = aiCostUsdPerCredit();
   const spend = run.spend;
