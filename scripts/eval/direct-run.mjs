@@ -14,6 +14,10 @@
 //      call with its own ledger reservation (kind direct-enhancer) at the 1-credit hold; "answered" first applies the brief's
 //      simulatedAnswers to the on-device design questions the app would ask, then enhances. Short prompts: --only s01-dentist,...
 //      read from scripts/eval/briefs-short/; "questions" applies the simulated answers without the enhancer)
+//     [--route new-site=claude-sonnet-5-5,continuation=claude-sonnet-5-5]  (model routing on, src/lib/ai/model-routing.ts: each stage is
+//      classified like the build route and runs through routedWebsiteStage with its single escalation to the builder model;
+//      without --route every stage runs on the builder model exactly as before)
+//     [--scope <scoped allowance>]  (reservations are booked in that owner-approved scoped allowance instead of the design cap)
 // Outputs land in this harness's outputs/eval/runs/<runId>/ in the run.mjs layout (source.json etc.), so measure.mjs works
 // on them; item.json says origin.stack "none (direct runBuilder)". Report these runs as direct-agent, not app-route, runs.
 import path from 'node:path';
@@ -24,7 +28,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' }, variant: { type: 'string', default: 'original' } } });
+const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' }, variant: { type: 'string', default: 'original' }, route: { type: 'string' }, scope: { type: 'string' } } });
 // This harness: the ledger, the run outputs and the secret scan always go through it.
 const DQ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPO = path.resolve(values.repo ?? DQ);
@@ -32,6 +36,9 @@ if (process.env.EVAL_SPEND_APPROVED !== 'yes' || !values.approval?.trim()) throw
 if (!/^[a-z0-9-]+$/.test(values.run ?? '')) throw new Error('--run must be a plain id');
 if (!['medium', 'high'].includes(values.effort)) throw new Error('--effort must be medium or high');
 if (!['original', 'enhanced', 'answered', 'questions'].includes(values.variant)) throw new Error('--variant must be original, enhanced, answered or questions');
+if (values.route !== undefined && !/^[a-z-]+=[a-z0-9.-]+(?:,[a-z-]+=[a-z0-9.-]+)*$/.test(values.route)) throw new Error('--route takes <class>=<model>[,<class>=<model>...]');
+if (values.scope !== undefined && !/^[a-z0-9][a-z0-9-]{2,63}$/.test(values.scope)) throw new Error('--scope must be a scoped allowance name');
+const routeEnv = values.route ? { MAKEBORNE_MODEL_ROUTING: 'on', ...Object.fromEntries(values.route.split(',').map(item => item.split('=')).map(([taskClass, model]) => [`MAKEBORNE_ROUTE_${taskClass.toUpperCase().replace(/-/g, '_')}`, model])) } : null;
 const only = (values.only ?? '').split(',').map(id => id.trim()).filter(Boolean);
 if (!only.length || only.length > 8) throw new Error('--only takes 1 to 8 brief ids');
 process.chdir(REPO);
@@ -44,7 +51,8 @@ const budget = await import(pathToFileURL(path.join(DQ, 'scripts/eval/lib/budget
 const { serve } = await imp('scripts/eval/lib/serve.mjs');
 const { captureForReview, describeCapture, saveShots } = await imp('scripts/eval/lib/capture-review.mjs');
 const { scanForSecrets } = await import(pathToFileURL(path.join(DQ, 'scripts/eval/run.mjs')).href);
-const { chromium } = await import(pathToFileURL(`${REPO}/scripts/eval/node_modules/playwright/index.mjs`).href);
+// Bare specifier: the eval package's playwright (nearest node_modules), else the app's.
+const { chromium } = await import('playwright');
 
 // The key goes into this process only (the SDK reads it); never printed or written.
 const envFile = process.env.EVAL_ENV_LOCAL?.trim() || path.join(DQ, '.env.local');
@@ -58,6 +66,10 @@ Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_C
 delete process.env.MAKEBORNE_BUILDER_MODEL;
 
 const { runBuilder } = loadApp('src/lib/builder/agent.ts');
+const routing = routeEnv ? loadApp('src/lib/ai/model-routing.ts') : null;
+const { routedWebsiteStage } = routeEnv ? loadApp('src/lib/builder/website-stage.ts') : {};
+/** Ledger reservations: the scoped allowance when --scope is given, else the design cap (unchanged). */
+const reserve = args => values.scope ? budget.reserveScoped({ ...args, scope: values.scope }) : budget.reserve(args);
 // Older trees (--repo at a base commit) have no contrast gate: they run without it, as they shipped.
 const renderedContrastCheck = fs.existsSync(path.join(REPO, 'src/lib/builder/contrast-gate.ts')) ? loadApp('src/lib/builder/contrast-gate.ts').renderedContrastCheck : null;
 const { ProjectFiles } = loadApp('src/lib/builder/files.ts');
@@ -113,11 +125,11 @@ try {
     if (fs.existsSync(path.join(itemDir, 'cost.json'))) { console.log(`${id}: already run, skipped`); continue; }
     fs.mkdirSync(itemDir, { recursive: true });
     const boundUsd = operationCapMicrousd / 1e6;
-    const reservation = await budget.reserve({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. ${values.effort}` });
+    const reservation = await reserve({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${values.scope ? '' : `${budget.CAP_APPROVAL}. `}${values.approval}. ${values.effort}${values.route ? ` route ${values.route}` : ''}` });
     // Images: the run's whole image allowance (max images x the dearest allowed medium bound) reserved under the OpenAI sub-cap.
     const imageModels = imagesModule ? imagesModule.imageConfiguration().models : [];
     const imageBoundUsd = imageModels.length ? policy.maxImages * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
-    const imageReservation = imageBoundUsd ? await budget.reserve({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
+    const imageReservation = imageBoundUsd ? await reserve({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
     let openaiMicrousd = 0, openaiUncertain = false;
     const imageBytes = new Map();
     const images = [];
@@ -140,7 +152,7 @@ try {
     const helpMode = enhancing && enhancedModule.shouldEnhance(brief.brief) ? 'enhance' : 'analyze';
     if (enhancing && values.variant !== 'questions') {
       const enhancerBoundUsd = enhancedModule.ENHANCER_CREDITS * RATE;
-      const enhancerReservation = await budget.reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
+      const enhancerReservation = await reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
       const enhanceSpend = new RunSpend({ run: `${values.run}/${id}/enhance`, providerCapMicrousd: Math.round(enhancerBoundUsd * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 50_000 });
       let enhanced = null, enhanceError = null;
       let reply = null;
@@ -177,14 +189,22 @@ try {
       const timer = setTimeout(() => controller.abort(), STAGE_MS);
       const before = new Set(files.changed); files.changed.clear();
       const saved = new Map(files.files);
-      let result = null, error = null;
+      let result = null, error = null, routeRecord = null;
+      const emit = event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file' || event.type === 'route') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300), ...(event.type === 'route' ? { model: event.model, class: event.class, escalated: event.escalated, reason: event.reason } : {}) }); };
+      // Like the route: the concept step on a first build (nothing written yet, no plan); the context is read at call time.
+      const firstBuild = name === 'build' && !files.files.size;
+      const attempt = (model, deadline) => runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history, prep }), required, contrastCheck,
+        concept: firstBuild, attachments: extra.attachments ?? [], emit,
+        signal: controller.signal, deadline, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage } : {}), ...(model ? { model } : {}) });
       try {
-        result = await runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history, prep }), required, contrastCheck,
-          // Like the route: the concept step on a first build (nothing written yet, no plan).
-          concept: name === 'build' && !files.files.size,
-          attachments: extra.attachments ?? [], emit: event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300) }); },
-          signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage } : {}) });
-      } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; }
+        if (!routeEnv) result = await attempt(undefined, Date.now() + STAGE_MS);
+        else {
+          // The build route's classification and single escalation (src/lib/builder/website-stage.ts), same inputs.
+          const routeKind = name === 'review' ? 'review' : name.startsWith('continuation') ? 'continuation' : 'build';
+          const route = routing.routeStage({ stage: routeKind, request, files: files.files.size, effort: values.effort, attachments: routeKind === 'build' ? (extra.attachments ?? []).length : 0 }, routeEnv);
+          ({ result, record: routeRecord } = await routedWebsiteStage({ route, stage: routeKind, files, spend, deadline: Date.now() + STAGE_MS, signal: controller.signal, emit, compile: compileVerdict, attempt }));
+        }
+      } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; routeRecord = caught.route ?? routeRecord; }
       finally { clearTimeout(timer); }
       spentMicrousd += spend.providerMicrousd;
       for (const call of spend.calls.filter(item => item.provider === 'openai')) { if (call.actualMicrousd === null) { openaiUncertain = true; openaiMicrousd += call.boundMicrousd; } else openaiMicrousd += call.actualMicrousd; }
@@ -197,9 +217,10 @@ try {
       }
       for (const file of before) files.changed.add(file);
       if (result?.concept) fs.writeFileSync(path.join(itemDir, 'concept.json'), JSON.stringify(result.concept, null, 2));
-      stages.push({ name, capMicrousd: cap, concept: result?.concept ? { chosen: result.concept.chosen.name, runnersUp: result.concept.runnersUp.map(item => item.name) } : undefined, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, calls: spend.calls.length, finished: result?.finished ?? false, build: result?.build ?? null, stopped: result?.stopped ?? spend.stopped, summary: result?.summary ?? null, changed, reverted, error });
+      stages.push({ name, capMicrousd: cap, concept: result?.concept ? { chosen: result.concept.chosen.name, runnersUp: result.concept.runnersUp.map(item => item.name) } : undefined, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, calls: spend.calls.length, finished: result?.finished ?? false, build: result?.build ?? null, stopped: result?.stopped ?? spend.stopped, summary: result?.summary ?? null, changed, reverted, error,
+        ...(routeEnv ? { route: routing.routeDetail(routeRecord), chargeableMicrousd: spend.chargeableMicrousd } : {}) });
       if (result?.summary) history.push(`v${history.length + 1}: ${(name === 'review' ? 'Design review' : message.slice(0, 600))} → ${result.summary}`.slice(0, 300));
-      console.log(`  ${id} ${name}: $${(spend.providerMicrousd / 1e6).toFixed(3)} (${spend.calls.length} calls) finished=${result?.finished ?? false}${error ? ` ERROR ${error.code ?? error.name}` : ''}`);
+      console.log(`  ${id} ${name}: $${(spend.providerMicrousd / 1e6).toFixed(3)} (${spend.calls.length} calls) finished=${result?.finished ?? false}${routeRecord ? ` ${routeRecord.models.join(' > ')}${routeRecord.escalation ? ` ESCALATED (${routeRecord.escalation})` : ''}` : ''}${error ? ` ERROR ${error.code ?? error.name}` : ''}`);
       return { result, error, changed };
     };
     let outcome = 'ok';
@@ -232,7 +253,7 @@ try {
       try { const source = files.toSource(); fs.writeFileSync(path.join(itemDir, 'source.json'), JSON.stringify(source)); sourceOk = true; } catch (error) { outcome = `no source: ${error.message}`; }
       fs.writeFileSync(path.join(itemDir, 'brief.json'), JSON.stringify(brief, null, 2));
       fs.writeFileSync(path.join(itemDir, 'item.json'), JSON.stringify({ id, kind: 'website', title: brief.title, direction: brief.direction, briefId: id, brief: brief.brief, briefSha256: null,
-        origin: { type: 'live', stack: 'none (direct runBuilder)', artifactId: null, version: null, path: null }, generation: { effort: values.effort, styleId: 'automatic', mode: 'create (direct)', images: values.images ? `on (${values.images})` : 'off', seed: Boolean(seedBlock), variant: values.variant, questionsAsked: prep.asked, enhancer: prep.enhancer } }, null, 2));
+        origin: { type: 'live', stack: 'none (direct runBuilder)', artifactId: null, version: null, path: null }, generation: { effort: values.effort, styleId: 'automatic', mode: 'create (direct)', images: values.images ? `on (${values.images})` : 'off', seed: Boolean(seedBlock), variant: values.variant, questionsAsked: prep.asked, enhancer: prep.enhancer, routing: values.route ?? 'off', ...(values.scope ? { scope: values.scope } : {}) } }, null, 2));
       fs.writeFileSync(path.join(itemDir, 'events.jsonl'), events.map(event => JSON.stringify(event)).join('\n'));
       fs.writeFileSync(path.join(itemDir, 'cost.json'), JSON.stringify({ boundUsd, reservationId: reservation, actualUsd: uncertain ? null : actualUsd, enhancer: prep.enhancer, images: imageReservation ? { boundUsd: imageBoundUsd, reservationId: imageReservation, actualUsd: openaiUncertain ? null : openaiMicrousd / 1e6, count: images.length } : null, stages, ms: Date.now() - started }, null, 2));
       fs.writeFileSync(path.join(itemDir, 'status.json'), JSON.stringify({ ok: sourceOk && outcome === 'ok', outcome }, null, 2));
