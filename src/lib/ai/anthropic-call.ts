@@ -51,7 +51,7 @@ export class ContextMeter {
       this.counted = true;
       return this.base;
     }
-    return this.base + messages.slice(this.baseLength).reduce<number>((total, message) => total + utf8Bytes(JSON.stringify(message)) + 64, 0);
+    return this.base + messages.slice(this.baseLength).reduce<number>((total, message) => total + messageTokenBound(message), 0);
   }
 
   /** Call right after appending the assistant reply: everything so far is covered by this usage. */
@@ -61,6 +61,69 @@ export class ContextMeter {
     this.baseLength = messages.length;
     this.counted = true;
   }
+}
+
+/** Worst case for one image whose pixel size is unknown: the high-resolution vision tier
+ * (2576 px long edge, ~3.75 MP) costs up to 4,784 tokens per image; with headroom. */
+export const IMAGE_TOKENS_UNKNOWN = 6_000;
+
+/** Pixel size of a base64 PNG, JPEG, GIF or WebP from its header, or null. */
+export function base64ImageSize(data: string): { width: number; height: number } | null {
+  let bytes: Buffer;
+  try { bytes = Buffer.from(data, "base64"); } catch { return null; }
+  const u16be = (at: number) => bytes.readUInt16BE(at), u16le = (at: number) => bytes.readUInt16LE(at), u24le = (at: number) => bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16);
+  try {
+    if (bytes.length >= 24 && bytes.readUInt32BE(0) === 0x89504e47) return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+    if (bytes.length >= 10 && bytes.toString("latin1", 0, 3) === "GIF") return { width: u16le(6), height: u16le(8) };
+    if (bytes.length >= 30 && bytes.toString("latin1", 0, 4) === "RIFF" && bytes.toString("latin1", 8, 12) === "WEBP") {
+      const chunk = bytes.toString("latin1", 12, 16);
+      if (chunk === "VP8X") return { width: u24le(24) + 1, height: u24le(27) + 1 };
+      if (chunk === "VP8L") { const bits = bytes.readUInt32LE(21); return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }; }
+      if (chunk === "VP8 ") return { width: u16le(26) & 0x3fff, height: u16le(28) & 0x3fff };
+      return null;
+    }
+    if (bytes.length >= 4 && u16be(0) === 0xffd8) {
+      // Walk the JPEG segments to the first start-of-frame marker.
+      let at = 2;
+      while (at + 9 < bytes.length) {
+        if (bytes[at] !== 0xff) return null;
+        const marker = bytes[at + 1];
+        if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01 || marker === 0xff) { at += marker === 0xff ? 1 : 2; continue; }
+        if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return { width: u16be(at + 7), height: u16be(at + 5) };
+        at += 2 + u16be(at + 2);
+      }
+    }
+  } catch { return null; }
+  return null;
+}
+
+/**
+ * Upper bound on an image block's input tokens. Claude bills about width × height / 750
+ * tokens per image and never upscales; the bound pads each edge by one 28 px patch and
+ * divides by 700. An image whose size cannot be read counts at IMAGE_TOKENS_UNKNOWN.
+ */
+export function imageTokenBound(source: unknown): number {
+  const data = (source as { type?: unknown; data?: unknown } | null)?.type === "base64" ? (source as { data?: unknown }).data : null;
+  const size = typeof data === "string" ? base64ImageSize(data) : null;
+  if (!size || size.width < 1 || size.height < 1) return IMAGE_TOKENS_UNKNOWN;
+  return Math.min(IMAGE_TOKENS_UNKNOWN, Math.ceil((size.width + 28) * (size.height + 28) / 700)) + 16;
+}
+
+/**
+ * Upper bound on a message's input tokens: one token per UTF-8 byte of its JSON (a token
+ * covers at least one byte of text), except that image blocks count by their pixel size
+ * (their base64 bytes say nothing about the tokens they cost, in either direction).
+ */
+export function messageTokenBound(message: unknown): number {
+  let images = 0;
+  const strip = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(strip);
+    if (!value || typeof value !== "object") return value;
+    const block = value as Record<string, unknown>;
+    if (block.type === "image") { images += imageTokenBound(block.source); return { type: "image" }; }
+    return Object.fromEntries(Object.entries(block).map(([key, item]) => [key, strip(item)]));
+  };
+  return utf8Bytes(JSON.stringify(strip(message))) + 64 + images;
 }
 
 export type BudgetedStream = {

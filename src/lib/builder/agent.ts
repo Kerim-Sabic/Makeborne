@@ -18,7 +18,8 @@ import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
 import { qualityProblems, type QualityInput } from "./quality-gates";
-import { CONCEPT_TOOL, checkConcept, withConceptComment, type ConceptRecord } from "./concept";
+import { CONCEPT_TOOL, checkConcept, imagePlanNote, withConceptComment, type ConceptRecord } from "./concept";
+import { imagePreview, type ImagePreview } from "./image-variants";
 
 /** Conservative streaming output rate used to size steps to the time left. */
 const OUTPUT_TOKENS_PER_SECOND = 50;
@@ -34,11 +35,11 @@ export type BuilderEvent =
   | { type: "file_start"; path: string; op: "write" | "edit" | "delete" }
   | { type: "file"; path: string; op: "write" | "edit"; content: string }
   | { type: "delete"; path: string }
-  | { type: "image_start"; name: string; prompt: string }
+  | { type: "image_start"; name: string; prompt: string; replaces?: string; rejected?: string }
   | { type: "image"; path: string; url: string; assetId: string; model?: string; quality?: string; size?: string; reason?: string; costMicrousd?: number | null }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
-  | { type: "concept"; chosen: string; runnersUp: string[]; why: string }
+  | { type: "concept"; chosen: string; runnersUp: string[]; why: string; shots?: number }
   | { type: "done"; version: number; summary: string; charged: number; changed?: boolean; finished?: boolean; build?: "passed" | "unverified" | null }
   | { type: "error"; code: string; message: string; retryable?: boolean };
 
@@ -48,7 +49,9 @@ const ToolInputs = {
   edit_file: z.object({ path: z.string(), old_string: z.string(), new_string: z.string(), replace_all: z.boolean().optional() }).strict(),
   delete_file: z.object({ path: z.string() }).strict(),
   generate_image: z.object({ name, prompt: z.string().min(20).max(3000), aspect: z.enum(["landscape", "portrait", "square"]), kind: z.enum(IMAGE_KINDS).optional(),
-    text: z.string().max(200).nullable().optional(), textPlacement: z.enum(["exact", "loose"]).optional() }).strict(),
+    text: z.string().max(200).nullable().optional(), textPlacement: z.enum(["exact", "loose"]).optional(),
+    replaces: name.optional(), rejected: z.string().trim().min(8).max(300).optional() }).strict()
+    .refine(input => Boolean(input.replaces) === Boolean(input.rejected), "replaces and rejected go together: the image being regenerated and what is wrong with it."),
   finish: z.object({
     summary: z.string().min(1).max(2000),
     title: z.string().min(1).max(200).optional(),
@@ -73,8 +76,9 @@ function tools(images: boolean, cutouts = false, textImages = false, concept = f
         design: { type: "object", properties: { positioning: { type: "string" }, composition: { type: "string" }, typography: { type: "string" }, palette: { type: "string" }, imagery: { type: "string" }, motion: { type: "string" } }, required: ["positioning", "composition", "typography", "palette", "imagery", "motion"], additionalProperties: false },
       }, required: ["summary", "title"], additionalProperties: false } },
   ];
-  if (images) list.splice(3, 0, { name: "generate_image", description: `Generate one original, art-directed image for the website and register it in the project. Returns the URL and pixel size to use in code (e.g. /images/hero-portrait.webp, width 1536, height 1024). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood, then the house style. Never request text, logos or watermarks in images. kind: photo (default), illustration, texture, icon, or cutout: one subject on a transparent background, trimmed to the subject, for layering over colour fields, shapes or other images${cutouts ? "" : " (cut-outs are unavailable with the configured image models)"}. text: null for no words in the image (the default, and the right choice when the words can be HTML over the image); otherwise the exact short words the image itself must show (a sign, label or poster lettering), with textPlacement "exact" when they must sit precisely where the prompt says${textImages ? "" : " (text in images is unavailable with the configured image models: use HTML text)"}. The platform picks the image model and quality per image.`,
-    input_schema: { type: "object", properties: { name: { type: "string", description: "kebab-case file name without extension" }, prompt: { type: "string" }, aspect: { type: "string", enum: ["landscape", "portrait", "square"] }, kind: { type: "string", enum: [...IMAGE_KINDS] }, text: { type: ["string", "null"], description: "Exact words to render in the image, or null" }, textPlacement: { type: "string", enum: ["exact", "loose"] } }, required: ["name", "prompt", "aspect"], additionalProperties: false } });
+  if (images) list.splice(3, 0, { name: "generate_image", description: `Generate one original, art-directed image for the website and register it in the project. Returns the URL and pixel size to use in code (e.g. /images/hero-portrait.webp, width 1536, height 1024). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood, then the house style. Never request text, logos or watermarks in images. kind: photo (default), illustration, texture, icon, or cutout: one subject on a transparent background, trimmed to the subject, for layering over colour fields, shapes or other images${cutouts ? "" : " (cut-outs are unavailable with the configured image models)"}. text: null for no words in the image (the default, and the right choice when the words can be HTML over the image); otherwise the exact short words the image itself must show (a sign, label or poster lettering), with textPlacement "exact" when they must sit precisely where the prompt says${textImages ? "" : " (text in images is unavailable with the configured image models: use HTML text)"}. The platform picks the image model and quality per image. The result shows you the image itself: inspect it before using it. To regenerate an image you reject (once per slot, counted against the allowance), give a new name, replaces (the rejected image's name) and rejected (what is wrong); the rejected image is removed from the project.`,
+    input_schema: { type: "object", properties: { name: { type: "string", description: "kebab-case file name without extension" }, prompt: { type: "string" }, aspect: { type: "string", enum: ["landscape", "portrait", "square"] }, kind: { type: "string", enum: [...IMAGE_KINDS] }, text: { type: ["string", "null"], description: "Exact words to render in the image, or null" }, textPlacement: { type: "string", enum: ["exact", "loose"] },
+      replaces: { type: "string", description: "Only when regenerating: the name of the generated image this one replaces" }, rejected: { type: "string", description: "Only with replaces: what is wrong with the replaced image (the artefact, the AI look, the wrong subject or the style break)" } }, required: ["name", "prompt", "aspect"], additionalProperties: false } });
   return list;
 }
 
@@ -92,8 +96,9 @@ export type BuilderRun = {
   signal: AbortSignal;
   /** Epoch ms by which the run must have stopped (platform time limit). */
   deadline: number;
-  /** Tighter limits for focused passes such as the design review. */
-  limits?: { maxTurns?: number; maxImages?: number };
+  /** Tighter limits for focused passes such as the design review. replaceOnly: images may only
+   * regenerate an existing image (the review pass), never add a new one. */
+  limits?: { maxTurns?: number; maxImages?: number; replaceOnly?: boolean };
   /** Completeness: sections the approved brief lists (by anchor) and the client's must-haves; checked at finish. */
   required?: QualityInput["required"];
   /** First build of a website: record 2-3 concepts with the concept tool and build the strongest. */
@@ -141,6 +146,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const textImages = imageModels.some(model => TEXT_IMAGE_MODELS.includes(model));
   let imagesUsed = 0, summary = "", title: string | undefined, finished = false, malformedTurns = 0;
   let concept: ConceptRecord | null = null;
+  // Regeneration: each slot is regenerated at most once. Names replaced (or being replaced), and the replacements.
+  const replacedNames = new Set<string>(), replacementNames = new Set<string>();
+  const replaceOnly = Boolean(run.limits?.replaceOnly);
   // Quality gates block a finish once per distinct problem; a repeat is accepted, so a false positive can never strand the work.
   const qualityReported = new Set<string>();
   let build: BuilderResult["build"] = null;
@@ -151,7 +159,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
 
   const messages: BetaMessageParam[] = [{ role: "user", content: [
     ...run.attachments,
-    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${cutouts ? ", transparent cut-outs included" : "; transparent cut-outs unavailable"})` : "unavailable — use typography, CSS and inline SVG"}.\n\n<request>\n${run.request}\n</request>` },
+    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? (replaceOnly
+      ? `available only to regenerate ${imageLimit === 1 ? "one existing image" : `up to ${imageLimit} existing images`} that crop and placement cannot fix (pass replaces and rejected); it comes back to you as a picture to inspect`
+      : `available (up to ${imageLimit} images this run${cutouts ? ", transparent cut-outs included" : "; transparent cut-outs unavailable"}); each image comes back to you as a picture: inspect it before you place it (see IMAGERY)`) : "unavailable — use typography, CSS and inline SVG"}.\n\n<request>\n${run.request}\n</request>` },
   ] }];
 
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
@@ -265,6 +275,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             if (!responsive.siteImageFits([...run.files.assets.values()])) { fail("This site already holds as many images as a published site can carry. Reuse an existing image or use CSS/SVG artwork."); break; }
             if (run.files.assets.has(`public/images/${input.name}.webp`)) { fail(`An image named ${input.name} already exists at /images/${input.name}.webp. Reuse it or choose a new name.`); break; }
+            const rejection = regenerationProblem(input, { replaceOnly, exists: other => run.files.assets.has(`public/images/${other}.webp`), replaced: replacedNames, replacements: replacementNames });
+            if (rejection) { fail(rejection); break; }
             const kind = input.kind ?? "photo";
             const route = routeImage({ kind, aspect: input.aspect, text: input.text ?? null, textPlacement: input.textPlacement }, input.prompt, imageModels);
             if (!route.ok) { fail(route.error); break; }
@@ -279,30 +291,39 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               break;
             }
             imagesUsed++;
-            run.emit({ type: "image_start", name: input.name, prompt: input.prompt });
+            if (input.replaces) { replacedNames.add(input.replaces); replacementNames.add(input.name); }
+            run.emit({ type: "image_start", name: input.name, prompt: input.prompt, ...(input.replaces ? { replaces: input.replaces, rejected: input.rejected } : {}) });
             const started = job;
             imageJobs.push(started.done.then(async bytes => {
               const detail = await started.detail;
               const record = { model: route.model, quality: route.quality, size: route.size, reason: route.reason, text: input.text ?? null, costMicrousd: detail.costMicrousd, outputTokens: detail.outputTokens, overrun: detail.overrun };
               const asset = await storeImage({ name: input.name, prompt: route.prompt, model: route.model, kind, transparent: route.background === "transparent", route: record }, bytes);
-              return { asset, record };
-            }).then(({ asset, record }) => {
+              // What the builder sees: a small preview of the stored image (best effort; text only without it).
+              const preview = await imagePreview(asset.data ?? bytes).catch(() => null);
+              return { asset, record, preview };
+            }).then(({ asset, record, preview }) => {
+              // The rejected image leaves the project (with its copies), so nothing ships or references it.
+              if (input.replaces) run.files.removeAsset(`public/images/${input.replaces}.webp`);
               run.files.addAsset({ id: asset.id, path: asset.path, sha256: asset.sha256, bytes: asset.bytes, mediaType: asset.mediaType });
               // Parallel jobs checked the budget before storing; re-check against what is registered now.
               const copies = Boolean(asset.variants?.length && responsive.variantsFit([...run.files.assets.values()], asset.variants));
               if (copies) for (const variant of asset.variants ?? []) run.files.addAsset(variant);
               run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id, model: record.model, quality: record.quality, size: record.size, reason: record.reason, costMicrousd: record.costMicrousd });
-              results.push({ type: "tool_result", tool_use_id: use.id, content: imageReadyMessage({ ...asset, copies }, input.aspect, kind) });
-            }, () => fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).")));
+              results.push({ type: "tool_result", tool_use_id: use.id, content: imageResultContent(imageReadyMessage({ ...asset, copies }, input.aspect, kind, { name: input.name, replaces: input.replaces, preview: Boolean(preview) }), preview) });
+            }, () => {
+              // A failed regeneration keeps the original in place, so the slot may be tried again.
+              if (input.replaces) { replacedNames.delete(input.replaces); replacementNames.delete(input.name); }
+              fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).");
+            }));
             break;
           }
           case "concept": {
             if (!run.concept) { fail("The concept step is only for a first build; continue with the current design."); break; }
-            const checked = checkConcept(use.input);
+            const checked = checkConcept(use.input, { images: replaceOnly ? 0 : imageLimit });
             if (!checked.ok) { fail(checked.problem); break; }
             concept = checked.record;
-            run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why });
-            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}).` });
+            run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why, ...(concept.imagePlan ? { shots: concept.imagePlan.shots.length } : {}) });
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}).${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan)}` : ""}` });
             break;
           }
           case "finish": {
@@ -368,16 +389,52 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept };
 }
 
+/** The client's own images: their imported photos (/images/photo-N.webp, redesign-server.ts) and the brand
+ * logo (/images/brand-logo.webp, brand/kit.ts). Generated images never replace them. */
+const CLIENT_IMAGE_NAME = /^(?:photo-[0-9]+|brand-logo)$/;
+
+/** Why a generate_image call may not regenerate (or, in a replace-only pass, add) an image, or null.
+ * Each slot is regenerated at most once: a replacement cannot itself be replaced, nor a slot twice. */
+export function regenerationProblem(input: { name: string; replaces?: string },
+  state: { replaceOnly: boolean; exists: (name: string) => boolean; replaced: ReadonlySet<string>; replacements: ReadonlySet<string> }): string | null {
+  if (!input.replaces) return state.replaceOnly
+    ? "In this pass generate_image only regenerates an existing image that crop and placement cannot fix (AI artefacts, the wrong subject): pass replaces (its name) and rejected (what is wrong). Otherwise fix the image with CSS (object-position, aspect, placement) or reuse an existing one."
+    : null;
+  if (input.replaces === input.name) return `Give the regenerated image a new name (for example ${input.replaces}-2) and update its src, width and height in the code.`;
+  if (state.replacements.has(input.replaces)) return `${input.replaces} is already a regenerated image: each slot is regenerated at most once. Use it with a crop or object-position that keeps the flaw out of frame, swap it for another generated image, or use CSS/SVG artwork in that slot.`;
+  if (state.replaced.has(input.replaces)) return `${input.replaces} has already been regenerated once. Use its replacement.`;
+  if (CLIENT_IMAGE_NAME.test(input.replaces)) return `${input.replaces} is the client's own image (their photo or logo): it is never replaced by a generated one. Fix its crop or placement with CSS instead.`;
+  if (!state.exists(input.replaces)) return `There is no generated image named ${input.replaces} to replace. Use the name of an existing image (without /images/ or .webp).`;
+  return null;
+}
+
+/** The inspection the builder does on every generated image it sees, before using it. */
+export const IMAGE_INSPECTION = "Inspect it at full attention before you use it. Reject it when it shows AI artefacts (malformed hands, fingers, faces or teeth; gibberish lettering, fake signage or labels; warped straight lines, impossible geometry or joins; duplicated, fused or melted objects), the AI look (oversaturated colour, plastic skin, HDR glow, glossy showroom perfection, a centred symmetrical subject), the wrong subject for the brief, or a break with the house style and palette of the set.";
+
 /** Tool result for a stored image: the URL, its real pixel size (for width/height, so nothing shifts), for cut-outs
- * whether the alpha survived, and, when responsive copies were stored, that the platform adds the srcset and the
- * code only sets sizes for the slot (without it every copy is chosen for a full-width slot). */
-export function imageReadyMessage(asset: { url: string; width?: number; height?: number; transparent?: boolean; copies?: boolean }, aspect: string, kind: string) {
+ * whether the alpha survived, when responsive copies were stored that the platform adds the srcset and the
+ * code only sets sizes for the slot (without it every copy is chosen for a full-width slot), and, with a preview,
+ * the inspection and art direction the builder does before placing it. */
+export function imageReadyMessage(asset: { url: string; width?: number; height?: number; transparent?: boolean; copies?: boolean }, aspect: string, kind: string,
+  seen: { name?: string; replaces?: string; preview?: boolean } = {}) {
   const size = asset.width && asset.height ? ` width="${asset.width}" height="${asset.height}"` : "";
   const note = kind === "cutout"
     ? (asset.transparent ? " Transparent cut-out trimmed to the subject: layer it over a colour field, shape or image; do not put it in a boxed card." : " The image came back opaque: frame it like a photo on a matching background.")
     : "";
   const copies = asset.copies ? " Smaller copies are added as its srcset automatically (no srcSet in code): set sizes for its slot, e.g. sizes=\"(min-width: 900px) 50vw, 100vw\" for a half-width image." : "";
-  return `Image ready. Use src="${asset.url}"${size} (${kind}, ${aspect}).${note}${copies}`;
+  const ready = `Image ready. Use src="${asset.url}"${size} (${kind}, ${aspect}).${note}${copies}`;
+  if (!seen.preview) return ready;
+  const shown = ` The picture above is this image as generated (a small preview${kind === "cutout" && asset.transparent ? ", transparent areas shown as grey" : ""}).`;
+  const verdict = seen.replaces
+    ? ` This regenerates ${seen.replaces} (removed from the project: point its slot at the new src, width and height). It cannot be regenerated again: if it still shows a flaw, crop it out of frame with the slot's aspect and object-position, or use CSS/SVG artwork in that slot.`
+    : ` If you reject it, call generate_image once more for this slot with a new name, replaces="${seen.name ?? "this-image"}", rejected (what is wrong) and a prompt that fixes the cause (it counts against the allowance; a slot is regenerated at most once).`;
+  return `${ready}${shown} ${IMAGE_INSPECTION}${verdict} Otherwise, before placing it, note to yourself where its focal point and its calm, empty space are, then art-direct the slot: an aspect and crop that serve its job, object-position per breakpoint that keeps the focal point in frame on phones, and text, captions or panels on the calm side or edge, never over the subject.`;
+}
+
+/** Tool result content: the preview image first (when there is one), then the text. */
+export function imageResultContent(text: string, preview: ImagePreview | null): BetaToolResultBlockParam["content"] {
+  if (!preview) return text;
+  return [{ type: "image", source: { type: "base64", media_type: preview.mediaType, data: preview.data } }, { type: "text", text }];
 }
 
 /** Provider HTTP errors and spending-control errors end the run; only malformed streams are retried as a turn. */

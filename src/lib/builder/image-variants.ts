@@ -24,3 +24,25 @@ export async function responsiveVariantBytes(input: Buffer, options: { quality?:
   }
   return variants;
 }
+
+/** Longest edge of the preview the builder sees of each generated image: 768 px keeps
+ * hands, faces, lettering and straight lines legible for the inspection while costing at
+ * most ~790 image tokens (a 768×768 square; 768×512 is ~520). */
+export const IMAGE_PREVIEW_EDGE = 768;
+
+export type ImagePreview = { mediaType: "image/webp"; data: string; width: number; height: number };
+
+/**
+ * A small WebP of a stored image for the builder to look at (tool result image block).
+ * Cut-outs are flattened onto a mid grey so their edges and halo stay visible
+ * (transparent pixels would otherwise read as black or white).
+ */
+export async function imagePreview(input: Buffer, options: { maxEdge?: number } = {}): Promise<ImagePreview> {
+  const edge = options.maxEdge ?? IMAGE_PREVIEW_EDGE;
+  const meta = await sharp(input).metadata();
+  if (!meta.width || !meta.height) throw new Error("The image could not be decoded.");
+  let image = sharp(input).rotate().resize({ width: edge, height: edge, fit: "inside", withoutEnlargement: true });
+  if (meta.hasAlpha) image = image.flatten({ background: { r: 138, g: 138, b: 138 } });
+  const { data, info } = await image.webp({ quality: 72, effort: 4 }).toBuffer({ resolveWithObject: true });
+  return { mediaType: "image/webp", data: data.toString("base64"), width: info.width, height: info.height };
+}

@@ -16,7 +16,7 @@ import { imageConfiguration } from "@/lib/builder/images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
-import { REVIEW_MAX_TURNS, reviewCreditCeiling } from "@/lib/builder/review-policy";
+import { REVIEW_MAX_TURNS, reviewCreditCeiling, reviewImageLimit } from "@/lib/builder/review-policy";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
 import { OperationError, beginOperation, brandKitFingerprint, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
 import { documentBuildResponse } from "@/lib/builder/docs-run";
@@ -189,6 +189,9 @@ export async function POST(request: Request) {
         : "<current_files>(empty — build the complete website from scratch)</current_files>",
     ].filter(Boolean).join("\n");
     const attachments: BetaContentBlockParam[] = reviewing ? reviewAttachments(reviewing) : builderAttachmentBlocks(body.attachments);
+    // A review may regenerate one generated image that reads as AI-made or cannot be cropped right; never on a type-only design.
+    const generatedImages = [...files.assets.keys()].filter(path => /^public\/images\/(?!_r\/)/.test(path) && !/^public\/images\/(?:photo-[0-9]+|brand-logo)\.webp$/.test(path)).length;
+    const reviewImages = reviewing ? reviewImageLimit({ imagery: operation.originalDesign?.imagery, siteImages: generatedImages }) : 0;
 
     // Provider dollars: the effort ceiling, independent of the customer's credits (admins included).
     const spend = createOperationSpend(operation, Date.now() + (maxDuration - 20) * 1000);
@@ -203,7 +206,7 @@ export async function POST(request: Request) {
 
     const response = websiteBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
       message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments,
-      limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
+      limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: reviewImages, replaceOnly: true } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
       // First build: the concept step (2-3 concepts scored on the rubric, the strongest built) inside this run.
       concept: Boolean(seed),
       // Rendered contrast at finish, measured in the export pipeline's Chromium on this app's origin (fail open without a browser).

@@ -82,6 +82,17 @@ export class ProjectFiles {
     this.assets.set(asset.path, asset);
   }
 
+  /** Unregister an image and its responsive copies (a regenerated image replaces it). */
+  removeAsset(path: string) {
+    const asset = this.assets.get(path);
+    if (!asset) return false;
+    this.assets.delete(path);
+    const key = asset.sha256.slice(0, 16);
+    const shared = [...this.assets.values()].some(other => !other.path.startsWith("public/images/_r/") && other.sha256.slice(0, 16) === key);
+    if (!shared) for (const other of [...this.assets.keys()]) if (other.startsWith(`public/images/_r/${key}-`)) this.assets.delete(other);
+    return true;
+  }
+
   totalBytes() {
     let total = 0;
     for (const content of this.files.values()) total += bytes(content);

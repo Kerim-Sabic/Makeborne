@@ -291,7 +291,7 @@ check("image-led by default: a hero image and the full allowance, sizes per slot
   assert.match(imagery, /^Image-led by default\./);
   assert.match(imagery, /Every website gets a strong hero image on the first screen, generated first/);
   assert.match(imagery, /visible on phones without scrolling[^.]*never pushed below all the text and buttons/);
-  assert.match(imagery, /allows about six: the hero plus one image for most other sections/);
+  assert.match(imagery, /Most sites find real jobs for most of the allowance the request states \(a standard build allows about six\)/);
   assert.match(imagery, /two to four of them on one gallery/);
   assert.match(BUILDER_SYSTEM, /At 360px the wordmark, that action and the menu button fit on one row/, "a header row that overflowed at 360 px (W9) in round 2");
   assert.match(imagery, /never instead of it/, "a crafted signature sits with the image, not in place of it");
