@@ -135,10 +135,10 @@ async function main() {
   try {
     await scenario("header shows saved, checked and live side by side; History marks Live, Current and Checked", "1 saved/checked/live", {}, async page => {
       await openEditor(page);
-      const facts = page.getByRole("list", { name: "Saved, checked and live versions" });
+      const facts = page.getByRole("list", { name: "Saved, checked, live and preview versions" });
       await facts.waitFor();
       await page.getByText("Live version 2", { exact: true }).waitFor();
-      assert.deepEqual(await facts.locator("li").allInnerTexts(), ["Saved version 3", "Not checked yet", "Live version 2"]);
+      assert.deepEqual(await facts.locator("li").allInnerTexts(), ["Saved version 3", "Not checked yet", "Live version 2", "Preview: version 3"]);
       assert.equal((await page.locator(".version-facts-notice").innerText()).trim(), "Newer saved changes aren’t live yet: version 3 is saved, version 2 is live. Publish to update the site.");
       await capture(page, "1-header-not-live", ".cloud-workbench-heading");
       await openPublish(page);

@@ -52,7 +52,7 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
  * `syncUrl` mirrors the page on the editor URL so a reload returns to it.
  * `snapshot` shows an earlier saved version read-only (History): it keeps no
  * scroll memory, so the editor's own preview is unaffected. */
-export default function LivePreview({ files, assets, scope, building, subject = null, onFixError, recover, visualEdit, routes = NO_ROUTES, syncUrl = false, snapshot, responseTimeoutMs = 10_000 }: {
+export default function LivePreview({ files, assets, scope, building, subject = null, onFixError, recover, onBuilt, visualEdit, routes = NO_ROUTES, syncUrl = false, snapshot, responseTimeoutMs = 10_000 }: {
   files: Record<string, string>;
   assets: Asset[];
   scope: { accountId: string; workspaceId: string; artifactId: string };
@@ -63,6 +63,8 @@ export default function LivePreview({ files, assets, scope, building, subject = 
   onFixError?: (problem: PreviewProblem) => void;
   /** Offered with a build error: restore an earlier saved version (the host's restore, one explicit click). */
   recover?: { label: string; effect: string; blocked?: string; onRestore: () => void };
+  /** Each compile of these files: `revision` is previewFileRevision(files), `ok` false for a build error. */
+  onBuilt?: (result: { revision: string; ok: boolean }) => void;
   visualEdit?: VisualEditHost;
   /** Saved page routes of this version. Unknown paths show a not-found state. */
   routes?: PreviewRoute[];
@@ -170,6 +172,8 @@ export default function LivePreview({ files, assets, scope, building, subject = 
   // Rebuild shortly after files settle; keep the last good render on errors.
   // Each new document gets a new frame so updates never add browser history.
   const fileKey = useMemo(() => previewFileRevision(files), [files]);
+  const builtRef = useRef(onBuilt);
+  useEffect(() => { builtRef.current = onBuilt; });
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -181,10 +185,11 @@ export default function LivePreview({ files, assets, scope, building, subject = 
         lastHash.current = frameHashKey(start.hash);
         setHtml(preparePreviewDocument(result.html, start)); setFrameKey(key => key + 1);
         setBuildError(""); setTransportError(""); setRuntimeError("");
+        builtRef.current?.({ revision: fileKey, ok: true });
       }
       else if (inspecting) { setEditing(false); setPicked(null); setEditNote("Click-to-edit couldn't read this project's code. Use Code, or ask the builder."); }
       else if (result.kind === "transport") { setTransportError(result.error); retryingRef.current = false; setRetrying(false); }
-      else { setBuildError(result.error); retryingRef.current = false; setRetrying(false); }
+      else { setBuildError(result.error); retryingRef.current = false; setRetrying(false); builtRef.current?.({ revision: fileKey, ok: false }); }
     }, building ? 700 : 150);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fileKey captures every path and full file content; startState reads refs

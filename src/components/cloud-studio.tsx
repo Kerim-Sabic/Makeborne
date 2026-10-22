@@ -33,6 +33,7 @@ import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
 import WorkbenchMore from "./workbench-more";
 import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
+import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
 import { choosePreview, editorEntry, hasBuilderSource, savedFormat } from "@/lib/cloud/saved-preview";
 import { BUILDER_OFF, BUILDER_WAITING_COPY, parseBuilderAvailability, type BuilderAvailability } from "@/lib/builder/availability";
@@ -1598,6 +1599,10 @@ export function CloudEditor({
   // A saved version that doesn't build can go back to the one before it, through History's restore.
   const previousVersion = !live && role !== "reviewer" ? versions.find(version => version.number === expectedVersion - 1) : undefined;
   const restoreBlocked = dirty || busy || savePaused || uncertainSave || conflict || !!recovery;
+  // The preview's latest compile, kept here so the header can say what Preview shows from any tab. It counts only for the exact files compiled.
+  const [previewBuild, setPreviewBuild] = useState<{ revision: string; ok: boolean } | null>(null);
+  const previewRevision = useMemo(() => live?.building ? "" : previewFileRevision(live?.files ?? sourceFiles), [live?.building, live?.files, sourceFiles]);
+  const previewFact = { building: Boolean(live?.building), failed: previewBuild?.ok === false && previewBuild.revision === previewRevision, draft: dirty || Boolean(live) };
   // A project created from the home prompt opens with its brief in the builder. The builder may ask its free
   // questions, but paid work starts only from an explicit Send after the maximum is shown (audit M08).
   useEffect(() => {
@@ -1637,7 +1642,7 @@ export function CloudEditor({
             Version {expectedVersion} ·{" "}
             {savePaused || conflict || uncertainSave ? "Saving paused — review required" : busy && dirty ? "Saving…" : dirty ? "Waiting to save…" : "Saved"}
           </p>
-          {artifact.kind === "website" && <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} />}
+          {artifact.kind === "website" && <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} preview={previewFact} />}
         </div>
         <button
           className={dirty || savePaused || uncertainSave ? "button primary" : "button secondary"}
@@ -1772,7 +1777,7 @@ export function CloudEditor({
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? previewAssets(content.websiteSource)}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
-          routes={!live ? content.websiteSource?.routes : undefined} syncUrl subject={previewSubject}
+          routes={!live ? content.websiteSource?.routes : undefined} syncUrl subject={previewSubject} onBuilt={setPreviewBuild}
           // Fix it only drafts the request in the composer; Send (with its maximum shown) is still the person's choice.
           onFixError={useLiveBuilder && builder.available ? problem => setBuilderPrefill({ key: crypto.randomUUID(), text: fixErrorRequest(problem, previewSubject) }) : undefined}
           recover={previousVersion ? { label: `Restore version ${previousVersion.number}`, effect: restoreEffect(previousVersion.number, expectedVersion, true),

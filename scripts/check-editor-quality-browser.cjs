@@ -172,6 +172,7 @@ async function main() {
   }
   const tab = (page, name) => page.getByRole("navigation", { name: "Project view" }).getByRole("button", { name, exact: true }).click();
   const mainFrame = page => page.frameLocator('iframe[title="Website preview"]');
+  const previewFactIs = (page, text) => page.waitForFunction(expected => document.querySelector('.version-facts li[data-fact="preview"]')?.textContent === expected, text);
   const versionRow = (page, number) => page.locator(".cloud-version").filter({ has: page.locator("strong", { hasText: new RegExp(`^Version ${number}(?!\\d)`) }) });
 
   try {
@@ -225,6 +226,7 @@ async function main() {
       const banner = page.getByRole("alert").filter({ hasText: "has a build error" });
       await banner.waitFor();
       assert.equal(await banner.locator("strong").innerText(), "Version 3 has a build error");
+      await previewFactIs(page, "Preview: build error");
       const restore = banner.getByRole("button", { name: "Restore version 2" }), fix = banner.getByRole("button", { name: "Fix it" });
       assert.match(await page.locator(`#${await restore.getAttribute("aria-describedby")}`).innerText(), /^Restore saves a copy of version 2 as new version 4\. It uses no AI and no credits/);
       assert.match(await page.locator(`#${await fix.getAttribute("aria-describedby")}`).innerText(), /Nothing is sent until you choose Send/);
@@ -248,6 +250,7 @@ async function main() {
       assert.equal(state.saves[0].expectedVersion, 3);
       assert.deepEqual(state.saves[0].content.websiteSource, state.versions[1].content.websiteSource, "version 2's source, saved as version 4");
       assert.equal(await page.getByRole("alert").filter({ hasText: "build error" }).count(), 0, "the restored version builds");
+      await previewFactIs(page, "Preview: version 4");
     });
 
     await scenario("a build error in unsaved edits says so instead of naming the saved version", { lastCode: BROKEN }, async (page, state) => {
@@ -265,6 +268,23 @@ async function main() {
       assert.match(await banner.innerText(), /Finish saving or resolve your current draft before restoring\./);
       state.hold.release();
       await page.waitForFunction(() => [...document.querySelectorAll('[role="alert"] strong')].some(node => node.textContent === "Version 4 has a build error"));
+      await previewFactIs(page, "Preview: build error");
+    });
+    await scenario("the header says what Preview shows, from every tab: the saved version, then unsaved edits, then the new version", {}, async (page, state) => {
+      await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
+      await previewFactIs(page, "Preview: version 3");
+      assert.deepEqual(await page.getByRole("list", { name: "Saved, checked, live and preview versions" }).locator("li").evaluateAll(items => items.map(item => item.dataset.fact)), ["saved", "checked", "live", "preview"]);
+      state.hold = deferred();
+      await tab(page, "Code");
+      assert.equal(await page.locator(".source-editor-guidance").innerText(), "Edits save as new versions after you pause. Preview rebuilds from this code in your browser, unsaved edits included; nothing is published until you publish. Use History to restore a saved version.");
+      await page.locator(".cm-content").click();
+      await page.keyboard.press("End"); await page.keyboard.type(" ");
+      await previewFactIs(page, "Preview: unsaved edits");
+      await tab(page, "History");
+      await previewFactIs(page, "Preview: unsaved edits");
+      state.hold.release();
+      await previewFactIs(page, "Preview: version 4");
+      assert.equal(state.saves.length, 1);
     });
   } finally { await browser.close(); server.close(); }
   if (failures.length) { console.log(`\n${failures.length} mounted editor quality checks failed.`); process.exitCode = 1; }
