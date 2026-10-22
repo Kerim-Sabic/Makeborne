@@ -286,9 +286,10 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             }).then(({ asset, record }) => {
               run.files.addAsset({ id: asset.id, path: asset.path, sha256: asset.sha256, bytes: asset.bytes, mediaType: asset.mediaType });
               // Parallel jobs checked the budget before storing; re-check against what is registered now.
-              if (asset.variants?.length && responsive.variantsFit([...run.files.assets.values()], asset.variants)) for (const variant of asset.variants) run.files.addAsset(variant);
+              const copies = Boolean(asset.variants?.length && responsive.variantsFit([...run.files.assets.values()], asset.variants));
+              if (copies) for (const variant of asset.variants ?? []) run.files.addAsset(variant);
               run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id, model: record.model, quality: record.quality, size: record.size, reason: record.reason, costMicrousd: record.costMicrousd });
-              results.push({ type: "tool_result", tool_use_id: use.id, content: imageReadyMessage(asset, input.aspect, kind) });
+              results.push({ type: "tool_result", tool_use_id: use.id, content: imageReadyMessage({ ...asset, copies }, input.aspect, kind) });
             }, () => fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).")));
             break;
           }
@@ -364,13 +365,16 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept };
 }
 
-/** Tool result for a stored image: the URL, its real pixel size (for width/height, so nothing shifts) and, for cut-outs, whether the alpha survived. */
-export function imageReadyMessage(asset: { url: string; width?: number; height?: number; transparent?: boolean }, aspect: string, kind: string) {
+/** Tool result for a stored image: the URL, its real pixel size (for width/height, so nothing shifts), for cut-outs
+ * whether the alpha survived, and, when responsive copies were stored, that the platform adds the srcset and the
+ * code only sets sizes for the slot (without it every copy is chosen for a full-width slot). */
+export function imageReadyMessage(asset: { url: string; width?: number; height?: number; transparent?: boolean; copies?: boolean }, aspect: string, kind: string) {
   const size = asset.width && asset.height ? ` width="${asset.width}" height="${asset.height}"` : "";
   const note = kind === "cutout"
     ? (asset.transparent ? " Transparent cut-out trimmed to the subject: layer it over a colour field, shape or image; do not put it in a boxed card." : " The image came back opaque: frame it like a photo on a matching background.")
     : "";
-  return `Image ready. Use src="${asset.url}"${size} (${kind}, ${aspect}).${note}`;
+  const copies = asset.copies ? " Smaller copies are added as its srcset automatically (no srcSet in code): set sizes for its slot, e.g. sizes=\"(min-width: 900px) 50vw, 100vw\" for a half-width image." : "";
+  return `Image ready. Use src="${asset.url}"${size} (${kind}, ${aspect}).${note}${copies}`;
 }
 
 /** Provider HTTP errors and spending-control errors end the run; only malformed streams are retried as a turn. */

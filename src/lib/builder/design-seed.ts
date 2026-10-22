@@ -47,31 +47,34 @@ export const ARCHETYPES = ["Photographic", "Type as image", "Editorial split", "
 type Archetype = typeof ARCHETYPES[number];
 /** Type as image was 65% of measured first screens: it stays available but rarely suggested. */
 /** Round 3: fewer photographic seeds had moved 4 of 7 first screens into Editorial split (D4/D5 fell to
- * 0.695), so the weights are flatter: three or four archetypes per industry at similar odds. */
+ * 0.695), so the weights are flatter: three or four archetypes per industry at similar odds.
+ * Image-led round (22 Oct, the owner's call after the Lovable comparison: 12 of 20 sites had no image although
+ * generation was on): every archetype now carries the hero image, and the image-forward ones (Photographic,
+ * Editorial split) are the likeliest draw wherever the subject is physical. */
 const ARCHETYPE_WEIGHTS: Record<Industry, Weighted<Archetype>> = {
-  food: [["Editorial split", 2], ["Poster", 2], ["Index", 2], ["Photographic", 2], ["Product stage", 1], ["Type as image", 1]],
+  food: [["Photographic", 3], ["Editorial split", 3], ["Poster", 2], ["Index", 1], ["Product stage", 1], ["Type as image", 1]],
   saas: [["Product stage", 4], ["Editorial split", 2], ["Index", 1], ["Type as image", 1], ["Poster", 1]],
-  professional: [["Editorial split", 2], ["Index", 2], ["Poster", 2], ["Type as image", 1]],
-  creator: [["Index", 3], ["Poster", 2], ["Type as image", 2], ["Editorial split", 1], ["Photographic", 1]],
-  commerce: [["Product stage", 3], ["Poster", 2], ["Photographic", 2], ["Editorial split", 1], ["Index", 1]],
-  wellness: [["Editorial split", 2], ["Index", 2], ["Type as image", 1], ["Poster", 1], ["Photographic", 1]],
-  trades: [["Poster", 3], ["Index", 2], ["Editorial split", 2], ["Type as image", 1], ["Photographic", 1]],
-  property: [["Editorial split", 2], ["Index", 2], ["Photographic", 2], ["Type as image", 1]],
-  events: [["Poster", 3], ["Index", 2], ["Type as image", 2], ["Photographic", 1]],
-  weddings: [["Editorial split", 2], ["Type as image", 2], ["Index", 2], ["Photographic", 1]],
-  civic: [["Poster", 2], ["Editorial split", 2], ["Index", 2], ["Type as image", 1]],
-  general: [["Editorial split", 2], ["Poster", 2], ["Index", 2], ["Photographic", 1], ["Product stage", 1], ["Type as image", 1]],
+  professional: [["Editorial split", 3], ["Index", 2], ["Poster", 1], ["Photographic", 1], ["Type as image", 1]],
+  creator: [["Editorial split", 2], ["Index", 2], ["Poster", 2], ["Photographic", 1], ["Type as image", 1]],
+  commerce: [["Product stage", 3], ["Photographic", 2], ["Editorial split", 2], ["Poster", 2], ["Index", 1]],
+  wellness: [["Editorial split", 3], ["Photographic", 2], ["Index", 1], ["Poster", 1], ["Type as image", 1]],
+  trades: [["Editorial split", 3], ["Photographic", 2], ["Poster", 2], ["Index", 1], ["Type as image", 1]],
+  property: [["Photographic", 3], ["Editorial split", 3], ["Index", 1], ["Type as image", 1]],
+  events: [["Poster", 3], ["Photographic", 2], ["Type as image", 2], ["Index", 1]],
+  weddings: [["Editorial split", 3], ["Photographic", 2], ["Type as image", 1], ["Index", 1]],
+  civic: [["Editorial split", 3], ["Poster", 2], ["Photographic", 1], ["Index", 1], ["Type as image", 1]],
+  general: [["Editorial split", 3], ["Photographic", 2], ["Poster", 1], ["Index", 1], ["Product stage", 1], ["Type as image", 1]],
 };
 /** A hue family per project for the ground tint and accent, so light sites stop sharing one palette (D1). */
 const PALETTE_FAMILIES = ["sage and moss", "sky and slate blue", "terracotta and clay", "butter and ochre", "plum and mauve", "ink navy and brass",
   "coral and blush", "olive and khaki", "teal and sea glass", "rust and sand", "lilac and violet", "charcoal and signal red", "forest and mint", "denim and cream"] as const;
 const ARCHETYPE_NOTES: Record<Archetype, string> = {
-  "Photographic": "a full-bleed image carries the first screen; the headline sits on a solid panel or a scrim, with a details bar on its edge",
-  "Type as image": "the headline fills the width and one cropped image or object is set into or against the type",
-  "Editorial split": "an asymmetric 7/5 or 5/7 split, the visual bleeding off the viewport edge, a compact details column",
-  "Poster": "one colour-flooded field, condensed or wide display type and a single bold graphic or image",
-  "Product stage": "a crafted product UI mock or product shot on a tinted plinth, the headline beside or above it",
-  "Index": "the services, menu, works or dates listed as large linked rows that are the first screen",
+  "Photographic": "a full-bleed photograph of the subject carries the first screen; the headline sits on a solid panel or a scrim, with a details bar on its edge",
+  "Type as image": "the headline fills the width and one large cropped photograph or cut-out is set into or against the type",
+  "Editorial split": "an asymmetric 7/5 or 5/7 split, a large photograph bleeding off the viewport edge, a compact details column",
+  "Poster": "one colour-flooded field, condensed or wide display type and a single bold photograph or cut-out",
+  "Product stage": "a crafted product UI mock or product shot on a tinted plinth, the headline beside or above it, a photograph of where it is used behind or beside it when that place is physical",
+  "Index": "the services, menu, works or dates listed as large linked rows beside a large image of the subject",
 };
 
 /** Library pairings per industry (display, text); at most two families. */
@@ -179,6 +182,23 @@ function pick<T>(options: Weighted<T>, byte: number): T {
   return options[options.length - 1][0];
 }
 
+/** The image plan when images are on and the client did not answer the imagery question: image-led by
+ * default (a hero image plus two supporting images), with the kind that suits the subject. */
+const DEFAULT_IMAGERY: Record<Industry, string> = {
+  food: "photographs: the hero shows the dishes or the room; supporting shots of the kitchen at work and a close detail of ingredients or the table",
+  saas: "a crafted product UI mock as the hero object, with a photograph of the physical place the product serves (one illustration technique when it has none)",
+  professional: "a calm photograph of the place or the work (the building, the town, papers and hands at a meeting table) or one illustration technique, beside the crafted signature",
+  creator: "photographs or one illustration technique of the subject's world; when the client's own work is not supplied, generated images are mood only, captioned \"Illustrative image\", never presented as their work",
+  commerce: "product photographs or cut-outs on tinted fields, plus a photograph of the product in use",
+  wellness: "calm photographs of the rooms and of care being given (no results, before-and-after or patients' faces)",
+  trades: "photographs of the work being done: the trade at work, the tools, the workshop or the van",
+  property: "large photographs of rooms, buildings and places; when the client's own project photos are not supplied, captioned \"Illustrative image\", never presented as their projects",
+  events: "atmospheric photographs of the venue, the room and the crowd at a distance",
+  weddings: "photographs of the setting and the details (landscape, tables, flowers), never presented as the client's own past weddings",
+  civic: "photographs of the place and of people doing the work, from behind or at a distance",
+  general: "photographs of this business's own subject",
+};
+
 /** Type pairings per answered vibe (display, text): the client's choice of feel sets the type. */
 const VIBE_PAIRINGS: Record<NonNullable<DesignAnswers["vibe"]>, readonly Pairing[]> = {
   calm: [["Instrument Serif", "Geist"], ["Cormorant", "Manrope"], ["Newsreader", "Plus Jakarta Sans"], ["Playfair Display", "DM Sans"]],
@@ -188,7 +208,7 @@ const VIBE_PAIRINGS: Record<NonNullable<DesignAnswers["vibe"]>, readonly Pairing
 };
 const VIBE_TONES: Record<NonNullable<DesignAnswers["vibe"]>, Tone> = { calm: "quiet", technical: "quiet", warm: "quiet", bold: "loud" };
 const IMAGERY_NOTES: Record<NonNullable<DesignAnswers["imagery"]> | "none", string> = {
-  photo: "photographs of this business's specific subject (generate_image kind photo); at most one or two per page, never stock-like",
+  photo: "photographs of this business's specific subject (generate_image kind photo): the hero image on the first screen plus supporting photographs in other sections, candid and specific, never stock-like",
   illustration: "one illustration technique for the whole site (generate_image kind illustration, or drawn CSS/SVG); no photographs",
   type: "no generated images: typography, colour fields and CSS/SVG shapes carry the page",
   none: "typography, CSS and inline SVG (image generation is unavailable)",
@@ -253,7 +273,8 @@ export function designSeedBlock(input: { seed: string; brief: string; images: bo
     design.colour ? `- Colour: build the palette around the client's colour ${design.colour} (accent or ground; text on it at AA contrast) (client's answer).`
       : design.logoColours ? "- Colour: take the palette from the client's logo (client's answer)."
       : `- Palette family: lean the ground tint and accent toward ${seed.palette}, adjusted to the subject.`,
-    imagery ? `- Imagery: ${IMAGERY_NOTES[imagery]}${design.imagery ? " (client's answer)" : ""}.` : "",
+    imagery ? `- Imagery: ${IMAGERY_NOTES[imagery]}${design.imagery ? " (client's answer)" : ""}.`
+      : input.images ? `- Imagery: image-led: a hero image on the first screen plus two supporting images in other sections; ${DEFAULT_IMAGERY[seed.industry]}.` : "",
     design.goal ? `- Primary action: ${GOAL_NOTES[design.goal]} (client's answer).` : "",
     `- Headline device: ${seed.headline}.`,
     "- Motif: one quiet visual motif drawn from this business's own working objects (a ledger page, a receipt, a timetable, a map, a menu card, a ticket, a plan drawing), used consistently and drawn with care, never as clip-art.",

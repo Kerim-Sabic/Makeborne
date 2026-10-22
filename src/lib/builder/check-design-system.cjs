@@ -281,6 +281,47 @@ check("image cut-outs are trimmed to the subject with alpha kept; opaque results
   assert.match(imageReadyMessage({ url: "/images/cup.webp", width: 916, height: 812, transparent: true }, "square", "cutout"), /src="\/images\/cup\.webp" width="916" height="812" \(cutout, square\)\. Transparent cut-out/);
   assert.match(imageReadyMessage({ url: "/images/cup.webp", width: 1024, height: 1024, transparent: false }, "square", "cutout"), /came back opaque/);
   assert.equal(imageReadyMessage({ url: "/images/h.webp" }, "landscape", "photo"), 'Image ready. Use src="/images/h.webp" (photo, landscape).');
+  assert.match(imageReadyMessage({ url: "/images/h.webp", width: 1536, height: 1024, copies: true }, "landscape", "photo"), /srcset automatically \(no srcSet in code\): set sizes for its slot/);
+});
+
+// Image-led sites (owner's decision, 22 Oct, after the Lovable comparison: 12 of 20 sites shipped no image with
+// generation on). The prompt must ask for a hero image by default and use the allowance, without loosening honesty.
+check("image-led by default: a hero image and the full allowance, sizes per slot, honesty for pending photos kept", () => {
+  const imagery = between(BUILDER_SYSTEM, "IMAGERY:", "\nCONVERSION:");
+  assert.match(imagery, /^Image-led by default\./);
+  assert.match(imagery, /Every website gets a strong hero image on the first screen, generated first/);
+  assert.match(imagery, /hero plus two supporting images/);
+  assert.match(imagery, /never instead of it/, "a crafted signature sits with the image, not in place of it");
+  // The old steering away from photography is gone.
+  for (const old of [/wins over photography/, /Default to illustration/, /at most one or two per page/, /keep photos, if any, to one supporting section/, /reads as stock and lowers the page/])
+    assert.doesNotMatch(BUILDER_SYSTEM, old);
+  assert.doesNotMatch(BUILDER_SYSTEM, /Photographic \(only when/);
+  // Realism guidance and the honesty rule stay.
+  assert.match(imagery, /Avoid the AI look: oversaturated colour, plastic skin, HDR glow/);
+  assert.match(imagery, /client's own photos are pending[^.]*never present a generated image as their work, products, premises, team or results/);
+  assert.match(imagery, /follow the brief's own instruction \(simple drawings, marked placeholders, no stock photos presented as their work\)/);
+  assert.match(imagery, /caption every generated mood or context image visibly as "Illustrative image"/);
+  assert.match(imagery, /no identifiable people presented as named staff/);
+  assert.match(imagery, /Never logos or brand marks/);
+  assert.match(BUILDER_SYSTEM, /Text never sits directly on an illustration, photograph or pattern: put it on a solid panel or a scrim/);
+  // Weight: the platform's srcset is used through sizes; grain is discouraged; the unavailable path is unchanged.
+  assert.match(imagery, /never write srcSet yourself, but give every image a sizes attribute that matches its slot/);
+  assert.match(imagery, /sizes="\(min-width: 1280px\) 1280px, 100vw"/);
+  assert.match(imagery, /heavy film grain or noise makes files several times larger/);
+  assert.match(BUILDER_SYSTEM, /If image generation is unavailable, build a strong typographic and graphic design/);
+  // The seed carries an image plan by default when images are on, and none when they are off or the client chose type.
+  for (const brief of ["A neighbourhood restaurant in Bristol", "Heating and plumbing repairs in Saint Paul", "A family dental clinic in Leeds", "SaaS tool for invoices"]) {
+    assert.match(designSeedBlock({ seed: "img", brief, images: true }), /- Imagery: image-led: a hero image on the first screen plus two supporting images/, brief);
+    assert.doesNotMatch(designSeedBlock({ seed: "img", brief, images: false }), /image-led/, brief);
+  }
+  assert.doesNotMatch(designSeedBlock({ seed: "img", brief: "A bakery", images: true, design: { imagery: "type" } }), /image-led/);
+  // Image-forward first screens are the likeliest draw for physical subjects.
+  const counts = {};
+  for (let index = 0; index < 400; index++) {
+    const seed = designSeed({ seed: `il-${index}`, brief: ["A neighbourhood restaurant in Bristol", "Heating and plumbing repairs in Saint Paul", "A family dental clinic in Leeds", "A bike repair workshop in Utrecht"][index % 4], images: true });
+    counts[seed.archetype] = (counts[seed.archetype] ?? 0) + 1;
+  }
+  assert.ok(((counts.Photographic ?? 0) + (counts["Editorial split"] ?? 0)) / 400 >= 0.5, JSON.stringify(counts));
 });
 
 check("the platform badge's accessible name contains its visible text (no aria-label)", async () => {
