@@ -12,6 +12,7 @@ import { newVisualEditSession, type VisualEditSession } from "@/lib/builder/visu
 import type { WebsiteProjectSource } from "@/lib/projects/website-source";
 import type { PickedElement } from "./visual-editor-panel";
 import { readCloudImage } from "./cloud-api";
+import { compileBlockedByAssets, describeAssetProblem, loadPreviewAssets, type AssetLoad, type AssetProblem } from "@/lib/builder/preview-assets";
 import responsive from "../../infra/project-runtime/responsive-images.cjs";
 import "@/app/visual-editor.css";
 
@@ -23,6 +24,8 @@ type Device = "desktop" | "tablet" | "mobile";
 const WIDTHS: Record<Device, number | null> = { desktop: null, tablet: 820, mobile: 390 };
 const STYLE_KEYS: StyleField[] = ["color", "backgroundColor", "fontSize", "fontWeight", "textAlign", "padding", "margin", "borderRadius"];
 const NO_ROUTES: PreviewRoute[] = [];
+const NO_IMAGES: Record<string, string> = {};
+const NO_PROBLEMS: AssetProblem[] = [];
 const NO_HISTORY: VisualEditSession["history"] = [];
 /** "", "#" and "#/" all show the home page. */
 const frameHashKey = (hash: string) => hash === "" || hash === "#" || hash === "#/" ? "#/" : hash;
@@ -88,9 +91,11 @@ export default function LivePreview({ files, assets, scope, building, subject = 
   const [transportError, setTransportError] = useState("");
   const [retrying, setRetrying] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
-  const [images, setImages] = useState<Record<string, string>>({});
-  const [missingImages, setMissingImages] = useState(0);
+  // Project images, as loaded for one exact identity (account, workspace, artifact, asset list, attempt). A result for another
+  // identity is never used, and the first compile waits for this one (see assetsReady below).
+  const [assetLoad, setAssetLoad] = useState<{ key: string } & AssetLoad>({ key: "", images: {}, problems: [] });
   const [imageAttempt, setImageAttempt] = useState(0);
+  const [assetBlocked, setAssetBlocked] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [notice, setNotice] = useState("");
   const cache = useRef(new Map<string, string>());
@@ -140,30 +145,24 @@ export default function LivePreview({ files, assets, scope, building, subject = 
     return () => { cancelled = true; };
   }, [inspecting, engine, setEditing]);
 
-  // Load project images once per asset id and keep them as data URLs.
+  // Load project images once per asset id and keep them as data URLs. Responsive copies (srcset) are for the published
+  // site; the preview uses the originals.
   const assetKey = assets.map(asset => `${asset.id}:${asset.path}`).sort().join("|");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- assetKey captures the asset list
+  const originals = useMemo(() => assets.filter(asset => !responsive.isVariantPath(asset.path)), [assetKey]);
+  const loadKey = `${scope.accountId}|${scope.workspaceId}|${scope.artifactId}|${assetKey}|${imageAttempt}`;
   useEffect(() => {
+    if (!originals.length) return;
     const controller = new AbortController();
-    void (async () => {
-      const next: Record<string, string> = {};
-      let missing = 0;
-      // Responsive copies (srcset) are for the published site; the preview uses the originals.
-      for (const asset of assets.filter(asset => !responsive.isVariantPath(asset.path))) {
-        let url = cache.current.get(asset.id);
-        if (!url) {
-          try {
-            const blob = await readCloudImage(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/assets/${asset.id}`, scope.accountId, controller.signal);
-            url = await toDataUrl(blob);
-            cache.current.set(asset.id, url);
-          } catch { missing++; continue; }
-        }
-        next[`/${asset.path.replace(/^public\//, "")}`] = url;
-      }
-      if (!controller.signal.aborted) { setImages(next); setMissingImages(missing); }
-    })();
+    loadPreviewAssets(originals, async (asset, signal) => toDataUrl(await readCloudImage(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/assets/${asset.id}`, scope.accountId, signal)),
+      { signal: controller.signal, cache: cache.current })
+      .then(result => { if (!controller.signal.aborted) setAssetLoad({ key: loadKey, ...result }); }, () => { /* superseded or unmounted: a newer load owns the preview */ });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- assetKey captures the asset list
-  }, [assetKey, scope.accountId, scope.workspaceId, scope.artifactId, imageAttempt]);
+  }, [loadKey, originals, scope.accountId, scope.workspaceId, scope.artifactId]);
+  // A project with no images is ready at once; otherwise only the load for this exact identity counts.
+  const assetsReady = !originals.length || assetLoad.key === loadKey;
+  const images = originals.length && assetLoad.key === loadKey ? assetLoad.images : NO_IMAGES;
+  const assetProblems = originals.length && assetLoad.key === loadKey ? assetLoad.problems : NO_PROBLEMS;
 
   /** Where a new preview document starts: the current page, its target and scroll. */
   function startState(): PreviewStart {
@@ -184,10 +183,13 @@ export default function LivePreview({ files, assets, scope, building, subject = 
   const builtRef = useRef(onBuilt);
   useEffect(() => { builtRef.current = onBuilt; });
   useEffect(() => {
+    // Never compile a saved project against images that are still loading: that reported a false "Cannot find" build error.
+    if (!assetsReady) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       const result = await bundleProject(files, images, "preview", { inspect: inspecting });
       if (cancelled) return;
+      setAssetBlocked(!result.ok && result.kind !== "transport" && compileBlockedByAssets(result.error, assetProblems));
       if (result.ok) {
         responded.current = false;
         const start = startState();
@@ -198,11 +200,15 @@ export default function LivePreview({ files, assets, scope, building, subject = 
       }
       else if (inspecting) { setEditing(false); setPicked(null); setEditNote("Click-to-edit couldn't read this project's code. Use Code, or ask the builder."); }
       else if (result.kind === "transport") { setTransportError(result.error); retryingRef.current = false; setRetrying(false); }
-      else { setBuildError(result.error); retryingRef.current = false; setRetrying(false); builtRef.current?.({ revision: fileKey, ok: false }); }
+      else {
+        setBuildError(result.error); retryingRef.current = false; setRetrying(false);
+        // An image that could not be reached is not a code error; a genuinely missing image is.
+        if (!compileBlockedByAssets(result.error, assetProblems.filter(problem => problem.reason !== "missing"))) builtRef.current?.({ revision: fileKey, ok: false });
+      }
     }, building ? 700 : 150);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fileKey captures every path and full file content; startState reads refs
-  }, [fileKey, images, building, reloadKey, inspecting]);
+  }, [fileKey, images, assetProblems, assetsReady, building, reloadKey, inspecting]);
 
   // A document that never reports back is a preview connection problem, not a build error.
   useEffect(() => {
@@ -353,14 +359,15 @@ export default function LivePreview({ files, assets, scope, building, subject = 
   }
 
   const width = WIDTHS[device];
-  const problem = buildError || runtimeError;
+  // A compile that failed only because images could not be reached is shown as an image problem, not a build error.
+  const problem = assetBlocked ? "" : buildError || runtimeError;
   const missing = isMissingPage(page, routes);
   const pageTitle = previewPageTitle(page, routes, frameTitle);
   const knownRoutes = routes.map(route => ({ ...route, path: normalizePath(route.path) }));
   // The page a picked element is on, by its saved route name (the document title is often the same on every page).
   const editPage = { title: knownRoutes.find(route => route.path === page.path)?.title || (page.path === "/" ? "Home" : page.path), path: page.path };
   const editTitle = !visualEdit ? "" : building ? "Wait for the build to finish" : visualEdit.disabledReason ?? (editing ? "Stop editing" : "Click elements in the preview to edit them");
-  const status = building ? "Building live…" : transportError ? "Preview connection lost" : retrying ? "Reconnecting…" : buildError ? "Needs a fix" : inspecting ? (picked ? "Editing" : "Click anything to edit it") : html ? missing ? "Page not found" : snapshot === undefined ? "Live preview" : `Saved version ${snapshot} · read only` : "Preparing preview…";
+  const status = building ? "Building live…" : !assetsReady ? html ? "Updating preview…" : "Loading preview…" : transportError ? "Preview connection lost" : retrying ? "Reconnecting…" : buildError ? assetBlocked ? "Images unavailable" : "Needs a fix" : inspecting ? (picked ? "Editing" : "Click anything to edit it") : html ? missing ? "Page not found" : snapshot === undefined ? "Live preview" : `Saved version ${snapshot} · read only` : "Preparing preview…";
   const label = snapshot === undefined ? "Website preview" : `Preview of saved version ${snapshot}`;
   return <section className="lp" aria-label={label} data-preview-path={formatPreviewPath(page)} data-preview-title={pageTitle} data-preview-focus={focusDescriptor || undefined}>
     <header className="lp-bar">
@@ -404,8 +411,17 @@ export default function LivePreview({ files, assets, scope, building, subject = 
         {onFixError && <button type="button" className="button primary small" aria-describedby={`lp-fix-${scope.artifactId}`} onClick={() => onFixError({ kind: buildError ? "build" : "runtime", message: problem })}><Wand2 size={14} />{PREVIEW_ACTIONS.fixError.label}</button>}
       </div>
     </div>}
-    {missingImages > 0 && !building && <div className="lp-problem" role="status"><AlertTriangle size={16} /><div>{missingImages === 1 ? "One project image" : `${missingImages} project images`} couldn&apos;t be loaded, so the preview shows the rest.</div>
-      <button type="button" className="button secondary small" onClick={() => setImageAttempt(attempt => attempt + 1)}>Load images again</button></div>}
+    {assetProblems.length > 0 && !building && !transportError && <div className="lp-problem" role={assetBlocked ? "alert" : "status"}>
+      <AlertTriangle size={16} />
+      <div><strong>{assetBlocked ? "The preview can't show this site yet" : assetProblems.length === 1 ? "One project image is missing from the preview" : `${assetProblems.length} project images are missing from the preview`}</strong>
+        <ul className="lp-problem-list">{assetProblems.map(problem => <li key={problem.path}>{describeAssetProblem(problem)}</li>)}</ul>
+        <p className="lp-problem-note">{assetProblems.some(problem => problem.reason === "missing")
+          ? "A saved file uses an image that isn't in this project. Upload it in Code or change the reference; your saved files are unchanged."
+          : assetProblems.some(problem => problem.reason === "denied")
+            ? "This account can't read these images. Check you're signed in to the account that owns the project."
+            : "This is a loading problem, not a build error. Your saved files are unchanged and nothing was sent to the builder."}</p></div>
+      {assetProblems.some(problem => problem.reason === "unavailable" || problem.reason === "invalid") && <button type="button" className="button secondary small" onClick={() => setImageAttempt(attempt => attempt + 1)}>Load images again</button>}
+    </div>}
     {!inspecting && editNote && <div className="lp-problem" role="status"><AlertTriangle size={16} /><div>{editNote}</div></div>}
     {notice && <p className="lp-notice" role="status">{notice}</p>}
     <div className="lp-body">
@@ -419,7 +435,7 @@ export default function LivePreview({ files, assets, scope, building, subject = 
           referrerPolicy="no-referrer"
           srcDoc={html}
           style={{ width: width ? `${width}px` : "100%" }}
-        /> : <div className="lp-empty">{building || (!buildError && !transportError) ? "Your website will appear here as it's built." : transportError ? "Preview connection lost. Try again re-renders the same saved files." : snapshot !== undefined ? "This saved version can't be shown: it has a build error." : "The first build needs a fix — ask the builder to repair it."}</div>}
+        /> : <div className="lp-empty" role="status">{building ? "Your website will appear here as it's built." : !assetsReady || (!buildError && !transportError) ? "Loading the saved website…" : assetBlocked ? "The preview appears once its images can be loaded." : transportError ? "Preview connection lost. Try again re-renders the same saved files." : snapshot !== undefined ? "This saved version can't be shown: it has a build error." : "The first build needs a fix — ask the builder to repair it."}</div>}
         {html && missing && <div className="lp-missing" role="region" aria-labelledby={`lp-missing-${scope.artifactId}`}>
           <h2 id={`lp-missing-${scope.artifactId}`}>Page not found</h2>
           <p><code>{formatPreviewPath(page)}</code> isn&apos;t a page in this saved version of the site. Nothing was created, generated or charged.</p>
