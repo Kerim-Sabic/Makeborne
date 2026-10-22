@@ -340,7 +340,7 @@ export class DocumentEditor {
   apply(name: string, rawInput: unknown): string {
     if (!(name in DocToolInputs) || AGENT_TOOLS.has(name)) throw new DocToolError(`Unknown tool ${name}.`);
     if (!(this.kind === "deck" ? DECK_TOOLS : BOOK_TOOLS).includes(name as DocToolName)) throw new DocToolError(`${name} is not available for a ${this.kind === "deck" ? "presentation" : "book"}.`);
-    const input = DocToolInputs[name as DocToolName].parse(rawInput) as never;
+    const input = DocToolInputs[name as DocToolName].parse(unescapeLiterals(rawInput)) as never;
     switch (name as DocToolName) {
       case "set_theme": return this.setTheme(input);
       case "set_deck_details": return this.setDeckDetails(input);
@@ -358,6 +358,15 @@ export class DocumentEditor {
 
   /** Compact model-facing snapshot of the current document. */
   snapshot() { return JSON.stringify(this.doc); }
+}
+
+/** A model sometimes double-escapes a character in tool JSON, leaving a literal "\u00e9" in prose (seen live in a figure
+ * caption, 22 Oct 2026). Document text never contains a backslash-u sequence on purpose, so they are decoded. */
+export function unescapeLiterals<T>(value: T): T {
+  if (typeof value === "string") return value.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))) as T;
+  if (Array.isArray(value)) return value.map(unescapeLiterals) as T;
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, unescapeLiterals(item)])) as T;
+  return value;
 }
 
 /** Bracketed fill-in fields ("[Your name]", "[market size in EUR]", "[x%]") and template instructions ("Replace this with…")

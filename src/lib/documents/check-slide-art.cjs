@@ -263,6 +263,11 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.ok(!book.hasImage("anemone") && book.hasImage("pools-opener"));
     assert.ok(!book.doc.chapters[0].text.includes("[[figure:anemone"), "the figure line is gone");
     assert.match(book.doc.chapters[0].text, /The pool is a small sea\.\n\nIt closes when the tide falls\./, "the text flows on without it");
+    const escaped = new DocumentEditor(emptyDocument("book", "Cafe"));
+    escaped.apply("write_chapter", { chapter: { id: "cafe", title: "The caf\\u00e9", text: "[[figure:loaf|A loaf in a busy caf\\u00e9 display]]" } });
+    assert.ok(!"The caf\\u00e9".includes("\u00e9"), "the fixture really is a literal backslash-u sequence");
+    assert.equal(escaped.doc.chapters[0].title, "The café");
+    assert.match(escaped.doc.chapters[0].text, /busy café display/, "a double-escaped character from tool JSON is decoded");
     assert.equal(book.doc.chapters[0].image, "pools-opener");
     assert.equal(imagesIn(fake.log.streams[1]).length, 2, "both images came back to be checked");
 
