@@ -6,7 +6,7 @@ import { hash, metrics, toneColors, type Ctx, type SlideScene } from "./scene-ki
 import * as T from "./compose-title";
 import * as C from "./compose-content";
 import * as M from "./compose-media";
-import { placeImage, placementsFor } from "./compose-image";
+import { RAIL_WIDE, placeImage, placementsFor } from "./compose-image";
 import type { ImagePlacement } from "./schema";
 
 /** Every deck slide is composed once into absolute primitives on a 1280×720
@@ -100,9 +100,9 @@ function context(deck: DeckLike, slide: Slide, index: number, total: number): Ct
   return { theme: deck.theme, dir, m: metrics(deck.theme), c: toneColors(deck.theme, slide.tone, dir.ground), prims: [], issues: [], index, total, deck, tone: slide.tone, slide,
     seed: hash(`${deck.title}|${slide.id}|${dir.id}`), sections };
 }
-function run(deck: DeckLike, slide: Slide, index: number, total: number, id: CompositionId, placement?: ImagePlacement): SlideScene {
+function run(deck: DeckLike, slide: Slide, index: number, total: number, id: CompositionId, placement?: ImagePlacement, rail?: number): SlideScene {
   const ctx = context(deck, slide, index, total);
-  const placed = placement ? placeImage(ctx, slide, placement, T.treatment(ctx)) : undefined;
+  const placed = placement ? placeImage(ctx, slide, placement, T.treatment(ctx), rail) : undefined;
   REGISTRY[id].draw(ctx, slide);
   placed?.finish(ctx);
   return { background: ctx.c.bg, prims: ctx.prims, issues: [...new Set(ctx.issues)], composition: id, ...(placement ? { imagePlacement: placement } : {}) };
@@ -120,6 +120,15 @@ export function candidates(deck: DeckLike, slide: Slide, index: number, total: n
 }
 
 type Planned = { id: CompositionId; scene: SlideScene };
+/** Compositions that stack their title over the content, so a 46% rail still leaves a readable column. */
+const WIDE_RAIL_COMPOSITIONS = new Set<CompositionId>(["points-rows", "closing-next", "statement-centered", "statement-hero", "statement-hanging", "quote-centered"]);
+const textSizes = (scene: SlideScene) => scene.prims.flatMap(prim => prim.k === "text" ? [{ size: prim.size, title: prim.role === "title", lines: prim.text.split("\n").length }] : []);
+/** The wide-rail scene sets its title at least 90% as large, in no more lines, and no text smaller than the standard one. */
+function keepsSizes(wide: SlideScene, standard: SlideScene) {
+  const [a, b] = [textSizes(wide), textSizes(standard)], title = (sizes: typeof a) => Math.max(0, ...sizes.filter(entry => entry.title).map(entry => entry.size));
+  const lines = (sizes: typeof a) => Math.max(0, ...sizes.filter(entry => entry.title).map(entry => entry.lines));
+  return title(a) >= title(b) * 0.9 && lines(a) <= lines(b) && Math.min(...a.map(entry => entry.size)) >= Math.min(...b.map(entry => entry.size));
+}
 const plans = new WeakMap<object, { slides: Slide[]; plan: Planned[] }>();
 function choose(deck: DeckLike, slide: Slide, index: number, total: number, previous: Planned | undefined, roleCount: number): Planned {
   const options = candidates(deck, slide, index, total);
@@ -130,7 +139,15 @@ function choose(deck: DeckLike, slide: Slide, index: number, total: number, prev
   const placements = placementsFor(slide), passes: (ImagePlacement | undefined)[] = placements.length ? placements : [undefined];
   const fitsPass = (id: CompositionId, placement: ImagePlacement | undefined) => placement !== "full" || REGISTRY[id].kind === "airy";
   const tried: Planned[] = [];
-  const attempt = (id: CompositionId, placement: ImagePlacement | undefined) => { const planned = { id, scene: run(deck, slide, index, total, id, placement) }; tried.push(planned); return planned.scene.issues.length ? undefined : planned; };
+  const attempt = (id: CompositionId, placement: ImagePlacement | undefined) => {
+    let scene = run(deck, slide, index, total, id, placement);
+    // Short copy in a stacked composition gives the image the wider rail, if it keeps its type sizes there.
+    if (placement === "side" && WIDE_RAIL_COMPOSITIONS.has(id)) {
+      const wide = run(deck, slide, index, total, id, placement, RAIL_WIDE);
+      if (!wide.issues.length && (scene.issues.length || keepsSizes(wide, scene))) scene = wide;
+    }
+    const planned = { id, scene }; tried.push(planned); return scene.issues.length ? undefined : planned;
+  };
   const best = () => tried.sort((a, b) => a.scene.issues.length - b.scene.issues.length)[0];
   // Image-bearing covers have a semantic image requirement. A decorative
   // variant cannot override that requirement and silently discard a paid asset.

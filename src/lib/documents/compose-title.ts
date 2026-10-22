@@ -1,8 +1,8 @@
 import type { Slide } from "./schema";
 import { mix, contrast, luminance, readableOn } from "./theme";
-import { H, W, ellipse, hline, image, line, measure, rect, scaled, text, toneColors, vline, type Ctx, type ImageTreatment, type RectPrim } from "./scene-kit";
+import { H, W, ellipse, hline, image, line, measure, rect, scaled, text, toneColors, tryCompose, vline, type Ctx, type ImageTreatment, type RectPrim } from "./scene-kit";
 import { scrimOpacity, zoneBrightness } from "./compose-image";
-import { area, display, divider, fitDisplay, footer, label, labelStyle, labelWidth, leadStyle, numeral, numeralStyle, sectionNumber, stack, displayStyle } from "./design";
+import { area, display, divider, fitDisplay, footer, label, labelStyle, labelWidth, leadStyle, numeral, numeralStyle, readableMark, sectionNumber, stack, displayStyle } from "./design";
 import { archPath, arrowPath, graphic, glowField, dotField } from "./graphics";
 import { path } from "./scene-kit";
 import type { GraphicKind } from "./directions";
@@ -184,7 +184,7 @@ export function coverImage(ctx: Ctx, slide: Slide, closing = false) {
     ctx.prims.push(fade, scrim);
     const white = "#FFFFFF", start = ctx.prims.length;
     // The eyebrow sits with the title on the scrim, not alone on the bare image.
-    const s = stack(ctx, { label: slide.eyebrow, labelColor: white, title: slide.title, size: ctx.dir.sizes.cover * (closing ? 0.7 : 0.8), min: 40, sub, titleColor: white, subStyle: { color: "#EDEDED" } }, { x: a.x, y: 160, w: a.w * 0.8, h: H - 56 - 160 }, "bottom");
+    const s = stack(ctx, { label: slide.eyebrow, labelColor: white, title: slide.title, size: ctx.dir.sizes.cover * (closing ? 0.76 : 0.86), min: 40, sub, titleColor: white, subStyle: { color: "#EDEDED" } }, { x: a.x, y: 160, w: a.w * 0.8, h: H - 56 - 160 }, "bottom");
     const top = Math.max(0, s.top - 36), zone = { x: 0, y: top, w: W, h: H - top };
     const dimmest = Math.min(1, ...ctx.prims.slice(start).flatMap(prim => prim.k === "text" ? [luminance(prim.color)] : []));
     const opacity = Math.round(scrimOpacity(zoneBrightness(ctx.deck.assets.find(asset => asset.name === name), box, zone, tr), dimmest) * 100) / 100;
@@ -193,10 +193,37 @@ export function coverImage(ctx: Ctx, slide: Slide, closing = false) {
     if (!fade.opacity) ctx.prims.splice(ctx.prims.indexOf(fade), 1);
     return;
   }
+  if (mode !== "arch" && bleedCover(ctx, slide, closing)) return;
   const left = slide.imageSide === "left", ix = left ? 0 : W / 2, tx = left ? W / 2 + 56 : a.x, tw = W / 2 - 56 - a.x;
   if (mode === "arch") image(ctx, name, { x: ix + 80, y: 72, w: W / 2 - 160, h: H - 144 }, { mask: "arch" });
   else image(ctx, name, { x: ix + (left ? 0 : 24), y: 0, w: W / 2 - 24, h: H }, { treatment: treatment(ctx) });
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.cover * 0.62, min: 36, sub }, { x: tx, y: a.y + 30, w: tw, h: H - 120 - a.y }, "middle");
+  // Larger beside the image, but at most four lines: a longer title steps down instead.
+  const size = ctx.dir.sizes.cover * 0.7;
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size, min: 36, sub, maxTitleH: Math.ceil(scaled(ctx, size) * ctx.dir.display.lh * 4.2) }, { x: tx, y: a.y + 30, w: tw, h: H - 120 - a.y }, "middle");
+}
+
+/** Where a split direction's cover photograph is dark enough on the text side (measured: asset.luma), it runs
+ * full bleed with a solid scrim under the text half and a fade beyond, so white text reaches 4.5:1 while most
+ * of the picture stays visible. A bright (mean of the measured cell highlights on the text side above BLEED_MEAN_MAX, or needing a scrim
+ * above BLEED_SCRIM_MAX), unmeasured or portrait image keeps the split. */
+const BLEED_SCRIM_MAX = 0.55, BLEED_MEAN_MAX = 180;
+function bleedCover(ctx: Ctx, slide: Slide, closing: boolean) {
+  const name = slide.image!, asset = ctx.deck.assets.find(entry => entry.name === name);
+  if (!asset?.luma || asset.aspect === "portrait") return false;
+  const textLeft = slide.imageSide !== "left", side = asset.luma.filter((_, i) => textLeft ? i % 8 < 5 : i % 8 > 2);
+  if (side.reduce((sum, value) => sum + value, 0) / side.length > BLEED_MEAN_MAX) return false;
+  const a = area(ctx), white = "#FFFFFF", tw = Math.round(W * 0.56) - a.x, panel = a.x + tw + 40, fadeW = 300;
+  const words: Ctx = { ...ctx, prims: [], issues: [] };
+  const s = stack(words, { label: slide.eyebrow, labelColor: white, title: slide.title, size: ctx.dir.sizes.cover * (closing ? 0.72 : 0.8), min: 40, sub: subOf(slide), titleColor: white, subStyle: { color: "#EDEDED" } }, { x: textLeft ? a.x : W - a.x - tw, y: a.y + 30, w: tw, h: H - 120 - a.y }, "middle");
+  if (words.issues.length) return false;
+  const tr = treatment(ctx), box = { x: 0, y: 0, w: W, h: H }, top = Math.max(0, s.top - 32), zone = { x: textLeft ? 0 : W - panel, y: top, w: panel, h: Math.min(H, s.bottom + 32) - top };
+  const dimmest = Math.min(1, ...words.prims.flatMap(prim => prim.k === "text" ? [luminance(prim.color)] : []));
+  const opacity = Math.round(scrimOpacity(zoneBrightness(asset, box, zone, tr), dimmest) * 100) / 100;
+  if (opacity > BLEED_SCRIM_MAX) return false;
+  image(ctx, name, box, { crop: "center", ...(tr ? { treatment: tr } : {}) });
+  ctx.prims.push({ k: "rect", x: textLeft ? 0 : W - panel, y: 0, w: panel, h: H, fill: "#000000", opacity },
+    { k: "rect", x: textLeft ? panel : W - panel - fadeW, y: 0, w: fadeW, h: H, fill: "#000000", opacity, fade: textLeft ? "right" : "left" }, ...words.prims);
+  return true;
 }
 
 export function closingAsk(ctx: Ctx, slide: Slide) {
@@ -232,22 +259,35 @@ export function closingBoxed(ctx: Ctx, slide: Slide) { coverBoxed(ctx, slide, tr
 /** The close as a decision: the ask on the left, the agreed next steps numbered on the right (step, then who/when),
  * and the contact line (the slide body, else the presenter) under a rule. No decorative graphic competes with the ask. */
 export function closingNext(ctx: Ctx, slide: Slide) {
+  // Beside an image rail the ask runs across the top and the steps below, rather than a word per line.
+  if (area(ctx).w < 760 && tryCompose(ctx, sub => closingNextLayout(sub, slide, true))) return;
+  closingNextLayout(ctx, slide, false);
+}
+function closingNextLayout(ctx: Ctx, slide: Slide, stacked: boolean) {
   const a = area(ctx), c = ctx.c, steps = slide.points ?? [], sub = slide.subtitle;
-  const lw = Math.round(a.w * (a.w < 900 ? 0.46 : 0.42)), rx = a.x + lw + 56, rw = a.r - rx;
   const contact = slide.body ?? ctx.deck.author, foot = contact ? 64 : 0, bottom = a.b - foot;
   // At most three lines: in a narrow column the ask is set smaller rather than one word per line.
-  const askSize = ctx.dir.sizes.cover * 0.6;
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: askSize, min: 34, sub, subStyle: { size: 22 }, maxTitleH: Math.ceil(scaled(ctx, askSize) * ctx.dir.display.lh * 3.2) }, { x: a.x, y: a.y, w: lw, h: bottom - a.y }, "middle");
-  const numW = 56, tw = rw - numW;
-  const rowsAt = (ts: number, bs: number) => steps.map(step => (step.title ? measure(ctx, step.title, tw, displayStyle(ctx, ts, { role: undefined, lh: 1.14 })) + 6 : 0) + measure(ctx, step.text, tw, { size: bs, lh: 1.4 }) + 36);
-  const sizes = [[30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
-  const [ts, bs] = sizes.find(([t, b]) => rowsAt(t, b).reduce((sum, h) => sum + h, 0) <= bottom - a.y) ?? sizes[sizes.length - 1];
+  const askSize = ctx.dir.sizes.cover * (stacked ? 0.6 : 0.66), maxTitleH = Math.ceil(scaled(ctx, askSize) * ctx.dir.display.lh * 3.2);
+  const ask = { label: slide.eyebrow, title: slide.title, size: askSize, min: stacked ? 36 : 34, sub, subStyle: { size: 22 }, maxTitleH };
+  let rx: number, top: number;
+  if (stacked) {
+    const s = stack(ctx, ask, { x: a.x, y: a.y, w: a.w, h: Math.round((bottom - a.y) * 0.52) }, "top");
+    rx = a.x; top = s.bottom + 32;
+  } else {
+    const lw = Math.round(a.w * (a.w < 900 ? 0.46 : 0.42));
+    stack(ctx, ask, { x: a.x, y: a.y, w: lw, h: bottom - a.y }, "middle");
+    rx = a.x + lw + 56; top = a.y;
+  }
+  const rw = a.r - rx, numW = 56, tw = rw - numW;
+  const rowsAt = (ts: number, bs: number) => steps.map(step => (step.title ? measure(ctx, step.title, tw, displayStyle(ctx, ts, { role: undefined, lh: 1.14 })) + 6 : 0) + measure(ctx, step.text, tw, { size: bs, lh: 1.4 }) + (stacked ? 30 : 36));
+  const sizes = [...(stacked ? [[34, 23], [32, 22]] : []), [30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
+  const [ts, bs] = sizes.find(([t, b]) => rowsAt(t, b).reduce((sum, h) => sum + h, 0) <= bottom - top) ?? sizes[sizes.length - 1];
   const rows = rowsAt(ts, bs), total = rows.reduce((sum, h) => sum + h, 0);
-  if (total > bottom - a.y + 4) ctx.issues.push("the next steps have too much text for the closing slide");
-  let y = a.y + Math.max(0, (bottom - a.y - total) / 2);
+  if (total > bottom - top + 4) ctx.issues.push("the next steps have too much text for the closing slide");
+  let y = top + (stacked ? 0 : Math.max(0, (bottom - top - total) / 2));
   steps.forEach((step, i) => {
     divider(ctx, rx, a.r, y, i === 0);
-    const ns = { ...numeralStyle(ctx, 30, { color: c.accent }), lh: 1.1 };
+    const ns = { ...numeralStyle(ctx, 30, { color: readableMark(ctx, c.accent) }), lh: 1.1 };
     text(ctx, numeral(ctx, i), { x: rx, y: y + 18, w: numW - 8, h: Math.ceil(ns.size * 1.15) }, ns);
     let ty = y + 18;
     if (step.title) ty += text(ctx, step.title, { x: rx + numW, y: ty, w: tw }, displayStyle(ctx, ts, { role: undefined, lh: 1.14, color: c.ink })) + 6;
@@ -365,7 +405,7 @@ export function statementHanging(ctx: Ctx, slide: Slide) {
 
 export function statementCentered(ctx: Ctx, slide: Slide) {
   const a = area(ctx), body = slide.body ?? slide.subtitle;
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.86, min: 38, sub: body, subW: 760, align: "center", rule: ctx.dir.id !== "luxury" }, { x: a.x + 30, y: a.y + 70, w: a.w - 60, h: a.b - a.y - 90 }, "middle");
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.96, min: 38, sub: body, subW: 760, align: "center", rule: ctx.dir.id !== "luxury" }, { x: a.x + 30, y: a.y + 70, w: a.w - 60, h: a.b - a.y - 90 }, "middle");
   footer(ctx);
 }
 
@@ -373,7 +413,7 @@ export function statementField(ctx: Ctx, slide: Slide) {
   applyTone(ctx, fieldTone(ctx));
   const a = area(ctx), body = slide.body ?? slide.subtitle, gw = Math.round(a.w * 0.3), kind = pickGraphic(ctx, 3);
   graphic(ctx, kind === "glow" ? "rings" : kind, { x: a.r - gw, y: a.y + 20, w: gw, h: a.b - a.y - 40 });
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.9, min: 40, sub: body, subW: 680 }, { x: a.x, y: a.y, w: a.w - gw - 56, h: a.b - a.y }, "middle");
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement, min: 40, sub: body, subW: 680 }, { x: a.x, y: a.y, w: a.w - gw - 56, h: a.b - a.y }, "middle");
   footer(ctx);
 }
 
@@ -385,7 +425,7 @@ export function statementSplit(ctx: Ctx, slide: Slide) {
   const g = kind === "mosaic" ? { x: half, y: 0, w: W - half, h: H } : kind === "glow" ? { x: half - 80, y: 0, w: W - half + 80, h: H } : { x: half + 56, y: 80, w: W - half - 112, h: H - 160 };
   if (kind === "mosaic") { const tile = H / 4; graphic(ctx, kind, { x: W - Math.floor((W - half) / tile) * tile, y: 0, w: Math.floor((W - half) / tile) * tile, h: H }); if (W - Math.floor((W - half) / tile) * tile > half) rect(ctx, { x: half, y: 0, w: W - Math.floor((W - half) / tile) * tile - half, h: H, fill: c.strong }); }
   else graphic(ctx, kind, g);
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.72, min: 36, sub: body, subStyle: { size: 23 } }, { x: a.x, y: a.y, w: half - a.x - 64, h: a.b - a.y }, "middle");
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.8, min: 36, sub: body, subStyle: { size: 23 } }, { x: a.x, y: a.y, w: half - a.x - 64, h: a.b - a.y }, "middle");
   text(ctx, String(ctx.index + 1).padStart(2, "0"), { x: a.x, y: 672, w: 80, h: 20 }, { size: 13, color: c.muted, weight: 600, lh: 1.3 });
 }
 

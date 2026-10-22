@@ -35,8 +35,8 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
   const kind = order === undefined ? "" : prim.k === "text" ? (prim.role === "title" ? " m-title" : " m-text") : prim.k === "line" ? " m-line" : prim.k === "art" ? " m-art" : prim.k === "image" ? " m-img" : prim.k === "chart" ? " m-chart" : " m-shape";
   switch (prim.k) {
     case "rect": {
-      const background = prim.noFill ? "transparent" : prim.fade === "up"
-        ? `linear-gradient(to top,${rgba(prim.fill, prim.opacity ?? 1)} 0%,${rgba(prim.fill, (prim.opacity ?? 1) * 0.75)} 45%,${rgba(prim.fill, 0)} 100%)`
+      const background = prim.noFill ? "transparent" : prim.fade
+        ? `linear-gradient(to ${prim.fade === "up" ? "top" : prim.fade},${rgba(prim.fill, prim.opacity ?? 1)} 0%,${rgba(prim.fill, (prim.opacity ?? 1) * 0.75)} 45%,${rgba(prim.fill, 0)} 100%)`
         : rgba(prim.fill, prim.opacity ?? 1);
       return `<div class="p${kind}" style="${box(prim)};background:${background}${prim.radius ? `;border-radius:${cq(prim.radius)}` : ""}${prim.stroke ? `;border:${cq(prim.strokeWidth ?? 1)} solid ${prim.stroke}` : ""}${motion}"></div>`;
     }

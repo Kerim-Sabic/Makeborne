@@ -13,6 +13,11 @@ export const area = (ctx: Ctx) => {
   return { x, y: f?.y ?? ctx.dir.top, w: r - x, r, b: f?.b ?? ctx.dir.bottom };
 };
 const headingWeight = (ctx: Ctx) => FONTS[ctx.theme.fonts].headingWeight as Weight;
+/** Points and numbers slides set their headline this much above the direction's size; long titles still step down to the fit minimum. */
+export const TITLE_UP = 1.12;
+export const headlineUp = (ctx: Ctx) => ctx.dir.sizes.headline * TITLE_UP;
+/** A colour for numerals and marks that reads at 4.5:1 on the slide: the accent, moved toward the ink only as far as needed. */
+export const readableMark = (ctx: Ctx, color: string) => [0, 0.15, 0.3, 0.45, 0.6, 0.75].map(amount => mix(color, ctx.c.ink, amount)).find(value => contrast(value, ctx.c.bg) >= 4.5) ?? ctx.c.ink;
 
 export function labelStyle(ctx: Ctx, extra: Partial<TextStyle> = {}): TextStyle {
   const l = ctx.dir.label, color = l.color === "accent" ? ctx.c.accent : l.color === "muted" ? ctx.c.muted : ctx.c.ink;

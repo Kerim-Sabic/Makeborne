@@ -4,8 +4,10 @@ import { H, W, image, type Ctx, type Frame, type ImageTreatment, type Prim, type
 
 /** Where a slide's image goes when its layout is not itself image-led.
  *
- * - side: a full-height image rail (38% of the width) on imageSide (default right); the
- *   composition lays out in the remaining text zone.
+ * - side: a full-height image rail on imageSide (default right); the composition lays out
+ *   in the remaining text zone. The rail is 46% of the width when the composition stacks
+ *   its title over the content and the copy is short enough to keep its sizes there
+ *   (slide-scene.ts), else 38%.
  * - band: a full-width image band across the top (200 px) above a chart, table or diagram,
  *   which stay native and editable.
  * - full: the image full-bleed with a dark scrim over a declared text-safe zone (the lower
@@ -20,7 +22,7 @@ export const PLACEMENTS: Partial<Record<Slide["layout"], readonly ImagePlacement
   statement: ["side", "full"], points: ["side"], stats: ["side"], agenda: ["side"], quote: ["side", "full"], section: ["side", "full"],
   chart: ["band", "side"], table: ["band", "side"], diagram: ["band", "side"],
 };
-export const RAIL_W = Math.round(W * 0.38), RAIL_GAP = 56, BAND_H = 200, BAND_GAP = 32, SCRIM_TOP = Math.round(H * 0.38);
+export const RAIL_W = Math.round(W * 0.38), RAIL_WIDE = Math.round(W * 0.46), RAIL_GAP = 56, BAND_H = 200, BAND_GAP = 32, SCRIM_TOP = Math.round(H * 0.38);
 
 /** Whether a slide's image will be shown, and why not when it won't. */
 export function imageSupport(slide: Pick<Slide, "layout" | "image" | "imagePlacement">): { ok: true } | { ok: false; message: string } {
@@ -85,14 +87,14 @@ const bbox = (prim: Prim): Box => prim.k === "line"
 const inside = (b: Box, zone: Box, tolerance = 2) => b.x >= zone.x - tolerance && b.y >= zone.y - tolerance && b.x + b.w <= zone.x + zone.w + tolerance && b.y + b.h <= zone.y + zone.h + tolerance;
 
 /** Put the slide's image on the canvas and narrow the composition to its text zone. `finish` runs after the composition. */
-export function placeImage(ctx: Ctx, slide: Slide, placement: ImagePlacement, treatment?: ImageTreatment): PlacementRun {
+export function placeImage(ctx: Ctx, slide: Slide, placement: ImagePlacement, treatment?: ImageTreatment, rail = RAIL_W): PlacementRun {
   const name = slide.image!, d = ctx.dir;
   let imageBox: Box, zone: Box, frame: Frame, scrim: RectPrim | undefined;
   if (placement === "side") {
     const left = slide.imageSide === "left";
-    imageBox = { x: left ? 0 : W - RAIL_W, y: 0, w: RAIL_W, h: H };
-    frame = left ? { x: RAIL_W + RAIL_GAP, r: W - d.mx, y: d.top, b: d.bottom } : { x: d.mx, r: W - RAIL_W - RAIL_GAP, y: d.top, b: d.bottom };
-    zone = left ? { x: RAIL_W + 1, y: 0, w: W - RAIL_W - 1, h: H } : { x: 0, y: 0, w: W - RAIL_W - 1, h: H };
+    imageBox = { x: left ? 0 : W - rail, y: 0, w: rail, h: H };
+    frame = left ? { x: rail + RAIL_GAP, r: W - d.mx, y: d.top, b: d.bottom } : { x: d.mx, r: W - rail - RAIL_GAP, y: d.top, b: d.bottom };
+    zone = left ? { x: rail + 1, y: 0, w: W - rail - 1, h: H } : { x: 0, y: 0, w: W - rail - 1, h: H };
   } else if (placement === "band") {
     imageBox = { x: 0, y: 0, w: W, h: BAND_H };
     frame = { x: d.mx, r: W - d.mx, y: BAND_H + BAND_GAP, b: d.bottom };

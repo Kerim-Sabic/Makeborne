@@ -122,7 +122,7 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
     for (const prim of scene.prims as Prim[]) {
       switch (prim.k) {
         case "rect":
-          slide.addShape(prim.radius ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), ...(prim.fade ? { objectName: FADE } : {}),
+          slide.addShape(prim.radius ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), ...(prim.fade ? { objectName: prim.fade === "up" ? FADE : `${FADE} ${prim.fade}` } : {}),
             fill: prim.noFill ? { type: "none" } : { color: color(prim.fill), transparency: transparency(prim.opacity) },
             line: prim.stroke ? { color: color(prim.stroke), width: pt(prim.strokeWidth ?? 1) } : { type: "none" },
             // pptxgenjs takes the corner radius in inches.
@@ -211,9 +211,11 @@ export function accessible(xml: string, marks: Marks) {
     const name = /<p:cNvPr id="\d+" name="([^"]*)"/.exec(body)?.[1] ?? "";
     if (kind === "pic") return whole.replace(`descr="${DECORATIVE}">`, `descr="">${DECORATIVE_EXT}`);
     if (!/<a:t>[^<]/.test(body)) {
-      // Scrim fades are a vertical gradient to the scrim's opacity, as in the preview (pptxgenjs writes only solid fills).
-      const faded = name === FADE ? whole.replace(/<a:solidFill><a:srgbClr val="([0-9A-F]{6})"><a:alpha val="(\d+)"\/><\/a:srgbClr><\/a:solidFill>/, (_m, hex: string, alpha: string) =>
-        `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${hex}"><a:alpha val="0"/></a:srgbClr></a:gs><a:gs pos="55000"><a:srgbClr val="${hex}"><a:alpha val="${Math.round(Number(alpha) * 0.75)}"/></a:srgbClr></a:gs><a:gs pos="100000"><a:srgbClr val="${hex}"><a:alpha val="${alpha}"/></a:srgbClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>`) : whole;
+      // Scrim fades are a gradient to the scrim's opacity, as in the preview (pptxgenjs writes only solid fills):
+      // "up" is transparent at the top, "right" at the right edge, "left" at the left edge.
+      const angle = name === FADE ? 5400000 : name === `${FADE} right` ? 10800000 : name === `${FADE} left` ? 0 : null;
+      const faded = angle !== null ? whole.replace(/<a:solidFill><a:srgbClr val="([0-9A-F]{6})"><a:alpha val="(\d+)"\/><\/a:srgbClr><\/a:solidFill>/, (_m, hex: string, alpha: string) =>
+        `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${hex}"><a:alpha val="0"/></a:srgbClr></a:gs><a:gs pos="55000"><a:srgbClr val="${hex}"><a:alpha val="${Math.round(Number(alpha) * 0.75)}"/></a:srgbClr></a:gs><a:gs pos="100000"><a:srgbClr val="${hex}"><a:alpha val="${alpha}"/></a:srgbClr></a:gs></a:gsLst><a:lin ang="${angle}" scaled="0"/></a:gradFill>`) : whole;
       return faded.replace(/(<p:cNvPr id="\d+" name="[^"]*">)(<\/p:cNvPr>)/, `$1${DECORATIVE_EXT}$2`);
     }
     let out = whole;

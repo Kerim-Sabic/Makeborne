@@ -10,7 +10,7 @@ export const W = 1280, H = 720;
 export type TextPrim = { k: "text"; x: number; y: number; w: number; h: number; text: string; font: FontRole; size: number; weight: Weight; color: string; align: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; lh: number; tracking?: number; upper?: boolean; italic?: boolean; role?: "title" | "body"; list?: TextList };
 /** One text box holding a list: each line of `text` is an item with a hanging marker; items are `gap` px apart. The PPTX writes one bulleted text box. */
 export type TextList = { marker: "dash" | "square"; color: string; indent: number; gap: number };
-export type RectPrim = { k: "rect"; x: number; y: number; w: number; h: number; fill: string; opacity?: number; radius?: number; fade?: "up"; stroke?: string; strokeWidth?: number; noFill?: true };
+export type RectPrim = { k: "rect"; x: number; y: number; w: number; h: number; fill: string; opacity?: number; radius?: number; fade?: "up" | "left" | "right"; stroke?: string; strokeWidth?: number; noFill?: true };
 export type EllipsePrim = { k: "ellipse"; x: number; y: number; w: number; h: number; fill?: string; stroke?: string; strokeWidth?: number; opacity?: number };
 export type LinePrim = { k: "line"; x1: number; y1: number; x2: number; y2: number; color: string; width: number; arrow?: boolean; opacity?: number; dash?: boolean };
 export type PathSeg = { op: "M" | "L"; x: number; y: number } | { op: "C"; x1: number; y1: number; x2: number; y2: number; x: number; y: number } | { op: "Z" };
@@ -241,6 +241,14 @@ export function shift(prims: Prim[], dy: number, dx = 0) {
 export const bottomOf = (prims: Prim[]) => Math.max(0, ...prims.map(prim => prim.k === "line" ? Math.max(prim.y1, prim.y2) : prim.y + prim.h));
 export const topOf = (prims: Prim[]) => Math.min(H, ...prims.map(prim => prim.k === "line" ? Math.min(prim.y1, prim.y2) : prim.y));
 /** Compose a block in a sub-context, then place it in [top, bottom] by bias (0 top, 0.5 centre, 1 bottom). */
+/** Compose into a trial context and keep the result only when it raised no issues. */
+export function tryCompose(ctx: Ctx, build: (sub: Ctx) => void) {
+  const sub: Ctx = { ...ctx, prims: [], issues: [] };
+  build(sub);
+  if (sub.issues.length) return false;
+  ctx.prims.push(...sub.prims);
+  return true;
+}
 export function placed(ctx: Ctx, top: number, bottom: number, build: (sub: Ctx) => void, bias = 0.42) {
   const sub: Ctx = { ...ctx, prims: [], issues: [] };
   build(sub);

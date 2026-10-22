@@ -8,7 +8,7 @@ const { DocumentSourceSchema, SLIDE_LAYOUTS } = require("./schema.ts");
 const { composeSlide, W, H } = require("./slide-scene.ts");
 const { DocumentEditor, DocToolError, emptyDocument } = require("./editor.ts");
 const { DIRECTIONS } = require("./directions.ts");
-const { imageSupport, scrimOpacity, zoneBrightness, RAIL_W, BAND_H, SCRIM_TOP } = require("./compose-image.ts");
+const { imageSupport, scrimOpacity, zoneBrightness, RAIL_W, RAIL_WIDE, BAND_H, SCRIM_TOP } = require("./compose-image.ts");
 const { imageLuma } = require("./image-luma.ts");
 const { contrast, luminance } = require("./theme.ts");
 const { deckPptx } = require("./pptx.ts");
@@ -60,19 +60,28 @@ const imageOf = (scene, name) => scene.prims.find(prim => prim.k === "image" && 
     assert.match(editor.apply("write_slide", { slide: { id: "p", layout: "points", notes: "n", image: "harbour", ...samples.points } }), /Added slide 1/);
     assert.ok(editor.problems().some(problem => /harbour/.test(problem)), "the image still has to be generated");
   });
-  await check("a side rail holds the image at 38% width and keeps every composed primitive in the text zone", () => {
+  await check("a side rail holds the image at 38% width (46% for short copy in a stacked composition) and keeps every composed primitive in the text zone", () => {
+    const STACKED = new Set(["points-rows", "closing-next", "statement-centered", "statement-hero", "statement-hanging", "quote-centered"]);
+    let wide = 0;
     for (const direction of DIRECTIONS) for (const layout of ["statement", "points", "stats", "agenda"]) {
       const deck = base(direction, [{ id: "s", layout, notes: "n", image: "rail-art", imagePlacement: "side", ...samples[layout] }], [asset("rail-art", "portrait")]);
       const scene = composeSlide(deck, deck.slides[0], 0, 1);
       assert.equal(scene.imagePlacement, "side", `${direction} ${layout}`);
       assert.deepEqual(scene.issues, [], `${direction} ${layout} ${scene.composition}`);
-      const img = imageOf(scene, "rail-art");
-      assert.deepEqual([img.x, img.y, img.w, img.h], [W - RAIL_W, 0, RAIL_W, H]);
+      const img = imageOf(scene, "rail-art"), rail = img.w;
+      assert.ok(rail === RAIL_W || (rail === RAIL_WIDE && STACKED.has(scene.composition)), `${direction} ${layout} ${scene.composition}: rail ${rail}`);
+      if (rail === RAIL_WIDE) wide++;
+      assert.deepEqual([img.x, img.y, img.h], [W - rail, 0, H]);
       for (const prim of scene.prims) if (prim !== img) {
         const right = prim.k === "line" ? Math.max(prim.x1, prim.x2) : prim.x + prim.w;
-        assert.ok(right <= W - RAIL_W + 2, `${direction} ${layout}: ${prim.k} reaches into the rail`);
+        assert.ok(right <= W - rail + 2, `${direction} ${layout}: ${prim.k} reaches into the rail`);
       }
     }
+    assert.ok(wide > 0, "short copy gives some slides the wide rail");
+    // A stacked composition beside the rail runs its title across the column: no title column of one word per line.
+    const pts = base("editorial", [{ id: "s", layout: "points", notes: "n", image: "rail-art", imagePlacement: "side", variant: "points-rows", ...samples.points }], [asset("rail-art", "portrait")]);
+    const title = composeSlide(pts, pts.slides[0], 0, 1).prims.find(prim => prim.k === "text" && prim.role === "title");
+    assert.ok(title.w > 500 && title.text.split("\n").length <= 2, `points title ${title.w}px wide, ${JSON.stringify(title.text)}`);
   });
   await check("chart, table and diagram slides take a top band and keep the chart native", () => {
     for (const layout of ["chart", "table", "diagram"]) {
@@ -110,6 +119,29 @@ const imageOf = (scene, name) => scene.prims.find(prim => prim.k === "image" && 
     };
     const [low, high] = [await scrimFor(dark), await scrimFor(bright)];
     assert.ok(low < high, `scrim ${low} on a dark image should be lighter than ${high} on a bright one`);
+  });
+  await check("a split-direction cover runs a dark measured photograph full bleed behind a side scrim at 4.5:1; a bright one keeps the split", async () => {
+    const cover = async (background) => {
+      const bytes = await sharp({ create: { width: 300, height: 300, channels: 3, background } }).png().toBuffer();
+      const deck = base("editorial", [{ id: "c", layout: "cover", notes: "n", image: "night", eyebrow: "Proposal", ...samples.cover }], [asset("night", "square", { luma: await imageLuma(bytes) })]);
+      return { deck, scene: composeSlide(deck, deck.slides[0], 0, 1) };
+    };
+    const dark = await cover("#1A2630"), img = imageOf(dark.scene, "night");
+    assert.deepEqual([img.x, img.y, img.w, img.h], [0, 0, W, H], "full bleed");
+    const [scrim, fade] = dark.scene.prims.filter(prim => prim.k === "rect");
+    assert.ok(scrim.x === 0 && scrim.h === H && !scrim.fade && fade.fade === "right" && fade.x === scrim.w, "solid scrim under the text, fading to the right");
+    const texts = dark.scene.prims.filter(prim => prim.k === "text");
+    const title = texts.find(prim => prim.role === "title");
+    assert.ok(title.size >= 80, `cover title ${title.size}px`);
+    for (const prim of texts) {
+      assert.ok(prim.x + prim.w <= scrim.w, `"${prim.text}" sits on the solid scrim`);
+      const shown = Math.round(zoneBrightness(dark.deck.assets[0], { x: 0, y: 0, w: W, h: H }, { x: 0, y: prim.y, w: scrim.w, h: prim.h }) * (1 - scrim.opacity));
+      assert.ok(contrast(prim.color, `#${shown.toString(16).padStart(2, "0").repeat(3)}`) >= 4.5, `"${prim.text}" ${prim.color}`);
+    }
+    const xml = await (await JSZip.loadAsync(await deckPptx(dark.deck, { night: await sharp({ create: { width: 60, height: 60, channels: 3, background: "#1A2630" } }).png().toBuffer() }))).file("ppt/slides/slide1.xml").async("string");
+    assert.match(xml, /name="Scrim fade right"[\s\S]*?<a:gradFill[\s\S]*?<a:lin ang="10800000"/, "the PPTX fade runs the same way");
+    const bright = await cover("#F4EEDC");
+    assert.ok(imageOf(bright.scene, "night").w < W, "a bright photograph keeps the split");
   });
   await check("the PPTX places the same images with their alt text, names the slide title and keeps caps as formatting", async () => {
     const deck = base("swiss", [

@@ -1,7 +1,7 @@
 import type { Slide } from "./schema";
 import { FONTS, mix, readableOn, contrast } from "./theme";
-import { H, W, ellipse, estimateLines, glyphWidth, hline, measure, placed, rect, scaled, text, textWidth, vline, line, initials, image, type Ctx, type TextStyle, type ChartColors, type Tone } from "./scene-kit";
-import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, header, label, labelStyle, leadStyle, marker, numeral, numeralStyle, panel, stack, ruleColor } from "./design";
+import { H, W, ellipse, estimateLines, glyphWidth, hline, measure, placed, rect, scaled, text, textWidth, tryCompose, vline, line, initials, image, type Ctx, type TextStyle, type ChartColors, type Tone } from "./scene-kit";
+import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, header, headlineUp, readableMark, label, labelStyle, leadStyle, marker, numeral, numeralStyle, panel, stack, ruleColor } from "./design";
 import { formatValue } from "./chart-svg";
 import { arrowPath } from "./graphics";
 import { path } from "./scene-kit";
@@ -16,7 +16,7 @@ function steps<T>(options: T[], fits: (option: T) => boolean) { return options.f
 
 export function pointsColumns(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
-  let top = header(ctx, slide, { standfirst: slide.body });
+  let top = header(ctx, slide, { standfirst: slide.body, size: headlineUp(ctx) });
   top += 44;
   const gap = n === 4 ? 32 : 48, colW = (a.w - gap * (n - 1)) / n, band = a.b - top;
   const numSize = Math.round((n <= 3 ? 64 : 52) * Math.max(1, ctx.dir.sizes.number / 176)), center = ctx.dir.axis === "center", align = center ? "center" as const : "left" as const;
@@ -41,7 +41,32 @@ export function pointsColumns(ctx: Ctx, slide: Slide) {
   footer(ctx);
 }
 
+/** Beside an image rail a title column would be a word per line: the title runs across the top, the rows below. */
+function pointsRowsStacked(ctx: Ctx, slide: Slide) {
+  const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
+  const top = header(ctx, slide, { size: headlineUp(ctx), maxLines: 3, standfirst: slide.body }) + 28, band = a.b - top;
+  const numW = 56, tw = a.w - numW;
+  const rowsAt = (ts: number, bs: number) => points.map(point => Math.max(36, (point.title ? measure(ctx, point.title, tw, titleStyle(ctx, ts)) + 6 : 0) + measure(ctx, point.text, tw, bodyStyle(ctx, { size: bs }))) + 34);
+  const sum = (rows: number[]) => rows.reduce((s, h) => s + h, 0);
+  const [ts, bs] = steps([[34, 24], [32, 23], [30, 22], [28, 21], [26, 20], [24, 19], [22, 18]], ([t, b]) => sum(rowsAt(t, b)) <= band);
+  const rows = rowsAt(ts, bs), total = sum(rows);
+  if (total > band + 4) ctx.issues.push("the points have too much text beside the image");
+  let y = top + Math.max(0, (band - total) * 0.3);
+  points.forEach((point, i) => {
+    divider(ctx, a.x, a.r, y, i === 0);
+    const inner = y + 18, base = numeralStyle(ctx, 26), ns = { ...base, color: readableMark(ctx, base.color ?? c.ink), lh: 1.1 };
+    text(ctx, numeral(ctx, i), { x: a.x, y: inner + 2, w: numW - 8, h: Math.ceil(ns.size * 1.15) }, ns);
+    let ty = inner;
+    if (point.title) ty += text(ctx, point.title, { x: a.x + numW, y: ty, w: tw }, titleStyle(ctx, ts)) + 6;
+    text(ctx, point.text, { x: a.x + numW, y: ty, w: tw }, bodyStyle(ctx, { size: bs, color: point.title ? c.muted : c.ink }));
+    y += rows[i];
+  });
+  if (n) divider(ctx, a.x, a.r, y);
+  footer(ctx);
+}
+
 export function pointsRows(ctx: Ctx, slide: Slide) {
+  if (area(ctx).w < 760 && tryCompose(ctx, sub => pointsRowsStacked(sub, slide))) return;
   const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
   const lw = Math.round(a.w * 0.36), rx = a.x + lw + 56, rw = a.r - rx;
   stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.headline, min: 32, sub: slide.body, subStyle: { size: 22 } }, { x: a.x, y: a.y, w: lw, h: a.b - a.y }, "top");
@@ -66,7 +91,7 @@ export function pointsRows(ctx: Ctx, slide: Slide) {
 
 export function pointsCards(ctx: Ctx, slide: Slide) {
   const a = area(ctx), points = slide.points!, n = points.length;
-  const top = header(ctx, slide, { standfirst: slide.body }) + 36;
+  const top = header(ctx, slide, { standfirst: slide.body, size: headlineUp(ctx) }) + 36;
   const cols = n <= 4 ? n : 3, rows = Math.ceil(n / cols), gap = 20, cw = (a.w - gap * (cols - 1)) / cols, band = a.b - top, ch = (band - gap * (rows - 1)) / rows, pad = cols >= 4 ? 24 : 30;
   const iw = cw - pad * 2, glyphS = rows > 1 ? 30 : 40;
   const contentH = (ts: number, bs: number) => Math.max(...points.map(point => glyphS + 24 + (point.title ? measure(ctx, point.title, iw, titleStyle(ctx, ts)) + 10 : 0) + measure(ctx, point.text, iw, bodyStyle(ctx, { size: bs })))) + pad * 2;
@@ -90,7 +115,7 @@ export function pointsCards(ctx: Ctx, slide: Slide) {
 
 export function pointsFeature(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, points = slide.points!, [first, ...rest] = points;
-  const top = header(ctx, slide) + 36, band = a.b - top, lw = Math.round(a.w * 0.47), rx = a.x + lw + 48, rw = a.r - rx;
+  const top = header(ctx, slide, { size: headlineUp(ctx) }) + 36, band = a.b - top, lw = Math.round(a.w * 0.47), rx = a.x + lw + 48, rw = a.r - rx;
   const ink = panel(ctx, { x: a.x, y: top, w: lw, h: band }, ctx.dir.panel !== "none" && ctx.dir.id !== "organic", 0);
   const pad = 40;
   const ns = numeralStyle(ctx, 72, { color: ink.accent });
@@ -115,7 +140,7 @@ export function pointsFeature(ctx: Ctx, slide: Slide) {
 export function pointsGrid(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
   // Six cells need the height: a long headline steps down to one line rather than squeezing the grid.
-  const top = header(ctx, slide, { standfirst: slide.body, ...(n >= 5 ? { maxLines: 1, size: ctx.dir.sizes.headline * 0.9 } : {}) }) + 32;
+  const top = header(ctx, slide, { standfirst: slide.body, ...(n >= 5 ? { maxLines: 1, size: ctx.dir.sizes.headline * 0.9 } : { size: headlineUp(ctx) }) }) + 32;
   const cols = n === 4 ? 2 : 3, rows = Math.ceil(n / cols), band = a.b - top, boxed = ctx.dir.panel === "outline" || ctx.dir.panel === "heavy" || ctx.dir.panel === "fill";
   const gap = boxed ? 16 : 0, cw = (a.w - gap * (cols - 1)) / cols, ch = (band - gap * (rows - 1)) / rows, pad = boxed ? 28 : 24;
   const iw = cw - pad * 2 - (boxed ? 0 : 0);
@@ -178,7 +203,7 @@ const valueStyle = (ctx: Ctx, size: number, color: string): TextStyle => ({ font
 
 export function statsHero(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, stats = slide.stats!, n = stats.length;
-  let top = header(ctx, slide, { maxLines: 2 });
+  let top = header(ctx, slide, { maxLines: 2, size: headlineUp(ctx) });
   top += 24;
   if (n === 1) {
     const s = stats[0], vw = a.w * 0.6, size = oneLine(ctx, s.value, vw, Math.min(280, ctx.dir.sizes.number * 1.5), 80);
@@ -208,7 +233,7 @@ export function statsHero(ctx: Ctx, slide: Slide) {
 
 export function statsRow(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, stats = slide.stats!, n = stats.length;
-  const top = header(ctx, slide, { standfirst: n > 1 ? undefined : slide.body }) + 40, colW = a.w / n, inset = 32;
+  const top = header(ctx, slide, { standfirst: n > 1 ? undefined : slide.body, size: headlineUp(ctx) }) + 40, colW = a.w / n, inset = 32;
   const valueBox = colW - (n > 1 ? inset * 2 : inset), size = Math.min(...stats.map(s => oneLine(ctx, s.value, valueBox, n <= 2 ? 150 : n === 3 ? 124 : 100, 40)));
   const vh = Math.ceil(size * 1.04);
   // Labels shrink together until their longest word fits the column, so the row stays even.
@@ -233,7 +258,7 @@ export function statsRow(ctx: Ctx, slide: Slide) {
 
 export function statsTiles(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, p = ctx.theme.palette, stats = slide.stats!, n = stats.length;
-  const top = header(ctx, slide) + 36, gap = 16, tw = (a.w - gap * (n - 1)) / n, th = a.b - top, pad = n === 4 ? 24 : 32;
+  const top = header(ctx, slide, { size: headlineUp(ctx) }) + 36, gap = 16, tw = (a.w - gap * (n - 1)) / n, th = a.b - top, pad = n === 4 ? 24 : 32;
   const fills = ctx.dir.id === "colorblock" ? [p.accent, p.accent2, p.dark, p.surface] : ctx.dir.id === "brutalist" ? [c.signal, c.bg, c.bg, c.bg] : [c.strong, c.surface, c.surface, c.surface];
   const size = Math.min(...stats.map(s => oneLine(ctx, s.value, tw - pad * 2, n <= 2 ? 150 : n === 3 ? 120 : 92, 40)));
   stats.forEach((s, i) => {
