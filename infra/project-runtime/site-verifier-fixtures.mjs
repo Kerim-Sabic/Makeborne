@@ -8,7 +8,7 @@ export const FIXTURE_ROUTES = Object.freeze([{path: '/', title: 'Home'}, {path: 
 
 /** Options (all false by default): deadLink, menuNeverOpens, menuNoEscape, overflow360, fixedBar, brokenImage,
  * runtimeError, formNoStatus, formTwice, formOffOrigin, reducedHidden, unknownBlank, primaryNoop, focusInvisible,
- * keyboardTrap, canaryPort (a localhost port the page tries to reach in every way it can). */
+ * keyboardTrap, dateField (a required date input: Tab walks its segments, which is not a trap), canaryPort (a localhost port the page tries to reach in every way it can). */
 export function fixtureSite(options = {}) {
   const o = options;
   const css = `*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,sans-serif;color:#1b1b1b;background:#fff}
@@ -35,7 +35,7 @@ const home = \`<main><section class="hero"><h1>Seasonal plates, slow evenings</h
 <img src="/images/hero.png" width="320" height="120" alt="The dining room">${o.brokenImage ? '<img src="/images/missing.png" width="100" height="100" alt="Missing">' : ''}${o.overflow360 ? '<div style="width:350px;height:8px;background:#ddd"></div>' : ''}${o.reducedHidden ? '<span class="spinner" aria-label="Loading"></span>' : ''}${canary}</section>
 <div class="filler"></div><section id="visit" data-reveal><h2>Visit</h2><p data-reveal>12 Fixture Lane. <a href="tel:+441234567890">Call us</a> or <a href="https://maps.example.com/">open the map</a>.</p></section>
 <section id="book"><h2>Book</h2><form aria-label="Booking enquiry"><label>Name <input name="name" required autocomplete="name"></label><label>Email <input name="email" type="email" required autocomplete="email"></label>
-<label>Message <textarea name="message" required></textarea></label><input name="_website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button type="submit">Send enquiry</button><p role="status" id="form-status"></p></form></section></main>${o.fixedBar ? '<div class="promo">Winter offer: two courses for one.</div>' : ''}\`;
+${o.dateField ? '<label>Date <input name="date" type="date" required min="2026-01-01"></label>' : ''}<label>Message <textarea name="message" required></textarea></label><input name="_website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button type="submit">Send enquiry</button><p role="status" id="form-status"></p></form></section></main>${o.fixedBar ? '<div class="promo">Winter offer: two courses for one.</div>' : ''}\`;
 const menu = \`<main><h1>Menu</h1><section><h2>Starters</h2><p>Leeks, hazelnut, brown butter.</p></section><p><a href="#/">Back home</a></p></main>\`;
 const missing = ${o.unknownBlank ? '"<main></main>"' : '`<main><h1>Page not found</h1><p>That page does not exist.</p><a href="#/">Go home</a></main>`'};
 let current = null;

@@ -5,7 +5,7 @@ import {rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {Budget, BudgetExhausted, CHECKS, classifyLink, decideForm, decidePrimary, planUnits, siteDigest, verifySite, DEFAULT_VIEWPORTS} from './site-verifier.mjs';
+import {Budget, BudgetExhausted, CHECKS, FICTIONAL, classifyLink, decideForm, decidePrimary, fictionalValue, planUnits, siteDigest, verifySite, DEFAULT_VIEWPORTS} from './site-verifier.mjs';
 import {VERIFIER_ORIGIN, enquiryContract, isolatedChromiumEnv, ISOLATED_CHROMIUM_ARGS} from './isolated-chromium.mjs';
 
 let groups = 0;
@@ -64,6 +64,20 @@ await check('digest covers the document and every file byte, independent of file
   assert.notEqual(siteDigest(a), siteDigest({...a, indexHtml: '<p>b</p>'}));
   assert.notEqual(siteDigest(a), siteDigest({...a, files: [file('/a.js', '1'), file('/b.css', '3')]}));
   assert.match(siteDigest(a), /^sha256:[0-9a-f]{64}$/);
+});
+
+await check('form fill: fictional values by type and hint, near-future dates clamped to min/max', async () => {
+  const field = extra => ({tag: 'input', type: 'text', name: '', label: '', autocomplete: '', ...extra});
+  const today = new Date(Date.UTC(2026, 9, 22));
+  assert.equal(fictionalValue(field({type: 'email'})), FICTIONAL.email);
+  assert.equal(fictionalValue(field({name: 'phone'})), FICTIONAL.phone);
+  assert.equal(fictionalValue(field({tag: 'textarea', type: 'textarea'})), FICTIONAL.message);
+  assert.equal(fictionalValue(field({name: 'name'})), FICTIONAL.name);
+  assert.equal(fictionalValue(field({type: 'date'}), 14, today), '2026-11-05');
+  assert.equal(fictionalValue(field({type: 'date', max: '2026-10-30'}), 14, today), '2026-10-30');
+  assert.equal(fictionalValue(field({type: 'date', min: '2026-12-01'}), 14, today), '2026-12-01');
+  assert.equal(fictionalValue(field({tag: 'select', type: 'select', options: ['17:30', '18:00']})), '17:30');
+  assert.equal(fictionalValue(field({type: 'checkbox'})), undefined);
 });
 
 await check('budget: steps and time are bounded and validated', async () => {

@@ -465,7 +465,7 @@ function probeForms() {
       const labels = field.labels ? [...field.labels].map(H.text).join(' ') : '';
       const offscreen = (() => { const r = field.getBoundingClientRect(); return r.right < 0 || r.bottom < 0 || r.left > document.documentElement.scrollWidth; })();
       const honeypot = field.name === '_website' || (field.tabIndex < 0 && (!H.rendered(field) || offscreen)) || !!field.closest('[aria-hidden="true"]');
-      return {ref: H.ref(field), tag: field.tagName.toLowerCase(), type, name: field.name || field.id || '', label: (labels || field.getAttribute('aria-label') || field.placeholder || '').slice(0, 60), autocomplete: field.getAttribute('autocomplete') || '', required: field.required || field.getAttribute('aria-required') === 'true', rendered: H.rendered(field), honeypot, options: field.tagName === 'SELECT' ? [...field.options].filter(option => option.value && !option.disabled).map(option => option.value).slice(0, 5) : null, min: field.getAttribute('min'), max: field.getAttribute('max')};
+      return {ref: H.ref(field), tag: field.tagName.toLowerCase(), type, name: field.name || field.id || '', label: (labels || field.getAttribute('aria-label') || field.placeholder || '').slice(0, 60), autocomplete: field.getAttribute('autocomplete') || '', required: field.required || field.getAttribute('aria-required') === 'true', rendered: H.rendered(field), disabled: field.disabled, value: field.type === 'checkbox' || field.type === 'radio' ? String(field.checked) : field.value, honeypot, options: field.tagName === 'SELECT' ? [...field.options].filter(option => option.value && !option.disabled).map(option => option.value).slice(0, 5) : null, min: field.getAttribute('min'), max: field.getAttribute('max')};
     });
     const submit = [...form.querySelectorAll('button, input[type="submit"]')].find(el => (el.tagName === 'BUTTON' ? (el.getAttribute('type') || 'submit') === 'submit' : true) && H.rendered(el))
       || (form.id ? [...document.querySelectorAll(`button[form="${CSS.escape(form.id)}"]`)].find(H.rendered) : null);
@@ -734,6 +734,24 @@ const logOf = ledger => [
   ...ledger.violations.map(item => `violation ${item.kind}: ${item.method ? `${item.method} ` : ''}${item.url}${item.blockedBy ? ` (blocked by ${item.blockedBy})` : ''}`),
 ];
 
+/** A fictional value for one form field; dates are `dayOffset` days ahead, clamped to the field's min/max. */
+export function fictionalValue(field, dayOffset = 14, today = new Date()) {
+  const hint = `${field.name} ${field.label} ${field.autocomplete}`.toLowerCase();
+  const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + dayOffset)).toISOString().slice(0, 10);
+  const clamp = value => (field.min && value < field.min ? field.min : field.max && value > field.max ? field.max : value);
+  if (field.tag === 'select') return field.options?.[0];
+  if (field.type === 'checkbox' || field.type === 'radio') return undefined;
+  if (field.type === 'email' || /e-?mail/.test(hint)) return FICTIONAL.email;
+  if (field.type === 'tel' || /phone|\btel\b|mobile/.test(hint)) return FICTIONAL.phone;
+  if (field.type === 'number') return field.min && Number(field.min) > 2 ? field.min : field.max && Number(field.max) < 2 ? field.max : '2';
+  if (field.type === 'date') return clamp(day);
+  if (field.type === 'datetime-local') return clamp(`${day}T12:00`);
+  if (field.type === 'time') return '12:00';
+  if (field.type === 'url') return 'https://example.invalid';
+  if (field.tag === 'textarea' || /message|enquiry|inquiry|details|notes|comment|question|tell us/.test(hint)) return FICTIONAL.message;
+  return FICTIONAL.name;
+}
+
 const UNITS = {
   async version(env, unit, {emit}) {
     const digest = siteDigest(env.site), expected = env.report.identity.publicationDigest;
@@ -946,7 +964,7 @@ const UNITS = {
       const primaries = await s.run(probePrimary, {limit: 2});
       const focusable = await s.run(probeFocusable);
       const stops = [];
-      let prev = -1, reachedAt = null, reachedDesc = null;
+      let prev = -1, reachedAt = null, reachedDesc = null, wrapped = false;
       for (let press = 1; press <= TAB_PRESSES; press++) {
         env.budget.step();
         await s.page.keyboard.press('Tab');
@@ -965,7 +983,7 @@ const UNITS = {
         const firstReal = stops.findIndex(item => !item.body);
         const previousReal = stops.slice(0, -1).reverse().find(item => !item.body);
         // Wrapped around (the whole order was seen); a repeat of the previous stop is a stuck focus, not a wrap.
-        if (firstReal < stops.length - 1 && stops[firstReal].ref === now.ref && previousReal && previousReal.ref !== now.ref && focusable > 1) break;
+        if (firstReal < stops.length - 1 && stops[firstReal].ref === now.ref && previousReal && previousReal.ref !== now.ref && focusable > 1) { wrapped = true; break; }
       }
       s.steps.push(`press Tab up to ${TAB_PRESSES} times (${stops.length} stop(s)); read the focused element and its computed focus styles after each press (isolated world)`);
       // Focus indicator: focused vs unfocused computed styles (element, ::before/::after, parent); a pixel comparison of the same clip confirms before failing.
@@ -981,15 +999,17 @@ const UNITS = {
         missing.push(stop.desc);
       }
       const real = stops.filter(stop => !stop.body);
-      const last = real.slice(-12).map(stop => stop.ref);
-      const stuck = focusable > 1 && real.some((stop, index) => index >= 2 && real[index - 1].ref === stop.ref && real[index - 2].ref === stop.ref);
-      const looping = real.length >= TAB_PRESSES - 2 && new Set(last).size <= 2 && focusable > 4;
+      // A trap: the order never wrapped round or reached the end of the page, and the last 8 presses stayed on at
+      // most two elements while more are focusable. Several presses on one element alone are not a trap: Tab walks
+      // the day/month/year segments of a date input.
+      const tail = stops.slice(-8);
+      const stuck = !wrapped && !stops.some(stop => stop.body) && stops.length >= 8 && tail.every(stop => !stop.body) && new Set(tail.map(stop => stop.ref)).size <= Math.min(2, focusable - 1);
       const sequence = real.slice(0, 14).map(stop => stop.desc).join(' → ');
       const primary = primaries[0];
       if (!primary) emit(make(unit, 'keyboard-reach', {steps: s.steps, observed: 'no primary action was identified in the first screen', status: 'not_checked', reason: 'nothing to reach'}));
       else emit(make(unit, 'keyboard-reach', {steps: s.steps, observed: reachedAt !== null && reachedAt <= TAB_REACH_BOUND ? `reached ${reachedDesc} at Tab stop ${reachedAt}` : reachedAt !== null ? `reached the primary action only at Tab stop ${reachedAt}` : `${primary.desc} was not reached in ${TAB_PRESSES} Tab presses; order: ${sequence || '(nothing focusable)'}`, status: reachedAt !== null && reachedAt <= TAB_REACH_BOUND ? 'passed' : 'failed', reason: reachedAt !== null && reachedAt <= TAB_REACH_BOUND ? undefined : 'keyboard users cannot reach the primary action quickly', evidence: {screenshot: null, log: [sequence]}}));
       emit(make(unit, 'focus-visible', {steps: s.steps, observed: !evaluated ? 'no focused element could be compared' : missing.length ? `no visible focus change on ${missing.slice(0, 5).join(', ')}` : `${evaluated} focused element(s) all show a focus indicator`, status: !evaluated ? 'not_checked' : missing.length ? 'failed' : 'passed', reason: !evaluated ? 'nothing focusable was compared in the viewport' : missing.length ? 'focus is invisible on some elements (outline removed without a replacement)' : undefined, evidence: {screenshot: null, log: []}}));
-      emit(make(unit, 'keyboard-trap', {steps: s.steps, observed: !real.length ? 'Tab focused nothing' : stuck || looping ? `focus stays on ${[...new Set(last)].length} element(s): ${real.slice(-3).map(stop => stop.desc).join(' → ')}` : `focus moved through ${new Set(real.map(stop => stop.ref)).size} element(s)`, status: !real.length ? 'not_checked' : stuck || looping ? 'failed' : 'passed', reason: !real.length ? 'nothing focusable' : stuck || looping ? 'keyboard trap: Tab cannot move on' : undefined, evidence: {screenshot: null, log: []}}));
+      emit(make(unit, 'keyboard-trap', {steps: s.steps, observed: !real.length ? 'Tab focused nothing' : stuck ? `focus stays on ${new Set(tail.map(stop => stop.ref)).size} element(s) for the last ${tail.length} Tab presses: ${tail.slice(-3).map(stop => stop.desc).join(' → ')}` : `focus moved through ${new Set(real.map(stop => stop.ref)).size} element(s)`, status: !real.length ? 'not_checked' : stuck ? 'failed' : 'passed', reason: !real.length ? 'nothing focusable' : stuck ? 'keyboard trap: Tab cannot move on' : undefined, evidence: {screenshot: null, log: [`${focusable} focusable; order: ${stops.map(stop => (stop.body ? '(body)' : `${stop.desc}#${stop.ref}`)).join(' → ')}`]}}));
     } finally { await s.close(); }
   },
 
@@ -1057,45 +1077,54 @@ const UNITS = {
         emit(make(unit, 'form-empty-submit', {steps: s.steps.slice(mark), observed: emptyPosts.length ? `the empty form sent ${emptyPosts.length} POST(s)` : empty.invalid.length ? `invalid: ${empty.invalid.join(', ')}${empty.live.length ? `; message "${empty.live[0].slice(0, 80)}"` : ''}` : empty.live.length ? `message "${empty.live[0].slice(0, 80)}"` : 'no field reports invalid and no error appears', status: emptyOk ? 'passed' : 'failed', reason: emptyOk ? undefined : emptyPosts.length ? 'an empty form was sent' : 'an empty submit gives no feedback (no required fields, aria-invalid or error message)', evidence: {screenshot: emptyOk ? null : await s.shot(`form-empty${unit.route}-${index}`), log: []}}, index));
         if (/^mailto:/i.test(form.action)) { emit(make(unit, 'form-submit', {steps: [], ...decideForm({mailto: true})}, index)); continue; }
         const fillMark = s.steps.length;
-        const fields = form.fields.filter(field => field.rendered && !field.honeypot && !['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(field.type));
-        const radios = new Set();
-        for (const field of fields) {
-          const hint = `${field.name} ${field.label} ${field.autocomplete}`.toLowerCase();
-          if (field.type === 'checkbox') { if (field.required) { env.budget.step(); s.steps.push(`check ${field.name || field.label}`); await s.run(probeSetValue, {ref: field.ref, check: true}); } continue; }
-          if (field.type === 'radio') { if (!radios.has(field.name)) { radios.add(field.name); env.budget.step(); s.steps.push(`choose the first ${field.name} option`); await s.run(probeSetValue, {ref: field.ref, check: true}); } continue; }
-          let value;
-          if (field.tag === 'select') value = field.options?.[0];
-          else if (field.type === 'email' || /e-?mail/.test(hint)) value = FICTIONAL.email;
-          else if (field.type === 'tel' || /phone|\btel\b|mobile/.test(hint)) value = FICTIONAL.phone;
-          else if (field.type === 'number') value = field.min && Number(field.min) > 2 ? field.min : '2';
-          else if (field.type === 'date') value = field.min && field.min > '2027-03-15' ? field.min : '2027-03-15';
-          else if (field.type === 'time') value = '12:00';
-          else if (field.type === 'datetime-local') value = '2027-03-15T12:00';
-          else if (field.type === 'url') value = 'https://example.invalid';
-          else if (field.tag === 'textarea' || /message|enquiry|inquiry|details|notes|comment|question|tell us/.test(hint)) value = FICTIONAL.message;
-          else value = FICTIONAL.name;
-          if (value === undefined) continue;
-          env.budget.step();
-          s.steps.push(`fill ${field.name || field.label || field.type} with "${value}"`);
-          if (['text', 'email', 'tel', 'search', 'url', 'textarea', 'password', 'number'].includes(field.type) || field.tag === 'textarea') {
-            if (await s.run(probeFocusRef, {ref: field.ref})) { await s.page.keyboard.press('ControlOrMeta+A'); await s.page.keyboard.insertText(value); continue; }
+        // Fill every visible field with fictional values; a date is near-future inside min/max. Fields that depend on
+        // others (a time select enabled by the date) are filled on a second pass. If only a date is rejected and nothing
+        // was sent, up to 4 nearby dates are tried (a restaurant closed on Mondays rejects some days).
+        const fill = async (dayOffset, onlyDates = false) => {
+          for (let pass = 0; pass < 2; pass++) {
+            const now = pass === 0 && !onlyDates ? form : (await s.run(probeForms))[index] ?? form;
+            const radios = new Set();
+            for (const field of now.fields.filter(item => item.rendered && !item.honeypot && !item.disabled && !['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(item.type))) {
+              const dateLike = ['date', 'datetime-local'].includes(field.type);
+              if (pass === 1 && !(field.tag === 'select' && !field.value)) continue;
+              if (onlyDates && pass === 0 && !dateLike) continue;
+              const value = fictionalValue(field, dayOffset);
+              if (field.type === 'checkbox') { if (field.required) { env.budget.step(); s.steps.push(`check ${field.name || field.label}`); await s.run(probeSetValue, {ref: field.ref, check: true}); } continue; }
+              if (field.type === 'radio') { if (!radios.has(field.name)) { radios.add(field.name); env.budget.step(); s.steps.push(`choose the first ${field.name} option`); await s.run(probeSetValue, {ref: field.ref, check: true}); } continue; }
+              if (value === undefined) continue;
+              env.budget.step();
+              s.steps.push(`fill ${field.name || field.label || field.type} with "${value}"`);
+              if (['text', 'email', 'tel', 'search', 'url', 'password', 'number', 'textarea'].includes(field.type) && await s.run(probeFocusRef, {ref: field.ref})) { await s.page.keyboard.press('ControlOrMeta+A'); await s.page.keyboard.insertText(value); continue; }
+              await s.run(probeSetValue, {ref: field.ref, value});
+            }
           }
-          await s.run(probeSetValue, {ref: field.ref, value});
+        };
+        const submit = async () => {
+          const before = await s.run(probeFormState, regionArgs);
+          const posts0 = s.ledger.enquiries.length, violations0 = s.ledger.violations.length, url0 = s.page.url();
+          await s.click(form.submitRef, `submit (filled) "${form.submitText}"`);
+          // Wait for the sink, then a little longer to catch a duplicate POST; a status message may follow the response.
+          const end = Date.now() + 3500;
+          while (Date.now() < end && s.ledger.enquiries.length === posts0 && s.ledger.violations.length === violations0) await wait(150);
+          await wait(1500);
+          const navigated = s.page.url() !== url0 ? s.page.url() : null;
+          let after = null;
+          try { after = await s.run(probeFormState, regionArgs); } catch { after = null; }
+          const posts = s.ledger.enquiries.slice(posts0);
+          const fresh = after ? [...after.live.filter(text => !before.live.includes(text)), ...after.blocks.filter(text => !before.blocks.includes(text) && !Object.values(FICTIONAL).some(value => text.includes(value)))] : [];
+          const message = (fresh[0] ?? '').slice(0, 160);
+          return {posts, violations: s.ledger.violations.slice(violations0), message, navigated, invalid: after?.connected && !posts.length ? after.invalid : []};
+        };
+        await fill(14);
+        let outcome = await submit();
+        const dateNames = new Set(form.fields.filter(field => ['date', 'datetime-local'].includes(field.type)).map(field => field.name || field.type));
+        for (let retry = 1; retry <= 4 && !outcome.posts.length && !outcome.violations.length && !outcome.navigated && outcome.invalid.length && outcome.invalid.every(name => dateNames.has(name)); retry++) {
+          s.steps.push(`the site rejected the date; try ${14 + retry} days ahead`);
+          await fill(14 + retry, true);
+          outcome = await submit();
         }
-        const before = await s.run(probeFormState, regionArgs);
-        const posts0 = s.ledger.enquiries.length, violations0 = s.ledger.violations.length, url0 = s.page.url();
-        await s.click(form.submitRef, `submit (filled) "${form.submitText}"`);
-        // Wait for the sink, then a little longer to catch a duplicate POST; a status message may follow the response.
-        const end = Date.now() + 3500;
-        while (Date.now() < end && s.ledger.enquiries.length === posts0 && s.ledger.violations.length === violations0) await wait(150);
-        await wait(1500);
-        const navigated = s.page.url() !== url0 ? s.page.url() : null;
-        let after = null;
-        try { after = await s.run(probeFormState, regionArgs); } catch { after = null; }
-        const posts = s.ledger.enquiries.slice(posts0);
-        const fresh = after ? [...after.live.filter(text => !before.live.includes(text)), ...after.blocks.filter(text => !before.blocks.includes(text) && !Object.values(FICTIONAL).some(value => text.includes(value)))] : [];
-        const message = (fresh[0] ?? (after && after.live.find(text => text.length > 3 && !before.live.includes(text))) ?? '').slice(0, 160);
-        const decision = decideForm({posts, violations: s.ledger.violations.slice(violations0), message, navigatedTo: navigated, invalidAfterFill: after?.connected && !posts.length ? after.invalid : [], origin: env.origin});
+        const decision = decideForm({posts: outcome.posts, violations: outcome.violations, message: outcome.message, navigatedTo: outcome.navigated, invalidAfterFill: outcome.invalid, origin: env.origin});
+        const posts = outcome.posts;
         emit(make(unit, 'form-submit', {steps: s.steps.slice(fillMark), ...decision, evidence: {screenshot: await s.shot(`form-submit${unit.route}-${index}`), log: [...posts.map(post => `POST /_mb/enquiries → ${post.status} ${JSON.stringify(post.body)}`), ...logOf(s.ledger).filter(line => line.startsWith('violation'))]}}, index));
       }
     } finally { await s.close(); }

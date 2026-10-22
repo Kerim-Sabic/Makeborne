@@ -72,6 +72,7 @@ async function main() {
     ["unknown route renders a blank page", { unknownBlank: true }, { only: ["unknown-route"], viewports: [DESKTOP], routes: HOME }, { "unknown-route:/__makeborne_unknown__:1440x900": "failed" }, report => assert.match(find(report, "unknown-route:/__makeborne_unknown__:1440x900").observed, /blank \(only the document title/)],
     ["primary button without an effect", { primaryNoop: true }, { only: ["primary-action"], viewports: [DESKTOP], routes: HOME }, { "primary-action:/:1440x900#0": "failed" }, report => assert.match(find(report, "primary-action:/:1440x900#0").observed, /nothing happened/)],
     ["focus outline removed", { focusInvisible: true }, { only: ["focus-visible"], viewports: [DESKTOP], routes: HOME }, { "focus-visible:/:1440x900": "failed" }, report => assert.match(find(report, "focus-visible:/:1440x900").observed, /a\.mark "Fixture Bistro"/)],
+    ["a date input is neither a trap nor an unfillable field", { dateField: true }, { only: ["keyboard-trap", "form-submit"], viewports: [DESKTOP], routes: HOME }, { "keyboard-trap:/:1440x900": "passed", "form-submit:/:1440x900#0": "passed" }, null],
     ["keyboard trap", { keyboardTrap: true }, { only: ["keyboard-trap", "keyboard-reach"], viewports: [DESKTOP], routes: HOME }, { "keyboard-reach:/:1440x900": "failed", "keyboard-trap:/:1440x900": "failed" }, null],
   ];
   for (const [name, options, request, expected, extra] of cases) {
