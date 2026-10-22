@@ -18,7 +18,7 @@ import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
 import { qualityProblems, type QualityInput } from "./quality-gates";
-import { CONCEPT_TOOL, checkConcept, imagePlanNote, withConceptComment, type ConceptRecord } from "./concept";
+import { CONCEPT_TOOL, checkConcept, imagePlanNote, sitePlanNote, withConceptComment, type ConceptRecord } from "./concept";
 import { imagePreview, type ImagePreview } from "./image-variants";
 
 /** Conservative streaming output rate used to size steps to the time left. */
@@ -39,7 +39,7 @@ export type BuilderEvent =
   | { type: "image"; path: string; url: string; assetId: string; model?: string; quality?: string; size?: string; reason?: string; costMicrousd?: number | null }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
-  | { type: "concept"; chosen: string; runnersUp: string[]; why: string; shots?: number }
+  | { type: "concept"; chosen: string; runnersUp: string[]; why: string; shots?: number; compositions?: string[] }
   | { type: "done"; version: number; summary: string; charged: number; changed?: boolean; finished?: boolean; build?: "passed" | "unverified" | null }
   | { type: "error"; code: string; message: string; retryable?: boolean };
 
@@ -321,11 +321,11 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
           }
           case "concept": {
             if (!run.concept) { fail("The concept step is only for a first build; continue with the current design."); break; }
-            const checked = checkConcept(use.input, { images: replaceOnly ? 0 : imageLimit });
+            const checked = checkConcept(use.input, { images: replaceOnly ? 0 : imageLimit, sitePlan: true });
             if (!checked.ok) { fail(checked.problem); break; }
             concept = checked.record;
-            run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why, ...(concept.imagePlan ? { shots: concept.imagePlan.shots.length } : {}) });
-            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}).${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan)}` : ""}` });
+            run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why, ...(concept.imagePlan ? { shots: concept.imagePlan.shots.length } : {}), ...(concept.sections ? { compositions: concept.sections.map(section => section.composition) } : {}) });
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}). ${sitePlanNote(concept)}${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan)}` : ""}` });
             break;
           }
           case "finish": {

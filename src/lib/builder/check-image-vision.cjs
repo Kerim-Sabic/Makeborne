@@ -27,7 +27,9 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 
 const { runBuilder, regenerationProblem, imageReadyMessage, IMAGE_INSPECTION } = require("./agent.ts");
 const { ProjectFiles } = require("./files.ts");
-const { checkConcept, imagePlanNote, CONCEPT_TOOL } = require("./concept.ts");
+const { checkConcept, imagePlanNote, sitePlanNote, conceptComment, CONCEPT_TOOL } = require("./concept.ts");
+const SITE_PLAN = { artSystem: { palette: "workshop green ground, brass accent, ink from chain grease", type: "Archivo condensed caps for display, Inter text", imagery: "one documentary photographer, overcast window light", motif: "a spoke ruler under every heading", motion: "rises and one wipe" },
+  sections: [{ id: "top", composition: "full-bleed-photo", job: "the bench at work" }, { id: "rates", composition: "giant-numeral", job: "the flat-tyre price" }, { id: "work", composition: "editorial-split", job: "what a service covers" }, { id: "visit", composition: "contact-card", job: "hours and address" }] };
 const { reviewImageLimit } = require("./review-policy.ts");
 const { reviewRequest } = require("./review.ts");
 const { BUILDER_SYSTEM } = require("./prompt.ts");
@@ -205,7 +207,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     const direct = fs.readFileSync(path.join(process.cwd(), "scripts/eval/direct-run.mjs"), "utf8");
     assert.match(direct, /replaceOnly: true,\s+maxImages: reviewImageLimit\(/);
     const rubric = reviewRequest({ round: 1, screenshots: [], viewports: [], errors: ["x"] });
-    assert.match(rubric, /5\. Imagery/); assert.match(rubric, /reads as AI-made/); assert.match(rubric, /a bad crop/); assert.match(rubric, /fighting its text/); assert.match(rubric, /placed without purpose/);
+    assert.match(rubric, /5\. Art direction against the plan/); assert.match(rubric, /6\. Imagery/); assert.match(rubric, /reads as AI-made/); assert.match(rubric, /a bad crop/); assert.match(rubric, /fighting its text/); assert.match(rubric, /placed without purpose/);
     assert.match(rubric, /At most one, never the client's own photos or logo/);
     assert.match(rubric, /Illustrative image/, "the honesty rules stay part of the review");
   });
@@ -233,10 +235,31 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.match(note, /2 images/); assert.ok(note.includes(plan.houseStyle)); assert.match(note, /inspect each one/); assert.match(note, /all the calls in one response/);
   });
 
+  await check("the art system and section plan: required on a first build, no composition twice in a row, at least four, recorded in the source", () => {
+    const concept = (name, headline, device) => ({ name, headline, angle: `An angle for ${name}`, device, archetype: "Editorial split", ground: "a workshop green", action: "book a repair", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } });
+    const base = { concepts: [concept("Truing stand", "Wheels trued while you wait", "a spoke-tension gauge"), concept("Repair ticket", "Your bike, ticketed", "a numbered repair ticket")], chosen: 0, why: "The gauge is the craft." };
+    assert.ok(checkConcept(base).ok, "edits and older callers need no plan");
+    assert.match(checkConcept(base, { sitePlan: true }).problem, /art system .* section plan/);
+    const repeat = { ...SITE_PLAN, sections: [SITE_PLAN.sections[0], { ...SITE_PLAN.sections[1], composition: "full-bleed-photo" }, ...SITE_PLAN.sections.slice(2)] };
+    assert.match(checkConcept({ ...base, ...repeat }, { sitePlan: true }).problem, /both use the full-bleed-photo composition/);
+    const few = { ...SITE_PLAN, sections: [SITE_PLAN.sections[0], SITE_PLAN.sections[1], SITE_PLAN.sections[0], SITE_PLAN.sections[1]] };
+    assert.match(checkConcept({ ...base, ...few }, { sitePlan: true }).problem, /uses 2 compositions across 4 sections; use at least 4/);
+    assert.ok(!checkConcept({ ...base, ...SITE_PLAN, sections: [{ id: "top", composition: "carousel", job: "a slider of photos" }, ...SITE_PLAN.sections] }, { sitePlan: true }).ok, "only named compositions");
+    const ok = checkConcept({ ...base, ...SITE_PLAN }, { sitePlan: true });
+    assert.ok(ok.ok); assert.equal(ok.record.sections.length, 4); assert.match(ok.record.artSystem.motif, /spoke ruler/);
+    const comment = conceptComment(ok.record);
+    assert.match(comment, / \* {3}Art system: palette .*motif a spoke ruler/); assert.match(comment, / \* {3}Sections: top = full-bleed-photo, rates = giant-numeral, work = editorial-split, visit = contact-card\./);
+    const note = sitePlanNote(ok.record);
+    assert.match(note, /repeat it in every section/); assert.match(note, /rates = giant-numeral \(one huge figure/);
+    assert.match(BUILDER_SYSTEM, /Never the same composition in two consecutive sections, at least four different compositions/);
+    assert.match(BUILDER_SYSTEM, /TYPE WITH DRAMA/); assert.match(BUILDER_SYSTEM, /clamp\(4\.5rem, 13vw, 10rem\)/);
+    assert.ok(CONCEPT_TOOL.input_schema.properties.sections.items.properties.composition.enum.includes("type-statement"));
+  });
+
   await check("the concept with an image plan reaches the model and the run events", async () => {
     script.length = 0; seen.length = 0;
     const concept = (name, headline, device) => ({ name, headline, angle: `An angle for ${name}`, device, archetype: "Editorial split", ground: "a workshop green", action: "book a repair", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } });
-    const input = { concepts: [concept("Truing stand", "Wheels trued while you wait", "a spoke-tension gauge"), concept("Repair ticket", "Your bike, ticketed", "a numbered repair ticket")], chosen: 0, why: "The gauge is the craft.",
+    const input = { concepts: [concept("Truing stand", "Wheels trued while you wait", "a spoke-tension gauge"), concept("Repair ticket", "Your bike, ticketed", "a numbered repair ticket")], chosen: 0, why: "The gauge is the craft.", ...SITE_PLAN,
       imagePlan: { houseStyle: "One documentary photographer, one overcast morning, 35mm, muted greens and brass.", shots: [{ section: "hero", job: "Show the craft of truing a wheel", shot: "close detail", aspect: "landscape", focal: "hands left; calm right", layout: "editorial split" }] } };
     script.push({ content: [{ type: "tool_use", id: "c1", name: "concept", input }, ...site("v")] }, { content: [gen("g1", { name: "hero-bench" })] }, { content: [finish("f6")] });
     const { events } = await run({ concept: true });
