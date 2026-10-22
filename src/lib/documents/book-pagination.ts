@@ -10,7 +10,8 @@ import { parseBookMarkup, plainText, smartPunctuation } from "./book-markup";
  * and a blank verso before any opener that would fall on a left-hand page.
  * Neither changes how the text flows, so the measured pages hold. */
 
-/** BOOK LENGTH RULE. A requested length in pages counts every page of the exported PDF except the cover: the title,
+/** BOOK LENGTH RULE (owner-confirmed 22 October 2026: "every page except the cover counts"). A requested length in
+ * pages counts every page of the exported PDF except the cover: the title,
  * copyright and contents pages, each chapter opener (a full page, sometimes preceded by a blank verso so it opens on a
  * right-hand page) and any end matter all count. A length is reached with content (sections, examples, chapters), never
  * by shrinking type or cutting what the reader needs: the body is always set at BODY_TYPE_PT. */
