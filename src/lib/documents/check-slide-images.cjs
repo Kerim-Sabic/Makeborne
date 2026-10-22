@@ -7,8 +7,11 @@ const JSZip = require("jszip"), sharp = require("sharp");
 const { DocumentSourceSchema, SLIDE_LAYOUTS } = require("./schema.ts");
 const { composeSlide, W, H } = require("./slide-scene.ts");
 const { DocumentEditor, DocToolError, emptyDocument } = require("./editor.ts");
-const { DIRECTIONS } = require("./directions.ts");
-const { imageSupport, scrimOpacity, zoneBrightness, RAIL_W, RAIL_WIDE, BAND_H, SCRIM_TOP } = require("./compose-image.ts");
+const { DIRECTIONS, DIRECTION_SPECS } = require("./directions.ts");
+const { imageSupport, scrimOpacity, zoneBrightness, RAIL_W, RAIL_WIDE, BAND_H, BAND_CHART_H, SCRIM_TOP } = require("./compose-image.ts");
+const { numeralMark, BADGE_RATIO, BADGE_MIN, BADGE_MAX, FIGURE_RATIO } = require("./design.ts");
+const { POINT_ROWS_STACKED, CALLOUT_VALUE, CALLOUT_CAPTION_MIN, CHART_TEXT_UP } = require("./compose-content.ts");
+const { CLOSING_STEPS_STACKED } = require("./compose-title.ts");
 const { imageLuma } = require("./image-luma.ts");
 const { contrast, luminance } = require("./theme.ts");
 const { deckPptx } = require("./pptx.ts");
@@ -89,11 +92,93 @@ const imageOf = (scene, name) => scene.prims.find(prim => prim.k === "image" && 
       const scene = composeSlide(deck, deck.slides[0], 0, 1);
       assert.equal(scene.imagePlacement, "band", layout);
       assert.deepEqual(scene.issues, []);
-      const img = imageOf(scene, "band-art");
-      assert.deepEqual([img.y, img.w, img.h], [0, W, BAND_H]);
-      assert.ok(scene.prims.filter(prim => prim !== img).every(prim => (prim.k === "line" ? Math.min(prim.y1, prim.y2) : prim.y) >= BAND_H), `${layout} content overlaps the band`);
+      // A chart's band is thinner (its headline, plot and callout need the height); tables and diagrams keep 200 px.
+      const img = imageOf(scene, "band-art"), band = layout === "chart" ? BAND_CHART_H : BAND_H;
+      assert.deepEqual([img.y, img.w, img.h], [0, W, band]);
+      assert.ok(scene.prims.filter(prim => prim !== img).every(prim => (prim.k === "line" ? Math.min(prim.y1, prim.y2) : prim.y) >= band), `${layout} content overlaps the band`);
       if (layout === "chart") assert.ok(scene.prims.some(prim => prim.k === "chart" && prim.h >= 180));
     }
+  });
+  await check("image-led lists and charts: badge or figure numerals at heading scale, larger item type that steps down to its minimum, a larger band chart", async () => {
+    const harbour = (direction, slides) => base(direction, slides, [asset("rail", "portrait"), asset("band")]);
+    const points = [{ title: "Later workdays", text: "The last sailing now leaves before most harbour offices close" }, { title: "Quiet decks", text: "Evening riders asked for calm seating and room for bikes" }, { title: "One extra crew", text: "Two night sailings need a single additional crew" }];
+    const flat = value => value.replace(/\s+/g, " ");
+    const isItemTitle = (prim, items) => prim.k === "text" && prim.role !== "title" && items.some(item => item.title === flat(prim.text));
+    const behind = (scene, prim) => [...scene.prims].reverse().find(shape => (shape.k === "ellipse" || shape.k === "rect") && shape.fill && shape.opacity === undefined && prim.x >= shape.x - 0.5 && prim.y >= shape.y - 0.5 && prim.x + prim.w <= shape.x + shape.w + 0.5 && prim.y + prim.h <= shape.y + shape.h + 0.5);
+    let stepped = 0;
+    for (const direction of DIRECTIONS) {
+      const deck = harbour(direction, [
+        { id: "why", layout: "points", notes: "n", image: "rail", imagePlacement: "side", variant: "points-rows", title: "Why evening sailings work", points },
+        { id: "close", layout: "closing", notes: "n", image: "rail", title: "Approve a 12-week evening pilot", body: "Harbour Light Ferries, Operations", points: [{ title: "Approve the pilot", text: "Board, at the next meeting" }, { title: "Train one crew", text: "Operations, within four weeks" }, { title: "Open bookings", text: "Marketing, two weeks before launch" }] },
+      ]);
+      for (const [index, slide] of deck.slides.entries()) {
+        const scene = composeSlide(deck, slide, index, 2), items = slide.points;
+        assert.deepEqual(scene.issues, [], `${direction} ${slide.id}`);
+        const titles = scene.prims.filter(prim => isItemTitle(prim, items)), size = titles[0].size;
+        assert.equal(titles.length, items.length, `${direction} ${slide.id}: one title per item`);
+        // Items are set alike, never below the last step; in the editorial harbour deck these short items take one of the
+        // largest steps (A2 set 28/21 for the points and 22/18 for the steps beside the rail).
+        const steps = slide.id === "why" ? POINT_ROWS_STACKED : CLOSING_STEPS_STACKED, [floorTitle, floorBody] = steps.at(-1);
+        const supporting = scene.prims.filter(prim => prim.k === "text" && items.some(item => item.text === flat(prim.text)));
+        assert.ok(titles.every(prim => prim.size === size) && size >= Math.floor(floorTitle * 0.9), `${direction} ${slide.id}: item titles ${titles.map(prim => prim.size)}`);
+        assert.ok(supporting.length === items.length && supporting.every(prim => prim.size === supporting[0].size && prim.size >= floorBody), `${direction} ${slide.id}: supporting text ${supporting.map(prim => prim.size)}`);
+        if (direction === "editorial") assert.ok(size >= (slide.id === "why" ? 32 : 36) && supporting[0].size >= 23, `editorial ${slide.id}: ${size}/${supporting[0].size}`);
+        // Balanced explicit breaks (the same in HTML and PPTX): a broken line is never a lone short word, nor the last line a stub.
+        for (const prim of supporting) {
+          const lines = prim.text.split("\n");
+          assert.ok(lines.length === 1 || (lines.every(line => line.includes(" ") || line.length > 3) && lines.at(-1).length >= lines[0].length * 0.4), `${direction}: ${JSON.stringify(prim.text)}`);
+        }
+        const numerals = scene.prims.filter(prim => prim.k === "text" && /^(0?[1-3]|I{1,3})$/.test(prim.text) && prim.x < titles[0].x);
+        assert.equal(numerals.length, items.length, `${direction} ${slide.id}: one numeral per item`);
+        const mark = slide.id === "close" ? "figure" : numeralMark({ dir: DIRECTION_SPECS[direction] });
+        for (const prim of numerals) {
+          const shape = behind(scene, prim);
+          if (mark === "figure") {
+            assert.ok(!shape && prim.size >= Math.round(size * FIGURE_RATIO) - 1, `${direction} ${slide.id}: figure ${prim.size}px for ${size}px titles`);
+            assert.ok(contrast(prim.color, scene.background) >= 4.5, `${direction} ${slide.id}: figure ${prim.color} on ${scene.background}`);
+          } else {
+            // The badge is a native shape carrying a live numeral; badge on slide and numeral on badge both read at 4.5:1.
+            assert.ok(shape && shape.k === (mark === "circle" ? "ellipse" : "rect"), `${direction} ${slide.id}: ${mark} badge behind "${prim.text}"`);
+            assert.equal(shape.w, Math.max(BADGE_MIN, Math.min(BADGE_MAX, Math.round(size * BADGE_RATIO))), `${direction}: badge size`);
+            assert.ok(contrast(prim.color, shape.fill) >= 4.5 && contrast(shape.fill, scene.background) >= 4.5, `${direction}: ${prim.color} on ${shape.fill} on ${scene.background}`);
+          }
+        }
+      }
+      // Long items step down together, never below the last step.
+      const long = harbour(direction, [{ id: "long", layout: "points", notes: "n", image: "rail", imagePlacement: "side", variant: "points-rows", title: "Why evening sailings work",
+        points: points.concat(points).slice(0, 4).map((point, i) => ({ title: `${point.title} and more ${i}`, text: `${point.text} each week` })) }]);
+      const scene = composeSlide(long, long.slides[0], 0, 1);
+      if (!scene.issues.length) {
+        stepped++;
+        const sizes = scene.prims.filter(prim => prim.k === "text" && prim.role !== "title" && / and more \d$/.test(flat(prim.text))).map(prim => prim.size);
+        assert.ok(sizes.length === 4 && new Set(sizes).size === 1 && sizes[0] < POINT_ROWS_STACKED[0][0] && sizes[0] >= Math.floor(POINT_ROWS_STACKED.at(-1)[0] * 0.9), `${direction}: long item titles ${sizes}`);
+      }
+    }
+    assert.ok(stepped >= DIRECTIONS.length / 2, `long items fit beside the rail in ${stepped} directions`);
+    // The band chart: a larger headline, statistic and caption, a taller native chart with larger labels (HTML and PPTX), the same data.
+    const chartDeck = harbour("editorial", [{ id: "demand", layout: "chart", notes: "n", image: "band", title: "Evening demand rises through the summer", body: "August peaks at twice the evening demand of May.",
+      chart: { type: "column", categories: ["May", "Jun", "Jul", "Aug", "Sep"], series: [{ name: "Evening riders per day", values: [180, 240, 320, 360, 290] }], highlight: 3, source: "Illustrative data" } }]);
+    const scene = composeSlide(chartDeck, chartDeck.slides[0], 0, 1);
+    assert.equal(scene.composition, "chart-annotated");
+    assert.deepEqual(scene.issues, []);
+    const title = scene.prims.find(prim => prim.k === "text" && prim.role === "title"), chart = scene.prims.find(prim => prim.k === "chart");
+    const value = scene.prims.find(prim => prim.k === "text" && prim.text === "360"), caption = scene.prims.find(prim => prim.k === "text" && /August peaks/.test(prim.text));
+    assert.ok(title.size >= 60, `chart headline ${title.size}px (58 before)`);
+    assert.ok(chart.h >= 270 && chart.w >= 680 && chart.style.text === CHART_TEXT_UP, `chart ${chart.w}x${chart.h}, labels x${chart.style.text}`);
+    assert.ok(value.size >= CALLOUT_VALUE * 0.9 && caption.size >= 32 && caption.size >= CALLOUT_CAPTION_MIN, `callout ${value.size}px, caption ${caption.size}px`);
+    assert.ok(caption.x >= chart.x + chart.w && value.x >= chart.x + chart.w, "the callout sits beside the chart");
+    // The statistic reads at 4.5:1 even where the theme's accent only reaches the 3:1 of large type.
+    const light = DocumentSourceSchema.parse({ ...chartDeck, theme: { ...chartDeck.theme, palette: { ...palette, accent: "#C4553A", background: "#F4EEE6" } } });
+    const lightValue = composeSlide(light, light.slides[0], 0, 1).prims.find(prim => prim.k === "text" && prim.text === "360");
+    assert.ok(contrast("#C4553A", "#F4EEE6") < 4.5 && contrast(lightValue.color, "#F4EEE6") >= 4.5, `statistic ${lightValue.color}`);
+    const { chartSvg } = require("./chart-svg.ts");
+    const svg = chartSvg(chart.chart, chart.w, chart.h, chart.colors, { heading: "Fraunces", body: "Inter" }, chart.style);
+    const sizes = [...svg.matchAll(/font-size="([\d.]+)"/g)].map(match => Number(match[1]));
+    assert.ok(Math.min(...sizes) >= 18, `chart labels from ${Math.min(...sizes)}px`);
+    const zip = await JSZip.loadAsync(await deckPptx(chartDeck, {}));
+    const xml = await zip.file(Object.keys(zip.files).find(name => /^ppt\/charts\/chart\d+\.xml$/.test(name))).async("string");
+    assert.deepEqual([...xml.matchAll(/<c:v>(\d+)<\/c:v>/g)].map(match => Number(match[1])), [180, 240, 320, 360, 290], "native chart, same data");
+    assert.ok([...xml.matchAll(/<a:defRPr[^>]* sz="(\d+)"/g)].filter(match => match[1] === "1400").length >= 2, "category and value labels at 14 pt in the PPTX");
   });
   await check("full-bleed text sits on a scrim that reaches 4.5:1 over the brightest pixels it covers", async () => {
     // Worst case (no measurement): pure white under the text.
