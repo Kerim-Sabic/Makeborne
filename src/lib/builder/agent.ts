@@ -76,7 +76,7 @@ function tools(images: boolean, cutouts = false, textImages = false, concept = f
         design: { type: "object", properties: { positioning: { type: "string" }, composition: { type: "string" }, typography: { type: "string" }, palette: { type: "string" }, imagery: { type: "string" }, motion: { type: "string" } }, required: ["positioning", "composition", "typography", "palette", "imagery", "motion"], additionalProperties: false },
       }, required: ["summary", "title"], additionalProperties: false } },
   ];
-  if (images) list.splice(3, 0, { name: "generate_image", description: `Generate one original, art-directed image for the website and register it in the project. Returns the URL and pixel size to use in code (e.g. /images/hero-portrait.webp, width 1536, height 1024). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood, then the house style. Never request text, logos or watermarks in images. kind: photo (default), illustration, texture, icon, or cutout: one subject on a transparent background, trimmed to the subject, for layering over colour fields, shapes or other images${cutouts ? "" : " (cut-outs are unavailable with the configured image models)"}. text: null for no words in the image (the default, and the right choice when the words can be HTML over the image); otherwise the exact short words the image itself must show (a sign, label or poster lettering), with textPlacement "exact" when they must sit precisely where the prompt says${textImages ? "" : " (text in images is unavailable with the configured image models: use HTML text)"}. The platform picks the image model and quality per image. The result shows you the image itself: inspect it before using it. To regenerate an image you reject (once per slot, counted against the allowance), give a new name, replaces (the rejected image's name) and rejected (what is wrong); the rejected image is removed from the project.`,
+  if (images) list.splice(3, 0, { name: "generate_image", description: `Generate one original, art-directed image for the website and register it in the project. Returns the URL and pixel size to use in code (e.g. /images/hero-portrait.webp, width 1536, height 1024). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood, then the house style. Never request text, logos or watermarks in images. kind: photo (default), illustration, texture, icon, or cutout: one subject on a transparent background, trimmed to the subject, for layering over colour fields, shapes or other images${cutouts ? "" : " (cut-outs are unavailable with the configured image models)"}. text: null for no words in the image (the default, and the right choice when the words can be HTML over the image); otherwise the exact short words the image itself must show (a sign, label or poster lettering), with textPlacement "exact" when they must sit precisely where the prompt says${textImages ? "" : " (text in images is unavailable with the configured image models: use HTML text)"}. The platform picks the image model and quality per image. The result shows you the image itself: inspect it before using it. To regenerate an image you reject (once per slot, counted against the allowance), give a new name, replaces (the rejected image's name) and rejected (what is wrong), then point the slot at the new image; the rejected image leaves the project once nothing uses it.`,
     input_schema: { type: "object", properties: { name: { type: "string", description: "kebab-case file name without extension" }, prompt: { type: "string" }, aspect: { type: "string", enum: ["landscape", "portrait", "square"] }, kind: { type: "string", enum: [...IMAGE_KINDS] }, text: { type: ["string", "null"], description: "Exact words to render in the image, or null" }, textPlacement: { type: "string", enum: ["exact", "loose"] },
       replaces: { type: "string", description: "Only when regenerating: the name of the generated image this one replaces" }, rejected: { type: "string", description: "Only with replaces: what is wrong with the replaced image (the artefact, the AI look, the wrong subject or the style break)" } }, required: ["name", "prompt", "aspect"], additionalProperties: false } });
   return list;
@@ -148,6 +148,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   let concept: ConceptRecord | null = null;
   // Regeneration: each slot is regenerated at most once. Names replaced (or being replaced), and the replacements.
   const replacedNames = new Set<string>(), replacementNames = new Set<string>();
+  // Completed regenerations: rejected name -> its replacement. The rejected image stays registered while any file
+  // still references it (a run can end before the code is updated), so a regeneration never leaves a broken image.
+  const replacedBy = new Map<string, string>();
   const replaceOnly = Boolean(run.limits?.replaceOnly);
   // Quality gates block a finish once per distinct problem; a repeat is accepted, so a false positive can never strand the work.
   const qualityReported = new Set<string>();
@@ -302,8 +305,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               const preview = await imagePreview(asset.data ?? bytes).catch(() => null);
               return { asset, record, preview };
             }).then(({ asset, record, preview }) => {
-              // The rejected image leaves the project (with its copies), so nothing ships or references it.
-              if (input.replaces) run.files.removeAsset(`public/images/${input.replaces}.webp`);
+              if (input.replaces) replacedBy.set(input.replaces, input.name);
               run.files.addAsset({ id: asset.id, path: asset.path, sha256: asset.sha256, bytes: asset.bytes, mediaType: asset.mediaType });
               // Parallel jobs checked the budget before storing; re-check against what is registered now.
               const copies = Boolean(asset.variants?.length && responsive.variantsFit([...run.files.assets.values()], asset.variants));
@@ -332,6 +334,11 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             // A first build records its concepts before it can finish (once: a repeat is accepted).
             const noConcept = "Before finishing a first build, call the concept tool once with 2-3 genuinely distinct concepts, scored on the rubric, and keep building the strongest.";
             if (run.concept && !concept && !qualityReported.has(noConcept)) { qualityReported.add(noConcept); problems.push(noConcept); }
+            // A rejected image still in use: its slot should show the regenerated one (once: a repeat is accepted).
+            for (const [rejected, replacement] of replacedBy) {
+              const stale = `The page still shows /images/${rejected}.webp, which you rejected and regenerated as /images/${replacement}.webp: point that slot at the new src with its width and height.`;
+              if (imageInUse(run.files.files, rejected) && !qualityReported.has(stale)) { qualityReported.add(stale); problems.push(stale); }
+            }
             if (input.routes?.length) run.files.routes = input.routes.some(route => route.path === "/") ? input.routes : [{ path: "/", title: "Home" }, ...input.routes];
             if (input.design) run.files.design = input.design;
             if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes, required: run.required })) {
@@ -380,6 +387,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
       messages.push({ role: "system", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }
   }
+  // Rejected images leave the project (with their responsive copies) once no file references them.
+  for (const rejected of replacedBy.keys()) if (!imageInUse(run.files.files, rejected)) run.files.removeAsset(`public/images/${rejected}.webp`);
   // The chosen concept and its runners-up stay in the source (also for a continuation, which reads the files).
   const app = run.files.files.get("src/App.tsx");
   if (concept && app !== undefined) {
@@ -408,6 +417,13 @@ export function regenerationProblem(input: { name: string; replaces?: string },
   return null;
 }
 
+/** Whether any project file references the generated image /images/<name>.webp. */
+export function imageInUse(files: ReadonlyMap<string, string>, name: string) {
+  const url = `/images/${name}.webp`;
+  for (const content of files.values()) if (content.includes(url)) return true;
+  return false;
+}
+
 /** The inspection the builder does on every generated image it sees, before using it. */
 export const IMAGE_INSPECTION = "Inspect it at full attention before you use it. Reject it when it shows AI artefacts (malformed hands, fingers, faces or teeth; gibberish lettering, fake signage or labels; warped straight lines, impossible geometry or joins; duplicated, fused or melted objects), the AI look (oversaturated colour, plastic skin, HDR glow or a golden glow over everything, showroom perfection: a room or object that looks like a 3D architectural or catalogue render, spotless, evenly lit and colour-matched to the palette; a centred symmetrical subject), the wrong subject for the brief, or a break with the set: a medium, rendering, grade or light that differs from the images already made (a glossy 3D render beside illustrations, a studio shot beside documentary photographs), or a material that reads false (plastic clay, wax food, rubbery skin).";
 
@@ -426,7 +442,7 @@ export function imageReadyMessage(asset: { url: string; width?: number; height?:
   if (!seen.preview) return ready;
   const shown = ` The picture above is this image as generated (a small preview${kind === "cutout" && asset.transparent ? ", transparent areas shown as grey" : ""}).`;
   const verdict = seen.replaces
-    ? ` This regenerates ${seen.replaces} (removed from the project: point its slot at the new src, width and height). It cannot be regenerated again: if it still shows a flaw, crop it out of frame with the slot's aspect and object-position, or use CSS/SVG artwork in that slot.`
+    ? ` This regenerates ${seen.replaces}: point its slot at this src, width and height now (the rejected image leaves the project once nothing uses it). It cannot be regenerated again: if it still shows a flaw, crop it out of frame with the slot's aspect and object-position, or use CSS/SVG artwork in that slot.`
     : ` If you reject it, call generate_image once more for this slot with a new name, replaces="${seen.name ?? "this-image"}", rejected (what is wrong) and a prompt that fixes the cause (it counts against the allowance; a slot is regenerated at most once).`;
   return `${ready}${shown} ${IMAGE_INSPECTION}${verdict} Otherwise, before placing it, note to yourself where its focal point and its calm, empty space are, then art-direct the slot: an aspect and crop that serve its job, object-position per breakpoint that keeps the focal point in frame on phones, and text, captions or panels on the calm side or edge, never over the subject.`;
 }

@@ -237,7 +237,7 @@ LAYOUT VOCABULARY. Combine four to six per page, never the same pattern twice in
 - Editorial asymmetric split: 5/7 or 4/8 columns, image bleeding to the viewport edge, a text column with a small label, heading and short body.
 - Bento grid: cells of unequal spans (2×2, 2×1, 1×1) mixing image, stat, quote and micro-UI, with one gap and one radius; one column on mobile.
 - Layered imagery: overlapping photos, cut-outs or cards via grid overlap or negative margins, a caption card across a photo edge.
-- Marquee: a slow horizontal band of words, services or dates (CSS animation, duplicated copy marked aria-hidden). Under prefers-reduced-motion it becomes a static wrapped list (flex-wrap) with the duplicate hidden (display: none), so no text sits clipped off-screen.
+- Marquee: a slow horizontal band of words, services or dates (CSS animation, duplicated copy marked aria-hidden). Give the moving track itself the band's background colour, not only the clipping band: items that move past the band's edge are otherwise measured against the page behind them and fail contrast. Under prefers-reduced-motion it becomes a static wrapped list (flex-wrap) with the duplicate hidden (display: none), so no text sits clipped off-screen.
 - Sticky scroll story: a position: sticky heading or visual on one side while numbered steps scroll past on the other.
 - Index list: full-width rows with large numerals, title, meta and an arrow; hover shifts or reveals in CSS.
 - Also: full-bleed image band with an overlaid headline and a scrim for contrast; stat band; numbered process; timeline; printed-card menu or price list; split call-to-action footer.

@@ -140,6 +140,27 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.match(refusals[1], /already been regenerated once/);
   });
 
+  await check("a regeneration never leaves a broken image: the rejected image stays while the code uses it, finish asks once to point the slot at the new one", async () => {
+    // The run ends right after the regeneration, before any code change (the review round that ran out of turns).
+    script.length = 0; seen.length = 0;
+    script.push({ content: [gen("g1", { name: "hero-bench" })] }, { content: [...site("x"), gen("g2", { name: "hero-bench-2", replaces: "hero-bench", rejected: "The rim is warped where the spokes meet it." })] });
+    const ended = await run({ limits: { maxTurns: 2 } });
+    assert.ok(!ended.result.finished);
+    assert.ok(ended.files.assets.has("public/images/hero-bench.webp"), "still referenced by App.tsx, so it stays");
+    assert.ok(ended.files.assets.has("public/images/hero-bench-2.webp"));
+    assert.deepEqual(ended.files.problems(), [], "no reference to a missing image");
+    // The same regeneration with time to finish: the first finish is asked to swap the slot, the repeat is accepted.
+    script.length = 0; seen.length = 0;
+    script.push({ content: [gen("g1", { name: "hero-bench" })] }, { content: [...site("y"), gen("g2", { name: "hero-bench-2", replaces: "hero-bench", rejected: "The rim is warped where the spokes meet it." })] },
+      { content: [finish("f1")] }, { content: [finish("f2")] });
+    const asked = await run();
+    assert.ok(asked.result.finished);
+    const stale = asked.events.find(event => event.type === "tool_error" && event.tool === "finish");
+    assert.match(stale.message, /still shows \/images\/hero-bench\.webp, which you rejected and regenerated as \/images\/hero-bench-2\.webp/);
+    assert.ok(asked.files.assets.has("public/images/hero-bench.webp"), "kept while in use: never a broken image");
+    assert.equal(script.length, 0);
+  });
+
   await check("regeneration rules: a new name, an existing generated image, never the client's own photos or logo; replaces and rejected go together", () => {
     const state = { replaceOnly: false, exists: name => ["hero", "photo-1", "brand-logo"].includes(name), replaced: new Set(), replacements: new Set() };
     assert.equal(regenerationProblem({ name: "hero-2" }, state), null, "a new image needs no replaces outside a review");
@@ -156,7 +177,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     script.length = 0; seen.length = 0; imageCalls.length = 0;
     const files = new ProjectFiles();
     for (const file of site("r")) files.write(file.input.path, file.input.content);
-    files.addAsset({ id: "00000001-0000-5000-a000-000000000000", path: "public/images/hero-bench.webp", sha256: "a".repeat(64), bytes: 1000, mediaType: "image/webp" });
+    files.addAsset({ id: "0000000a-0000-5000-a000-000000000000", path: "public/images/hero-bench.webp", sha256: "a".repeat(64), bytes: 1000, mediaType: "image/webp" });
     script.push({ content: [gen("g1", { name: "extra-shot" })] }, { content: [gen("g2", { name: "hero-bench-2", replaces: "hero-bench", rejected: "Gibberish lettering on the workshop sign." })] },
       { content: [write("w1", "src/App.tsx", files.files.get("src/App.tsx").replace("hero-bench", "hero-bench-2")), finish("f4")] });
     const { events, result } = await run({ limits: { maxTurns: 6, maxImages: 1, replaceOnly: true } }, files);
