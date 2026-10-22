@@ -158,10 +158,14 @@ function plateScene(scene: SlideScene, plate: { name: string; luma?: number[]; s
   const prims: Prim[] = [{ k: "image", x: 0, y: 0, w: W, h: H, name: plate.name, alt: "", crop: "center" }];
   for (const prim of scene.prims) {
     if (full(prim)) continue;
-    if (prim.k === "rect" && !prim.noFill && (prim.opacity ?? 1) >= 0.95 && !prim.fade) panels.push(prim);
+    // Any filled shape under a text is its designed ground (a card, a badge behind a numeral): such text is never scrimmed.
+    if ((prim.k === "rect" && !prim.noFill && (prim.opacity ?? 1) >= 0.5 && !prim.fade) || ((prim.k === "ellipse" || prim.k === "path") && prim.fill && (prim.opacity ?? 1) >= 0.5)) panels.push(prim);
     if (prim.k === "text" || prim.k === "chart") {
-      const onPanel = panels.some(panel => prim.x >= panel.x - 1 && prim.y >= panel.y - 1 && prim.x + prim.w <= panel.x + panel.w + 1 && prim.y + prim.h <= panel.y + panel.h + 1);
+      const cx = prim.x + prim.w / 2, cy = prim.y + prim.h / 2;
+      const onPanel = panels.some(panel => cx >= panel.x && cx <= panel.x + panel.w && cy >= panel.y && cy <= panel.y + panel.h);
       const color = prim.k === "text" ? prim.color : prim.colors.ink;
+      // Text not designed for the slide's ground (light type for a coloured shape) is left as composed.
+      if (!onPanel && contrast(color, ground) < PLATE_CONTRAST) { prims.push(prim); continue; }
       const pad = 14, box = { x: Math.max(0, prim.x - pad), y: Math.max(0, prim.y - pad), w: Math.min(W, prim.w + 2 * pad), h: Math.min(H, prim.h + 2 * pad) };
       const alpha = onPanel ? 0 : plateScrim(color, ground, plateRange(plate, box));
       if (alpha > 0) prims.push({ k: "rect", ...box, fill: ground, opacity: alpha, radius: 6 });

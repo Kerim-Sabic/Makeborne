@@ -169,6 +169,8 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   const pendingImages = new Map<string, { attempts: number; accept: () => void; retry: (fix: string) => Promise<Checked>; drop: () => void }>();
   /** Slides that just became editable text in a full-image deck: each gets a text-free plate in the deck's art direction. */
   const platesWanted: string[] = [];
+  /** Images that passed check_image this run. */
+  const passedImages = new Set<string>();
 
   const renders = imageLimit > 0 && art ? Math.min(imageBudget, DECK_ART_IMAGE_CAP) : 0;
   const imageLine = art
@@ -295,7 +297,13 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   }
   /** Plates for every slide that became editable text since the last call (one image each, within the image budget). */
   async function platesFor(): Promise<(BetaTextBlockParam | BetaImageBlockParam)[]> {
-    const ids = platesWanted.splice(0).filter(id => deck()?.art?.renders.some(entry => entry.slide === id && entry.outcome === "fallback" && !entry.plate));
+    const ids = platesWanted.splice(0).filter(id => deck()?.art?.renders.some(entry => entry.slide === id && entry.outcome === "fallback" && !entry.plate)).filter(id => {
+      // A plate the designer already generated under this name and checked is used as it is (no second image).
+      const name = `plate-${id}`.slice(0, 49).replace(/-+$/, ""), render = deck()?.art?.renders.find(entry => entry.slide === id);
+      if (!passedImages.has(name) || !run.editor.hasImage(name) || !render) return true;
+      run.editor.recordRender({ ...render, plate: name });
+      return false;
+    });
     return (await Promise.all(ids.map(id => makePlate(id, 1)))).flat();
   }
   async function checkSlide(input: z.infer<typeof DocToolInputs.check_slide>): Promise<{ ok: boolean; content: string | (BetaTextBlockParam | BetaImageBlockParam)[] }> {
@@ -358,7 +366,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     const pending = pendingImages.get(input.name);
     if (!pending) return { ok: false, content: `No image "${input.name}" is waiting for a check.` };
     pendingImages.delete(input.name);
-    if (input.verdict === "pass" && !input.artifacts.length) { pending.accept(); record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "passed", problems: [] }); return { ok: true, content: `Image "${input.name}" passed.` }; }
+    if (input.verdict === "pass" && !input.artifacts.length) { pending.accept(); passedImages.add(input.name); record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "passed", problems: [] }); return { ok: true, content: `Image "${input.name}" passed.` }; }
     const problems = input.artifacts.length ? input.artifacts : ["failed the visual check"];
     if (pending.attempts < CHECK_ATTEMPTS) {
       record({ target: "image", id: input.name, attempt: pending.attempts, outcome: "retry", problems });

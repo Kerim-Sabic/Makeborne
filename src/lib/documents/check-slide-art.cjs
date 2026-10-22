@@ -6,7 +6,7 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const JSZip = require("jszip"), sharp = require("sharp");
 const { DocumentEditor, emptyDocument, unescapeLiterals } = require("./editor.ts");
 const { composeSlide, H } = require("./slide-scene.ts");
-const { ART_COMPOSITION, ART_SAFE_MARGIN_PCT, artAlt, artFontsFor, plateRange, plateScrim, artPlaceholders, artPlanIssues, artPrompt, artTextIssues, compareSlideText, slideClaimIssues, slideText, textKey, verifiedArt } = require("./slide-art.ts");
+const { ART_COMPOSITION, ART_SAFE_MARGIN_PCT, artAlt, artFontsFor, artScene, plateRange, plateScrim, artPlaceholders, artPlanIssues, artPrompt, artTextIssues, compareSlideText, slideClaimIssues, slideText, textKey, verifiedArt } = require("./slide-art.ts");
 const { deckModeFromBrief, bookImagePlanFromBrief } = require("./creation-options.ts");
 const { bookImageIssues, bookImagePlanText, plannedBookImages } = require("./book-images.ts");
 const { fitArtwork, ARTWORK_IMAGE_LIMIT, ARTWORK_TOTAL_LIMIT } = require("./artwork-fit.ts");
@@ -277,6 +277,17 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     const alpha = plateScrim("#14181F", "#F6F3EE", plateRange(busy, box));
     assert.ok(alpha > 0.5, `a busy area gets a scrim (${alpha})`);
     assert.ok(contrast("#14181F", mix("#282828", "#F6F3EE", alpha)) >= 4.5 && contrast("#14181F", mix("#FAFAFA", "#F6F3EE", alpha)) >= 4.5, "and the text reaches 4.5:1 over its darkest and brightest pixels");
+    // A numeral on its badge keeps its badge (live d02 re-run: badges were scrimmed over and the numerals vanished).
+    const plateDeck = { ...editor.doc, assets: [...editor.doc.assets, { name: "plate-demand", id: "00000000-0000-4000-8000-000000000099", aspect: "landscape", alt: "", prompt: "", luma: busy.luma, shade: busy.shade }] };
+    const live = () => ({ background: "#F6F3EE", issues: [], prims: [
+      { k: "ellipse", x: 100, y: 300, w: 40, h: 40, fill: "#A9471F" },
+      { k: "text", x: 105, y: 305, w: 30, h: 30, text: "1", font: "body", size: 20, weight: 600, color: "#FFFFFF", align: "center", valign: "middle", lh: 1 },
+      { k: "text", x: 160, y: 300, w: 500, h: 40, text: "Market size", font: "heading", size: 30, weight: 600, color: "#14181F", align: "left", valign: "top", lh: 1.1 }] });
+    const scene = artScene(plateDeck, plateDeck.slides[2], live);
+    assert.equal(scene.prims[0].name, "plate-demand");
+    const scrims = scene.prims.filter(prim => prim.k === "rect");
+    assert.equal(scrims.length, 1, "one scrim: behind the heading on the busy plate, none over the badge");
+    assert.ok(scrims[0].x >= 140 && scene.prims.indexOf(scrims[0]) === scene.prims.findIndex(prim => prim.k === "text" && prim.text === "Market size") - 1);
     const prompt = artPrompt({ ...editor.doc }, editor.doc.slides[0]);
     assert.match(prompt, /top 14% and bottom 14% of the canvas hold no words at all/);
     assert.match(prompt, /keeps 6\.5% clear above the first line/);
