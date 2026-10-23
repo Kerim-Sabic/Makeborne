@@ -1,0 +1,13 @@
+.image-edit-panel { display: grid; gap: 12px; margin-top: 8px; padding: 12px; border: 1px solid var(--line, #d9d6cf); border-radius: 10px; background: var(--surface, #fff); }
+.image-edit-panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.image-edit-panel h4 { margin: 0; font-size: 0.95rem; }
+.image-edit-form, .image-edit-compare { display: grid; gap: 10px; }
+.image-edit-form label { display: grid; gap: 4px; font-size: 0.85rem; }
+.image-edit-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.image-edit-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.image-edit-pair img { max-width: 100%; height: auto; }
+.image-edit-estimate { display: grid; gap: 8px; }
+.image-edit-review { margin: 0; padding-left: 18px; font-size: 0.85rem; }
+.image-edit-use { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.image-edit-panel fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 4px; }
+.image-edit-panel legend { font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
