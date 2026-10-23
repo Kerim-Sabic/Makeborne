@@ -28,6 +28,9 @@ const DOCUMENT_FONT_FILES = [
   "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-SUBSET-wght-*.woff2",
 ].flatMap((file) => ["latin", "latin-ext"].map((subset) => `./node_modules/${file.replace("SUBSET", subset)}`));
 
+/** Source parsers run in a worker thread loaded by path at run time (src/lib/ingest/worker-host.ts). */
+const INGEST_WORKER_FILES = ["./src/lib/ingest/parse-worker.cjs", "./src/lib/ingest/parsers/*.cjs"];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // PDF export runs Chromium; on Vercel it comes from @sparticuz/chromium's packed binary.
@@ -37,7 +40,10 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // Compile check at the end of a website build (src/lib/builder/compile.ts):
     // the service runs bin/esbuild with node, which loads esbuild.wasm by path.
-    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm"],
+    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm", ...INGEST_WORKER_FILES],
+    "/api/build/plan": INGEST_WORKER_FILES,
+    "/api/build/sources": INGEST_WORKER_FILES,
+    "/api/cloud/workspaces/*/artifacts/*/sources": INGEST_WORKER_FILES,
     "/admin": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm"],
     // Playwright loads its registry and runtime resources dynamically. Include
     // them explicitly for both export entry points in serverless deployments.

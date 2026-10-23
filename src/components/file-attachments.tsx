@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Ban, CircleAlert, CircleCheck, Download, File, FileText, HardDrive, LoaderCircle, Paperclip, RotateCcw, TriangleAlert, X } from "lucide-react";
 import { addAttachments, formatFileSize, readAttachments, removeAttachment, type Attachment } from "@/lib/attachments";
-import { analyzeSource, decideSources, type SourceAnalysis, type SourceEntry, type SourceReadiness, type SourceState } from "@/lib/builder/source-readiness";
+import { analyzeSource, decideSources, type SourceAnalysis, type SourceEntry, type SourceInspector, type SourceReadiness, type SourceState } from "@/lib/builder/source-readiness";
+import { ingestCapabilities, inspectSourceFile } from "@/lib/ingest/client";
 import "@/app/file-attachments.css";
 
 export function useFileAttachments(owner: string | null, context: string) {
@@ -61,6 +62,9 @@ export function AttachFilesButton({ onFiles, disabled, busy, compact = false }: 
 }
 /** Pre-Send AI readiness for stored files. Analyses are cached by the immutable stored id,
  * so Retry re-reads exactly the same saved copy and Send binds exactly the listed files. */
+/** The server-side ingestion check (Office/CSV/PDF coverage). When the server switch is off it reports
+ * "not available" once and every file is analysed exactly as before. */
+const SERVER_INSPECTOR: SourceInspector = { capabilities: ingestCapabilities, inspect: (file, mediaType) => inspectSourceFile(file, mediaType) };
 export type SourceReadinessState = SourceReadiness & { retry: (id: string) => void; settle: () => Promise<SourceReadiness> };
 export function useSourceReadiness(files: Attachment[], excluded: ReadonlySet<string>): SourceReadinessState {
   const [analyses, setAnalyses] = useState<ReadonlyMap<string, SourceAnalysis>>(() => new Map());
@@ -70,7 +74,7 @@ export function useSourceReadiness(files: Attachment[], excluded: ReadonlySet<st
   const analyze = useCallback((file: Attachment) => {
     const running = inflight.current.get(file.id);
     if (running) return running;
-    const next: Promise<SourceAnalysis> = analyzeSource(file).then(result => {
+    const next: Promise<SourceAnalysis> = analyzeSource(file, SERVER_INSPECTOR).then(result => {
       if (inflight.current.get(file.id) === next) { inflight.current.delete(file.id); cache.current.set(file.id, result); setAnalyses(new Map(cache.current)); }
       return result;
     });
@@ -86,7 +90,7 @@ export function useSourceReadiness(files: Attachment[], excluded: ReadonlySet<st
   const retry = useCallback((id: string) => { cache.current.delete(id); inflight.current.delete(id); setAnalyses(new Map(cache.current)); setAttempt(value => value + 1); }, []);
   return { ...report, retry, settle };
 }
-const STATE_ICONS: Record<SourceState, typeof File> = { ready: CircleCheck, "local-only": HardDrive, unsupported: Ban, "too-large": TriangleAlert, failed: CircleAlert, checking: LoaderCircle };
+const STATE_ICONS: Record<SourceState, typeof File> = { ready: CircleCheck, "local-only": HardDrive, unsupported: Ban, "too-large": TriangleAlert, failed: CircleAlert, partial: TriangleAlert, checking: LoaderCircle };
 type ChipActions = { onRemove?: (id: string) => void; removeLabel?: (name: string) => string; onExclude?: (id: string) => void; onInclude?: (id: string) => void; onRetry?: (id: string) => void };
 function FileChip({ file, entry, onRemove, removeLabel, onExclude, onInclude, onRetry, disabled }: { file: Attachment; entry?: SourceEntry; disabled?: boolean } & ChipActions) {
   const [preview, setPreview] = useState("");
@@ -104,6 +108,8 @@ function FileChip({ file, entry, onRemove, removeLabel, onExclude, onInclude, on
   const canRetry = entry?.state === "failed" && !!onRetry;
   const canExclude = Boolean(entry && !entry.excluded && !entry.duplicateOf && entry.state !== "checking" && onExclude);
   const canInclude = !!entry?.excluded && !!onInclude;
+  // An unreadable or partly readable file stops generation until the user chooses: remove it, or continue without it.
+  const continueWithout = Boolean(entry && entry.state !== "ready" && (entry.state === "partial" || entry.sourceType));
   return <li className={`attachment-chip${entry ? " has-state" : ""}`} data-state={entry?.state}>
     <div className="attachment-row">
       <a className="attachment-download" href={downloadUrl || undefined} download={file.name} aria-label={`Download ${file.name}`} title={`Download ${file.name}`}>
@@ -116,10 +122,11 @@ function FileChip({ file, entry, onRemove, removeLabel, onExclude, onInclude, on
     </div>
     {entry && StateIcon && <>
       <p className="attachment-state"><StateIcon size={13} aria-hidden="true" className={entry.state === "checking" ? "attachment-saving" : undefined} /><span><strong>{entry.label}.</strong> {entry.reason}</span></p>
+      {entry.details && entry.details.length > 0 && <ul className="attachment-details-list" aria-label={`What was and wasn’t read in ${file.name}`}>{entry.details.map(detail => <li key={detail}>{detail}</li>)}</ul>}
       {(canRetry || canExclude || canInclude) && <div className="attachment-actions">
         {canRetry && <button type="button" disabled={disabled} onClick={() => onRetry!(file.id)} aria-label={`Retry reading ${file.name}`}><RotateCcw size={12} aria-hidden="true" />Retry</button>}
         {canInclude && <button type="button" disabled={disabled} onClick={() => onInclude!(file.id)} aria-label={`Include ${file.name} in this request`}>Include</button>}
-        {canExclude && <button type="button" disabled={disabled} onClick={() => onExclude!(file.id)} aria-label={`Leave ${file.name} out of this request (the saved file is kept)`}>Leave out</button>}
+        {canExclude && <button type="button" disabled={disabled} onClick={() => onExclude!(file.id)} aria-label={continueWithout ? `Continue without ${file.name} for this request (the saved file is kept)` : `Leave ${file.name} out of this request (the saved file is kept)`}>{continueWithout ? "Continue without it" : "Leave out"}</button>}
       </div>}
     </>}
   </li>;
@@ -136,7 +143,9 @@ export function AttachmentList({ files, onRemove, disabled, compact = false, not
     {readiness && <div className="attachment-readiness" role="status" aria-live="polite" aria-atomic="true">
       <p className="attachment-read">{readPrefix}{readiness.readSummary}</p>
       {readiness.skippedSummary && <p className="attachment-skipped">{readiness.skippedSummary}</p>}
-      {readiness.blocking.length > 0 && <p className="attachment-blocking">Retry or {onExclude ? "leave out" : "remove"} {readiness.blocking.map(entry => entry.file.name).join(", ")} before sending.</p>}
+      {readiness.blocking.length > 0 && <p className="attachment-blocking">{readiness.blocking.some(entry => entry.state === "partial" || entry.sourceType)
+        ? `Generation is stopped until you choose for ${readiness.blocking.map(entry => entry.file.name).join(", ")}: remove it${onExclude ? ", or continue without it" : ""}.`
+        : `Retry or ${onExclude ? "leave out" : "remove"} ${readiness.blocking.map(entry => entry.file.name).join(", ")} before sending.`}</p>}
     </div>}
     <ul className="attachment-list" aria-label={readiness ? "Source files for this request" : "Attached files"}>{files.map(file => <FileChip key={file.id} file={file} entry={entries.get(file.id)} onRemove={onRemove} removeLabel={removeLabel} onExclude={onExclude} onInclude={onInclude} onRetry={onRetry} disabled={disabled} />)}</ul>
     <p className="attachment-note">{note}</p>
