@@ -4,7 +4,7 @@
 
 - Canonical origin: `https://makeborne.vercel.app` in `src/lib/site-metadata.ts`.
 - Home is indexable in production and has a canonical URL, descriptive title, description, Open Graph/Twitter preview, and `WebSite` structured data for the Makeborne identity.
-- `/help` supplies visible answers about current availability, selecting styles, writing a brief, attachments, effort, account access, coffee support, client work, and publishing. It is linked from the home footer, has its own canonical metadata, and uses matching `WebPage`/`BreadcrumbList` structured data. It does not advertise unavailable generation or publishing as live.
+- `/help` supplies visible answers about current availability, selecting styles, writing a brief, attachments, effort, account access, credits and pricing, client work, and publishing. It is linked from the home footer, has its own canonical metadata, and uses matching `WebPage`/`BreadcrumbList` structured data. It does not advertise unavailable generation or publishing as live.
 - `/sitemap.xml` contains only home and `/help`. The public route list is shared in `site-metadata.ts`. Billing currently contains account information, so it is not a public pricing landing page.
 - `/robots.txt` permits crawling so crawlers can read each route's `noindex` directive. `OAI-SearchBot` is explicitly allowed for ChatGPT search discovery. This does not change the existing wildcard policy for model-training crawlers or grant access to private workspaces.
 - Public metadata requests large image previews and full snippets. Open Graph and Twitter both point to the actual 1200 × 630 brand image, with descriptive alt text.

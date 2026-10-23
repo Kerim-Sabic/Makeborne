@@ -15,6 +15,11 @@ import type { EffortLevel } from "../routing/effort";
  * estimate follows the rate if it changes.
  */
 export const MEASURED_EFFORT: EffortLevel = "medium";
+/** Which run the arrays below come from, as the pricing page names it. The deck and book sizes are
+ * the two golden decks and books (BASELINE_2026-10.md). These runs predate the later caching and
+ * review changes; re-measure, then update the arrays and this label together. */
+export const MEASURED_RUN = Object.freeze({ id: "golden-20261018", label: "18 October 2026 test runs", presentationSlides: Object.freeze([8, 10]), bookPages: Object.freeze([13, 38]) });
+export type MeasuredRun = { label: string; presentationSlides: readonly number[]; bookPages: readonly number[] };
 export const MEASURED_FIRST_BUILD_USD = Object.freeze({
   website: Object.freeze([1.125621, 1.348174, 1.074213, 0.909322, 1.054121, 0.648577, 1.041343, 0.528332, 0.78035, 0.480012,
     0.991713, 0.524447, 1.302457, 0.760686, 0.890188, 0.535692, 1.065288, 1.022891, 0.941304, 0.461811]),

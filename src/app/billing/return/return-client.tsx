@@ -6,12 +6,22 @@ import { ArrowRight, CircleCheck, Clock3 } from "lucide-react";
 import BrandMark from "@/components/brand-mark";
 import { authDestination } from "@/lib/supabase/auth-flow";
 
+/** The plan-checkout keys written by creation-plans.tsx; cleared once access is verified. */
+const CHECKOUT_KEYS = { session: ["makeborne-creation-checkout-v1", "makeborne-creation-checkout-sent-v1"], local: ["makeborne-creation-checkout-v2"] };
+/** True only when this tab's checkout record returns to a saved brief (draft= or claim=). */
+function returnsToDraft() {
+  try { const saved = JSON.parse(sessionStorage.getItem(CHECKOUT_KEYS.session[0]) ?? "null"); return typeof saved?.next === "string" && /[?&](draft|claim)=/.test(saved.next); } catch { return false; }
+}
+
 export default function CheckoutReturn({ requestId }: { requestId: string }) {
   const router = useRouter();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<"checking" | "pending" | "active" | "error">("checking");
-  const [message, setMessage] = useState("Your draft is saved. We’ll reopen it once Whop confirms your creation membership.");
+  const [message, setMessage] = useState("We’ll take you on once Whop confirms your creation membership.");
   useEffect(() => {
+    const draft = returnsToDraft();
+    // Storage is read after mount, so the server render and the first client render agree.
+    if (attempt === 0) queueMicrotask(() => setMessage(draft ? "Your draft is saved. We’ll reopen it once Whop confirms your creation membership." : "We’ll open the studio once Whop confirms your creation membership."));
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let count = 0;
@@ -22,12 +32,13 @@ export default function CheckoutReturn({ requestId }: { requestId: string }) {
         if (!response.ok) throw new Error(result.error?.message ?? "We could not confirm your membership yet.");
         if (result.status === "active" && typeof result.next === "string") {
           setState("active");
+          try { CHECKOUT_KEYS.session.forEach(key => sessionStorage.removeItem(key)); CHECKOUT_KEYS.local.forEach(key => localStorage.removeItem(key)); } catch { /* Nothing stored. */ }
           router.replace(authDestination(result.next));
           return;
         }
         if (++count < 12) { timer = setTimeout(check, 2500); return; }
         setState("pending");
-        setMessage("Whop has not confirmed access yet. Your draft is safe. Check again shortly; you don’t need to purchase again.");
+        setMessage(`Whop has not confirmed access yet.${draft ? " Your draft is safe." : ""} Check again shortly; you don’t need to purchase again.`);
       } catch (error) {
         if (abort.signal.aborted) return;
         setState("error");

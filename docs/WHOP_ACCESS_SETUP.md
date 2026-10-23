@@ -2,6 +2,10 @@
 
 ## What works without payment API secrets
 
+**Pricing page (24 Oct 2026).** The $1 coffee support card, its nav item and FAQs are no longer on `/billing`; the `SUPPORT` constant, this route and the terms paragraph stay. The route remains live from old links until `MAKEBORNE_SUPPORT_CHECKOUT_ENABLED=false` is set (recommended owner decision). Signed-out plan CTAs send visitors to `/login?mode=signup&next=/billing?plan=…&interval=…#plans`; `authDestination` keeps only `plan ∈ {create, studio, scale}` and `interval ∈ {monthly, yearly}`. Price wording beside every CTA comes from `TAX_NOTE` (`src/lib/billing/plans.ts`), which mentions tax **and** checkout fees until the owner confirms buyers pay no Whop fee.
+
+**EU/UK prerequisites before consumer sales open** (enforced through Whop country settings and the release-checklist gate row, not by the page): Whop tax-inclusive consumer prices on and `TAX_NOTE` flipped to its tax-inclusive variant; `topup-fulfillment.ts` and the membership webhook verified with **taxed** payments (today a taxed total can differ from the catalogue amount the fulfilment path expects: a fulfilment gap); an EU "order with obligation to pay" final button in Whop; and Whop collecting the immediate-performance consent and withdrawal acknowledgement the terms require "separately at checkout". Without that consent EU/UK consumers keep a 14-day withdrawal right with a proportionate refund even after using credits.
+
 `GET /api/billing/support-checkout` reports whether the verified coffee product is available and whether the visitor is signed in. `POST` requires a server-verified Supabase account, then returns the fixed public Whop product URL:
 
 `https://whop.com/checkout/plan_B7Dgm9ZqM3V0M`

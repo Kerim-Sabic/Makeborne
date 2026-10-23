@@ -50,7 +50,7 @@ Migrations `20261012120000_credit_lots_expiry.sql`, `20261012130000_credit_lock_
 - **Ledger:** the invariant `sum(delta) = available` still holds.
   - Unheld credits that expire produce a negative `expire` row.
   - Balances are exact at read time without these rows. `makeborne_credit_expire_due` writes the rows; it runs at the end of every reconciliation run and on the next wallet write.
-- **Display:** `/api/credits` returns `nextExpiry: {at, credits}` (UTC). The billing page shows it in the viewer's own time zone, for example "120 credits expire 31 Oct 2026, 10:00". There is also a "Do credits expire?" FAQ entry.
+- **Display:** `/api/credits` returns `nextExpiry: {at, credits}` (UTC). The billing page shows it in the viewer's own time zone, for example "120 credits expire 31 Oct 2026, 10:00". There is also a "Do unused credits expire?" FAQ entry (`#faq-expire`), and the No surprises band says unused plan credits stay usable for two months after their month ends.
 - **Existing balances:**
   - Each existing wallet becomes one non-expiring `legacy` lot (`legacy:pre-lots`, with the reason recorded). That lot funds the wallet's open holds.
   - `credit_lot_migration` stores each wallet's balance, reserved and available amounts before and after. The migration aborts unless every wallet matches exactly; holds older than 15 minutes are compared as available, the same way the previous reads treated them.

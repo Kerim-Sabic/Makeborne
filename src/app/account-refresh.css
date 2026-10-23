@@ -116,3 +116,4 @@
 @media(prefers-reduced-motion:reduce){.auth-spinner{animation:none}.auth-refined *{scroll-behavior:auto!important}}
 @media(prefers-reduced-transparency:reduce){.auth-refined .login-card.auth-verification-card{background:#fff}}
 @media(forced-colors:active){.auth-refined .login-card.auth-verification-card,.auth-email-address,.auth-google{border:1px solid CanvasText}.auth-refined .login-card .button.primary{background:ButtonFace;color:ButtonText;border-color:ButtonText}.auth-verification-card .auth-mail-icon{background:Canvas;color:CanvasText;border-color:CanvasText}}
+.auth-plan-strip{width:100%;margin:0 0 16px;padding:12px 14px;border:1px solid #e3dcea;border-radius:12px;background:#f7f4fc;color:#4d3e5c;font-size:14px;line-height:1.55;text-align:left}

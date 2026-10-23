@@ -46,6 +46,10 @@ const nextConfig: NextConfig = {
     // the serverless Chromium has only Open Sans, and fonts-server.ts reads these files.
     "/api/cloud/workspaces/*/artifacts/*/document-export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", ...DOCUMENT_FONT_FILES],
   },
+  // Old and guessed pricing links land on the plans page (308, cached by clients and search engines).
+  async redirects() {
+    return [{ source: "/pricing", destination: "/billing", permanent: true }];
+  },
   async headers() {
     return [
       {
