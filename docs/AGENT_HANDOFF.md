@@ -1736,3 +1736,51 @@ Worktree `.claude/worktrees/agency-ops`, branch `feature/agency-ops` from `featu
 **Integration with feature/model-routing:** `run-spend.ts` and `operation-server.ts` merge cleanly (`git merge-tree`; the only conflict, `live-builder.tsx`, already exists between main and that branch). Settlement uses `chargeableMicrousd(spend)`, which picks up routing's `chargeableMicrousd` (confirmed − absorbed) when present; no separate absorbed accounting was added. `QUALIFIED_ROUTES` and `AGENCY_SETTINGS` are separate registries today; unify them when routing qualifies cells.
 
 Ingest agent: untouched `src/lib/ingest/*`, `attachments.ts`, `source-readiness.ts`; extraction records can join `agency_task_scope` as a new input kind later. Codex: please review the migration (scope function, finish/recover branches, heartbeat bounds). Acknowledgment not assumed.
+
+### Claude — agency stage 5: image editing through the existing OpenAI image path, local handback, 23 October 2026 (committed on `feature/agency-image-edit`; not pushed, merged or deployed; feature disabled; live qualification outstanding)
+Worktree `.claude/worktrees/agency-image-edit`, branch `feature/agency-image-edit` from `feature/agency-workflow` 5b92a20 (node_modules is a junction; never `--force` remove). 0 AI spend, 0 cloud spend; no migration, production, flag, credential, billing or policy change. All fixtures are generated in the harness.
+
+**Official-doc findings (checked 2026-10-23, recorded in `src/lib/ai/image-edit-prices.ts` with URLs):** `/v1/images/edits` is supported by gpt-image-2.5-sunburst (named by OpenAI for editing precision, the API's default edit model), gpt-image-2.5-flare (everyday/fast) and gpt-image-2. Rates are text $5, image input $8 and image output $30 per 1M tokens. Cached rates do not apply to the Images API, and each partial image adds 100 output tokens. A mask must match the image's format and size (< 50 MB) and needs an alpha channel. Masking is prompt-based ("may not follow its exact shape"), and a mask adds instructions of unpublished size. Up to 16 input images are allowed. Quality is low/medium/high (+ xhigh/max on 2.5, default auto). Transparency is documented for 2.5 but only "in preview" for gpt-image-2. `input_fidelity` must be omitted on gpt-image-2. `usage` is documented "for gpt-image-1 only". **The per-image input-token rule is published only for gpt-image-1, which shuts down today.** No input-image or edit output-token count is published for any model we can call, so every edit cell is refused (`MEASURED_EDIT_TOKENS` is empty).
+
+**Built:**
+- `ai/image-edit-prices.ts`: edit evidence per model, the measured-cell table (empty), `assertSupportedImageEditRequest` and `imageEditCallBoundMicrousd` (text + every input image + mask + measured mask text + output, each ×1.5 headroom, at standard rates, ×1.1; no caching or discount), usage pricing, and the `imageEditPriceCardVersion` hash. The generic image-input refusal in `prices.ts` is unchanged (comment only).
+- `ai/image-edit-call.ts`: one multipart edit (image[], mask, prompt, size, quality, background, png, n=1, `stream: false`, no partials, `maxRetries: 0`, ≤180 s). It reserves the bound through RunSpend first. A thrown non-429 response is recorded as uncertain at the bound, never retried. A malformed response has its usage recorded but is never stored. An overrun goes to `reportImageOverrun`, then `markOverrun`, then SQL emergency stop.
+- `images/edit/contract.ts`: the Zod contract. It covers the asset id + sha, instruction, optional mask, ≤3 references, allowlisted size/quality/background, preserve notes, protected regions, action/step keys and the ceiling. It also holds the plan and candidate schemas, the six reference kinds and the flag `MAKEBORNE_IMAGE_EDITING=on` (off).
+- `images/edit/pixels.ts` (sharp): sha + decode verification and mask validation (PNG, same dims, real alpha, 0.5–99.5% editable, ≤4 MB). Inputs are normalised to the output size (aspect > 2% refused except "extend", which gets a canvas and an auto-mask). Protected regions are composited back exactly (stored lossless) and require review. It also does deterministic resize/crop/compress/exact composite with no model call.
+- `images/edit/routing.ts`: precision ops go to Sunburst only, and routine ops (restyle/variant) prefer Flare, then Sunburst, then gpt-image-2. A model also needs the operator allowlist `MAKEBORNE_IMAGE_EDIT_MODELS` (unset), edit evidence, no overrun stop and a measured cell.
+- `images/edit/run.ts`: one action on the existing operation (kind `image_edit`) in two fenced steps. Step 1 is Claude via the stage-1 lead loop (2 turns, 1,200 output tokens, its own small stage cap), which produces the precise instruction or "deterministic suffices". Step 2 is one edit call that stores a NEW asset (provenance: original id+sha, instruction/request hashes, model, price card, usage, cost, operation/run ids) and finishes `result` with a candidate. Duplicate keys replay both steps without a call. Failures finish `failed` (not charged). The customer view has no provider or model names.
+- `images/edit/references.ts` + `accept.ts`: acceptance is one `makeborne_save_artifact_version` with the expected version and an idempotent accept key. Only the chosen uses switch: an outline block, the style reference, a document image name everywhere, one document placement (cover / slide / person / chapter opener / nth figure), a website path everywhere, or one website URL occurrence. New website paths sit beside the original, with responsive copies registered. The manifest only grows, and the original stays untouched and listed. A candidate must be an edit of that original in that project, and review is required when flagged. Discard needs no call: the candidate stays unreferenced and immutable.
+- `documents/export-server.ts loadDocumentImages` now re-hashes bytes against the registered sha256 (mismatch = left out).
+- Small additive stage-1 changes: an optional `stageCap` on `beginAgencyOperation` and `stage` on `runAgencyTask` (defaults unchanged), plus a `lossless` option in `storeProjectImage`.
+- Routes under `/api/cloud/workspaces/[ws]/artifacts/[id]/image-edits` (GET availability, POST generate; `estimate`, `accept`, `uses`, `deterministic`, `[operationId]` read), all 404 unless the flag is on.
+- UI: `components/image-edit-panel.tsx`, shown as "Edit image" on outline image blocks in cloud-studio only when the server reports the flag on and the editor is clean. The flow is describe, then maximum credit estimate, then one version, then before/after, then choose places, then Accept/Discard.
+
+**Checks:**
+- New `src/lib/images/edit/check-image-edit.cjs`, 22/22. It covers:
+  - price evidence and bound math;
+  - flag, settings and route refusals before any RPC;
+  - unauthorized assets (other project and workspace; SQL scope as the second line);
+  - invalid masks, huge or changed inputs, unsupported settings;
+  - the happy path (one call, multipart shape, new asset, original bytes and row unchanged);
+  - duplicate submission and timeout-uncertain (no retry, not charged);
+  - insufficient budget (empty wallet, hold below the bound);
+  - malformed output, overrun with emergency stop, deterministic-suffices;
+  - protected regions exact with review required, extend auto-mask, deterministic ops;
+  - stale and mismatched acceptance, the website flow (source resolver, responsive srcset, GitHub snapshot, publication resolver) with old bytes after discard;
+  - deck slides through `loadDocumentImages` (the PDF/PPTX input) plus tamper detection, and book figures;
+  - "all uses" switches and original preservation;
+  - no model names in customer copy.
+- `check-agency.cjs` 22/22 after the stage-1 additions.
+- `npm test` 187/187.
+- `tsc --noEmit` clean; eslint clean on changed files.
+- The PDF/PPTX renderers themselves were not launched: they consume the verified `loadDocumentImages` buffers by name.
+
+**Disabled / outstanding:**
+- The flag is off.
+- No edit model is on the allowlist, no cell is measured and no `image_edit` setting is qualified.
+- Live qualification is per `docs/release-review/image-edit-qualification-20261023.md`: 24 edit calls (Sunburst 16, Flare 6, gpt-image-2 2) + 3 end-to-end runs. The planning cap is $5.83 OpenAI + $0.36 Anthropic, and the requested allowance is $6.50 + $0.50, which needs an owner-approved ledger entry first.
+- Measured edit bounds extend D8 (owner sign-off).
+- A failed step's specific code (uncertain vs malformed) is not stored in the SQL result (only in run detail), so a replay shows the generic "could not be made / not charged" text.
+- The UI entry point is outline image blocks only; website and document images are supported by the API, and the minimal UI for them is still to do.
+- Unreferenced edit candidates rely on the existing asset cleanup.
+- Codex: please review accept.ts (save path and reference rules) and the stage-1 `stageCap` addition. Acknowledgment not assumed.
