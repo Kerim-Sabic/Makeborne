@@ -16,7 +16,8 @@ import { watchOperationCancellation, finishOperation, operationFailure, operatio
 import { builtTitle } from "../projects/project-title";
 import { routeDetail, type ModelRoute, type RouteRecord } from "../ai/model-routing";
 import { refreshContext, repairRequest, routedWebsiteStage } from "./website-stage";
-import type { AttemptRole } from "../ai/model-routing";
+import { attemptGuidance, type AttemptRole, type Intensity } from "../ai/model-routing";
+import { filesSince, snapshotText, type SnapshotVersion } from "./site-snapshot";
 
 export type WebsiteBuildInput = {
   client: SupabaseClient;
@@ -34,7 +35,10 @@ export type WebsiteBuildInput = {
   message: string;
   effort: EffortLevel;
   request: string;
+  /** The project context; without `snapshot` it ends with the current files. */
   context: string;
+  /** The cached site snapshot (./site-snapshot.ts). Absent: the context carries the current files, as before. */
+  snapshot?: SnapshotVersion | null;
   attachments: BetaContentBlockParam[];
   limits?: BuilderRun["limits"];
   /** What the finished site must contain (the approved brief's sections, the client's must-haves). */
@@ -99,16 +103,18 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         const stageDeadline = Date.now() + (input.maxDuration - 20) * 1000;
         // One attempt of the stage. A repair starts a new conversation from the current files with the evidence to fix;
         // every attempt is a new conversation, so no model's thinking blocks are replayed to another.
-        const attempt = (plan: { role: AttemptRole; model?: string; deadline: number; repairNotes: string[] }) => runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
+        const attempt = (plan: { role: AttemptRole; model?: string; deadline: number; repairNotes: string[]; effort?: Intensity }) => runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
           request: plan.role === "repair" ? repairRequest(input.request, plan.repairNotes) : input.request,
-          context: plan.role === "repair" ? refreshContext(input.context, files) : input.context, attachments: input.attachments, emit, signal: controller.signal,
+          // With the cached snapshot, every attempt (a repair too) names what changed since it, from the current working copy.
+          context: (input.snapshot ? `${input.context}\n${filesSince(input.snapshot, files)}` : plan.role === "repair" ? refreshContext(input.context, files) : input.context)
+            + (input.route && plan.model ? attemptGuidance(input.route, plan.model) : ""), ...(input.snapshot ? { snapshot: snapshotText(input.snapshot) } : {}), attachments: input.attachments, emit, signal: controller.signal,
           deadline: plan.deadline, limits: input.limits, required: input.required, concept: plan.role !== "repair" && input.concept, contrastCheck: input.contrastCheck,
           anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile,
-          ...(plan.model ? { model: plan.model } : {}), ...(input.route ? { firstStep: input.route.firstStep } : {}) });
+          ...(plan.model ? { model: plan.model } : {}), ...(input.route ? { firstStep: input.route.firstStep } : {}), ...(input.route?.mode === "on" && plan.effort ? { intensity: plan.effort } : {}) });
         try {
           if (!input.route) result = await attempt({ role: "initial", deadline: stageDeadline, repairNotes: [] });
           else {
-            const routed = await routedWebsiteStage({ route: input.route, stage, files, spend, deadline: stageDeadline, signal: controller.signal, emit, compile, attempt });
+            const routed = await routedWebsiteStage({ route: input.route, stage, files, spend, deadline: stageDeadline, signal: controller.signal, emit, compile, request: input.request, attempt });
             result = routed.result; routeRecord = routed.record;
           }
         } catch (error) {
@@ -120,7 +126,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
           result = { summary: "Saved the progress made so far.", title: undefined, credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, build: null, stopped: spend.stopped };
         }
         logRouteOnce();
-        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped,
+        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped, usage: spend.usageByModel(),
           ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
         if (reviewing && !files.changed.size) {
           // The review found nothing to fix (or ran out of room before editing):
@@ -204,7 +210,7 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
             ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) }, candidate));
           return;
         }
-        await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped }).catch(() => undefined);
+        await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped, usage: spend.usageByModel() }).catch(() => undefined);
         const stop = logAiStop(hold.reference, error);
         if (stop) emit({ type: "error", code: stop.code, message: stop.message, retryable: true });
         else emit({ type: "error", code: "BUILD_FAILED", message: (error as { code?: string }).code === "REFUSED" ? "This request can't be built. Try rephrasing it."

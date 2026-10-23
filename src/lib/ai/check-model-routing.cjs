@@ -140,7 +140,8 @@ const microusd = (result, model) => result.spend.calls.filter(call => !model || 
 
   await check("classification uses scope and stage, not prompt length; plans, attachments and approved plans are never targeted", () => {
     const c = request => routing.classifyStage({ stage: "build", files: 9, effort: "medium", request }).class;
-    assert.equal(c(`Change the button "Book now" in the footer to "Reserve". ${"Context about why. ".repeat(150)}`), "targeted-edit", "a long request about one named part");
+    assert.equal(c(`Change the button "Book now" in the footer to "Reserve". ${"Context about why. ".repeat(150)}`), "copy-edit", "a long request naming the exact replacement is a copy edit, whatever its length");
+    assert.equal(c(`Move the button "Book now" in the footer above the map. ${"Context about why. ".repeat(150)}`), "targeted-edit", "a long request about one named part");
     assert.equal(c("Redesign it"), "redesign", "a short request for a whole-project change");
     assert.equal(c(`Change the <h1> "Hello" in src/App.tsx (line 4): bigger`), "targeted-edit");
     assert.equal(c("Make it better"), "edit", "no scope: a general edit");
@@ -156,10 +157,14 @@ const microusd = (result, model) => result.spend.calls.filter(call => !model || 
     assert.match(prices.capabilityIssue("claude-haiku-5-5", { effort: "medium" }), /thinking progress updates/);
     assert.match(prices.capabilityIssue(SONNET, { effort: "medium", taskClass: "targeted-edit", requireQualified: true }), /not qualified/);
     assert.match(prices.capabilityIssue(OPUS, { effort: "medium", outputTokens: 200_000 }), /output is capped/);
-    for (const bad of ["claude-haiku-5-5", "claude-sonnet-9", "claude-sonnet-5-5-20260101"]) {
+    for (const bad of ["claude-sonnet-9", "claude-sonnet-5-5-20260101"]) {
       const route = routeFor({ MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_TARGETED_EDIT: bad });
       assert.equal(route.model, OPUS, bad); assert.ok(route.reasonCodes.includes("CAPABILITY_REJECTED"), bad);
     }
+    // Website stages run without progress notes on models that lack them; plans and documents still need them.
+    assert.equal(routeFor({ MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_TARGETED_EDIT: "claude-haiku-5-5" }).model, "claude-haiku-5-5");
+    const haikuPlan = routing.routeStage({ stage: "plan", artifact: "website", request: "Plan it", files: 4, effort: "light" }, { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_PLAN: "claude-haiku-5-5" });
+    assert.equal(haikuPlan.model, OPUS); assert.ok(haikuPlan.reasonCodes.includes("CAPABILITY_REJECTED"));
     assert.equal(routing.routeIssue(routeFor(ON)), null);
     assert.match(routing.routeIssue({ ...routeFor(ON), escalation: "claude-unknown" }), /claude-unknown/);
     // No floating aliases and no automatic adoption: only exact ids with a capability record are eligible.
@@ -379,6 +384,77 @@ const microusd = (result, model) => result.spend.calls.filter(call => !model || 
     assert.match(build, /websiteBuildResponse\(\{ client, hold, spend, operation, route,/);
     for (const file of ["website-run.ts", "docs-run.ts", "plan-run.ts", "operation-server.ts"]) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, "../builder", file), "utf8"), /finishOperation\([^)]*spend\.confirmedMicrousd/, file);
     assert.match(fs.readFileSync(path.join(__dirname, "../../components/live-builder.tsx"), "utf8"), /<dt>Task<\/dt>/);
+  });
+
+  await check("v3 copy edits: named values to replace or remove, in English or Bosnian; design, behaviour, additions and block removals are not", () => {
+    const c = request => routing.classifyStage({ stage: "build", files: 9, effort: "medium", request }).class;
+    for (const request of ["Change the phone number to +387 61 123 456", 'Replace "Book a table" with "Reserve now"', 'Fix the typo: "Resturant" should be "Restaurant"',
+      "Change opening hours on Saturday to 10:00–14:00", 'Remove the line "Free parking"', "Promijeni broj telefona na 061 123 456", "Obriši rečenicu „Besplatan parking“"]) assert.equal(c(request), "copy-edit", request);
+    for (const request of ["Make the hero bolder and change the heading to \"Hi\"", 'Add a FAQ with "Do you deliver?"', "Remove the testimonials section",
+      'Change the heading to "Book a table" and give the section a saffron background', "Change the button so the booking form checks the date", "Make it better"]) assert.notEqual(c(request), "copy-edit", request);
+  });
+
+  await check("v3 cells: a copy edit routes to the cheap model only by override, escalates at the requested effort, and runs lower effort only when asked", () => {
+    const route = (request, env) => routing.routeStage({ stage: "build", artifact: "website", request, files: 4, projectBytes: 600, effort: "medium", attachments: 0, verification: { compile: true, contrast: true } }, env);
+    const HAIKU = "claude-haiku-5-5", copy = "Change the phone number to +387 61 123 456";
+    const off = route(copy, {});
+    assert.equal(off.class, "copy-edit"); assert.equal(off.model, OPUS); assert.equal(off.effort, "medium"); assert.equal(off.escalation, null);
+    assert.equal(route(copy, { MAKEBORNE_MODEL_ROUTING: "on" }).model, OPUS, "nothing routes down without an override or a qualified default");
+    const on = route(copy, { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_COPY_EDIT: HAIKU });
+    assert.equal(on.model, HAIKU); assert.equal(on.escalation, OPUS); assert.equal(on.escalationEffort, "medium"); assert.ok(on.reasonCodes.includes("ROUTED_DOWN"));
+    const low = route(copy, { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_COPY_EDIT: HAIKU, MAKEBORNE_ROUTE_COPY_EDIT_EFFORT: "low" });
+    assert.equal(low.effort, "low"); assert.equal(low.escalationEffort, "medium"); assert.ok(low.reasonCodes.includes("EFFORT_LOW"));
+    assert.equal(route(copy, { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_COPY_EDIT_EFFORT: "high" }).effort, "medium", "effort is never raised");
+    assert.equal(route(copy, { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_COPY_EDIT_EFFORT: "tiny" }).effort, "medium");
+    const review = routing.routeStage({ stage: "review", artifact: "website", files: 4, effort: "medium", verification: { compile: true, contrast: true } }, { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_REVIEW_EFFORT: "low" });
+    assert.equal(review.model, OPUS); assert.equal(review.effort, "low", "the builder model can run a class at lower effort");
+    // Price words are content in a copy edit; security or legal content keeps it on the builder model.
+    assert.equal(route("Change the price of a haircut to 25 KM", { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_COPY_EDIT: HAIKU }).model, HAIKU);
+    assert.equal(route('Change the password reset text to "Send me a link"', { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_COPY_EDIT: HAIKU }).model, OPUS);
+    assert.match(routing.attemptGuidance(on, HAIKU), /copy edit: change only/); assert.equal(routing.attemptGuidance(on, OPUS), "");
+    assert.deepEqual(routing.CANDIDATE_CELLS["copy-edit"].map(cell => cell.model), [HAIKU, HAIKU]); assert.deepEqual(routing.QUALIFIED_ROUTES, {});
+  });
+
+  await check("v3 copy check end to end: a cheap attempt that misses the named text fails a check no model runs, and the builder model's fix is all the customer pays", async () => {
+    const HAIKU = "claude-haiku-5-5", request = 'Replace "Hello" with "Fresh bread daily"';
+    const route = routing.routeStage({ stage: "build", artifact: "website", request, files: 4, projectBytes: 600, effort: "light", attachments: 0, verification: { compile: true, contrast: true } },
+      { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_COPY_EDIT: HAIKU });
+    const wrong = 'export default function App() { return <main><h1>Fresh bread</h1><p>Welcome.</p></main>; }', right = 'export default function App() { return <main><h1>Fresh bread daily</h1><p>Welcome.</p></main>; }';
+    const anthropic = provider((model, messages) => editor(model === OPUS ? right : wrong)(model, messages));
+    const result = await websiteStage({ route, anthropic, message: request });
+    const detail = result.finish.args.p_detail.route, done = result.stream.at(-1);
+    assert.deepEqual(detail.attempts.map(item => [item.role, item.model, item.kind]), [["initial", HAIKU, "quality"], ["repair", HAIKU, "quality"], ["escalation", OPUS, "accept"]]);
+    const repair = anthropic.calls.find(call => /Repair:/.test(JSON.stringify(call.messages[0])));
+    assert.match(JSON.stringify(repair.messages[0]), /Fresh bread daily/, "the repair names the missing text");
+    assert.match(JSON.stringify(anthropic.calls[0].messages[0]), /copy edit: change only/, "the cheap model gets its guidance in the request, not the system prompt");
+    assert.equal(anthropic.calls.find(call => call.model === OPUS).effort, "low", "the escalation runs at the requested effort (light)");
+    assert.equal(result.spend.absorbedMicrousd, microusd(result, HAIKU)); assert.equal(result.finish.args.p_measured_microusd, microusd(result, OPUS));
+    assert.equal(done.type, "done");
+    assert.equal(result.finish.args.p_candidate.content.websiteSource.files.find(file => file.path === "src/App.tsx").content, right);
+    // A correct cheap attempt is accepted on its own, with nothing absorbed.
+    const good = await websiteStage({ route, anthropic: provider(editor(right)), message: request });
+    assert.deepEqual(good.finish.args.p_detail.route.attempts.map(item => [item.role, item.model, item.kind]), [["initial", HAIKU, "accept"]]);
+    assert.equal(good.spend.absorbedMicrousd, 0);
+  });
+
+  await check("v4 effort cascade: the builder model at a lower effort escalates once to the requested effort; only the escalation is charged", async () => {
+    const env = { MAKEBORNE_MODEL_ROUTING: "on", MAKEBORNE_ROUTE_TARGETED_EDIT_EFFORT: "low" };
+    const route = routing.routeStage({ stage: "build", artifact: "website", request: MESSAGE, files: 4, projectBytes: 600, effort: "medium", attachments: 0, verification: { compile: true, contrast: true } }, env);
+    assert.equal(route.model, OPUS); assert.equal(route.effort, "low"); assert.equal(route.escalation, OPUS); assert.equal(route.escalationEffort, "medium");
+    assert.equal(route.allocation.initialShare, routing.ALLOCATION.routedInitialShare, "the cheaper cell leaves the escalation its share");
+    assert.equal(routing.routeStage({ stage: "build", artifact: "website", request: MESSAGE, files: 4, projectBytes: 600, effort: "medium", attachments: 0, verification: { compile: true, contrast: true } }, { MAKEBORNE_MODEL_ROUTING: "on" }).escalation, null, "no cheaper cell, no escalation");
+    // Low-effort attempts write broken code (the repair too); the escalation at medium fixes it.
+    const anthropic = provider((model, messages, params) => params.output_config?.effort === "medium" ? editor(GOOD)(model, messages) : /Repair:/.test(firstUserText(messages)) ? breaker(BROKEN_OTHER)(model, messages) : breaker(BROKEN)(model, messages));
+    const result = await websiteStage({ route, anthropic, effort: "medium" });
+    const detail = result.finish.args.p_detail.route;
+    // The repair runs inside its 15% share, so it may end out of room ("incomplete") rather than on a failed check; both escalate.
+    assert.deepEqual(detail.attempts.map(item => [item.role, item.model]), [["initial", OPUS], ["repair", OPUS], ["escalation", OPUS]]);
+    assert.equal(detail.attempts[0].kind, "quality"); assert.ok(["quality", "incomplete"].includes(detail.attempts[1].kind)); assert.equal(detail.attempts[2].kind, "accept");
+    const efforts = [...new Set(anthropic.calls.map(call => call.effort))];
+    assert.deepEqual(efforts, ["low", "medium"], "low until the escalation, then the requested effort");
+    const escalationCalls = anthropic.calls.filter(call => call.effort === "medium").length, costPerCall = result.spend.calls[0].actualMicrousd;
+    assert.ok(result.spend.absorbedMicrousd > 0, "the failed low-effort attempts are absorbed");
+    assert.equal(result.finish.args.p_measured_microusd, escalationCalls * costPerCall, "the customer pays for the escalation only");
   });
 
   process.stdout.write(`${passed} model-routing checks passed.\n`);

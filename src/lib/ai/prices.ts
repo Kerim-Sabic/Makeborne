@@ -269,8 +269,11 @@ export function assertSupportedTextRequest(params: Record<string, unknown>) {
     if (tool.type === WEB_SEARCH.type) assertWebSearchTool(String(params.model), tool);
     else if (tool.type !== undefined && tool.type !== "custom") throw new UnsupportedConfigurationError(`tool type "${String(tool.type)}"`);
   }
-  const cache = params.cache_control as { type?: string; ttl?: string } | undefined;
-  if (cache && (cache.type !== "ephemeral" || (cache.ttl !== undefined && cache.ttl !== "5m"))) throw new UnsupportedConfigurationError("cache TTL other than 5 minutes");
+  // Bounds price cache writes at the 5-minute rate, so every marker (top level, tools, system and message blocks) must be one.
+  const blocks = [...((params.tools as unknown[] | undefined) ?? []), ...(Array.isArray(params.system) ? params.system : []),
+    ...((params.messages as Array<{ content?: unknown }> | undefined) ?? []).flatMap(message => Array.isArray(message?.content) ? message.content : [])];
+  const markers = [params.cache_control, ...blocks.map(block => (block as { cache_control?: unknown } | null)?.cache_control)] as Array<{ type?: string; ttl?: string } | null | undefined>;
+  for (const cache of markers) if (cache && (cache.type !== "ephemeral" || (cache.ttl !== undefined && cache.ttl !== "5m"))) throw new UnsupportedConfigurationError("cache TTL other than 5 minutes");
   const output = params.output_config as Record<string, unknown> | undefined;
   if (output && Object.keys(output).some(key => key !== "effort")) throw new UnsupportedConfigurationError("output_config beyond effort");
 }
@@ -334,6 +337,10 @@ export function maxInputTokenMicrousd(model: string) {
 export function maxOutputTokenMicrousd(model: string) {
   return textPrice(model).output * GEO_MULTIPLIER;
 }
+/** Most an input token read from the prompt cache can cost on this model, with the geo uplift. */
+export function cachedInputTokenMicrousd(model: string) {
+  return textPrice(model).cacheRead * GEO_MULTIPLIER;
+}
 
 /** Apply the expensive tier to the complete reservation when its prompt can cross the threshold. */
 export function textCallTierMultiplier(model: string, inputTokens: number) {
@@ -342,10 +349,14 @@ export function textCallTierMultiplier(model: string, inputTokens: number) {
 }
 
 /** Conservative ceiling for one text call: every input token at its highest
- * rate plus the full output allowance (thinking is part of output). */
-export function textCallBoundMicrousd(model: string, inputTokens: number, maxOutputTokens: number) {
-  if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1) throw new Error("Invalid call bound inputs.");
-  return roundBound((inputTokens * maxInputTokenMicrousd(model) + maxOutputTokens * maxOutputTokenMicrousd(model)) * textCallTierMultiplier(model, inputTokens));
+ * rate plus the full output allowance (thinking is part of output). With
+ * `cachedTokens`, that many input tokens are priced as cache reads instead:
+ * the expected bound of a call whose prefix the previous call just cached. */
+export function textCallBoundMicrousd(model: string, inputTokens: number, maxOutputTokens: number, cachedTokens = 0) {
+  if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1
+    || !Number.isSafeInteger(cachedTokens) || cachedTokens < 0 || cachedTokens > inputTokens) throw new Error("Invalid call bound inputs.");
+  return roundBound(((inputTokens - cachedTokens) * maxInputTokenMicrousd(model) + cachedTokens * cachedInputTokenMicrousd(model) + maxOutputTokens * maxOutputTokenMicrousd(model))
+    * textCallTierMultiplier(model, inputTokens));
 }
 
 type CacheCreation = { ephemeral_5m_input_tokens?: number | null; ephemeral_1h_input_tokens?: number | null } | null | undefined;
@@ -391,6 +402,26 @@ export function textUsageMicrousd(model: string, usage: TextUsageLike) {
   const iterations = usage.iterations?.filter(Boolean) ?? [];
   if (iterations.length) return roundActual(iterations.reduce((total, item) => total + attemptCost(item.model || model, item), 0));
   return roundActual(attemptCost(model, usage));
+}
+
+/** Token counts of one provider call, for the usage log: uncached input, cache reads, cache writes by TTL, output,
+ * image input (image calls) and web searches. Cache writes without a TTL breakdown count as 1-hour, as they are priced. */
+export type TokenUsage = { input: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number; output: number; imageInput: number; webSearches: number };
+export const NO_TOKENS: TokenUsage = Object.freeze({ input: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, imageInput: 0, webSearches: 0 });
+const count = (value: number | null | undefined) => Number.isSafeInteger(value) && value! > 0 ? value! : 0;
+export function addTokens(a: TokenUsage, b: TokenUsage): TokenUsage {
+  return { input: a.input + b.input, cacheRead: a.cacheRead + b.cacheRead, cacheWrite5m: a.cacheWrite5m + b.cacheWrite5m, cacheWrite1h: a.cacheWrite1h + b.cacheWrite1h,
+    output: a.output + b.output, imageInput: a.imageInput + b.imageInput, webSearches: a.webSearches + b.webSearches };
+}
+/** One text response's tokens, summed over its per-attempt records when present (as textUsageMicrousd bills them). */
+export function textTokenUsage(usage: TextUsageLike): TokenUsage {
+  const iterations = usage.iterations?.filter(Boolean) ?? [];
+  if (iterations.length) return iterations.map(item => textTokenUsage({ ...item, iterations: null })).reduce(addTokens, NO_TOKENS);
+  const split = usage.cache_creation, created = count(usage.cache_creation_input_tokens);
+  const hasSplit = Boolean(split && (split.ephemeral_5m_input_tokens != null || split.ephemeral_1h_input_tokens != null));
+  return { input: count(usage.input_tokens), cacheRead: count(usage.cache_read_input_tokens),
+    cacheWrite5m: hasSplit ? count(split!.ephemeral_5m_input_tokens) : 0, cacheWrite1h: hasSplit ? count(split!.ephemeral_1h_input_tokens) : created,
+    output: count(usage.output_tokens), imageInput: 0, webSearches: count(usage.server_tool_use?.web_search_requests) };
 }
 
 /** UTF-8 bytes bound text tokens from above (every token covers at least one byte). */
@@ -442,4 +473,9 @@ export function imageUsageMicrousd(model: string, usage: ImageUsageLike) {
   const image = usage.input_tokens_details?.image_tokens ?? 0;
   const text = usage.input_tokens_details?.text_tokens ?? Math.max(0, usage.input_tokens - image);
   return roundActual(text * price.textInput + image * price.imageInput + usage.output_tokens * price.imageOutput);
+}
+export function imageTokenUsage(usage: ImageUsageLike): TokenUsage {
+  const image = count(usage.input_tokens_details?.image_tokens);
+  const text = usage.input_tokens_details?.text_tokens != null ? count(usage.input_tokens_details.text_tokens) : Math.max(0, count(usage.input_tokens) - image);
+  return { ...NO_TOKENS, input: text, imageInput: image, output: count(usage.output_tokens) };
 }

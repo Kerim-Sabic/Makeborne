@@ -17,6 +17,7 @@ import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
 import { REVIEW_MAX_TURNS, reviewCreditCeiling } from "@/lib/builder/review-policy";
+import { snapshotAnchor, snapshotVersion } from "@/lib/builder/site-snapshot";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
 import { OperationError, beginOperation, brandKitFingerprint, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
 import { documentBuildResponse } from "@/lib/builder/docs-run";
@@ -167,6 +168,9 @@ export async function POST(request: Request) {
     const outline = current.content.websiteSource ? "" : current.content.sections.map(section => [section.title, ...section.blocks.map(block => block.text)].filter(Boolean).join("\n")).join("\n\n").slice(0, 20_000);
     const history = versions.filter(version => version.number <= artifact.current_version).slice(0, 6).reverse()
       .map(version => `v${version.number}: ${version.changeSummary}`).join("\n");
+    // Websites send the site as a cached snapshot ahead of everything that changes per request (lib/builder/site-snapshot.ts).
+    const snapshot = artifact.kind === "website" && files.files.size
+      ? snapshotAnchor(versions.filter(version => version.number <= artifact.current_version).map(snapshotVersion), artifact.current_version) : null;
     const approvedPlan = body.plan ?? operation.originalPlan;
     // Bound to the operation: a continuation uses exactly the brief and answers the request was authorized with.
     const approvedBrief = reviewing ? undefined : body.brief ?? operation.originalBrief;
@@ -197,7 +201,8 @@ export async function POST(request: Request) {
       operation.originalMessage ? `Original authorized request: ${operation.originalMessage}` : "",
       "</project>",
       approvedPlan ? `<approved_plan>\nThe client reviewed and approved this plan. Build exactly this: the same pages and section order, content, type pairing, palette hex values, layout ideas, imagery and signature interaction. Do not add or drop pages or sections unless the request says so. Where the plan names fonts the toolchain cannot load, use the closest permitted stack.\n\n${planToBrief(approvedPlan)}\n</approved_plan>` : "",
-      files.files.size
+      // With a snapshot, the website run adds what changed since it (per attempt, from the working copy).
+      snapshot ? "" : files.files.size
         ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: ${[...files.assets.values()].map(asset => `/${asset.path.slice(7)}`).join(", ") || "none"}`
         : "<current_files>(empty — build the complete website from scratch)</current_files>",
     ].filter(Boolean).join("\n");
@@ -225,7 +230,7 @@ export async function POST(request: Request) {
     }
 
     const response = websiteBuildResponse({ client, hold, spend, operation, route, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
-      message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments,
+      message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, snapshot, attachments,
       limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
       // First build: the concept step (2-3 concepts scored on the rubric, the strongest built) inside this run.
       concept: Boolean(seed),

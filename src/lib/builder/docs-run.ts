@@ -117,7 +117,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
           result = { summary: "Saved the progress made so far. Ask me to continue to finish the remaining parts.", credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, stopped: spend.stopped };
         }
         logRouteOnce();
-        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped,
+        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped, usage: spend.usageByModel(),
           ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
         if (!editor.changed) {
           if (input.operation) {
@@ -173,7 +173,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
             ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) }, candidate));
           return;
         }
-        await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped }).catch(() => undefined);
+        await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped, usage: spend.usageByModel() }).catch(() => undefined);
         const stop = logAiStop(hold.reference, error);
         if (!stop) console.error("document build failed", error instanceof Error ? error.message : error);
         if (stop) emit({ type: "error", code: stop.code, message: stop.message, retryable: true });

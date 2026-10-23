@@ -10,6 +10,11 @@
 //   opus    MAKEBORNE_MODEL_ROUTING off: the builder model, one attempt (today's behaviour).
 //   routed  MAKEBORNE_MODEL_ROUTING on with MAKEBORNE_ROUTE_TARGETED_EDIT=<routed model>: the routed attempt (half the budget,
 //           60% of the time) and at most one escalation to the builder model, inside the same RunSpend.
+// Policy v3 arms (docs/ai/MODEL_ORCHESTRATOR.md):
+//   haiku      on, copy edits on Claude Haiku 5.5 (medium), checked without a model; one repair, one escalation to Opus.
+//   haiku-low  the same at effort low.
+//   opus-low   on, the builder model at effort low for targeted edits and edits (no route-down).
+// Every arm of a copy-edit case also records the model-free copy check of its final files (cost.json copyCheck).
 // No database or server: a memory gate, one RunSpend per stage at the operation's caps (Medium: 50 credits x $0.03).
 // Spend: one scoped ledger reservation per case and arm at that cap, settled at the measured provider cost (unknown at the
 // bound when any call's usage is unconfirmed). Nothing is retried. Outputs, in the run.mjs layout so measure.mjs and the
@@ -26,7 +31,7 @@ if (process.env.EVAL_SPEND_APPROVED !== 'yes' || !values.approval?.trim()) throw
 if (!/^[a-z0-9-]+$/.test(values.run ?? '')) throw new Error('--run must be a plain id');
 if (!values.scope) throw new Error('--scope is required (the owner-approved scoped allowance for this qualification)');
 const arms = values.arms.split(',').map(arm => arm.trim());
-if (!arms.length || arms.some(arm => !['opus', 'shadow', 'routed'].includes(arm))) throw new Error('--arms takes opus, shadow and/or routed');
+if (!arms.length || arms.some(arm => !['opus', 'shadow', 'routed', 'haiku', 'haiku-low', 'opus-low'].includes(arm))) throw new Error('--arms takes opus, shadow, routed, haiku, haiku-low and/or opus-low');
 process.chdir(REPO);
 
 const require = createRequire(`${REPO}/scripts/eval/package.json`);
@@ -50,8 +55,10 @@ const { runBuilder } = loadApp('src/lib/builder/agent.ts');
 const { routedWebsiteStage, repairRequest } = loadApp('src/lib/builder/website-stage.ts');
 const { buildTaskContract } = loadApp('src/lib/builder/task-contract.ts');
 const routing = loadApp('src/lib/ai/model-routing.ts');
+const { copyEditFindings } = loadApp('src/lib/ai/copy-edit.ts');
 const { renderedContrastCheck } = loadApp('src/lib/builder/contrast-gate.ts');
 const { ProjectFiles } = loadApp('src/lib/builder/files.ts');
+const { filesSince, snapshotText } = loadApp('src/lib/builder/site-snapshot.ts');
 const { RunSpend, memoryGate } = loadApp('src/lib/ai/run-spend.ts');
 const { BUILDER_EFFORT } = loadApp('src/lib/builder/pricing.ts');
 const { compileVerdict } = loadApp('src/lib/builder/compile.ts');
@@ -67,16 +74,19 @@ const cases = JSON.parse(fs.readFileSync(casesFile, 'utf8')).cases.filter(item =
 if (!cases.length) throw new Error('no case selected');
 // opus: routing off (today). shadow: off execution, the on-decision recorded. routed: the policy executes (on), Sonnet allowed for edits.
 const ROUTES = { MAKEBORNE_ROUTE_TARGETED_EDIT: ROUTED_MODEL, MAKEBORNE_ROUTE_EDIT: ROUTED_MODEL };
-const ENV = { opus: {}, shadow: { MAKEBORNE_MODEL_ROUTING: 'shadow', ...ROUTES }, routed: { MAKEBORNE_MODEL_ROUTING: 'on', ...ROUTES } };
+const HAIKU = 'claude-haiku-5-5', LOW = { MAKEBORNE_ROUTE_TARGETED_EDIT_EFFORT: 'low', MAKEBORNE_ROUTE_EDIT_EFFORT: 'low' };
+const ENV = { opus: {}, shadow: { MAKEBORNE_MODEL_ROUTING: 'shadow', ...ROUTES }, routed: { MAKEBORNE_MODEL_ROUTING: 'on', ...ROUTES },
+  haiku: { MAKEBORNE_MODEL_ROUTING: 'on', MAKEBORNE_ROUTE_COPY_EDIT: HAIKU }, 'haiku-low': { MAKEBORNE_MODEL_ROUTING: 'on', MAKEBORNE_ROUTE_COPY_EDIT: HAIKU, MAKEBORNE_ROUTE_COPY_EDIT_EFFORT: 'low' },
+  'opus-low': { MAKEBORNE_MODEL_ROUTING: 'on', ...LOW } };
 const dirOf = arm => path.join(REPO, 'outputs', 'eval', 'runs', `${values.run}-${arm}`);
 const writeJson = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value, null, 2)); };
 
-/** The build route's context for an existing website (src/app/api/build/route.ts), from what the saved run recorded. */
-function context({ item, files, history }) {
+/** The build route's context for an existing website (src/app/api/build/route.ts), from what the saved run recorded: the saved
+ * site is the cached snapshot (src/lib/builder/site-snapshot.ts) and the context names what changed since it in the working copy. */
+function context({ item, files, history, anchor }) {
   return [`<project title="${item.title.replace(/"/g, "'")}">`, `Brief: ${item.brief}`,
     'Visual direction: No preset — choose the best direction for this business.',
-    history.length ? `Recent revisions:\n${history.join('\n')}` : '', '</project>',
-    `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: ${[...files.assets.values()].map(asset => `/${asset.path.slice(7)}`).join(', ') || 'none'}`,
+    history.length ? `Recent revisions:\n${history.join('\n')}` : '', '</project>', filesSince(anchor, files),
   ].filter(Boolean).join('\n');
 }
 /** Unified-ish per-file change list (counts only) for the record. */
@@ -117,6 +127,7 @@ try {
       if (fs.existsSync(path.join(itemDir, 'cost.json'))) { console.log(`${testCase.id} ${arm}: already run, skipped`); continue; }
       const files = new ProjectFiles(source);
       const before = new Map(files.files), checkpoint = files.checkpoint();
+      const anchor = { number: item.origin?.version ?? 1, files: before };
       // The build route's decision on the same inputs, with the task contract (scope and checks) it builds.
       const picked = /([\w./-]+\.(?:tsx|ts|css|html|json|svg|md)) \(line (\d+)\)/.exec(testCase.request);
       const contract = buildTaskContract({ artifact: 'website', objective: 'edit', message: testCase.request, revision: { expectedVersion: item.origin?.version ?? 1 },
@@ -133,8 +144,9 @@ try {
         // As website-run.ts: a repair starts a new conversation from the current files with the evidence to fix.
         const attempt = plan => runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: testCase.id }, files, effort: values.effort, spend,
           request: plan.role === 'repair' ? repairRequest(testCase.request, plan.repairNotes) : testCase.request,
-          context: context({ item, files, history }), attachments: [], emit, signal: controller.signal, deadline: plan.deadline, contrastCheck, compile: compileVerdict, model: plan.model, firstStep: route.firstStep });
-        ({ result, record } = await routedWebsiteStage({ route, stage: 'build', files, spend, deadline: Date.now() + STAGE_MS, signal: controller.signal, emit, compile: compileVerdict, attempt }));
+          context: context({ item, files, history, anchor }) + routing.attemptGuidance(route, plan.model), snapshot: snapshotText(anchor), attachments: [], emit, signal: controller.signal, deadline: plan.deadline, contrastCheck, compile: compileVerdict, model: plan.model, firstStep: route.firstStep,
+          ...(route.mode === 'on' && plan.effort ? { intensity: plan.effort } : {}) });
+        ({ result, record } = await routedWebsiteStage({ route, stage: 'build', files, spend, deadline: Date.now() + STAGE_MS, signal: controller.signal, emit, compile: compileVerdict, request: testCase.request, attempt }));
       } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; record = caught.route ?? record; }
       finally { clearTimeout(timer); }
       // Like website-run.ts: unfinished work is kept only if it compiles; otherwise the saved website stands.
@@ -150,17 +162,19 @@ try {
       await budget.settle(reservation, uncertain ? { unknown: true, detail: { calls: spend.calls.length } } : { actualUsd: spend.providerMicrousd / 1e6, detail: { calls: spend.calls.length, models: [...new Set(spend.calls.map(call => call.model))] } });
       let saved; try { saved = files.toSource(); } catch (invalid) { files.restore(checkpoint); saved = files.toSource(); outcome = `invalid source (${String(invalid.message).slice(0, 120)}): saved website kept`; kept = false; }
       const changes = changeStats(before, files.files);
+      // The model-free copy check on the final files, for every arm of a copy-edit case (the Opus baseline included).
+      const copyCheck = route.class === 'copy-edit' ? copyEditFindings({ request: testCase.request, before, after: files.files, allowStylesheetFixes: Boolean(result?.problems?.length) }) : null;
       writeJson(path.join(itemDir, 'item.json'), { ...baseItem, origin: { type: 'live', stack: 'none (direct runBuilder; edit of a saved isolated-stack website)', artifactId: item.origin?.artifactId ?? null, version: item.origin?.version ?? null, path: path.relative(REPO, siteDir) },
         generation: { arm, effort: values.effort, mode: 'edit (direct)', images: 'off', route: { policy: route.policyVersion, mode: route.mode, class: route.class, model: route.model, escalation: route.escalation, codes: route.reasonCodes, limits: route.limits, shadow: route.shadow, contract: contract.version, checks: route.requiredChecks } } });
       fs.writeFileSync(path.join(itemDir, 'source.json'), JSON.stringify(saved));
       copyAssets(path.join(siteDir, 'assets'), path.join(itemDir, 'assets'));
       const cost = { boundUsd: capMicrousd / 1e6, reservationId: reservation, actualUsd: uncertain ? null : spend.providerMicrousd / 1e6, chargedCredits: spend.customerCredits(RATE), absorbedUsd: spend.absorbedMicrousd / 1e6,
-        calls: spend.calls.map(call => ({ model: call.model, boundMicrousd: call.boundMicrousd, actualMicrousd: call.actualMicrousd })), route: routing.routeDetail(record), finished: Boolean(result?.finished), build, kept, stopped: result?.stopped ?? spend.stopped, error, ms, changes };
+        calls: spend.calls.map(call => ({ model: call.model, boundMicrousd: call.boundMicrousd, actualMicrousd: call.actualMicrousd })), route: routing.routeDetail(record), finished: Boolean(result?.finished), build, kept, stopped: result?.stopped ?? spend.stopped, error, ms, changes, copyCheck };
       writeJson(path.join(itemDir, 'cost.json'), cost);
       fs.writeFileSync(path.join(itemDir, 'events.jsonl'), events.map(event => JSON.stringify(event)).join('\n'));
       writeJson(path.join(itemDir, 'status.json'), { ok: Boolean(result?.finished) && !error, outcome, summary: result?.summary ?? null });
-      summary.push({ case: testCase.id, arm, models: record?.models ?? [route.model], escalation: record?.escalation ?? null, finished: Boolean(result?.finished), build, usd: cost.actualUsd, credits: cost.chargedCredits, ms, files: changes.length });
-      console.log(`${testCase.id} ${arm}: ${(record?.models ?? [route.model]).join(' > ')} finished=${Boolean(result?.finished)} build=${build} $${(spend.providerMicrousd / 1e6).toFixed(3)} charged ${cost.chargedCredits} cr ${Math.round(ms / 1000)} s ${changes.length} file(s)${record?.escalation ? ` ESCALATED (${record.escalation})` : ''}${error ? ` ERROR ${error.code ?? error.name}` : ''}; scope ${JSON.stringify(budget.scopeSummary(values.scope).committedUsd)}`);
+      summary.push({ case: testCase.id, arm, class: route.class, effort: route.effort, models: record?.models ?? [route.model], escalation: record?.escalation ?? null, finished: Boolean(result?.finished), build, usd: cost.actualUsd, credits: cost.chargedCredits, ms, files: changes.length, copyCheck });
+      console.log(`${testCase.id} ${arm}: ${(record?.models ?? [route.model]).join(' > ')} finished=${Boolean(result?.finished)} build=${build} $${(spend.providerMicrousd / 1e6).toFixed(3)} charged ${cost.chargedCredits} cr ${Math.round(ms / 1000)} s ${changes.length} file(s)${record?.escalation ? ` ESCALATED (${record.escalation})` : ''}${error ? ` ERROR ${error.code ?? error.name}` : ''}${copyCheck ? ` copy check ${copyCheck.length ? `FAIL: ${copyCheck[0].slice(0, 90)}` : 'pass'}` : ''}; scope ${JSON.stringify(budget.scopeSummary(values.scope).committedUsd)}`);
     }
   }
 } finally {

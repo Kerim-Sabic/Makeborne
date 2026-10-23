@@ -69,7 +69,7 @@ export function planStreamResponse(input: PlanRunInput): Response {
           result = routed.result; routeRecord = routed.record;
         }
         logRouteOnce();
-        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped,
+        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped, usage: spend.usageByModel(),
           ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
         if (!result.plan) {
           if (input.operation) {
@@ -102,7 +102,7 @@ export function planStreamResponse(input: PlanRunInput): Response {
             ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) }));
           return;
         }
-        await releaseRun(hold, measured(), "plan_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped }).catch(() => undefined);
+        await releaseRun(hold, measured(), "plan_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped, usage: spend.usageByModel() }).catch(() => undefined);
         const stop = logAiStop(hold.reference, error);
         if (stop) emit({ type: "error", code: stop.code, message: stop.message, retryable: true });
         else emit({ type: "error", code: "PLAN_FAILED", message: (error as { code?: string }).code === "REFUSED" ? "This request can't be planned. Try rephrasing it."

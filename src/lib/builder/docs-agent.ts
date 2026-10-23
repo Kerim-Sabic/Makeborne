@@ -95,7 +95,9 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   const storeImage = run.storeImage ?? ((request: { name: string; prompt: string; model: string }, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes));
   const kind = run.editor.kind;
   const tools = docToolDefinitions(kind, imageLimit > 0) as unknown as BetaToolUnion[];
-  const system = [{ type: "text" as const, text: kind === "deck" ? DECK_SYSTEM : BOOK_SYSTEM }];
+  // The system prompt carries its own cache marker, so every run (builds, edits,
+  // reviews, every user) reuses it; the automatic breakpoint caches the conversation.
+  const system = [{ type: "text" as const, text: kind === "deck" ? DECK_SYSTEM : BOOK_SYSTEM, cache_control: { type: "ephemeral" as const } }];
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
   let imagesUsed = 0, summary = "", finished = false, malformedTurns = 0;

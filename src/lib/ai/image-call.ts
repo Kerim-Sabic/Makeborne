@@ -1,4 +1,4 @@
-import { assertSupportedImageRequest, imageCallBoundMicrousd, imageOutputTokenBound, imageUsageMicrousd, type ImageBackground, type ImageQuality, type ImageSize, type ImageUsageLike } from "./prices";
+import { assertSupportedImageRequest, imageCallBoundMicrousd, imageOutputTokenBound, imageTokenUsage, imageUsageMicrousd, type ImageBackground, type ImageQuality, type ImageSize, type ImageUsageLike } from "./prices";
 import { reportImageOverrun } from "./image-health";
 import type { RunSpend } from "./run-spend";
 
@@ -46,7 +46,8 @@ export async function startBudgetedImage(input: {
     try { cost = response.usage ? imageUsageMicrousd(input.model, response.usage) : null; } catch { cost = null; }
     const outputTokens = Number.isSafeInteger(response.usage?.output_tokens) ? response.usage!.output_tokens : null;
     const overrun = outputTokens !== null && outputTokens > boundOutputTokens;
-    await input.spend.finish(ticket, cost === null ? { actualMicrousd: null, detail: { reason: "usage_missing" } } : { actualMicrousd: cost, ...(overrun ? { detail: { outputTokens, boundOutputTokens } } : {}) });
+    const usage = response.usage ? imageTokenUsage(response.usage) : null;
+    await input.spend.finish(ticket, cost === null ? { actualMicrousd: null, usage, detail: { reason: "usage_missing" } } : { actualMicrousd: cost, usage, ...(overrun ? { detail: { outputTokens, boundOutputTokens } } : {}) });
     if (overrun) {
       reportImageOverrun({ model: input.model, quality: input.quality, size: input.size, outputTokens, boundTokens: boundOutputTokens });
       input.spend.markOverrun();

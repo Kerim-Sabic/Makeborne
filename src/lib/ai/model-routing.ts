@@ -3,6 +3,7 @@ import { CAPABILITY_CONFIG_VERSION, capabilityIssue, textCapabilities } from "./
 import type { RunSpend } from "./run-spend";
 import type { TaskContract } from "../builder/task-contract";
 import { ACCEPTANCE_CONTRACT, DOCUMENT_STAGE_CHECKS, WEBSITE_STAGE_CHECKS, inLoop, failedIds, uncheckedIds, type CheckId, type CheckResult, type RequiredChecks } from "../builder/acceptance";
+import { looksLikeCopyEdit, withoutQuoted } from "./copy-edit";
 
 /**
  * Model routing for the builder's text stages (website build/edit/review, plan, book/deck): a versioned,
@@ -23,20 +24,33 @@ import { ACCEPTANCE_CONTRACT, DOCUMENT_STAGE_CHECKS, WEBSITE_STAGE_CHECKS, inLoo
  * short request), missing information, missing verification, prior failure evidence, a large context, or too little
  * budget or time. Models come from the capability registry in prices.ts: unknown, unpriced or unsupported combinations
  * are rejected before any reservation. Pure: no SDK, database or server-only imports.
+ *
+ * v3 adds the copy-edit class (replace, correct or remove existing content with values the customer names; its result
+ * is checked without a model in ./copy-edit.ts), a per-class effort (MAKEBORNE_ROUTE_<CLASS>_EFFORT, lower only), an
+ * escalation that runs at the requested effort, and model-specific guidance for the cheaper models. The research and the
+ * candidate cells still to qualify are in docs/ai/MODEL_ORCHESTRATOR.md.
  */
-export const ROUTING_POLICY_VERSION = "routing-policy-v2-20261022";
-export const TASK_CLASSES = ["new-site", "redesign", "edit", "targeted-edit", "continuation", "review", "plan", "document-new", "document-edit"] as const;
+export const ROUTING_POLICY_VERSION = "routing-policy-v3-20261023";
+export const TASK_CLASSES = ["new-site", "redesign", "edit", "targeted-edit", "copy-edit", "continuation", "review", "plan", "document-new", "document-edit"] as const;
 export type TaskClass = typeof TASK_CLASSES[number];
 export type RouteStage = "build" | "continuation" | "review" | "plan" | "document";
 export type RoutingMode = "off" | "shadow" | "on";
 export type Intensity = "low" | "medium" | "high" | "xhigh" | "max";
 
 export const CLASS_LABELS: Readonly<Record<TaskClass, string>> = Object.freeze({
-  "new-site": "new website", redesign: "large redesign", edit: "edit", "targeted-edit": "targeted edit", continuation: "continuation",
+  "new-site": "new website", redesign: "large redesign", edit: "edit", "targeted-edit": "targeted edit", "copy-edit": "copy edit", continuation: "continuation",
   review: "design review", plan: "plan", "document-new": "new document", "document-edit": "document edit",
 });
 /** Qualified route-down defaults when routing is on. Empty: no class qualified (see the record cited above). */
 export const QUALIFIED_ROUTES: Readonly<Partial<Record<TaskClass, string>>> = Object.freeze({});
+/** The cells the next qualification measures, per class: never executed unless set as overrides (MAKEBORNE_ROUTE_<CLASS>
+ * and MAKEBORNE_ROUTE_<CLASS>_EFFORT) or moved into QUALIFIED_ROUTES after a passing record. */
+export const CANDIDATE_CELLS: Readonly<Partial<Record<TaskClass, readonly { model: string; effort: Intensity }[]>>> = Object.freeze({
+  "copy-edit": [{ model: "claude-haiku-5-5", effort: "medium" }, { model: "claude-haiku-5-5", effort: "low" }],
+  "targeted-edit": [{ model: "claude-opus-5-5", effort: "low" }, { model: "claude-sonnet-5-5", effort: "medium" }],
+  review: [{ model: "claude-opus-5-5", effort: "low" }],
+  plan: [{ model: "claude-opus-5-5", effort: "low" }],
+});
 /** Classes whose unfinished work is saved and continued by the next stage (no repair; escalation only on a hard failure). */
 export const MULTI_STAGE_CLASSES: ReadonlySet<string> = new Set(["new-site", "redesign", "continuation"]);
 
@@ -113,13 +127,22 @@ export function classifyStage(input: RouteInput): { class: TaskClass; codes: str
   if (input.plan) return { class: "redesign", codes: ["APPROVED_PLAN"] };
   if (LARGE_CHANGE.test(request)) return { class: "redesign", codes: ["SCOPE_WHOLE_PROJECT"] };
   if (input.attachments) return { class: "edit", codes: ["ATTACHMENTS"] };
+  // Named values to put in, take out or correct, with no design or behaviour change (the quoted words themselves don't count).
+  if (looksLikeCopyEdit(request) && !DESIGN_WORDS.test(withoutQuoted(request)) && !FUNCTION_WORDS.test(withoutQuoted(request))) return { class: "copy-edit", codes: ["SCOPE_EXPLICIT_VALUES"] };
   if (TARGET_REFERENCE.test(request)) return { class: "targeted-edit", codes: ["SCOPE_PICKED_ELEMENT"] };
   if (NAMED_PART.test(request)) return { class: "targeted-edit", codes: ["SCOPE_NAMED_PART"] };
   return { class: "edit", codes: ["SCOPE_UNSCOPED"] };
 }
 
+/** Website stages run without the thinking progress notes on models that lack them (agent.ts); plans and documents need them. */
+const needsUpdates = (stage: RouteStage) => stage === "plan" || stage === "document";
+
+/** Price words are content in a copy edit (the new amount is checked exactly), not a business-risk change of logic. */
+const PRICE_WORDS = /\b(?:price|prices|pricing|fee|fees|discount)\b/gi;
+
 export function routeSignals(input: RouteInput, taskClass: TaskClass): RouteSignals {
-  const request = input.request ?? "", files = input.files ?? 0;
+  // A copy edit is judged by what it asks for, not by the words it wants on the page.
+  const request = taskClass === "copy-edit" ? withoutQuoted(input.request ?? "") : input.request ?? "", files = input.files ?? 0;
   const artifact = input.artifact ?? (input.stage === "document" ? "book" : "website");
   const design = ["new-site", "redesign", "review", "document-new"].includes(taskClass) || DESIGN_WORDS.test(request) || Boolean(input.attachments) ? "high" : taskClass === "edit" || taskClass === "document-edit" ? "medium" : "low";
   const functional = FUNCTION_WORDS.test(request) || input.plan ? "high" : taskClass === "edit" || taskClass === "new-site" || taskClass === "redesign" ? "medium" : "low";
@@ -130,7 +153,7 @@ export function routeSignals(input: RouteInput, taskClass: TaskClass): RouteSign
     contextTokens: Math.ceil((input.projectBytes ?? 0) / 3.5) + Math.ceil(request.length / 3.5),
     affectedScope: taskClass === "redesign" || taskClass === "new-site" ? "whole-project" : input.contract?.scope.kind === "element" || TARGET_REFERENCE.test(request) ? "picked-element"
       : input.contract?.scope.kind === "files" || NAMED_PART.test(request) ? "named-part" : "unscoped",
-    functionalComplexity: functional, designDemand: design, risk: RISK_WORDS.test(request) ? "high" : "low", missingInformation: MISSING_WORDS.test(request),
+    functionalComplexity: functional, designDemand: design, risk: RISK_WORDS.test(taskClass === "copy-edit" ? request.replace(PRICE_WORDS, " ") : request) ? "high" : "low", missingInformation: MISSING_WORDS.test(request),
     verificationAvailable, priorFailure: Boolean(previous && (previous.escalations > 0 || previous.signatures.length > 0 || previous.interrupted > 0)),
     budgetLow: input.allowanceMicrousd !== undefined && input.allowanceMicrousd < 300_000, deadlineShort: input.deadlineMs !== undefined && input.deadlineMs < 150_000,
   };
@@ -154,8 +177,9 @@ export type RoutingDecision = {
   requiredChecks: RequiredChecks; inLoopChecks: CheckId[]; deferredChecks: string[];
   allocation: { initialShare: number; repairShare: number; initialTimeShare: number; repairTimeShare: number };
   limits: { repairs: number; escalations: number };
-  /** The model a failed attempt escalates to, once (null: none). */
+  /** The model a failed attempt escalates to, once (null: none), and the effort it runs at (the requested one). */
   escalation: string | null;
+  escalationEffort: Intensity;
   fallback: "preserve-valid-work" | "stop";
   /** In shadow mode: what "on" would execute. */
   shadow: { model: string; escalation: string | null; firstStep: string; reasonCodes: string[] } | null;
@@ -167,6 +191,7 @@ export type RoutingDecision = {
 export type ModelRoute = RoutingDecision;
 
 const INTENSITY: Readonly<Record<EffortLevel, Intensity>> = Object.freeze({ light: "low", medium: "medium", high: "high", super_high: "xhigh", ultra: "max" });
+const INTENSITY_RANK: Readonly<Record<Intensity, number>> = Object.freeze({ low: 0, medium: 1, high: 2, xhigh: 3, max: 4 });
 const envName = (taskClass: TaskClass) => `MAKEBORNE_ROUTE_${taskClass.toUpperCase().replace(/-/g, "_")}`;
 const warned = new Set<string>();
 function warnOnce(message: string) { if (!warned.has(message)) { warned.add(message); console.error(message); } }
@@ -189,7 +214,7 @@ function onPlan(input: RouteInput, taskClass: TaskClass, signals: RouteSignals, 
   let model = override || QUALIFIED_ROUTES[taskClass] || primary;
   if (model !== primary) {
     codes.push(override ? "OVERRIDE" : "QUALIFIED_ROUTE");
-    const issue = capabilityIssue(model, { effort, vision: Boolean(input.attachments) || input.stage === "review", taskClass, requireQualified: !override });
+    const issue = capabilityIssue(model, { effort, vision: Boolean(input.attachments) || input.stage === "review", taskClass, requireQualified: !override, thinkingDisplayUpdates: needsUpdates(input.stage) });
     const blocks = [
       issue ? `CAPABILITY_REJECTED` : null,
       signals.designDemand === "high" ? "DESIGN_DEMAND_HIGH" : null, signals.functionalComplexity === "high" ? "FUNCTIONAL_COMPLEXITY_HIGH" : null,
@@ -205,15 +230,32 @@ function onPlan(input: RouteInput, taskClass: TaskClass, signals: RouteSignals, 
   // The task contract's limits can lower the policy's, never raise them.
   const limit = { repairs: Math.min(OPERATION_LIMITS.repairs, input.contract?.limits.repairs ?? OPERATION_LIMITS.repairs), escalations: Math.min(OPERATION_LIMITS.escalations, input.contract?.limits.escalations ?? OPERATION_LIMITS.escalations) };
   if (limit.repairs < OPERATION_LIMITS.repairs || limit.escalations < OPERATION_LIMITS.escalations) codes.push("CONTRACT_LIMITS_LOWER");
+  // A class may run below the requested effort (MAKEBORNE_ROUTE_<CLASS>_EFFORT), never above it.
+  const asked = env[`${envName(taskClass)}_EFFORT`]?.trim().toLowerCase();
+  let cellEffort = effort;
+  if (asked && asked in INTENSITY_RANK && INTENSITY_RANK[asked as Intensity] < INTENSITY_RANK[effort] && !capabilityIssue(model, { effort: asked as Intensity, thinkingDisplayUpdates: needsUpdates(input.stage) })) { cellEffort = asked as Intensity; codes.push(`EFFORT_${asked.toUpperCase()}`); }
+  else if (asked && !(asked in INTENSITY_RANK)) warnOnce(`Ignoring ${envName(taskClass)}_EFFORT "${asked}": use low, medium or high.`);
+  // A cheaper cell (another model, or the builder model at a lower effort) escalates once to the builder model at the
+  // requested effort: "run low, re-run the failures at the requested level".
+  const cheaper = model !== primary || cellEffort !== effort;
   let repairs = singlePass ? Math.max(0, limit.repairs - previous.repairs) : 0;
-  let escalations = model !== primary ? Math.max(0, limit.escalations - previous.escalations) : 0;
+  let escalations = cheaper ? Math.max(0, limit.escalations - previous.escalations) : 0;
   if (previous.interrupted > 0) { escalations = 0; repairs = 0; codes.push("PRIOR_INTERRUPTED_NO_RETRY"); }
   if (previous.repairs >= OPERATION_LIMITS.repairs) codes.push("REPAIR_USED");
   if (previous.escalations >= OPERATION_LIMITS.escalations) codes.push("ESCALATION_USED");
   const fromEnv = (env.MAKEBORNE_ROUTE_FIRST_STEP ?? "").trim().toLowerCase();
   const firstStep = fromEnv === "capped" ? FIRST_STEP_CAPPED : fromEnv === "low" ? FIRST_STEP_LOW : FIRST_STEP_ON;
   if (signals.empty && input.stage === "build") codes.push(`FIRST_STEP_${firstStep.rule.toUpperCase().replace(/-/g, "_")}`);
-  return { model, escalation: escalations > 0 ? primary : null, repairs, escalations, firstStep, codes };
+  return { model, effort: cellEffort, cheaper, escalation: escalations > 0 ? primary : null, repairs, escalations, firstStep, codes };
+}
+
+/** Model-specific instructions for an attempt, added to its request context (the system prompt stays identical, so it caches).
+ * From Anthropic's Claude Haiku 5.5 guidance: in long agent prompts at low or medium effort it may stop early or call work
+ * done without checking it. */
+export function attemptGuidance(route: Pick<RoutingDecision, "class">, model: string): string {
+  if (!model.startsWith("claude-haiku-")) return "";
+  const copy = route.class === "copy-edit" ? " This is a copy edit: change only the text, numbers or links the request names, everywhere they appear (including tel: and mailto: links), and nothing else: no new elements, no styling, no rewording of other text." : "";
+  return `\n\nKeep working until everything the request asks for is done, then call finish. Before finish, re-read each file you changed and confirm the requested text is there exactly as asked.${copy}`;
 }
 
 function checksFor(input: RouteInput, document: boolean, deck: boolean) {
@@ -232,17 +274,19 @@ export function routeStage(input: RouteInput, env: Record<string, string | undef
   const plan = onPlan(input, taskClass, signals, effort, env);
   const executes = mode === "on";
   const model = executes ? plan.model : primary;
+  const stageEffort = executes ? plan.effort : effort;
   const eligibleModels = [...new Set([primary, ...Object.values(QUALIFIED_ROUTES), env[envName(taskClass)]?.trim()].filter((item): item is string => Boolean(item)))]
-    .filter(candidate => capabilityIssue(candidate, { effort, vision: Boolean(input.attachments) || input.stage === "review" }) === null);
+    .filter(candidate => capabilityIssue(candidate, { effort, vision: Boolean(input.attachments) || input.stage === "review", thinkingDisplayUpdates: needsUpdates(input.stage) }) === null);
   const reasonCodes = [`MODE_${mode.toUpperCase()}`, ...classCodes, ...(executes ? plan.codes : [])];
-  const routed = executes && plan.model !== primary;
+  // A cheaper cell keeps the rest of the allowance for its escalation, whether it is another model or a lower effort.
+  const routed = executes && plan.cheaper;
   const singlePass = !MULTI_STAGE_CLASSES.has(taskClass);
   const document = input.stage === "document", deck = input.artifact === "deck";
   return {
     policyVersion: ROUTING_POLICY_VERSION, capabilityConfigVersion: CAPABILITY_CONFIG_VERSION, mode,
     parent: { operationId: input.operation?.id ?? null, runId: input.operation?.runId ?? null, stage: input.stage }, inputRevision: input.operation?.revision ?? null,
     taskRole: input.stage === "plan" ? "planner" : document ? "document-builder" : "website-builder",
-    class: taskClass, reasonCodes, signals, model, effort,
+    class: taskClass, reasonCodes, signals, model, effort: stageEffort,
     firstStep: executes ? plan.firstStep : FIRST_STEP_LOW, eligibleModels,
     tools: { files: input.stage !== "plan", images: input.stage !== "plan" && input.stage !== "review", concept: taskClass === "new-site", webSearch: false },
     context: { selection: document ? "document-snapshot" : input.stage === "plan" ? "brief-and-project" : "project-snapshot", files: signals.files, estimatedTokens: signals.contextTokens },
@@ -253,7 +297,7 @@ export function routeStage(input: RouteInput, env: Record<string, string | undef
       initialTimeShare: (routed || plan.repairs) && singlePass ? ALLOCATION.initialTimeShare : 1, repairTimeShare: plan.repairs ? ALLOCATION.repairTimeShare : 0,
     } : { initialShare: 1, repairShare: 0, initialTimeShare: 1, repairTimeShare: 0 },
     limits: executes ? { repairs: plan.repairs, escalations: plan.escalations } : { repairs: 0, escalations: 0 },
-    escalation: executes ? plan.escalation : null,
+    escalation: executes ? plan.escalation : null, escalationEffort: effort,
     fallback: "preserve-valid-work",
     shadow: mode === "shadow" ? { model: plan.model, escalation: plan.escalation, firstStep: plan.firstStep.rule, reasonCodes: plan.codes } : null,
     reason: reasonCodes.join(" "), routing: mode,
@@ -266,7 +310,7 @@ export const routeModels = (route: RoutingDecision) => [route.model, ...(route.e
 export function routeIssue(route: RoutingDecision): string | null {
   for (const model of routeModels(route)) {
     try { textCapabilities(model); } catch (error) { return (error as Error).message; }
-    const issue = capabilityIssue(model, { effort: route.effort, vision: route.parent.stage === "review" });
+    const issue = capabilityIssue(model, { effort: route.effort, vision: route.parent.stage === "review", thinkingDisplayUpdates: needsUpdates(route.parent.stage) });
     if (issue) return issue;
   }
   return null;
@@ -325,6 +369,9 @@ export function errorKind(error: unknown): FailureKind {
   return error instanceof Error ? "model-output" : "infrastructure";
 }
 const REPAIRABLE: ReadonlySet<FailureKind> = new Set(["quality", "incomplete"]);
+/** Classes whose repeated finding comes from a check on the cheap attempt (the copy check), which the builder model's escalation
+ * is not held to: a repeat there means the cheap model can't do it, so it escalates instead of stopping. */
+const ESCALATE_ON_REPEAT: ReadonlySet<TaskClass> = new Set(["copy-edit"]);
 const ESCALATABLE: ReadonlySet<FailureKind> = new Set(["quality", "incomplete", "refusal", "model-output"]);
 
 export type Evaluation = { kind: FailureKind; checks: CheckResult[]; problems: string[] };
@@ -339,7 +386,7 @@ export type RoutedRun<R> = {
   /** Runs one attempt: the initial one, a targeted repair from the current state (with the evidence to fix), or the
    * escalation from the stage's starting state. Every attempt starts a new conversation, so no provider-specific thinking
    * block is ever replayed to another model. */
-  attempt: (plan: { role: AttemptRole; model: string; deadline: number; repairNotes: string[] }) => Promise<R>;
+  attempt: (plan: { role: AttemptRole; model: string; deadline: number; repairNotes: string[]; effort: Intensity }) => Promise<R>;
   /** What the attempt established against the decision's required checks. */
   evaluate: (result: R) => Promise<Evaluation> | Evaluation;
   /** Puts the working copy back to the state before the first attempt (and tells the client). */
@@ -372,7 +419,7 @@ export async function runRouted<R>(run: RoutedRun<R>): Promise<{ result: R; reco
     // A share of the stage's whole allowance (never more than is left), so a later escalation keeps the rest.
     if (capShare !== null) spend.capAttempt(spend.providerMicrousd + spend.pendingMicrousd + Math.min(spend.remainingMicrousd, Math.floor(spend.runAllowanceMicrousd * capShare)));
     let result: R | null = null, error: unknown = null;
-    try { result = await run.attempt({ role, model, deadline, repairNotes }); } catch (caught) { error = caught; } finally { spend.capAttempt(null); }
+    try { result = await run.attempt({ role, model, deadline, repairNotes, effort: role === "escalation" ? route.escalationEffort ?? route.effort : route.effort }); } catch (caught) { error = caught; } finally { spend.capAttempt(null); }
     let evaluation: Evaluation = error ? { kind: errorKind(error), checks: [], problems: [] } : await run.evaluate(result as R);
     // An attempt that ended unaccepted after provider calls whose usage is unknown (transport or server failures, at their
     // bound) failed on infrastructure, even when the builder only saw its budget run out: never repaired or escalated.
@@ -405,7 +452,10 @@ export async function runRouted<R>(run: RoutedRun<R>): Promise<{ result: R; reco
     if (last.evaluation.kind === "accept") return finish(last, "accept");
     // The same normalized diagnostics after a repair: the loop is not progressing (often a deterministic finding) — stop.
     // An attempt that only ran out of room twice has no diagnostics to repeat and may still escalate.
-    if (last.signature && last.signature === firstSignature && last.evaluation.problems.length) { record.codes.push("REPEATED_IDENTICAL_FAILURE"); return finish(last, "stop"); }
+    if (last.signature && last.signature === firstSignature && last.evaluation.problems.length) {
+      record.codes.push("REPEATED_IDENTICAL_FAILURE");
+      if (!ESCALATE_ON_REPEAT.has(route.class)) return finish(last, "stop");
+    }
   }
   // One escalation, only on evidence the builder model can change, and only with room to finish.
   const blocked = stopped() ?? (run.deadline - now() < MIN_ESCALATION_MS ? "too little time left" : spend.remainingMicrousd < spend.allowanceMicrousd * MIN_ESCALATION_SHARE ? "too little budget left" : null);

@@ -20,6 +20,12 @@ const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 
 export class FileToolError extends Error {}
 
+/** Files as the builder reads them: sorted by path, so the same files always render to the same bytes (a cacheable prefix). */
+export function fileBlocks(files: ReadonlyMap<string, string>) {
+  return [...files.entries()].sort(([a], [b]) => a < b ? -1 : 1)
+    .map(([path, content]) => `<file path="${path}">\n${content}\n</file>`).join("\n\n");
+}
+
 /** Mutable working copy of one website project used during a builder run. */
 export class ProjectFiles {
   readonly files = new Map<string, string>();
@@ -107,8 +113,7 @@ export class ProjectFiles {
 
   /** Model-facing snapshot: every editable file, byte for byte. */
   snapshot() {
-    return [...this.files.entries()].sort(([a], [b]) => a < b ? -1 : 1)
-      .map(([path, content]) => `<file path="${path}">\n${content}\n</file>`).join("\n\n");
+    return fileBlocks(this.files);
   }
 
   /** Static checks the browser bundler would otherwise fail on: missing entry

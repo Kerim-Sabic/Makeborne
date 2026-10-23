@@ -87,5 +87,5 @@ export function createRunSpend(input: { hold: CreditHold; providerCapCredits: nu
 /** Settlement detail for audit: provider cost as this process saw it. */
 export function spendDetail(spend: RunSpend) {
   return { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd,
-    confirmedMicrousd: spend.confirmedMicrousd, stopped: spend.stopped };
+    confirmedMicrousd: spend.confirmedMicrousd, stopped: spend.stopped, usage: spend.usageByModel() };
 }

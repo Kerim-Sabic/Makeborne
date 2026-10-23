@@ -13,7 +13,7 @@ import responsive from "../../../infra/project-runtime/responsive-images.cjs";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
-import { UnpricedModelError, imageCallBoundMicrousd, supportsTransparentImages } from "../ai/prices";
+import { UnpricedModelError, imageCallBoundMicrousd, supportsTransparentImages, textCapabilities } from "../ai/prices";
 import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
@@ -88,6 +88,9 @@ export type BuilderRun = {
   spend: RunSpend;
   request: string;
   context: string;
+  /** The cached site snapshot (./site-snapshot.ts): first in the request with its own cache marker; the context then
+   * carries only what changed since. */
+  snapshot?: string;
   attachments: BetaContentBlockParam[];
   emit: (event: BuilderEvent) => void;
   signal: AbortSignal;
@@ -113,6 +116,8 @@ export type BuilderRun = {
   model?: string;
   /** The first step of an empty project (routing policy rule; default first-step-low-v1: effort low, no extra cap). */
   firstStep?: FirstStepRule;
+  /** The effort this attempt runs at (a routing cell, never above the requested level); default: the effort level's intensity. */
+  intensity?: "low" | "medium" | "high" | "xhigh" | "max";
 };
 
 /** How the steps that run while the project is still empty are sized: a routing-policy rule (../ai/model-routing.ts). */
@@ -133,6 +138,8 @@ export type BuilderResult = { summary: string; title?: string; credits: number; 
 export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const policy = { ...BUILDER_EFFORT[run.effort], ...run.limits };
   const model = run.model ?? builderModel();
+  // Progress notes between tool calls where the model offers them (not on Claude Haiku 5.5, which then runs without them).
+  const progressNotes = textCapabilities(model).thinkingDisplayUpdates;
   const models = builderModels(model);
   const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 600_000 }) as unknown as AnthropicLike);
   const rate = aiCostUsdPerCredit();
@@ -159,12 +166,16 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const seenProblems = new Set<string>();
   let waived: string[] = [];
   const firstStep = run.firstStep ?? FIRST_STEP_LOW;
-  const system = [{ type: "text" as const, text: BUILDER_SYSTEM }];
+  // The system prompt carries its own cache marker, so every run (builds, edits,
+  // reviews, every user) reuses it; the automatic breakpoint caches the conversation.
+  const system = [{ type: "text" as const, text: BUILDER_SYSTEM, cache_control: { type: "ephemeral" as const } }];
   const toolList = tools(imageLimit > 0, cutouts, textImages, Boolean(run.concept));
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
 
   const messages: BetaMessageParam[] = [{ role: "user", content: [
+    // Stable across runs: the snapshot, then everything that changes per request (attachments, context, request).
+    ...(run.snapshot ? [{ type: "text" as const, text: run.snapshot, cache_control: { type: "ephemeral" as const } }] : []),
     ...run.attachments,
     { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${cutouts ? ", transparent cut-outs included" : "; transparent cut-outs unavailable"})` : "unavailable — use typography, CSS and inline SVG"}.\n\n<request>\n${run.request}\n</request>` },
   ] }];
@@ -218,7 +229,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
         // First make a recoverable project. Unbounded first-turn deliberation
         // can consume the entire request without producing a single file.
         // Later refinement retains the user's requested reasoning intensity.
-        params: { betas: ["thinking-display-updates-2026-08-18"], thinking: { type: "adaptive", display: "updates" }, output_config: { effort: empty ? (firstStep.effort === "policy" ? policy.intensity : firstStep.effort) : policy.intensity },
+        params: { ...(progressNotes ? { betas: ["thinking-display-updates-2026-08-18"], thinking: { type: "adaptive" as const, display: "updates" as const } } : { thinking: { type: "adaptive" as const } }), output_config: { effort: empty ? (firstStep.effort === "policy" ? run.intensity ?? policy.intensity : firstStep.effort) : run.intensity ?? policy.intensity },
           cache_control: { type: "ephemeral" }, system, tools: toolList, messages } }));
     } catch (error) {
       usage();
