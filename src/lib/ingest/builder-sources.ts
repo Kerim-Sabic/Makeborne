@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { builderAttachmentBlocks, type BuilderAttachment } from "../builder/attachments";
 import { RequestError } from "../server/http";
-import { extractedSourceBlocks, omittedSourcesBlock, type OmittedSource } from "./model-blocks";
+import { UNTRUSTED_SOURCE_RULE, extractedSourceBlocks, omittedSourcesBlock, type OmittedSource } from "./model-blocks";
 import { ingestionReference, type ExtractionRecord, type IngestionReference } from "./record";
 import { isIngested, type BuilderSource } from "./request";
 import { resolveSourceReference } from "./storage";
@@ -46,6 +46,9 @@ export async function prepareBuilderSources(sources: readonly BuilderSource[], o
           const record = await extractSource({ bytes: decode(legacy.data), name: legacy.name, declaredType: legacy.mediaType, signal: context.signal });
           if (record.status !== "complete") throw unreadableSourceError(legacy.name, record);
           references.push(ingestionReference(record, `inline:${record.sourceSha256}`));
+          // The PDF itself goes to the model unchanged, inside the same untrusted-source rule as every other file.
+          blocks.push(...builderAttachmentBlocks([legacy]).map(block => block.type === "document" ? { ...block, context: UNTRUSTED_SOURCE_RULE } : block));
+          continue;
         }
         blocks.push(...builderAttachmentBlocks([legacy]));
         continue;
@@ -56,7 +59,7 @@ export async function prepareBuilderSources(sources: readonly BuilderSource[], o
       const record = await extractSource({ bytes, name: source.name, declaredType: source.mediaType, signal: context.signal });
       if (record.status !== "complete") throw unreadableSourceError(source.name, record);
       references.push(ingestionReference(record, "reference" in source ? source.reference.assetId : `inline:${record.sourceSha256}`));
-      if (record.format === "pdf") blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: Buffer.from(bytes).toString("base64") }, title: source.name });
+      if (record.format === "pdf") blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: Buffer.from(bytes).toString("base64") }, title: source.name, context: UNTRUSTED_SOURCE_RULE });
       else blocks.push(...extractedSourceBlocks(record, source.name));
     }
   } catch (error) {

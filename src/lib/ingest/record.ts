@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Must equal EXTRACTION_VERSION in parsers/common.cjs; the host refuses any other version. */
-export const EXTRACTION_VERSION = "ingest-2026-10-23.1";
+export const EXTRACTION_VERSION = "ingest-2026-10-24.1";
 
 export const SOURCE_FORMATS = ["docx", "pptx", "xlsx", "csv", "pdf", "text", "markdown", "png", "jpeg", "webp", "gif", "office", "legacy", "unknown"] as const;
 export type SourceFormat = typeof SOURCE_FORMATS[number];

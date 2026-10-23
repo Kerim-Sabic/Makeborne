@@ -20,7 +20,7 @@ function parseDocx(bytes, limits) {
   const body = kid(document, 'body');
   if (!body) throw new IngestError('malformed', 'This Word file has no document body. Save a fresh copy and attach that.');
   const styles = readStyles(pkg, main);
-  const counters = { deletions: 0, fields: 0, altChunks: 0, smartArt: 0, equations: 0, paragraphs: 0 };
+  const counters = { deletions: 0, fields: 0, altChunks: 0, smartArt: 0, equations: 0, paragraphs: 0, hidden: 0 };
   const context = { pkg, out, part: main, styles, counters };
   walkBlocks(body, context);
 
@@ -43,6 +43,7 @@ function parseDocx(bytes, limits) {
         out.missed(`The ${label.toLowerCase()} part couldn’t be read (${error.message || 'damaged'}).`); }
     }
   }
+  if (counters.hidden) out.warn(`${counters.hidden} passage${counters.hidden === 1 ? ' is' : 's are'} hidden in the document (formatted as hidden text) and may not be meant for readers; ${counters.hidden === 1 ? 'it is' : 'they are'} marked “[hidden in the document: …]”.`);
   if (counters.deletions) out.warn(`${counters.deletions} tracked deletion${counters.deletions === 1 ? '' : 's'} left out; inserted text is included.`);
   if (counters.fields) out.warn(`${counters.fields} field${counters.fields === 1 ? '' : 's'} (such as page numbers or cross-references) shown as last saved; fields were not updated.`);
   if (counters.altChunks) out.unsupported.push({ kind: 'embedded-object', count: counters.altChunks, detail: `${counters.altChunks} imported content block${counters.altChunks === 1 ? '' : 's'} (HTML or RTF inside the document) not read.` });
@@ -104,6 +105,13 @@ function paragraphBlock(node, context) {
   for (const item of pending) item();
 }
 
+/** A run formatted as hidden text (w:vanish / w:specVanish, unless switched off with val 0/false/off). */
+function hiddenRun(run) {
+  const properties = kid(run, 'rPr');
+  const vanish = kid(properties, 'vanish') || kid(properties, 'specVanish');
+  return Boolean(vanish) && !['0', 'false', 'off'].includes(String(attr(vanish, 'val') ?? '').toLowerCase());
+}
+
 /** Text of one paragraph. Pictures, charts and text boxes found inside are queued after it. */
 function paragraphText(node, context, pending = []) {
   let text = '';
@@ -120,6 +128,11 @@ function paragraphText(node, context, pending = []) {
       else if (name === 'instrText') context.counters.fields++;
       else if (name === 'oMath' || name === 'oMathPara') { context.counters.equations++; text += find(child, 't').map(textOf).join(''); }
       else if (name === 'drawing' || name === 'pict' || name === 'object') pending.push(...drawing(child, context));
+      else if (name === 'r' && hiddenRun(child)) {
+        // Hidden text (w:vanish) is not shown to readers of the document: mark it so the model never takes it as ordinary content.
+        const before = text; text = ''; visit(child); const hidden = text; text = before;
+        if (hidden.trim()) { context.counters.hidden = (context.counters.hidden ?? 0) + 1; text += `[hidden in the document: ${hidden}]`; }
+      }
       else if (name === 'AlternateContent') { const choice = kid(child, 'Choice') || kid(child, 'Fallback'); if (choice) visit(choice); }
       else if (name === 'footnoteReference' || name === 'endnoteReference') text += '*';
       else visit(child);

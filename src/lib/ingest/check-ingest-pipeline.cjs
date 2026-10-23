@@ -157,7 +157,10 @@ async function main() {
     });
     await withFlag(true, async () => {
       const prepared = await prepareServer([...legacy, { name: 'brief.docx', mediaType: DOCX, data: b64(f.docx({ body: f.para('Office brief') })) }], [{ name: 'old.xls', reason: 'unreadable' }], { client: fakeClient(), scope });
-      assert.deepEqual(prepared.blocks.slice(0, 2), builderAttachmentBlocks(legacy), 'existing PDF/text blocks unchanged with the switch on');
+      // With the switch on, a PDF stays the same native document block but carries the same untrusted-source rule as every other file (2026-10-24 qualification).
+      const expected = builderAttachmentBlocks(legacy);
+      assert.deepEqual(prepared.blocks[0], expected[0], 'text attachment unchanged');
+      assert.deepEqual(prepared.blocks[1], { ...expected[1], context: UNTRUSTED_SOURCE_RULE }, 'PDF: same bytes, plus the untrusted-source rule');
       assert.match(prepared.blocks[2].source.data, /Office brief/);
       assert.match(prepared.blocks.at(-1).text, /old\.xls \(could not be read; the user chose to continue without it\)/);
       assert.deepEqual(prepared.references.map(item => [item.format, item.status]), [['pdf', 'complete'], ['docx', 'complete']]);

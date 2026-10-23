@@ -6,7 +6,7 @@
  * production (docs/AGENT_HANDOFF.md, 23 Oct source-ingestion entry). */
 
 /** Bump when any parser changes what it extracts for the same bytes. */
-const EXTRACTION_VERSION = 'ingest-2026-10-23.1';
+const EXTRACTION_VERSION = 'ingest-2026-10-24.1';
 
 /** Processing limits. The worker host may lower (never raise) them per request. */
 const DEFAULT_LIMITS = Object.freeze({
