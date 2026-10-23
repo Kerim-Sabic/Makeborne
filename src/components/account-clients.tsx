@@ -17,6 +17,7 @@ import BrandKits from "./brand-kits";
 import LeadRedesign from "./lead-redesign";
 import ClientPortalPanel from "./client-portal-panel";
 import ClientKnowledge from "./client-knowledge";
+import ClientResearch from "./client-research";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -45,7 +46,7 @@ const readDevicePreference = () => { try { return typeof window !== "undefined" 
 const writeDevicePreference = (value: boolean) => { try { window.sessionStorage.setItem(DEVICE_PREFERENCE, value ? "1" : "0"); } catch { /* private mode */ } };
 
 /** Account changes unmount every client draft and invalidate outstanding reads. */
-type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient, prefill?: { brief: string; title: string }) => void };
+type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient, prefill?: { brief: string; title: string; kind?: "website" | "book" | "presentation" }) => void };
 type ClientNavigation = { target: AccountClientRoute | null; navigate: (route: AccountClientRoute | null) => void };
 export default function AccountClients({ deviceClients, target, navigate, onCreate, onOpenProject, initialDevice = false }: ClientNavigation & ClientCreation & { deviceClients: ReactNode; initialDevice?: boolean }) {
   const [account, setAccount] = useState<string | null>(null);
@@ -414,6 +415,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
         <button className="button primary" disabled={saving} onClick={() => onCreate(snapshot.workspace.id, opened)}><Plus size={16} /> Create for this client</button></div>}</header>
     {redesigning && opened && snapshot && <LeadRedesign accountId={accountId} workspaceId={snapshot.workspace.id} client={{ id: opened.id, name: opened.company || opened.name, website: opened.website }}
       onClose={() => setRedesigning(false)} onCreate={(brief, title) => { setRedesigning(false); onCreate(snapshot.workspace.id, opened, { brief, title }); }} />}
+    {opened && snapshot && canEdit && <ClientResearch key={`research:${opened.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={opened.id} onCreate={prefill => onCreate(snapshot.workspace.id, opened, prefill)} />}
     {message && <p role="status">{message}</p>}
     {openError && <div className="ac-notice" role="alert"><p>{openError}</p><button className="button secondary small" onClick={backToList}>Back to clients</button></div>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />
