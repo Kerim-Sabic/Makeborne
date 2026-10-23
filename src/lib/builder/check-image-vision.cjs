@@ -2,6 +2,7 @@
 const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), assert = require("node:assert/strict"), Module = require("node:module");
 const sharp = require("sharp");
 const load = Module._load, script = [], seen = [];
+let testModels = ["gpt-image-2"];
 let imageBytes = null;
 Module._load = function(name, parent, main) {
   if (name === "server-only") return {};
@@ -14,7 +15,7 @@ Module._load = function(name, parent, main) {
     seen.push({ tools: input.params.tools.map(tool => tool.name), messages: JSON.parse(JSON.stringify(input.params.messages)) });
     return { message: { content: next.content, stop_reason: "tool_use", usage: { input_tokens: 10, output_tokens: 10 } } };
   } };
-  if (name === "./images" && fromAgent) return { imageConfiguration: () => ({ model: "gpt-image-2", models: ["gpt-image-2"], issue: null }), IMAGE_SIZES: { landscape: "1536x1024", portrait: "1024x1536", square: "1024x1024" }, openaiImageClient: () => ({}) };
+  if (name === "./images" && fromAgent) return { imageConfiguration: () => ({ model: testModels[0], models: [...testModels], issue: null }), IMAGE_SIZES: { landscape: "1536x1024", portrait: "1024x1536", square: "1024x1024" }, openaiImageClient: () => ({}) };
   // The image provider: every call returns the fixture picture; nothing is sent anywhere.
   if (name === "../ai/image-call" && fromAgent) return { startBudgetedImage: async input => {
     imageCalls.push(input);
@@ -25,9 +26,10 @@ Module._load = function(name, parent, main) {
 const imageCalls = [];
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
 
-const { runBuilder, regenerationProblem, imageReadyMessage, IMAGE_INSPECTION } = require("./agent.ts");
+const { runBuilder, regenerationProblem, imageReadyMessage, IMAGE_INSPECTION, compPrompt } = require("./agent.ts");
+const { designCompBlocks } = require("./design-comps.ts");
 const { ProjectFiles } = require("./files.ts");
-const { checkConcept, imagePlanNote, sitePlanNote, conceptComment, CONCEPT_TOOL } = require("./concept.ts");
+const { checkConcept, imagePlanNote, sitePlanNote, conceptComment, compsFromSource, MAX_COMPS, CONCEPT_TOOL } = require("./concept.ts");
 const SITE_PLAN = { artSystem: { palette: "workshop green ground, brass accent, ink from chain grease", type: "Archivo condensed caps for display, Inter text", imagery: "one documentary photographer, overcast window light", motif: "a spoke ruler under every heading", motion: "rises and one wipe" },
   sections: [{ id: "top", composition: "full-bleed-photo", job: "the bench at work" }, { id: "rates", composition: "giant-numeral", job: "the flat-tyre price" }, { id: "work", composition: "editorial-split", job: "what a service covers" }, { id: "visit", composition: "contact-card", job: "hours and address" }] };
 const { reviewImageLimit } = require("./review-policy.ts");
@@ -266,6 +268,69 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.equal(events.find(event => event.type === "concept").shots, 1);
     const recorded = seen[1].messages.at(-1).content.find(block => block.type === "tool_result" && /Concept recorded/.test(block.content));
     assert.match(recorded.content, /Image plan recorded \(1 image\)/);
+  });
+
+  await check("comp-first: design comps after the concept, shown to the builder at 1024 px, never registered as site images, recorded for the review", async () => {
+    testModels = ["gpt-image-2.5-flare", "gpt-image-2"];
+    try {
+      script.length = 0; seen.length = 0; imageCalls.length = 0;
+      const concept = (name, headline, device) => ({ name, headline, angle: `An angle for ${name}`, device, archetype: "Editorial split", ground: "a workshop green", action: "book a repair", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } });
+      const input = { concepts: [concept("Truing stand", "Wheels trued while you wait", "a spoke-tension gauge"), concept("Repair ticket", "Your bike, ticketed", "a numbered repair ticket")], chosen: 0, why: "The gauge is the craft.", ...SITE_PLAN,
+        imagePlan: { houseStyle: "One documentary photographer, one overcast morning, 35mm, muted greens and brass.", shots: [{ section: "top", job: "Show the craft of truing a wheel", shot: "close detail", aspect: "landscape", focal: "hands left; calm right", layout: "editorial split" }] } };
+      const comp = (id, section, viewport = "desktop") => ({ type: "tool_use", id, name: "generate_comp", input: { section, viewport, prompt: "Editorial split: a huge condensed headline on the left third, the bench photograph bleeding off the right edge, a brass rule under the headline.", text: "Wheels trued while you wait. Book a repair" } });
+      const stored = [];
+      const storeComp = async (bytes, provenance) => { stored.push(provenance); return { id: `c0000000-0000-5000-a000-00000000000${stored.length}`, data: bytes }; };
+      script.push({ content: [comp("k0", "top")] }, { content: [{ type: "tool_use", id: "c1", name: "concept", input }] },
+        { content: [comp("k1", "top"), comp("k2", "rates"), comp("k3", "work"), comp("k4", "top", "mobile"), comp("k5", "visit")] },
+        { content: [gen("g1", { name: "hero-bench" })] }, { content: [...site("z"), finish("f1")] });
+      const { result, events, files } = await run({ concept: true, storeComp });
+      assert.ok(result.finished);
+      assert.ok(seen[0].tools.includes("generate_comp"), "offered on a first build with a text-capable model");
+      const early = events.find(event => event.type === "tool_error" && event.tool === "generate_comp");
+      assert.match(early.message, /Record the concept/);
+      const results = seen[3].messages.at(-1).content.filter(block => block.type === "tool_result");
+      const made = results.filter(block => Array.isArray(block.content));
+      assert.ok(made.length >= 2 && made.length <= MAX_COMPS, `comps inside the image third (${made.length})`);
+      const refused = results.filter(block => block.is_error);
+      assert.ok(refused.length >= 1 && refused.every(block => /No image budget is left for another design comp|At most 4 design comps/.test(block.content)), "comps never take the photographs' share");
+      const [image, text] = made[0].content;
+      const size = await sharp(Buffer.from(image.source.data, "base64")).metadata();
+      assert.equal(Math.max(size.width, size.height), 1024);
+      assert.match(text.text, /never shown on the page or registered as a site image/); assert.match(text.text, /build the section to match the comp as closely as code allows/);
+      assert.match(text.text, /rule wins over the comp/);
+      assert.ok(stored.every(item => item.kind === "design-comp"));
+      assert.ok(![...files.assets.keys()].some(key => /comp/.test(key)), "comps are not site images");
+      assert.ok(imageCalls.some(call => call.model === "gpt-image-2.5-flare" && /A design comp: a desktop website screen at 1440 px wide/.test(call.prompt) && /Render this text in the image, spelled exactly/.test(call.prompt)), "comps go to the text model with the exact words");
+      assert.ok(events.filter(event => event.type === "image_start" && event.comp).length === made.length);
+      const recorded = compsFromSource(files.files.get("src/App.tsx"));
+      assert.equal(recorded.length, made.length); assert.equal(recorded[0].section, "top"); assert.match(recorded[0].asset, /^c0000000-/);
+      // Edits never get the tool.
+      script.length = 0; seen.length = 0;
+      script.push({ content: [...site("e"), finish("f2")] });
+      await run({ concept: false });
+      assert.ok(!seen[0].tools.includes("generate_comp"));
+    } finally { testModels = ["gpt-image-2"]; }
+    // Without a text-capable model there are no comps.
+    script.length = 0; seen.length = 0;
+    script.push({ content: [...site("q"), finish("f3")] }, { content: [finish("f4")] });
+    await run({ concept: true });
+    assert.ok(!seen[0].tools.includes("generate_comp"));
+    assert.match(compPrompt({ section: "top", viewport: "mobile", prompt: "x".repeat(40) }, { chosen: { name: "Truing stand" }, artSystem: SITE_PLAN.artSystem }), /phone website screen at 390 px wide[\s\S]*Motif: a spoke ruler/);
+  });
+
+  await check("comp-first: the review attaches the comps it can read (design comps of this project only) before the screenshots", async () => {
+    const png = await picture(1536, 1024, { format: "png" });
+    const app = conceptComment({ chosen: { name: "A", headline: "B c d", device: "e", archetype: "f", ground: "g", action: "h", angle: "i", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } }, runnersUp: [], why: "why it wins",
+      comps: [{ section: "top", viewport: "desktop", asset: "c0000000-0000-5000-a000-000000000001" }, { section: "menu", viewport: "desktop", asset: "c0000000-0000-5000-a000-000000000002" }] }) + "\nexport default function App() { return null; }\n";
+    const rows = { "c0000000-0000-5000-a000-000000000001": { object_path: "w/p/artwork/one.webp", provenance: { kind: "design-comp" } }, "c0000000-0000-5000-a000-000000000002": { object_path: "w/p/artwork/two.webp", provenance: { kind: "generated" } } };
+    const client = { from: () => { const filters = {}; const query = { select: () => query, eq: (key, value) => { filters[key] = value; return query; }, maybeSingle: async () => ({ data: rows[filters.id] ?? null, error: null }) }; return query; } };
+    const blocks = await designCompBlocks(client, { workspaceId: "w", projectId: "p" }, app, async () => ({ data: new Blob([png]), error: null }));
+    assert.equal(blocks.length, 2, "one comp: a label and its image (the other row is not a design comp)");
+    assert.match(blocks[0].text, /Design comp for the "top" section \(desktop\)/); assert.equal(blocks[1].type, "image");
+    const route = fs.readFileSync(path.join(process.cwd(), "src/app/api/build/route.ts"), "utf8");
+    assert.match(route, /\[\.\.\.await designCompBlocks\(client, scope, files\.files\.get\("src\/App\.tsx"\)\), \.\.\.reviewAttachments\(reviewing\)\]/);
+    assert.match(reviewRequest({ round: 1, screenshots: [], viewports: [], errors: ["x"] }), /7\. Fidelity to the design comps/);
+    assert.match(BUILDER_SYSTEM, /DESIGN COMPS \(first builds, when generate_comp is offered\)/);
   });
 
   await check("token bounds stay correct with images in the history: images count by pixel size, not base64 bytes", async () => {

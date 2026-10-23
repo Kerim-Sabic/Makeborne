@@ -85,7 +85,17 @@ export type ConceptInput = z.infer<typeof ConceptInputSchema>;
 export type ImagePlan = z.infer<typeof ImagePlanSchema>;
 export type ArtSystem = z.infer<typeof ArtSystemSchema>;
 export type SectionPlan = z.infer<typeof SectionPlanSchema>;
-export type ConceptRecord = { chosen: Concept; runnersUp: Concept[]; why: string; imagePlan?: ImagePlan; artSystem?: ArtSystem; sections?: SectionPlan[] };
+/** A design comp: a generated picture of a finished website screen, a reference for the build only (never shipped). */
+export type DesignComp = { section: string; viewport: "desktop" | "mobile"; asset: string };
+export type ConceptRecord = { chosen: Concept; runnersUp: Concept[]; why: string; imagePlan?: ImagePlan; artSystem?: ArtSystem; sections?: SectionPlan[]; comps?: DesignComp[] };
+/** At most this many design comps per first build (the first screen, two key sections and the phone first screen). */
+export const MAX_COMPS = 4;
+const COMP_ENTRY = /([A-Za-z0-9][A-Za-z0-9 _-]{0,39})@(desktop|mobile)=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/g;
+/** The design comps recorded in the concept comment of src/App.tsx (read back by the review), at most MAX_COMPS. */
+export function compsFromSource(app: string | undefined): DesignComp[] {
+  const line = /^ \* {3}Comps: (.+)$/m.exec(/^\/\*\n \* Makeborne concept:[\s\S]*?\*\//.exec(app ?? "")?.[0] ?? "")?.[1] ?? "";
+  return [...line.matchAll(COMP_ENTRY)].slice(0, MAX_COMPS).map(match => ({ section: match[1].trim(), viewport: match[2] as DesignComp["viewport"], asset: match[3] }));
+}
 
 /** Section-plan problems: never one composition in two consecutive sections, and at least four (or one per section
  * on a shorter page) different compositions, so the page reads as designed spreads rather than one repeated block. */
@@ -170,6 +180,7 @@ export function conceptComment(record: ConceptRecord) {
     ` *   Why: ${clean(record.why)}`,
     ...(record.artSystem ? [` *   Art system: palette ${clean(record.artSystem.palette)}; type ${clean(record.artSystem.type)}; imagery ${clean(record.artSystem.imagery)}; motif ${clean(record.artSystem.motif)}; motion ${clean(record.artSystem.motion)}.`] : []),
     ...(record.sections ? [` *   Sections: ${record.sections.map(section => `${clean(section.id)} = ${section.composition}`).join(", ")}.`] : []),
+    ...(record.comps?.length ? [` *   Comps: ${record.comps.map(comp => `${clean(comp.section)}@${comp.viewport}=${comp.asset}`).join(", ")}.`] : []),
     ...record.runnersUp.map(concept => ` * Runner-up: ${line(concept)}`),
     " */",
   ].join("\n");

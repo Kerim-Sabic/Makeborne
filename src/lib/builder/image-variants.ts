@@ -30,6 +30,9 @@ export async function responsiveVariantBytes(input: Buffer, options: { quality?:
  * most ~790 image tokens (a 768×768 square; 768×512 is ~520). */
 export const IMAGE_PREVIEW_EDGE = 768;
 
+/** Design comps are read for layout and type, so they are shown larger than a photo preview (~1.4k image tokens). */
+export const COMP_PREVIEW_EDGE = 1024;
+
 export type ImagePreview = { mediaType: "image/webp"; data: string; width: number; height: number };
 
 /**

@@ -17,6 +17,7 @@ import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
 import { REVIEW_MAX_TURNS, reviewCreditCeiling, reviewImageLimit } from "@/lib/builder/review-policy";
+import { designCompBlocks } from "@/lib/builder/design-comps";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
 import { OperationError, beginOperation, brandKitFingerprint, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
 import { documentBuildResponse } from "@/lib/builder/docs-run";
@@ -188,7 +189,10 @@ export async function POST(request: Request) {
         ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: ${[...files.assets.values()].map(asset => `/${asset.path.slice(7)}`).join(", ") || "none"}`
         : "<current_files>(empty — build the complete website from scratch)</current_files>",
     ].filter(Boolean).join("\n");
-    const attachments: BetaContentBlockParam[] = reviewing ? reviewAttachments(reviewing) : builderAttachmentBlocks(body.attachments);
+    // A review also sees the design comps the first build was made from (the fidelity check), before the screenshots.
+    const attachments: BetaContentBlockParam[] = reviewing
+      ? [...await designCompBlocks(client, scope, files.files.get("src/App.tsx")), ...reviewAttachments(reviewing)]
+      : builderAttachmentBlocks(body.attachments);
     // A review may regenerate one generated image that reads as AI-made or cannot be cropped right; never on a type-only design.
     const generatedImages = [...files.assets.keys()].filter(path => /^public\/images\/(?!_r\/)/.test(path) && !/^public\/images\/(?:photo-[0-9]+|brand-logo)\.webp$/.test(path)).length;
     const reviewImages = reviewing ? reviewImageLimit({ imagery: operation.originalDesign?.imagery, siteImages: generatedImages }) : 0;

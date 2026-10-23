@@ -18,8 +18,9 @@ import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
 import { qualityProblems, type QualityInput } from "./quality-gates";
-import { CONCEPT_TOOL, checkConcept, imagePlanNote, sitePlanNote, withConceptComment, type ConceptRecord } from "./concept";
-import { imagePreview, type ImagePreview } from "./image-variants";
+import { CONCEPT_TOOL, MAX_COMPS, checkConcept, imagePlanNote, sitePlanNote, withConceptComment, type ConceptRecord, type DesignComp } from "./concept";
+import { storeProjectImage } from "./images";
+import { COMP_PREVIEW_EDGE, imagePreview, type ImagePreview } from "./image-variants";
 
 /** Conservative streaming output rate used to size steps to the time left. */
 const OUTPUT_TOKENS_PER_SECOND = 50;
@@ -35,7 +36,7 @@ export type BuilderEvent =
   | { type: "file_start"; path: string; op: "write" | "edit" | "delete" }
   | { type: "file"; path: string; op: "write" | "edit"; content: string }
   | { type: "delete"; path: string }
-  | { type: "image_start"; name: string; prompt: string; replaces?: string; rejected?: string }
+  | { type: "image_start"; name: string; prompt: string; replaces?: string; rejected?: string; comp?: boolean }
   | { type: "image"; path: string; url: string; assetId: string; model?: string; quality?: string; size?: string; reason?: string; costMicrousd?: number | null }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
@@ -48,6 +49,8 @@ const ToolInputs = {
   write_file: z.object({ path: z.string(), content: z.string() }).strict(),
   edit_file: z.object({ path: z.string(), old_string: z.string(), new_string: z.string(), replace_all: z.boolean().optional() }).strict(),
   delete_file: z.object({ path: z.string() }).strict(),
+  generate_comp: z.object({ section: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9 _-]{0,39}$/, "Use the section id from the section plan."), viewport: z.enum(["desktop", "mobile"]),
+    prompt: z.string().min(40).max(3000), text: z.string().trim().min(2).max(200) }).strict(),
   generate_image: z.object({ name, prompt: z.string().min(20).max(3000), aspect: z.enum(["landscape", "portrait", "square"]), kind: z.enum(IMAGE_KINDS).optional(),
     text: z.string().max(200).nullable().optional(), textPlacement: z.enum(["exact", "loose"]).optional(),
     replaces: name.optional(), rejected: z.string().trim().min(8).max(300).optional() }).strict()
@@ -60,9 +63,14 @@ const ToolInputs = {
   }).strict(),
 };
 
-function tools(images: boolean, cutouts = false, textImages = false, concept = false): BetaToolUnion[] {
+/** The comp tool: a finished website screen as one picture (type, image, colour and space designed together). */
+const COMP_TOOL = { name: "generate_comp", description: `First build, after the concept: generate one design comp, a picture of a finished website screen in the art system, as an art director's reference you then build in code. It is never shown on the page. Use it for the first screen (desktop) and the two most important other sections, and optionally the phone first screen (viewport mobile); at most ${MAX_COMPS}, all in one step. prompt: the section's composition from the section plan, the type (face, size relative to the screen, weight, case, leading), the colour fields and their proportions, the photograph or drawing and its crop, overlaps, the motif and the empty space. text: the only words the comp shows (the section's real headline and primary action, under 200 characters); body copy appears as quiet lines.`,
+  input_schema: { type: "object" as const, properties: { section: { type: "string", description: "The section id from the section plan" }, viewport: { type: "string", enum: ["desktop", "mobile"] }, prompt: { type: "string" }, text: { type: "string", description: "The headline and action words the comp shows" } }, required: ["section", "viewport", "prompt", "text"], additionalProperties: false } };
+
+function tools(images: boolean, cutouts = false, textImages = false, concept = false, comps = false): BetaToolUnion[] {
   const list: BetaToolUnion[] = [
     ...(concept ? [CONCEPT_TOOL as unknown as BetaToolUnion] : []),
+    ...(comps ? [COMP_TOOL as unknown as BetaToolUnion] : []),
     { name: "write_file", description: "Create a new file or replace an entire file in the project.", eager_input_streaming: true,
       input_schema: { type: "object", properties: { path: { type: "string", description: "Relative path, e.g. src/components/Hero.tsx" }, content: { type: "string", description: "Complete file content" } }, required: ["path", "content"], additionalProperties: false } },
     { name: "edit_file", description: "Replace an exact string in an existing file. old_string must match the current file exactly (including whitespace) and be unique unless replace_all is true.", eager_input_streaming: true,
@@ -111,6 +119,8 @@ export type BuilderRun = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: (request: GeneratedImageRequest, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
+  /** Stores a design comp as a registered (never published) asset; tests inject one. */
+  storeComp?: (bytes: Buffer, provenance: Record<string, unknown>) => Promise<{ id: string; data?: Buffer }>;
   /** Compile check at finish (tests inject one); production bundles with esbuild. */
   compile?: (files: ReadonlyMap<string, string>) => Promise<CompileVerdict>;
 };
@@ -156,7 +166,14 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const qualityReported = new Set<string>();
   let build: BuilderResult["build"] = null;
   const system = [{ type: "text" as const, text: BUILDER_SYSTEM }];
-  const toolList = tools(imageLimit > 0, cutouts, textImages, Boolean(run.concept));
+  // Design comps: first builds with a text-capable image model, paid from the part of the run's image third that the
+  // photo allowance does not need at its worst case (comps never reduce the photographs a site may have).
+  const compsAvailable = Boolean(run.concept) && !run.limits?.replaceOnly && imageLimit > 0 && textImages;
+  // In call order (the jobs finish in any order); a failed comp leaves its slot empty.
+  const comps: DesignComp[] = [], compSlots: (DesignComp | undefined)[] = [];
+  let compsStarted = 0, imageReservedMicrousd = 0;
+  const storeComp = run.storeComp ?? ((bytes: Buffer, provenance: Record<string, unknown>) => storeProjectImage(run.client, run.scope, bytes, provenance));
+  const toolList = tools(imageLimit > 0, cutouts, textImages, Boolean(run.concept), compsAvailable);
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
 
@@ -294,6 +311,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               break;
             }
             imagesUsed++;
+            imageReservedMicrousd += route.boundMicrousd;
             if (input.replaces) { replacedNames.add(input.replaces); replacementNames.add(input.name); }
             run.emit({ type: "image_start", name: input.name, prompt: input.prompt, ...(input.replaces ? { replaces: input.replaces, rejected: input.rejected } : {}) });
             const started = job;
@@ -317,6 +335,42 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               if (input.replaces) { replacedNames.delete(input.replaces); replacementNames.delete(input.name); }
               fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).");
             }));
+            break;
+          }
+          case "generate_comp": {
+            const input = ToolInputs.generate_comp.parse(use.input);
+            if (!compsAvailable || !imageClient) { fail("Design comps are only for a first build with a text-capable image model. Build from the art system and the section plan."); break; }
+            if (!concept) { fail("Record the concept, with its art system and section plan, before generating design comps."); break; }
+            if (compsStarted >= MAX_COMPS) { fail(`At most ${MAX_COMPS} design comps per build. Build the other sections from the art system and the comps you have.`); break; }
+            if (comps.some(comp => comp.section === input.section && comp.viewport === input.viewport)) { fail(`There is already a ${input.viewport} comp for ${input.section}.`); break; }
+            const route = routeImage({ kind: "illustration", aspect: input.viewport === "desktop" ? "landscape" : "portrait", text: input.text, textPlacement: "loose" }, compPrompt(input, concept), imageModels);
+            if (!route.ok) { fail(route.error); break; }
+            const photoReserve = Math.max(0, imageLimit - imagesUsed) * imageBound;
+            if (imageReservedMicrousd + route.boundMicrousd + photoReserve > spend.allowanceMicrousd / 3 || spend.remainingMicrousd - route.boundMicrousd < spend.allowanceMicrousd * 0.1) {
+              fail("No image budget is left for another design comp. Build from the art system and the comps you have."); break;
+            }
+            let job: Awaited<ReturnType<typeof startBudgetedImage>>;
+            try {
+              job = await startBudgetedImage({ client: imageClient, spend, model: route.model, prompt: route.prompt, size: route.size, quality: route.quality, signal: run.signal, allowHigh: route.allowHigh });
+            } catch (error) {
+              fail(error instanceof SpendError && !error.graceful ? `${error.message} Build without this comp.` : "No image budget is left for another design comp. Build from the art system and the comps you have.");
+              break;
+            }
+            const slot = compsStarted++; imageReservedMicrousd += route.boundMicrousd;
+            run.emit({ type: "image_start", name: `comp-${input.section}-${input.viewport}`, prompt: input.prompt, comp: true });
+            const started = job, record = concept;
+            imageJobs.push(started.done.then(async bytes => {
+              const detail = await started.detail;
+              const stored = await storeComp(bytes, { kind: "design-comp", section: input.section, viewport: input.viewport, model: route.model, prompt: route.prompt.slice(0, 2000), costMicrousd: detail.costMicrousd });
+              const preview = await imagePreview(stored.data ?? bytes, { maxEdge: COMP_PREVIEW_EDGE }).catch(() => null);
+              return { stored, preview };
+            }).then(({ stored, preview }) => {
+              compSlots[slot] = { section: input.section, viewport: input.viewport, asset: stored.id };
+              comps.splice(0, comps.length, ...compSlots.filter((entry): entry is DesignComp => Boolean(entry)));
+              record.comps = [...comps];
+              run.emit({ type: "status", message: `Design comp ready: ${input.section} (${input.viewport})` });
+              results.push({ type: "tool_result", tool_use_id: use.id, content: imageResultContent(compReadyMessage(input), preview) });
+            }, () => fail("The design comp could not be made. Build this section from the art system and the section plan.")));
             break;
           }
           case "concept": {
@@ -396,6 +450,23 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     if (commented !== app) { run.files.write("src/App.tsx", commented); run.emit({ type: "file", path: "src/App.tsx", op: "write", content: commented }); }
   }
   return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept };
+}
+
+/** The comp prompt: a finished screen of this site in its art system (the router appends the exact words). */
+export function compPrompt(input: { section: string; viewport: "desktop" | "mobile"; prompt: string }, concept: Pick<ConceptRecord, "artSystem" | "chosen">) {
+  const art = concept.artSystem;
+  const screen = input.viewport === "desktop" ? "a desktop website screen at 1440 px wide" : "a phone website screen at 390 px wide";
+  return [
+    `A design comp: ${screen}, shown flat and full-frame as a screenshot of the browser viewport (no device, no browser window, no mockup, no perspective), for the "${input.section}" section of a website whose concept is "${concept.chosen.name}". Designed by an award-winning web studio: editorial layout with a clear grid, dramatic type scale, deliberate colour fields and calm negative space.`,
+    input.prompt,
+    art ? `Art system: palette ${art.palette}. Type: ${art.type}. Imagery: ${art.imagery}. Motif: ${art.motif}.` : "",
+    "Body copy, navigation and small labels are shown only as quiet thin grey lines, never as words. Real-looking photography or a crafted drawing as the art system says; never stock-looking, no AI look (oversaturation, HDR glow, plastic skin).",
+  ].filter(Boolean).join("\n");
+}
+
+/** Tool result for a design comp: how to read it and what to build from it. */
+export function compReadyMessage(input: { section: string; viewport: string }) {
+  return `Design comp for ${input.section} (${input.viewport}), above. It is your reference only: it is never shown on the page or registered as a site image, and its lettering is never copied (spell from your own copy). Read it as an art director's comp: the grid and columns, the headline's size relative to the frame (the frame is ${input.viewport === "desktop" ? "1440" : "390"} px wide), weights and case, the colour fields and their proportions, where the image sits and how it is cropped, overlaps and the empty space. Next, generate the text-free images it shows with generate_image (same subject, crop, light and position, described from this comp; inspect them as usual), then build the section to match the comp as closely as code allows: grid, scale, type sizes and weights, colour fields, overlaps, image crops and negative space, with live HTML text and real buttons and links. Every accessibility, contrast, honesty and 360 px rule wins over the comp.`;
 }
 
 /** The client's own images: their imported photos (/images/photo-N.webp, redesign-server.ts) and the brand
