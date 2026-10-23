@@ -31,6 +31,8 @@ export type AgencyRunDeps = Readonly<{
   model: ModelPort; tools: Readonly<Record<string, AgencyTool>>; readInput: (index: number) => Promise<string>;
   specialists?: readonly SpecialistSpec[]; platformDeadline: number;
   heartbeatMs?: number; pollMs?: number; maxSpecialistCalls?: number;
+  /** Limits for this one step inside the task's ceiling (a multi-step task keeps room for its later steps). */
+  stage?: Readonly<{ credits: number; providerMicrousd: number }>;
 }>;
 export type AgencyRunOutcome = Readonly<{
   replayed: boolean; status: OperationStatus | null; outcome: string; charged: number; code?: string; message: string;
@@ -94,7 +96,8 @@ export async function runAgencyTask<R>(task: AgencyTask, lead: AgencyLeadSpec<R>
     throw new AgencyError("AGENCY_TOOL_REFUSED", "One of the requested tools is not available for this task.", 400);
   const { run, status } = await beginAgencyOperation({ actor: task.actorId, workspaceId: task.workspaceId, artifactId: task.artifactId, kind: task.kind,
     effort: task.settings.effort, expectedVersion: task.expectedRevision, ceiling: task.ceilings.customerCredits,
-    providerCapMicrousd: task.ceilings.providerMicrousd, context: taskContext(task), digest: taskDigest(task), actionKey: task.actionKey, stepKey: task.stepKey });
+    providerCapMicrousd: Math.min(task.ceilings.providerMicrousd, deps.stage?.providerMicrousd ?? Infinity), stageCap: deps.stage?.credits,
+    context: taskContext(task), digest: taskDigest(task), actionKey: task.actionKey, stepKey: task.stepKey });
   // A duplicate request (same action and step) gets the stored outcome and makes no call.
   if (!run) return recorded(status, true);
   return executeStep(task, lead, deps, run);

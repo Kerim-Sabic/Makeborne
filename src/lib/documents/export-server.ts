@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -11,19 +12,23 @@ import { embeddedFontSources } from "./fonts-server";
 import { chromiumLaunchOptions } from "../server/export";
 import { downloadProjectAsset } from "../cloud/asset-storage";
 
-/** Read the document's generated artwork through the caller's RLS-bound client. */
-export async function loadDocumentImages(client: SupabaseClient, workspaceId: string, projectId: string, doc: DocumentSource) {
+/** Read the document's generated artwork through the caller's RLS-bound client.
+ * Bytes are re-hashed against the registered sha256: an object whose bytes do
+ * not match its record is left out (never rendered), like a missing one. */
+export async function loadDocumentImages(client: SupabaseClient, workspaceId: string, projectId: string, doc: DocumentSource, download = downloadProjectAsset) {
   const buffers: Record<string, Buffer> = {};
-  const ids = doc.assets.map(asset => asset.id);
+  const ids = [...new Set(doc.assets.map(asset => asset.id))];
   if (!ids.length) return buffers;
-  const { data, error } = await client.from("assets").select("id,object_path,content_type").eq("workspace_id", workspaceId).eq("project_id", projectId).in("id", ids);
+  const { data, error } = await client.from("assets").select("id,object_path,content_type,sha256").eq("workspace_id", workspaceId).eq("project_id", projectId).in("id", ids);
   if (error) throw new Error("Asset registry unavailable.");
   for (const asset of doc.assets) {
     const row = data?.find(entry => entry.id === asset.id);
-    if (!row || !String(row.object_path).startsWith(`${workspaceId}/`) || !["image/png", "image/jpeg", "image/webp"].includes(row.content_type)) continue;
-    const file = await downloadProjectAsset(client, { workspaceId, projectId }, row.object_path);
+    if (!row || !String(row.object_path).startsWith(`${workspaceId}/`) || !["image/png", "image/jpeg", "image/webp"].includes(row.content_type) || !/^[a-f0-9]{64}$/.test(String(row.sha256))) continue;
+    const file = await download(client, { workspaceId, projectId }, row.object_path);
     if (file.error || !file.data || file.data.size > 12_000_000) continue;
-    buffers[asset.name] = Buffer.from(await file.data.arrayBuffer());
+    const bytes = Buffer.from(await file.data.arrayBuffer());
+    if (createHash("sha256").update(bytes).digest("hex") !== row.sha256) continue;
+    buffers[asset.name] = bytes;
   }
   return buffers;
 }
