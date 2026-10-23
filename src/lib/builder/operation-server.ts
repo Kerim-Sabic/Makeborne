@@ -11,8 +11,8 @@ import { databaseGate, SETTLEMENT_WINDOW_MS, CLOCK_SKEW_MS } from "../ai/live-ru
 import type { CreditHold } from "../credits/server";
 import type { EffortLevel } from "../routing/effort";
 import { OperationSnapshotSchema, OperationStatusSchema, type OperationRequest, type OperationSnapshot, type OperationStatus } from "./operation-contract";
-import { sourcesFingerprint, type OperationSources } from "./operation-sources";
-export { OperationSourcesSchema, sourcesFingerprint, type OperationSources } from "./operation-sources";
+import { sourcesContext, sourcesFingerprint, type OperationSources } from "./operation-sources";
+export { OperationSourcesSchema, sourcesContext, sourcesFingerprint, type OperationSources } from "./operation-sources";
 
 const internalSnapshot = OperationSnapshotSchema.extend({ rateMicrousd: z.number().int().positive(), providerRemainingMicrousd: z.number().int().nonnegative() });
 const runSchema = z.object({ id: z.string().uuid(), reference: z.string(), fence: z.string().uuid(), amount: z.number().int().nonnegative(), exempt: z.boolean(), reservedAt: z.union([z.string(), z.number()]), expiresAt: z.union([z.string(), z.number()]) });
@@ -135,12 +135,10 @@ export function brandKitFingerprint(kit: object | null): string {
   return kit ? `sha256:${createHash("sha256").update(canonicalSourceJson(kit)).digest("hex")}` : "none";
 }
 /** The request context recorded once with a new operation. Provenance (advisor brief ids) is kept for the record only. */
-export function operationContext(request: unknown, attachmentsSha256: string, sources?: OperationSources | null): Record<string, unknown> {
+export function operationContext(request: unknown, attachmentsSha256: string): Record<string, unknown> {
   const body = typeof request === "object" && request !== null ? request as { message?: unknown; plan?: unknown; provenance?: unknown } : null;
   const brandKit = requestBrandKit(request);
-  const sourcesSha256 = sourcesFingerprint(sources);
-  return { attachmentsSha256, ...(brandKit ? { brandKit } : {}), ...(body ? { message: body.message ?? "", ...(body.plan ? { plan: body.plan } : {}), ...(body.provenance ? { provenance: body.provenance } : {}) } : {}),
-    ...(sources && sourcesSha256 ? { sources: { omitted: sources.omitted, references: sources.references, sha256: sourcesSha256 } } : {}) };
+  return { attachmentsSha256, ...(brandKit ? { brandKit } : {}), ...(body ? { message: body.message ?? "", ...(body.plan ? { plan: body.plan } : {}), ...(body.provenance ? { provenance: body.provenance } : {}) } : {}) };
 }
 const requestBrandKit = (request: unknown) => typeof request === "object" && request !== null && typeof (request as { brandKit?: unknown }).brandKit === "string"
   ? (request as { brandKit: string }).brandKit : undefined;
@@ -154,7 +152,6 @@ export async function beginOperation(input: {
 }): Promise<{ run: OperationRun | null; status: OperationStatus }> {
   const digest = createHash("sha256").update(canonicalSourceJson(input.request)).digest("hex");
   const attachmentsSha256 = attachmentFingerprint(input.request);
-  const sourcesSha256 = sourcesFingerprint(input.sources);
   const brandKit = requestBrandKit(input.request);
   let id: string;
   if ("actionKey" in input.envelope) {
@@ -163,7 +160,7 @@ export async function beginOperation(input: {
       p_action: input.envelope.actionKey, p_kind: input.kind, p_effort: input.effort,
       p_initial_version: input.expectedVersion, p_input_hash: digest, p_credit_cap: input.ceiling,
       p_rate_microusd: Math.round(aiCostUsdPerCredit() * 1_000_000),
-      p_context: operationContext(input.request, attachmentsSha256, input.sources),
+      p_context: { ...operationContext(input.request, attachmentsSha256), ...sourcesContext(input.sources) },
     });
     checkRefusal(created);
     id = snapshot(created.operation ?? created).id;
@@ -188,7 +185,7 @@ export async function beginOperation(input: {
       // The same "Continue without it" choices and the same extraction of each file (an operation recorded without
       // source choices continues only without them).
       const recorded = (existingData.requestContext as { sources?: { sha256?: unknown } } | null)?.sources?.sha256;
-      if ((typeof recorded === "string" ? recorded : null) !== sourcesSha256) throw new OperationError("OPERATION_SOURCES_CHANGED", "Continue with the same files and the same “Continue without it” choices used for this request, or start a new request.", 409, existing.operation);
+      if ((typeof recorded === "string" ? recorded : null) !== sourcesFingerprint(input.sources)) throw new OperationError("OPERATION_SOURCES_CHANGED", "Continue with the same files and the same “Continue without it” choices used for this request, or start a new request.", 409, existing.operation);
     }
   }
   const kind = "id" in input.envelope ? input.envelope.kind : input.kind;

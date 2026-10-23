@@ -20,3 +20,8 @@ export function sourcesFingerprint(sources: OperationSources | null | undefined)
   const parsed = OperationSourcesSchema.parse(sources);
   return createHash("sha256").update(canonicalSourceJson({ omitted: parsed.omitted, references: parsed.references })).digest("hex");
 }
+/** The `sources` entry of a new operation's recorded request context (nothing when no file was omitted or ingested). */
+export function sourcesContext(sources: OperationSources | null | undefined): Record<string, unknown> {
+  const sha256 = sourcesFingerprint(sources);
+  return sources && sha256 ? { sources: { omitted: sources.omitted, references: sources.references, sha256 } } : {};
+}

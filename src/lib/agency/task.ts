@@ -5,7 +5,7 @@ import { textPrice } from "../ai/prices";
 import { RequestError } from "../server/http";
 import { AGENCY_OPERATION_KINDS } from "../builder/operation-contract";
 import type { AgencyInput, AgencyScope } from "../builder/operation-server";
-import { sourcesFingerprint, type OperationSources } from "../builder/operation-sources";
+import { sourcesContext, sourcesFingerprint, type OperationSources } from "../builder/operation-sources";
 import type { EffortLevel } from "../routing/effort";
 
 /**
@@ -126,11 +126,10 @@ export async function resolveAgencyTask(actor: string, body: unknown, deps: Reso
 
 /** Stored once with the operation. SQL re-verifies `inputs`, `projectId` and `clientId` against the artifact. */
 export function taskContext(task: AgencyTask): Record<string, unknown> {
-  const sourcesSha256 = sourcesFingerprint(task.sources);
   return { task: { objective: task.objective, inputs: task.inputs, projectId: task.projectId, clientId: task.clientId,
     permittedTools: task.permittedTools, settings: task.settings.profile, scale: task.scale, ceilingCredits: task.ceilings.customerCredits,
     // Present only when files were read or omitted, so tasks without them keep their exact digest.
-    ...(task.sources && sourcesSha256 ? { sources: { omitted: task.sources.omitted, references: task.sources.references, sha256: sourcesSha256 } } : {}) } };
+    ...sourcesContext(task.sources) } };
 }
 
 /**
