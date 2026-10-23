@@ -1,0 +1,350 @@
+{
+  "schema": "agency-eval/1",
+  "generatedAt": "2026-10-23T19:40:33.210Z",
+  "startedAt": "2026-10-23T19:40:31.080Z",
+  "node": "v22.18.0",
+  "platform": "win32",
+  "revision": "0565f10eb41cea9927842a3181748f7bc756e456",
+  "uncommitted": [
+    "?? docs/release-review/agency-eval-20261024.md"
+  ],
+  "note": "Deterministic local measurement only: fixtures generated in this script (fictional businesses), no network, no database, no paid provider call. Fake model output where a model step exists.",
+  "notMeasured": [
+    "cost, charge and margin per case (requires live runs; estimates listed per case)",
+    "human preference between outputs (requires live generation and human or blind-judge grading)",
+    "previous vs new workflow on the same inputs (requires live generation on both paths)",
+    "model quality of the assisted steps (research brief writer, reviewer, narrative writer, image edit model)"
+  ],
+  "summary": {
+    "cases": 8,
+    "completed": 8,
+    "passed": 8,
+    "seededDefects": 19,
+    "caught": 19,
+    "escaped": 0,
+    "networkAttempts": 0,
+    "paidCalls": 0
+  },
+  "cases": [
+    {
+      "id": "brief-bakery",
+      "title": "Business brief: Harbour Bakery (food retail, consumer)",
+      "pipeline": "stage 4 Understand this client, deterministic (no AI); stage 3 extraction from notes",
+      "completed": true,
+      "correctness": {
+        "factClaims": 9,
+        "citations": 9,
+        "citationsResolved": 8,
+        "citationsVerbatim": 2,
+        "citationsStructuredVerified": 6,
+        "citationsUnverifiable": [
+          "Clear next step: no"
+        ],
+        "citationsFailing": [],
+        "inferences": 1,
+        "pagesRead": 3,
+        "competitorsRead": 0,
+        "recommendations": [
+          "website"
+        ],
+        "searchPerformed": false,
+        "knowledgeSuggestionsFromNotes": [
+          "price.weekly_bread_box",
+          "contact.phone"
+        ]
+      },
+      "defects": {
+        "seeded": 1,
+        "caught": 1,
+        "escaped": 0,
+        "detail": [
+          "hidden injected text kept out of the brief"
+        ]
+      },
+      "pass": true,
+      "latencyMs": 33,
+      "cost": {
+        "measured": false,
+        "note": "not measured — requires live run",
+        "live": "assisted brief ≈ $0.12–0.15 per brief, ≤ $1 at the 3-turn ceiling (Opus 5.5 price card); web search refused until a result-token ceiling exists",
+        "plan": "research qualification: 12 runs + 3 Stop/replay ≈ $2, cap $4.50; search ≈ $0.60–0.85, cap $2"
+      }
+    },
+    {
+      "id": "brief-physio",
+      "title": "Business brief: Northwind Physiotherapy (health clinic, appointments)",
+      "pipeline": "stage 4 Understand this client, deterministic (no AI); stage 3 extraction from notes",
+      "completed": true,
+      "correctness": {
+        "factClaims": 10,
+        "citations": 10,
+        "citationsResolved": 9,
+        "citationsVerbatim": 3,
+        "citationsStructuredVerified": 6,
+        "citationsUnverifiable": [
+          "Clear next step: no"
+        ],
+        "citationsFailing": [],
+        "inferences": 1,
+        "pagesRead": 3,
+        "competitorsRead": 1,
+        "recommendations": [
+          "website",
+          "deck"
+        ],
+        "searchPerformed": false,
+        "knowledgeSuggestionsFromNotes": [
+          "contact.email",
+          "contact.phone"
+        ]
+      },
+      "defects": {
+        "seeded": 1,
+        "caught": 1,
+        "escaped": 0,
+        "detail": [
+          "robots-disallowed /patients not read"
+        ]
+      },
+      "pass": true,
+      "latencyMs": 7,
+      "cost": {
+        "measured": false,
+        "note": "not measured — requires live run",
+        "live": "assisted brief ≈ $0.12–0.15 per brief, ≤ $1 at the 3-turn ceiling (Opus 5.5 price card); web search refused until a result-token ceiling exists",
+        "plan": "research qualification: 12 runs + 3 Stop/replay ≈ $2, cap $4.50; search ≈ $0.60–0.85, cap $2"
+      }
+    },
+    {
+      "id": "brief-freight",
+      "title": "Business brief: Kestrel Freight (B2B logistics, enterprise sales)",
+      "pipeline": "stage 4 Understand this client, deterministic (no AI); stage 3 extraction from notes",
+      "completed": true,
+      "correctness": {
+        "factClaims": 9,
+        "citations": 9,
+        "citationsResolved": 8,
+        "citationsVerbatim": 2,
+        "citationsStructuredVerified": 6,
+        "citationsUnverifiable": [
+          "Clear next step: yes"
+        ],
+        "citationsFailing": [],
+        "inferences": 1,
+        "pagesRead": 2,
+        "competitorsRead": 0,
+        "recommendations": [
+          "website"
+        ],
+        "searchPerformed": false,
+        "knowledgeSuggestionsFromNotes": []
+      },
+      "defects": {
+        "seeded": 0,
+        "caught": 0,
+        "escaped": 0,
+        "detail": []
+      },
+      "pass": true,
+      "latencyMs": 3,
+      "cost": {
+        "measured": false,
+        "note": "not measured — requires live run",
+        "live": "assisted brief ≈ $0.12–0.15 per brief, ≤ $1 at the 3-turn ceiling (Opus 5.5 price card); web search refused until a result-token ceiling exists",
+        "plan": "research qualification: 12 runs + 3 Stop/replay ≈ $2, cap $4.50; search ≈ $0.60–0.85, cap $2"
+      }
+    },
+    {
+      "id": "website-mobile",
+      "title": "Website with a difficult phone layout (wide table, long URL, fixed-width banner, project images)",
+      "pipeline": "stage 6 review capture (offline Chromium, desktop + phone) with project images served from verified storage and the stage 3 knowledge claims check",
+      "completed": true,
+      "correctness": {
+        "controlFalsePositives": [],
+        "checksRun": 9,
+        "projectImagesServed": 2,
+        "projectImagesBroken": [
+          "/images/clinic.png"
+        ],
+        "projectImagesNotChecked": [
+          "/images/team.png"
+        ],
+        "notCheckedListedInCoverage": true,
+        "unexpectedFailedChecks": [],
+        "phoneViewport": "390×844",
+        "desktopViewport": "1440×900"
+      },
+      "defects": {
+        "seeded": 7,
+        "caught": 7,
+        "escaped": 0,
+        "escapedNames": [],
+        "caughtNames": [
+          "overflow",
+          "covered",
+          "clipped",
+          "broken",
+          "claim",
+          "dead-link",
+          "unlabelled"
+        ]
+      },
+      "pass": true,
+      "latencyMs": 374,
+      "cost": {
+        "measured": false,
+        "note": "not measured — requires live run",
+        "live": "fresh-context reviewer ≈ $0.13 per review, ≤ $1 at 4 turns",
+        "plan": "review qualification: 12 reviews + 6 re-checks ≈ $2.5, cap $5; blind comparison 20 pairs ≈ $5–9, cap $12"
+      }
+    },
+    {
+      "id": "ebook-dense-sparse",
+      "title": "Ebook with dense and sparse chapters",
+      "pipeline": "document JSON → real PDF export (offline Chromium printer) → stage 6 book checks on the PDF file",
+      "completed": true,
+      "correctness": {
+        "pdfBytes": 111412,
+        "pages": 21,
+        "pageSizePt": "432×648",
+        "allPagesTrim": true,
+        "denseChapterPages": 13,
+        "sparseChapterPages": 2,
+        "outlineChapters": 6,
+        "controlFalsePositives": []
+      },
+      "defects": {
+        "seeded": 4,
+        "caught": 4,
+        "escaped": 0,
+        "escapedNames": []
+      },
+      "pass": true,
+      "latencyMs": 622,
+      "cost": {
+        "measured": false,
+        "note": "not measured — requires live run",
+        "live": "book generation and reviewer turns are existing paths; reviewer ≈ $0.13 per review",
+        "plan": "covered by the review qualification cap ($5)"
+      }
+    },
+    {
+      "id": "deck-calculated-charts",
+      "title": "Deck with real calculated charts (fictional freight client's campaign data)",
+      "pipeline": "CSV → stage 2 parser → stage 7 facts sheet + campaign deck → persist (fake RLS storage) → real PPTX and PDF → chart caches reconciled",
+      "completed": true,
+      "correctness": {
+        "rows": 60,
+        "facts": 61,
+        "charts": 5,
+        "nativeEditableCharts": 5,
+        "plottedPoints": 26,
+        "plottedPointsMatchingFacts": 26,
+        "independentTotals": 8,
+        "independentTotalsReconciled": 8,
+        "mismatches": [],
+        "savedFiles": [
+          "facts",
+          "pdf",
+          "pptx"
+        ],
+        "pdfPages": 10,
+        "deckSlides": 10,
+        "controlDeckFailures": []
+      },
+      "defects": {
+        "seeded": 2,
+        "caught": 2,
+        "escaped": 0,
+        "escapedNames": []
+      },
+      "pass": true,
+      "latencyMs": 757,
+      "cost": {
+        "measured": false,
+        "note": "not measured — requires live run",
+        "live": "AI-written narrative ≈ $0.07 per narrative, ≤ $0.66 at the 3-turn ceiling (the plain narrative used here costs nothing)",
+        "plan": "data narrative qualification: 20 runs ≈ $1.5, cap $3; open-ended code execution ≈ $2–6, cap $8"
+      }
+    },
+    {
+      "id": "client-conflicting-sources",
+      "title": "Client with conflicting source documents (DOCX + XLSX + CSV)",
+      "pipeline": "stage 2 builders → isolated ingestion worker → stage 3 deterministic suggestions → conflict rule (TS mirror of the SQL rule)",
+      "completed": true,
+      "correctness": {
+        "files": [
+          "price-list.docx: complete (docx)",
+          "prices.xlsx: complete (xlsx)",
+          "hours.csv: complete (csv)"
+        ],
+        "suggestions": 8,
+        "conflictKeys": [
+          "opening_hours.monday",
+          "price.weekly_bread_box"
+        ],
+        "expectedConflictKeys": [
+          "opening_hours.monday",
+          "price.weekly_bread_box"
+        ],
+        "agreementsNotFlagged": [
+          "contact.phone"
+        ],
+        "everyConflictSideHasFileLocatorAndSha256": true,
+        "conflictSides": [
+          "opening_hours.monday = 08:00–16:00 [price-list.docx {\"paragraph\":3}]",
+          "opening_hours.monday = 09:00–17:00 [hours.csv {\"sheet\":\"hours\",\"cell\":\"A2\"}]",
+          "price.weekly_bread_box = EUR 49 [price-list.docx {\"paragraph\":2}]",
+          "price.weekly_bread_box = EUR 52 [prices.xlsx {\"sheet\":\"Prices\",\"cell\":\"B2\"}]"
+        ]
+      },
+      "defects": {
+        "seeded": 3,
+        "caught": 3,
+        "escaped": 0,
+        "detail": [
+          "2 seeded conflicts (price, Monday hours) must be flagged; 1 seeded agreement (phone in DOCX and CSV) must not be"
+        ]
+      },
+      "pass": true,
+      "latencyMs": 113,
+      "cost": {
+        "measured": false,
+        "note": "not measured — requires live run",
+        "live": "AI reading of the same files in a build ≈ $1–2 for a 10-file adversarial set at medium effort",
+        "plan": "ingestion qualification ≈ $1–2 (no cap recorded; propose $2)"
+      }
+    },
+    {
+      "id": "image-edit-label",
+      "title": "Image edit with strong product preservation (protected label)",
+      "pipeline": "stage 5 verify → normalise → fake model output → protected-region compositing (sharp, lossless)",
+      "completed": true,
+      "correctness": {
+        "labelRegionPx": "304×200",
+        "labelPixels": 60800,
+        "labelPixelsChangedByFakeModel": 18112,
+        "labelPixelsChangedAfterCompositing": 0,
+        "protectedPixelsIdentical": true,
+        "outsidePixelsChanged": "40000 of 40000",
+        "outputLossless": true
+      },
+      "defects": {
+        "seeded": 1,
+        "caught": 1,
+        "escaped": 0,
+        "detail": [
+          "the fake model output alters the label; compositing must restore every label pixel exactly"
+        ]
+      },
+      "pass": true,
+      "latencyMs": 101,
+      "cost": {
+        "measured": false,
+        "note": "not measured — requires live run",
+        "live": "worst planned edit call $0.243 (OpenAI, 3 input images); instruction step ≤ $0.119 (Anthropic)",
+        "plan": "image edit qualification: 24 edit calls + 3 end-to-end ≈ $5.83 + $0.36, allowance $6.50 OpenAI + $0.50 Anthropic"
+      }
+    }
+  ]
+}
