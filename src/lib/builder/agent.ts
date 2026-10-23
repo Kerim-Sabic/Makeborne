@@ -181,7 +181,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const compsAvailable = Boolean(run.concept) && !run.limits?.replaceOnly && imageLimit > 0 && textImages;
   // In call order (the jobs finish in any order); a failed comp leaves its slot empty.
   const comps: DesignComp[] = [], compSlots: (DesignComp | undefined)[] = [];
-  let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = false;
+  let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = false, readingsAsked = false;
   // The project as it was the last time the rendered layout check found no blocking defect, and the defects of the
   // latest check: a run that ends with a defect it could not fix restores that version instead of saving the defect.
   let cleanFiles: Map<string, string> | null = null, layoutDefects: string[] = [];
@@ -306,7 +306,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const input = ToolInputs.generate_image.parse(use.input);
             if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Use CSS, typography and inline SVG."); break; }
             // Comp-first: the photographs follow the comps they belong to (asked once; a repeat goes ahead).
-            if (compsAvailable && concept && compsStarted === 0 && !compsAsked) { compsAsked = true; fail("Design comps come first on this build: call generate_comp for the first screen and the two most important sections (in one response), then generate the photographs each comp shows."); break; }
+            if (compsAvailable && concept && compsStarted < MIN_COMPS && !compsAsked) { compsAsked = true; fail(`Design comps come first on this build and only ${compsStarted} ${compsStarted === 1 ? "was" : "were"} made: in one response call generate_comp for the first screen (desktop), the phone first screen (mobile) and the two heart sections the brief names, then read_comp for each, then generate the photographs each comp shows.`); break; }
             if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             if (!responsive.siteImageFits([...run.files.assets.values()])) { fail("This site already holds as many images as a published site can carry. Reuse an existing image or use CSS/SVG artwork."); break; }
             if (run.files.assets.has(`public/images/${input.name}.webp`)) { fail(`An image named ${input.name} already exists at /images/${input.name}.webp. Reuse it or choose a new name.`); break; }
@@ -405,7 +405,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (!checked.ok) { fail(checked.problem); break; }
             concept = checked.record;
             run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why, ...(concept.imagePlan ? { shots: concept.imagePlan.shots.length } : {}), ...(concept.sections ? { compositions: concept.sections.map(section => section.composition) } : {}) });
-            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}). ${sitePlanNote(concept)}${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan, { comps: compsAvailable })}` : ""}${compsAvailable && !concept.imagePlan ? " Your next step is the design comps: call generate_comp in one response for the first screen and the two most important other sections." : ""}` });
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}). ${sitePlanNote(concept)}${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan, { comps: compsAvailable })}` : ""}${compsAvailable && !concept.imagePlan ? " Your next step is the design comps: in one response call generate_comp at least four times: the first screen (desktop), the phone first screen (viewport mobile) and the two heart sections the brief names (listings, menu, services or collection), plus the other key sections while the image budget allows. Then record each comp with read_comp." : ""}` });
             break;
           }
           case "finish": {
@@ -414,6 +414,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             // A first build records its concepts before it can finish (once: a repeat is accepted).
             const noConcept = "Before finishing a first build, call the concept tool once with 2-3 genuinely distinct concepts, scored on the rubric, and keep building the strongest.";
             if (run.concept && !concept && !qualityReported.has(noConcept)) { qualityReported.add(noConcept); problems.push(noConcept); }
+            // Every comp is read before finish, so the build can be measured against it (asked once).
+            const unread = comps.filter(comp => !comp.reading);
+            if (unread.length && !readingsAsked) { readingsAsked = true; problems.push(`Record read_comp for ${unread.map(comp => `${comp.section} (${comp.viewport})`).join(", ")}: the headline cap height and image share you read from each comp; finish then measures the built sections against them.`); }
             // A rejected image still in use: its slot should show the regenerated one (once: a repeat is accepted).
             for (const [rejected, replacement] of replacedBy) {
               const stale = `The page still shows /images/${rejected}.webp, which you rejected and regenerated as /images/${replacement}.webp: point that slot at the new src with its width and height.`;
@@ -503,12 +506,15 @@ export function compPrompt(input: { section: string; viewport: "desktop" | "mobi
 
 /** Tool result for a design comp: how to read it and what to build from it. */
 export function compReadyMessage(input: { section: string; viewport: string }) {
-  return `Design comp for ${input.section} (${input.viewport}), above. It is your reference only: it is never shown on the page or registered as a site image, and its lettering is never copied (spell from your own copy). Read it as an art director's comp: the grid and columns, the headline's size relative to the frame (the frame is ${input.viewport === "desktop" ? "1440" : "390"} px wide), weights and case, the colour fields and their proportions, where the image sits and how it is cropped, overlaps and the empty space. Next, generate the text-free images it shows with generate_image (same subject, crop, light and position, described from this comp; inspect them as usual), then build the section to match the comp as closely as code allows: grid, scale, type sizes and weights, colour fields, overlaps, image crops and negative space, with live HTML text and real buttons and links. Every accessibility, contrast, honesty and 360 px rule wins over the comp.`;
+  return `Design comp for ${input.section} (${input.viewport}), above. First record it with read_comp (section "${input.section}", viewport ${input.viewport}): the cap height of its largest headline as a percentage of the comp's height, the share of the frame its image covers and the side it sits on; finish measures your build against that reading. It is your reference only: it is never shown on the page or registered as a site image, and its lettering is never copied (spell from your own copy). Read it as an art director's comp: the grid and columns, the headline's size relative to the frame (the frame is ${input.viewport === "desktop" ? "1440" : "390"} px wide), weights and case, the colour fields and their proportions, where the image sits and how it is cropped, overlaps and the empty space. Next, generate the text-free images it shows with generate_image (same subject, crop, light and position, described from this comp; inspect them as usual), then build the section to match the comp as closely as code allows: grid, scale, type sizes and weights, colour fields, overlaps, image crops and negative space, with live HTML text and real buttons and links. Every accessibility, contrast, honesty and 360 px rule wins over the comp.`;
 }
 
 /** The client's own images: their imported photos (/images/photo-N.webp, redesign-server.ts) and the brand
  * logo (/images/brand-logo.webp, brand/kit.ts). Generated images never replace them. */
 const CLIENT_IMAGE_NAME = /^(?:photo-[0-9]+|brand-logo)$/;
+
+/** Comps asked for before the first photograph: the first screen, the phone first screen and two heart sections. */
+const MIN_COMPS = 4;
 
 /** Why a generate_image call may not regenerate (or, in a replace-only pass, add) an image, or null.
  * Each slot is regenerated at most once: a replacement cannot itself be replaced, nor a slot twice. */

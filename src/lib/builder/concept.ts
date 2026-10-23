@@ -176,7 +176,7 @@ export function sitePlanNote(record: Pick<ConceptRecord, "artSystem" | "sections
 export function imagePlanNote(plan: ImagePlan, options: { comps?: boolean } = {}) {
   if (!plan.shots.length) return "Image plan recorded: no generated images (the brief rules them out); carry the page with typography, colour and CSS/SVG drawing.";
   return `Image plan recorded (${plan.shots.length} image${plan.shots.length === 1 ? "" : "s"}): ${plan.shots.map((shot, index) => `${index + 1}. ${shot.section}: ${shot.job} (${shot.shot}, ${shot.aspect}; ${shot.layout})`).join(" ")} End every image prompt with the house style sentence verbatim: "${plan.houseStyle}". ${options.comps
-    ? "Your next step is the design comps: call generate_comp in one response for the first screen (desktop), the two most important other sections and, if useful, the phone first screen. After them, generate exactly these images together in one response, each matching its comp's subject, crop and light, inspect each one when it comes back, and build each section to its comp."
+    ? "Your next step is the design comps: in one response call generate_comp at least four times: the first screen (desktop), the phone first screen (viewport mobile) and the two heart sections the brief names (listings, menu, services or collection), plus the other key sections while the image budget allows. Then record each comp with read_comp. After them, generate exactly these images together in one response, each matching its comp's subject, crop and light, inspect each one when it comes back, and build each section to its comp."
     : "Generate exactly these images together in your next step (all the calls in one response, the hero first), inspect each one when it comes back, and place it as planned."}`;
 }
 

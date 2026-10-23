@@ -313,14 +313,14 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       script.push({ content: [comp("k0", "top")] }, { content: [{ type: "tool_use", id: "c1", name: "concept", input }] },
         { content: [comp("k1", "top"), comp("k2", "rates"), comp("k3", "work"), comp("k4", "top", "mobile"), comp("k5", "visit"), comp("k6", "band"), comp("k7", "stories"), comp("k8", "faq")] },
         { content: [{ type: "tool_use", id: "r1", name: "read_comp", input: { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" } }, { type: "tool_use", id: "r2", name: "read_comp", input: { section: "nowhere", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" } }, gen("g1", { name: "hero-bench" })] },
-        { content: [...site("z"), finish("f1")] });
+        { content: [...site("z"), finish("f1")] }, { content: [finish("f1b")] });
       const { result, events, files } = await run({ concept: true, storeComp });
       assert.ok(result.finished);
       assert.ok(seen[0].tools.includes("generate_comp"), "offered on a first build with a text-capable model");
       const early = events.find(event => event.type === "tool_error" && event.tool === "generate_comp");
       assert.match(early.message, /Record the concept/);
       const conceptResult = seen[2].messages.at(-1).content.find(block => block.type === "tool_result");
-      assert.match(conceptResult.content, /Your next step is the design comps: call generate_comp/, "the concept result makes the comps the next step");
+      assert.match(conceptResult.content, /Your next step is the design comps: in one response call generate_comp at least four times/, "the concept result makes the comps the next step");
       const results = seen[3].messages.at(-1).content.filter(block => block.type === "tool_result");
       const made = results.filter(block => Array.isArray(block.content));
       assert.ok(made.length >= 2 && made.length <= MAX_COMPS, `comps inside the image third (${made.length})`);
@@ -341,6 +341,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       const readResults = seen[4].messages.at(-1).content.filter(block => block.type === "tool_result");
       assert.match(readResults[0].content, /largest headline's cap height at least 85% of 9% of the frame/);
       assert.match(readResults[1].content, /There is no desktop comp for "nowhere"/);
+      assert.ok(events.some(event => event.type === "tool_error" && event.tool === "finish" && /Record read_comp for rates \(desktop\)/.test(event.message)), "unread comps are asked for once at finish");
       // A photograph asked for before any comp is sent back once to the comps; a repeat goes ahead.
       script.length = 0; seen.length = 0; imageCalls.length = 0;
       script.push({ content: [{ type: "tool_use", id: "c2", name: "concept", input }] }, { content: [gen("g7", { name: "hero-bench" })] }, { content: [gen("g8", { name: "hero-bench" })] }, { content: [...site("w"), finish("f9")] });
