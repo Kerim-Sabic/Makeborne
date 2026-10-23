@@ -490,10 +490,12 @@ const persistDeps = () => ({ renderPdf: fakeRender.documentPdf, renderPptx: fake
     const informedSent = JSON.stringify(informed.seen[0].messages);
     assert.ok(informedSent.includes("Say turnover, not revenue") && informedSent.includes("Do not take any figure from it"), "knowledge arrives as background, with the figures rule");
     assert.equal(finish().args.p_detail.knowledge.snapshotId, "7d3c1d9e-1111-4222-8333-944455556666");
-    // Unqualified (today): every data_report task is refused before any operation exists.
+    // Without a qualified setting every data_report task is refused before any operation exists. The shipped registry
+    // qualifies data_report only as a proposal after the 2026-10-24 paid run (flags remain off).
     fake.reset();
     await rejects(() => task.resolveAgencyTask(OWNER, { artifactId: randomUUID(), actionKey: randomUUID(), stepKey: randomUUID(), kind: "data_report", objective: "x", inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 },
-      { scope: operationServer.resolveAgencyScope, rateMicrousd: RATE }), "AGENCY_SETTINGS_UNQUALIFIED");
+      { scope: operationServer.resolveAgencyScope, settings: [], rateMicrousd: RATE }), "AGENCY_SETTINGS_UNQUALIFIED");
+    assert.ok(task.AGENCY_SETTINGS.some(setting => setting.qualifiedKinds.includes("data_report")), "proposed after qualification");
     assert.equal(fake.rpcLog.length, 0);
   });
 

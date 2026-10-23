@@ -87,10 +87,16 @@ export const IMAGE_EDIT_EVIDENCE: readonly ImageEditEvidence[] = Object.freeze([
  * owner-approved live qualification. Inputs are always normalised server-side
  * to the requested output size before they are sent (source and mask exactly
  * that size, references inside it), so one cell covers every edit of that size.
- * EMPTY on 2026-10-23: there are no approved OpenAI funds, nothing is measured,
- * and every edit is refused. A cell is bounded at observed x MEASURED_HEADROOM
- * (the D8 rule for generation, which needs the owner's sign-off for edits when
- * the first cell is recorded).
+ * PROPOSED after the paid qualification of 24 Oct 2026 (scope
+ * agency-qualification-20261024; docs/release-review/agency-qualification-20261024.md):
+ * the largest counts observed over 24 live medium-quality calls, usage returned on
+ * every call, no overrun. Input image tokens are per image (the source; references
+ * fitted inside the canvas counted less or equal). The mask figure is the largest TOTAL
+ * text-token count seen on a masked call (conservative); cells without masked calls
+ * carry none, so masks stay refused there. Every other model x quality x size stays
+ * refused. A cell is bounded at observed x MEASURED_HEADROOM (the D8 rule for
+ * generation): extending D8 to edits STILL NEEDS THE OWNER'S SIGN-OFF, and the
+ * image-editing flags remain off and set nowhere.
  */
 export type EditCell = Readonly<{
   /** Largest observed image-input tokens for ONE input image of this size. */
@@ -102,7 +108,20 @@ export type EditCell = Readonly<{
   evidence: string;
 }>;
 export type EditTokenTable = Readonly<Record<string, Readonly<Partial<Record<ImageQuality, Readonly<Partial<Record<ImageSize, EditCell>>>>>>>>;
-export const MEASURED_EDIT_TOKENS: EditTokenTable = Object.freeze({});
+const QUALIFIED_20261024 = (calls: number, size: string) => `agency-qualification-20261024: largest of ${calls} live call(s) at medium ${size}, usage returned on every call; owner sign-off of the D8 extension pending`;
+export const MEASURED_EDIT_TOKENS: EditTokenTable = Object.freeze({
+  "gpt-image-2.5-sunburst": Object.freeze({ medium: Object.freeze({
+    "1024x1024": Object.freeze({ inputImageTokens: 1024, maskTextTokens: 55, outputTokens: 439, evidence: QUALIFIED_20261024(8, "1024x1024") }),
+    "1536x1024": Object.freeze({ inputImageTokens: 1536, maskTextTokens: 55, outputTokens: 343, evidence: QUALIFIED_20261024(8, "1536x1024") }),
+  }) }),
+  "gpt-image-2.5-flare": Object.freeze({ medium: Object.freeze({
+    "1024x1024": Object.freeze({ inputImageTokens: 1024, outputTokens: 439, evidence: QUALIFIED_20261024(3, "1024x1024") }),
+    "1536x1024": Object.freeze({ inputImageTokens: 1536, outputTokens: 343, evidence: QUALIFIED_20261024(3, "1536x1024") }),
+  }) }),
+  "gpt-image-2": Object.freeze({ medium: Object.freeze({
+    "1024x1024": Object.freeze({ inputImageTokens: 1024, outputTokens: 1756, evidence: QUALIFIED_20261024(2, "1024x1024") }),
+  }) }),
+});
 
 export const EDIT_SIZES: readonly ImageSize[] = Object.freeze(["1024x1024", "1536x1024", "1024x1536"]);
 export const EDIT_QUALITIES: readonly ImageQuality[] = Object.freeze(["low", "medium", "high"]);

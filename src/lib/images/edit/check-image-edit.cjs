@@ -284,18 +284,29 @@ async function check(name, fn) {
 (async () => {
   editedPng = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: { r: 30, g: 160, b: 70 } } }).png().toBuffer();
 
-  await check("price evidence: shipped edit table is empty, so every model x quality x size is refused; no assumptions from generation prices", async () => {
-    assert.deepEqual(editPrices.MEASURED_EDIT_TOKENS, {}, "no measured edit cells without an approved live qualification");
+  await check("price evidence: only the cells measured live (2026-10-24 qualification) are bounded; every other model x quality x size is refused; no assumptions from generation prices", async () => {
+    const measured = { "gpt-image-2.5-sunburst": ["1024x1024", "1536x1024"], "gpt-image-2.5-flare": ["1024x1024", "1536x1024"], "gpt-image-2": ["1024x1024"] };
+    assert.deepEqual(Object.fromEntries(Object.entries(editPrices.MEASURED_EDIT_TOKENS).map(([model, cells]) => [model, Object.keys(cells.medium ?? {}).sort()])), measured, "medium cells only, from the recorded run");
+    assert.ok(Object.values(editPrices.MEASURED_EDIT_TOKENS).every(cells => Object.keys(cells).every(quality => quality === "medium")));
+    assert.ok(Object.values(editPrices.MEASURED_EDIT_TOKENS).flatMap(cells => Object.values(cells.medium)).every(cell => /agency-qualification-20261024/.test(cell.evidence) && /sign-off/.test(cell.evidence)), "evidence names the run and the pending D8 sign-off");
     for (const model of ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2", "gpt-image-1", "gpt-image-1.5", "dall-e-2"])
-      for (const quality of ["low", "medium", "high"]) for (const size of ["1024x1024", "1536x1024", "1024x1536"])
-        assert.throws(() => editPrices.imageEditCallBoundMicrousd({ model, quality, size, images: 1, mask: false, background: "opaque", prompt: "x" }), prices.UnsupportedConfigurationError);
+      for (const quality of ["low", "medium", "high"]) for (const size of ["1024x1024", "1536x1024", "1024x1536"]) {
+        const shape = { model, quality, size, images: 1, mask: false, background: "opaque", prompt: "x" };
+        if (quality === "medium" && measured[model]?.includes(size)) assert.ok(editPrices.imageEditCallBoundMicrousd(shape).boundMicrousd > 0, `${model} ${size} is bounded`);
+        else assert.throws(() => editPrices.imageEditCallBoundMicrousd(shape), prices.UnsupportedConfigurationError, `${model} ${quality} ${size}`);
+        assert.throws(() => editPrices.imageEditCallBoundMicrousd(shape, {}), prices.UnsupportedConfigurationError, "an empty table refuses everything");
+      }
+    // Masks only where masked calls were measured (Sunburst); transparency never on gpt-image-2.
+    assert.throws(() => editPrices.imageEditCallBoundMicrousd({ model: "gpt-image-2.5-flare", quality: "medium", size: "1024x1024", images: 1, mask: true, background: "opaque", prompt: "x" }), /mask/);
+    assert.throws(() => editPrices.imageEditCallBoundMicrousd({ model: "gpt-image-2", quality: "medium", size: "1024x1024", images: 1, mask: false, background: "transparent", prompt: "x" }), /transparent/);
     // gpt-image-1 is retired today even with a cell; the generic image-input refusal on generation is unchanged.
     assert.throws(() => editPrices.assertSupportedImageEditRequest({ model: "gpt-image-1", quality: "medium", size: "1024x1024", images: 1, mask: false, background: "opaque" }, { "gpt-image-1": TABLE["gpt-image-2.5-sunburst"] }, Date.parse("2026-10-23T12:00:00Z")), /retired/);
     assert.throws(() => prices.assertSupportedImageRequest({ model: "gpt-image-2", quality: "medium", size: "1024x1024", hasImageInput: true }), /image input/);
     assert.ok(editPrices.IMAGE_EDIT_EVIDENCE.every(item => item.verifiedAt === "2026-10-23"), "evidence dated at implementation time");
     assert.equal(editPrices.IMAGE_EDIT_EVIDENCE.find(item => item.model === "gpt-image-2.5-sunburst").inputImageTokens, "unpublished");
     assert.equal(routing.allowedEditModels({ OPENAI_API_KEY: "test-key-not-a-secret" }).length, 0, "no operator allowlist: no edit model");
-    assert.equal(routing.routeImageEdit({ operation: "variant", settings: { size: "1024x1024", quality: "medium", background: "opaque" }, images: 1, mask: false }, ALLOWED).ok, false, "allowlisted but unmeasured: refused");
+    assert.equal(routing.routeImageEdit({ operation: "variant", settings: { size: "1024x1024", quality: "medium", background: "opaque" }, images: 1, mask: false }, ALLOWED, {}).ok, false, "allowlisted but unmeasured: refused");
+    assert.equal(routing.routeImageEdit({ operation: "variant", settings: { size: "1024x1536", quality: "medium", background: "opaque" }, images: 1, mask: false }, ALLOWED).ok, false, "a shipped but unmeasured size: refused");
   });
 
   await check("price bound: text + every input image + mask + output at standard rates, headroom 1.5, x1.1; unsupported request shapes refused", async () => {
@@ -316,9 +327,9 @@ async function check(name, fn) {
     const original = registerAsset(await picture(1024, 1024)); outlineArtifact(original.id);
     const { deps: d } = deps();
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, env: {} }), "IMAGE_EDITING_UNAVAILABLE");
-    await rejects(run.runImageEdit(ACTOR, body(original), { ...d, settings: undefined }), "AGENCY_SETTINGS_UNQUALIFIED");
-    assert.ok(task.AGENCY_SETTINGS.every(setting => !setting.qualifiedKinds.includes("image_edit")), "shipped registry qualifies no image edit");
-    await rejects(run.runImageEdit(ACTOR, body(original), { ...d, table: editPrices.MEASURED_EDIT_TOKENS }), "EDIT_UNSUPPORTED");
+    await rejects(run.runImageEdit(ACTOR, body(original), { ...d, settings: [] }), "AGENCY_SETTINGS_UNQUALIFIED");
+    assert.ok(task.AGENCY_SETTINGS.some(setting => setting.qualifiedKinds.includes("image_edit")), "shipped registry: image_edit proposed after the 2026-10-24 qualification (flags remain off)");
+    await rejects(run.runImageEdit(ACTOR, body(original), { ...d, table: {} }), "EDIT_UNSUPPORTED");
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, allowedModels: [] }), "EDIT_UNSUPPORTED");
     assert.equal(contract.imageEditingEnabled({}), false); assert.equal(contract.imageEditingEnabled({ MAKEBORNE_IMAGE_EDITING: "true" }), false);
     assert.equal(opRpcs() + imageCalls.length + modelCalls, 0);

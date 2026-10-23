@@ -192,9 +192,13 @@ async function rejects(promise, code) { await assert.rejects(promise, error => {
     assert.deepEqual(rpcLog.map(entry => entry.args.p_actor), [ACTOR]);
   });
 
-  await check("qualified settings only: shipped registry refuses every kind; unknown profile and unpriced model fail closed", async () => {
-    await rejects(task.resolveAgencyTask(ACTOR, body(), { scope: server.resolveAgencyScope, rateMicrousd: RATE }), "AGENCY_SETTINGS_UNQUALIFIED");
-    assert.equal(task.AGENCY_SETTINGS.every(setting => setting.qualifiedKinds.length === 0), true, "nothing qualified without a recorded run");
+  await check("qualified settings only: shipped registry qualifies only the kinds with a recorded run; unknown profile and unpriced model fail closed", async () => {
+    // Proposed after the paid qualification of 2026-10-24: research, data_report and image_edit only.
+    assert.deepEqual(task.AGENCY_SETTINGS.flatMap(setting => setting.qualifiedKinds).sort(), ["data_report", "image_edit", "research"]);
+    assert.ok(task.AGENCY_SETTINGS.every(setting => /agency-qualification-20261024/.test(setting.evidence)), "each qualified kind names its recorded run");
+    for (const kind of ["independent_review", "ingest"])
+      await rejects(task.resolveAgencyTask(ACTOR, body({ kind }), { scope: server.resolveAgencyScope, rateMicrousd: RATE }), "AGENCY_SETTINGS_UNQUALIFIED");
+    await rejects(task.resolveAgencyTask(ACTOR, body(), { scope: server.resolveAgencyScope, settings: [], rateMicrousd: RATE }), "AGENCY_SETTINGS_UNQUALIFIED");
     await rejects(resolve({ settings: "turbo" }), "AGENCY_SETTINGS_UNQUALIFIED");
     await rejects(resolve({}, { settings: [{ ...qualified[0], model: "mystery-model-9" }] }), "AGENCY_SETTINGS_UNQUALIFIED");
     await rejects(resolve({ kind: "data_report" }, { settings: [{ ...qualified[0], qualifiedKinds: ["research"] }] }), "AGENCY_SETTINGS_UNQUALIFIED");

@@ -48,16 +48,19 @@ export type AgencyTaskRequest = z.infer<typeof AgencyTaskRequestSchema>;
 
 /**
  * Qualified model settings. A profile is usable for a kind only after a live
- * qualification run recorded its evidence. None is qualified yet (no approved
- * budget), so every agency task is refused until one is: fail closed.
+ * qualification run recorded its evidence; every other kind is refused: fail closed.
+ * PROPOSED after the paid qualification of 24 Oct 2026 (scope agency-qualification-20261024,
+ * docs/release-review/agency-qualification-20261024.md); the flags remain off and set nowhere.
+ * independent_review and ingest stay unqualified.
  */
 export type QualifiedSetting = Readonly<{
   profile: string; model: string; effort: EffortLevel; intensity: "low" | "medium" | "high";
   maxOutputTokens: number; maxTurns: number; qualifiedKinds: readonly AgencyKind[]; evidence: string;
 }>;
 export const AGENCY_SETTINGS: readonly QualifiedSetting[] = Object.freeze([
-  Object.freeze({ profile: "standard", model: "claude-opus-5-5", effort: "medium" as const, intensity: "medium" as const, maxOutputTokens: 8000, maxTurns: 8,
-    qualifiedKinds: Object.freeze([]) as readonly AgencyKind[], evidence: "Not qualified: needs a recorded live qualification run per kind (no approved budget on 2026-10-23)." }),
+  Object.freeze({ profile: "standard", model: "claude-opus-5-5", effort: "medium" as const, intensity: "medium" as const, maxOutputTokens: 8000, maxTurns: 3,
+    qualifiedKinds: Object.freeze(["research", "data_report", "image_edit"]) as readonly AgencyKind[],
+    evidence: "Proposed after the paid qualification of 2026-10-24 (scope agency-qualification-20261024): research 12/12 briefs, 174/174 facts grounded, replay and Stop checked; data_report 20/20 first-turn narratives at 31b1b3d (3/20 before it); image_edit 3/3 end-to-end edits inside the measured bound. independent_review NOT qualified (grounding bugs, book capture). Flags remain off." }),
 ]);
 
 /** Per-kind policy: tools a task of this kind may be granted, its credit ceiling, whether specialists may be used and
