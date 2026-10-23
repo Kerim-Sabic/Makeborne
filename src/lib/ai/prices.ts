@@ -235,8 +235,9 @@ export function assertSupportedTextRequest(params: Record<string, unknown>) {
     if (tool.type === WEB_SEARCH.type) assertWebSearchTool(String(params.model), tool);
     else if (tool.type !== undefined && tool.type !== "custom") throw new UnsupportedConfigurationError(`tool type "${String(tool.type)}"`);
   }
-  const cache = params.cache_control as { type?: string; ttl?: string } | undefined;
-  if (cache && (cache.type !== "ephemeral" || (cache.ttl !== undefined && cache.ttl !== "5m"))) throw new UnsupportedConfigurationError("cache TTL other than 5 minutes");
+  // Bounds price cache writes at the 5-minute rate, so every marker must be one.
+  const markers = [params.cache_control, ...(Array.isArray(params.system) ? params.system.map(block => (block as { cache_control?: unknown }).cache_control) : [])] as Array<{ type?: string; ttl?: string } | null | undefined>;
+  for (const cache of markers) if (cache && (cache.type !== "ephemeral" || (cache.ttl !== undefined && cache.ttl !== "5m"))) throw new UnsupportedConfigurationError("cache TTL other than 5 minutes");
   const output = params.output_config as Record<string, unknown> | undefined;
   if (output && Object.keys(output).some(key => key !== "effort")) throw new UnsupportedConfigurationError("output_config beyond effort");
 }

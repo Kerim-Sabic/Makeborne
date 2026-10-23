@@ -227,7 +227,7 @@ async function checkAdmin() {
       else {
         // Overview: real figures from the administrator-checked RPC, revenue priced from the plan catalog.
         const overview = renderToStaticMarkup(await page.default(at("overview")));
-        assert(overview.includes("Customers") && overview.includes(">42<") && overview.includes("$79"), "overview shows customers and revenue");
+        assert(overview.includes("Customers") && overview.includes(">42<") && overview.includes("$49"), "overview shows customers and revenue");
         assert.equal(overviewReads, 1);
         const html = renderToStaticMarkup(await page.default(at("system")));
         assert(html.includes("Live builder") && html.includes("Legacy operator jobs") && html.includes("Retired"));

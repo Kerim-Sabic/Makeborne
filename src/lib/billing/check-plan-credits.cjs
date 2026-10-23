@@ -58,10 +58,10 @@ const { CREATION_CATALOG, SUPPORT } = config;
     assert.deepEqual(plain(billing.accessPlanIds), [CREATION_CATALOG.create, "plan_Annual9"]);
     assert.deepEqual(plain(billing.planConfigIssues).map(issue => issue.value), ["plan_Ghost", SUPPORT.planId]);
     const rule = plain(planCredits.creditRuleFor("plan_Annual9"));
-    assert.deepEqual(rule, { planId: "plan_Annual9", tier: "studio", interval: "yearly", monthlyCredits: 850 });
+    assert.deepEqual(rule, { planId: "plan_Annual9", tier: "studio", interval: "yearly", monthlyCredits: 750 });
     assert.equal(planCredits.creditRuleFor(SUPPORT.planId), null);
     assert.equal(planCredits.creditRuleFor("plan_Ghost"), null);
-    assert.equal(planCredits.creditPlanFor("scale").monthlyCredits, 2200);
+    assert.equal(planCredits.creditPlanFor("scale").monthlyCredits, 1550);
     env.WHOP_PLAN_CREDIT_MAP = ""; env.WHOP_ACCESS_PLAN_IDS = "";
   });
 
@@ -82,7 +82,7 @@ const { CREATION_CATALOG, SUPPORT } = config;
       periodStart: "2027-01-31T10:00:00.000Z", periodEnd: "2028-01-31T10:00:00.000Z", source: "webhook" });
     assert.deepEqual(plain(result), { outcome: "recorded", granted: 1 });
     assert.deepEqual(calls, [["makeborne_record_plan_observation", { p_user: user, p_membership: "mem_annual", p_whop_plan_id: "plan_Annual9", p_tier: "studio",
-      p_interval: "yearly", p_monthly_credits: 850, p_status: "active", p_paid: true, p_period_start: "2027-01-31T10:00:00.000Z", p_period_end: "2028-01-31T10:00:00.000Z", p_source: "webhook" }]]);
+      p_interval: "yearly", p_monthly_credits: 750, p_status: "active", p_paid: true, p_period_start: "2027-01-31T10:00:00.000Z", p_period_end: "2028-01-31T10:00:00.000Z", p_source: "webhook" }]]);
     env.WHOP_PLAN_CREDIT_MAP = "";
   });
 

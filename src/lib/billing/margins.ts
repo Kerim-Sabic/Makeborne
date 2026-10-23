@@ -21,14 +21,12 @@ import { CREDIT_TOPUP_PACKS } from "./topups-catalog";
  * figures; a stale price card silently lowers every margin computed here.
  */
 export const MARGIN_POLICY = {
-  /** Enforced now: no live offer may fall below this. Equal to today's worst
-   * case (founding first year), so any change that lowers margins fails. */
+  /** Enforced now: no live offer may fall below this. The tightest live offer
+   * is a yearly plan (Scale, 41.3%), so any change that lowers margins further fails. */
   enforcedMinAiMargin: 0.4,
-  /** DRAFT, awaiting the owner's decision; not enforced on live offers. */
+  /** Target for monthly plans, which all meet it. Yearly plans sit between the
+   * two floors so that prices stay at or below the field (owner, 23 Oct 2026). */
   proposedMinAiMargin: 0.5,
-  /** DRAFT, awaiting the owner's decision; not live. The live founding
-   * discount is FOUNDING_DISCOUNT_PERCENT for both monthly and yearly. */
-  proposedFoundingYearlyDiscountPercent: 15,
 } as const;
 
 export type Offer = {
@@ -42,20 +40,17 @@ export type Offer = {
 
 const INTERVALS: BillingInterval[] = ["monthly", "yearly"];
 
-/** Every way a customer can buy credits. `foundingYearlyDiscountPercent`
- * models a draft founding yearly discount without changing live prices. */
-export function creditOffers(options: { foundingYearlyDiscountPercent?: number } = {}): Offer[] {
+/** Every way a customer can buy credits, including founding terms when a founding discount is set. */
+export function creditOffers(): Offer[] {
   const offers: Offer[] = [];
   for (const plan of CREATION_PLANS) {
     for (const interval of INTERVALS) {
-      for (const founding of [false, true]) {
+      for (const founding of FOUNDING_DISCOUNT_PERCENT ? [false, true] : [false]) {
         const price = planPrice(plan.id as PlanId, interval, founding);
-        const draft = founding && interval === "yearly" && options.foundingYearlyDiscountPercent !== undefined;
-        const priceCents = draft ? Math.round(price.standardCents * (100 - options.foundingYearlyDiscountPercent!) / 100) : price.priceCents;
         offers.push({
           id: `${plan.id}:${interval}${founding ? ":founding" : ""}`, kind: "plan",
-          label: `${plan.name} ${interval}${founding ? ` founding (${draft ? options.foundingYearlyDiscountPercent : FOUNDING_DISCOUNT_PERCENT}% off first term)` : ""}`,
-          revenueCents: priceCents / price.months, credits: price.monthlyCredits,
+          label: `${plan.name} ${interval}${founding ? ` founding (${FOUNDING_DISCOUNT_PERCENT}% off first term)` : ""}`,
+          revenueCents: price.priceCents / price.months, credits: price.monthlyCredits,
         });
       }
     }
