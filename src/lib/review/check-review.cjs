@@ -297,11 +297,12 @@ const keepAlive = setInterval(() => {}, 1000);
     }
   });
 
-  await check("operation: the review task must match the reviewed revision; the shipped settings registry refuses it until qualified", async () => {
+  await check("operation: the review task must match the reviewed revision; without a qualified setting it is refused (the shipped registry qualifies it only as a proposal)", async () => {
     const request = websiteRequest({ subject: subject(2, "v2") });
     await assert.rejects(operation.runIndependentReview({ task: await reviewTask(), request, deterministic: [], deps: runDeps(scripted([])) }), /different revisions/);
     await assert.rejects(task.resolveAgencyTask(ACTOR, { artifactId: ARTIFACT, actionKey: randomUUID(), stepKey: randomUUID(), kind: "independent_review", objective: "Review", inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 },
-      { scope: server.resolveAgencyScope, rateMicrousd: RATE }), error => error.code === "AGENCY_SETTINGS_UNQUALIFIED");
+      { scope: server.resolveAgencyScope, settings: [], rateMicrousd: RATE }), error => error.code === "AGENCY_SETTINGS_UNQUALIFIED");
+    assert.ok(task.AGENCY_SETTINGS.some(setting => setting.qualifiedKinds.includes("independent_review")), "proposed after the 2026-10-24 re-run (flags remain off)");
     const only = operation.deterministicOnly(websiteRequest(), detFindings(websiteRequest()), "reviewer_not_qualified");
     assert.deepEqual([only.status, only.unavailableReason, only.reviewer], ["review_unavailable", "reviewer_not_qualified", "deterministic_only"], "deterministic-only is never acceptable");
     assert.equal(operation.independentReviewEnabled({}), false);

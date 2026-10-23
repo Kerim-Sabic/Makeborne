@@ -51,7 +51,7 @@ export type AgencyTaskRequest = z.infer<typeof AgencyTaskRequestSchema>;
  * qualification run recorded its evidence; every other kind is refused: fail closed.
  * PROPOSED after the paid qualification of 24 Oct 2026 (scope agency-qualification-20261024,
  * docs/release-review/agency-qualification-20261024.md); the flags remain off and set nowhere.
- * independent_review and ingest stay unqualified.
+ * independent_review was added after the same day's re-run with fixes; ingest stays unqualified (no route runs that kind).
  */
 export type QualifiedSetting = Readonly<{
   profile: string; model: string; effort: EffortLevel; intensity: "low" | "medium" | "high";
@@ -59,8 +59,8 @@ export type QualifiedSetting = Readonly<{
 }>;
 export const AGENCY_SETTINGS: readonly QualifiedSetting[] = Object.freeze([
   Object.freeze({ profile: "standard", model: "claude-opus-5-5", effort: "medium" as const, intensity: "medium" as const, maxOutputTokens: 8000, maxTurns: 3,
-    qualifiedKinds: Object.freeze(["research", "data_report", "image_edit"]) as readonly AgencyKind[],
-    evidence: "Proposed after the paid qualification of 2026-10-24 (scope agency-qualification-20261024): research 12/12 briefs, 174/174 facts grounded, replay and Stop checked; data_report 20/20 first-turn narratives at 31b1b3d (3/20 before it); image_edit 3/3 end-to-end edits inside the measured bound. independent_review NOT qualified (grounding bugs, book capture). Flags remain off." }),
+    qualifiedKinds: Object.freeze(["research", "data_report", "image_edit", "independent_review"]) as readonly AgencyKind[],
+    evidence: "Proposed after the paid qualification of 2026-10-24 (scope agency-qualification-20261024): research 12/12 briefs, 174/174 facts grounded, replay and Stop checked, identity conflicts flagged after 3a0aca8; data_report 20/20 first-turn narratives at 31b1b3d (3/20 before it); image_edit 3/3 end-to-end edits inside the measured bound; independent_review after the re-run at ef753a3 (6/6 seeded defects grounded, 6/6 acceptable fixtures clean, 6/6 re-checks resolved, 0 unavailable). Flags remain off." }),
 ]);
 
 /** Per-kind policy: tools a task of this kind may be granted, its credit ceiling, whether specialists may be used and
