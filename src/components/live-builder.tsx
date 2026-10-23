@@ -1,4 +1,5 @@
 "use client";
+import { useChatHistory } from "./use-chat-history";
 import { affordability } from "@/lib/billing/affordability";
 
 import { closeSheetOnEscape } from "@/lib/overlay-focus";
@@ -125,6 +126,9 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
 }) {
   const copy = COPY[kind], website = kind === "website";
   const [turns, setTurns] = useState<Turn[]>([]);
+  const transcript = useChatHistory(accountId, workspaceId, artifactId, turns);
+  const previousTurns = transcript.messages;
+  const blockedReason = disabled ? disabledReason : undefined;
   const [draft, setDraft] = useState("");
   const [effort, setEffort] = useState<EffortLevel>(defaultEffort ?? "medium");
   const sourceOwner = attachmentOwner(accountId);
@@ -719,7 +723,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
   }, [autoStart, autoStartMode, disabled, hasPreviousOperation, operationReady, planner.hasPrevious, planner.ready, readiness.checking, sources.busy, sources.ready, startOrAsk, turns.length, version, website]);
 
 
-  const empty = !turns.length && !history.length && !planner.restored;
+  const empty = transcript.ready && !turns.length && !previousTurns.length && !history.length && !planner.restored;
   // Phones show the preview first; the conversation opens on demand above the composer.
   const lastAssistant = [...turns].reverse().find(turn => turn.role === "assistant");
   const chatSummary = busy ? [...(lastAssistant?.activity ?? [])].reverse().find(item => !item.done)?.label ?? "Working…"
@@ -734,6 +738,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     <button type="button" className="workbench-chat-toggle" aria-expanded={chatOpen} aria-controls={`lb-log-${artifactId}`} onClick={() => setChatOpen(open => !open)}>
       {busy ? <Loader2 size={14} className="lb-spin" /> : <MessageSquare size={14} />}<span aria-live="polite">{chatSummary}</span><ChevronDown size={15} className="workbench-chat-chevron" />
     </button>
+    {transcript.error && <p className="lb-history-sync" role="status">{transcript.error} <button type="button" onClick={transcript.retry}>Retry</button></p>}
     <div className="lb-log" id={`lb-log-${artifactId}`} ref={log} aria-live="polite">
       {empty && !asking && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {asking && <><div className="lb-turn lb-user"><p>{asking.text}</p></div>
@@ -741,6 +746,11 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           : <BriefQuestionsCard questions={asking.questions} kind={kind} planning={asking.mode === "plan"} busy={busy || preparingSources || Boolean(disabled)}
           limit={`Starting ${asking.mode === "plan" ? "the plan" : "the build"} uses up to ${asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits, with ${sources.files.length ? `your source files: ${sources.files.filter(file => !leftOut.has(file.id)).map(file => file.name).join(", ") || "none"}` : "no source files"}. You pay only for what is used.`}
           onStart={answers => answerQuestions(answers)} onSkip={() => answerQuestions(null)} />}</div></>}
+      {!!previousTurns.length && <details className="lb-history" open><summary>Chat history</summary>
+        <p>{transcript.synced ? "Saved to your account" : "Syncing to your account…"}</p>
+        {transcript.next && <button type="button" onClick={() => void transcript.older()}>Load older messages</button>}
+        {previousTurns.map(turn => <div key={turn.id} className={`lb-turn lb-${turn.role}`}><p>{turn.text}</p></div>)}
+      </details>}
       {!!history.length && <details className="lb-history"><summary>{history.length} earlier change{history.length === 1 ? "" : "s"}</summary>
         <ol>{history.map(item => <li key={item.number}><strong>v{item.number}</strong> {item.summary}</li>)}</ol></details>}
       {planner.restored && <div className="lb-turn lb-assistant">
@@ -822,7 +832,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         onRemove={id => void sources.remove(id)} removeLabel={name => `Delete ${name} from this project on this device`}
         disabled={busy || preparingSources || sources.busy || disabled || operationRunning} compact
         note="Saved on this device for this project. Leave out skips a file for this request only; × deletes the saved copy. Continuing uses the original request’s files." />
-      <p className="lb-plan-note lb-source-formats">AI sources: PNG, JPEG, WebP, GIF, PDF, TXT or Markdown · up to 5 files, 3 MB combined. Text: up to 200,000 characters.</p>
+
       {sources.error && <p className="lb-notice" role="alert">{sources.error}</p>}
       <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
         onChange={event => setDraft(event.target.value)}
@@ -832,7 +842,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           <button type="button" aria-pressed={mode === "create"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("create")} title="Build: edit the website directly"><Hammer size={12} />Build</button>
           <button type="button" aria-pressed={mode === "plan"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
         </div>}
-        <label className="lb-attach" aria-label="Attach files"><Paperclip size={15} /><input type="file" multiple accept={BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
+        <label className="lb-attach" aria-label="Attach files" title="Attach images, PDF, text or Markdown · up to 5 files, 3 MB total"><Paperclip size={15} /><input type="file" multiple accept={BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
         <select aria-label="Effort" value={effort} disabled={busy || operationRunning || Boolean(previewingRecovery)} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}
         </select>
@@ -846,8 +856,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         </button> : <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || readiness.checking || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>}
       </div>
       {(busy || operationRunning) && <p className="lb-action-effect" id={`lb-stop-effect-${artifactId}`}>{stopEffect(operation, version, pendingCancel && !operation?.cancelRequested)}</p>}
+      <details className="lb-request-details"><summary>Request details <span>Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</span></summary>
       <div className="lb-estimate">
-        {brandKit !== undefined && <p className="lb-brand">{brandKit ? `Brand kit: ${brandKit}` : "No brand kit"} · used for this request</p>}
+        {brandKit && <p className="lb-brand">Brand kit: {brandKit}</p>}
         <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
         {/* Only measured figures: failed planning is released at zero; explicit Stop settles confirmed usage. */}
         <p className="lb-estimate-detail">{mode === "plan" ? "A failed plan is not charged. If you choose Stop, confirmed usage is charged and unused credits are returned."
@@ -856,7 +867,11 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         {/* Phones: one line instead of the three above (limit, measured range, balance). */}
         <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
       </div>
-      {(notice || (disabled && disabledReason)) && <p className="lb-notice" role="status">{notice || disabledReason}</p>}
+      <p className="lb-plan-note">Attach PNG, JPEG, WebP, GIF, PDF, TXT or Markdown. Up to 5 files, 3 MB combined; text up to 200,000 characters.</p>
+      {blockedReason && <p className="lb-notice">{blockedReason}</p>}
+      </details>
+      {notice && <p className="lb-notice" role="status">{notice}</p>}
+      {blockedReason && !notice && <p className="lb-availability" role="status" title={blockedReason}>Sending unavailable <span>See request details</span></p>}
     </form>
   </aside>;
 }
