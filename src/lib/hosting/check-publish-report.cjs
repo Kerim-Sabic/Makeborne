@@ -72,7 +72,8 @@ check("the check record: only saved versions without unsaved edits count; malfor
 
 check("wiring: header facts, History 'Checked', Copy link, report, audience line and SEO on the prepared output", () => {
   const studio = read("components/cloud-studio.tsx");
-  assert.ok(studio.includes('{artifact.kind === "website" && <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} />}'));
+  // The facts sit in the project details popover of the header (websites only); scripts/check-editor-header-browser.cjs checks them mounted.
+  assert.ok(studio.includes('details={artifact.kind === "website" ? <>') && studio.includes('<VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} />'));
   assert.ok(studio.includes('v.number === checkRecord?.version && <span className="cloud-version-checked"'));
   assert.equal((studio.match(/onPublished=\{\(\) => setLiveRefresh\(value => value \+ 1\)\}/g) ?? []).length, 2, "both publish panels refresh the header");
   const trusted = read("components/trusted-website-publish.tsx");

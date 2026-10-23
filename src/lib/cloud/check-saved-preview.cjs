@@ -129,9 +129,9 @@ check("F01: the format notice names the editor control actually shown, for every
   const cases = [
     [{ kind: "website", website: { html: "<p>x</p>", css: "" } }, "Code", true],
     [{ kind: "website", websiteSource: { files: [] } }, "Code", false],
-    [{ kind: "website" }, "Edit", true],
-    [{ kind: "book" }, "Edit", true], [{ kind: "book", document: {} }, "Edit", true],
-    [{ kind: "presentation" }, "Edit", true], [{ kind: "presentation", document: {} }, "Edit", true],
+    [{ kind: "website" }, "Content", true],
+    [{ kind: "book" }, "Content", true], [{ kind: "book", document: {} }, "Content", true],
+    [{ kind: "presentation" }, "Content", true], [{ kind: "presentation", document: {} }, "Content", true],
   ];
   for (const [content, label, editorDownload] of cases) for (const reviewer of [false, true]) {
     const entry = editorEntry(content, reviewer);

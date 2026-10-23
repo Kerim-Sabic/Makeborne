@@ -114,7 +114,9 @@ async function main() {
   async function openHistory(page) {
     await page.evaluate(() => window.mountEditor());
     await page.getByRole("heading", { name: "Ovenbird Bakehouse", level: 1 }).waitFor();
-    await page.getByRole("button", { name: "History", exact: true }).click();
+    // History opens from the header's Project actions menu (one place for it; the toolbar then names it).
+    await page.getByRole("button", { name: "Project actions" }).click();
+    await page.getByRole("group", { name: "Project actions" }).getByRole("button", { name: "Version history" }).click();
     await page.getByRole("heading", { name: "Version history" }).waitFor();
   }
   const compare = page => page.getByRole("region", { name: "Compare versions" });

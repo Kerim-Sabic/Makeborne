@@ -31,7 +31,7 @@ import type { EditTarget } from "@/lib/builder/edit-intent";
 import type { EffortLevel } from "@/lib/routing/effort";
 import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
-import WorkbenchMore from "./workbench-more";
+import ProjectHeader, { saveStateOf } from "./project-header";
 import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
 import { choosePreview, editorEntry, hasBuilderSource, savedFormat } from "@/lib/cloud/saved-preview";
@@ -48,12 +48,11 @@ import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type Removed
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
-import { useLiveVersion } from "./use-live-version";
+import { useLivePublication } from "./use-live-version";
 import { useCheckRecord } from "./use-check-record";
 import VersionFactsBar from "./version-facts";
 import { useCallback, useEffect, useEffectEvent, useMemo, useState, useRef } from "react";
 import {
-  ArrowLeft,
   ArrowUp,
   ArrowDown,
   Trash2,
@@ -61,6 +60,7 @@ import {
   ArrowRight,
   Cloud,
   FileText,
+  ExternalLink,
   Globe2,
   Eye,
   History,
@@ -71,7 +71,6 @@ import {
   FolderOpen,
   LogOut,
   Plus,
-  Save,
   Users,
   MessageSquareText,
   GitCompareArrows,
@@ -1146,7 +1145,10 @@ export function CloudEditor({
   const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
   // Which saved version is public (websites only; audit M07): read on open, on each view change and after publishing.
   const [liveRefresh, setLiveRefresh] = useState(0);
-  const liveVersion = useLiveVersion(accountId, workspaceId, artifact.id, artifact.kind === "website", `${view}:${liveRefresh}`);
+  const livePublication = useLivePublication(accountId, workspaceId, artifact.id, artifact.kind === "website", `${view}:${liveRefresh}`);
+  const liveVersion = livePublication.version;
+  // The one preview toolbar above the canvas: the mounted preview renders its size, page and output controls into it.
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null);
   // The latest explicit check of a saved version in this tab, for the header and History.
   const checkRecord = useCheckRecord({ accountId, workspaceId, artifactId: artifact.id });
   // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
@@ -1601,41 +1603,28 @@ export function CloudEditor({
     } catch { /* storage unavailable: the user can send the brief manually */ }
   }, [useLiveBuilder, builder.available, format, project?.brief, expectedVersion, accountId, workspaceId, artifact.projectId, artifact.id]);
   const PreviewIcon = artifact.kind === "website" ? PanelsTopLeft : artifact.kind === "book" ? BookOpen : Presentation;
+  const saveState = saveStateOf({ loaded: Boolean(content), reviewer: role === "reviewer", dirty, busy, paused: savePaused, uncertain: uncertainSave, conflict, recovery: Boolean(recovery) });
+  const kindName = artifact.kind === "website" ? "Website" : artifact.kind === "book" ? "Book" : "Presentation";
+  const kindLabel = format === "website-design" ? "Website · static design" : format === "outline" ? `${kindName} outline` : format === "starting" ? `New ${kindName.toLowerCase()}` : kindName;
+  const secondaryView = view === "history" ? { label: "Version history", icon: History } : view === "review" ? { label: "Client review", icon: MessageSquareText } : view === "publish" ? { label: "Publish", icon: Globe2 } : null;
   return (
-    <section className="cloud-editor workspace-workbench cloud-workbench">
-      <div className="editor-heading cloud-workbench-heading">
-        <button
-          className="icon-button"
-          aria-label="Back to projects"
-          onClick={() => {
-            if (
-              !dirty ||
-              window.confirm(
-                "Leave this unsaved draft? Download it first if you need to preserve changes.",
-              )
-            )
-              back();
-          }}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <div>
-          <h1>{artifact.title}</h1>
-          <p>
-            Version {expectedVersion} ·{" "}
-            {savePaused || conflict || uncertainSave ? "Saving paused — review required" : busy && dirty ? "Saving…" : dirty ? "Waiting to save…" : "Saved"}
-          </p>
-          {artifact.kind === "website" && <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} />}
-        </div>
-        <button
-          className={dirty || savePaused || uncertainSave ? "button primary" : "button secondary"}
-          disabled={busy || !content || conflict || role === "reviewer"}
-          onClick={save}
-        >
-          <Save size={16} />
-          {!content ? "Loading…" : busy ? "Saving…" : savePaused ? "Retry save" : "Save now"}
-        </button>
-      </div>
+    <section className="cloud-editor workspace-workbench cloud-workbench project-chrome">
+      <ProjectHeader title={artifact.title} kindLabel={kindLabel} version={expectedVersion} save={saveState} onSave={() => void save()}
+        onBack={() => { if (!dirty || window.confirm("Leave this unsaved draft? Download it first if you need to preserve changes.")) back(); }}
+        details={artifact.kind === "website" ? <>
+          <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} />
+          {livePublication.address && <a className="ph-details-link" href={livePublication.address} target="_blank" rel="noopener noreferrer">{livePublication.address.replace(/^https?:\/\//, "")}<ExternalLink size={13} aria-hidden="true" /><span className="chrome-sr"> (live site, opens in a new tab)</span></a>}
+        </> : undefined}
+        publish={content?.websiteSource && role === "owner" ? { open: () => setView("publish"), current: view === "publish",
+          description: "Review the saved version and choose whether to publish it. Nothing goes live until you confirm." } : undefined}
+        actions={<>
+          <button type="button" className="editor-menu-item" aria-current={view === "history" || undefined} onClick={() => setView("history")}><History size={15} aria-hidden="true" />Version history</button>
+          <button type="button" className="editor-menu-item" aria-current={view === "review" || undefined} onClick={() => setView("review")}><MessageSquareText size={15} aria-hidden="true" />Client review</button>
+          {(content?.website || content?.websiteSource) && role !== "reviewer" && <div className="editor-menu-item-wrap" data-keep-open>
+            <WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} />
+            {(dirty || busy || conflict || uncertainSave || !!recovery) && <p className="editor-menu-note">Downloads the saved version once saving has finished.</p>}
+          </div>}
+        </>} />
       <div className="workbench-layout">
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
@@ -1647,17 +1636,15 @@ export function CloudEditor({
           brandKit={brandKitName} onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage">
-          <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
-            <div>
-              {/* Under 960px the labels collapse to icons (still the accessible name); see cloud-workbench.css. */}
+          <div className="workbench-toolbar project-toolbar" data-editor-chrome="toolbar">
+            <nav className="editor-view-switch" aria-label="Project view">
               <button type="button" aria-pressed={view === "preview"} title="Preview" onClick={() => setView("preview")}><Eye size={15} /><span className="workbench-tab-label">Preview</span></button>
               <button type="button" aria-pressed={view === "edit"} title={editor.label} onClick={() => setView("edit")}><PencilLine size={15} /><span className="workbench-tab-label">{editor.label}</span></button>
-              <button type="button" aria-pressed={view === "history"} title="History" onClick={() => setView("history")}><History size={15} /><span className="workbench-tab-label">History</span></button>
-              {content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} title="Publish" onClick={() => setView("publish")}><Globe2 size={15} /><span className="workbench-tab-label">Publish</span></button>}
-              <button type="button" aria-pressed={view === "review"} title="Client review" onClick={() => setView("review")}><MessageSquareText size={15} /><span className="workbench-tab-label">Client review</span></button>
-            </div>
-            {(content?.website || content?.websiteSource) && role !== "reviewer" ? <WorkbenchMore><WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} /></WorkbenchMore> : <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>}
-          </nav>
+              {/* History, Client review and Publish open from the header; while one is open it is named here, so the place is never a mystery. */}
+              {secondaryView && <span className="editor-view-current" aria-current="page"><secondaryView.icon size={15} aria-hidden="true" />{secondaryView.label}</span>}
+            </nav>
+            <div className="project-toolbar-slot" ref={setToolbarSlot} />
+          </div>
           <div className="cloud-workbench-content">
       {uncertainSave && (
         <div className="cloud-conflict" role="alert">
@@ -1754,13 +1741,13 @@ export function CloudEditor({
           onOutputVersionChange={setGeneratedVersionId}
           onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
         {view === "preview" && previewDocument && <DocumentPreview key={`${accountId}:${workspaceId}:${artifact.id}`} document={previewDocument} focus={useLiveBuilder ? live?.focus : undefined}
-          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={useLiveBuilder && Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} />}
+          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={useLiveBuilder && Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} toolbar={toolbarSlot} />}
         {view === "preview" && preview === "start-builder" && liveDocument && <div className="lp-empty dp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
         {view === "preview" && !liveDocument && (preview === "live" || preview === "website-source") && <LivePreview
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? content.websiteSource?.assets.map(asset => ({ id: asset.id, path: asset.path })) ?? []}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
-          routes={!live ? content.websiteSource?.routes : undefined} syncUrl
+          routes={!live ? content.websiteSource?.routes : undefined} syncUrl toolbar={toolbarSlot}
           visualEdit={content.websiteSource && role !== "reviewer" && !live ? {
             source: content.websiteSource,
             disabledReason: uncertainSave || conflict || recovery ? "Resolve the save notice above before editing." : lockChangePending ? "Saving content protection…" : undefined,

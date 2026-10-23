@@ -1,7 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { AlertTriangle, CornerDownLeft, Maximize2, Monitor, MousePointerClick, RotateCw, Smartphone, Tablet, Wand2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { AlertTriangle, CornerDownLeft, Maximize2, Monitor, MousePointerClick, RotateCw, SlidersHorizontal, Smartphone, Tablet, Wand2 } from "lucide-react";
+import EditorMenu from "./editor-menu";
 import { bundleProject } from "@/lib/builder/browser-bundler";
 import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { HOME, PREVIEW_HISTORY_KEY, PREVIEW_PATH_PARAM, formatPreviewPath, frameHashFor, isMissingPage, normalizePath, parseFrameHash, parsePreviewPath, preparePreviewDocument, previewPageTitle, samePage, withPreviewPathParam,
@@ -50,7 +52,7 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
  * links, images and style directly in the source — no model call.
  * Page, query, fragment target, title, scroll and focus are tracked apart;
  * `syncUrl` mirrors the page on the editor URL so a reload returns to it. */
-export default function LivePreview({ files, assets, scope, building, onFixError, visualEdit, routes = NO_ROUTES, syncUrl = false, responseTimeoutMs = 10_000 }: {
+export default function LivePreview({ files, assets, scope, building, onFixError, visualEdit, routes = NO_ROUTES, syncUrl = false, responseTimeoutMs = 10_000, toolbar }: {
   files: Record<string, string>;
   assets: Asset[];
   scope: { accountId: string; workspaceId: string; artifactId: string };
@@ -61,6 +63,9 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   routes?: PreviewRoute[];
   syncUrl?: boolean;
   responseTimeoutMs?: number;
+  /** The editor's single preview toolbar: when given, the size, page and preview controls render there (one row above
+   * the canvas) instead of in this preview's own bar. Notices, the page-path form and the frame stay here. */
+  toolbar?: HTMLElement | null;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [device, setDevice] = useState<Device>("desktop");
@@ -335,8 +340,31 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   const knownRoutes = routes.map(route => ({ ...route, path: normalizePath(route.path) }));
   const editTitle = !visualEdit ? "" : building ? "Wait for the build to finish" : visualEdit.disabledReason ?? (editing ? "Stop editing" : "Click elements in the preview to edit them");
   const status = building ? "Building live…" : transportError ? "Preview connection lost" : retrying ? "Reconnecting…" : buildError ? "Needs a fix" : inspecting ? (picked ? "Editing" : "Click anything to edit it") : html ? missing ? "Page not found" : "Live preview" : "Preparing preview…";
+  const idle = status === "Live preview";
+  const pageSelect = (knownRoutes.length > 1 || missing) && <select className="dp-jump lp-page" aria-label="Preview page" value={missing ? "" : page.path}
+    onChange={event => { const route = knownRoutes.find(item => item.path === event.target.value); if (route) go({ path: route.path, query: "", target: "" }); }}>
+    {missing && <option value="" disabled>Not found · {page.path}</option>}
+    {knownRoutes.map(route => <option key={route.path} value={route.path}>{route.title ? `${route.title} · ${route.path}` : route.path}</option>)}
+  </select>;
+  const editButton = visualEdit && <button type="button" className="lp-edit" aria-pressed={inspecting} disabled={!editing && (Boolean(visualEdit.disabledReason) || Boolean(building) || !html)} title={editTitle} onClick={toggleEditing}>
+    <MousePointerClick size={14} />{inspecting ? "Done" : "Edit"}</button>;
+  const toolbarControls = toolbar && createPortal(<div className="lp-toolbar">
+    {pageSelect}
+    {/* "Live preview" is the resting state: announced, not shown. Building, errors and edit mode show here as one short label. */}
+    <span className="lp-status" role="status" data-idle={idle || undefined}>{status}</span>
+    {editButton}
+    <EditorMenu collapse label="Preview options" className="lp-tools" trigger={<SlidersHorizontal size={16} aria-hidden="true" />}>
+      <div className="lp-devices" role="group" aria-label="Preview size">
+        {([["desktop", Monitor, "Desktop"], ["tablet", Tablet, "Tablet"], ["mobile", Smartphone, "Phone"]] as const).map(([value, Icon, name]) =>
+          <button key={value} type="button" aria-label={`${value} preview`} title={`${name} width`} aria-pressed={device === value} onClick={() => setDevice(value)}><Icon size={15} aria-hidden="true" /><span className="editor-menu-label">{name} width</span></button>)}
+      </div>
+      {knownRoutes.length > 0 && <button type="button" aria-label="Go to a page path" aria-expanded={pathOpen} title="Open a page or section by its path" onClick={() => { setPathOpen(open => !open); setPathError(""); }}><CornerDownLeft size={15} aria-hidden="true" /><span className="editor-menu-label">Go to a page path</span></button>}
+      <button type="button" aria-label="Reload preview" title={PREVIEW_ACTIONS.reload.effect} onClick={() => setReloadKey(key => key + 1)}><RotateCw size={15} aria-hidden="true" /><span className="editor-menu-label">Reload preview</span></button>
+      <button type="button" aria-label="Full screen preview" title="Full screen preview" onClick={() => void frame.current?.requestFullscreen?.().catch(() => undefined)}><Maximize2 size={15} aria-hidden="true" /><span className="editor-menu-label">Full screen</span></button>
+    </EditorMenu>
+  </div>, toolbar);
   return <section className="lp" aria-label="Website preview" data-preview-path={formatPreviewPath(page)} data-preview-title={pageTitle} data-preview-focus={focusDescriptor || undefined}>
-    <header className="lp-bar">
+    {toolbar ? toolbarControls : <header className="lp-bar">
       <div className="lp-devices" role="group" aria-label="Preview size">
         {([["desktop", Monitor], ["tablet", Tablet], ["mobile", Smartphone]] as const).map(([value, Icon]) =>
           <button key={value} type="button" aria-label={`${value} preview`} aria-pressed={device === value} onClick={() => setDevice(value)}><Icon size={15} /></button>)}
@@ -354,7 +382,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
         <button type="button" aria-label="Reload preview" title={PREVIEW_ACTIONS.reload.effect} onClick={() => setReloadKey(key => key + 1)}><RotateCw size={15} /></button>
         <button type="button" aria-label="Full screen preview" onClick={() => void frame.current?.requestFullscreen?.().catch(() => undefined)}><Maximize2 size={15} /></button>
       </div>
-    </header>
+    </header>}
     {pathOpen && <form className="lp-path" onSubmit={submitPath}>
       <label htmlFor={`lp-path-${scope.artifactId}`}>Page path</label>
       <input id={`lp-path-${scope.artifactId}`} value={pathValue} onChange={event => setPathValue(event.target.value)} placeholder="/menu#hours" autoComplete="off" spellCheck={false} maxLength={300}

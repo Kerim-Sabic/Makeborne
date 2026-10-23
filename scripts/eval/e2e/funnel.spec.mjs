@@ -175,8 +175,9 @@ test.describe('S1 funnel (isolated stack, AI off)', () => {
     // Sharing moves the fixture to "in review"; the ledger remembers how to put it back.
     record({ kind: 'fixture-stage', projectId: FIXTURE.projectId, before: run.review.fixtureStageBefore });
 
-    const tabs = page.getByRole('navigation', { name: 'Project view' });
-    await tabs.getByRole('button', { name: 'Client review' }).click();
+    // Client review opens from the project header's actions menu.
+    await page.getByRole('button', { name: 'Project actions' }).click();
+    await page.getByRole('group', { name: 'Project actions' }).getByRole('button', { name: 'Client review' }).click();
     const panel = page.getByRole('region', { name: 'Client review' });
     await panel.getByRole('radio', { name: /Latest version/ }).check();
     await panel.getByRole('textbox', { name: 'Client name' }).fill(reviewerName);
@@ -254,9 +255,10 @@ test.describe('S1 funnel (isolated stack, AI off)', () => {
 
   test('publish: verified publishing is off on this stack', async () => {
     test.info().annotations.push({ type: 'publish', description: 'trusted publishing is off on this stack (MAKEBORNE_TRUSTED_PUBLICATION_ENABLED blank); there is no local publish path, so nothing was published' });
-    const tabs = page.getByRole('navigation', { name: 'Project view' });
+    // Publish is the project header's primary action; it opens the publishing workflow only.
+    const header = page.locator('[data-editor-chrome="header"]');
     const preparation = page.waitForResponse(r => r.url().endsWith('/publication/preparation') && r.request().method() === 'GET', { timeout: 30_000 }).catch(() => null);
-    await tabs.getByRole('button', { name: 'Publish' }).click();
+    await header.getByRole('button', { name: 'Publish' }).click();
     await expect(page.getByText('Verified publishing is being prepared')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Prepare saved website' })).toBeDisabled();
     // The status read fails on this stack; say why instead of hiding it.

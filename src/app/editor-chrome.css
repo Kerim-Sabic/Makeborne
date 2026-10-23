@@ -1,0 +1,171 @@
+/* Project editor chrome: one project header (52px) and one preview toolbar (44px; 48px on phones) above the canvas.
+   Neutral surfaces, one blue-violet primary action (Publish, or Retry save when a save failed), visible focus.
+   Sizes respond to the width the bar actually has (container queries), not the window: at 800px the
+   preview column is ~470px wide while the header has the full width. */
+.project-chrome {
+  --chrome-line: #e9e7ed;
+  --chrome-ink: #221c2b;
+  --chrome-text: #4f4759;
+  --chrome-hover: #f3f1f6;
+  --chrome-selected: #ffffff;
+  --chrome-track: #f2f0f5;
+  --chrome-primary: #4f46c8;
+  --chrome-primary-hover: #4038a8;
+  --chrome-focus: #5b4fd0;
+  --chrome-attention: #7a4a00;
+  --chrome-attention-bg: #fdf4e3;
+}
+.chrome-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* The page below the 53px header (52 + its border). */
+.cloud-workbench.project-chrome .workbench-layout { --workbench-heading: 53px; height: calc(100dvh - 53px); }
+
+/* ---------- Header ---------- */
+.project-header { position: relative; z-index: 30; container: ph / inline-size; display: flex; align-items: center; gap: 6px; height: 52px; padding: 0 10px 0 8px; border-bottom: 1px solid var(--chrome-line); background: #fff; font-family: var(--sans); }
+.project-header button { font-family: inherit; }
+.ph-icon { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--chrome-text); cursor: pointer; }
+.ph-icon:hover, .ph-icon[aria-expanded=true] { background: var(--chrome-hover); color: var(--chrome-ink); }
+.project-header > .ph-project { flex: 0 1 auto; min-width: 0; }
+.editor-menu-heading { margin: 0; min-width: 0; font: inherit; letter-spacing: normal; }
+.ph-title-button { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; height: 36px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--chrome-ink); font-size: 14px; font-weight: 600; line-height: 20px; letter-spacing: -.01em; cursor: pointer; }
+.ph-title-button:hover, .ph-title-button[aria-expanded=true] { background: var(--chrome-hover); }
+.ph-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-title-button > svg { flex: 0 0 auto; color: var(--text-muted); }
+
+.ph-save { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; min-width: 0; color: var(--chrome-text); font-size: 13px; line-height: 18px; }
+.ph-save-text { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ph-save-text > svg { flex: 0 0 auto; }
+.ph-save[data-state=saved] .ph-save-text > svg { color: #2f7a4c; }
+.ph-save[data-tone=attention] .ph-save-text { padding: 2px 8px; border-radius: 999px; background: var(--chrome-attention-bg); color: var(--chrome-attention); font-weight: 600; }
+.ph-save[data-state=unsaved] .ph-save-text { padding: 0; background: none; color: var(--chrome-text); font-weight: 500; }
+.ph-save-action { height: 30px; padding: 0 11px; border: 1px solid #d9d3e0; border-radius: 8px; background: #fff; color: var(--chrome-ink); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.ph-save-action:hover { background: var(--chrome-hover); }
+.ph-save-action.is-primary { border-color: var(--chrome-primary); background: var(--chrome-primary); color: #fff; }
+.ph-save-action.is-primary:hover { background: var(--chrome-primary-hover); }
+
+.project-header > .ph-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; margin-left: auto; }
+.ph-publish { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 0; border-radius: 9px; background: var(--chrome-primary); color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.ph-publish:hover { background: var(--chrome-primary-hover); }
+.ph-publish[aria-pressed=true] { background: var(--chrome-primary-hover); box-shadow: inset 0 0 0 1px #ffffff59; }
+
+/* Project details popover */
+.ph-details { display: grid; gap: 6px; padding: 8px 8px 6px; color: var(--chrome-text); font-size: 13px; line-height: 1.45; }
+.ph-details p { margin: 0; }
+.ph-details .ph-details-title { color: var(--chrome-ink); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.ph-details .ph-details-kind { color: var(--text-muted); }
+.ph-details .ph-details-save[data-tone=attention] { color: var(--chrome-attention); font-weight: 550; }
+.ph-details .version-facts { margin-top: 2px; }
+.ph-details .version-facts ul { flex-direction: column; align-items: flex-start; }
+.ph-details .version-facts li { font-size: 12.5px; white-space: normal; }
+.ph-details-link { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; color: #3a32a8; font-weight: 600; overflow-wrap: anywhere; text-underline-offset: 3px; }
+
+@container ph (max-width: 560px) {
+  .project-header .ph-icon { flex-basis: 44px; width: 44px; height: 44px; }
+  .ph-title-button { height: 44px; padding: 0 6px; }
+  /* With an action on screen the button says it; the long label would only squeeze the title. */
+  .ph-save:has(.ph-save-action) .ph-save-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ph-save-action { height: 40px; }
+  .ph-publish { height: 40px; padding: 0 12px; }
+}
+/* Phones: "Saved" is the check mark (named for assistive technology and in its tooltip), so the title keeps its room. */
+@container ph (max-width: 430px) {
+  .ph-save[data-state=saved] .ph-save-text > span:first-of-type { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ph-save[data-state=saved] .ph-save-text { display: grid; place-items: center; width: 28px; height: 28px; }
+}
+@media (max-width: 430px) { .project-header { gap: 2px; padding: 0 6px 0 4px; } }
+@container ph (max-width: 340px) {
+  .ph-publish > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ph-publish { width: 40px; padding: 0; justify-content: center; }
+}
+
+/* ---------- Menus (editor-menu.tsx) ---------- */
+.editor-menu { position: relative; min-width: 0; }
+.editor-menu > .editor-menu-panel { display: none; position: absolute; z-index: 50; top: calc(100% + 6px); min-width: 220px; max-width: calc(100vw - 24px); padding: 6px; border: 1px solid #e4dfea; border-radius: 12px; background: #fff; box-shadow: 0 12px 32px #2a1d3524, 0 2px 6px #2a1d3512; text-align: left; }
+.editor-menu[data-align=end] > .editor-menu-panel { right: 0; }
+.editor-menu[data-align=start] > .editor-menu-panel { left: 0; width: min(340px, calc(100vw - 64px)); }
+.editor-menu[data-open] > .editor-menu-panel { display: block; }
+/* Item styles apply only while the panel is a menu: always for header menus, under 640px for toolbar menus. */
+.editor-menu:not([data-collapse]) > .editor-menu-panel :is(.editor-menu-item, .editor-menu-item-wrap button) {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: auto; min-height: 40px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--chrome-ink); font: inherit; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; }
+.editor-menu:not([data-collapse]) > .editor-menu-panel :is(.editor-menu-item, .editor-menu-item-wrap button):hover:not(:disabled) { background: var(--chrome-hover); }
+.editor-menu-panel .editor-menu-item[aria-current] { background: #f1edf6; font-weight: 600; }
+.editor-menu-panel button:disabled { color: #8d8697; cursor: default; }
+.editor-menu:not([data-collapse]) > .editor-menu-panel svg { flex: 0 0 auto; color: var(--chrome-text); }
+.editor-menu-item-wrap .small-note { display: block; padding: 2px 10px 6px; color: var(--text-muted); font-size: 12px; }
+.editor-menu-note { margin: 0; padding: 2px 10px 6px; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+
+/* While a menu is open, a click on the preview closes the menu instead of acting inside the sandboxed frame (whose events never reach the editor). */
+.project-chrome:has(.editor-menu[data-open]) .cloud-workbench-stage iframe { pointer-events: none; }
+
+/* ---------- Preview toolbar ---------- */
+.project-chrome .project-toolbar { position: relative; z-index: 20; container: tb / inline-size; display: flex; align-items: center; gap: 8px; flex: 0 0 44px; height: 44px; min-height: 0; padding: 0 10px; border-bottom: 1px solid var(--chrome-line); background: #fff; font-family: var(--sans); }
+.editor-view-switch { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; padding: 2px; border-radius: 9px; background: var(--chrome-track); }
+.editor-view-switch > button, .editor-view-current { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--chrome-text); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.editor-view-switch > button:hover { color: var(--chrome-ink); }
+.editor-view-switch > button[aria-pressed=true], .editor-view-current { background: var(--chrome-selected); color: var(--chrome-ink); font-weight: 600; box-shadow: 0 1px 2px #2a1d3524; }
+.editor-view-current { cursor: default; }
+.project-toolbar-slot { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; }
+.lp-toolbar { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.lp-toolbar .lp-page { flex: 0 1 240px; min-width: 96px; max-width: 260px; height: 30px; }
+.lp-toolbar .lp-status { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--chrome-text); font-size: 12px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+/* The resting "Live preview" is announced but not shown; the element keeps its width as the spacer. */
+.lp-toolbar .lp-status[data-idle] { height: 1px; clip-path: inset(50%); }
+.lp-toolbar button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--chrome-text); cursor: pointer; }
+.lp-toolbar button:hover:not(:disabled) { background: var(--chrome-hover); color: var(--chrome-ink); }
+.lp-toolbar button[aria-pressed=true] { background: #efe9f4; color: #3d2f4a; }
+.lp-toolbar button:disabled { opacity: .45; cursor: default; }
+.lp-toolbar .lp-edit { display: inline-flex; gap: 6px; width: auto; height: 32px; padding: 0 10px; border: 1px solid #e3dde9; background: #fff; color: #3d2f4a; font: inherit; font-size: 13px; font-weight: 600; }
+.lp-toolbar .lp-edit[aria-pressed=true] { border-color: #4b3a59; background: #4b3a59; color: #fff; }
+.lp-toolbar .lp-tools { display: flex; align-items: center; flex: 0 0 auto; }
+.lp-toolbar .lp-devices, .lp-toolbar .dp-actions { display: flex; align-items: center; gap: 2px; }
+.lp-toolbar .dp-export { display: inline-flex; gap: 5px; width: auto; padding: 0 10px; border: 1px solid #e3dde9; background: #fff; color: #3d2f4a; font: inherit; font-size: 12px; font-weight: 600; }
+.lp-toolbar .dp-outputs-label { padding: 0 6px; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.lp-toolbar .dp-stats { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--chrome-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.lp-toolbar .dp-jump { flex: 0 1 240px; min-width: 96px; height: 30px; }
+
+/* Inline on wide bars: the menu's items sit in the toolbar, its button is hidden, item labels are names only. */
+.editor-menu[data-collapse] { display: flex; align-items: center; }
+.editor-menu[data-collapse] > .editor-menu-toggle { display: none; }
+.editor-menu[data-collapse] > .editor-menu-panel { display: contents; }
+.editor-menu[data-collapse] .editor-menu-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.editor-menu[data-collapse] .editor-menu-note { display: none; }
+.lp-toolbar .editor-menu-toggle { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--chrome-text); cursor: pointer; }
+.lp-toolbar .editor-menu-toggle[aria-expanded=true] { background: #efe9f4; color: #3d2f4a; }
+
+@container tb (max-width: 980px) { .lp-toolbar .dp-stats { display: none; } }
+/* Narrow bars: size, path, reload, full screen (or downloads and present) move into one menu. */
+@container tb (max-width: 640px) {
+  .editor-menu[data-collapse] { display: block; }
+  .editor-menu[data-collapse] > .editor-menu-toggle { display: grid; }
+  .editor-menu[data-collapse] > .editor-menu-panel { display: none; }
+  .editor-menu[data-collapse][data-open] > .editor-menu-panel { display: block; min-width: 230px; }
+  .editor-menu[data-collapse] .editor-menu-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+  .editor-menu[data-collapse] .editor-menu-note { display: block; }
+  .editor-menu[data-collapse] > .editor-menu-panel > button, .editor-menu[data-collapse] > .editor-menu-panel :is(.lp-devices, .dp-actions) button {
+    display: flex; align-items: center; gap: 10px; width: 100%; height: auto; min-height: 40px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--chrome-ink); font: inherit; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; }
+  .editor-menu[data-collapse] > .editor-menu-panel > button:hover:not(:disabled), .editor-menu[data-collapse] > .editor-menu-panel :is(.lp-devices, .dp-actions) button:hover:not(:disabled) { background: var(--chrome-hover); }
+  .editor-menu-panel .lp-devices, .editor-menu-panel .dp-actions { flex-direction: column; align-items: stretch; gap: 0; }
+  .editor-menu-panel .lp-devices { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #efecf3; }
+  .editor-menu-panel .lp-devices button[aria-pressed=true] { background: #f1edf6; font-weight: 600; }
+  .editor-menu-panel .dp-outputs-label { display: block; padding: 6px 10px 4px; color: var(--text-muted); font-size: 12px; }
+  .editor-menu-panel .dp-export { justify-content: flex-start; }
+}
+@container tb (max-width: 430px) {
+  .editor-view-switch .workbench-tab-label, .editor-view-current > :not(svg) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .editor-view-switch > button, .editor-view-current { width: 38px; padding: 0; justify-content: center; }
+}
+.editor-view-current { position: relative; }
+
+@media (max-width: 760px) {
+  .project-chrome .project-toolbar { flex-basis: 48px; height: 48px; padding: 0 8px; }
+  .editor-view-switch > button, .editor-view-current { height: 36px; }
+  .lp-toolbar button, .lp-toolbar .editor-menu-toggle { width: 40px; height: 40px; }
+  .lp-toolbar .lp-edit { height: 40px; }
+  .lp-toolbar .lp-page, .lp-toolbar .dp-jump { height: 36px; font-size: 13px; }
+}
+
+.project-header :focus-visible, .project-toolbar :focus-visible { outline: 2px solid var(--chrome-focus); outline-offset: 2px; }
+.editor-menu-panel :focus-visible { outline-offset: -2px; }
+@media (prefers-reduced-motion: no-preference) {
+  .ph-icon, .ph-title-button, .ph-publish, .ph-save-action, .editor-view-switch > button, .lp-toolbar button { transition: background-color .12s ease-out, color .12s ease-out; }
+}
