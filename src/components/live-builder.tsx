@@ -21,10 +21,13 @@ import { useBuilderOperation } from "./use-builder-operation";
 import type { OperationRequest, OperationSnapshot } from "@/lib/builder/operation-contract";
 import { recoveryPreview } from "@/lib/builder/recovery-preview";
 import { CHECK_EFFECT, continueEffect, operationPhase, recoverEffect, stopEffect } from "@/lib/builder/action-semantics";
-import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest, prepareBuilderAttachments, type BuilderAttachment } from "@/lib/builder/attachments";
+import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest } from "@/lib/builder/attachments";
+import { INGEST_ACCEPT, builderSourceWire, ingestCapabilities, prepareBuilderSources, uploadSourceReference } from "@/lib/ingest/client";
+import type { BuilderSource } from "@/lib/ingest/request";
+import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import { attachmentOwner, projectAttachmentKey, retainBuilderAttachmentSnapshot, bindBuilderAttachmentSnapshot, readBuilderAttachmentSnapshot, type Attachment as StoredAttachment } from "@/lib/attachments";
 import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-attachments";
-import { sourceIntentIssue } from "@/lib/builder/source-readiness";
+import { omittedSources, sourceIntentIssue } from "@/lib/builder/source-readiness";
 import BriefQuestionsCard from "./brief-questions-card";
 import { briefQuestions, briefWithAnswers, isBriefQuestion, type BriefAnswers, type BriefQuestion } from "@/lib/builder/brief-questions";
 import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendingRequest, savePendingRequest, targetIssue, targetReference, undoIssue, type EditTarget, type PendingRequest } from "@/lib/builder/edit-intent";
@@ -36,7 +39,8 @@ import responsive from "../../infra/project-runtime/responsive-images.cjs";
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
 type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[]; receipt?: RunReceipt };
-type Attachment = BuilderAttachment;
+type Attachment = BuilderSource;
+type Omitted = ReturnType<typeof omittedSources>;
 type Live = { files: Record<string, string>; assets: { id: string; path: string }[]; document?: DocumentSource; focus?: string };
 type RunResult = { version: number; changed: boolean; touched: number; finished: boolean; operation?: OperationSnapshot };
 export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean; document?: DocumentSource; focus?: string };
@@ -138,6 +142,17 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [leftOut, setLeftOut] = useState<ReadonlySet<string>>(() => new Set());
   const readiness = useSourceReadiness(sources.files, leftOut);
   const settleSources = readiness.settle;
+  // Files over the inline limit are stored privately in this project when sent (exact server-named
+  // path, never overwriting) and travel as a reference, not as base64 in the request.
+  const storeLarge = useCallback((file: StoredAttachment, mediaType: string) => uploadSourceReference(file, mediaType,
+    { workspaceId, artifactId, accountHeader: { "X-Makeborne-Account": accountId } },
+    async (objectPath, blob, contentType) => {
+      const { error } = await createBrowserSupabase().storage.from("project-assets").upload(objectPath, blob, { contentType, upsert: false, cacheControl: "0" });
+      return { error: error ? { message: error.message } : null };
+    }), [accountId, artifactId, workspaceId]);
+  // Office and CSV files are offered in the picker only where the server reads them.
+  const [ingestOffered, setIngestOffered] = useState(false);
+  useEffect(() => { let active = true; void ingestCapabilities().then(value => { if (active) setIngestOffered(value.enabled); }); return () => { active = false; }; }, []);
   const [preparingSources, setPreparingSources] = useState(false);
   const sourceLock = useRef(false);
   const sourceSession = useMemo(() => ({ active: true, accountId, workspaceId, artifactId }), [accountId, workspaceId, artifactId]);
@@ -414,7 +429,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     if (receipt) setTurns(current => [...current, { id: newId(), role: "assistant", text: "", activity: [], state: "done", receipt }]);
   }, [unlimited, website]);
 
-  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string }): Promise<Outcome | undefined> => {
+  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string; omitted?: Omitted }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
     const quoteIssue = !options?.operation ? affordability(options?.approvedMaximum ?? BUILDER_EFFORT[options?.effort ?? effort].ceilingCredits, balance) : null;
     if (quoteIssue) { setNotice(quoteIssue); return; }
@@ -442,7 +457,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         operation: requestOperation,
         // A new request is bound to the maximum shown before sending (the composer limit or the plan approval).
         ...("actionKey" in requestOperation ? { approvedMaximum: options?.approvedMaximum ?? BUILDER_EFFORT[level].ceilingCredits } : {}),
-        attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan, planRevision: options.planRevision } : {}),
+        attachments: files.map(builderSourceWire), ...(options?.omitted?.length ? { omittedSources: options.omitted } : {}), ...(options?.plan ? { plan: options.plan, planRevision: options.planRevision } : {}),
         ...(brief ? { provenance: brief.provenance } : {}) }, reply.id, live, meter);
       outcome = result ? "done" : lastRefusal.current ? "refused" : "uncertain";
       if (brief && outcome === "done") briefSent(brief);
@@ -459,7 +474,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         refreshBalance();
         const continued: RunResult | null = await stream({ expectedVersion: result.version, effort: level,
           operation: { id: result.operation.id, stepKey: newId(), kind: "continuation" },
-          attachments: files,
+          attachments: files.map(builderSourceWire), ...(options?.omitted?.length ? { omittedSources: options.omitted } : {}),
           message: `Continue the previous request and complete everything that is still missing, then check the project and call finish. The previous request was:
 ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         if (!continued) break;
@@ -523,7 +538,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
 
   /** Plan mode: investigate and propose an editable plan; never writes code.
    * A message while a draft plan is open revises that plan. */
-  const plan = useCallback(async (text: string, files: Attachment[] = []) => {
+  const plan = useCallback(async (text: string, files: Attachment[] = [], omitted: Omitted = []) => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
     const quoteIssue = affordability(PLAN_CEILING_CREDITS, balance);
     if (quoteIssue) { setNotice(quoteIssue); return; }
@@ -540,7 +555,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     setSentSources({ names: files.map(file => file.name), operationId: null });
     const brief = pendingBrief;
     await planner.run({ turnId: reply.id, message: text.trim(), effort, expectedVersion: version, revise, approvedMaximum: PLAN_CEILING_CREDITS, ...(brief ? { provenance: brief.provenance } : {}),
-      attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })) }, {
+      attachments: files.map(builderSourceWire), omittedSources: omitted }, {
       onText: delta => update(reply.id, turn => ({ ...turn, text: turn.text + delta })),
       onStatus: message => update(reply.id, turn => ({ ...turn, activity: [{ id: "status", kind: "note", label: message, done: false }] })),
       onCredits: credits => update(reply.id, turn => ({ ...turn, credits })),
@@ -563,10 +578,11 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       const issue = sourceIntentIssue(decided);
       if (issue) throw new Error(issue);
       const originals = decided.ready;
-      const files = await prepareBuilderAttachments(originals);
+      const omitted = omittedSources(decided);
+      const files = await prepareBuilderSources(originals, { storeLarge });
       if (!sourceSession.active) return;
-      if (requestMode === "plan") await plan(text, files);
-      else return await send(text, files, { ...options, sourceFiles: originals });
+      if (requestMode === "plan") await plan(text, files, omitted);
+      else return await send(text, files, { ...options, sourceFiles: originals, omitted });
     } catch (error) {
       if (sourceSession.active) { setNotice(error instanceof Error ? error.message : "The source files could not be read."); setDraft(text); }
       return "refused";
@@ -574,7 +590,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       sourceLock.current = false;
       if (sourceSession.active) setPreparingSources(false);
     }
-  }, [busy, disabled, operationRunning, plan, previewingRecovery, send, settleSources, sourceSession, sources.busy, sources.ready]);
+  }, [busy, disabled, operationRunning, plan, previewingRecovery, send, settleSources, sourceSession, sources.busy, sources.ready, storeLarge]);
   /** Questions written for this brief by a small, capped AI call (free to the user). Null on any failure. */
   const tailoredQuestions = useCallback(async (brief: string, attachments: number): Promise<readonly BriefQuestion[] | null> => {
     try {
@@ -665,7 +681,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     try {
       // A continuation uses its retained original files, even after selection edits or reload.
       if (buildActionKey) await bindBuilderAttachmentSnapshot(sourceOwner, sourceContext, buildActionKey, operation.id);
-      const files = operation.pendingKind === "review" ? [] : await prepareBuilderAttachments(await readBuilderAttachmentSnapshot(sourceOwner, sourceContext, operation.id));
+      const files = operation.pendingKind === "review" ? [] : await prepareBuilderSources(await readBuilderAttachmentSnapshot(sourceOwner, sourceContext, operation.id), { storeLarge });
       if (!sourceSession.active) return;
       const approved = await authorizeOperation(operation);
       if (!sourceSession.active) return;
@@ -842,7 +858,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           <button type="button" aria-pressed={mode === "create"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("create")} title="Build: edit the website directly"><Hammer size={12} />Build</button>
           <button type="button" aria-pressed={mode === "plan"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
         </div>}
-        <label className="lb-attach" aria-label="Attach files" title="Attach images, PDF, text or Markdown · up to 5 files, 3 MB total"><Paperclip size={15} /><input type="file" multiple accept={BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
+        <label className="lb-attach" aria-label="Attach files" title={ingestOffered ? "Attach images, PDF, text, Markdown, Word, PowerPoint, Excel or CSV · up to 5 files" : "Attach images, PDF, text or Markdown · up to 5 files, 3 MB total"}><Paperclip size={15} /><input type="file" multiple accept={ingestOffered ? `${BUILDER_ATTACHMENT_ACCEPT},${INGEST_ACCEPT}` : BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
         <select aria-label="Effort" value={effort} disabled={busy || operationRunning || Boolean(previewingRecovery)} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}
         </select>

@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { BuilderAttachmentsSchema, builderAttachmentBlocks, MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
+import { MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
+import { BuilderSourcesSchema, OmittedSourcesSchema } from "@/lib/ingest/request";
+import { prepareBuilderSources } from "@/lib/ingest/builder-sources";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
 import { mapProject, mapVersion } from "@/lib/cloud/mappers";
@@ -41,7 +43,10 @@ const BuildRequest = z.object({
   expectedVersion: z.number().int().nonnegative(),
   message: z.string().trim().min(1).max(8000),
   effort: EffortLevelSchema.default("medium"),
-  attachments: BuilderAttachmentsSchema.default([]),
+  attachments: BuilderSourcesSchema.default([]),
+  /** Attached files the user explicitly chose to continue without (named to the model; never automatic).
+   * Optional rather than defaulted so requests without it keep their exact input hash. */
+  omittedSources: OmittedSourcesSchema.optional(),
   /** An approved Plan mode plan the build must follow. */
   plan: SitePlanSchema.optional(),
   /** The saved plan revision the customer approved; required with `plan`. */
@@ -119,6 +124,10 @@ export async function POST(request: Request) {
       const issue = approvedPlanIssue(stored.success ? stored.data : null, { plan: body.plan, revision: body.planRevision });
       if (issue) throw new RequestError("PLAN_REVISION_CONFLICT", issue, 409);
     }
+    // Source files are read (Office/CSV extraction in an isolated worker, stored references
+    // verified) before admission: an unreadable file stops here, before any hold exists.
+    const prepared = reviewing ? null : await prepareBuilderSources(body.attachments, body.omittedSources ?? [],
+      { client, scope: { workspaceId: body.workspaceId, projectId: artifact.project_id }, signal: request.signal });
     // The brand kit is resolved before admission and fingerprinted into the request, so a
     // kit edited mid-request cannot silently change a started operation.
     const brand = await projectBrandKit(client, body.workspaceId, project);
@@ -171,7 +180,7 @@ export async function POST(request: Request) {
         ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: ${[...files.assets.values()].map(asset => `/${asset.path.slice(7)}`).join(", ") || "none"}`
         : "<current_files>(empty — build the complete website from scratch)</current_files>",
     ].filter(Boolean).join("\n");
-    const attachments: BetaContentBlockParam[] = reviewing ? reviewAttachments(reviewing) : builderAttachmentBlocks(body.attachments);
+    const attachments: BetaContentBlockParam[] = reviewing ? reviewAttachments(reviewing) : prepared!.blocks;
 
     // Provider dollars: the effort ceiling, independent of the customer's credits (admins included).
     const spend = createOperationSpend(operation, Date.now() + (maxDuration - 20) * 1000);
