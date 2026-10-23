@@ -173,24 +173,61 @@ export async function captureBook(book: Book, buffers: Record<string, Buffer>, i
   try { pdf = inspectPdf(await (options.pdf ?? (doc => documentPdf(doc, buffers)))(book)); }
   catch (cause) { exportError = cause instanceof Error ? cause.message.slice(0, 200) : "PDF export failed"; }
   const images: ReviewImage[] = [];
-  const notInspected: Coverage["notInspected"] = [{ what: "rasters of the exported PDF pages", reason: "no PDF rasteriser runs here; page images are slices of the same print layout, and page size, count, coverage and balance are measured on the exported PDF itself" }];
+  const notInspected: Coverage["notInspected"] = [{ what: "rasters of the exported PDF pages", reason: "no PDF rasteriser runs here: page images use the PDF page box and margins, paginated by whole lines (breaks, heads, folios may differ); size, count and balance are measured on the PDF" }];
   if (options.screenshots !== false) {
     const browser = await (options.launch ?? defaultLaunch)();
     try {
-      const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: { width: 576, height: 864 } });
+      // The PDF's page box: full pages (cover, title, contents, openers) print without margins; text pages inside the @page margins.
+      const px = (inches: number) => Math.round(inches * 96);
+      const pageW = px(BOOK_TRIM.width), pageH = px(BOOK_TRIM.height), top = px(BOOK_TRIM.top), contentH = pageH - top - px(BOOK_TRIM.bottom);
+      const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: { width: pageW, height: pageH } });
       await context.route("**/*", route => route.abort());
       const page = await context.newPage();
       page.setDefaultTimeout(30_000);
-      await page.setContent(bookHtml(book, imageUrls, "print", await embeddedFontSources(FONTS[book.theme.fonts].faces)), { waitUntil: "load" });
+      // On screen @page margins do not apply: text pages get the same side margins (recto: inside left, outside right).
+      const margins = `<style>.chapter{box-sizing:border-box;padding-left:${px(BOOK_TRIM.inside)}px!important;padding-right:${px(BOOK_TRIM.outside)}px!important}</style>`;
+      await page.setContent(bookHtml(book, imageUrls, "print", await embeddedFontSources(FONTS[book.theme.fonts].faces)).replace("</head>", `${margins}</head>`), { waitUntil: "load" });
       await page.emulateMedia({ media: "print" });
       await page.evaluate(() => document.fonts.ready.then(() => undefined));
-      const height = await page.evaluate(() => document.documentElement.scrollHeight);
-      const slices = Math.min(8, Math.ceil(height / 864));
-      for (let index = 0; index < slices; index++) {
-        const image = await jpeg(await page.screenshot({ type: "png", fullPage: true, clip: { x: 0, y: index * 864, width: 576, height: Math.min(864, height - index * 864) } }), 576);
-        images.push({ id: `img-print-${index + 1}`, label: `Print layout slice ${index + 1} (approximately one page; not a raster of the PDF)`, mediaType: "image/jpeg", ...image });
+      const plan = await page.evaluate(({ contentH }) => {
+        const slices: { kind: "full" | "text"; y: number; h: number }[] = [];
+        const range = document.createRange();
+        for (const element of Array.from(document.body.children)) {
+          const box = element.getBoundingClientRect(), start = box.top + window.scrollY, end = start + box.height;
+          if (box.height < 1) continue;
+          if (element.classList.contains("full")) { slices.push({ kind: "full", y: Math.round(start), h: Math.round(box.height) }); continue; }
+          if (!element.classList.contains("chapter")) continue;
+          // Units a page break must not cut: every line box, and pictures, tables, notes and quotes.
+          const units: [number, number][] = [];
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (!node.textContent?.trim()) continue;
+            range.selectNodeContents(node);
+            for (const rect of Array.from(range.getClientRects())) if (rect.height > 0) units.push([rect.top + window.scrollY, rect.bottom + window.scrollY]);
+          }
+          for (const block of Array.from(element.querySelectorAll("img,figure,table,.note,.ph,.table,blockquote"))) {
+            const rect = block.getBoundingClientRect();
+            if (rect.height > 0 && rect.height < contentH) units.push([rect.top + window.scrollY, rect.bottom + window.scrollY]);
+          }
+          for (let pageStart = start; pageStart < end - 1;) {
+            let cut = Math.min(pageStart + contentH, end), moved = true;
+            while (moved) { moved = false; for (const [a, b] of units) if (a > pageStart + 1 && a < cut && b > cut) { cut = a; moved = true; } }
+            if (cut <= pageStart + 1) cut = Math.min(pageStart + contentH, end);
+            slices.push({ kind: "text", y: Math.floor(pageStart), h: Math.max(1, Math.ceil(cut - pageStart)) });
+            pageStart = cut;
+          }
+        }
+        return { slices, background: getComputedStyle(document.body).backgroundColor };
+      }, { contentH });
+      const [r, g, b] = (plan.background.match(/\d+(\.\d+)?/g) ?? ["255", "255", "255"]).map(Number);
+      const shown = plan.slices.slice(0, 8);
+      for (const [index, slice] of shown.entries()) {
+        const shot = await page.screenshot({ type: "png", fullPage: true, clip: { x: 0, y: slice.y, width: pageW, height: Math.min(slice.kind === "full" ? pageH : contentH, slice.h) } });
+        const png = slice.kind === "full" ? shot : await sharp({ create: { width: pageW, height: pageH, channels: 3, background: { r, g, b } } }).composite([{ input: shot, left: 0, top }]).png().toBuffer();
+        const image = await jpeg(png, pageW);
+        images.push({ id: `img-print-${index + 1}`, label: slice.kind === "full" ? `Page ${index + 1}: full page as printed (not a raster of the PDF)` : `Page ${index + 1}: text page with the PDF's page box and margins (not a raster of the PDF)`, mediaType: "image/jpeg", ...image });
       }
-      if (height > slices * 864) notInspected.push({ what: `print layout below slice ${slices}`, reason: "at most 8 slices are reviewed visually" });
+      if (plan.slices.length > shown.length) notInspected.push({ what: `pages after page ${shown.length} of the print layout`, reason: "at most 8 pages are reviewed visually" });
       await context.close();
     } catch { notInspected.push({ what: "print layout images", reason: "the print layout could not be rendered" }); }
     finally { await browser.close(); }

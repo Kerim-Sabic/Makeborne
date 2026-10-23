@@ -186,6 +186,26 @@ const failed = (diagnostics, check) => diagnostics.filter(item => item.check ===
       assert.deepEqual(broken.map(item => [item.check, item.status]), [["book.export", "failed"]]);
     });
 
+    await check("book page images keep the PDF's page box: text pages show the real top and side margins and no line is cut between pages (2026-10-24 regression)", async () => {
+      const { BOOK_TRIM } = require("../documents/render-book.ts");
+      const book = emptyDocument("book", "Harbour Notes");
+      book.chapters = [{ id: "dawn", title: "Dawn bakes", text: Array.from({ length: 26 }, (_, i) => `The ovens are lit long before the shop opens, and batch ${i + 1} of loaves cools by the window while the harbour wakes and the first customers wait outside.`).join("\n\n") },
+        { id: "box", title: "The bread box", text: "The weekly bread box costs €49 per month and is collected on Saturdays." }];
+      const captured = await capture.captureBook(book, {}, {}, { launch, pdf: async () => documentPdf(book, {}) });
+      const text = captured.evidence.images.filter(image => /text page/.test(image.label));
+      assert.ok(text.length >= 2, `text pages are rendered as pages (${captured.evidence.images.map(image => image.label).join(" | ")})`);
+      const px = inches => Math.floor(inches * 96);
+      for (const image of text) {
+        assert.deepEqual([image.width, image.height], [576, 864], "the 6 × 9 in page box");
+        const bytes = Buffer.from(image.data, "base64");
+        const band = async region => Math.max(...(await sharp(await sharp(bytes).extract(region).png().toBuffer()).stats()).channels.slice(0, 3).map(channel => channel.stdev));
+        assert.ok(await band({ left: 0, top: 0, width: 576, height: px(BOOK_TRIM.top) - 8 }) < 4, `${image.id}: the top margin is empty`);
+        assert.ok(await band({ left: 0, top: 0, width: px(BOOK_TRIM.inside) - 8, height: 864 }) < 4, `${image.id}: the inside margin is empty`);
+        assert.ok(await band({ left: 576 - px(BOOK_TRIM.outside) + 8, top: 0, width: px(BOOK_TRIM.outside) - 8, height: 864 }) < 4, `${image.id}: the outside margin is empty`);
+        assert.ok(await band({ left: 0, top: 864 - px(BOOK_TRIM.bottom) + 8, width: 576, height: px(BOOK_TRIM.bottom) - 8 }) < 4, `${image.id}: the bottom margin is empty`);
+      }
+    });
+
     await check("deck: rendered slides plus the actual PPTX — native editable charts and speaker notes; seeded export defects are found", async () => {
       const deck = emptyDocument("deck", "Harbour Bakery");
       deck.slides = [
