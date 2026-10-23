@@ -144,7 +144,7 @@ try {
       writeJson(path.join(itemDir, 'item.json'), { ...baseItem, origin: { type: 'live', stack: 'none (direct runBuilder; review of a saved isolated-stack website)', path: path.relative(REPO, siteDir) }, generation: { arm, effort, mode: 'design review (direct)', images: 'off' } });
       fs.writeFileSync(path.join(itemDir, 'source.json'), JSON.stringify(saved));
       const cost = { boundUsd: capMicrousd / 1e6, reservationId: reservation, actualUsd: uncertain ? null : spend.providerMicrousd / 1e6, chargedCredits: spend.customerCredits(RATE), effort,
-        calls: spend.calls.map(call => ({ model: call.model, boundMicrousd: call.boundMicrousd, actualMicrousd: call.actualMicrousd })), finished: Boolean(result?.finished), build, stopped: result?.stopped ?? spend.stopped, error, ms, changes, summary: result?.summary ?? null };
+        calls: spend.calls.map(call => ({ model: call.model, boundMicrousd: call.boundMicrousd, worstCaseMicrousd: call.worstCaseMicrousd, actualMicrousd: call.actualMicrousd, cacheMiss: call.cacheMiss, usage: call.usage })), usage: spend.usageByModel(), finished: Boolean(result?.finished), build, stopped: result?.stopped ?? spend.stopped, error, ms, changes, summary: result?.summary ?? null };
       writeJson(path.join(itemDir, 'cost.json'), cost);
       fs.writeFileSync(path.join(itemDir, 'events.jsonl'), events.map(event => JSON.stringify(event)).join('\n'));
       writeJson(path.join(itemDir, 'status.json'), { ok: Boolean(result?.finished) && !error, outcome, summary: result?.summary ?? null });

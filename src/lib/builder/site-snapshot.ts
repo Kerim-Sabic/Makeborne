@@ -15,7 +15,10 @@ import { fileBlocks, type ProjectFiles } from "./files";
  * (../ai/anthropic-call.ts), never from this layout.
  */
 export const SNAPSHOT_BLOCK = 6;
-export const SNAPSHOT_CHANGE_SHARE = 0.5;
+/** Keeping the snapshot stays cheaper than writing a new one until the changes are about 96% of the site (a cache read costs
+ * 1/25 of a write); the limit is lower so the request never carries more than three quarters of the site twice. At 50%, two
+ * edits that touch the main stylesheet (often half a site) already forced a new snapshot (8 sessions, 23 Oct). */
+export const SNAPSHOT_CHANGE_SHARE = 0.75;
 
 export type SnapshotVersion = { number: number; files: ReadonlyMap<string, string> };
 

@@ -25,8 +25,10 @@ const anchors = versions => versions.map(item => snapshotAnchor(versions, item.n
 check("anchor: a run keeps the snapshot the run before it sent while the changes stay small; a large change becomes the new snapshot", () => {
   const small = history([files => files, files => edit(files, "src/App.tsx", "x"), files => edit(files, "src/Hero.tsx", "y"), files => edit(files, "src/App.tsx", "z")]);
   assert.deepEqual(anchors(small), [1, 1, 1, 1]);
-  // Rewriting three of five files (60% of the site) re-anchors; the next small edit keeps the new snapshot.
-  const large = history([files => files, files => ({ ...files, "src/App.tsx": "a".repeat(4000), "src/Hero.tsx": "h".repeat(4000), "src/Menu.tsx": "m".repeat(4000) }), files => edit(files, "src/App.tsx", "q")]);
+  // Three of five files changed (60%) still keep the snapshot; four (80%) make a new one, which the next small edit keeps.
+  const most = history([files => files, files => ({ ...files, "src/App.tsx": "a".repeat(4000), "src/Hero.tsx": "h".repeat(4000), "src/Menu.tsx": "m".repeat(4000) })]);
+  assert.deepEqual(anchors(most), [1, 1]);
+  const large = history([files => files, files => ({ ...files, "src/App.tsx": "a".repeat(4000), "src/Hero.tsx": "h".repeat(4000), "src/Menu.tsx": "m".repeat(4000), "index.html": "i".repeat(4000) }), files => edit(files, "src/App.tsx", "q")]);
   assert.deepEqual(anchors(large), [1, 2, 2]);
 });
 

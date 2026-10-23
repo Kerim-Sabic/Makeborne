@@ -1,0 +1,174 @@
+{
+  "note": "Three-edit sessions for the cached-snapshot measurement (v4 #1, docs/ai/MODEL_ORCHESTRATOR.md §8): two frozen requests per site from copy-cases.json and targeted-cases-all.json, a third generic follow-up where a site had only two. Edits run back to back on the result of the previous edit.",
+  "frozenAt": "2026-10-23",
+  "sessions": [
+    {
+      "id": "s1-ovenbird",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w11-restaurant-ovenbird-bakehouse",
+      "edits": [
+        {
+          "id": "c03-ovenbird-phone",
+          "kind": "phone, national and tel: formats",
+          "request": "Change the phone number to 0131 496 0499."
+        },
+        {
+          "id": "t07-ovenbird-contact-cards",
+          "kind": "layout, named part",
+          "request": "In the pre-order section, show the phone and email options as two side-by-side cards on desktop, stacked on phones, each with its own heading."
+        },
+        {
+          "id": "c10-ovenbird-hours",
+          "kind": "hours in several formats",
+          "request": "Change the Wednesday to Saturday opening hours from 07:30–14:00 to 08:00–14:00."
+        }
+      ]
+    },
+    {
+      "id": "s2-hisaburja",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w18-property-hisa-burja",
+      "edits": [
+        {
+          "id": "c06-hisaburja-email",
+          "kind": "email in a constant",
+          "request": "Change the email to bookings@hisaburja.example."
+        },
+        {
+          "id": "t11-hisaburja-times-table",
+          "kind": "table, named part",
+          "request": "In the stay information, show check-in, check-out and breakfast times as a small two-column table (what, when) with a visible heading row."
+        },
+        {
+          "id": "c12-hisaburja-checkin-bs",
+          "kind": "hours, Bosnian request",
+          "request": "Promijeni vrijeme prijave (check-in) na 14:00–20:00."
+        }
+      ]
+    },
+    {
+      "id": "s3-saffron",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w01-restaurant-saffron-table",
+      "edits": [
+        {
+          "id": "c14-saffron-heading",
+          "kind": "heading text",
+          "request": "Replace the heading \"Come hungry, come early or late.\" with \"Come hungry. We'll save you a seat.\""
+        },
+        {
+          "id": "e01-saffron-reservation-heading",
+          "kind": "copy + colour, picked element",
+          "request": "Change the <h2> \"Ask us for a table.\" in src/App.tsx (line 230): make it read \"Book a table with us\", and give the whole reservation section a subtle saffron-tinted background so it stands out from the section above."
+        },
+        {
+          "id": "g1-back-to-top",
+          "kind": "small addition (generic follow-up)",
+          "request": "Add a small \"Back to top\" link at the end of the footer that scrolls smoothly to the top of the page."
+        }
+      ]
+    },
+    {
+      "id": "s4-ledgerline",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w12-saas-ledgerline",
+      "edits": [
+        {
+          "id": "c15-ledgerline-headline",
+          "kind": "headline text",
+          "request": "Change the headline \"January should be boring.\" to \"January should be quiet.\""
+        },
+        {
+          "id": "e05-ledgerline-pricing-mobile",
+          "kind": "copy + responsive layout",
+          "request": "In the pricing section, add the note \"Cancel any time from your account page.\" under the prices, and on phones stack the pricing items vertically with more space between them."
+        },
+        {
+          "id": "g2-footer-readable",
+          "kind": "small restyle (generic follow-up)",
+          "request": "Make the footer text a little larger and easier to read on phones."
+        }
+      ]
+    },
+    {
+      "id": "s5-ridgeline",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w19-events-ridgeline-weddings",
+      "edits": [
+        {
+          "id": "c07-ridgeline-price",
+          "kind": "price, named old",
+          "request": "Change the Elopement planning price from $1,200 to $1,350."
+        },
+        {
+          "id": "e06-ridgeline-package-cards",
+          "kind": "component restyle",
+          "request": "Make the packages easier to compare: show each package as its own card with the price at the top of the card, and give the cards equal height on desktop."
+        },
+        {
+          "id": "g1-back-to-top",
+          "kind": "small addition (generic follow-up)",
+          "request": "Add a small \"Back to top\" link at the end of the footer that scrolls smoothly to the top of the page."
+        }
+      ]
+    },
+    {
+      "id": "s6-fernhill",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w13-professional-fernhill-books-tax",
+      "edits": [
+        {
+          "id": "c08-fernhill-price",
+          "kind": "price, named old",
+          "request": "Change the Monthly Books price from $450 to $475."
+        },
+        {
+          "id": "t08-fernhill-popular-badge",
+          "kind": "emphasis, named part",
+          "request": "In the packages section, mark the Books + Tax package as the most popular one with a small badge and a stronger border, so it stands out from the others."
+        },
+        {
+          "id": "g2-footer-readable",
+          "kind": "small restyle (generic follow-up)",
+          "request": "Make the footer text a little larger and easier to read on phones."
+        }
+      ]
+    },
+    {
+      "id": "s7-relay",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w02-saas-relay-operations",
+      "edits": [
+        {
+          "id": "c09-relay-price",
+          "kind": "price, named old",
+          "request": "Change the Single site plan price from $29 to $32."
+        },
+        {
+          "id": "t10-relay-pricing-align",
+          "kind": "layout, named part",
+          "request": "Make the pricing cards the same height on desktop, with each card's button lined up at the bottom of the card."
+        },
+        {
+          "id": "g1-back-to-top",
+          "kind": "small addition (generic follow-up)",
+          "request": "Add a small \"Back to top\" link at the end of the footer that scrolls smoothly to the top of the page."
+        }
+      ]
+    },
+    {
+      "id": "s8-glenrise",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w20-civic-glen-rise-maths-club",
+      "edits": [
+        {
+          "id": "c13-glenrise-time",
+          "kind": "time, named old",
+          "request": "Change the session time from 10:00–12:00 to 10:00–12:30."
+        },
+        {
+          "id": "t12-glenrise-bring-row",
+          "kind": "layout, named part",
+          "request": "In the \"Bring three things.\" section, show the three things in a row on desktop, each with a simple inline SVG icon above its label, and stacked on phones."
+        },
+        {
+          "id": "g2-footer-readable",
+          "kind": "small restyle (generic follow-up)",
+          "request": "Make the footer text a little larger and easier to read on phones."
+        }
+      ]
+    }
+  ]
+}

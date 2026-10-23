@@ -253,7 +253,7 @@ Spent **$23.32 of the $30** (scope `model-orchestrator-20261023`, local eval sta
   - then everything that changes per request: attachments and screenshots, the project details, `<changes_since_snapshot>` (the current content of changed files and the deleted paths), the images, and the request.
 - **Which version is the snapshot:**
   - It follows from the saved versions alone, so every run recomputes exactly what the run before it sent. No timing guesses, and no new database fields.
-  - Versions are grouped in fixed blocks of 6. In a block, the first version with files is the snapshot, and it stays so while the changed files are at most half the site; otherwise that version becomes the snapshot.
+  - Versions are grouped in fixed blocks of 6. In a block, the first version with files is the snapshot, and it stays so while the changed files are at most three quarters of the site (raised from half after the 8.3 test); otherwise that version becomes the snapshot.
   - Measured on 32 saved edits: one edit rewrites 8–38% of the site (median about 18%).
 - **Where it's wired in:** the build route and both eval harnesses share it. A repair attempt keeps the snapshot and recomputes the changes from the working copy.
 - **This supersedes the "unchanged files first" order in §6.2 and §7 row 1.** Which files are unchanged differs from edit to edit, so that order would never give a byte-identical prefix twice.
@@ -268,6 +268,45 @@ Spent **$23.32 of the $30** (scope `model-orchestrator-20261023`, local eval sta
 - `check-live-spend.cjs`: 40 checks, 7 new. They cover the cache-aware reservation, the review scenario end to end, staleness, edited history, the lookback limit, the dropped-cache miss within the margin, worst-case accounting, token usage records and the snapshot request layout.
 - `check-site-snapshot.cjs`: 5 new checks. They cover the anchor rule, determinism across version windows and byte-identical snapshot text.
 - `npm test` 194/194; tsc and eslint clean.
+
+### 8.3 v4 tests: cached snapshot and design review (23 Oct, late evening)
+
+**Scope and spend:** `model-orchestrator-v4-20261023`, recorded with the owner's approval text. Spent **$13.14 of the $100** (local eval stack, images off, routing off: Opus medium). New harness: `scripts/eval/session-qualify.mjs` with `scripts/eval/routing/session-cases.json`.
+
+**Design review (8 saved sites, medium and low):**
+- **Reviews finish now:** 16 of 16 called finish with a passing build, against 0 of 16 before the budget fix.
+- **Cost:** a medium review costs $0.16–0.25 (median about $0.19, 2 calls), against $0.22–0.32 before.
+- **The system prompt and tools are about 21.7K tokens**, not the 7.6K in §2. Every first call read them from the cache.
+- **Blind judge, low vs medium:** low 2, medium 3, ties 3, inside the noise floor. Each arm introduced one visible glitch (low: "Booka consultation"; medium: a nav-button spacing error), and medium fixed a broken image that low left. **Reviews stay at the requested effort.**
+- **Changing effort did not reset the cache on Opus 5.5.** The low run read the whole 51K-token prompt of the medium run before it. So the low arm's cost ($0.02–0.10) is warm. From the medium arm's figures, a cold low review comes to about $0.18, so roughly 20% cheaper. The reservation still treats another effort as uncached, which is the conservative side.
+
+**Cached snapshot (8 three-edit sessions, edits back to back, 72 edits):**
+- **marker:** the system cache marker, with the full site in every request.
+- **snapshot:** the new layout, at the first 50% limit and at 75%.
+
+| Arm | Edit 1 median | Edit 2 median | Edit 3 median | Total (24 edits) | Snapshot kept at edit 2 / 3 |
+|---|---|---|---|---|---|
+| marker | $0.103 | $0.115 | $0.098 | $2.78 | — |
+| snapshot, 50% limit | $0.108 | $0.089 | $0.094 | $2.34 (−16%) | 6/8, 2/8 |
+| **snapshot, 75% limit** | **$0.095** | **$0.076** | **$0.068** | **$2.10 (−24%)** | **7/8, 6/8** |
+
+- **Follow-up edits** (2 and 3) at 75%: median **$0.072**, against $0.107 when the whole site is resent (−33%).
+- **Against the old cold edit** (median $0.23, §2): the system marker alone brings an edit to about $0.10, and the snapshot brings a follow-up to about $0.07.
+- **What was cached:** when the snapshot was kept, the first call read about 34K tokens (system plus site) and wrote only the changed files (3–10K tokens), instead of rewriting the 10–20K-token site.
+- **Why 75%:** at 50%, two edits that touched the main stylesheet or `App.tsx` (often half a site) already forced a new snapshot. Keeping it is cheaper until about 96%; 75% caps how much stale copy a request carries.
+- **Quality:**
+  - All 72 edits finished with a passing build, with 0 `edit_file` failures, so the stale copies in the snapshot did not mislead the model. Every copy-edit check passed.
+  - Blind judge on the final sites, snapshot vs marker: **75% arm 3, marker 2, ties 3**; 50% arm 2, marker 2, ties 4. No loss.
+
+**Limits of this test:**
+- Only 8 sessions.
+- The runs went back to back, so the system prompt was always warm. That is the production case under traffic, not for the first request after a quiet spell.
+- The judge's 4000-px crop missed most footer edits (the generic third edits), which the deterministic checks still covered.
+
+**Decisions:**
+- Keep the snapshot layout, at the 75% limit (`SNAPSHOT_CHANGE_SHARE`).
+- Reviews stay at medium.
+- Next: shadow mode for Haiku copy edits, then the build sweep (§7 row 5).
 
 ## Sources
 
