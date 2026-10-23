@@ -15,7 +15,7 @@
  */
 import type { Browser } from "playwright";
 import type { ContrastFinding } from "./rendered-contrast";
-import type { CoveredText, CutOff } from "./contrast-probe";
+import type { CoveredText, CutOff, WrappedBand } from "./contrast-probe";
 
 const HOST_PATH = "/__makeborne-contrast-host";
 const STATE = { default: "", hover: " on hover", focus: " on keyboard focus", invalid: " in its error state" } as const;
@@ -33,6 +33,11 @@ export function coveredProblem(item: CoveredText) {
 }
 
 /** A boxed element with text running past the screen edge (a hero card off the page). */
+/** A marquee or tag band that wraps into a second row. */
+export function wrappedProblem(item: WrappedBand) {
+  return `Wrapped band: ${item.element} ("${item.text}") breaks into ${item.rows} rows at ${item.width} px wide. A marquee or tag band is always one row: flex-wrap: nowrap on the track, white-space: nowrap on its items and overflow: clip on the band; under prefers-reduced-motion it stops but stays one row (fade the edge with mask-image, hide the duplicate), never a wrapped second line. Then call finish again.`;
+}
+
 export function cutOffProblem(item: CutOff) {
   return `Cut off: ${item.element} ("${item.text}") runs past the ${item.side} edge of the screen at ${item.width} px wide. Keep everything inside the page margins at every width down to 360 px: size cards, panels and product mocks to their column (max-width: 100%), let rows wrap, and on small phones move secondary header items into the menu; only images and full-width bands may bleed. Then call finish again.`;
 }
@@ -61,11 +66,11 @@ export function renderedContrastCheck(input: { origin: string; launch: () => Pro
       await page.goto(`${origin}${HOST_PATH}`, { waitUntil: "load" });
       await page.addScriptTag({ url: `${origin}/builder-runtime/contrast-probe.js` });
       const result = await page.evaluate(async record => {
-        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[]; cutOff?: CutOff[] }> } }).__makeborneContrast;
+        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[]; cutOff?: CutOff[]; wrapped?: WrappedBand[] }> } }).__makeborneContrast;
         if (!probe) throw new Error("contrast probe unavailable");
         return probe.probeContrast(record);
       }, Object.fromEntries(files));
-      return [...(result.covered ?? []).slice(0, 4).map(coveredProblem), ...(result.cutOff ?? []).slice(0, 2).map(cutOffProblem), ...contrastProblems(result.findings)];
+      return [...(result.covered ?? []).slice(0, 4).map(coveredProblem), ...(result.cutOff ?? []).slice(0, 2).map(cutOffProblem), ...(result.wrapped ?? []).slice(0, 1).map(wrappedProblem), ...contrastProblems(result.findings)];
     } catch (error) {
       console.error(JSON.stringify({ event: "builder_contrast_unverified", reason: error instanceof Error ? error.message.slice(0, 200) : "unavailable" }));
       return null;
