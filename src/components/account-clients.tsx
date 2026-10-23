@@ -16,6 +16,7 @@ import EnquiryLeads from "./enquiry-leads";
 import BrandKits from "./brand-kits";
 import LeadRedesign from "./lead-redesign";
 import ClientPortalPanel from "./client-portal-panel";
+import ClientKnowledge from "./client-knowledge";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -427,6 +428,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
           try { const detail = await api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`); saved(detail.client); setMessage("Client details saved to your account."); }
           catch { setMessage("Client details saved. Refresh to see the latest version."); }
         }} />}
+        {view === "details" && <ClientKnowledge key={`knowledge:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.company || full.name} />}
         {view === "brand" && <BrandKits key={`brand:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} />}
         {view === "brand" && <ClientPortalPanel key={`portal:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.company || full.name} contactName={full.name} clientEmail={full.email} canEdit={canEdit} />}
         {view === "reviews" && <ClientReviewFeed key={`${snapshot.workspace.id}:${full.id}:reviews`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} canEdit={canEdit} onOpenProject={onOpenProject} />}
