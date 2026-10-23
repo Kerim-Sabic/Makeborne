@@ -288,6 +288,8 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.ok(seen[0].tools.includes("generate_comp"), "offered on a first build with a text-capable model");
       const early = events.find(event => event.type === "tool_error" && event.tool === "generate_comp");
       assert.match(early.message, /Record the concept/);
+      const conceptResult = seen[2].messages.at(-1).content.find(block => block.type === "tool_result");
+      assert.match(conceptResult.content, /Your next step is the design comps: call generate_comp/, "the concept result makes the comps the next step");
       const results = seen[3].messages.at(-1).content.filter(block => block.type === "tool_result");
       const made = results.filter(block => Array.isArray(block.content));
       assert.ok(made.length >= 2 && made.length <= MAX_COMPS, `comps inside the image third (${made.length})`);
@@ -304,6 +306,12 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.ok(events.filter(event => event.type === "image_start" && event.comp).length === made.length);
       const recorded = compsFromSource(files.files.get("src/App.tsx"));
       assert.equal(recorded.length, made.length); assert.equal(recorded[0].section, "top"); assert.match(recorded[0].asset, /^c0000000-/);
+      // A photograph asked for before any comp is sent back once to the comps; a repeat goes ahead.
+      script.length = 0; seen.length = 0; imageCalls.length = 0;
+      script.push({ content: [{ type: "tool_use", id: "c2", name: "concept", input }] }, { content: [gen("g7", { name: "hero-bench" })] }, { content: [gen("g8", { name: "hero-bench" })] }, { content: [...site("w"), finish("f9")] });
+      const eager = await run({ concept: true, storeComp });
+      assert.match(eager.events.find(event => event.type === "tool_error" && event.tool === "generate_image").message, /Design comps come first on this build/);
+      assert.equal(imageCalls.length, 1, "the repeat is generated");
       // Edits never get the tool.
       script.length = 0; seen.length = 0;
       script.push({ content: [...site("e"), finish("f2")] });

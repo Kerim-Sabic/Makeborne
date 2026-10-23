@@ -171,7 +171,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const compsAvailable = Boolean(run.concept) && !run.limits?.replaceOnly && imageLimit > 0 && textImages;
   // In call order (the jobs finish in any order); a failed comp leaves its slot empty.
   const comps: DesignComp[] = [], compSlots: (DesignComp | undefined)[] = [];
-  let compsStarted = 0, imageReservedMicrousd = 0;
+  let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = false;
   const storeComp = run.storeComp ?? ((bytes: Buffer, provenance: Record<string, unknown>) => storeProjectImage(run.client, run.scope, bytes, provenance));
   const toolList = tools(imageLimit > 0, cutouts, textImages, Boolean(run.concept), compsAvailable);
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
@@ -292,6 +292,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
           case "generate_image": {
             const input = ToolInputs.generate_image.parse(use.input);
             if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Use CSS, typography and inline SVG."); break; }
+            // Comp-first: the photographs follow the comps they belong to (asked once; a repeat goes ahead).
+            if (compsAvailable && concept && compsStarted === 0 && !compsAsked) { compsAsked = true; fail("Design comps come first on this build: call generate_comp for the first screen and the two most important sections (in one response), then generate the photographs each comp shows."); break; }
             if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             if (!responsive.siteImageFits([...run.files.assets.values()])) { fail("This site already holds as many images as a published site can carry. Reuse an existing image or use CSS/SVG artwork."); break; }
             if (run.files.assets.has(`public/images/${input.name}.webp`)) { fail(`An image named ${input.name} already exists at /images/${input.name}.webp. Reuse it or choose a new name.`); break; }
@@ -379,7 +381,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (!checked.ok) { fail(checked.problem); break; }
             concept = checked.record;
             run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why, ...(concept.imagePlan ? { shots: concept.imagePlan.shots.length } : {}), ...(concept.sections ? { compositions: concept.sections.map(section => section.composition) } : {}) });
-            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}). ${sitePlanNote(concept)}${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan)}` : ""}` });
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}). ${sitePlanNote(concept)}${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan, { comps: compsAvailable })}` : ""}${compsAvailable && !concept.imagePlan ? " Your next step is the design comps: call generate_comp in one response for the first screen and the two most important other sections." : ""}` });
             break;
           }
           case "finish": {
