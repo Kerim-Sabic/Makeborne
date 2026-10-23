@@ -82,8 +82,17 @@ export function groundFindings(review: ModelReview, request: ReviewRequest, clai
       // A factual finding must cite the brief or approved facts, or be confirmed by the claims check on the quoted output.
       const quoted = finding.evidence.type === "quote" && finding.evidence.from === "artifact" ? finding.evidence.text : null;
       const checked = quoted ? claims(quoted, request.facts) : [];
-      if (checked.length && checked.every(result => result.supported)) issues.push("the approved facts support this value");
-      else if (!checked.some(result => !result.supported) && !finding.factRefs.length && !finding.briefRequirement) issues.push("a factual finding must cite approved facts or the brief");
+      // Each claim in the quote is judged on its own: only the claims this finding disputes can make it unverified.
+      // Disputed = the claims its repair names; otherwise, when it cites only the facts that support the quote's claims
+      // (or cites nothing), every claim in the quote. A supported €49 beside a disputed "Sundays" is not disputed.
+      const repair = norm(finding.proposedRepair);
+      const named = checked.filter(result => repair.includes(norm(result.text)));
+      const supporting = new Set(checked.flatMap(result => result.supported && result.factId ? [result.factId] : []));
+      const cited = finding.factRefs.length > 0 || Boolean(finding.briefRequirement);
+      const citesOnlySupporting = finding.factRefs.length > 0 && finding.factRefs.every(ref => supporting.has(ref));
+      const disputed = named.length ? named : citesOnlySupporting || !cited ? checked : [];
+      if (disputed.length && disputed.every(result => result.supported)) issues.push("the approved facts support this value");
+      else if (!checked.some(result => !result.supported) && !cited) issues.push("a factual finding must cite approved facts or the brief");
     }
     let severity = finding.severity, note: string | undefined;
     if (finding.location.kind === "artifact" && !["export", "completeness", "factual"].includes(finding.category) && repairs(severity)) {
@@ -97,14 +106,26 @@ export function groundFindings(review: ModelReview, request: ReviewRequest, clai
 export const repairable = (finding: Finding) => repairs(finding.severity) && finding.grounding !== "unverified";
 
 const sameSpot = (a: Finding, b: Finding) => JSON.stringify(a.location) === JSON.stringify(b.location) && a.category === b.category;
+/** The distinctive text of a measured finding: the values it quotes ("€59") and the files it names (/assets/missing.png). */
+function signatures(measured: Finding): string[] {
+  const value = measured.evidence.type === "measured" ? measured.evidence.value : measured.evidence.type === "quote" ? measured.evidence.text : "";
+  return [...[...value.matchAll(/"([^"]{2,160})"/g)].map(match => match[1]), ...(value.match(/\/[\w./-]+\.[a-z0-9]{2,5}/gi) ?? [])].map(norm).filter(item => item.length >= 2);
+}
+/** Same place, same kind AND the same defect: the same measurement, or the model's quote or repair names what was measured. */
+export function sameDefect(measured: Finding, finding: Finding) {
+  if (!sameSpot(measured, finding)) return false;
+  if (finding.evidence.type === "measured") return measured.evidence.type === "measured" && measured.evidence.diagnosticId === finding.evidence.diagnosticId;
+  const text = norm(`${finding.evidence.type === "quote" ? finding.evidence.text : ""} ${finding.proposedRepair}`);
+  return signatures(measured).some(signature => text.includes(signature));
+}
 
 export function buildResult(input: {
   request: ReviewRequest; deterministic: readonly Finding[]; model: Interpreted | { ok: false; reason: UnavailableReason; detail: string }; claims: ClaimsCheck;
 }): ReviewResult {
   const { request } = input;
   const modelFindings = input.model.ok ? groundFindings(input.model.review, request, input.claims)
-    // A model finding at the same place and of the same kind as a measured one adds nothing.
-    .filter(finding => !input.deterministic.some(measured => sameSpot(measured, finding) && (finding.evidence.type !== "measured" || measured.evidence.type === "measured" && measured.evidence.diagnosticId === finding.evidence.diagnosticId))) : [];
+    // A model finding that describes the SAME defect as a measured one adds nothing; a different defect at that place stays.
+    .filter(finding => !input.deterministic.some(measured => sameDefect(measured, finding))) : [];
   const findings = [...input.deterministic, ...modelFindings];
   const count = (status: Diagnostic["status"]) => request.diagnostics.filter(item => item.status === status).length;
   const status: ReviewResult["status"] = !input.model.ok ? "review_unavailable" : findings.some(repairable) ? "changes_needed" : "acceptable";

@@ -393,6 +393,35 @@ const keepAlive = setInterval(() => {}, 1000);
     assert.match(reviewer.reviewerText(request), new RegExp(`\\[${price}\\] Weekly bread box: €49 per month`), "the reviewer sees the facts under their citation ids");
   });
 
+  await check("regressions from the 2026-10-24 paid run: a distinct defect next to a measured one survives; a supported value in the same quote does not downgrade another claim", async () => {
+    const pickupFacts = { snapshotId: "facts-q", facts: [...facts.facts, { id: "pickup-day", statement: "The bread box is collected on Saturdays.", value: "Saturdays" }] };
+    // A (deck-s2): the measured "€59" claims finding and the reviewer's "Collected on Sundays" share a place and a category.
+    const diagnostics = [{ id: "site.claims:/:0", check: "site.claims", location: route("/", "desktop"), status: "failed", measured: "\"€59\" (price) is not in the approved facts" }];
+    const request = websiteRequest({ diagnostics, facts: pickupFacts, text: "Weekly bread box: €59 per month\nCollected on Sundays at Pier 4" });
+    const sundays = finding({ id: "pickup-sundays", category: "factual", location: route("/", "desktop"), evidence: { type: "quote", text: "Collected on Sundays at Pier 4", from: "artifact" },
+      factRefs: ["pickup-day"], proposedRepair: "Change \"Collected on Sundays\" to \"Collected on Saturdays\"." });
+    const samePrice = finding({ id: "price-59", category: "factual", location: route("/", "desktop"), evidence: { type: "quote", text: "Weekly bread box: €59 per month", from: "artifact" },
+      factRefs: ["price-box"], proposedRepair: "Replace €59 with the approved €49." });
+    const sameCrop = finding({ id: "price-59-crop", category: "factual", location: route("/", "desktop"), proposedRepair: "The price \"€59\" is not approved; use €49." });
+    const result = validate.buildResult({ request, deterministic: detFindings(request), model: { ok: true, review: { findings: [sundays, samePrice, sameCrop], coverageNotes: [] } }, claims: claims.defaultClaimsCheck });
+    const ids = result.findings.map(item => item.id);
+    assert.ok(ids.includes("pickup-sundays"), "a different defect at the measured spot is kept");
+    assert.equal(result.findings.find(item => item.id === "pickup-sundays").grounding, "grounded");
+    assert.ok(!ids.includes("price-59") && !ids.includes("price-59-crop"), "model copies of the measured €59 defect are still dropped");
+    // B (book-s1): the quote holds a supported €49 and the disputed Sundays; only the claim the finding disputes is judged.
+    const bookText = "The weekly bread box costs €49 per month and is collected on Sundays at Pier 4.";
+    const request2 = websiteRequest({ diagnostics: [], facts: pickupFacts, text: bookText });
+    const graded = validate.groundFindings({ coverageNotes: [], findings: [
+      finding({ id: "sundays-cites-pickup", category: "factual", evidence: { type: "quote", text: bookText, from: "artifact" }, factRefs: ["pickup-day"], proposedRepair: "Change \"collected on Sundays\" to \"collected on Saturdays\". Make no other changes." }),
+      finding({ id: "sundays-cites-both", category: "factual", location: route("/", "phone"), evidence: { type: "quote", text: bookText, from: "artifact" }, factRefs: ["price-box", "pickup-day"], proposedRepair: "Change Sundays to Saturdays." }),
+      finding({ id: "sundays-cites-brief", category: "factual", location: route("/", "desktop", "p"), evidence: { type: "quote", text: bookText, from: "artifact" }, briefRequirement: { ref: "contact", quote: "Visitors can send a message." }, proposedRepair: "Change Sundays to Saturdays." }),
+      finding({ id: "price-is-fine", category: "factual", location: route("/", "phone", "p"), evidence: { type: "quote", text: bookText, from: "artifact" }, factRefs: ["price-box"], proposedRepair: "The €49 price is wrong; change €49 to the approved price." }),
+      finding({ id: "price-vague", category: "factual", location: route("/", "phone", "span"), evidence: { type: "quote", text: bookText, from: "artifact" }, factRefs: ["price-box"], proposedRepair: "Use the approved price." }),
+    ] }, request2, claims.defaultClaimsCheck);
+    assert.deepEqual(graded.map(item => [item.id, item.grounding]), [["sundays-cites-pickup", "grounded"], ["sundays-cites-both", "grounded"], ["sundays-cites-brief", "grounded"], ["price-is-fine", "unverified"], ["price-vague", "unverified"]]);
+    assert.match(graded[3].note, /approved facts support this value/);
+  });
+
   await check("model step: the knowledge is re-read with the operation id and snapshotted; changed facts end it uncharged with no call", async () => {
     fake.db.clientId = CLIENT;
     const items = knowledgeItems();
