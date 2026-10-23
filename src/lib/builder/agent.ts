@@ -147,7 +147,10 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   // One image's worst case; images may use at most a third of the run's allowance.
   // Sizing the run's image allowance: the dearest allowed model at medium portrait with a full prompt.
   const imageBound = imageModels.length ? Math.max(...imageModels.map(model => imageCallBoundMicrousd(model, "medium", IMAGE_SIZES.portrait, "x".repeat(3400)))) : Infinity;
-  const imageLimit = imageModelId ? Math.min(maxImages, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
+  // A run whose remaining budget cannot pay for one image (a late continuation of a long build) is not offered the tool:
+  // a refused image call there cost the stage its only affordable step (round 3E w05 ended BUILD_INCOMPLETE that way).
+  const imageAffordable = spend.remainingMicrousd - imageBound >= spend.allowanceMicrousd * 0.1;
+  const imageLimit = imageModelId && imageAffordable ? Math.min(maxImages, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
   const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
   // Website images also get responsive copies (srcset) while they fit the site's image budget.
   const storeImage = run.storeImage ?? ((request: GeneratedImageRequest, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes,

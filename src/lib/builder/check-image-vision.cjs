@@ -165,6 +165,16 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.equal(script.length, 0);
   });
 
+  await check("a stage whose remaining budget cannot pay for one image is not offered the image tool (round 3E w05 BUILD_INCOMPLETE)", async () => {
+    script.length = 0; seen.length = 0;
+    script.push({ content: [...site("b"), finish("fb")] });
+    const deadline = Date.now() + 280_000;
+    const spend = { allowanceMicrousd: 1_500_000, remainingMicrousd: 160_000, providerMicrousd: 0, uncertainMicrousd: 0, stopped: null, deadline, customerCredits: () => 0, timeLeftMs: () => 200_000 };
+    await run({ spend });
+    assert.ok(!seen[0].tools.includes("generate_image"));
+    assert.match(seen[0].messages[0].content.at(-1).text, /Image generation: unavailable/);
+  });
+
   await check("regeneration rules: a new name, an existing generated image, never the client's own photos or logo; replaces and rejected go together", () => {
     const state = { replaceOnly: false, exists: name => ["hero", "photo-1", "brand-logo"].includes(name), replaced: new Set(), replacements: new Set() };
     assert.equal(regenerationProblem({ name: "hero-2" }, state), null, "a new image needs no replaces outside a review");
