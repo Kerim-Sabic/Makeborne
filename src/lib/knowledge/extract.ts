@@ -98,9 +98,11 @@ export function suggestionsFromExtraction(record: ExtractionInput, target: Omit<
       // A label cell followed by a currency cell is a price, cited at the price cell.
       for (const [index, cell] of sorted.entries()) {
         const label = sorted.slice(0, index).reverse().find(item => item.kind === "string" && item.text.trim());
-        if (cell.kind === "currency" && typeof cell.number === "number" && cell.currency && label) {
+        // CSV cells carry the parsed amount in `number`; XLSX cells keep the saved numeric value in `value`.
+        const amount = typeof cell.number === "number" ? cell.number : typeof cell.value === "number" && Number.isFinite(cell.value) ? cell.value : null;
+        if (cell.kind === "currency" && amount !== null && cell.currency && label) {
           const key = normalizeKey(`price.${label.text}`);
-          if (key && key !== "price") push([{ kind: "observed_fact", key, label: cleanText(label.text).slice(0, 200), valueText: `${cell.currency} ${cell.number}`, value: { amount: Math.round(cell.number * 100) / 100 },
+          if (key && key !== "price") push([{ kind: "observed_fact", key, label: cleanText(label.text).slice(0, 200), valueText: `${cell.currency} ${amount}`, value: { amount: Math.round(amount * 100) / 100 },
             currency: cell.currency, ...(target.observedAt ? { observedAt: target.observedAt } : {}), evidence: [evidence(full, { sheet: sheet.name, cell: cell.ref }, `${label.text}: ${cell.text}`)] }]);
         } else if (cell.kind === "string" && index === sorted.length - 1) {
           push(suggestionsFromLine(sorted.map(item => item.text).join(": "), { sheet: sheet.name, cell: sorted[0].ref }, full));
