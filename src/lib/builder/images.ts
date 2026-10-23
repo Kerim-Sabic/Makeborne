@@ -62,7 +62,7 @@ const CUTOUT_MIN_TRANSPARENT = 0.02;
  * plus a 3% transparent margin, so CSS places the object rather than empty
  * canvas, and encoded with a high alpha quality for clean edges.
  */
-export async function prepareImageBytes(input: Buffer, options: { transparent?: boolean; quality?: number } = {}) {
+export async function prepareImageBytes(input: Buffer, options: { transparent?: boolean; quality?: number; lossless?: boolean } = {}) {
   const source = sharp(input).rotate();
   const meta = await source.metadata();
   if (options.transparent && meta.hasAlpha) {
@@ -77,6 +77,8 @@ export async function prepareImageBytes(input: Buffer, options: { transparent?: 
       return { bytes, transparent: true };
     }
   }
+  // Lossless keeps exact pixels (image edits with composited labels or logos).
+  if (options.lossless) return { bytes: await source.webp({ lossless: true, effort: 5 }).toBuffer(), transparent: false };
   return { bytes: await source.webp({ quality: options.quality ?? 84, ...(options.quality ? { smartSubsample: true, effort: 5 } : {}) }).toBuffer(), transparent: false };
 }
 
@@ -99,7 +101,7 @@ async function registerImageBytes(client: SupabaseClient, scope: { workspaceId: 
 
 /** Store original bytes as a registered project asset through the caller's
  * RLS-bound client, so the existing source-asset verifier accepts it. */
-export async function storeProjectImage(client: SupabaseClient, scope: { workspaceId: string; projectId: string }, input: Buffer, provenance: Record<string, unknown>, options: { transparent?: boolean; quality?: number } = {}) {
+export async function storeProjectImage(client: SupabaseClient, scope: { workspaceId: string; projectId: string }, input: Buffer, provenance: Record<string, unknown>, options: { transparent?: boolean; quality?: number; lossless?: boolean } = {}) {
   const prepared = await prepareImageBytes(input, options);
   const bytes = prepared.bytes;
   const meta = await sharp(bytes).metadata();

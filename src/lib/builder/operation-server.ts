@@ -345,6 +345,8 @@ export async function resolveAgencyScope(actor: string, artifactId: string, inpu
 export async function beginAgencyOperation(input: {
   actor: string; workspaceId: string; artifactId: string; kind: string; effort: EffortLevel; expectedVersion: number;
   ceiling: number; providerCapMicrousd: number; context: Record<string, unknown>; digest: string; actionKey: string; stepKey: string;
+  /** Credits this one step may hold (default: the whole ceiling). Must be the same on a replay of the step. */
+  stageCap?: number;
 }): Promise<{ run: OperationRun | null; status: OperationStatus }> {
   const created = await call("makeborne_ai_operation_create", {
     p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_action: input.actionKey, p_kind: input.kind,
@@ -356,7 +358,7 @@ export async function beginAgencyOperation(input: {
   if (operation.kind !== input.kind) throw new OperationError("OPERATION_CONFLICT", messages.OPERATION_CONFLICT, 409, operation);
   const data = await call("makeborne_ai_operation_begin", {
     p_actor: input.actor, p_operation: operation.id, p_step: input.stepKey, p_kind: input.kind,
-    p_input_hash: input.digest, p_expected_version: input.expectedVersion, p_stage_cap: input.ceiling,
+    p_input_hash: input.digest, p_expected_version: input.expectedVersion, p_stage_cap: Math.min(input.stageCap ?? input.ceiling, input.ceiling),
   });
   checkRefusal(data);
   const status = publicStatus(data);

@@ -23,6 +23,7 @@ import { brandSwatches as kitSwatches, parseBrandKit } from "@/lib/brand/kit";
 import { brandRequest } from "./brand-kit-api";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
+import ImageEditAction from "./image-edit-panel";
 import BuildConversation from "./build-conversation";
 import LiveBuilder, { type LiveUpdate } from "./live-builder";
 import { useProjectAdvisorHandoff } from "./advisor-handoff";
@@ -1845,6 +1846,9 @@ export function CloudEditor({
                       maxLength={50000}
                       onChange={(e) => editBlock(s.id, b.id, e.target.value)}
                     />
+                    {b.assetId && role !== "reviewer" && !content.document && <ImageEditAction accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} assetId={b.assetId}
+                      defaultUse={{ kind: "block", sectionId: s.id, blockId: b.id }} expectedVersion={expectedVersion}
+                      disabled={dirty || busy || b.locked || uncertainSave || conflict || !!recovery || lockChangePending} onAccepted={() => void load()} />}
                   </div>
                 ))}
                 {s.slideDesign&&<p className="small-note">Custom slide composition. Editing text preserves its placement; new content needs a canvas element.</p>}
