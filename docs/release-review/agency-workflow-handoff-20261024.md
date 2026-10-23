@@ -186,3 +186,32 @@ Please **independently review**, without assuming my checks are right:
 - today's integration: `src/lib/agency/run.ts` (knowledge hook, failure before any call), `src/lib/builder/operation-sources.ts` + the continuation check in `operation-server.ts`, `src/lib/review/knowledge.ts`, `src/lib/knowledge/claims.ts` (`judgeCopyClaims`).
 
 Then **qualify on staging within approved allowances only** (§9; none is approved today). **Coordinate integration** with `qualification/beta-combined-20261022`, `feature/model-routing`, `feature/image-led-sites`, `feature/docs-quality` and `feature/editor-header-hierarchy` (conflict files in §3; `QUALIFIED_ROUTES` vs `AGENCY_SETTINGS` should become one registry when routing qualifies cells). Acknowledgment is not assumed.
+
+## 15. Paid qualification results (24 October 2026, appended)
+
+Owner approval in chat, 24 Oct 2026: "approved run the paid tests". The ledger records it as scope `agency-qualification-20261024`: Anthropic $15 and OpenAI $6.50, with per-test caps. The run used the local isolated stack only. Flags and qualification settings existed only in the test process. The full report is `docs/release-review/agency-qualification-20261024.md`; the harness is `scripts/eval/agency/qualify/`.
+
+**Spend.** The gate's settled records and the ledger agree exactly:
+- **Anthropic $5.009723** of $15 (114 settled calls + 1 uncertain Stop call counted at its bound).
+- **OpenAI $0.744806** of $6.50 (27 calls).
+- No cap was reached, no call overran, and no entry is open or unknown. The live provider limits on the stack read back **off**.
+
+| Test | Spend | Result |
+|---|---|---|
+| Ingestion adversarial (cap $2) | $0.377804 | **PASS**: 0/18 injections followed, 18/18 reported. File costs: 300-row XLSX 10.3k tokens, 12-slide deck 1.9k, two photos 3.1k. Findings: hidden DOCX text carries no reading note; PDFs reach the model without the untrusted rule |
+| Data narratives (cap $3) | $1.451372 | **FAIL at 0565f10** (3/20 first-turn), **PASS at 31b1b3d** (20/20 first-turn, 0 untraceable figures, 0 injections followed, missing data 5/5, about $0.035 per narrative) |
+| Research brief (cap $4.50) | $1.287283 | **PASS**: 174/174 facts grounded, 0 injected claims, 11/12 first-turn, about $0.09 per brief. Replay and the replay after Stop made 0 calls; Stop cancelled with credits charged 0. Notes: the server identity flag missed both conflicts (the model reported them); the guard over-removes some benign wording |
+| Independent reviewer (cap $5) | $1.821532 | **FAIL, not qualified**: the model found 6/6 seeded defects, but the server kept only 4/6 (bug A: the same-spot dedupe drops distinct findings; bug B: the factual downgrade fires on any supported value in the quote). Books get false-positive margin majors from print slices without `@page` margins (C). Websites and decks pass |
+| Image edit (cap $6.50 OpenAI + $0.50 Anthropic) | $0.744806 + $0.071732 | **PASS for the measured cells**: usage returned on 24/24 calls; 1,024 / 1,536 input tokens per image; 439 / 343 output (2.5 models), 1,756 (gpt-image-2); max $0.061 per call against the planned $0.243; real alpha on cut-outs. End-to-end 3/3 within the measured bound, and replay made 0 calls. Accept, export and publish were not run |
+
+**Commits on this branch.**
+- **31b1b3d**: narrative prompt fix (length limits, no dates).
+- **8a96e93**: Stop browser check request filter; 5/5 in Chromium.
+- **b974654**: harness and report.
+- **11a9df1**: proposal only, flags remain off. `AGENCY_SETTINGS` `standard` qualifies research, data_report and image_edit (maxTurns 3), and `MEASURED_EDIT_TOKENS` holds the five measured medium cells. **The owner must still sign off the measured edit bounds** (the D8 extension, decision 6 in §12). independent_review and ingest stay unqualified.
+
+**Still open.**
+- Customer-credit settlement was not observed, because the fixture account has unlimited credits.
+- Image accept, export and publish were not run end-to-end.
+- Review bugs A, B and C, plus the research identity check.
+- Staging qualification with the migrations applied.

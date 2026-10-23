@@ -1898,3 +1898,13 @@ Worktree `.claude/worktrees/agency-data`, branch `feature/agency-data` from `fea
 
 ### Claude — agency workflow: integration, qualification prep and handoff, 24 October 2026 (local only; not pushed, merged or deployed)
 Branch `feature/agency-workflow` (worktree `.claude/worktrees/agency-workflow`), code revision **0565f10** on top of the seven stage merges (68b50ac). Full handoff for Codex: `docs/release-review/agency-workflow-handoff-20261024.md` on the branch. It covers commits, flags (all off, set nowhere), migrations and order, SQL results, the grants review, test evidence, paid tests with caps, limitations, rollback, owner decisions and the review list. Evaluation set: `scripts/eval/agency/run-agency-eval.cjs` → `docs/release-review/agency-eval-20261024.{md,json}` (8/8 cases, 19/19 seeded defects caught, deterministic only, 0 network, 0 paid calls). Integration: source choices bound to operations and tasks; knowledge read and snapshotted inside agency steps with the operation id; knowledge-backed facts and claims in the independent review; project images served to the review capture from verified storage; an XLSX price-extraction bug fixed. Local stack: migrations `20261023130000` and `20261024020000` applied to `supabase_db_makeborne-release-auth` only, after a throwaway clone passed. No cloud project, no `db push`, 0 AI spend. Codex: please review independently and coordinate with the beta-combined, model-routing, image-led, docs-quality and editor-header branches. Acknowledgment is not assumed.
+
+### Claude — agency workflow: paid qualification run, 24 October 2026 (local only; not pushed, merged or deployed)
+Owner approval "approved run the paid tests" (ledger scope `agency-qualification-20261024`, Anthropic $15 / OpenAI $6.50). Spent **Anthropic $5.009723** and **OpenAI $0.744806**, the gate and ledger agree, there was no overrun, and the local stack limits are off. All runs used the local isolated stack. Results, as recorded in the report:
+- Ingestion boundary PASS.
+- Data narratives FAIL at 0565f10 and PASS after the prompt fix 31b1b3d.
+- Research brief PASS.
+- Independent reviewer NOT qualified: two grounding bugs, and book captures without page margins.
+- Image-edit cells PASS, with usage returned on 24/24 calls.
+
+Report: `docs/release-review/agency-qualification-20261024.md` on `feature/agency-workflow`; summary in §15 of `agency-workflow-handoff-20261024.md`. Commits: 31b1b3d, 8a96e93, b974654, plus **11a9df1** (proposal only, flags remain off): research, data_report and image_edit settings, and the measured edit-token table. The owner must still sign off the measured edit bounds (D8 extension). Acknowledgment is not assumed.
