@@ -52,6 +52,14 @@ Keep all controls closed while AI generation and the promised creation plans are
 
 Verified hidden, out-of-stock creation catalog (4 October 2026): Create $29/month `plan_qs8XNbKQsowC6`; Studio $79/month `plan_arwSDewCa8Dvi`; Scale $199/month `plan_Wf2CTdqqUwufk`. The server catalog recognizes only these IDs, and activation still requires the separate environment/database controls. Product creation does not make these memberships available for sale.
 
+**Repriced on 23 Oct 2026** (`docs/RELEASE_DECISIONS.md`):
+- **New prices:** the code now expects Create $20, Studio $49 and Scale $99 a month. Yearly is $192, $470.40 and $950.40.
+- **Old plans:** the three plans above keep their old renewal prices, so `verifiedCreationOffer` refuses them, because a plan's renewal price must equal `planPrice()`. Nobody can be charged an old price by mistake.
+- **To open checkout:**
+  1. The owner creates new hidden plans at the new prices in Whop.
+  2. `CREATION_CATALOG` in `src/lib/billing/config.ts`, `WHOP_PLAN_CREDIT_MAP` and `WHOP_ACCESS_PLAN_IDS` are updated to their IDs.
+  3. `makeborne_private.billing_access_plans` enables them.
+
 ## Authoritative checkout and membership binding
 
 `POST /api/billing/checkout` accepts `{ planId, requestId, next? }`. It validates the signed-in account and plan allowlist, reserves a durable unique request, creates a Whop checkout configuration, and saves the provider checkout ID before returning its verified URL. A retry with the same request ID reuses the saved checkout; a conflicting or uncertain request fails closed.

@@ -132,7 +132,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   // Quality gates block a finish once per distinct problem; a repeat is accepted, so a false positive can never strand the work.
   const qualityReported = new Set<string>();
   let build: BuilderResult["build"] = null;
-  const system = [{ type: "text" as const, text: BUILDER_SYSTEM }];
+  // The system prompt carries its own cache marker, so every run (builds, edits,
+  // reviews, every user) reuses it; the automatic breakpoint caches the conversation.
+  const system = [{ type: "text" as const, text: BUILDER_SYSTEM, cache_control: { type: "ephemeral" as const } }];
   const toolList = tools(imageLimit > 0, cutouts, textImages);
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });

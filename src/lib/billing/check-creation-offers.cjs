@@ -4,24 +4,24 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
 const plans=require('./plans.ts'), schedule=require('./plan-schedule.ts');
 let config={enabled:true,configured:true,companyId:'biz_fixture',accessPlanIds:['plan_month','plan_year'],planConfigIssues:[]};
 let enabled=true, dbError=null, providerCalls=0, user=null, members=[];
-let provider={id:'plan_month',company:{id:'biz_fixture'},currency:'usd',plan_type:'renewal',billing_period:30,initial_price:0,renewal_price:29,trial_period_days:null,release_method:'buy_now',stock:0,unlimited_stock:true};
+let provider={id:'plan_month',company:{id:'biz_fixture'},currency:'usd',plan_type:'renewal',billing_period:30,initial_price:0,renewal_price:20,trial_period_days:null,release_method:'buy_now',stock:0,unlimited_stock:true};
 const db={rpc:async()=>({data:enabled,error:dbError}),from:()=>({select:()=>({eq:()=>({not:()=>({limit:async()=>({data:members,error:dbError})})})})})};
 const env={WHOP_PLAN_CREDIT_MAP:'plan_year:create:yearly'};
 const modules={'server-only':{},'./config':{billingConfig:()=>config,CREATION_CATALOG:{create:'plan_month'},SUPPORT:{planId:'plan_coffee'}},'./database':{billingDatabase:()=>db},'./plan-schedule':schedule,'./plans':plans,
- './whop':{whopGet:async path=>{providerCalls++;return path.endsWith('plan_year')?{...provider,id:'plan_year',billing_period:365,renewal_price:278.4}:provider;}},'./topup-fulfillment':{providerUsdCents:value=>{if(!/^\d+(\.\d{1,2})?$/.test(String(value)))throw Error('imprecise');return BigInt(Math.round(Number(value)*100));}}};
+ './whop':{whopGet:async path=>{providerCalls++;return path.endsWith('plan_year')?{...provider,id:'plan_year',billing_period:365,renewal_price:192}:provider;}},'./topup-fulfillment':{providerUsdCents:value=>{if(!/^\d+(\.\d{1,2})?$/.test(String(value)))throw Error('imprecise');return BigInt(Math.round(Number(value)*100));}}};
 function load(file, imports){const ctx={exports:{},process:{env},Response,require:name=>imports[name]??require(name)};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ctx);return ctx.exports;}
 const offers=load(require.resolve('./creation-offers.ts'),modules);
 class RequestError extends Error{constructor(code,message,status){super(message);this.code=code;this.status=status;}}
 const route=load(require.resolve('../../app/api/billing/availability/route.ts'),{'@/lib/billing/access':{billingUser:async()=>user},'@/lib/billing/config':modules['./config'],'@/lib/billing/database':modules['./database'],'@/lib/billing/creation-offers':offers,'@/lib/server/http':{RequestError,apiError:e=>Response.json({error:e.code},{status:e.status??500})}});
 (async()=>{
- assert.equal((await offers.verifiedCreationOffer({tier:'create',interval:'monthly'})).totalCents,2900);
- assert.equal((await offers.verifiedCreationOffer({tier:'create',interval:'yearly'})).totalCents,27840);
+ assert.equal((await offers.verifiedCreationOffer({tier:'create',interval:'monthly'})).totalCents,2000);
+ assert.equal((await offers.verifiedCreationOffer({tier:'create',interval:'yearly'})).totalCents,19200);
  assert.equal(await offers.verifiedCreationOffer({tier:'scale',interval:'yearly'}),null);
- for(const patch of [{currency:'eur'},{initial_price:29},{renewal_price:30},{billing_period:7},{trial_period_days:1},{stock:0,unlimited_stock:false},{stock:null,unlimited_stock:false},{stock:-1},{stock:0.5},{unlimited_stock:undefined},{unlimited_stock:'true'},{release_method:'waitlist'},{company:{id:'biz_other'}},{id:'plan_other'}]){
+ for(const patch of [{currency:'eur'},{initial_price:29},{renewal_price:30},{renewal_price:29},{billing_period:7},{trial_period_days:1},{stock:0,unlimited_stock:false},{stock:null,unlimited_stock:false},{stock:-1},{stock:0.5},{unlimited_stock:undefined},{unlimited_stock:'true'},{release_method:'waitlist'},{company:{id:'biz_other'}},{id:'plan_other'}]){
   const previous=provider;provider={...provider,...patch};assert.equal(await offers.verifiedCreationOffer({planId:'plan_month'}),null,JSON.stringify(patch));provider=previous;
  }
  for(const patch of [{stock:0,unlimited_stock:true},{stock:null,unlimited_stock:true},{stock:1,unlimited_stock:false}]){
-  const previous=provider;provider={...provider,...patch};assert.equal((await offers.verifiedCreationOffer({planId:'plan_month'})).totalCents,2900,JSON.stringify(patch));provider=previous;
+  const previous=provider;provider={...provider,...patch};assert.equal((await offers.verifiedCreationOffer({planId:'plan_month'})).totalCents,2000,JSON.stringify(patch));provider=previous;
  }
  enabled=false;let before=providerCalls;assert.equal(await offers.verifiedCreationOffer({planId:'plan_month'}),null);assert.equal(providerCalls,before);enabled=true;
  config.enabled=false;assert.equal((await offers.configuredCreationOffers()).length,0);config.enabled=true;
