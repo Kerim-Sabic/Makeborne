@@ -54,7 +54,8 @@ function toolText(value: unknown) {
 }
 
 export async function runTaskLoop<R>(input: {
-  system: string; prompt: string; tools: readonly AgencyTool[]; result: z.ZodType<R>; resultDescription: string;
+  /** Text, or content blocks (e.g. labelled images for a reviewer) for the first user message. */
+  system: string; prompt: string | readonly unknown[]; tools: readonly AgencyTool[]; result: z.ZodType<R>; resultDescription: string;
   maxTurns: number; maxOutputTokens: number; spend: RunSpend; signal: AbortSignal; model: ModelPort; context: ToolContext;
   /** Durable Stop check before a draft-producing action (the operation heartbeat in production). Throws to refuse. */
   beforeDraft?: () => Promise<void>;

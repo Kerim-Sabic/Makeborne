@@ -34,7 +34,7 @@ export async function loadDocumentImages(client: SupabaseClient, workspaceId: st
 }
 
 /** Downscale for print: 300 dpi at the largest placement is plenty. */
-async function dataUrls(buffers: Record<string, Buffer>) {
+export async function dataUrls(buffers: Record<string, Buffer>) {
   const urls: Record<string, string> = {};
   for (const [name, bytes] of Object.entries(buffers)) {
     const jpeg = await sharp(bytes, { limitInputPixels: 40_000_000 }).rotate().resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer();

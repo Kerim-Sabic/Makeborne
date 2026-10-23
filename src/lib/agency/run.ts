@@ -26,6 +26,10 @@ export type AgencyLeadSpec<R> = Readonly<{
   system: string; result: z.ZodType<R>; resultDescription: string;
   /** Present for tasks that change the project: the candidate is saved only at the task's expected revision. */
   apply?: (result: R, task: AgencyTask) => Extract<OperationCandidate, { expectedVersion: number }>;
+  /** Extra content blocks after the objective in the first message (a reviewer's labelled images). */
+  content?: readonly unknown[];
+  /** For data results: the server-side form stored on the run (e.g. a review grounded against its request). */
+  finalize?: (result: R, task: AgencyTask) => unknown;
 }>;
 export type AgencyRunDeps = Readonly<{
   model: ModelPort; tools: Readonly<Record<string, AgencyTool>>; readInput: (index: number) => Promise<string>;
@@ -131,7 +135,7 @@ async function executeStep<R>(task: AgencyTask, lead: AgencyLeadSpec<R>, deps: A
   const specialists = task.scale === "standard" && AGENCY_KIND_POLICY[task.kind].specialists ? deps.specialists ?? [] : [];
   let outcome: LoopOutcome<R>;
   try {
-    outcome = await runTaskLoop({ system: lead.system, prompt: leadPrompt(task), result: lead.result, resultDescription: lead.resultDescription,
+    outcome = await runTaskLoop({ system: lead.system, prompt: lead.content?.length ? [{ type: "text", text: leadPrompt(task) }, ...lead.content] : leadPrompt(task), result: lead.result, resultDescription: lead.resultDescription,
       tools: specialists.length ? [...tools, delegateTool(specialists, () => parent, deps.maxSpecialistCalls ?? 3)] : tools,
       maxTurns: task.settings.maxTurns, maxOutputTokens: task.settings.maxOutputTokens, spend, signal: controller.signal, model: deps.model, context,
       beforeDraft: () => beat(false), onTurn: turn => { progress = { stage: "working", turn }; } });
@@ -147,7 +151,8 @@ async function executeStep<R>(task: AgencyTask, lead: AgencyLeadSpec<R>, deps: A
   let name: OperationOutcome = "failed", candidate: OperationCandidate | undefined;
   if (outcome.ok) {
     if (lead.apply) { name = "saved"; candidate = lead.apply(outcome.result, task); }
-    else { name = "result"; candidate = { data: outcome.result }; }
+    // A finalizer that throws ends the step as failed (no charge) instead of leaving the run open.
+    else { try { candidate = { data: lead.finalize ? lead.finalize(outcome.result, task) : outcome.result }; name = "result"; } catch { candidate = undefined; } }
   } else if (INCOMPLETE.has(outcome.code)) name = "incomplete";
   try {
     const finalization = await finishOperation(run, chargeableMicrousd(spend), name, detail, candidate);
