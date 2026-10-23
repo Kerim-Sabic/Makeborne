@@ -63,6 +63,8 @@ export class RunSpend {
   cancel() { this.stopped = "CANCELLED"; }
   /** A call produced more than its bound allowed (e.g. image output tokens): no further calls in this run. */
   markOverrun() { if (this.stopped !== "CANCELLED") this.stopped = "OVERRUN"; }
+  /** A durably renewed lease (operation heartbeat) may move the deadline later, never earlier. */
+  extendDeadline(epochMs: number) { if (Number.isFinite(epochMs) && epochMs > this.options.deadline) this.options.deadline = epochMs; }
 
   async begin(provider: ProviderName, model: string, boundMicrousd: number): Promise<CallTicket> {
     if (this.stopped === "CANCELLED") throw new SpendError("CANCELLED", "This request was stopped.");
