@@ -5,7 +5,7 @@
 - **Authority.** The owner wrote in chat on 24 Oct 2026: "approved run the paid tests". The ledger records this as `capApprovals` scope **`agency-qualification-20261024`**: $21.50 in total, of which **Anthropic $15** and **OpenAI $6.50**.
 - **Per-test caps.** Ingestion $2. Data narratives $3. Research brief $4.50. Independent reviewer $5. Image edit $6.50 OpenAI + $0.50 Anthropic.
 - **Not covered and not run.** Blind cross-provider review, web search and open-ended execution.
-- **Code under test.** Branch `feature/agency-workflow`, revision **0565f10** (+ docs 6c835f7). One fix was found and made during the run: **31b1b3d**, the data-narrative prompt (§3). The harness is in `scripts/eval/agency/qualify/` (commit below).
+- **Code under test.** Branch `feature/agency-workflow`, revision **0565f10** (+ docs 6c835f7). One fix was found and made during the run: **31b1b3d**, the data-narrative prompt (§3). The harness is in `scripts/eval/agency/qualify/` (b974654); the proposal is a separate commit, 11a9df1 (§4).
 - **Stack.** The release-auth stack only: API 127.0.0.1:55435, DB 127.0.0.1:55438, container `supabase_db_makeborne-release-auth`. The quality fixture account is used, and it has unlimited credits (see the limits in §8).
 
 ## 1. How every paid call was bounded
@@ -39,7 +39,7 @@ Qualification settings were injected only in the process. Each was the committed
 | **Total** | **Anthropic** | 114 settled + 1 uncertain | **$5.009723** | **$15.00** | |
 | **Total** | **OpenAI** | 27 | **$0.744806** | **$6.50** | |
 
-No test was stopped at its cap. The largest share of any cap used was the review test, at 36%. Replays and the replay after Stop made **0 gate calls** (their reservations settled at $0).
+No test was stopped at its cap. Share of each cap used: ingestion 19%, data narratives 48% (two rounds), research 29%, reviewer 36%, image edit 11% (OpenAI) and 14% (Anthropic). Replays and the replay after Stop made **0 gate calls** (their reservations settled at $0).
 
 ## 3. Results against each plan's criteria
 
