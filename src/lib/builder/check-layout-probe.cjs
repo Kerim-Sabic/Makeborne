@@ -2,7 +2,7 @@
 const fs = require("node:fs"), path = require("node:path"), http = require("node:http"), ts = require("typescript"), assert = require("node:assert/strict");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
 const { qualityProblems } = require("./quality-gates.ts");
-const { coveredProblem, wrappedProblem } = require("./contrast-gate.ts");
+const { coveredProblem, wrappedProblem, overflowProblem, fidelityProblem } = require("./contrast-gate.ts");
 
 let passed = 0;
 async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}`); }
@@ -38,7 +38,7 @@ const ONE_ROW = `<style>${BASE}.marquee{background:#c6f04a;color:#1d1430;overflo
     const page = await browser.newPage();
     await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
-    const probe = (html, width = 1440) => page.evaluate(({ html, width }) => new Promise((resolve, reject) => {
+    const probe = (html, width = 1440, readings = []) => page.evaluate(({ html, width, readings }) => new Promise((resolve, reject) => {
       const frame = document.createElement("iframe");
       frame.setAttribute("sandbox", "allow-same-origin");
       frame.style.cssText = `position:fixed;left:-20000px;top:0;width:${width}px;height:900px;border:0`;
@@ -46,13 +46,14 @@ const ONE_ROW = `<style>${BASE}.marquee{background:#c6f04a;color:#1d1430;overflo
         try {
           const doc = frame.contentDocument, view = frame.contentWindow;
           const before = doc.documentElement.outerHTML;
-          const result = { covered: LP.coveredText(doc, view, width), wrapped: LP.wrappedBands(doc, view, width) };
+          const fidelity = LP.compFidelity(doc, view, width, readings);
+          const result = { covered: LP.coveredText(doc, view, width), wrapped: LP.wrappedBands(doc, view, width), overflow: LP.pageOverflow(doc, view, width), fidelity };
           resolve({ ...result, restored: doc.documentElement.outerHTML === before });
         } catch (error) { reject(error); } finally { frame.remove(); }
       }, { once: true });
       frame.srcdoc = `<!doctype html><html lang="en"><head></head><body>${html}</body></html>`;
       document.body.appendChild(frame);
-    }), { html, width });
+    }), { html, width, readings });
 
     await check("covered text: a line running under a cut-out image with pointer-events: none is found (round 3D w22)", async () => {
       const result = await probe(OCCLUDED);
@@ -72,6 +73,24 @@ const ONE_ROW = `<style>${BASE}.marquee{background:#c6f04a;color:#1d1430;overflo
       assert.equal((await probe(WRAPPED, 390)).wrapped.length, 1);
       assert.deepEqual((await probe(ONE_ROW, 1440)).wrapped, []);
       assert.deepEqual((await probe(ONE_ROW, 390)).wrapped, []);
+    });
+    await check("comp fidelity: a headline toned down from its comp and an image on the wrong side are measured; a faithful build passes", async () => {
+      const hero = size => `<style>${BASE}#top{position:relative;height:960px}#top h1{font-size:${size}px;line-height:1;width:620px;margin:120px 0 0 60px}#top img{position:absolute;top:0;width:720px;height:960px}</style>`;
+      const reading = { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" };
+      const toned = await probe(`${hero(40)}<section id="top"><h1>Bristol, cooked in season.</h1><img style="left:0" alt="" width="720" height="960" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></section>`, 1440, [reading]);
+      assert.deepEqual(toned.fidelity.map(item => item.metric).sort(), ["headline", "image-side"]);
+      const headline = toned.fidelity.find(item => item.metric === "headline");
+      assert.equal(headline.comp, 86); assert.equal(headline.built, 28);
+      assert.match(fidelityProblem(headline), /Comp fidelity: the "top" section \(desktop\) is off its comp: set the largest headline to at least 105px at 1440 px wide/);
+      const faithful = await probe(`${hero(110)}<section id="top"><h1>Bristol, cooked in season.</h1><img style="left:720px" alt="" width="720" height="960" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></section>`, 1440, [reading]);
+      assert.deepEqual(faithful.fidelity, []);
+      assert.deepEqual((await probe(`${hero(40)}<section id="top"><h1>Small</h1></section>`, 390, [reading])).fidelity, [], "a desktop reading is measured at 1440 only");
+    });
+    await check("page overflow: a page wider than the phone screen is measured with the element past the edge", async () => {
+      const wide = await probe(`<style>${BASE}.giant{font-size:140px;white-space:nowrap}</style><main><p class="giant">GOOD DOG</p></main>`, 390);
+      assert.ok(wide.overflow && wide.overflow.px > 1); assert.match(wide.overflow.element, /^p\.giant/);
+      assert.match(overflowProblem(wide.overflow), /^Page overflow: the page is \d+ px wider than the screen at 390 px wide; the outermost element past the edge is p\.giant/);
+      assert.equal((await probe(`<style>${BASE}</style><main><p>Fits</p></main>`, 390)).overflow, null);
     });
   } finally { await browser.close(); server.close(); }
 

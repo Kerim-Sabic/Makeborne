@@ -18,7 +18,8 @@ import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
 import { qualityProblems, type QualityInput } from "./quality-gates";
-import { CONCEPT_TOOL, MAX_COMPS, checkConcept, imagePlanNote, sitePlanNote, withConceptComment, type ConceptRecord, type DesignComp } from "./concept";
+import { BLOCKING_PROBLEM } from "./contrast-gate-rules";
+import { CONCEPT_TOOL, CompReadingSchema, MAX_COMPS, checkConcept, compsFromSource, imagePlanNote, sitePlanNote, withConceptComment, type CompReadingValues, type ConceptRecord, type DesignComp } from "./concept";
 import { storeProjectImage } from "./images";
 import { COMP_PREVIEW_EDGE, imagePreview, type ImagePreview } from "./image-variants";
 
@@ -49,6 +50,7 @@ const ToolInputs = {
   write_file: z.object({ path: z.string(), content: z.string() }).strict(),
   edit_file: z.object({ path: z.string(), old_string: z.string(), new_string: z.string(), replace_all: z.boolean().optional() }).strict(),
   delete_file: z.object({ path: z.string() }).strict(),
+  read_comp: CompReadingSchema,
   generate_comp: z.object({ section: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9 _-]{0,39}$/, "Use the section id from the section plan."), viewport: z.enum(["desktop", "mobile"]),
     prompt: z.string().min(40).max(3000), text: z.string().trim().min(2).max(200) }).strict(),
   generate_image: z.object({ name, prompt: z.string().min(20).max(3000), aspect: z.enum(["landscape", "portrait", "square"]), kind: z.enum(IMAGE_KINDS).optional(),
@@ -67,10 +69,15 @@ const ToolInputs = {
 const COMP_TOOL = { name: "generate_comp", description: `First build, after the concept: generate one design comp, a picture of a finished website screen in the art system, as an art director's reference you then build in code. It is never shown on the page. Use it for the first screen (desktop) and the two most important other sections, and optionally the phone first screen (viewport mobile); at most ${MAX_COMPS}, all in one step. prompt: the section's composition from the section plan, the type (face, size relative to the screen, weight, case, leading), the colour fields and their proportions, the photograph or drawing and its crop, overlaps, the motif and the empty space. text: the only words the comp shows (the section's real headline and primary action, under 200 characters); body copy appears as quiet lines.`,
   input_schema: { type: "object" as const, properties: { section: { type: "string", description: "The section id from the section plan" }, viewport: { type: "string", enum: ["desktop", "mobile"] }, prompt: { type: "string" }, text: { type: "string", description: "The headline and action words the comp shows" } }, required: ["section", "viewport", "prompt", "text"], additionalProperties: false } };
 
+/** The builder's reading of a comp, measured against the built page at finish. */
+const READ_COMP_TOOL = { name: "read_comp", description: "After a design comp comes back, record what it shows, read from the picture: the cap height of its largest headline as a percentage of the comp's height (a capital H; e.g. 8 for a headline whose capitals are 8% of the frame tall), the share of the frame the photograph or drawing covers (0-100), and the side it sits on. Finish measures the built section against this reading: its largest headline's cap height must be at least 85% of the comp's.",
+  input_schema: { type: "object" as const, properties: { section: { type: "string" }, viewport: { type: "string", enum: ["desktop", "mobile"] }, headlineCapHeightPct: { type: "number" }, imageAreaPct: { type: "number" }, imageSide: { type: "string", enum: ["left", "right", "full", "none"] } },
+    required: ["section", "viewport", "headlineCapHeightPct", "imageAreaPct", "imageSide"], additionalProperties: false } };
+
 function tools(images: boolean, cutouts = false, textImages = false, concept = false, comps = false): BetaToolUnion[] {
   const list: BetaToolUnion[] = [
     ...(concept ? [CONCEPT_TOOL as unknown as BetaToolUnion] : []),
-    ...(comps ? [COMP_TOOL as unknown as BetaToolUnion] : []),
+    ...(comps ? [COMP_TOOL as unknown as BetaToolUnion, READ_COMP_TOOL as unknown as BetaToolUnion] : []),
     { name: "write_file", description: "Create a new file or replace an entire file in the project.", eager_input_streaming: true,
       input_schema: { type: "object", properties: { path: { type: "string", description: "Relative path, e.g. src/components/Hero.tsx" }, content: { type: "string", description: "Complete file content" } }, required: ["path", "content"], additionalProperties: false } },
     { name: "edit_file", description: "Replace an exact string in an existing file. old_string must match the current file exactly (including whitespace) and be unique unless replace_all is true.", eager_input_streaming: true,
@@ -112,7 +119,7 @@ export type BuilderRun = {
   /** First build of a website: record 2-3 concepts with the concept tool and build the strongest. */
   concept?: boolean;
   /** Rendered contrast at finish (text over its real background): failing pairs, or null when no browser is available. */
-  contrastCheck?: (files: ReadonlyMap<string, string>) => Promise<readonly string[] | null>;
+  contrastCheck?: (files: ReadonlyMap<string, string>, options?: { comps?: readonly CompReadingValues[] }) => Promise<readonly string[] | null>;
   /** No step starts with less time than this left (default 45 s; tests use less). */
   stepGuardMs?: number;
   /** Injected providers (tests). Production uses the SDKs with retries disabled. */
@@ -175,6 +182,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   // In call order (the jobs finish in any order); a failed comp leaves its slot empty.
   const comps: DesignComp[] = [], compSlots: (DesignComp | undefined)[] = [];
   let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = false;
+  // The project as it was the last time the rendered layout check found no blocking defect, and the defects of the
+  // latest check: a run that ends with a defect it could not fix restores that version instead of saving the defect.
+  let cleanFiles: Map<string, string> | null = null, layoutDefects: string[] = [];
   const storeComp = run.storeComp ?? ((bytes: Buffer, provenance: Record<string, unknown>) => storeProjectImage(run.client, run.scope, bytes, provenance));
   const toolList = tools(imageLimit > 0, cutouts, textImages, Boolean(run.concept), compsAvailable);
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
@@ -350,7 +360,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (comps.some(comp => comp.section === input.section && comp.viewport === input.viewport)) { fail(`There is already a ${input.viewport} comp for ${input.section}.`); break; }
             const route = routeImage({ kind: "illustration", aspect: input.viewport === "desktop" ? "landscape" : "portrait", text: input.text, textPlacement: "loose" }, compPrompt(input, concept), imageModels);
             if (!route.ok) { fail(route.error); break; }
-            const photoReserve = Math.max(0, imageLimit - imagesUsed) * imageBound;
+            // The photographs still to come, at the bound of the model the router picks for them (comps never cut photos).
+            const photoBound = Math.max(...(["landscape", "portrait", "square"] as const).map(aspect => { const photo = routeImage({ kind: "photo", aspect, text: null }, "x".repeat(3400), imageModels); return photo.ok ? photo.boundMicrousd : imageBound; }));
+            const photoReserve = Math.max(0, imageLimit - imagesUsed) * photoBound;
             if (imageReservedMicrousd + route.boundMicrousd + photoReserve > spend.allowanceMicrousd / 3 || spend.remainingMicrousd - route.boundMicrousd < spend.allowanceMicrousd * 0.1) {
               fail("No image budget is left for another design comp. Build from the art system and the comps you have."); break;
             }
@@ -378,6 +390,15 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             }, () => fail("The design comp could not be made. Build this section from the art system and the section plan.")));
             break;
           }
+          case "read_comp": {
+            const input = ToolInputs.read_comp.parse(use.input);
+            const comp = comps.find(entry => entry.section === input.section && entry.viewport === input.viewport);
+            if (!comp || !concept) { fail(`There is no ${input.viewport} comp for "${input.section}" to read.`); break; }
+            comp.reading = input;
+            concept.comps = [...comps];
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Reading recorded for ${input.section} (${input.viewport}). At finish the built section is measured against it at ${input.viewport === "desktop" ? "1440" : "390"} px: its largest headline's cap height at least 85% of ${input.headlineCapHeightPct}% of the frame, and the image covering about ${input.imageAreaPct}% of the section's first screen${input.viewport === "desktop" && input.imageSide !== "none" && input.imageSide !== "full" ? ` on the ${input.imageSide}` : ""}.` });
+            break;
+          }
           case "concept": {
             if (!run.concept) { fail("The concept step is only for a first build; continue with the current design."); break; }
             const checked = checkConcept(use.input, { images: replaceOnly ? 0 : imageLimit, sitePlan: true });
@@ -401,7 +422,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (input.routes?.length) run.files.routes = input.routes.some(route => route.path === "/") ? input.routes : [{ path: "/", title: "Home" }, ...input.routes];
             if (input.design) run.files.design = input.design;
             if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes, required: run.required })) {
-              if (!qualityReported.has(problem)) { qualityReported.add(problem); problems.push(problem); }
+              if (BLOCKING_PROBLEM.test(problem) || !qualityReported.has(problem)) { qualityReported.add(problem); problems.push(problem); }
             }
             if (!problems.length) { try { run.files.toSource(); } catch (error) { problems.push((error as Error).message); } }
             // A saved version must build: compile once the static checks pass.
@@ -414,8 +435,13 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             // Rendered contrast: text measured over its real background in a browser. Each failing pair blocks once.
             if (!problems.length && verdict?.status === "passed" && run.contrastCheck) {
               run.emit({ type: "status", message: "Checking text contrast…" });
-              const findings = await run.contrastCheck(run.files.files).catch(() => null);
-              for (const finding of findings ?? []) if (!qualityReported.has(finding)) { qualityReported.add(finding); problems.push(finding); }
+              // A review measures the build against the comp readings in the concept comment.
+              const readings = (replaceOnly ? compsFromSource(run.files.files.get("src/App.tsx")) : comps).map(comp => comp.reading).filter((reading): reading is CompReadingValues => Boolean(reading));
+              const findings = await run.contrastCheck(run.files.files, readings.length ? { comps: readings } : undefined).catch(() => null);
+              // Covered text, content past the edge, page overflow and wrapped bands block every time; the rest once.
+              const blocking = (findings ?? []).filter(finding => BLOCKING_PROBLEM.test(finding));
+              if (findings) { layoutDefects = blocking; if (!blocking.length) cleanFiles = new Map(run.files.files); }
+              for (const finding of findings ?? []) if (BLOCKING_PROBLEM.test(finding) || !qualityReported.has(finding)) { qualityReported.add(finding); problems.push(finding); }
             }
             if (problems.length) { fail(`Not finished yet. Fix these problems, then call finish again:\n- ${problems.join("\n- ")}`); break; }
             // An unavailable compiler is not the model's to fix: keep the work and report it as unverified.
@@ -445,6 +471,12 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     if (spend.remainingMicrousd < spend.allowanceMicrousd * 0.25 || turn === policy.maxTurns - 2 || Date.now() > deadline - 120_000) {
       messages.push({ role: "system", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }
+  }
+  if (!finished && layoutDefects.length && cleanFiles) {
+    const clean = cleanFiles;
+    for (const path of [...run.files.files.keys()]) if (!clean.has(path)) { run.files.remove(path); run.emit({ type: "delete", path }); }
+    for (const [path, content] of clean) if (run.files.files.get(path) !== content) { run.files.write(path, content); run.emit({ type: "file", path, op: "write", content }); }
+    run.emit({ type: "status", message: "Restored the last version without layout defects." });
   }
   // Rejected images leave the project (with their responsive copies) once no file references them.
   for (const rejected of replacedBy.keys()) if (!imageInUse(run.files.files, rejected)) run.files.removeAsset(`public/images/${rejected}.webp`);

@@ -175,6 +175,26 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.match(seen[0].messages[0].content.at(-1).text, /Image generation: unavailable/);
   });
 
+  await check("block-don't-accept: covered text blocks finish every time, and a run that ends with it restores the last version without it", async () => {
+    script.length = 0; seen.length = 0;
+    const bad = 'export default function App() { return <main><h1>Wheels trued while you wait</h1><img src="/images/hero-bench.webp" width="1536" height="1024" alt="" style={{ position: "absolute", top: 0 }} /></main>; }\n';
+    script.push({ content: [gen("g1", { name: "hero-bench" })] }, { content: [...site("c"), finish("f1")] }, { content: [write("w2", "src/App.tsx", bad), finish("f2")] }, { content: [finish("f3")] });
+    const checks = [["Contrast: p \"Muted\" is 3.1:1 and needs 4.5:1."], ["Covered text: \"Wheels trued while you wait\" (h1) is hidden under img at 1440 px wide."], ["Covered text: \"Wheels trued while you wait\" (h1) is hidden under img at 1440 px wide."]];
+    const seenOptions = [];
+    const { result, files, events } = await run({ limits: { maxTurns: 4 }, contrastCheck: async (_files, options) => { seenOptions.push(options); return checks.shift() ?? []; } });
+    assert.ok(!result.finished, "the repeated covered text was not accepted");
+    assert.equal(events.filter(event => event.type === "tool_error" && /Covered text/.test(event.message)).length, 2, "blocked both times");
+    assert.doesNotMatch(files.files.get("src/App.tsx"), /position: "absolute"/, "the defect was not saved");
+    assert.match(files.files.get("src/App.tsx"), /Wheels trued while you wait/);
+    assert.ok(events.some(event => event.type === "status" && /Restored the last version without layout defects/.test(event.message)));
+    assert.equal(seenOptions[0], undefined, "no comp readings, no fidelity options");
+    // The static reduced-motion band rule blocks every time too.
+    const { BLOCKING_PROBLEM } = require("./contrast-gate-rules.ts");
+    assert.ok(BLOCKING_PROBLEM.test("Under prefers-reduced-motion .marquee-track wraps a marquee or tag band into several rows: keep it one row"));
+    assert.ok(BLOCKING_PROBLEM.test("Page overflow: the page is 25 px wider than the screen at 390 px wide") && BLOCKING_PROBLEM.test("Wrapped band: ul.track") && BLOCKING_PROBLEM.test("Cut off: div.hero"));
+    assert.ok(!BLOCKING_PROBLEM.test("Contrast: p") && !BLOCKING_PROBLEM.test("Comp fidelity: the top section"), "contrast and fidelity block once (a repeat goes ahead)");
+  });
+
   await check("regeneration rules: a new name, an existing generated image, never the client's own photos or logo; replaces and rejected go together", () => {
     const state = { replaceOnly: false, exists: name => ["hero", "photo-1", "brand-logo"].includes(name), replaced: new Set(), replacements: new Set() };
     assert.equal(regenerationProblem({ name: "hero-2" }, state), null, "a new image needs no replaces outside a review");
@@ -291,8 +311,9 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       const stored = [];
       const storeComp = async (bytes, provenance) => { stored.push(provenance); return { id: `c0000000-0000-5000-a000-00000000000${stored.length}`, data: bytes }; };
       script.push({ content: [comp("k0", "top")] }, { content: [{ type: "tool_use", id: "c1", name: "concept", input }] },
-        { content: [comp("k1", "top"), comp("k2", "rates"), comp("k3", "work"), comp("k4", "top", "mobile"), comp("k5", "visit")] },
-        { content: [gen("g1", { name: "hero-bench" })] }, { content: [...site("z"), finish("f1")] });
+        { content: [comp("k1", "top"), comp("k2", "rates"), comp("k3", "work"), comp("k4", "top", "mobile"), comp("k5", "visit"), comp("k6", "band"), comp("k7", "stories"), comp("k8", "faq")] },
+        { content: [{ type: "tool_use", id: "r1", name: "read_comp", input: { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" } }, { type: "tool_use", id: "r2", name: "read_comp", input: { section: "nowhere", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" } }, gen("g1", { name: "hero-bench" })] },
+        { content: [...site("z"), finish("f1")] });
       const { result, events, files } = await run({ concept: true, storeComp });
       assert.ok(result.finished);
       assert.ok(seen[0].tools.includes("generate_comp"), "offered on a first build with a text-capable model");
@@ -304,7 +325,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       const made = results.filter(block => Array.isArray(block.content));
       assert.ok(made.length >= 2 && made.length <= MAX_COMPS, `comps inside the image third (${made.length})`);
       const refused = results.filter(block => block.is_error);
-      assert.ok(refused.length >= 1 && refused.every(block => /No image budget is left for another design comp|At most 4 design comps/.test(block.content)), "comps never take the photographs' share");
+      assert.ok(refused.length >= 1 && refused.every(block => /No image budget is left for another design comp|At most 6 design comps/.test(block.content)), "comps never take the photographs' share");
       const [image, text] = made[0].content;
       const size = await sharp(Buffer.from(image.source.data, "base64")).metadata();
       assert.equal(Math.max(size.width, size.height), 1024);
@@ -316,6 +337,10 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.ok(events.filter(event => event.type === "image_start" && event.comp).length === made.length);
       const recorded = compsFromSource(files.files.get("src/App.tsx"));
       assert.equal(recorded.length, made.length); assert.equal(recorded[0].section, "top"); assert.match(recorded[0].asset, /^c0000000-/);
+      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" }, "the reading travels in the concept comment to the review");
+      const readResults = seen[4].messages.at(-1).content.filter(block => block.type === "tool_result");
+      assert.match(readResults[0].content, /largest headline's cap height at least 85% of 9% of the frame/);
+      assert.match(readResults[1].content, /There is no desktop comp for "nowhere"/);
       // A photograph asked for before any comp is sent back once to the comps; a repeat goes ahead.
       script.length = 0; seen.length = 0; imageCalls.length = 0;
       script.push({ content: [{ type: "tool_use", id: "c2", name: "concept", input }] }, { content: [gen("g7", { name: "hero-bench" })] }, { content: [gen("g8", { name: "hero-bench" })] }, { content: [...site("w"), finish("f9")] });

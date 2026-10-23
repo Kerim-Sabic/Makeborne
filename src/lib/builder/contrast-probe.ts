@@ -11,12 +11,13 @@
 import { captureStaticSnapshot } from "./browser-bundler";
 import { canvasColorParser, measureRenderedContrast, summarizeFindings, type ContrastFinding } from "./rendered-contrast";
 import { previewDocument } from "../hosting/prepared-preview";
-import { coveredText, cutOffPanels, wrappedBands, type CoveredText, type CutOff, type WrappedBand } from "./layout-probe";
+import { compFidelity, coveredText, cutOffPanels, pageOverflow, wrappedBands, type CompDeviation, type CompReading, type CoveredText, type CutOff, type PageOverflow, type WrappedBand } from "./layout-probe";
 
-export type { CoveredText, CutOff, WrappedBand } from "./layout-probe";
+export type { CompDeviation, CompReading, CoveredText, CutOff, PageOverflow, WrappedBand } from "./layout-probe";
 
-function measure(html: string, width: number, parse: ReturnType<typeof canvasColorParser>, phoneOnly = false) {
-  return new Promise<ReturnType<typeof measureRenderedContrast> & { covered: CoveredText[]; cutOff: CutOff[]; wrapped: WrappedBand[] }>((resolve, reject) => {
+type Layout = { covered: CoveredText[]; cutOff: CutOff[]; wrapped: WrappedBand[]; overflow: PageOverflow[]; fidelity: CompDeviation[] };
+function measure(html: string, width: number, parse: ReturnType<typeof canvasColorParser>, phoneOnly = false, readings: readonly CompReading[] = []) {
+  return new Promise<ReturnType<typeof measureRenderedContrast> & Layout>((resolve, reject) => {
     const frame = document.createElement("iframe");
     frame.setAttribute("sandbox", "allow-same-origin");
     frame.style.cssText = `position:fixed;left:-20000px;top:0;width:${width}px;height:900px;border:0`;
@@ -27,10 +28,14 @@ function measure(html: string, width: number, parse: ReturnType<typeof canvasCol
         if (!doc || !view) throw new Error("unavailable");
         // The 360 px pass only looks for content past the screen edge; contrast and covered text are measured at 390.
         const contrast = phoneOnly ? { findings: [], measured: 0, unmeasured: { image: 0 } } as unknown as ReturnType<typeof measureRenderedContrast> : measureRenderedContrast(doc, view, "/", parse, 400);
-        if (phoneOnly) { resolve({ ...contrast, covered: [], cutOff: cutOffPanels(doc, view, width, 2, true), wrapped: wrappedBands(doc, view, width) }); return; }
+        const overflow = [pageOverflow(doc, view, width)].filter((item): item is PageOverflow => Boolean(item));
+        if (phoneOnly) { resolve({ ...contrast, covered: [], cutOff: cutOffPanels(doc, view, width, 2, true), wrapped: wrappedBands(doc, view, width), overflow, fidelity: [] }); return; }
+        // Comp fidelity is measured in a frame of the comp's own height, before the frame grows to the whole page.
+        frame.style.height = `${width >= 1000 ? 960 : 585}px`;
+        const fidelity = compFidelity(doc, view, width, readings);
         // The whole page in one viewport, so every line can be hit-tested.
         frame.style.height = `${Math.min(20_000, doc.documentElement.scrollHeight)}px`;
-        resolve({ ...contrast, covered: coveredText(doc, view, width), cutOff: cutOffPanels(doc, view, width), wrapped: wrappedBands(doc, view, width) });
+        resolve({ ...contrast, covered: coveredText(doc, view, width), cutOff: cutOffPanels(doc, view, width), wrapped: wrappedBands(doc, view, width), overflow, fidelity });
       } catch (error) { reject(error); }
       finally { window.clearTimeout(timer); frame.remove(); }
     }, { once: true });
@@ -39,19 +44,19 @@ function measure(html: string, width: number, parse: ReturnType<typeof canvasCol
   });
 }
 
-export async function probeContrast(files: Record<string, string>): Promise<{ findings: ContrastFinding[]; measured: number; unmeasuredImage: number; covered: CoveredText[]; cutOff: CutOff[]; wrapped: WrappedBand[] }> {
+export async function probeContrast(files: Record<string, string>, readings: readonly CompReading[] = []): Promise<{ findings: ContrastFinding[]; measured: number; unmeasuredImage: number } & Layout> {
   const html = await captureStaticSnapshot(files, {});
   const parse = canvasColorParser(document);
   const findings: ContrastFinding[] = [];
   let measured = 0, unmeasuredImage = 0;
-  const covered: CoveredText[] = [], cutOff: CutOff[] = [], wrapped: WrappedBand[] = [];
+  const covered: CoveredText[] = [], cutOff: CutOff[] = [], wrapped: WrappedBand[] = [], overflow: PageOverflow[] = [], fidelity: CompDeviation[] = [];
   for (const width of [1440, 390]) {
-    const result = await measure(html, width, parse);
-    findings.push(...result.findings); measured += result.measured; unmeasuredImage += result.unmeasured.image; covered.push(...result.covered); cutOff.push(...result.cutOff); wrapped.push(...result.wrapped);
+    const result = await measure(html, width, parse, false, readings);
+    findings.push(...result.findings); measured += result.measured; unmeasuredImage += result.unmeasured.image; covered.push(...result.covered); cutOff.push(...result.cutOff); wrapped.push(...result.wrapped); overflow.push(...result.overflow); fidelity.push(...result.fidelity);
   }
   const phone = await measure(html, 360, parse, true);
-  cutOff.push(...phone.cutOff); wrapped.push(...phone.wrapped);
-  return { findings: summarizeFindings(findings), measured, unmeasuredImage, covered, cutOff, wrapped };
+  cutOff.push(...phone.cutOff); wrapped.push(...phone.wrapped); overflow.push(...phone.overflow);
+  return { findings: summarizeFindings(findings), measured, unmeasuredImage, covered, cutOff, wrapped, overflow, fidelity };
 }
 
 declare global { interface Window { __makeborneContrast?: { probeContrast: typeof probeContrast } } }

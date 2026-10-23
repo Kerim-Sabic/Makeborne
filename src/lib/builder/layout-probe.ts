@@ -154,3 +154,79 @@ export function wrappedBands(doc: Document, view: Window, width: number, limit =
   }
   return out;
 }
+
+export type PageOverflow = { px: number; element: string; text: string; width: number };
+/** The page is wider than the screen (it scrolls sideways): how far, and the outermost element past the edge that no
+ * ancestor clips (W9). Null when the page fits. */
+export function pageOverflow(doc: Document, view: Window, width: number): PageOverflow | null {
+  const px = Math.round(doc.documentElement.scrollWidth - width);
+  if (px <= 1) return null;
+  const clipped = (el: Element) => {
+    for (let node = el.parentElement; node && node !== doc.body; node = node.parentElement) if (/hidden|clip|auto|scroll/.test(view.getComputedStyle(node).overflowX)) return true;
+    return false;
+  };
+  let worst: Element | null = null, right = width + 1;
+  for (const el of Array.from(doc.body.querySelectorAll("*"))) {
+    const box = el.getBoundingClientRect();
+    // An element's content can run past its own box (a long word in a giant headline): scrollWidth counts it.
+    const reach = Math.max(box.right, box.left + (view.getComputedStyle(el).overflowX === "visible" ? el.scrollWidth : 0));
+    if (box.width <= 0 || reach <= width + 1 || clipped(el) || view.getComputedStyle(el).position === "fixed") continue;
+    // The furthest reach wins; at the same reach the deepest element (the one whose own content runs past) is named.
+    if (reach > right + 1 || (worst && worst.contains(el) && reach >= right - 1)) { worst = el; right = Math.max(right, reach); }
+  }
+  return { px, element: worst ? describe(worst) : "the page", text: ((worst?.textContent ?? "").replace(/\s+/g, " ").trim()).slice(0, 50), width };
+}
+
+/** What the builder read from a design comp (read_comp): the headline's cap height and the image's share of the frame. */
+export type CompReading = { section: string; viewport: "desktop" | "mobile"; headlineCapHeightPct: number; imageAreaPct: number; imageSide: "left" | "right" | "full" | "none" };
+export type CompDeviation = { section: string; viewport: "desktop" | "mobile"; metric: "headline" | "image-area" | "image-side"; comp: number | string; built: number | string; fix: string };
+/** Cap height of a typical display face as a share of its font size. */
+export const CAP_HEIGHT = 0.7;
+/** The comp's frame as a viewport: a 1536×1024 desktop comp is 1440×960 px; a 1024×1536 phone comp is 390×585 px. */
+export const COMP_FRAME = { desktop: { width: 1440, height: 960 }, mobile: { width: 390, height: 585 } } as const;
+/**
+ * Measured fidelity of the built page to its comps, at the comp's viewport: the largest text in the section's first
+ * frame (its cap height must be at least 85% of the comp's), the share of that frame images cover (at least 70% of the
+ * comp's when the comp's image covers over 15%), and the side the image sits on.
+ */
+export function compFidelity(doc: Document, view: Window, width: number, readings: readonly CompReading[]): CompDeviation[] {
+  const out: CompDeviation[] = [];
+  for (const reading of readings) {
+    const frame = COMP_FRAME[reading.viewport];
+    if (frame.width !== width) continue;
+    const id = reading.section.trim();
+    const target = doc.getElementById(id) ?? doc.querySelector(`[data-section="${id}"]`)
+      ?? (/^(top|hero|home|first|intro|landing)/i.test(id) ? doc.querySelector("main section, section, main > *") : null);
+    if (!target) continue;
+    const top = target.getBoundingClientRect().top, bottom = top + frame.height;
+    // The largest text in the section's first frame.
+    let size = 0;
+    for (const el of Array.from(target.querySelectorAll("*"))) {
+      if (!Array.from(el.childNodes).some(node => node.nodeType === 3 && (node.textContent ?? "").trim().length > 1)) continue;
+      const box = el.getBoundingClientRect(), style = view.getComputedStyle(el);
+      if (box.top >= bottom || box.bottom <= top || style.visibility === "hidden" || style.display === "none") continue;
+      size = Math.max(size, parseFloat(style.fontSize) || 0);
+    }
+    const compCap = reading.headlineCapHeightPct / 100 * frame.height, builtCap = size * CAP_HEIGHT;
+    if (compCap >= 12 && builtCap < compCap * 0.85)
+      out.push({ section: id, viewport: reading.viewport, metric: "headline", comp: Math.round(compCap), built: Math.round(builtCap),
+        fix: `set the largest headline to at least ${Math.ceil(compCap * 0.85 / CAP_HEIGHT)}px at ${width} px wide (cap height ${Math.round(compCap)} px in the comp, ${Math.round(builtCap)} px built)` });
+    // Image share and side of the section's first frame.
+    let area = 0, weighted = 0;
+    for (const img of Array.from(target.querySelectorAll("img, picture, video, [style*='background-image']"))) {
+      const box = img.getBoundingClientRect();
+      const h = Math.max(0, Math.min(box.bottom, bottom) - Math.max(box.top, top)), w = Math.max(0, Math.min(box.right, width) - Math.max(box.left, 0));
+      area += w * h; weighted += w * h * ((Math.max(box.left, 0) + Math.min(box.right, width)) / 2);
+    }
+    const share = Math.min(100, area / (frame.width * frame.height) * 100);
+    if (reading.imageAreaPct > 15 && share < reading.imageAreaPct * 0.7)
+      out.push({ section: id, viewport: reading.viewport, metric: "image-area", comp: Math.round(reading.imageAreaPct), built: Math.round(share),
+        fix: `give the image about ${Math.round(reading.imageAreaPct)}% of the first ${frame.height} px of the section as in the comp (it covers ${Math.round(share)}%)` });
+    if (area > 0 && reading.viewport === "desktop" && (reading.imageSide === "left" || reading.imageSide === "right")) {
+      const centre = weighted / area / width, side = centre < 0.42 ? "left" : centre > 0.58 ? "right" : "full";
+      if (side !== reading.imageSide && side !== "full")
+        out.push({ section: id, viewport: reading.viewport, metric: "image-side", comp: reading.imageSide, built: side, fix: `put the image on the ${reading.imageSide} as in the comp` });
+    }
+  }
+  return out;
+}
