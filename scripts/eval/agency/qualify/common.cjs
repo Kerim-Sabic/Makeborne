@@ -183,6 +183,7 @@ async function db() {
 async function sql(text, args = []) { return (await (await db()).query(text, args)).rows; }
 async function closeDb() { if (pgClient) { await pgClient.end().catch(() => undefined); pgClient = null; } }
 
+let runCommitted = 0;
 const LIMIT_SCOPES = ['global', 'anthropic', 'openai'];
 async function limitsState() {
   return sql('select scope, enabled, emergency_stop, daily_limit_microusd::text l, note from makeborne_private.live_provider_limits where scope = any($1) order by scope', [LIMIT_SCOPES]);
@@ -235,6 +236,10 @@ function gateTotals(rows) {
 async function paidStep(ctx, { test, provider = 'anthropic', boundUsd, bounds = null, ref, note }, fn) {
   const b = await budget();
   const perProvider = bounds ?? { [provider]: boundUsd };
+  // Optional cap for this invocation (QUAL_RUN_CAP_USD): what it has settled plus this step's bound must fit.
+  const runCap = Number(process.env.QUAL_RUN_CAP_USD) || null;
+  const stepBound = Object.values(perProvider).reduce((sum, value) => sum + micro(value), 0);
+  if (runCap && !(runCommitted + stepBound <= micro(runCap))) throw new CapStop(`run cap ${runCap}: ${(runCommitted / 1e6).toFixed(4)} settled + ${(stepBound / 1e6).toFixed(4)} bound would exceed it`);
   for (const [name, bound] of Object.entries(perProvider)) await assertFits(test, name, bound);
   const reservations = {};
   for (const [name, bound] of Object.entries(perProvider)) reservations[name] = await b.reserveScoped({ scope: SCOPE, kind: TESTS[test].kind, ref, boundUsd: bound, note: note ?? null, provider: name });
@@ -260,6 +265,7 @@ async function paidStep(ctx, { test, provider = 'anthropic', boundUsd, bounds = 
     const settled = await b.settle(reservationId, { actualUsd: totals.totalMicrousd / 1e6, detail: { gateCalls: totals.calls, confirmedMicrousd: totals.confirmedMicrousd, uncertainMicrousd: totals.uncertainMicrousd, statuses: totals.statuses, overrun: totals.overrun, callIds: own.map(row => row.id).slice(0, 12) } });
     ledger[name] = { status: settled.status, actualMicrousd: settled.actualMicrousd, boundMicrousd: settled.boundMicrousd, overrun: settled.overrun ?? false };
   }
+  runCommitted += gate.totalMicrousd;
   const foreign = rows.filter(row => !reservations[row.provider]);
   if (foreign.length) console.error(`WARNING: ${foreign.length} gate row(s) for providers without a reservation in this step`);
   const single = Object.keys(reservations).length === 1 ? ledger[Object.keys(reservations)[0]] : ledger;

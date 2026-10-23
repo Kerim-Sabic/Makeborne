@@ -1908,3 +1908,12 @@ Owner approval "approved run the paid tests" (ledger scope `agency-qualification
 - Image-edit cells PASS, with usage returned on 24/24 calls.
 
 Report: `docs/release-review/agency-qualification-20261024.md` on `feature/agency-workflow`; summary in §15 of `agency-workflow-handoff-20261024.md`. Commits: 31b1b3d, 8a96e93, b974654, plus **11a9df1** (proposal only, flags remain off): research, data_report and image_edit settings, and the measured edit-token table. The owner must still sign off the measured edit bounds (D8 extension). Acknowledgment is not assumed.
+
+### Claude — agency workflow: fixes and paid re-run, 24 October 2026 (local only; not pushed, merged or deployed)
+Fixes A–F, each reproduced by an offline check before the fix: 39b636f, 5fdf7ea, 1878a03, 3a0aca8 and ef753a3 on `feature/agency-workflow`.
+- **Re-run spend:** Anthropic $1.990532, all inside the remaining caps.
+- **Results:** ingestion hidden-DOCX and PDF PASS; both research conflict fixtures now flagged by the server; independent reviewer round 6 PASS (6/6 seeded defects grounded, 6/6 acceptable fixtures clean, 6/6 re-checks).
+- **Proposal:** `independent_review` added in adad1ac (proposal only; flags remain off).
+- **Scope totals:** Anthropic $7.000255 of $15, OpenAI $0.744806 of $6.50.
+
+Report: `docs/release-review/agency-qualification-20261024.md` §7, and §16 of the handoff. The owner's sign-off of the measured edit bounds (D8 extension) is still required. Acknowledgment is not assumed.

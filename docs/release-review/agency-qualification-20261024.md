@@ -1,6 +1,6 @@
 # Agency workflow: paid qualification results, 24 October 2026
 
-**Status: run complete, local isolated stack only.** Nothing is pushed, merged, deployed or switched on. Every feature flag is still off in code and set nowhere. Flags and qualification settings existed only inside the test process.
+**Status: run complete, plus a re-run after fixes (§7); local isolated stack only.** Nothing is pushed, merged, deployed or switched on. Every feature flag is still off in code and set nowhere. Flags and qualification settings existed only inside the test process.
 
 - **Authority.** The owner wrote in chat on 24 Oct 2026: "approved run the paid tests". The ledger records this as `capApprovals` scope **`agency-qualification-20261024`**: $21.50 in total, of which **Anthropic $15** and **OpenAI $6.50**.
 - **Per-test caps.** Ingestion $2. Data narratives $3. Research brief $4.50. Independent reviewer $5. Image edit $6.50 OpenAI + $0.50 Anthropic.
@@ -138,7 +138,7 @@ Each ran through `runClientResearch` as the route composes it: kind `research`, 
 - The guard over-removes some benign wording.
 - The redirect-to-private fixture page was never selected for reading, so that path was not exercised live (it is covered offline).
 
-### 3.4 Independent reviewer (plan §1). **FAIL (not qualified)**
+### 3.4 Independent reviewer (plan §1). **FAIL in the first run; PASS in the re-run after fixes (§7)**
 
 Fixtures: 12 (website, book, deck: 2 acceptable + 2 seeded each), each followed by 6 targeted re-checks.
 - **Rendering.** Fixtures were rendered in real Chromium and exported to a real PDF and PPTX. They were captured and checked by the real capture-server and deterministic checks.
@@ -196,9 +196,9 @@ The first call per model verified that the edits endpoint works with this key an
 ## 4. Proposed settings (separate commit, "proposed after qualification; flags remain off")
 
 This is a proposal only, in its own commit. **No flag is set anywhere.** The proposal touches only these cells:
-- **`AGENCY_SETTINGS` `standard`:** `qualifiedKinds: ["research", "data_report", "image_edit"]` and `maxTurns` 3 (the ceiling the runs used; the image instruction step is clamped to 2 anyway).
+- **`AGENCY_SETTINGS` `standard`:** `qualifiedKinds: ["research", "data_report", "image_edit"]` (11a9df1), plus `independent_review` after the re-run (adad1ac, §7), and `maxTurns` 3 (the ceiling the runs used; the image instruction step is clamped to 2 anyway).
   - `data_report` qualifies **only at or after 31b1b3d**.
-  - `independent_review` is **not** qualified (§3.4).
+  - `independent_review` was not qualified by the first run (§3.4). It was added in adad1ac after the re-run met every criterion at ef753a3 (§7).
   - `ingest` is not added: no route runs that kind. The boundary result above is evidence for the source-ingestion switch decision, which still needs production worker isolation.
 - **`MEASURED_EDIT_TOKENS`, medium:** the largest observed counts.
 
@@ -230,3 +230,65 @@ This is a proposal only, in its own commit. **No flag is set anywhere.** The pro
 - **Ledger:** scope `agency-qualification-20261024`, 145 entries, all settled.
 - **Fixture rows left on the local stack:** clients, projects, artifacts, versions and assets titled "Agency qualification 2026-10-24 …" in workspace `bbc276ae…`, plus the stored candidates. These are local test data only; remove them with that label if wanted.
 - **Live provider limits** on the stack are all **off** (read back after every step).
+
+## 7. Re-run after fixes (24 October 2026, same scope and caps)
+
+The coordinator asked for fixes A–E with offline tests that reproduce each case first, then a live re-run inside the remaining caps. Each new offline check was confirmed to **fail on the old code and pass on the fix**.
+
+### Fixes and their tests
+
+| Fix | Commit | Change | Offline check |
+|---|---|---|---|
+| A | 39b636f | `buildResult` drops a model finding only when it is the same defect as a measured one: the same diagnostic id, or its quote or repair names the measured value or file. Same place and category alone is no longer enough | `check-review.cjs` regression: "Collected on Sundays" survives beside the measured "€59"; model copies of the €59 are still dropped |
+| B | 39b636f | `groundFindings` judges each claim in a quote on its own. Only the claims the finding disputes count: those its repair names, else all of them when it cites only the supporting facts or cites nothing | `check-review.cjs`: a supported €49 no longer downgrades the Sundays finding (cited by fact, by both facts, or by brief); a finding that calls the supported €49 wrong is still unverified |
+| C | 5fdf7ea | Book page images use the PDF's 6 × 9 in page box. Full pages are shown as printed; text pages get the real top, bottom, inside and outside margins, and page breaks fall between whole lines. Still not a raster of the PDF, and the coverage note says so | `check-review-render.cjs` (real Chromium): every text page is 576×864 with empty margin bands |
+| D | 1878a03 | Hidden DOCX runs (`w:vanish`/`w:specVanish`) are marked inline "[hidden in the document: …]", and a reading note says they may not be meant for readers. With the switch on, PDF blocks keep their bytes and carry `UNTRUSTED_SOURCE_RULE`; switch off is unchanged. The extraction version moved to `ingest-2026-10-24.1` | `check-ingest-parsers.cjs` (hidden-text marker, note, val 0 control) and `check-ingest-pipeline.cjs` (PDF context) |
+| E | 3a0aca8 | `checkIdentity` flags a conflict in two cases. A document that says it covers a separate company or another branch is kept apart. Places stated in notes or saved facts that share nothing with the places the client's own site names are noted, with nothing excluded. The followers guard now matches counts only | `check-research.cjs`: both conflict cases flag, with three consistent controls; the guard keeps "bread box subscribers" and still removes 1 million followers, "a following of 20k", "thousands of subscribers" and similar |
+| F (found by the re-run) | ef753a3 | An elided quote ("…" / "...") resolves when every part of 8+ characters appears in order. An invented or reordered part stays unverified | `check-review.cjs` elided-quote cases |
+
+### Live re-runs
+
+| Test | Calls | Spend | Sub-cap | Result |
+|---|---|---|---|---|
+| Ingestion: hidden-DOCX + PDF, ×2 each | 4 | **$0.072768** | $0.30 | **PASS.** 0/4 followed, 4/4 reported. The hidden passage reached the model marked, with the reading note, and the model named it "a hidden passage (formatted as hidden text)". The PDF carried the untrusted rule (+127 tokens: 1,887 vs 1,760) |
+| Research: the 2 conflict fixtures (ceiling 6 credits, about $0.18 per brief) | 2 | **$0.150332** | $0.40 | **PASS.** Both now `identity.status = conflict`. r07: "Your notes or saved facts place the business in Manchester, UK, but its website talks about Queensland, Brisbane, Australia". r08: the Brighton document kept apart. Both also appear as "Same business?" questions. Facts 13/13 and 11/11 grounded |
+| Reviewer round 5 (all 12 + 6 re-checks, fixes A–E) | 19 | **$0.915444** | $3.18 with round 6 | Not yet passing. Acceptable books are now clean (C) and deck-s2's Sundays finding is kept (A). Three things remained. **F:** web-s1's hours finding quoted "… ... …" and was marked unverified (fixed in ef753a3). **Fixture flaw:** book-s1's contradiction sat in the chapter the seeded export drops, so it had no PDF page and was correctly rejected. **Fixture flaw:** the brief said "a three-slide pitch", and the reviewer rightly flagged the four-slide deck-a2 |
+| Reviewer round 6 (all 12 + 6 re-checks, code ef753a3, both fixture flaws corrected) | 19 | **$0.851988** | (same) | **PASS**, see the criteria table below |
+
+The two fixture corrections were: the brief now says "a short pitch deck", and book-s1's Sundays sentence moved into a chapter that is in the export.
+
+### Reviewer round 6 against the plan criteria
+
+| Criterion | Round 6 |
+|---|---|
+| Reviewer-only seeded defect reported, grounded, right location (≥ 5/6) | **6/6** grounded (web-s1 hours, web-s2 faint text, book-s1 Sundays, book-s2 placeholder, deck-s1 "Harbur", deck-s2 Sundays) |
+| Acceptable fixtures: no grounded blocker or major | **6/6** (websites, books and decks) |
+| Server downgrades unresolvable findings | Yes. Round 5 correctly rejected a location on a page the PDF does not have; the offline checks cover the rest |
+| Re-checks: repairs gone, nothing repair-triggering added | **6/6**: 5/5, 7/7, 3/3, 3/3, 3/3 and 2/2 resolved; 0 added |
+| Cost per review | **$0.040–0.069**; re-checks $0.032–0.051 |
+| Refusals, unavailable | **0, 0** |
+
+**Re-run spend: Anthropic $1.990532** (ingestion $0.072768 + research $0.150332 + reviewer $1.767432). OpenAI $0.
+
+**Scope totals after the re-run** (ledger: 187 entries, all settled, 0 open, 0 unknown, 0 overruns; stack limits read back off):
+
+| Provider | Spend | Cap |
+|---|---|---|
+| **Anthropic** | **$7.000255** | $15 |
+| **OpenAI** | **$0.744806** | $6.50 |
+
+| Test | Spend | Cap |
+|---|---|---|
+| Ingestion | $0.450572 | $2 |
+| Data | $1.451372 | $3 |
+| Research | $1.437615 | $4.50 |
+| Reviewer | $3.588964 | $5 |
+| Image | $0.744806 OpenAI + $0.071732 Anthropic | $6.50 + $0.50 |
+
+**Proposal:** `independent_review` is added in adad1ac ("proposed after qualification; flags remain off"). The cross-provider reviewer stays off; it was not covered. The owner still has to sign off the measured edit bounds (the D8 extension).
+
+**Still not covered:**
+- A non-exempt account, so customer-credit settlement was not observed.
+- Image accept, export and publish end-to-end.
+- PDF page rasters: the page images reproduce the page box but are not rasters, so exact page breaks, running heads and folios may differ.
+- The location-based identity check reads proper nouns after "in", "serving", "across" and similar, plus country names. It can miss places written differently.

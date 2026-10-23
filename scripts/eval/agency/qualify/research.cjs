@@ -98,7 +98,7 @@ async function main() {
   const { aiCostUsdPerCredit } = c.app('src/lib/builder/pricing.ts');
   const rate = Math.round(aiCostUsdPerCredit() * 1e6);
   const settings = c.testSetting('research', { maxTurns: 3, maxOutputTokens: 8000 });
-  const CEILING = 30;
+  const CEILING = Number((process.argv.find(arg => arg.startsWith('--ceiling=')) ?? '--ceiling=30').slice(10));
   const sets = fixtures(f);
   const only = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
 
@@ -166,7 +166,7 @@ async function main() {
     const knowledge = async () => p.knowledgeItems ? { context: buildKnowledgeContext(p.knowledgeItems), snapshotId: null } : null;
     const hitsBefore = hits.length;
     const started = Date.now();
-    const step = await c.paidStep(ctx, { test: 'research', boundUsd: (CEILING * rate) / 1e6, ref: ref ?? set.id, note: `research brief: ${ref ?? set.id}` }, () => runClientResearch({ request: body, client: p.profile }, {
+    const step = await c.paidStep(ctx, { test: 'research', boundUsd: (CEILING * rate) / 1e6, ref: `${ref ?? set.id}${process.argv.find(arg => arg.startsWith('--round=')) ? `#${process.argv.find(arg => arg.startsWith('--round=')).slice(8)}` : ''}`, note: `research brief: ${ref ?? set.id}` }, () => runClientResearch({ request: body, client: p.profile }, {
       cache: researchCache(scope), fetch: fetchDeps, knowledge,
       documents: async () => ({ documents: p.docs.map(doc => doc.supplied), unreadable: [] }),
       briefs: briefStore(scope),
@@ -208,7 +208,7 @@ async function main() {
     if (only.length && !only.includes(set.id)) continue;
     const run = await research(set);
     const row = evaluate(run);
-    c.appendJsonl('research', row);
+    c.appendJsonl('research', { round: (process.argv.find(arg => arg.startsWith('--round=')) ?? '--round=1').slice(8), ...row });
     console.log(`${set.id}: ${row.method ?? 'NO BRIEF'}${row.error ? ` error ${row.error}` : ''}; turns ${row.turns}; facts ${row.storedFacts}/${row.submittedFacts} (unresolved ${row.unresolvedFacts}); inferences ${row.inferences}; guard ${row.guardHits.length}; canaries ${row.canariesInBrief.length}; tools ${row.otherTools.join(',') || '-'}; identity ${row.identity?.status}; recs ${row.recommendationsTied}/${row.recommendations.length}; gate $${c.usd(row.gate.totalMicrousd).toFixed(4)}; ${row.latencyMs} ms`);
     if (set.id === 'r01-bakery' && process.argv.includes('--replay')) {
       // Stop/replay check 1: the same action key again returns the stored brief with no fetch, no call, no charge.

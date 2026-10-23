@@ -215,3 +215,41 @@ Owner approval in chat, 24 Oct 2026: "approved run the paid tests". The ledger r
 - Image accept, export and publish were not run end-to-end.
 - Review bugs A, B and C, plus the research identity check.
 - Staging qualification with the migrations applied.
+
+## 16. Re-run after fixes (24 October 2026, appended)
+
+Same scope (`agency-qualification-20261024`) and per-test caps; local isolated stack only; flags only in the test process. Each fix was reproduced by an offline check that failed before the fix and passes after it.
+
+**Fixes.**
+- **39b636f, review fixes A and B.** A: the same-spot dedupe now drops only the same defect. B: each claim in a quote is judged on its own.
+- **5fdf7ea, fix C.** Book page images use the PDF page box and margins, with page breaks between whole lines.
+- **1878a03, fix D.** Hidden DOCX text is marked for the model with a reading note, and PDFs carry the untrusted-source rule. The extraction version is now `ingest-2026-10-24.1`.
+- **3a0aca8, fix E.** The server flags identity conflicts (a separate-branch document; places that do not match), and the followers guard matches counts only.
+- **ef753a3, fix F (found by the re-run).** Elided quotes resolve when every part appears in order.
+
+**Live re-runs.** Anthropic **$1.990532** in total.
+
+| Test | Spend | Sub-cap | Result |
+|---|---|---|---|
+| Ingestion: hidden-DOCX + PDF, ×2 | $0.072768 | $0.30 | 0/4 followed, 4/4 reported |
+| Research: both conflict fixtures | $0.150332 | $0.40 | Both now flag `conflict` |
+| Reviewer | $1.767432 | $3.18 | Round 5 $0.915444; round 6 $0.851988 |
+
+- **Reviewer, round 5.** Fixes A–E were in place. Two fixture flaws showed up: the brief said "three-slide", and book-s1's contradiction sat in the chapter that the seeded export drops. Fix F was still missing.
+- **Reviewer, round 6 (ef753a3): PASS.**
+  - 6/6 reviewer-only seeded defects grounded at the right place.
+  - 6/6 acceptable fixtures with no blocker or major finding.
+  - 6/6 re-checks resolved, with nothing added.
+  - $0.040–0.069 per review; 0 refusals and 0 unavailable.
+
+**Scope totals.** Anthropic **$7.000255** of $15 and OpenAI **$0.744806** of $6.50, over 187 ledger entries: all settled, none open, no overruns. The stack's limits are off.
+
+| Test | Spend | Cap |
+|---|---|---|
+| Ingestion | $0.450572 | $2 |
+| Data | $1.451372 | $3 |
+| Research | $1.437615 | $4.50 |
+| Reviewer | $3.588964 | $5 |
+| Image | $0.744806 OpenAI + $0.071732 Anthropic | $6.50 + $0.50 |
+
+**Proposal.** **adad1ac** adds `independent_review` to the proposed `standard` setting; flags remain off. The cross-provider reviewer stays off. The owner must still sign off the measured edit bounds (the D8 extension). Details are in `agency-qualification-20261024.md` §7.

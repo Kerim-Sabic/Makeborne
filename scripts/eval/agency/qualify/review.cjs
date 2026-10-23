@@ -14,7 +14,7 @@
 const c = require('./common.cjs');
 const path = require('node:path');
 
-const BRIEF = { id: 'brief-qual', version: 1, approved: true, summary: 'Harbour Bakery: one-page site, a short guide and a three-slide pitch for the weekly bread box.',
+const BRIEF = { id: 'brief-qual', version: 1, approved: true, summary: 'Harbour Bakery: one-page site, a short guide and a short pitch deck for the weekly bread box.',
   requirements: [
     { id: 'contact', text: 'Visitors can send a message.' },
     { id: 'hours', text: 'Show the opening hours (open daily from seven until two).' },
@@ -87,7 +87,10 @@ function fixtures(emptyDocument) {
       reviewerOnly: [{ defect: 'pickup sentence is near-invisible (low contrast #efe9df on #fbf7f0)', match: /contrast|legib|faint|pale|invisible|hard to read|barely|low.?contrast|light text/i }] },
     { id: 'book-a1', kind: 'book', seeded: false, doc: book([{ id: 'dawn', title: 'Dawn bakes', text: longChapter(40) }, boxChapter(goodBox)]) },
     { id: 'book-a2', kind: 'book', seeded: false, doc: book([{ id: 'dawn', title: 'Dawn bakes', text: longChapter(30) }, { id: 'people', title: 'The people', text: 'Ana and Luka Marić run Harbour Bakery on Pier 4 and bake every morning.' }, boxChapter(goodBox)]) },
-    { id: 'book-s1', kind: 'book', seeded: true, doc: book([{ id: 'dawn', title: 'Dawn bakes', text: longChapter(40) }, boxChapter('The weekly bread box costs €49 per month and is collected on Sundays at Pier 4. Harbour Bakery opens daily from seven until two.')]),
+    // Round 6: the contradiction sits in a chapter that IS in the export (rounds 2-5 put it in the chapter the export drops, so it had no PDF page).
+    { id: 'book-s1', kind: 'book', seeded: true, doc: book([{ id: 'dawn', title: 'Dawn bakes', text: `${longChapter(40)}
+
+On the first Sunday of each month the bread box is collected on Sundays at Pier 4 instead.` }, boxChapter(goodBox)]),
       exportWithout: 'box', repairedDoc: book([{ id: 'dawn', title: 'Dawn bakes', text: longChapter(40) }, boxChapter(goodBox)]),
       reviewerOnly: [{ defect: 'pickup day contradicts the brief and facts (Sundays vs Saturdays)', match: /sunday/i }] },
     { id: 'book-s2', kind: 'book', seeded: true, doc: book([{ id: 'dawn', title: 'Dawn bakes', text: `${longChapter(40)}\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. TODO: replace this paragraph with the real story of the bakery.` }, boxChapter(goodBox.replace('€49', '€59'))]),
