@@ -51,6 +51,8 @@ const nextConfig: NextConfig = {
     // Document PDFs embed their open-licensed faces (src/lib/documents/fonts.ts):
     // the serverless Chromium has only Open Sans, and fonts-server.ts reads these files.
     "/api/cloud/workspaces/*/artifacts/*/document-export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", ...DOCUMENT_FONT_FILES],
+    // Data reports read the stored spreadsheet in the ingestion worker and render the PDF/PPTX they save.
+    "/api/cloud/workspaces/*/artifacts/*/data-reports": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", ...DOCUMENT_FONT_FILES, ...INGEST_WORKER_FILES],
   },
   async headers() {
     return [

@@ -21,7 +21,8 @@ function classifyFormat(id, code) {
   if (BUILTIN_PERCENT.has(id)) return { kind: 'percent' };
   if (BUILTIN_CURRENCY.has(id)) return { kind: 'currency' };
   if (!code) return { kind: 'number' };
-  const bracketCurrency = /\[\$([^\]-]*)(?:-[0-9A-Fa-f]+)?\]/.exec(code);
+  // [$€-2], [$€-x-euro2], [$USD-409]: the symbol, then an optional locale tag.
+  const bracketCurrency = /\[\$([^\]-]*)(?:-[^\]]*)?\]/.exec(code);
   const plain = code.replace(/"[^"]*"/g, '').replace(/\\./g, '').replace(/\[[^\]]*\]/g, '').replace(/_.|\*./g, '');
   if (/%/.test(plain)) return { kind: 'percent' };
   const quoted = (code.match(/"([^"]*)"/g) || []).map(text => text.slice(1, -1).trim());

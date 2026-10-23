@@ -62,7 +62,7 @@ export function inferColumns(sheet: ExtractionSheet, headerRow = 1): ColumnProfi
 }
 
 /** Exact decimal sum of the numbers as written (shortest round-trip form, at most 17 significant digits). */
-function exactSum(values: number[]): { sum: number; exact: string } | null {
+export function exactSum(values: number[]): { sum: number; exact: string } | null {
   let scale = 0;
   const parts: { digits: bigint; scale: number }[] = [];
   for (const value of values) {
