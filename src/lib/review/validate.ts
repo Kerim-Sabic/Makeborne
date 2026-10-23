@@ -54,9 +54,19 @@ function evidenceIssue(finding: ModelFinding, request: ReviewRequest, corpus: st
     return evidence.box.x + evidence.box.w <= image.width && evidence.box.y + evidence.box.h <= image.height ? null : "the crop lies outside the image";
   }
   const quote = norm(evidence.text);
-  if (evidence.from === "artifact") return corpus.includes(quote) ? null : "the quoted text does not appear in the reviewed output";
-  if (evidence.from === "brief") return norm(`${request.brief.summary}\n${request.brief.requirements.map(item => item.text).join("\n")}`).includes(quote) ? null : "the quote is not in the approved brief";
-  return norm(request.facts.facts.map(fact => `${fact.statement} ${fact.value ?? ""}`).join("\n")).includes(quote) ? null : "the quote is not in the approved facts";
+  if (evidence.from === "artifact") return quoted(corpus, quote) ? null : "the quoted text does not appear in the reviewed output";
+  if (evidence.from === "brief") return quoted(norm(`${request.brief.summary}\n${request.brief.requirements.map(item => item.text).join("\n")}`), quote) ? null : "the quote is not in the approved brief";
+  return quoted(norm(request.facts.facts.map(fact => `${fact.statement} ${fact.value ?? ""}`).join("\n")), quote) ? null : "the quote is not in the approved facts";
+}
+
+/** Exact, or elided ("…" / "..."): every part (8+ characters) appears in the source, in order. */
+function quoted(source: string, quote: string) {
+  if (source.includes(quote)) return true;
+  const parts = quote.split(/\s*(?:\.\.\.|…)\s*/).map(part => part.trim()).filter(Boolean);
+  if (parts.length < 2 || parts.some(part => part.length < 8)) return false;
+  let from = 0;
+  for (const part of parts) { const at = source.indexOf(part, from); if (at < 0) return false; from = at + part.length; }
+  return true;
 }
 
 /** Grounds each model finding against the request; never trusts the model's own claims about sources. */

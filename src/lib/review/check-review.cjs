@@ -420,6 +420,15 @@ const keepAlive = setInterval(() => {}, 1000);
     ] }, request2, claims.defaultClaimsCheck);
     assert.deepEqual(graded.map(item => [item.id, item.grounding]), [["sundays-cites-pickup", "grounded"], ["sundays-cites-both", "grounded"], ["sundays-cites-brief", "grounded"], ["price-is-fine", "unverified"], ["price-vague", "unverified"]]);
     assert.match(graded[3].note, /approved facts support this value/);
+    // An elided quote ("… ...") resolves when every part appears in the output, in order; an invented part still fails.
+    const pieces = websiteRequest({ diagnostics: [], text: "Weekly bread box: €49 per month\nThe bread box is collected on Saturdays. Order by Thursday.\nHarbour Bakery, Pier 4" });
+    const elided = validate.groundFindings({ coverageNotes: [], findings: [
+      finding({ id: "elided", category: "completeness", evidence: { type: "quote", text: "Weekly bread box: €49 per month ... The bread box is collected on Saturdays. … Harbour Bakery, Pier 4", from: "artifact" } }),
+      finding({ id: "elided-wrong-order", category: "completeness", location: route("/", "phone"), evidence: { type: "quote", text: "Harbour Bakery, Pier 4 ... Weekly bread box: €49 per month", from: "artifact" } }),
+      finding({ id: "elided-invented", category: "completeness", location: route("/", "desktop", "p"), evidence: { type: "quote", text: "Weekly bread box: €49 per month ... Open every Sunday", from: "artifact" } }),
+      finding({ id: "elided-too-short", category: "completeness", location: route("/", "phone", "p"), evidence: { type: "quote", text: "We ... ly", from: "artifact" } }),
+    ] }, pieces, claims.defaultClaimsCheck);
+    assert.deepEqual(elided.map(item => [item.id, item.grounding]), [["elided", "grounded"], ["elided-wrong-order", "unverified"], ["elided-invented", "unverified"], ["elided-too-short", "unverified"]]);
   });
 
   await check("model step: the knowledge is re-read with the operation id and snapshotted; changed facts end it uncharged with no call", async () => {
