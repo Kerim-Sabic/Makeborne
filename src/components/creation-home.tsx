@@ -124,9 +124,9 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
     <main className="mk-home">
       <header className="mk-nav">
         <Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={30} /><span>Makeborne</span></Link>
-        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
+        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/billing">Pricing</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
         <div className="mk-nav-actions"><StudioAccount variant="home" initialEmail={initialEmail} enabled={accountsEnabled} /><Link className="mk-nav-cta" href="/studio">Open studio <ArrowUpRight size={14} /></Link><button className="mk-menu-toggle" aria-label={menu ? "Close navigation" : "Open navigation"} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X size={20} /> : <Menu size={20} />}</button></div>
-        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
+        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/billing">Pricing</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
       </header>
       <section className="mk-hero" aria-labelledby="creation-heading">
         <div className="mk-atmosphere" aria-hidden="true"><span /><span /><span /></div>
@@ -155,7 +155,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
           {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
           <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>
-          <p className="mk-availability">{immediateWebsite ? "Your project opens with this brief ready to send. Building starts, and credits are used, only when you press Send there, after its maximum is shown." : trialCredits ? `Start free — confirmed accounts get ${trialCredits} trial credits to build their first website.` : "Every creation plan includes monthly credits to build with."}</p>
+          <p className="mk-availability">{immediateWebsite ? "Your project opens with this brief ready to send. Building starts, and credits are used, only when you press Send there, after its maximum is shown." : trialCredits ? `Start free — confirmed accounts get ${trialCredits} trial credits to build their first website.` : <>Every <Link href="/billing#plans">creation plan</Link> includes monthly credits to build with.</>}</p>
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>

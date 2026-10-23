@@ -31,7 +31,9 @@ chat, a file or a log.
 - [ ] The candidate tree matches `candidate-inventory.json` (aggregate hash), and is committed and tagged by the owner. An uncommitted tree is not a release artifact.
 - [ ] Production is still at 20 migrations, last `20261007110318`, with the schema fingerprint from `production-baseline.json`. If anything differs, stop and re-run `node scripts/rehearse-candidate.mjs <container>`.
 - [ ] The deployed app is still `dpl_8NUAKFQ6orzUHcb7sAEPziGHhK9T` (commit `307881c2…`).
-- [ ] D1 founding copy is resolved, and D2–D8 are decided or explicitly deferred with the feature off.
+- [ ] D1 is resolved (no founding offer; standard prices on `/billing`), and D2–D8 are decided or explicitly deferred with the feature off.
+- [ ] **EU/UK consumer compliance gate.** The database plan gate (`makeborne_billing_creation_enabled`) may be opened only after every EU/UK item in `docs/WHOP_ACCESS_SETUP.md` (tax-inclusive prices and `TAX_NOTE` flipped, taxed-payment fulfilment verified, checkout-fee question answered, an "order with obligation to pay" button, immediate-performance consent and withdrawal acknowledgement collected by Whop) is signed off, **or** Whop blocks EU/UK consumer sales. This is a process control; the page cannot geo-gate.
+- [ ] The `/billing` outcome figures are re-measured on the current pipeline, or the owner accepts publishing the 18 Oct figures with their "predate our latest efficiency changes" footnote (`docs/pricing/OUTCOME_FIGURES.md`).
 - [ ] Owner-required AI images are qualified on the exact candidate before launch. Keep image activation off until a server-only key, currently verified prices, enforceable per-call bounds and a live qualification pass are recorded. A missing key does not authorize reducing launch scope. Never rely on a retired or unqualified default image model.
 - [ ] Single user-action cumulative credit authorization is qualified across builds, continuations, reviews and recovery; displayed maxima match server enforcement.
 - [ ] Anonymous client review rejects stale displayed versions and exposes no presenter notes, generation prompts or source provenance. Canonical documents and authorized artwork match the version the client approves.
@@ -108,7 +110,7 @@ select version from supabase_migrations.schema_migrations order by version; -- e
 | `MAKEBORNE_BILLING_MIGRATIONS_VERIFIED` | `true` after section D |
 | `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET`, `WHOP_COMPANY_ID`, `WHOP_ACCESS_PLAN_IDS`, `WHOP_PLAN_CREDIT_MAP` | production company and plans; **no** `WHOP_SANDBOX_COMPANY_ID`, `MAKEBORNE_WHOP_SANDBOX` or `WHOP_API_BASE_URL` |
 | Whop webhook endpoint (dashboard/API, not an env var) | created with `api_version_date` `2025-01-01` to match the app's pinned requests; events `membership.*`, `payment.*`, `refund.*`, `dispute.*` |
-| `WHOP_CREATION_ENABLED` | `false` until D1 is resolved and the founding/standard offer is approved |
+| `WHOP_CREATION_ENABLED` | `false` until the standard offer is approved and the EU/UK compliance gate row above is signed off |
 | `MAKEBORNE_BILLING_RECONCILE_ENABLED`, `CRON_SECRET` | `false` until section G; secret ≥ 32 characters |
 | `ANTHROPIC_API_KEY`, `MAKEBORNE_BUILDER_MODEL` | priced model only (`prices.ts`), else `AI_UNAVAILABLE` |
 | `OPENAI_API_KEY`, `MAKEBORNE_IMAGE_MODELS` (or `MAKEBORNE_IMAGE_MODEL`) | unset (images off), or `gpt-image-2.5-flare,gpt-image-2.5-sunburst,gpt-image-2` (D8 changed 2026-10-21) before gpt-image-1 shuts down on 2026-10-23 |
@@ -188,7 +190,7 @@ Unpaid, in order:
 4. Publish a website. The existing address serves it; republish after a rename and check the former address returns 404.
 5. Enable enquiries on that site, submit the form, and see it in the owner inbox. Then disable enquiries.
 6. With limits disabled, a build returns `AI_PAUSED` with no hold row.
-7. Billing page: the founding and creation CTAs match the D1 decision. A checkout returns the same URL on retry (`resumed: true`).
+7. Billing page: signed out, the CTAs read "Get Create / Get Studio / Get Scale" with renewal and tax wording under each, and lead to `/login?mode=signup` with the plan in `next`; signed in, the key-information panel opens and one click reaches Whop. A checkout returns the same URL on retry (`resumed: true`).
 
 Paid (only with separately confirmed budget): one Plan-mode request at `light` effort. One settled `ai_run_outcomes` row; `actual_microusd ≤ bound_microusd`.
 

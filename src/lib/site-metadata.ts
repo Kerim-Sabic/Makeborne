@@ -29,7 +29,15 @@ export const PUBLIC_ROBOTS: Metadata["robots"] = {
 /** Fixed public pages, plus help articles (listed in the sitemap from the help content). */
 export type PublicPath = typeof PUBLIC_PATHS[number] | `/help/${string}`;
 
-export function publicPageMetadata(path: PublicPath, title: string, description: string): Metadata {
+/** The brand once: a trailing " | Makeborne" is dropped (the root template adds " · Makeborne"),
+ * and social previews get the branded title absolutely, since they ignore the document template. */
+export function brandedTitle(title: string) {
+  const page = title.replace(/\s*\|\s*Makeborne\s*$/, "");
+  return { page, social: /\bMakeborne\b/.test(page) ? page : `${page} · ${SITE.name}` };
+}
+
+export function publicPageMetadata(path: PublicPath, input: string, description: string): Metadata {
+  const { page: title, social } = brandedTitle(input);
   return {
     title,
     description,
@@ -38,7 +46,7 @@ export function publicPageMetadata(path: PublicPath, title: string, description:
     openGraph: {
       type: "website",
       siteName: SITE.name,
-      title,
+      title: social,
       description,
       url: path,
       locale: "en_US",
@@ -46,7 +54,7 @@ export function publicPageMetadata(path: PublicPath, title: string, description:
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: social,
       description,
       images: [{ url: "/opengraph-image", alt: SITE.title }],
     },

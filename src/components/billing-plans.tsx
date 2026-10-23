@@ -1,91 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowUpRight, ChevronDown, Coffee, LoaderCircle, ShieldCheck } from "lucide-react";
-import EffortControl from "./effort-control";
+import { ShieldCheck } from "lucide-react";
 import BillingTopups from "./billing-topups";
 import CreationPlans from "./creation-plans";
-import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
+import PlanAssurances from "./plan-assurances";
+import type { PlanId } from "@/lib/billing/plans";
+import type { BuilderEstimates, MeasuredRun } from "@/lib/builder/credit-estimate";
 
-type SupportCheckout = { available: boolean; authenticated: boolean };
-
-function SupportPlan() {
-  const router = useRouter();
-  const [checkout, setCheckout] = useState<SupportCheckout | null>(null);
-  const [availabilityAttempt, setAvailabilityAttempt] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const opening = useRef(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/api/billing/support-checkout", { signal: controller.signal, cache: "no-store" })
-      .then(async response => {
-        if (!response.ok) throw new Error("Checkout availability could not be loaded.");
-        const data: unknown = await response.json();
-        if (!data || typeof data !== "object" || !("available" in data) || typeof data.available !== "boolean" || !("authenticated" in data) || typeof data.authenticated !== "boolean") throw new Error("Checkout availability could not be loaded.");
-        setCheckout({ available: data.available, authenticated: data.authenticated });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setCheckout({ available: false, authenticated: false });
-      });
-    return () => controller.abort();
-  }, [availabilityAttempt]);
-
-  async function openCheckout() {
-    if (opening.current || !checkout?.available) return;
-    opening.current = true;
-    setBusy(true);
-    setError("");
-    const signIn = () => {
-      const returnTo = `${window.location.pathname}${window.location.search}#support`;
-      router.push(`/login?next=${encodeURIComponent(returnTo)}`);
-    };
-    try {
-      if (!checkout.authenticated) { signIn(); return; }
-      const next = new URLSearchParams(window.location.search).get("next") ?? "/billing";
-      const response = await fetch("/api/billing/support-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ next }),
-      });
-      if (response.status === 401) { signIn(); return; }
-      const data = await response.json();
-      if (!response.ok) throw new Error(typeof data?.error?.message === "string" ? data.error.message : "Checkout could not be opened. Please try again.");
-      if (typeof data?.url !== "string") throw new Error("Checkout could not be opened. Please try again.");
-      const destination = new URL(data.url);
-      if (destination.origin !== "https://whop.com" || destination.username || destination.password || !/^\/checkout\/(?:plan|ch)_[A-Za-z0-9]+\/?$/.test(destination.pathname)) throw new Error("The checkout link could not be verified. Please try again.");
-      window.location.assign(destination.href);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Checkout could not be opened. Please try again.");
-      opening.current = false;
-      setBusy(false);
-    }
-  }
-
-  return <section id="support" className="billing-support" aria-labelledby="support-heading">
-    <div className="billing-support-icon" aria-hidden="true"><Coffee size={25} strokeWidth={1.45} /></div>
-    <div className="billing-support-copy">
-      <div className="billing-support-kicker"><span>A LITTLE SUPPORT</span></div>
-      <h2 id="support-heading">Buy us a coffee</h2>
-      <p>Like what we’re building? Help keep it going.</p>
-    </div>
-    <div className="billing-support-action">
-      <div className="billing-support-price"><strong><span>$</span>1</strong><span>USD / month</span></div>
-      {checkout?.available ? <button className="billing-support-button" type="button" disabled={busy} onClick={() => void openCheckout()}>
-        {busy ? <><LoaderCircle className="billing-loading" size={16} />Continuing…</> : <>Buy us a coffee<ArrowUpRight size={15} /></>}
-      </button> : checkout === null ? <span className="billing-support-status" role="status">Checking checkout…</span> : <><span className="billing-support-status" role="status">Checkout is unavailable right now</span><button className="billing-support-retry" type="button" onClick={() => { setCheckout(null); setAvailabilityAttempt(attempt => attempt + 1); }}>Try again</button></>}
-      <span>{checkout?.authenticated ? "Via Whop · Cancel anytime" : "Sign in to continue · Cancel anytime"}</span>
-      {error && <p className="billing-checkout-error" role="alert">{error}</p>}
-    </div>
-    <p className="billing-support-note">Optional support only. No app access or AI credits included.</p>
-  </section>;
-}
-
-export default function BillingPlans({ unlimitedCredits = false }: { unlimitedCredits?: boolean }) {
-  const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
-  return <><CreationPlans />{unlimitedCredits ? <section className="billing-unlimited-topups" aria-label="Credit top-ups"><ShieldCheck size={19} aria-hidden="true" /><div><h2>You’re covered.</h2><p>Your unlimited administrator allowance means you do not need credit top-ups.</p></div></section> : <BillingTopups />}<SupportPlan />
-    <details className="billing-effort-details"><summary><span>How does thinking effort affect credits?</span><ChevronDown size={16} aria-hidden="true" /></summary><div className="billing-effort-preview"><div><h3>Set the pace for each project.</h3><p>Higher effort allows more planning and review, which can use more credits. Your estimate will depend on the work, including its length and artwork.</p><small>Try the slider. This preview changes no project settings.</small></div><EffortControl value={effort} onChange={setEffort} /></div></details>
+/** Plans for everyone; buying reassurance only without a plan; credit packs only for members on a limited allowance.
+ * Coffee support and the effort preview are no longer on /billing (the support route and terms stay). */
+export default function BillingPlans({ unlimitedCredits = false, isMember = false, topupsOpen = false, hasYearly = false, estimates = null, mediumCeilingCredits = null, currentTier = null, measuredRun = null, accountId = null }: { unlimitedCredits?: boolean; /** Active, canceling or past-due creation subscription (or unknown because subscriptions failed to load). */ isMember?: boolean; topupsOpen?: boolean; /** A yearly offer is configured (drops "Yearly billing." from what isn't ready). */ hasYearly?: boolean; estimates?: BuilderEstimates | null; mediumCeilingCredits?: number | null; currentTier?: PlanId | null; measuredRun?: MeasuredRun | null; accountId?: string | null }) {
+  const buying = !isMember && !unlimitedCredits;
+  return <>
+    <CreationPlans estimates={estimates} mediumCeilingCredits={mediumCeilingCredits} currentTier={currentTier} measuredRun={measuredRun} accountId={accountId} />
+    {buying && <PlanAssurances topupsOpen={topupsOpen} hasYearly={hasYearly} />}
+    {unlimitedCredits ? <section className="billing-unlimited-topups" aria-label="Credit top-ups"><ShieldCheck size={19} aria-hidden="true" /><div><h2>You’re covered.</h2><p>Your unlimited administrator allowance means you do not need credit top-ups.</p></div></section> : isMember && <BillingTopups currentTier={currentTier} />}
   </>;
 }

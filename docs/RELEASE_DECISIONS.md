@@ -43,7 +43,7 @@ the decision.
 
 | Topic | Customer copy | Implementation | Status |
 | --- | --- | --- | --- |
-| Included-credit expiry | Expire at the end of the allocation month, soonest first (`billing/terms`, `billing-workspace.tsx:69`) | `credit_lots` expire at allocation end, plan lots spent first (20261012120000) | Consistent |
+| Included-credit expiry | Expire at the end of the allocation month, soonest first (`billing/terms`, `billing-workspace.tsx` FAQ `#faq-expire`, `PLAN_PROMISES` in `billing/plans.ts`) | `credit_lots` expire at allocation end, plan lots spent first (20261012120000) | Consistent |
 | Annual plans | Credits released monthly, not all up front | One allocation per month of the provider period (sandbox annual purchase: 1 allocation) | Consistent |
 | Trial credits | "Trial credits do not expire" | Trial lots have no expiry; the free tier is off by default (20261011170000), 50 credits when enabled | Consistent; the trial itself is undecided (D3) |
 | Renewal price | Renews at the standard price after the discounted first term | Whop plan configuration, not app code | Unverified until a real renewal is observed (gate 2) |
