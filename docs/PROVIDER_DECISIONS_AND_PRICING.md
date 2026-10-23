@@ -24,6 +24,8 @@ Do not integrate all payment providers at once. A provider-neutral entitlement s
 
 ## 3. Exact PROPOSED monthly plans
 
+> **Superseded on 23 Oct 2026:** current prices are Create $20 (300 credits), Studio $49 (750) and Scale $99 (1,550); see `docs/RELEASE_DECISIONS.md`. The tables below are the original proposal, kept for history.
+
 USD prices before customer taxes. All features and allowances below are proposed limits pending measurements and implementation. Do not enable purchase buttons or advertise them as available until the corresponding flows work.
 
 | Plan | Monthly price | Included generation credits | Active hosted static sites | Asset storage | Seats | Purpose |

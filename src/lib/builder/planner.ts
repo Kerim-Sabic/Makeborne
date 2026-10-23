@@ -28,6 +28,8 @@ export type PlannerRun = {
   emit: (event: PlannerEvent) => void;
   signal: AbortSignal;
   anthropic?: AnthropicLike;
+  /** The model this stage runs on (see ../ai/model-routing.ts); default: the builder model. */
+  model?: string;
 };
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds. */
@@ -70,11 +72,13 @@ const MILESTONES: [string, string][] = [
  * plan when the model did not produce a valid plan (the caller charges nothing). */
 export async function runPlanner(run: PlannerRun): Promise<PlannerResult> {
   const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 240_000 }) as unknown as AnthropicLike);
-  const model = builderModel();
+  const model = run.model ?? builderModel();
   const models = builderModels(model);
   const rate = aiCostUsdPerCredit();
   const spend = run.spend;
-  const system = [{ type: "text" as const, text: PLANNER_SYSTEM }];
+  // The system prompt carries its own cache marker, so every run (builds, edits,
+  // reviews, every user) reuses it; the automatic breakpoint caches the conversation.
+  const system = [{ type: "text" as const, text: PLANNER_SYSTEM, cache_control: { type: "ephemeral" as const } }];
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: [TOOL], messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const result = (plan: SitePlan | null): PlannerResult => ({ plan, note: note.trim(), credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6 });
   let note = "";

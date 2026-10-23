@@ -1,0 +1,21 @@
+{
+  "id": "s04-yoga-studio",
+  "format": "website",
+  "direction": "wellness",
+  "title": "Yoga studio website",
+  "shared": false,
+  "brief": "yoga studio website",
+  "simulatedAnswers": {
+    "vibe": "calm",
+    "goal": "book",
+    "sections": [
+      "prices",
+      "hours",
+      "team",
+      "faq"
+    ],
+    "imagery": "illustration",
+    "theme": "light"
+  },
+  "notes": "Deliberately short and vague first prompt (design round 3). simulatedAnswers are the one-click answers a typical owner would give to the on-device design questions, fixed in advance; 'auto' means 'You choose' / 'Let Makeborne choose'. Only questions the app actually asks for this prompt are answered."
+}

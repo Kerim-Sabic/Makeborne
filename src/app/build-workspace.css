@@ -126,3 +126,14 @@ p.build-state-card { display:block; }
   .workbench-empty { min-height:440px; }
 }
 .studio-shell.is-project-open .artifact-canvas.is-starting-draft > .canvas-toolbar,.studio-shell.is-project-open .artifact-canvas.is-starting-draft > .preview-disclaimer{display:none}
+/* Desktop: the conversation can be hidden (Hide chat, Ctrl+.) so the preview takes the full width. It stays mounted, so drafts and state survive. */
+.cloud-workbench-tabs button.workbench-chat-hide { display:none; }
+@media (min-width:761px) {
+  .cloud-workbench-tabs button.workbench-chat-hide { display:inline-flex; }
+  /* The preview always takes the main column, whether or not a conversation sits beside it. */
+  .workbench-layout > .workbench-stage { grid-column:-2 / -1; }
+  .workbench-layout.chat-hidden { grid-template-columns:minmax(0,1fr); }
+  .workbench-layout.chat-hidden > :is(.build-conversation, .lb) { display:none; }
+}
+#editor-stage:focus { outline:none; }
+#editor-stage:focus-visible { outline:2px solid #806797; outline-offset:-2px; }

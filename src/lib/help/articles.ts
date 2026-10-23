@@ -323,7 +323,7 @@ const CORE_ARTICLES: HelpArticle[] = [
     keywords: ["credits", "pricing", "plans", "cost", "subscription", "billing", "top up", "credit pack", "refund", "carry over", "how much"],
     answer: "Every plan includes monthly credits for AI work: creating and editing projects, personalised emails, lead finding and advisor answers. Sending email, publishing and the CRM itself use no credits. Automated sequence sending is disabled for the current launch. Unused plan credits carry over for two months, and one-time credit packs add more without changing your plan.",
     sections: [
-      { heading: "Plans", list: ["Create: US$29 per month, 300 credits.", "Studio: US$79 per month, 850 credits.", "Scale: US$199 per month, 2,200 credits.", "Yearly billing is 20% below twelve monthly payments. Prices are before tax."] },
+      { heading: "Plans", list: ["Create: US$20 per month, 300 credits.", "Studio: US$49 per month, 750 credits.", "Scale: US$99 per month, 1,550 credits.", "Yearly billing is 20% below twelve monthly payments. Prices are before tax."] },
       { heading: "What uses credits", list: ["Creating and editing websites, books and presentations (more for larger work and higher effort).", "Advisor answers: Standard usually under one credit; Genius more.", "Personal emails: a fraction of a credit each.", "Lead finding: 0.2 credits per delivered lead plus confirmed AI ranking, with the combined total rounded up once. Creator discovery is temporarily unavailable."] },
       { heading: "What is free", list: ["Sending emails. Gmail is currently send-only; automated sequence sending is disabled for launch.", "Publishing and hosting websites (fair use).", "The CRM, client reviews and lead research of a single profile."] },
     ],

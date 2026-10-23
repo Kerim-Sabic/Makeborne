@@ -1,0 +1,20 @@
+{
+  "id": "s03-plumber-leeds",
+  "format": "website",
+  "direction": "trades",
+  "title": "Plumber website",
+  "shared": false,
+  "brief": "plumber in Leeds",
+  "simulatedAnswers": {
+    "vibe": "technical",
+    "goal": "call",
+    "sections": [
+      "prices",
+      "testimonials",
+      "contact"
+    ],
+    "imagery": "auto",
+    "theme": "light"
+  },
+  "notes": "Deliberately short and vague first prompt (design round 3). simulatedAnswers are the one-click answers a typical owner would give to the on-device design questions, fixed in advance; 'auto' means 'You choose' / 'Let Makeborne choose'. Only questions the app actually asks for this prompt are answered."
+}

@@ -1,0 +1,12 @@
+{
+  "note": "Six more targeted edits for the model-orchestrator qualification (scope model-orchestrator-20261023), each visible on the page, on websites saved by the 21 October app-route run (read only). Used together with edit-cases.json (e01-e06).",
+  "frozenAt": "2026-10-23",
+  "cases": [
+    { "id": "t07-ovenbird-contact-cards", "kind": "layout, named part", "site": "outputs/eval/runs/live-20261021T202136Z/w11-restaurant-ovenbird-bakehouse", "request": "In the pre-order section, show the phone and email options as two side-by-side cards on desktop, stacked on phones, each with its own heading." },
+    { "id": "t08-fernhill-popular-badge", "kind": "emphasis, named part", "site": "outputs/eval/runs/live-20261021T202136Z/w13-professional-fernhill-books-tax", "request": "In the packages section, mark the Books + Tax package as the most popular one with a small badge and a stronger border, so it stands out from the others." },
+    { "id": "t09-crux-first-visit", "kind": "new block, named part", "site": "outputs/eval/runs/live-20261021T202136Z/w16-wellness-crux-yard", "request": "Under the opening hours, add a short \"First visit?\" note with three bullet points: bring clean indoor shoes, arrive ten minutes early for the safety talk, and the first taster session is free." },
+    { "id": "t10-relay-pricing-align", "kind": "layout, named part", "site": "outputs/eval/runs/live-20261021T202136Z/w02-saas-relay-operations", "request": "Make the pricing cards the same height on desktop, with each card's button lined up at the bottom of the card." },
+    { "id": "t11-hisaburja-times-table", "kind": "table, named part", "site": "outputs/eval/runs/live-20261021T202136Z/w18-property-hisa-burja", "request": "In the stay information, show check-in, check-out and breakfast times as a small two-column table (what, when) with a visible heading row." },
+    { "id": "t12-glenrise-bring-row", "kind": "layout, named part", "site": "outputs/eval/runs/live-20261021T202136Z/w20-civic-glen-rise-maths-club", "request": "In the \"Bring three things.\" section, show the three things in a row on desktop, each with a simple inline SVG icon above its label, and stacked on phones." }
+  ]
+}

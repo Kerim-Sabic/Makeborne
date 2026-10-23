@@ -5,7 +5,7 @@
 //   node scripts/eval/e2e/server.mjs
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
 import { REPO } from '../lib/paths.mjs';
 import { isolatedStack } from '../lib/stack.mjs';
@@ -104,7 +104,9 @@ function start() {
   // Presence only: never print a key's value.
   const present = ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY'].filter(key => env[key]).join(', ');
   console.log(`[e2e server] next dev on ${ORIGIN} -> stack ${env.NEXT_PUBLIC_SUPABASE_URL} (set: ${present}; provider keys blank; ${fileKeys.length} key(s) named in ${ENV_FILES.join(', ')} blanked)`);
-  const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', HOST, '--port', String(PORT)], {
+  // A git worktree reaches the app's packages through a node_modules link, which Turbopack refuses ("points out of the filesystem root").
+  const linked = lstatSync(path.join(REPO, 'node_modules')).isSymbolicLink();
+  const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', ...(linked ? ['--webpack'] : []), '--hostname', HOST, '--port', String(PORT)], {
     cwd: REPO, env, stdio: 'inherit', detached: process.platform !== 'win32',
   });
   let stopping = false;

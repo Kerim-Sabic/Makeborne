@@ -10,6 +10,14 @@
 //     --effort medium|high --only w01,w02 [--repo <another checkout whose app code to run, e.g. an extracted base commit>]
 //     [--images gpt-image-2.5-flare,gpt-image-2.5-sunburst,gpt-image-2]  (image routing on: OPENAI_API_KEY from the same .env.local;
 //      a second, OpenAI ledger reservation per brief covers its images under the OpenAI sub-cap; bytes land in <item>/assets/)
+//     [--variant original|enhanced|answered]  (design round 3: "enhanced" runs the app's brief enhancer first, one capped Haiku
+//      call with its own ledger reservation (kind direct-enhancer) at the 1-credit hold; "answered" first applies the brief's
+//      simulatedAnswers to the on-device design questions the app would ask, then enhances. Short prompts: --only s01-dentist,...
+//      read from scripts/eval/briefs-short/; "questions" applies the simulated answers without the enhancer)
+//     [--route new-site=claude-sonnet-5-5,continuation=claude-sonnet-5-5]  (model routing on, src/lib/ai/model-routing.ts: each stage is
+//      classified like the build route and runs through routedWebsiteStage with its single escalation to the builder model;
+//      without --route every stage runs on the builder model exactly as before)
+//     [--scope <scoped allowance>]  (reservations are booked in that owner-approved scoped allowance instead of the design cap)
 // Outputs land in this harness's outputs/eval/runs/<runId>/ in the run.mjs layout (source.json etc.), so measure.mjs works
 // on them; item.json says origin.stack "none (direct runBuilder)". Report these runs as direct-agent, not app-route, runs.
 import path from 'node:path';
@@ -20,13 +28,17 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' } } });
+const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' }, variant: { type: 'string', default: 'original' }, route: { type: 'string' }, scope: { type: 'string' }, 'first-step': { type: 'string' } } });
 // This harness: the ledger, the run outputs and the secret scan always go through it.
 const DQ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPO = path.resolve(values.repo ?? DQ);
 if (process.env.EVAL_SPEND_APPROVED !== 'yes' || !values.approval?.trim()) throw new Error('Refusing: EVAL_SPEND_APPROVED=yes and --approval are required');
 if (!/^[a-z0-9-]+$/.test(values.run ?? '')) throw new Error('--run must be a plain id');
 if (!['medium', 'high'].includes(values.effort)) throw new Error('--effort must be medium or high');
+if (!['original', 'enhanced', 'answered', 'questions'].includes(values.variant)) throw new Error('--variant must be original, enhanced, answered or questions');
+if (values.route !== undefined && !/^[a-z-]+=[a-z0-9.-]+(?:,[a-z-]+=[a-z0-9.-]+)*$/.test(values.route)) throw new Error('--route takes <class>=<model>[,<class>=<model>...]');
+if (values.scope !== undefined && !/^[a-z0-9][a-z0-9-]{2,63}$/.test(values.scope)) throw new Error('--scope must be a scoped allowance name');
+const routeEnv = values.route || values['first-step'] ? { MAKEBORNE_MODEL_ROUTING: 'on', ...(values['first-step'] ? { MAKEBORNE_ROUTE_FIRST_STEP: values['first-step'] } : {}), ...Object.fromEntries((values.route ?? '').split(',').filter(Boolean).map(item => item.split('=')).map(([taskClass, model]) => [`MAKEBORNE_ROUTE_${taskClass.toUpperCase().replace(/-/g, '_')}`, model])) } : null;
 const only = (values.only ?? '').split(',').map(id => id.trim()).filter(Boolean);
 if (!only.length || only.length > 8) throw new Error('--only takes 1 to 8 brief ids');
 process.chdir(REPO);
@@ -39,7 +51,8 @@ const budget = await import(pathToFileURL(path.join(DQ, 'scripts/eval/lib/budget
 const { serve } = await imp('scripts/eval/lib/serve.mjs');
 const { captureForReview, describeCapture, saveShots } = await imp('scripts/eval/lib/capture-review.mjs');
 const { scanForSecrets } = await import(pathToFileURL(path.join(DQ, 'scripts/eval/run.mjs')).href);
-const { chromium } = await import(pathToFileURL(`${REPO}/scripts/eval/node_modules/playwright/index.mjs`).href);
+// Bare specifier: the eval package's playwright (nearest node_modules), else the app's.
+const { chromium } = await import('playwright');
 
 // The key goes into this process only (the SDK reads it); never printed or written.
 const envFile = process.env.EVAL_ENV_LOCAL?.trim() || path.join(DQ, '.env.local');
@@ -53,6 +66,12 @@ Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_C
 delete process.env.MAKEBORNE_BUILDER_MODEL;
 
 const { runBuilder } = loadApp('src/lib/builder/agent.ts');
+const routing = routeEnv ? loadApp('src/lib/ai/model-routing.ts') : null;
+const { routedWebsiteStage, repairRequest } = routeEnv ? loadApp('src/lib/builder/website-stage.ts') : {};
+/** Ledger reservations: the scoped allowance when --scope is given, else the design cap (unchanged). */
+const reserve = args => values.scope ? budget.reserveScoped({ ...args, scope: values.scope }) : budget.reserve(args);
+// Older trees (--repo at a base commit) have no contrast gate: they run without it, as they shipped.
+const renderedContrastCheck = fs.existsSync(path.join(REPO, 'src/lib/builder/contrast-gate.ts')) ? loadApp('src/lib/builder/contrast-gate.ts').renderedContrastCheck : null;
 const { ProjectFiles } = loadApp('src/lib/builder/files.ts');
 const { RunSpend, memoryGate } = loadApp('src/lib/ai/run-spend.ts');
 const { BUILDER_EFFORT } = loadApp('src/lib/builder/pricing.ts');
@@ -61,6 +80,10 @@ const { reviewRequest, reviewAttachments, ReviewInputSchema } = loadApp('src/lib
 const { compileVerdict } = loadApp('src/lib/builder/compile.ts');
 const imagesModule = values.images ? loadApp('src/lib/builder/images.ts') : null;
 const prices = loadApp('src/lib/ai/prices.ts');
+const enhancing = values.variant !== 'original';
+const questionsModule = enhancing ? loadApp('src/lib/builder/brief-questions.ts') : null;
+const enhancedModule = enhancing ? loadApp('src/lib/builder/enhanced-brief.ts') : null;
+const enhancerModule = enhancing ? loadApp('src/lib/builder/brief-enhancer.ts') : null;
 const { createHash } = await import('node:crypto');
 let seedBlock = null;
 try { seedBlock = values.seedless ? null : loadApp('src/lib/builder/design-seed.ts').designSeedBlock; } catch { seedBlock = null; }
@@ -77,9 +100,13 @@ const runJson = fs.existsSync(runJsonFile) ? JSON.parse(fs.readFileSync(runJsonF
 const save = () => fs.writeFileSync(runJsonFile, JSON.stringify(runJson, null, 2));
 save();
 
-function context({ brief, files, history }) {
-  const seed = !files.files.size && seedBlock ? seedBlock({ seed: brief.projectSeed, brief: brief.brief, images: Boolean(values.images), brand: false }) : '';
-  return [`<project title="${brief.title.replace(/"/g, "'")}">`, `Brief: ${brief.brief}`, 'Visual direction: No preset — choose the best direction for this business.', seed,
+function context({ brief, files, history, prep }) {
+  // Like the build route: the client's own brief first, then their answers and the approved enhanced brief.
+  const seed = !files.files.size && seedBlock ? seedBlock({ seed: brief.projectSeed, brief: [brief.brief, prep.message, prep.approved?.text].filter(Boolean).join('\n'), images: Boolean(values.images) && prep.design?.imagery !== 'type', brand: false,
+    ...(enhancing ? { design: prep.design, tone: enhancedModule.briefTone(prep.approved?.text) } : {}) }) : '';
+  return [`<project title="${brief.title.replace(/"/g, "'")}">`, `Brief: ${brief.brief}`,
+    enhancing ? enhancedModule.designAnswersBlock(prep.design) : '', prep.approved ? enhancedModule.enhancedBriefBlock(prep.approved) : '',
+    'Visual direction: No preset — choose the best direction for this business.', seed,
     history.length ? `Recent revisions:\n${history.join('\n')}` : '', '</project>',
     files.files.size ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: none` : '<current_files>(empty — build the complete website from scratch)</current_files>',
   ].filter(Boolean).join('\n');
@@ -87,20 +114,22 @@ function context({ brief, files, history }) {
 
 const browser = await chromium.launch();
 const runtime = await serve(path.join(REPO, 'public'));
+// The build route's rendered-contrast finish gate, on the local runtime origin (same probe, same rules).
+const contrastCheck = renderedContrastCheck ? renderedContrastCheck({ origin: runtime.url, launch: () => chromium.launch() }) : undefined;
 try {
   for (const id of only) {
-    const brief = JSON.parse(fs.readFileSync(path.join(REPO, 'scripts', 'eval', 'briefs', `${id}.json`), 'utf8'));
+    const brief = JSON.parse(fs.readFileSync(path.join(REPO, 'scripts', 'eval', /^s\d/.test(id) ? 'briefs-short' : 'briefs', `${id}.json`), 'utf8'));
     if (brief.format !== 'website') throw new Error(`${id} is not a website brief`);
     brief.projectSeed = randomUUID();
     const itemDir = path.join(runDir, id);
     if (fs.existsSync(path.join(itemDir, 'cost.json'))) { console.log(`${id}: already run, skipped`); continue; }
     fs.mkdirSync(itemDir, { recursive: true });
     const boundUsd = operationCapMicrousd / 1e6;
-    const reservation = await budget.reserve({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. ${values.effort}` });
+    const reservation = await reserve({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${values.scope ? '' : `${budget.CAP_APPROVAL}. `}${values.approval}. ${values.effort}${values.route ? ` route ${values.route}` : ''}` });
     // Images: the run's whole image allowance (max images x the dearest allowed medium bound) reserved under the OpenAI sub-cap.
     const imageModels = imagesModule ? imagesModule.imageConfiguration().models : [];
     const imageBoundUsd = imageModels.length ? policy.maxImages * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
-    const imageReservation = imageBoundUsd ? await budget.reserve({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
+    const imageReservation = imageBoundUsd ? await reserve({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
     let openaiMicrousd = 0, openaiUncertain = false;
     const imageBytes = new Map();
     const images = [];
@@ -109,7 +138,35 @@ try {
     let spentMicrousd = 0, uncertain = false;
     const files = new ProjectFiles();
     const history = [];
-    const message = brief.brief.trim().length > 8000 ? `${brief.brief.trim().slice(0, 7400).replace(/\s+\S*$/, '')}…` : brief.brief.trim();
+    // Variants: the studio's first-build path. Answered: the design questions the app would ask, answered as the brief's
+    // simulatedAnswers say (skips and "you choose" set nothing); enhanced: the brief enhancer (fail open on any failure).
+    const prep = { message: brief.brief.trim(), design: {}, asked: [], approved: null, enhancer: null };
+    if (values.variant === 'answered' || values.variant === 'questions') {
+      const asked = questionsModule.briefQuestions('website', brief.brief);
+      const answers = Object.fromEntries(asked.map(question => { const value = brief.simulatedAnswers?.[question.id]; return [question.id, Array.isArray(value) ? { options: value } : typeof value === 'string' ? { option: value } : {}]; }));
+      prep.asked = asked.map(question => question.id);
+      prep.message = questionsModule.briefWithAnswers(brief.brief, asked, answers);
+      prep.design = questionsModule.designAnswers(asked, answers);
+    }
+    // Like the studio: short briefs are enhanced; detailed ones get a free analysis of the client's verbatim words.
+    const helpMode = enhancing && enhancedModule.shouldEnhance(brief.brief) ? 'enhance' : 'analyze';
+    if (enhancing && values.variant !== 'questions') {
+      const enhancerBoundUsd = enhancedModule.ENHANCER_CREDITS * RATE;
+      const enhancerReservation = await reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
+      const enhanceSpend = new RunSpend({ run: `${values.run}/${id}/enhance`, providerCapMicrousd: Math.round(enhancerBoundUsd * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 50_000 });
+      let enhanced = null, enhanceError = null;
+      let reply = null;
+      try { enhanced = await enhancerModule.enhanceBrief({ brief: prep.message, title: brief.title, design: prep.design, mode: helpMode, spend: enhanceSpend, signal: AbortSignal.timeout(45_000), onReply: (text, stop) => { reply = { text, stop }; } }); }
+      catch (error) { enhanceError = String(error.message).slice(0, 200); }
+      const enhancerUncertain = enhanceSpend.uncertainMicrousd > 0;
+      await budget.settle(enhancerReservation, enhancerUncertain ? { unknown: true, detail: { error: enhanceError } } : { actualUsd: enhanceSpend.providerMicrousd / 1e6, detail: { calls: enhanceSpend.calls.length, usable: Boolean(enhanced) } });
+      prep.enhancer = { mode: helpMode, usd: enhanceSpend.providerMicrousd / 1e6, uncertain: enhancerUncertain, calls: enhanceSpend.calls.length, usable: Boolean(enhanced), error: enhanceError, credits: enhanceSpend.customerCredits(RATE) };
+      if (enhanced) prep.approved = helpMode === 'enhance' ? { mode: 'enhanced', text: enhancedModule.renderEnhancedBrief(enhanced) } : { mode: 'analysis', text: enhancedModule.renderBriefAnalysis(enhanced) };
+      fs.writeFileSync(path.join(itemDir, 'enhanced.json'), JSON.stringify({ variant: values.variant, asked: prep.asked, design: prep.design, message: prep.message, enhanced, text: prep.approved?.text ?? null, enhancer: prep.enhancer, ...(enhanced ? {} : { unusableReply: reply }) }, null, 2));
+      console.log(`  ${id} enhance: $${prep.enhancer.usd.toFixed(4)} usable=${prep.enhancer.usable}${enhanceError ? ` ERROR ${enhanceError}` : ''}`);
+    }
+    const required = enhancing ? { sections: prep.approved ? enhancedModule.requiredSections(prep.approved.text) : [], design: prep.design, brief: [brief.brief, prep.message].join('\n') } : undefined;
+    const message = prep.message.length > 8000 ? `${prep.message.slice(0, 7400).replace(/\s+\S*$/, '')}…` : prep.message;
     const storeImage = async (request, bytes) => {
       const prepared = await imagesModule.prepareImageBytes(bytes, { transparent: request.transparent, quality: request.transparent ? undefined : imagesModule.GENERATED_PHOTO_QUALITY });
       const sha256 = createHash('sha256').update(prepared.bytes).digest('hex');
@@ -132,12 +189,23 @@ try {
       const timer = setTimeout(() => controller.abort(), STAGE_MS);
       const before = new Set(files.changed); files.changed.clear();
       const saved = new Map(files.files);
-      let result = null, error = null;
+      let result = null, error = null, routeRecord = null;
+      const emit = event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file' || event.type === 'route') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300), ...(event.type === 'route' ? { class: event.class, role: event.role } : {}) }); };
+      // Like the route: the concept step on a first build (nothing written yet, no plan); the context is read at call time.
+      const firstBuild = name === 'build' && !files.files.size;
+      // The build route's decision (src/lib/ai/model-routing.ts) on the same inputs, when routing is on for this run.
+      const routeKind = name === 'review' ? 'review' : name.startsWith('continuation') ? 'continuation' : 'build';
+      const route = routeEnv ? routing.routeStage({ stage: routeKind, artifact: 'website', request, files: files.files.size, projectBytes: [...files.files.values()].reduce((sum, content) => sum + content.length, 0), effort: values.effort,
+        attachments: routeKind === 'build' ? (extra.attachments ?? []).length : 0, verification: { compile: true, contrast: Boolean(contrastCheck) } }, routeEnv) : null;
+      const attempt = plan => runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend,
+        request: plan.role === 'repair' ? repairRequest(request, plan.repairNotes) : request, context: context({ brief, files, history, prep }), required, contrastCheck,
+        concept: firstBuild && plan.role !== 'repair', attachments: extra.attachments ?? [], emit,
+        signal: controller.signal, deadline: plan.deadline, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage } : {}),
+        ...(plan.model ? { model: plan.model } : {}), ...(route ? { firstStep: route.firstStep } : {}) });
       try {
-        result = await runBuilder({ client: null, scope: { workspaceId: 'eval', projectId: brief.projectSeed }, files, effort: values.effort, spend, request, context: context({ brief, files, history }),
-          attachments: extra.attachments ?? [], emit: event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300) }); },
-          signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits, ...(imagesModule ? { storeImage } : {}) });
-      } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; }
+        if (!route) result = await attempt({ role: 'initial', deadline: Date.now() + STAGE_MS, repairNotes: [] });
+        else ({ result, record: routeRecord } = await routedWebsiteStage({ route, stage: routeKind, files, spend, deadline: Date.now() + STAGE_MS, signal: controller.signal, emit, compile: compileVerdict, attempt }));
+      } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; routeRecord = caught.route ?? routeRecord; }
       finally { clearTimeout(timer); }
       spentMicrousd += spend.providerMicrousd;
       for (const call of spend.calls.filter(item => item.provider === 'openai')) { if (call.actualMicrousd === null) { openaiUncertain = true; openaiMicrousd += call.boundMicrousd; } else openaiMicrousd += call.actualMicrousd; }
@@ -149,9 +217,11 @@ try {
         if (verdict.status === 'failed') { files.files.clear(); for (const [file, content] of saved) files.files.set(file, content); reverted = verdict.problems.join(' ').slice(0, 300); changed = []; }
       }
       for (const file of before) files.changed.add(file);
-      stages.push({ name, capMicrousd: cap, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, calls: spend.calls.length, finished: result?.finished ?? false, build: result?.build ?? null, stopped: result?.stopped ?? spend.stopped, summary: result?.summary ?? null, changed, reverted, error });
+      if (result?.concept) fs.writeFileSync(path.join(itemDir, 'concept.json'), JSON.stringify(result.concept, null, 2));
+      stages.push({ name, capMicrousd: cap, concept: result?.concept ? { chosen: result.concept.chosen.name, runnersUp: result.concept.runnersUp.map(item => item.name) } : undefined, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, calls: spend.calls.length, finished: result?.finished ?? false, build: result?.build ?? null, stopped: result?.stopped ?? spend.stopped, summary: result?.summary ?? null, changed, reverted, error,
+        ...(routeEnv ? { route: routing.routeDetail(routeRecord), chargeableMicrousd: spend.chargeableMicrousd } : {}) });
       if (result?.summary) history.push(`v${history.length + 1}: ${(name === 'review' ? 'Design review' : message.slice(0, 600))} → ${result.summary}`.slice(0, 300));
-      console.log(`  ${id} ${name}: $${(spend.providerMicrousd / 1e6).toFixed(3)} (${spend.calls.length} calls) finished=${result?.finished ?? false}${error ? ` ERROR ${error.code ?? error.name}` : ''}`);
+      console.log(`  ${id} ${name}: $${(spend.providerMicrousd / 1e6).toFixed(3)} (${spend.calls.length} calls) finished=${result?.finished ?? false}${routeRecord ? ` ${routeRecord.models.join(' > ')}${routeRecord.escalation ? ` ESCALATED (${routeRecord.escalation})` : ''}` : ''}${error ? ` ERROR ${error.code ?? error.name}` : ''}`);
       return { result, error, changed };
     };
     let outcome = 'ok';
@@ -184,9 +254,9 @@ try {
       try { const source = files.toSource(); fs.writeFileSync(path.join(itemDir, 'source.json'), JSON.stringify(source)); sourceOk = true; } catch (error) { outcome = `no source: ${error.message}`; }
       fs.writeFileSync(path.join(itemDir, 'brief.json'), JSON.stringify(brief, null, 2));
       fs.writeFileSync(path.join(itemDir, 'item.json'), JSON.stringify({ id, kind: 'website', title: brief.title, direction: brief.direction, briefId: id, brief: brief.brief, briefSha256: null,
-        origin: { type: 'live', stack: 'none (direct runBuilder)', artifactId: null, version: null, path: null }, generation: { effort: values.effort, styleId: 'automatic', mode: 'create (direct)', images: values.images ? `on (${values.images})` : 'off', seed: Boolean(seedBlock) } }, null, 2));
+        origin: { type: 'live', stack: 'none (direct runBuilder)', artifactId: null, version: null, path: null }, generation: { effort: values.effort, styleId: 'automatic', mode: 'create (direct)', images: values.images ? `on (${values.images})` : 'off', seed: Boolean(seedBlock), variant: values.variant, questionsAsked: prep.asked, enhancer: prep.enhancer, routing: values.route ?? 'off', ...(values.scope ? { scope: values.scope } : {}) } }, null, 2));
       fs.writeFileSync(path.join(itemDir, 'events.jsonl'), events.map(event => JSON.stringify(event)).join('\n'));
-      fs.writeFileSync(path.join(itemDir, 'cost.json'), JSON.stringify({ boundUsd, reservationId: reservation, actualUsd: uncertain ? null : actualUsd, images: imageReservation ? { boundUsd: imageBoundUsd, reservationId: imageReservation, actualUsd: openaiUncertain ? null : openaiMicrousd / 1e6, count: images.length } : null, stages, ms: Date.now() - started }, null, 2));
+      fs.writeFileSync(path.join(itemDir, 'cost.json'), JSON.stringify({ boundUsd, reservationId: reservation, actualUsd: uncertain ? null : actualUsd, enhancer: prep.enhancer, images: imageReservation ? { boundUsd: imageBoundUsd, reservationId: imageReservation, actualUsd: openaiUncertain ? null : openaiMicrousd / 1e6, count: images.length } : null, stages, ms: Date.now() - started }, null, 2));
       fs.writeFileSync(path.join(itemDir, 'status.json'), JSON.stringify({ ok: sourceOk && outcome === 'ok', outcome }, null, 2));
       runJson.items = runJson.items.filter(item => item.id !== id).concat({ id, kind: 'website', status: sourceOk ? 'generated' : 'failed', costUsd: uncertain ? null : actualUsd });
       save();

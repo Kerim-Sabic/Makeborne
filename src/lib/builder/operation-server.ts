@@ -6,10 +6,13 @@ import { RequestError, apiError } from "../server/http";
 import { canonicalSourceJson } from "../projects/canonical-json";
 import { aiCostUsdPerCredit } from "./pricing";
 import { SitePlanSchema, StoredPlanSchema, estimatePlanCredits, recommendedEffort, type SitePlan } from "./plan";
+import { BuildBriefSchema, DesignAnswersSchema, type BuildBrief } from "./enhanced-brief";
+import type { DesignAnswers } from "./brief-questions";
 import { RunSpend, SpendError, type SpendGate } from "../ai/run-spend";
 import { databaseGate, SETTLEMENT_WINDOW_MS, CLOCK_SKEW_MS } from "../ai/live-run";
 import type { CreditHold } from "../credits/server";
 import type { EffortLevel } from "../routing/effort";
+import { priorRoute, type PriorRoute } from "../ai/model-routing";
 import { OperationSnapshotSchema, OperationStatusSchema, type OperationRequest, type OperationSnapshot, type OperationStatus } from "./operation-contract";
 
 const internalSnapshot = OperationSnapshotSchema.extend({ rateMicrousd: z.number().int().positive(), providerRemainingMicrousd: z.number().int().nonnegative() });
@@ -20,7 +23,12 @@ export type OperationRun = {
   hold: CreditHold; operation: OperationSnapshot; rateMicrousd: number; providerAllowanceMicrousd: number; expiresAt: number;
   originalMessage?: string;
   originalPlan?: SitePlan;
+  /** The enhanced (or client-edited) brief and one-click design answers the request was authorized with. */
+  originalBrief?: BuildBrief;
+  originalDesign?: DesignAnswers;
   finalizationStarted?: boolean;
+  /** Routing counts of the operation's earlier runs (durable: read back from ai_operation_runs results). */
+  priorRoute?: PriorRoute;
 };
 export type OperationCandidate = {
   content: unknown; style: unknown; assetIds: string[]; summary: string; expectedVersion: number;
@@ -133,9 +141,10 @@ export function brandKitFingerprint(kit: object | null): string {
 }
 /** The request context recorded once with a new operation. Provenance (advisor brief ids) is kept for the record only. */
 export function operationContext(request: unknown, attachmentsSha256: string): Record<string, unknown> {
-  const body = typeof request === "object" && request !== null ? request as { message?: unknown; plan?: unknown; provenance?: unknown } : null;
+  const body = typeof request === "object" && request !== null ? request as { message?: unknown; plan?: unknown; provenance?: unknown; brief?: unknown; design?: unknown } : null;
   const brandKit = requestBrandKit(request);
-  return { attachmentsSha256, ...(brandKit ? { brandKit } : {}), ...(body ? { message: body.message ?? "", ...(body.plan ? { plan: body.plan } : {}), ...(body.provenance ? { provenance: body.provenance } : {}) } : {}) };
+  return { attachmentsSha256, ...(brandKit ? { brandKit } : {}), ...(body ? { message: body.message ?? "", ...(body.plan ? { plan: body.plan } : {}), ...(body.provenance ? { provenance: body.provenance } : {}),
+    ...(body.brief ? { brief: body.brief } : {}), ...(body.design ? { design: body.design } : {}) } : {}) };
 }
 const requestBrandKit = (request: unknown) => typeof request === "object" && request !== null && typeof (request as { brandKit?: unknown }).brandKit === "string"
   ? (request as { brandKit: string }).brandKit : undefined;
@@ -148,7 +157,7 @@ export async function beginOperation(input: {
   const digest = createHash("sha256").update(canonicalSourceJson(input.request)).digest("hex");
   const attachmentsSha256 = attachmentFingerprint(input.request);
   const brandKit = requestBrandKit(input.request);
-  let id: string;
+  let id: string, prior: PriorRoute | undefined;
   if ("actionKey" in input.envelope) {
     const created = await call("makeborne_ai_operation_create", {
       p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId,
@@ -165,6 +174,8 @@ export async function beginOperation(input: {
     const existingData = await call("makeborne_ai_operation_read", { p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_operation: id, p_action: null });
     checkRefusal(existingData);
     const existing = publicStatus(existingData);
+    // Repair and escalation counts survive restarts and stages: they are read back from the earlier runs' durable results.
+    prior = priorRoute(existingData.runs);
     if (existing.operation.effort !== input.effort) throw new OperationError("OPERATION_CONFLICT", "Continue with the effort originally authorized for this request.", 409, existing.operation);
     // Every later stage (continuation or review) must use the brand kit the request started with.
     const startedWith = (existingData.requestContext as { brandKit?: unknown } | null)?.brandKit;
@@ -199,7 +210,9 @@ export async function beginOperation(input: {
     hold: { userId: input.actor, reference: value.reference, amount: value.amount, exempt: value.exempt, reservedAt },
     operation: status.operation, rateMicrousd: op.rateMicrousd, providerAllowanceMicrousd: op.providerRemainingMicrousd, expiresAt,
     originalMessage: typeof (data.requestContext as { message?: unknown } | null)?.message === "string" ? (data.requestContext as { message: string }).message : undefined,
-    originalPlan: SitePlanSchema.safeParse((data.requestContext as { plan?: unknown } | null)?.plan).data } };
+    originalPlan: SitePlanSchema.safeParse((data.requestContext as { plan?: unknown } | null)?.plan).data,
+    originalBrief: BuildBriefSchema.safeParse((data.requestContext as { brief?: unknown } | null)?.brief).data,
+    originalDesign: DesignAnswersSchema.safeParse((data.requestContext as { design?: unknown } | null)?.design).data, ...(prior ? { priorRoute: prior } : {}) } };
 }
 
 export function createOperationSpend(run: OperationRun, platformDeadline: number): RunSpend {
@@ -266,7 +279,7 @@ export function operationTerminal(status: OperationStatus): Record<string, unkno
  * issuing a contradictory release or claiming that nothing was charged. */
 export async function operationFailure(run: OperationRun, spend: RunSpend, detail: Record<string, unknown>, candidate?: OperationCandidate): Promise<Record<string, unknown>> {
   try {
-    if (!run.finalizationStarted) return operationTerminal(await finishOperation(run, spend.confirmedMicrousd, "failed", detail, candidate));
+    if (!run.finalizationStarted) return operationTerminal(await finishOperation(run, spend.chargeableMicrousd, "failed", detail, candidate));
     const status = await readOperation({ actor: run.actor, workspaceId: run.workspaceId, artifactId: run.artifactId, id: run.operation.id });
     if (status.result?.runId === run.id) return operationTerminal(status);
     return operationTerminal({ ...status, result: null });

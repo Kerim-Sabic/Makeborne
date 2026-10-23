@@ -1,3 +1,21 @@
+## Owner decision — 2026-10-23: launch prices at or below the field
+
+The owner's words: "nothing free at start and u can adjust pricing … make it same price or cheaper then others but still same quality".
+
+| Plan | Monthly | Yearly (20% off) | Credits/month | Price per credit (monthly / yearly) | AI-only margin at full use (monthly / yearly) |
+|---|---:|---:|---:|---:|---:|
+| Create | $20 | $192 ($16/mo) | 300 | $0.0667 / $0.0533 | 55.0% / 43.8% |
+| Studio | $49 | $470.40 ($39.20/mo) | 750 | $0.0653 / $0.0523 | 54.1% / 42.6% |
+| Scale | $99 | $950.40 ($79.20/mo) | 1,550 | $0.0639 / $0.0511 | 53.0% / 41.3% |
+
+- **Comparison:** every plan is at or below the matching plan of Base44 ($20 / $50 / $100), Lovable ($25 / $50), Bolt ($25 / $50 / $100), Replit ($20 / $100), Duda ($25 / $39 / $69) and Readdy ($25 / $40 / $80). Sources are in `docs/market/teardown-2026-10-23/deep/pricing-economics.md` §1.
+- **Free and founding offers:** no free tier and no trial at launch. There is no founding discount either (`FOUNDING_DISCOUNT_PERCENT = 0`); it superseded D1/D4 for now.
+- **Quality:** the model, effort, prompts and review pass are unchanged. The only AI change is a cache marker on the system prompts, which bills repeated prompt text as cache reads and does not change what the model receives.
+- **Margins:** D2's enforced 0.40 floor still holds every offer; the tightest is Scale yearly at 41.3%. Monthly plans meet the 0.50 target, and yearly plans sit between the two floors.
+- **Typical job at the Create monthly price, measured provider cost:** a first website (34 credits) $2.27, was $3.29; a deck (8) $0.53, was $0.77; a short book (11) $0.73, was $1.06; a targeted edit (8) $0.53, was $0.77.
+- **Top-ups are unchanged** ($12 / $32 / $95; they never undercut a plan). The proposed new packs are $8 / 100, $21 / 300 and $68 / 1,000 credits. They need an additive catalog migration and matching Whop products, so they are left to Codex.
+- **Whop:** the existing hidden plans keep their old renewal prices. Checkout refuses them until new plans exist at these prices (see `docs/WHOP_ACCESS_SETUP.md`).
+
 ## Owner decisions confirmed to Codex — 2026-10-13
 
 These supersede the earlier recommendations below:

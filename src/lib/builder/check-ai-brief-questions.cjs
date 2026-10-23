@@ -25,10 +25,10 @@ const bakery = [
 (async () => {
   await check("tailored questions are validated and normalised into the card's shape", () => {
     const questions = parseQuestions("website", `Here you go:\n${reply(bakery)}`);
-    assert.deepEqual(questions.map(question => question.id), ["ordering", "style", "signature"]);
+    assert.deepEqual(questions.map(question => question.id), ["ordering", "vibe", "signature"], "a website style question is the vibe question");
     assert.equal(questions[0].question, "Do people order ahead, walk in, or both?", "adds the missing question mark");
     assert.deepEqual(questions[0].options.map(option => option.value), ["o1", "o2", "o3"]);
-    assert.ok(questions[1].options.every(option => option.swatch), "id style reuses the built-in look question with swatches");
+    assert.ok(questions[1].options.every(option => option.swatch), "id style reuses the built-in look (vibe) question with swatches");
     assert.deepEqual(questions[2].options, [], "no options means a free-text question");
     assert.equal(questions[2].custom, "e.g. Cardamom knots");
     assert.ok(questions.every(isBriefQuestion), "every normalised question passes the client-side check");
