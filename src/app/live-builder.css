@@ -185,3 +185,16 @@
 .lb-provenance span { min-width:0; flex:1 1 auto; }
 .lb-provenance button { min-height:32px; padding:3px 10px; border:1px solid #d9d0e2; border-radius:8px; background:#fff; color:#65518a; font:inherit; font-weight:550; cursor:pointer; }
 .lb-provenance[data-status="sent"] { color:#6d6478; }
+
+/* Keep the composer focused; disclosures remain available on demand. */
+.lb-request-details { margin-top:8px; border-top:1px solid #eeedf2; font-size:11px; color:var(--text-muted); }
+.lb-request-details > summary { cursor:pointer; padding:9px 2px 2px; display:flex; justify-content:space-between; gap:8px; }
+.lb-request-details > summary span { opacity:.8; }
+.lb-request-details[open] > summary { margin-bottom:8px; }
+.lb-availability { margin:7px 2px 0; font-size:11px; color:var(--text-muted); }
+.lb-availability span { opacity:.75; margin-left:6px; }
+.lb-history > .lb-turn:first-of-type { margin-top:12px; }
+.lb-history > p { font-size:11px; margin:0 0 12px; }
+
+.lb-history-sync { padding:8px 16px; margin:0; font-size:11px; color:var(--text-muted); }
+.lb-history-sync button, .lb-history > button { background:none; border:0; color:var(--accent,#6554c0); cursor:pointer; font:inherit; padding:4px; text-decoration:underline; }
