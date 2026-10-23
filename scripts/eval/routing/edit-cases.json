@@ -1,0 +1,18 @@
+{
+  "note": "Targeted-edit cases for model-routing qualification (scripts/eval/route-qualify.mjs). Each site is a website saved on the isolated release-auth stack by the 21 October app-route run (outputs/eval/runs/live-20261021T202136Z, read only). Requests are short, visible in screenshots, and two use the visual editor's element reference format (path (line N)). No request asks for invented facts.",
+  "frozenAt": "2026-10-22",
+  "cases": [
+    { "id": "e01-saffron-reservation-heading", "kind": "copy + colour, picked element", "site": "outputs/eval/runs/live-20261021T202136Z/w01-restaurant-saffron-table",
+      "request": "Change the <h2> \"Ask us for a table.\" in src/App.tsx (line 230): make it read \"Book a table with us\", and give the whole reservation section a subtle saffron-tinted background so it stands out from the section above." },
+    { "id": "e02-mira-commission-steps", "kind": "add a small section", "site": "outputs/eval/runs/live-20261021T202136Z/w04-creator-mira-objects",
+      "request": "Add a short \"How a commission works\" strip with three numbered steps (enquire, agree the shape and glaze, collect or have it posted) between the collection and the commission enquiry form, in the site's existing style." },
+    { "id": "e03-gooddog-launch-button", "kind": "button copy + reassurance line, picked element", "site": "outputs/eval/runs/live-20261021T202136Z/w05-ecommerce-good-dog",
+      "request": "Change the button \"Join the launch list\" in src/components/Rest.tsx (line 81) to \"Get launch news\", and add one short line under the form saying we send at most one email a month and you can unsubscribe any time." },
+    { "id": "e04-elmwood-hours-table", "kind": "restructure content", "site": "outputs/eval/runs/live-20261021T202136Z/w10-civic-elmwood-pantry",
+      "request": "In the footer, show the pantry opening hours as a clear two-column table (day, hours) with a visible heading row, instead of the current list. Keep the same days and times." },
+    { "id": "e05-ledgerline-pricing-mobile", "kind": "copy + responsive layout", "site": "outputs/eval/runs/live-20261021T202136Z/w12-saas-ledgerline",
+      "request": "In the pricing section, add the note \"Cancel any time from your account page.\" under the prices, and on phones stack the pricing items vertically with more space between them." },
+    { "id": "e06-ridgeline-package-cards", "kind": "component restyle", "site": "outputs/eval/runs/live-20261021T202136Z/w19-events-ridgeline-weddings",
+      "request": "Make the packages easier to compare: show each package as its own card with the price at the top of the card, and give the cards equal height on desktop." }
+  ]
+}

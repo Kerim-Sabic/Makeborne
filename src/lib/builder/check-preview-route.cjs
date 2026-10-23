@@ -60,6 +60,9 @@ const ROUTES = [{ path: "/", title: "Home" }, { path: "/collections", title: "Co
     assert.match(shim, /password\|hidden\|file/, "passwords, hidden and file fields are never kept");
     assert.match(shim, /post\(\{type:"form-blocked"\}\)/);
     assert.doesNotMatch(shim, /\.submit\(\)|requestSubmit/, "the runtime never submits a form");
+    assert.match(shim, /document\.addEventListener\("focusin",function\(e\)\{if\(!editing\)return;var el=within\(e\.target\);if\(el&&el!==chosen\)select\(el\)\},true\);/, "keyboard focus selects, in edit mode only");
+    const hostListeners = shim.match(/addEventListener\("message",function\(e\)\{[^;]*/g) ?? [];
+    assert.ok(hostListeners.length >= 3 && hostListeners.every(listener => listener.includes("e.source!==parent")), "every host message must come from the editor window");
   });
   await check("a failed runtime fetch is a transport failure that Try again can recover from", async () => {
     const origin = "http://runtime.test", runtime = path.join(root, "public", "builder-runtime");
@@ -102,6 +105,16 @@ const ROUTES = [{ path: "/", title: "Home" }, { path: "/collections", title: "Co
     assert.match(actions.CHECK_EFFECT, /never starts, repeats or charges/);
     assert.match(actions.PREVIEW_ACTIONS.retryPreview.effect, /same saved files\. No AI call, no credits/);
     assert.match(actions.PREVIEW_ACTIONS.fixError.effect, /new AI request that uses credits/);
+    assert.match(actions.PREVIEW_ACTIONS.fixError.effect, /Nothing is sent until you choose Send/, "Fix it only drafts the request");
+    assert.equal(actions.previewProblemTitle("build", { version: 7, unsaved: false }), "Version 7 has a build error");
+    assert.equal(actions.previewProblemTitle("build", { version: 7, unsaved: true }), "Your unsaved edits have a build error", "never blames the saved version for unsaved edits");
+    assert.equal(actions.previewProblemTitle("runtime", { version: 7, unsaved: false }), "Version 7 hit an error while running");
+    assert.equal(actions.previewProblemTitle("build", null), "The site has a build error", "builder output is no saved version");
+    const long = `src/App.tsx:9:4: ERROR: Unexpected "}" ${"x".repeat(400)}\n    at line two`;
+    const request = actions.fixErrorRequest({ kind: "build", message: `\n${long}` }, { version: 7, unsaved: false });
+    assert.match(request, /^Fix the build error in version 7: src\/App\.tsx:9:4: ERROR: Unexpected "\}" x+…$/);
+    assert.ok(request.length < 360, "short: the first line, trimmed");
+    assert.equal(actions.fixErrorRequest({ kind: "runtime", message: "" }, { version: 2, unsaved: true }), "Fix the error while running in my unsaved edits.");
     const labels = ["Stop", "Retry Stop", "Approve allowance & continue", "Preview retained draft", "Save reviewed draft", "Check saved result & charge", "Restore as new version", actions.PREVIEW_ACTIONS.retryPreview.label, actions.PREVIEW_ACTIONS.fixError.label];
     assert.equal(new Set(labels).size, labels.length, "no two actions share a label");
   });
@@ -113,7 +126,10 @@ const ROUTES = [{ path: "/", title: "Home" }, { path: "/collections", title: "Co
     assert.match(builder, /if \(!operation \|\| busy \|\| disabled \|\| authorizing\.current \|\| !operation\.canContinue \|\| operation\.kind !== "build"\) return;/, "Continue keeps its guard");
     assert.match(builder, /previewingRecovery\?\.runId !== buildRecovery\.runId \|\| previewingRecovery\.version !== version \|\| busy \|\| disabled \|\| authorizing\.current\) return;/, "recovery save keeps its version fence");
     assert.match(builder, /\(busy \|\| operationRunning\) \? <button type="button" className="lb-stop" disabled=\{cancelling \|\| operation\?\.cancelRequested === true\}/, "Stop replaces Send while running and cannot be sent twice");
-    assert.match(builder, /<textarea ref=\{composer\}[^>]*disabled=\{busy \|\| preparingSources \|\| !sources\.ready \|\| sources\.busy \|\| disabled \|\| operationRunning/, "composer stays disabled while running");
+    assert.match(builder, /<textarea ref=\{composer\}[^>]*disabled=\{busy \|\| preparingSources \|\| !sources\.ready \|\| sources\.busy \|\| locked \|\| operationRunning/, "composer stays disabled while running");
+    // A pending autosave (sendBlocked) leaves the text editable but holds every request: `disabled` guards them all.
+    assert.ok(builder.includes("const disabled = Boolean(locked) || Boolean(sendBlocked);"), "requests wait while sending is blocked");
+    assert.match(builder, /const submit = \(text: string\) => \{\r?\n    if \(disabled\) return;/, "Enter can't send while sending is blocked");
     assert.match(builder, /operation\?\.kind === "build" && operation\.canContinue && operation\.status !== "running"/, "Continue is never offered for a running request");
     const studio = fs.readFileSync(path.join(root, "src/components/cloud-studio.tsx"), "utf8");
     assert.match(studio, /disabled=\{dirty \|\| busy \|\| savePaused \|\| uncertainSave \|\| conflict \|\| !!recovery\} aria-describedby=\{`restore-effect-/, "Restore keeps its draft/save guard");

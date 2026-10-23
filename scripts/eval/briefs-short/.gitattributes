@@ -1,0 +1,2 @@
+# Brief hashes in index.json are over exact bytes: keep LF on Windows checkouts.
+* text eol=lf

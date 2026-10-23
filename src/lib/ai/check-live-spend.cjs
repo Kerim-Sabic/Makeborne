@@ -71,7 +71,7 @@ function fakeAnthropic(steps, options = {}) {
   return { log, client: { beta: { messages: {
     async countTokens() { log.counts++; if (options.countError) throw options.countError; return { input_tokens: options.inputTokens ?? 5000 }; },
     stream(params, requestOptions) {
-      log.streams.push({ model: params.model, max_tokens: params.max_tokens, maxRetries: requestOptions.maxRetries, fallbacks: params.fallbacks, betas: params.betas, toolNames: (params.tools ?? []).map(tool => tool.name), messages: params.messages });
+      log.streams.push({ model: params.model, max_tokens: params.max_tokens, maxRetries: requestOptions.maxRetries, fallbacks: params.fallbacks, betas: params.betas, toolNames: (params.tools ?? []).map(tool => tool.name), messages: params.messages, system: params.system });
       const step = steps.shift();
       if (!step) throw new Error("Mock script exhausted: unexpected provider call.");
       const listeners = [];
@@ -148,7 +148,7 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
   const response = websiteBuildResponse({ client: db.client, hold, spend, workspaceId: "22222222-2222-4222-8222-222222222222",
     artifact: { id: "33333333-3333-4333-8333-333333333333", project_id: "44444444-4444-4444-8444-444444444444", title: "T", current_version: 1 },
     current: { assetIds: [], content: { title: "T" }, style: {} }, files: extra.files ?? baseFiles(), reviewing: false, message: "Update the heading", effort: "medium",
-    request: "Update the heading", context: "<project/>", attachments: [], maxDuration: 300, anthropic, imageClient: extra.imageClient, storeImage, stepGuardMs: extra.stepGuardMs, compile: extra.compile });
+    request: "Update the heading", context: "<project/>", snapshot: extra.snapshot, attachments: [], maxDuration: 300, anthropic, imageClient: extra.imageClient, storeImage, stepGuardMs: extra.stepGuardMs, compile: extra.compile });
   return { db, response };
 }
 
@@ -277,6 +277,124 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
     assert.equal(spend.uncertainMicrousd, spend.calls[0].boundMicrousd);
   });
 
+  // ---- 3b. Cached conversations: what the previous call cached is reserved at the read price ----
+  // A design review's 15-credit round: the cold first call (system, tools, site and screenshots, ~30K tokens written to the
+  // cache) costs $0.27; priced as if nothing were cached, the next call's input alone no longer fits what is left.
+  // What the cold call wrote to the cache (its 2 uncached input tokens are not part of the entry).
+  const OPUS = "claude-opus-5-5", CACHED = 30_000;
+  const coldStep = () => ({ usage: { input_tokens: 2, cache_creation_input_tokens: 30_000, cache_creation: { ephemeral_5m_input_tokens: 30_000, ephemeral_1h_input_tokens: 0 }, output_tokens: 6000 },
+    content: [toolUse("edit_file", { path: "src/App.tsx", old_string: "Hello", new_string: "Hi" })], stop: "tool_use" });
+  const warmStep = (usage = { input_tokens: 2, cache_read_input_tokens: CACHED, cache_creation_input_tokens: 6400, cache_creation: { ephemeral_5m_input_tokens: 6400, ephemeral_1h_input_tokens: 0 }, output_tokens: 1500 }) =>
+    ({ usage, content: [{ type: "text", text: "done" }], stop: "end_turn" });
+  function cachedLoop(fake, spend) {
+    let t = 1_000_000;
+    const meter = new ContextMeter(async () => fake.client.beta.messages.countTokens({}).then(r => r.input_tokens));
+    const messages = [{ role: "user", content: [{ type: "text", text: "<current_files>…</current_files>" }, { type: "text", text: "Review the screenshots." }] }];
+    const call = () => budgetedStream({ client: fake.client, spend, meter, models: [OPUS], params: { cache_control: { type: "ephemeral" }, messages }, maxTokens: 64_000, minTokens: MIN_STEP_TOKENS,
+      signal: new AbortController().signal, sleep: async () => {}, now: () => t });
+    const reply = message => {
+      messages.push({ role: "assistant", content: message.content });
+      meter.afterReply(message.usage, messages);
+      const use = message.content.find(block => block.type === "tool_use");
+      if (use) messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: use.id, content: "Edited src/App.tsx." }] });
+    };
+    return { meter, messages, call, reply, wait: ms => { t += ms; }, now: () => t };
+  }
+  const { CACHE_FRESH_MS, cacheKey, cachePositions } = require("./anthropic-call.ts");
+
+  await check("cached conversation: the next call reserves the cached prefix at the read price, so a 15-credit round gets past its cold first call; the gate gets the worst case; tokens recorded", async () => {
+    const { spend, gate } = spendFor(billing.hold(15), { providerCapCredits: 15 });
+    const fake = fakeAnthropic([coldStep(), warmStep()], { inputTokens: 30_000 });
+    const loop = cachedLoop(fake, spend);
+    loop.reply((await loop.call()).message);
+    assert.equal(spend.confirmedMicrousd, 30_000 * 5 + 2 * 4 + 6000 * 20, "the cold call: the whole prefix written to the cache");
+    loop.wait(90_000);
+    const inputBound = await loop.meter.bound(loop.messages), left = spend.remainingMicrousd;
+    assert.ok(Math.ceil(inputBound * prices.maxInputTokenMicrousd(OPUS)) > left, "priced as uncached, the next call's input alone exceeds what is left (the old stop)");
+    loop.reply((await loop.call()).message);
+    const expectedInput = Math.ceil((inputBound - CACHED) * prices.maxInputTokenMicrousd(OPUS) + CACHED * prices.cachedInputTokenMicrousd(OPUS)) + 2;
+    const maxTokens = fake.log.streams[1].max_tokens;
+    assert.equal(maxTokens, Math.floor((left - expectedInput) / prices.maxOutputTokenMicrousd(OPUS)));
+    assert.ok(maxTokens >= MIN_STEP_TOKENS);
+    const [, second] = spend.calls;
+    assert.equal(second.boundMicrousd, prices.textCallBoundMicrousd(OPUS, inputBound, maxTokens, CACHED));
+    assert.equal(second.worstCaseMicrousd, prices.textCallBoundMicrousd(OPUS, inputBound, maxTokens));
+    assert.equal(gate.log.begin[1].boundMicrousd, second.worstCaseMicrousd, "the platform gate reserves (and polices) the cost without the cache");
+    assert.equal(gate.log.begin[0].boundMicrousd, spend.calls[0].boundMicrousd, "a call with nothing cached reserves its worst case, as before");
+    assert.deepEqual({ ...gate.log.finish[1].detail, usage: undefined }, { model: OPUS, attempt: 0, stop: "end_turn", cachedTokens: CACHED, reservedMicrousd: second.boundMicrousd, usage: undefined });
+    assert.equal(second.cacheMiss, false); assert.equal(spend.stopped, null);
+    assert.deepEqual(gate.log.finish[1].detail.usage, { input: 2, cacheRead: CACHED, cacheWrite5m: 6400, cacheWrite1h: 0, output: 1500, imageInput: 0, webSearches: 0 });
+    assert.deepEqual(spend.usageByModel(), { [OPUS]: { input: 4, cacheRead: CACHED, cacheWrite5m: 36_400, cacheWrite1h: 0, output: 7500, imageInput: 0, webSearches: 0, calls: 2, cacheMisses: 0 } });
+    assert.ok(spend.providerMicrousd <= spend.allowanceMicrousd, "with the cache served, the round stays inside its allowance");
+  });
+
+  await check("cached conversation: only a cache that is surely alive counts (same model and settings, under 4 minutes, unchanged history, within the lookback); otherwise the worst case applies", async () => {
+    const { spend } = spendFor(billing.hold(15), { providerCapCredits: 15 });
+    const fake = fakeAnthropic([coldStep()], { inputTokens: 30_000 });
+    const loop = cachedLoop(fake, spend);
+    const startedAt = loop.now();
+    loop.reply((await loop.call()).message);
+    const key = cacheKey({ cache_control: { type: "ephemeral" }, messages: loop.messages, model: OPUS, max_tokens: 1 });
+    assert.equal(loop.meter.cachedTokens(key, loop.messages, startedAt + 60_000), CACHED);
+    assert.equal(loop.meter.cachedTokens(key, loop.messages, startedAt + CACHE_FRESH_MS), 0, "4 minutes after the last call started");
+    assert.equal(loop.meter.cachedTokens(cacheKey({ cache_control: { type: "ephemeral" }, output_config: { effort: "low" }, model: OPUS }), loop.messages, startedAt + 60_000), 0, "another effort invalidates the cache");
+    assert.equal(loop.meter.cachedTokens(cacheKey({ cache_control: { type: "ephemeral" }, model: "claude-haiku-5-5" }), loop.messages, startedAt + 60_000), 0, "caches are per model");
+    const edited = structuredClone(loop.messages); edited[0].content[1].text = "Review the screenshots again.";
+    assert.equal(loop.meter.cachedTokens(key, edited, startedAt + 60_000), 0, "an edited history is not the cached prefix");
+    const many = [...loop.messages, { role: "user", content: Array.from({ length: 19 }, (_, i) => ({ type: "text", text: `note ${i}` })) }];
+    assert.equal(loop.meter.cachedTokens(key, many, startedAt + 60_000), 0, "more new blocks than the lookback reaches");
+    assert.equal(cachePositions([{ role: "user", content: Array.from({ length: 30 }, (_, i) => ({ type: "tool_result", tool_use_id: `t${i}`, content: "ok" })) }]), 1, "a run of tool results is one position");
+    // The review's second call more than 4 minutes later: priced without the cache it cannot start, and nothing is sent.
+    loop.wait(CACHE_FRESH_MS);
+    await assert.rejects(loop.call(), error => error.code === "RUN_BUDGET");
+    assert.equal(fake.log.streams.length, 1);
+  });
+
+  await check("cached conversation: a dropped cache costs more than the reservation but within the worst case: a cache miss, not an overrun; the run ends within its allowance plus the margin", async () => {
+    const { spend, gate } = spendFor(billing.hold(15), { providerCapCredits: 15 });
+    const miss = { input_tokens: 2, cache_creation_input_tokens: 36_400, cache_creation: { ephemeral_5m_input_tokens: 36_400, ephemeral_1h_input_tokens: 0 }, output_tokens: 3000 };
+    const fake = fakeAnthropic([coldStep(), { ...warmStep(miss), content: [toolUse("edit_file", { path: "src/App.tsx", old_string: "Hi", new_string: "Hey" })], stop: "tool_use" }], { inputTokens: 30_000 });
+    const loop = cachedLoop(fake, spend);
+    loop.reply((await loop.call()).message);
+    loop.wait(60_000);
+    loop.reply((await loop.call()).message);
+    const [, second] = spend.calls;
+    assert.ok(second.actualMicrousd > second.boundMicrousd && second.actualMicrousd <= second.worstCaseMicrousd);
+    assert.equal(second.cacheMiss, true); assert.equal(second.overrun, false); assert.equal(spend.stopped, null, "no overrun stop: the platform gate saw the worst case");
+    assert.equal(gate.log.finish[1].detail.cacheMiss, true);
+    assert.ok(spend.providerMicrousd > spend.allowanceMicrousd && spend.providerMicrousd <= spend.allowanceMicrousd * 1.5);
+    assert.equal(spend.usageByModel()[OPUS].cacheMisses, 1);
+    await assert.rejects(loop.call(), error => error.code === "RUN_BUDGET", "nothing is left: the run stops gracefully");
+    assert.equal(fake.log.streams.length, 2);
+    assert.ok(spend.customerCredits(RATE) > 15, "settlement caps the charge at the hold (see the website-run checks); the platform absorbs the rest");
+  });
+
+  await check("run spend worst cases: uncertain usage counts at the worst case; a worst case beyond the allowance plus the margin is refused; above the worst case is an overrun", async () => {
+    const gate = memoryGate();
+    const spend = new RunSpend({ run: "w", providerCapMicrousd: 100_000, customerCapMicrousd: null, gate, deadline: Date.now() + 60_000 });
+    await assert.rejects(spend.begin("anthropic", OPUS, 10_000, { worstCaseMicrousd: 150_001 }), error => error.code === "RUN_BUDGET");
+    await assert.rejects(spend.begin("anthropic", OPUS, 10_000, { worstCaseMicrousd: 9_999 }), /no lower than its bound/);
+    assert.equal(gate.log.begin.length, 0);
+    const a = await spend.begin("anthropic", OPUS, 10_000, { worstCaseMicrousd: 150_000 });
+    assert.equal(gate.log.begin[0].boundMicrousd, 150_000); assert.equal(spend.remainingMicrousd, 90_000); assert.equal(spend.worstCaseRoomMicrousd, 0);
+    await assert.rejects(spend.begin("anthropic", OPUS, 1), error => error.code === "RUN_BUDGET", "an open worst case holds the margin");
+    await spend.finish(a, { actualMicrousd: null, partialMicrousd: 4_000 });
+    assert.equal(spend.uncertainMicrousd, 146_000, "unknown usage counts at the worst case, as the gate records it"); assert.equal(spend.remainingMicrousd, 0);
+    const b = new RunSpend({ run: "o", providerCapMicrousd: 100_000, customerCapMicrousd: null, gate, deadline: Date.now() + 60_000 });
+    await b.finish(await b.begin("anthropic", OPUS, 10_000, { worstCaseMicrousd: 40_000 }), { actualMicrousd: 40_001 });
+    assert.equal(b.stopped, "OVERRUN");
+  });
+
+  await check("token usage: cache writes by TTL (unsplit writes as 1-hour, as priced), fallback attempts summed, web searches, image tokens", async () => {
+    assert.deepEqual(prices.textTokenUsage({ input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 40, cache_creation: { ephemeral_5m_input_tokens: 30, ephemeral_1h_input_tokens: 10 }, server_tool_use: { web_search_requests: 2 } }),
+      { input: 10, cacheRead: 100, cacheWrite5m: 30, cacheWrite1h: 10, output: 5, imageInput: 0, webSearches: 2 });
+    assert.equal(prices.textTokenUsage({ input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 40 }).cacheWrite1h, 40);
+    assert.deepEqual(prices.textTokenUsage({ input_tokens: 9, output_tokens: 9, iterations: [{ model: OPUS, input_tokens: 3, output_tokens: 0 }, { model: "claude-sonnet-5-5", input_tokens: 4, output_tokens: 7 }] }),
+      { ...prices.NO_TOKENS, input: 7, output: 7 });
+    assert.deepEqual(prices.imageTokenUsage(IMAGE_USAGE), { ...prices.NO_TOKENS, input: 50, output: 1300 });
+    assert.deepEqual(prices.imageTokenUsage({ input_tokens: 80, output_tokens: 10, input_tokens_details: { image_tokens: 30 } }), { ...prices.NO_TOKENS, input: 50, imageInput: 30, output: 10 });
+  });
+
   await check("image calls: bound reserved before contact, actual usage recorded, failures at the bound, no SDK retries", async () => {
     const { spend } = spendFor(billing.hold(50));
     const images = fakeImages([{ usage: IMAGE_USAGE }, { error: Object.assign(new Error("server"), { status: 500 }) }]);
@@ -356,6 +474,48 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
     assert.equal(saved, app);
     assert.equal(events.at(-1).type, "done"); assert.equal(events.at(-1).finished, true);
     assert.equal(events.at(-1).build, "passed", "a compiled version is reported as a passed build");
+  });
+
+  await check("website run with the cached snapshot: system prompt and snapshot carry 5-minute markers ahead of everything per request; the context names only what changed since", async () => {
+    const { snapshotText } = require("../builder/site-snapshot.ts");
+    const hold = billing.hold(50);
+    const { spend } = spendFor(hold);
+    const files = baseFiles();
+    // The snapshot is an earlier version: the saved site changed src/App.tsx since.
+    const anchor = { number: 3, files: new Map([...files.files, ["src/App.tsx", "export default function App() { return <main><h1>Old</h1></main>; }"]]) };
+    const fake = fakeAnthropic([{ usage: { input_tokens: 5000, output_tokens: 900 }, content: [toolUse("write_file", { path: "src/App.tsx", content: app }), toolUse("finish", { summary: "Done.", title: "T" })] }]);
+    const { response, db } = websiteRun(hold, spend, fake.client, { files, snapshot: anchor });
+    const events = await sse(response);
+    assert.equal(events.at(-1).type, "done"); assert.equal(db.saves.length, 1);
+    const [request] = fake.log.streams;
+    assert.deepEqual(request.system.map(block => block.cache_control), [{ type: "ephemeral" }]);
+    const [first, ...rest] = request.messages[0].content;
+    assert.deepEqual(first, { type: "text", text: snapshotText(anchor), cache_control: { type: "ephemeral" } }, "the snapshot opens the request, with its own marker");
+    const own = rest.at(-1).text;
+    assert.match(own, /^<project\/>\n<changes_since_snapshot>\nThe project changed after the snapshot above \(v3\)\./);
+    assert.ok(own.includes('<file path="src/App.tsx">\nexport default function App() { return <main><h1>Hello</h1></main>; }\n</file>'), "the current App.tsx, as saved");
+    assert.ok(!own.includes('<file path="src/main.tsx">'), "unchanged files are read from the snapshot");
+    assert.ok(own.indexOf("</changes_since_snapshot>") < own.indexOf("Image generation:") && own.indexOf("Image generation:") < own.indexOf("<request>"));
+    assert.throws(() => prices.assertSupportedTextRequest({ model: "claude-opus-5-5", max_tokens: 10, messages: [{ role: "user", content: [{ type: "text", text: "x", cache_control: { type: "ephemeral", ttl: "1h" } }] }] }),
+      /cache TTL other than 5 minutes/, "a message-block marker must be a 5-minute one too (bounds price writes at that rate)");
+  });
+
+  await check("website run: a 15-credit round (a design review's cap) continues past its cold first call on the cached prefix and settles with per-model tokens", async () => {
+    const hold = billing.hold(15);
+    const { spend, gate } = spendFor(hold, { providerCapCredits: 15 });
+    const fake = fakeAnthropic([
+      { usage: coldStep().usage, content: [toolUse("write_file", { path: "src/App.tsx", content: brokenApp }), toolUse("finish", { summary: "Done.", title: "T" })] },
+      { usage: warmStep().usage, content: [toolUse("write_file", { path: "src/App.tsx", content: app }), toolUse("finish", { summary: "Fixed.", title: "T" })] }], { inputTokens: 30_000 });
+    const { response, db } = websiteRun(hold, spend, fake.client);
+    const events = await sse(response);
+    assert.equal(fake.log.streams.length, 2, "the second call fits: the builder's history stays the cached prefix");
+    assert.equal(gate.log.finish[1].detail.cachedTokens, CACHED); assert.equal(spend.calls[1].cacheMiss, false);
+    assert.equal(events.at(-1).type, "done"); assert.equal(events.at(-1).finished, true);
+    const settle = billing.outcomes.find(item => item.kind === "settle");
+    assert.equal(settle.charged, credits(spend.confirmedMicrousd));
+    assert.deepEqual(settle.detail.usage, spend.usageByModel());
+    assert.equal(settle.detail.usage[OPUS].calls, 2); assert.equal(settle.detail.usage[OPUS].cacheRead, CACHED);
+    assert.equal(db.saves.length, 1);
   });
 
   await check("website run: progress cut off before finish is not saved when it does not compile", async () => {

@@ -7,7 +7,7 @@ Module._load = function(name, parent, main) {
 };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true}}).outputText, filename);
 
-const {BUILDER_SYSTEM, MOTION_PATTERN, FORM_PATTERN, ROUTE_PATTERN, FONT_FILE_KB, FONT_FALLBACKS} = require("./prompt.ts");
+const {BUILDER_SYSTEM, MOTION_PATTERN, FORM_PATTERN, ROUTE_PATTERN, FONT_FILE_KB, FONT_FALLBACKS, FONT_FALLBACKS_BOLD} = require("./prompt.ts");
 const {FONT_CATALOG} = require("./fonts.ts");
 const {ProjectFiles} = require("./files.ts");
 const {qualityProblems, withoutBlocks} = require("./quality-gates.ts");
@@ -201,7 +201,7 @@ check("design seed: deterministic, fitted to the industry and spread across proj
   assert.ok(Math.max(...Object.values(archetypes)) / 400 < 0.45 && Object.keys(archetypes).length >= 4, JSON.stringify(archetypes));
   assert.ok(pairings.size >= 8, `pairings ${pairings.size}`);
   for (let index = 0; index < 200; index++) {
-    const quiet = designSeed({ seed: `q-${index}`, brief: index % 2 ? "Employment solicitors in Manchester" : "A bookkeeping app for freelancers in public beta", images: true });
+    const quiet = designSeed({ seed: `q-${index}`, brief: index % 2 ? "Employment solicitors in Manchester" : "A family dental clinic in Leeds", images: true });
     assert.equal(quiet.tone, "quiet");
     assert.notEqual(quiet.ground, "dark", "quiet subjects never get a dark ground");
     assert.doesNotMatch(quiet.motion, /marquee|depth/);
@@ -210,7 +210,12 @@ check("design seed: deterministic, fitted to the industry and spread across proj
     assert.equal(loud.tone, "loud");
   }
   const block = designSeedBlock({ seed: "x", brief: "Climbing gym", images: false, brand: true });
-  assert.match(block, /- Tone: quiet: a light ground/);
+  // The tone line no longer names the ground (the seed's ground line does, since round 3), so the light-ground rule
+  // for quiet subjects is checked on the seeds themselves: never dark, and light, pale or tinted on most projects.
+  assert.match(block, /- Tone: quiet: generous space/);
+  const quietGrounds = Array.from({ length: 200 }, (_, index) => designSeed({ seed: `ql-${index}`, brief: index % 2 ? "Employment solicitors in Manchester" : "A family dental clinic in Leeds", images: true }).ground);
+  assert.ok(!quietGrounds.includes("dark") && !quietGrounds.includes("colour flood"), "quiet subjects never get a dark or colour-flooded ground");
+  assert.ok(quietGrounds.filter(ground => /light|pale tint/.test(ground)).length >= 150, "quiet subjects get a light ground on at least three projects in four");
   assert.match(block, /- Motif: one quiet visual motif/);
   assert.match(block, /^<design_seed>[\s\S]*the brand kit[\s\S]*<\/design_seed>$/);
   assert.match(BUILDER_SYSTEM, /<design_seed>/);
@@ -234,8 +239,12 @@ check("font sizes in the prompt match the runtime files and drive a font budget"
     assert.ok(size > 60 && size < 150 && ascent > 60 && ascent < 140 && descent > 10 && descent < 50, `${font.family} metrics are plausible`);
     assert.equal(local === "Georgia", font.category === "serif", `${font.family}: serif families fall back to Georgia`);
     assert.ok(BUILDER_SYSTEM.includes(`Fallback: "${font.family} Fallback", `), `${font.family} stack names its fallback face`);
+    const bold = FONT_FALLBACKS_BOLD[font.family];
+    // Families with several weights get a real bold face (measured: one size-adjust cannot fit 400 and 800).
+    assert.equal(Boolean(bold), font.weight.includes(" "), `${font.family}: a bold face exactly when the family has several weights`);
+    if (bold) assert.ok(bold[0] === `${local} Bold` && bold[1] > 60 && bold[1] < 150, `${font.family} bold face`);
   }
-  assert.match(BUILDER_SYSTEM, /@font-face \{ font-family: "Fraunces Fallback"; src: local\("Georgia"\); size-adjust: 116\.3%;/);
+  assert.match(BUILDER_SYSTEM, /@font-face \{ font-family: "Archivo Fallback"; src: local\("Arial"\); font-weight: 100 599; size-adjust: 98%;[^}]*\} @font-face \{ font-family: "Archivo Fallback"; src: local\("Arial Bold"\); font-weight: 600 900; size-adjust: 98\.7%;/);
   assert.match(BUILDER_SYSTEM, /Font budget: about 100 KB/);
   assert.match(BUILDER_SYSTEM, /any <em>, <i>, <cite>, <address>, <dfn>, <var> or font-style: italic anywhere in the project loads them/);
 });

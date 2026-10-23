@@ -48,6 +48,8 @@ export type DocBuilderRun = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: (request: { name: string; prompt: string; model: string }, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
+  /** The model this stage runs on (see ../ai/model-routing.ts); default: the builder model. */
+  model?: string;
 };
 export type DocBuilderResult = { summary: string; credits: number; usd: number; finished: boolean; stopped: string | null };
 
@@ -80,7 +82,7 @@ export function describeTool(name: string, input: Record<string, unknown> | null
  * slide; generate_image runs at the end of the step; finish validates. */
 export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilderResult> {
   const policy = BUILDER_EFFORT[run.effort];
-  const model = builderModel();
+  const model = run.model ?? builderModel();
   const models = builderModels(model);
   const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 600_000 }) as unknown as AnthropicLike);
   const rate = aiCostUsdPerCredit();

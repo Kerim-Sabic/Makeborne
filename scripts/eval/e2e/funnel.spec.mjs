@@ -154,7 +154,7 @@ test.describe('S1 funnel (isolated stack, AI off)', () => {
     const conversation = page.getByRole('complementary', { name: 'Project conversation' });
     const message = conversation.getByRole('textbox', { name: 'Message about your project' });
     await message.fill('Make the opening warmer and lead with the morning bake.');
-    await conversation.getByRole('button', { name: 'Save instruction for later' }).click();
+    await conversation.getByRole('button', { name: 'Save note in this tab' }).click();
     await expect(conversation.getByText('Saved in this tab · not applied')).toBeVisible();
     await expect(conversation).toContainText('Make the opening warmer and lead with the morning bake.');
     expect(run.paidEndpointCalls, 'no generation request may start').toEqual([]);

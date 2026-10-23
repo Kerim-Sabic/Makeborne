@@ -22,7 +22,25 @@ export type PriceEvidence = {
   notes: string[];
   /** Provider shutdown; calls are refused from this instant. */
   retiresAt?: string;
+  /** Text models only: what the model supports, verified with its price (the single capability registry; see textCapabilities). */
+  capabilities?: TextCapabilities;
 };
+
+/** One text model's verified request surface. Anything not listed true is unsupported and refused before a paid call. */
+export type TextCapabilities = {
+  contextTokens: number; maxOutputTokens: number;
+  /** Thinking modes accepted (the builder sends adaptive with display updates). */
+  thinking: readonly ("adaptive")[]; thinkingDisplayUpdates: boolean;
+  effort: readonly ("low" | "medium" | "high" | "xhigh" | "max")[];
+  clientTools: boolean; eagerInputStreaming: boolean; forcedToolChoice: boolean; vision: boolean; structuredOutput: boolean;
+  /** Builder task classes this model has qualified for (src/lib/ai/model-routing.ts); the builder model holds all. */
+  qualified: readonly string[];
+  limitations: readonly string[];
+  verifiedAt: string; source: string;
+};
+/** Bumped whenever a capability record changes; recorded in every routing decision. */
+export const CAPABILITY_CONFIG_VERSION = "capabilities-20261022";
+
 
 export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvidence[]>[
   {
@@ -37,6 +55,11 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
       "Tool use adds a 286-token system prompt (input); counted by the token-counting endpoint.",
       "Batch (50% off) and server tools (web search $10 per 1,000) are not used and are refused.",
       "Fallback attempts are billed per attempt in usage.iterations."],
+    capabilities: { contextTokens: 1_000_000, maxOutputTokens: 128_000, thinking: ["adaptive"], thinkingDisplayUpdates: true, effort: ["low", "medium", "high", "xhigh", "max"],
+      clientTools: true, eagerInputStreaming: true, forcedToolChoice: false, vision: true, structuredOutput: true,
+      qualified: ["new-site", "redesign", "edit", "targeted-edit", "continuation", "review", "plan", "document-new", "document-edit"],
+      limitations: ["Thinking cannot be disabled; effort is the only depth control (default medium).", "Forced tool_choice any/tool returns 400.", "Thinking blocks are bound to this model and conversation: never replayed to another model."],
+      verifiedAt: "2026-10-22", source: "claude-api skill model table and migration notes (cached 2026-10-06); pricing page checked 2026-10-22" },
   },
   {
     provider: "anthropic", model: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", verifiedAt: "2026-10-12",
@@ -45,6 +68,13 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
     components: { input: 2, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.1, output: 10 },
     notes: ["Cache reads are 0.05x base input on Sonnet 5.5.", "Same geo, fast-mode, batch and server-tool notes as Opus 5.5.",
       "Used only when configured as an explicit fallback."],
+    capabilities: { contextTokens: 1_000_000, maxOutputTokens: 128_000, thinking: ["adaptive"], thinkingDisplayUpdates: true, effort: ["low", "medium", "high", "xhigh", "max"],
+      clientTools: true, eagerInputStreaming: true, forcedToolChoice: false, vision: true, structuredOutput: true,
+      // Qualification 2026-10-22 (docs/release-review/model-routing-20261022.md): lost or tied on every class tested.
+      qualified: [],
+      limitations: ["Effort levels are recalibrated against Sonnet 5 (default high).", "Forced tool_choice any/tool returns 400.", "Safety classifiers decline in five categories (cyber, bio, frontier_llm, reasoning_extraction, general_harms).",
+        "Thinking blocks are bound to this model and conversation: never replayed to another model.", "Qualification: used absolute paths in edit_file once (rejected; finish gate)."],
+      verifiedAt: "2026-10-22", source: "claude-api skill model table and migration notes (cached 2026-10-06); pricing page checked 2026-10-22" },
   },
   {
     provider: "anthropic", model: "claude-haiku-5-5", label: "Claude Haiku 5.5", verifiedAt: "2026-10-13",
@@ -54,6 +84,10 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
     notes: ["Prices are the up-to-100,000-token tier. Prompts over 100,000 tokens cost 5x ($0.50/$2.50); bounds and usage both apply that tier.",
       "US-only inference (inference_geo us) is 1.1x on every category; bounds assume it.",
       "Thinking tokens are billed as output.", "Used for standard expert chat replies."],
+    capabilities: { contextTokens: 1_000_000, maxOutputTokens: 128_000, thinking: ["adaptive"], thinkingDisplayUpdates: false, effort: ["low", "medium", "high", "xhigh", "max"],
+      clientTools: true, eagerInputStreaming: true, forcedToolChoice: true, vision: true, structuredOutput: true, qualified: [],
+      limitations: ["thinking display \"updates\" (the builder's progress notes) is not available on this model, so it cannot run a builder stage.", "Prompts over 100,000 tokens cost 5x."],
+      verifiedAt: "2026-10-22", source: "claude-api skill thinking table (cached 2026-10-06)" },
   },
   {
     provider: "openai", model: "gpt-image-1", label: "GPT Image 1", verifiedAt: "2026-10-12",
@@ -235,8 +269,10 @@ export function assertSupportedTextRequest(params: Record<string, unknown>) {
     if (tool.type === WEB_SEARCH.type) assertWebSearchTool(String(params.model), tool);
     else if (tool.type !== undefined && tool.type !== "custom") throw new UnsupportedConfigurationError(`tool type "${String(tool.type)}"`);
   }
-  // Bounds price cache writes at the 5-minute rate, so every marker must be one.
-  const markers = [params.cache_control, ...(Array.isArray(params.system) ? params.system.map(block => (block as { cache_control?: unknown }).cache_control) : [])] as Array<{ type?: string; ttl?: string } | null | undefined>;
+  // Bounds price cache writes at the 5-minute rate, so every marker (top level, tools, system and message blocks) must be one.
+  const blocks = [...((params.tools as unknown[] | undefined) ?? []), ...(Array.isArray(params.system) ? params.system : []),
+    ...((params.messages as Array<{ content?: unknown }> | undefined) ?? []).flatMap(message => Array.isArray(message?.content) ? message.content : [])];
+  const markers = [params.cache_control, ...blocks.map(block => (block as { cache_control?: unknown } | null)?.cache_control)] as Array<{ type?: string; ttl?: string } | null | undefined>;
   for (const cache of markers) if (cache && (cache.type !== "ephemeral" || (cache.ttl !== undefined && cache.ttl !== "5m"))) throw new UnsupportedConfigurationError("cache TTL other than 5 minutes");
   const output = params.output_config as Record<string, unknown> | undefined;
   if (output && Object.keys(output).some(key => key !== "effort")) throw new UnsupportedConfigurationError("output_config beyond effort");
@@ -301,6 +337,10 @@ export function maxInputTokenMicrousd(model: string) {
 export function maxOutputTokenMicrousd(model: string) {
   return textPrice(model).output * GEO_MULTIPLIER;
 }
+/** Most an input token read from the prompt cache can cost on this model, with the geo uplift. */
+export function cachedInputTokenMicrousd(model: string) {
+  return textPrice(model).cacheRead * GEO_MULTIPLIER;
+}
 
 /** Apply the expensive tier to the complete reservation when its prompt can cross the threshold. */
 export function textCallTierMultiplier(model: string, inputTokens: number) {
@@ -309,10 +349,14 @@ export function textCallTierMultiplier(model: string, inputTokens: number) {
 }
 
 /** Conservative ceiling for one text call: every input token at its highest
- * rate plus the full output allowance (thinking is part of output). */
-export function textCallBoundMicrousd(model: string, inputTokens: number, maxOutputTokens: number) {
-  if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1) throw new Error("Invalid call bound inputs.");
-  return roundBound((inputTokens * maxInputTokenMicrousd(model) + maxOutputTokens * maxOutputTokenMicrousd(model)) * textCallTierMultiplier(model, inputTokens));
+ * rate plus the full output allowance (thinking is part of output). With
+ * `cachedTokens`, that many input tokens are priced as cache reads instead:
+ * the expected bound of a call whose prefix the previous call just cached. */
+export function textCallBoundMicrousd(model: string, inputTokens: number, maxOutputTokens: number, cachedTokens = 0) {
+  if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1
+    || !Number.isSafeInteger(cachedTokens) || cachedTokens < 0 || cachedTokens > inputTokens) throw new Error("Invalid call bound inputs.");
+  return roundBound(((inputTokens - cachedTokens) * maxInputTokenMicrousd(model) + cachedTokens * cachedInputTokenMicrousd(model) + maxOutputTokens * maxOutputTokenMicrousd(model))
+    * textCallTierMultiplier(model, inputTokens));
 }
 
 type CacheCreation = { ephemeral_5m_input_tokens?: number | null; ephemeral_1h_input_tokens?: number | null } | null | undefined;
@@ -360,6 +404,26 @@ export function textUsageMicrousd(model: string, usage: TextUsageLike) {
   return roundActual(attemptCost(model, usage));
 }
 
+/** Token counts of one provider call, for the usage log: uncached input, cache reads, cache writes by TTL, output,
+ * image input (image calls) and web searches. Cache writes without a TTL breakdown count as 1-hour, as they are priced. */
+export type TokenUsage = { input: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number; output: number; imageInput: number; webSearches: number };
+export const NO_TOKENS: TokenUsage = Object.freeze({ input: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, imageInput: 0, webSearches: 0 });
+const count = (value: number | null | undefined) => Number.isSafeInteger(value) && value! > 0 ? value! : 0;
+export function addTokens(a: TokenUsage, b: TokenUsage): TokenUsage {
+  return { input: a.input + b.input, cacheRead: a.cacheRead + b.cacheRead, cacheWrite5m: a.cacheWrite5m + b.cacheWrite5m, cacheWrite1h: a.cacheWrite1h + b.cacheWrite1h,
+    output: a.output + b.output, imageInput: a.imageInput + b.imageInput, webSearches: a.webSearches + b.webSearches };
+}
+/** One text response's tokens, summed over its per-attempt records when present (as textUsageMicrousd bills them). */
+export function textTokenUsage(usage: TextUsageLike): TokenUsage {
+  const iterations = usage.iterations?.filter(Boolean) ?? [];
+  if (iterations.length) return iterations.map(item => textTokenUsage({ ...item, iterations: null })).reduce(addTokens, NO_TOKENS);
+  const split = usage.cache_creation, created = count(usage.cache_creation_input_tokens);
+  const hasSplit = Boolean(split && (split.ephemeral_5m_input_tokens != null || split.ephemeral_1h_input_tokens != null));
+  return { input: count(usage.input_tokens), cacheRead: count(usage.cache_read_input_tokens),
+    cacheWrite5m: hasSplit ? count(split!.ephemeral_5m_input_tokens) : 0, cacheWrite1h: hasSplit ? count(split!.ephemeral_1h_input_tokens) : created,
+    output: count(usage.output_tokens), imageInput: 0, webSearches: count(usage.server_tool_use?.web_search_requests) };
+}
+
 /** UTF-8 bytes bound text tokens from above (every token covers at least one byte). */
 export const utf8Bytes = (value: string) => Buffer.byteLength(value, "utf8");
 
@@ -375,10 +439,43 @@ export function imageCallBoundMicrousd(model: string, quality: ImageQuality, siz
   return roundBound(((utf8Bytes(prompt) + 64) * price.textInput + output * price.imageOutput) * GEO_MULTIPLIER);
 }
 
+/**
+ * The capability registry: a text model's verified surface, from its price record. Unknown, unpriced or
+ * capability-less models have none (UnpricedModelError / UnsupportedConfigurationError): exact IDs only, no
+ * aliases, no automatic adoption of a model that is not listed here.
+ */
+export function textCapabilities(model: string): TextCapabilities {
+  textPrice(model);
+  const item = PRICE_EVIDENCE.find(entry => entry.model === model);
+  if (!item?.capabilities) throw new UnsupportedConfigurationError(`model "${model}" has no verified capability record`);
+  return item.capabilities;
+}
+/** What one builder stage needs from a model. */
+export type StageNeeds = { effort: TextCapabilities["effort"][number]; thinkingDisplayUpdates?: boolean; clientTools?: boolean; eagerInputStreaming?: boolean; vision?: boolean; inputTokens?: number; outputTokens?: number; taskClass?: string; requireQualified?: boolean };
+/** Null when the model supports the stage; otherwise why not (checked before any reservation or provider call). */
+export function capabilityIssue(model: string, needs: StageNeeds): string | null {
+  let caps: TextCapabilities;
+  try { caps = textCapabilities(model); } catch (error) { return (error as Error).message; }
+  if (!caps.effort.includes(needs.effort)) return `${model} does not support effort ${needs.effort}`;
+  if (needs.thinkingDisplayUpdates !== false && !caps.thinkingDisplayUpdates) return `${model} does not support thinking progress updates`;
+  if (needs.clientTools !== false && !caps.clientTools) return `${model} does not support client tools`;
+  if (needs.eagerInputStreaming !== false && !caps.eagerInputStreaming) return `${model} does not support eager tool input streaming`;
+  if (needs.vision && !caps.vision) return `${model} does not accept images`;
+  if (needs.inputTokens !== undefined && needs.inputTokens > caps.contextTokens) return `${model} context is ${caps.contextTokens} tokens`;
+  if (needs.outputTokens !== undefined && needs.outputTokens > caps.maxOutputTokens) return `${model} output is capped at ${caps.maxOutputTokens} tokens`;
+  if (needs.requireQualified && needs.taskClass && !caps.qualified.includes(needs.taskClass)) return `${model} is not qualified for ${needs.taskClass}`;
+  return null;
+}
+
 export type ImageUsageLike = { input_tokens: number; output_tokens: number; input_tokens_details?: { text_tokens?: number; image_tokens?: number } | null };
 export function imageUsageMicrousd(model: string, usage: ImageUsageLike) {
   const price = imagePrice(model);
   const image = usage.input_tokens_details?.image_tokens ?? 0;
   const text = usage.input_tokens_details?.text_tokens ?? Math.max(0, usage.input_tokens - image);
   return roundActual(text * price.textInput + image * price.imageInput + usage.output_tokens * price.imageOutput);
+}
+export function imageTokenUsage(usage: ImageUsageLike): TokenUsage {
+  const image = count(usage.input_tokens_details?.image_tokens);
+  const text = usage.input_tokens_details?.text_tokens != null ? count(usage.input_tokens_details.text_tokens) : Math.max(0, count(usage.input_tokens) - image);
+  return { ...NO_TOKENS, input: text, imageInput: image, output: count(usage.output_tokens) };
 }

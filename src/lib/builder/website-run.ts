@@ -14,6 +14,10 @@ import { compileVerdict } from "./compile";
 import { aiCostUsdPerCredit } from "./pricing";
 import { watchOperationCancellation, finishOperation, operationFailure, operationTerminal, type OperationRun, type OperationCandidate } from "./operation-server";
 import { builtTitle } from "../projects/project-title";
+import { routeDetail, type ModelRoute, type RouteRecord } from "../ai/model-routing";
+import { refreshContext, repairRequest, routedWebsiteStage } from "./website-stage";
+import { attemptGuidance, type AttemptRole, type Intensity } from "../ai/model-routing";
+import { filesSince, snapshotText, type SnapshotVersion } from "./site-snapshot";
 
 export type WebsiteBuildInput = {
   client: SupabaseClient;
@@ -31,9 +35,16 @@ export type WebsiteBuildInput = {
   message: string;
   effort: EffortLevel;
   request: string;
+  /** The project context; without `snapshot` it ends with the current files. */
   context: string;
+  /** The cached site snapshot (./site-snapshot.ts). Absent: the context carries the current files, as before. */
+  snapshot?: SnapshotVersion | null;
   attachments: BetaContentBlockParam[];
   limits?: BuilderRun["limits"];
+  /** What the finished site must contain (the approved brief's sections, the client's must-haves). */
+  required?: BuilderRun["required"];
+  concept?: BuilderRun["concept"];
+  contrastCheck?: BuilderRun["contrastCheck"];
   maxDuration: number;
   /** Injected for tests: providers and the step guard. */
   stepGuardMs?: number;
@@ -41,7 +52,15 @@ export type WebsiteBuildInput = {
   imageClient?: ImageClientLike;
   storeImage?: BuilderRun["storeImage"];
   compile?: BuilderRun["compile"];
+  /** The stage's model route (../ai/model-routing.ts). Absent: the builder model, one attempt, as before. */
+  route?: ModelRoute;
 };
+
+/** Operator telemetry for one routed stage: class, models, outcome, cost and time. No prompt content. */
+export function logRoute(reference: string, stage: string, record: RouteRecord | null | undefined) {
+  const detail = routeDetail(record);
+  if (detail) console.info(JSON.stringify({ event: "ai_model_route", reference, stage, ...detail }));
+}
 
 /** Logs a spending-control stop privately (operator diagnostics stay out of the response). */
 export function logAiStop(reference: string, error: unknown) {
@@ -59,7 +78,11 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
   const { client, hold, spend, artifact, current, files, reviewing } = input;
   const compile = input.compile ?? compileVerdict;
   const rate = input.operation ? input.operation.rateMicrousd / 1e6 : aiCostUsdPerCredit();
+  // Customer charge: confirmed cost, less a failed routed attempt that was escalated (absorbed by the platform).
   const measured = () => spend.customerCredits(rate);
+  const stage = reviewing ? "review" : input.route?.class === "continuation" ? "continuation" : "build";
+  let routeRecord: RouteRecord | null = null, routeLogged = false;
+  const logRouteOnce = () => { if (!routeLogged) { routeLogged = true; logRoute(hold.reference, stage, routeRecord); } };
   const encoder = new TextEncoder();
   // The run continues even if the browser disconnects, so paid work is saved.
   const controller = new AbortController();
@@ -77,25 +100,40 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         if (input.operation) emit({ type: "operation", operation: input.operation.operation });
         emit({ type: "status", message: reviewing ? "Reviewing the design…" : files.files.size ? "Reading your project…" : "Planning your website…" });
         let result;
+        const stageDeadline = Date.now() + (input.maxDuration - 20) * 1000;
+        // One attempt of the stage. A repair starts a new conversation from the current files with the evidence to fix;
+        // every attempt is a new conversation, so no model's thinking blocks are replayed to another.
+        const attempt = (plan: { role: AttemptRole; model?: string; deadline: number; repairNotes: string[]; effort?: Intensity }) => runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
+          request: plan.role === "repair" ? repairRequest(input.request, plan.repairNotes) : input.request,
+          // With the cached snapshot, every attempt (a repair too) names what changed since it, from the current working copy.
+          context: (input.snapshot ? `${input.context}\n${filesSince(input.snapshot, files)}` : plan.role === "repair" ? refreshContext(input.context, files) : input.context)
+            + (input.route && plan.model ? attemptGuidance(input.route, plan.model) : ""), ...(input.snapshot ? { snapshot: snapshotText(input.snapshot) } : {}), attachments: input.attachments, emit, signal: controller.signal,
+          deadline: plan.deadline, limits: input.limits, required: input.required, concept: plan.role !== "repair" && input.concept, contrastCheck: input.contrastCheck,
+          anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile,
+          ...(plan.model ? { model: plan.model } : {}), ...(input.route ? { firstStep: input.route.firstStep } : {}), ...(input.route?.mode === "on" && plan.effort ? { intensity: plan.effort } : {}) });
         try {
-          result = await runBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, files, effort: input.effort, spend,
-            request: input.request, context: input.context, attachments: input.attachments, emit, signal: controller.signal,
-            deadline: Date.now() + (input.maxDuration - 20) * 1000, limits: input.limits,
-            anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, stepGuardMs: input.stepGuardMs, compile });
+          if (!input.route) result = await attempt({ role: "initial", deadline: stageDeadline, repairNotes: [] });
+          else {
+            const routed = await routedWebsiteStage({ route: input.route, stage, files, spend, deadline: stageDeadline, signal: controller.signal, emit, compile, request: input.request, attempt });
+            result = routed.result; routeRecord = routed.record;
+          }
         } catch (error) {
+          routeRecord = (error as { route?: RouteRecord } | null)?.route ?? routeRecord;
           // A step was cut off (time limit or provider error): keep finished work if it is valid.
           if (!files.changed.size || (error as { code?: string }).code === "REFUSED" || aiStop(error)) throw error;
           try { files.toSource(); } catch { throw error; }
           emit({ type: "status", message: "Saving the work finished so far…" });
           result = { summary: "Saved the progress made so far.", title: undefined, credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, build: null, stopped: spend.stopped };
         }
-        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped };
+        logRouteOnce();
+        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped, usage: spend.usageByModel(),
+          ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
         if (reviewing && !files.changed.size) {
           // The review found nothing to fix (or ran out of room before editing):
           // charge for the look it took, keep the current version.
           const summary = result.finished ? result.summary || "No changes needed in the captured views." : "The review ran out of room before making changes. Your website is unchanged.";
           if (input.operation) {
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "review_no_change", { ...detail, version: artifact.current_version, summary, changed: false, finished: result.finished })));
+            emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, "review_no_change", { ...detail, version: artifact.current_version, summary, changed: false, finished: result.finished })));
             return;
           }
           const settled = await settleRun(hold, measured(), { ...detail, kind: "review_no_change" });
@@ -113,16 +151,20 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         }
         if (!source || !files.changed.size && !result.finished) {
           if (input.operation) {
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "incomplete", { ...detail, code: "BUILD_INCOMPLETE", message: "The builder stopped before a usable change was ready. Your previous saved version is safe.", version: artifact.current_version, changed: false, finished: false })));
+            // A step that saved nothing usable is never charged (its provider cost is absorbed); a finished request
+            // that needed no change is a completed request and stays chargeable.
+            // That includes a run that called finish but left no source that compiles; a finished request that needed no
+            // change never reaches here (it has a source and is saved as a completed, chargeable request).
+            emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, "failed", { ...detail, code: "BUILD_INCOMPLETE", message: `The builder ${result.finished ? "finished without a website that compiles" : "stopped before a usable change was ready"}. Nothing was charged. Your previous saved version is safe.`, version: artifact.current_version, changed: false, finished: false })));
             return;
           }
-          await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
-          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Your project is unchanged — try a more focused request or a higher effort level." });
+          await releaseRun(hold, measured(), "incomplete_nothing_saved", { ...detail, kind: "incomplete" });
+          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "The builder finished without a website that compiles. Nothing was charged. Your project is unchanged." :"The builder ran out of room before finishing. Nothing was charged. Your project is unchanged — try a more focused request or a higher effort level." });
           return;
         }
         if (input.operation) {
           const summary = result.summary || (result.finished ? "Updated the website." : "Saved the progress made so far.");
-          emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished, build }, {
+          emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished, build }, {
             content: { schemaVersion: 1, kind: "website", title: builtTitle(current.content.title, reviewing ? "" : result.title, input.projectBrief ?? "", "website").slice(0, 200), sections: [], websiteSource: source },
             style: current.style, assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])],
             summary: `${reviewing ? "Design review" : input.message.slice(0, 600)} → ${summary}`.slice(0, 2000), expectedVersion: artifact.current_version,
@@ -152,6 +194,8 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         const settled = await settleRun(hold, measured(), { ...detail, kind: "saved" });
         emit({ type: "done", version: saved.data.version.version_number ?? artifact.current_version + 1, summary, charged: settled.charged, changed: true, finished: result.finished, build });
       } catch (error) {
+        routeRecord = (error as { route?: RouteRecord } | null)?.route ?? routeRecord;
+        logRouteOnce();
         if (input.operation) {
           const stop = logAiStop(hold.reference, error);
           let candidate: OperationCandidate | undefined;
@@ -162,10 +206,11 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
               assetIds: [...new Set([...current.assetIds, ...source.assets.map(asset => asset.id)])],
               summary: verdict.status === "passed" ? "Recovered the work completed before the builder stopped." : "Recovered the work completed before the builder stopped. Its build could not be checked.", expectedVersion: artifact.current_version };
           } catch { /* Only validated source that does not fail to build is offered for recovery. */ }
-          emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false }, candidate));
+          emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false,
+            ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) }, candidate));
           return;
         }
-        await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped }).catch(() => undefined);
+        await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped, usage: spend.usageByModel() }).catch(() => undefined);
         const stop = logAiStop(hold.reference, error);
         if (stop) emit({ type: "error", code: stop.code, message: stop.message, retryable: true });
         else emit({ type: "error", code: "BUILD_FAILED", message: (error as { code?: string }).code === "REFUSED" ? "This request can't be built. Try rephrasing it."

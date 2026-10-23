@@ -1,0 +1,26 @@
+{
+  "note": "Copy edits for the model-orchestrator qualification (scope model-orchestrator-20261023): one change each to a website saved by the 21 October app-route run (read only). Every named old text exists in that site. Two requests are in Bosnian; c20 is a removal; c01-c06 name only the new contact, so the project's single number or email is the one to replace.",
+  "frozenAt": "2026-10-23",
+  "cases": [
+    { "id": "c01-laurel-phone", "kind": "phone, unnamed old", "site": "outputs/eval/runs/live-20261021T202136Z/w06-wellness-laurel-creek-dental", "request": "Change our phone number to (916) 555-0199." },
+    { "id": "c02-elmwood-phone", "kind": "phone, unnamed old", "site": "outputs/eval/runs/live-20261021T202136Z/w10-civic-elmwood-pantry", "request": "Change the pantry phone number to (401) 555-0177." },
+    { "id": "c03-ovenbird-phone", "kind": "phone, national and tel: formats", "site": "outputs/eval/runs/live-20261021T202136Z/w11-restaurant-ovenbird-bakehouse", "request": "Change the phone number to 0131 496 0499." },
+    { "id": "c04-hartwell-phone", "kind": "phone in constants", "site": "outputs/eval/runs/live-20261021T202136Z/w03-professional-hartwell-rook", "request": "Please change the phone number everywhere to 0161 496 0799." },
+    { "id": "c05-lowceiling-email", "kind": "email, unnamed old", "site": "outputs/eval/runs/live-20261021T202136Z/w08-events-low-ceiling", "request": "Change the bookings email address to events@lowceiling.example." },
+    { "id": "c06-hisaburja-email", "kind": "email in a constant", "site": "outputs/eval/runs/live-20261021T202136Z/w18-property-hisa-burja", "request": "Change the email to bookings@hisaburja.example." },
+    { "id": "c07-ridgeline-price", "kind": "price, named old", "site": "outputs/eval/runs/live-20261021T202136Z/w19-events-ridgeline-weddings", "request": "Change the Elopement planning price from $1,200 to $1,350." },
+    { "id": "c08-fernhill-price", "kind": "price, named old", "site": "outputs/eval/runs/live-20261021T202136Z/w13-professional-fernhill-books-tax", "request": "Change the Monthly Books price from $450 to $475." },
+    { "id": "c09-relay-price", "kind": "price, named old", "site": "outputs/eval/runs/live-20261021T202136Z/w02-saas-relay-operations", "request": "Change the Single site plan price from $29 to $32." },
+    { "id": "c10-ovenbird-hours", "kind": "hours in several formats", "site": "outputs/eval/runs/live-20261021T202136Z/w11-restaurant-ovenbird-bakehouse", "request": "Change the Wednesday to Saturday opening hours from 07:30–14:00 to 08:00–14:00." },
+    { "id": "c11-hartwell-hours", "kind": "hours, unnamed old", "site": "outputs/eval/runs/live-20261021T202136Z/w03-professional-hartwell-rook", "request": "Change the opening hours to Monday to Friday 09:00–17:30." },
+    { "id": "c12-hisaburja-checkin-bs", "kind": "hours, Bosnian request", "site": "outputs/eval/runs/live-20261021T202136Z/w18-property-hisa-burja", "request": "Promijeni vrijeme prijave (check-in) na 14:00–20:00." },
+    { "id": "c13-glenrise-time", "kind": "time, named old", "site": "outputs/eval/runs/live-20261021T202136Z/w20-civic-glen-rise-maths-club", "request": "Change the session time from 10:00–12:00 to 10:00–12:30." },
+    { "id": "c14-saffron-heading", "kind": "heading text", "site": "outputs/eval/runs/live-20261021T202136Z/w01-restaurant-saffron-table", "request": "Replace the heading \"Come hungry, come early or late.\" with \"Come hungry. We'll save you a seat.\"" },
+    { "id": "c15-ledgerline-headline", "kind": "headline text", "site": "outputs/eval/runs/live-20261021T202136Z/w12-saas-ledgerline", "request": "Change the headline \"January should be boring.\" to \"January should be quiet.\"" },
+    { "id": "c16-hollis-heading", "kind": "heading text", "site": "outputs/eval/runs/live-20261021T202136Z/w07-trades-hollis-heating-plumbing", "request": "Change \"Not urgent? Ask for a quote.\" to \"Not an emergency? Ask for a quote.\"" },
+    { "id": "c17-mira-button", "kind": "button label", "site": "outputs/eval/runs/live-20261021T202136Z/w04-creator-mira-objects", "request": "Rename the \"Commission enquiry\" button to \"Ask about a commission\"." },
+    { "id": "c18-crux-heading", "kind": "heading text", "site": "outputs/eval/runs/live-20261021T202136Z/w16-wellness-crux-yard", "request": "Change the heading \"Coffee and toasties between goes\" to \"Coffee and toasties between climbs\"." },
+    { "id": "c19-kafatamo-heading-bs", "kind": "heading text, Bosnian request", "site": "outputs/eval/runs/live-20261021T202136Z/w15-ecommerce-kafa-tamo", "request": "Zamijeni naslov „Freshly roasted, once a month.“ sa „Roasted fresh, every month.“" },
+    { "id": "c20-lowceiling-remove", "kind": "removal of a sentence", "site": "outputs/eval/runs/live-20261021T202136Z/w08-events-low-ceiling", "request": "Remove the sentence \"Tickets on the door cost €3 more.\"" }
+  ]
+}

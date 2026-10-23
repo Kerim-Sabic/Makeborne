@@ -20,6 +20,12 @@ const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 
 export class FileToolError extends Error {}
 
+/** Files as the builder reads them: sorted by path, so the same files always render to the same bytes (a cacheable prefix). */
+export function fileBlocks(files: ReadonlyMap<string, string>) {
+  return [...files.entries()].sort(([a], [b]) => a < b ? -1 : 1)
+    .map(([path, content]) => `<file path="${path}">\n${content}\n</file>`).join("\n\n");
+}
+
 /** Mutable working copy of one website project used during a builder run. */
 export class ProjectFiles {
   readonly files = new Map<string, string>();
@@ -82,6 +88,23 @@ export class ProjectFiles {
     this.assets.set(asset.path, asset);
   }
 
+  /** The whole working copy, to put back with restore() (an escalated stage starts again from it). */
+  checkpoint() {
+    return { files: new Map(this.files), assets: new Map(this.assets), routes: [...this.routes], design: this.design, changed: new Set(this.changed) };
+  }
+
+  /** Puts a checkpoint back. Returns what differs from the current copy, so the client can be told. */
+  restore(saved: ReturnType<ProjectFiles["checkpoint"]>) {
+    const written: string[] = [], deleted: string[] = [];
+    for (const [path, content] of saved.files) if (this.files.get(path) !== content) written.push(path);
+    for (const path of this.files.keys()) if (!saved.files.has(path)) deleted.push(path);
+    this.files.clear(); for (const [path, content] of saved.files) this.files.set(path, content);
+    this.assets.clear(); for (const [path, asset] of saved.assets) this.assets.set(path, asset);
+    this.routes = [...saved.routes]; this.design = saved.design;
+    this.changed.clear(); for (const path of saved.changed) this.changed.add(path);
+    return { written, deleted };
+  }
+
   totalBytes() {
     let total = 0;
     for (const content of this.files.values()) total += bytes(content);
@@ -90,8 +113,7 @@ export class ProjectFiles {
 
   /** Model-facing snapshot: every editable file, byte for byte. */
   snapshot() {
-    return [...this.files.entries()].sort(([a], [b]) => a < b ? -1 : 1)
-      .map(([path, content]) => `<file path="${path}">\n${content}\n</file>`).join("\n\n");
+    return fileBlocks(this.files);
   }
 
   /** Static checks the browser bundler would otherwise fail on: missing entry

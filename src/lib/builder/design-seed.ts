@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { DesignAnswers } from "./brief-questions";
 
 /**
  * Deterministic art-direction starting points for a first build without a
@@ -45,20 +46,25 @@ export function detectIndustry(text: string): Industry {
 export const ARCHETYPES = ["Photographic", "Type as image", "Editorial split", "Poster", "Product stage", "Index"] as const;
 type Archetype = typeof ARCHETYPES[number];
 /** Type as image was 65% of measured first screens: it stays available but rarely suggested. */
+/** Round 3: fewer photographic seeds had moved 4 of 7 first screens into Editorial split (D4/D5 fell to
+ * 0.695), so the weights are flatter: three or four archetypes per industry at similar odds. */
 const ARCHETYPE_WEIGHTS: Record<Industry, Weighted<Archetype>> = {
-  food: [["Editorial split", 3], ["Photographic", 2], ["Index", 2], ["Poster", 2], ["Type as image", 1]],
-  saas: [["Product stage", 5], ["Editorial split", 2], ["Index", 1], ["Type as image", 1]],
-  professional: [["Editorial split", 4], ["Index", 3], ["Type as image", 1]],
-  creator: [["Index", 4], ["Poster", 3], ["Type as image", 2], ["Photographic", 1]],
-  commerce: [["Product stage", 4], ["Photographic", 3], ["Poster", 2], ["Editorial split", 2]],
-  wellness: [["Editorial split", 4], ["Index", 2], ["Photographic", 1], ["Type as image", 1]],
-  trades: [["Poster", 3], ["Editorial split", 3], ["Index", 2], ["Photographic", 1]],
-  property: [["Editorial split", 4], ["Index", 2], ["Photographic", 1], ["Type as image", 1]],
-  events: [["Poster", 4], ["Index", 3], ["Type as image", 2], ["Photographic", 1]],
-  weddings: [["Editorial split", 4], ["Type as image", 2], ["Index", 2]],
-  civic: [["Editorial split", 3], ["Poster", 2], ["Index", 2], ["Photographic", 1]],
-  general: [["Editorial split", 3], ["Photographic", 2], ["Poster", 2], ["Index", 2], ["Product stage", 1], ["Type as image", 1]],
+  food: [["Editorial split", 2], ["Poster", 2], ["Index", 2], ["Photographic", 2], ["Product stage", 1], ["Type as image", 1]],
+  saas: [["Product stage", 4], ["Editorial split", 2], ["Index", 1], ["Type as image", 1], ["Poster", 1]],
+  professional: [["Editorial split", 2], ["Index", 2], ["Poster", 2], ["Type as image", 1]],
+  creator: [["Index", 3], ["Poster", 2], ["Type as image", 2], ["Editorial split", 1], ["Photographic", 1]],
+  commerce: [["Product stage", 3], ["Poster", 2], ["Photographic", 2], ["Editorial split", 1], ["Index", 1]],
+  wellness: [["Editorial split", 2], ["Index", 2], ["Type as image", 1], ["Poster", 1], ["Photographic", 1]],
+  trades: [["Poster", 3], ["Index", 2], ["Editorial split", 2], ["Type as image", 1], ["Photographic", 1]],
+  property: [["Editorial split", 2], ["Index", 2], ["Photographic", 2], ["Type as image", 1]],
+  events: [["Poster", 3], ["Index", 2], ["Type as image", 2], ["Photographic", 1]],
+  weddings: [["Editorial split", 2], ["Type as image", 2], ["Index", 2], ["Photographic", 1]],
+  civic: [["Poster", 2], ["Editorial split", 2], ["Index", 2], ["Type as image", 1]],
+  general: [["Editorial split", 2], ["Poster", 2], ["Index", 2], ["Photographic", 1], ["Product stage", 1], ["Type as image", 1]],
 };
+/** A hue family per project for the ground tint and accent, so light sites stop sharing one palette (D1). */
+const PALETTE_FAMILIES = ["sage and moss", "sky and slate blue", "terracotta and clay", "butter and ochre", "plum and mauve", "ink navy and brass",
+  "coral and blush", "olive and khaki", "teal and sea glass", "rust and sand", "lilac and violet", "charcoal and signal red", "forest and mint", "denim and cream"] as const;
 const ARCHETYPE_NOTES: Record<Archetype, string> = {
   "Photographic": "a full-bleed image carries the first screen; the headline sits on a solid panel or a scrim, with a details bar on its edge",
   "Type as image": "the headline fills the width and one cropped image or object is set into or against the type",
@@ -84,8 +90,9 @@ const PAIRINGS: Record<Industry, readonly Pairing[]> = {
   general: [["Instrument Serif", "Geist"], ["Space Grotesk", "Manrope"], ["Syne", "DM Sans"], ["Newsreader", "Outfit"], ["Bricolage Grotesque", "Geist"]],
 };
 
-type Ground = "dark" | "colour flood" | "mid-tone" | "cool light" | "warm light" | "photographic";
+type Ground = "dark" | "colour flood" | "mid-tone" | "cool light" | "warm light" | "pale tint" | "photographic";
 const GROUND_NOTES: Record<Ground, string> = {
+  "pale tint": "a pale but clearly tinted ground in the palette family (pale sage, sky, blush, butter, lilac), dark text",
   "dark": "a deep tinted dark ground (not pure black) with light text",
   "colour flood": "one saturated hue from the subject as the ground of the first screen",
   "mid-tone": "a muted mid-value ground (clay, slate, sage, ochre, denim) with dark or light text at AA contrast",
@@ -97,31 +104,33 @@ const GROUND_NOTES: Record<Ground, string> = {
  * preferred calm light pages for services; round 2 still drifted to 7 of 20 dark sites. Light is the
  * default; dark is suggested only where the subject itself is dark (nightlife, events). */
 const GROUNDS: Record<Industry, Weighted<Ground>> = {
-  food: [["photographic", 3], ["warm light", 3], ["colour flood", 2], ["mid-tone", 1]],
-  saas: [["cool light", 5], ["warm light", 1], ["mid-tone", 1]],
-  professional: [["cool light", 3], ["warm light", 3], ["mid-tone", 1]],
-  creator: [["cool light", 2], ["warm light", 2], ["colour flood", 2], ["mid-tone", 1]],
-  commerce: [["warm light", 2], ["cool light", 2], ["colour flood", 2], ["photographic", 2], ["mid-tone", 1]],
-  wellness: [["warm light", 3], ["cool light", 3], ["photographic", 2], ["mid-tone", 1]],
-  trades: [["cool light", 4], ["warm light", 2], ["colour flood", 1], ["photographic", 1]],
-  property: [["photographic", 3], ["warm light", 3], ["cool light", 2], ["mid-tone", 1]],
-  events: [["dark", 3], ["colour flood", 2], ["photographic", 1], ["cool light", 1]],
-  weddings: [["photographic", 3], ["warm light", 3], ["cool light", 2]],
-  civic: [["warm light", 3], ["cool light", 3], ["colour flood", 1]],
-  general: [["cool light", 3], ["warm light", 3], ["mid-tone", 1]],
+  food: [["photographic", 2], ["warm light", 2], ["pale tint", 1], ["colour flood", 2], ["dark", 1], ["mid-tone", 1]],
+  saas: [["cool light", 3], ["pale tint", 2], ["colour flood", 1], ["mid-tone", 1]],
+  professional: [["cool light", 2], ["warm light", 2], ["pale tint", 2], ["mid-tone", 1]],
+  creator: [["cool light", 1], ["pale tint", 1], ["colour flood", 2], ["dark", 2], ["warm light", 1], ["mid-tone", 1]],
+  commerce: [["pale tint", 2], ["warm light", 1], ["cool light", 1], ["colour flood", 2], ["photographic", 1], ["dark", 1], ["mid-tone", 1]],
+  wellness: [["pale tint", 3], ["warm light", 2], ["cool light", 2], ["photographic", 1], ["mid-tone", 1]],
+  trades: [["cool light", 2], ["pale tint", 1], ["warm light", 1], ["colour flood", 2], ["dark", 1], ["photographic", 1]],
+  property: [["photographic", 2], ["warm light", 2], ["pale tint", 2], ["cool light", 1], ["mid-tone", 1]],
+  events: [["dark", 3], ["colour flood", 2], ["photographic", 1], ["pale tint", 1]],
+  weddings: [["photographic", 2], ["warm light", 2], ["pale tint", 2], ["cool light", 1]],
+  civic: [["warm light", 2], ["pale tint", 2], ["cool light", 1], ["colour flood", 2]],
+  general: [["cool light", 2], ["warm light", 1], ["pale tint", 1], ["colour flood", 1], ["dark", 1], ["mid-tone", 1]],
 };
+/** Industries whose visitors act from a phone on the spot (call, find, check hours, order). */
+const QUICK_ACTION_INDUSTRIES: ReadonlySet<Industry> = new Set(["food", "trades", "wellness", "events", "weddings"]);
 
 /** Quiet subjects earn calm, light, typographic restraint; loud ones may be bold. The judge's
  * repeat preferences (a calm editorial law firm, a ledger-paper bookkeeping app, a plain-spoken
  * plumber with a huge phone number) were all quiet executions. */
 export type Tone = "quiet" | "loud";
 export const TONES: Record<Industry, Tone> = {
-  food: "loud", saas: "quiet", professional: "quiet", creator: "loud", commerce: "loud", wellness: "quiet",
-  trades: "quiet", property: "quiet", events: "loud", weddings: "quiet", civic: "quiet", general: "quiet",
+  food: "loud", saas: "loud", professional: "quiet", creator: "loud", commerce: "loud", wellness: "quiet",
+  trades: "loud", property: "quiet", events: "loud", weddings: "quiet", civic: "loud", general: "loud",
 };
 const TONE_NOTES: Record<Tone, string> = {
-  quiet: "quiet: a light ground, generous whitespace, one accent colour used sparingly, type and spacing doing the work, no marquee, no bento grid, no stat band, no dark section heavier than the footer, calm motion only; quiet is not plain: the first screen still carries one ownable, crafted signature drawn for this business (a diagram, illustration or object from its own facts)",
-  loud: "loud: bolder colour and scale are welcome, but still one dominant device on the first screen, a clear hierarchy and plenty of air around it",
+  quiet: "quiet: generous space, a calm palette, refined type at confident sizes and calm motion; quiet is not plain: the first screen carries one ownable, crafted signature drawn for this business (a diagram, illustration or object from its own facts) and every section looks designed for this site",
+  loud: "loud: commit to colour and scale: big, characterful display type, a saturated, tinted or deep dark ground where the subject suits it, and one crafted signature graphic carried through the sections; still one dominant device on the first screen and a clear hierarchy",
 };
 const HEADLINE_DEVICES: Record<Tone, readonly string[]> = {
   quiet: [
@@ -170,15 +179,47 @@ function pick<T>(options: Weighted<T>, byte: number): T {
   return options[options.length - 1][0];
 }
 
-export type DesignSeed = { industry: Industry; tone: Tone; archetype: Archetype; pairing: Pairing; ground: Ground; headline: string; motion: string; compositions: [string, string] };
+/** Type pairings per answered vibe (display, text): the client's choice of feel sets the type. */
+const VIBE_PAIRINGS: Record<NonNullable<DesignAnswers["vibe"]>, readonly Pairing[]> = {
+  calm: [["Instrument Serif", "Geist"], ["Cormorant", "Manrope"], ["Newsreader", "Plus Jakarta Sans"], ["Playfair Display", "DM Sans"]],
+  bold: [["Unbounded", "Geist"], ["Bricolage Grotesque", "DM Sans"], ["Syne", "Space Grotesk"], ["Bebas Neue", "Outfit"]],
+  warm: [["Fraunces", "DM Sans"], ["DM Serif Display", "Manrope"], ["Bricolage Grotesque", "Newsreader"], ["Fraunces", "Outfit"]],
+  technical: [["Geist", "JetBrains Mono"], ["Space Grotesk", "Geist"], ["Sora", "Manrope"], ["Plus Jakarta Sans", "JetBrains Mono"]],
+};
+const VIBE_TONES: Record<NonNullable<DesignAnswers["vibe"]>, Tone> = { calm: "quiet", technical: "quiet", warm: "quiet", bold: "loud" };
+const IMAGERY_NOTES: Record<NonNullable<DesignAnswers["imagery"]> | "none", string> = {
+  photo: "photographs of this business's specific subject (generate_image kind photo); at most one or two per page, never stock-like",
+  illustration: "one illustration technique for the whole site (generate_image kind illustration, or drawn CSS/SVG); no photographs",
+  type: "no generated images: typography, colour fields and CSS/SVG shapes carry the page",
+  none: "typography, CSS and inline SVG (image generation is unavailable)",
+};
+const GOAL_NOTES: Record<NonNullable<DesignAnswers["goal"]>, string> = {
+  call: "a call (the phone number as one of the two largest elements of the first screen, a tel: link)",
+  book: "booking (the booking action in the header, the first screen and the closing section)",
+  buy: "buying (products and their prices or a clear way to order, first)",
+  visit: "visiting (address, opening hours and directions on the first screen)",
+  enquire: "an enquiry (a short, accessible enquiry form reachable from the first screen)",
+  signup: "signing up (an email form reachable from the first screen, honest about what happens next)",
+};
 
-export function designSeed(input: { seed: string; brief: string; images: boolean }): DesignSeed {
+export type DesignSeed = { industry: Industry; tone: Tone; archetype: Archetype; pairing: Pairing; ground: Ground; palette: string; headline: string; motion: string; compositions: [string, string]; quickActions: boolean };
+
+/**
+ * Deterministic for (seed, brief, answers): the client's one-click answers override the per-project
+ * draw where they apply (theme sets the ground, vibe the tone and type, imagery the image plan and
+ * first-screen archetypes); an enhanced brief's tone applies when the vibe was not answered.
+ */
+export function designSeed(input: { seed: string; brief: string; images: boolean; design?: DesignAnswers; tone?: Tone }): DesignSeed {
   const industry = detectIndustry(input.brief);
-  const tone = TONES[industry];
+  const design = input.design ?? {};
+  const tone = design.vibe ? VIBE_TONES[design.vibe] : input.tone ?? TONES[industry];
   const bytes = digest(input.seed);
-  const archetypes = ARCHETYPE_WEIGHTS[industry].filter(([name]) => input.images || name !== "Photographic");
-  const grounds = GROUNDS[industry].filter(([name]) => input.images || name !== "photographic");
-  const pairings = PAIRINGS[industry];
+  const photos = input.images && design.imagery !== "illustration" && design.imagery !== "type";
+  const archetypes = ARCHETYPE_WEIGHTS[industry].filter(([name]) => photos || name !== "Photographic")
+    .map(([name, weight]) => [name, design.imagery === "photo" && name === "Photographic" ? weight * 2 : design.imagery === "type" && name === "Type as image" ? weight * 2 : weight] as const);
+  const grounds = design.theme === "dark" ? [["dark", 1]] as Weighted<Ground>
+    : GROUNDS[industry].filter(([name]) => (photos || name !== "photographic") && (design.theme !== "light" || name !== "dark"));
+  const pairings = design.vibe ? VIBE_PAIRINGS[design.vibe] : PAIRINGS[industry];
   const compositions = COMPOSITIONS[tone];
   const first = bytes[5] % compositions.length;
   let second = bytes[6] % compositions.length;
@@ -188,27 +229,48 @@ export function designSeed(input: { seed: string; brief: string; images: boolean
     archetype: pick(archetypes, bytes[0]),
     pairing: pairings[bytes[1] % pairings.length],
     ground: pick(grounds, bytes[2]),
+    palette: PALETTE_FAMILIES[bytes[7] % PALETTE_FAMILIES.length],
     headline: HEADLINE_DEVICES[tone][bytes[3] % HEADLINE_DEVICES[tone].length],
     motion: SIGNATURE_MOTION[tone][bytes[4] % SIGNATURE_MOTION[tone].length],
     compositions: [compositions[first], compositions[second]],
+    quickActions: QUICK_ACTION_INDUSTRIES.has(industry) || design.goal === "call" || design.goal === "visit",
   };
 }
 
 /** The user-turn block for a first build. */
-export function designSeedBlock(input: { seed: string; brief: string; images: boolean; brand?: boolean }) {
+export function designSeedBlock(input: { seed: string; brief: string; images: boolean; brand?: boolean; design?: DesignAnswers; tone?: Tone }) {
   const seed = designSeed(input);
+  const design = input.design ?? {};
   const [display, text] = seed.pairing;
+  const imagery = !input.images ? "none" : design.imagery ?? null;
   return [
     "<design_seed>",
-    "Starting points for this project's art direction, chosen per project so Makeborne sites do not converge on one look. Use them unless they clearly conflict with the brief; the brief, an approved plan, a requested style" + (input.brand ? " and the brand kit (its colours and fonts)" : "") + " always win. If you change one, choose something just as specific and say why in finish.design.",
-    `- Tone: ${TONE_NOTES[seed.tone]}.`,
+    "Starting points for this project's art direction, chosen per project so Makeborne sites do not converge on one look. Use them unless they clearly conflict with the brief; the brief, an approved plan, a requested style" + (input.brand ? " and the brand kit (its colours and fonts)" : "") + " always win. If you change one, choose something just as specific and say why in finish.design." + (Object.keys(design).length ? " Lines marked (client's answer) come from the client's own one-click answers: follow them." : ""),
+    `- Tone: ${TONE_NOTES[seed.tone]}${design.vibe ? " (client's answer)" : ""}.`,
     `- First screen: ${seed.archetype} (${ARCHETYPE_NOTES[seed.archetype]}).`,
-    `- Type: "${display}"${display === text ? " for display and text (vary weight, width and size)" : ` for display, "${text}" for text`}.`,
-    `- Ground: ${seed.ground}: ${GROUND_NOTES[seed.ground]}. Derive the exact hues from this business.`,
+    `- Type: "${display}"${display === text ? " for display and text (vary weight, width and size)" : ` for display, "${text}" for text`}${design.vibe ? " (client's answer)" : ""}.`,
+    `- Ground: ${seed.ground}: ${GROUND_NOTES[seed.ground]}${design.theme ? " (client's answer)" : ""}. Derive the exact hues from this business.`,
+    design.colour ? `- Colour: build the palette around the client's colour ${design.colour} (accent or ground; text on it at AA contrast) (client's answer).`
+      : design.logoColours ? "- Colour: take the palette from the client's logo (client's answer)."
+      : `- Palette family: lean the ground tint and accent toward ${seed.palette}, adjusted to the subject.`,
+    imagery ? `- Imagery: ${IMAGERY_NOTES[imagery]}${design.imagery ? " (client's answer)" : ""}.` : "",
+    design.goal ? `- Primary action: ${GOAL_NOTES[design.goal]} (client's answer).` : "",
     `- Headline device: ${seed.headline}.`,
     "- Motif: one quiet visual motif drawn from this business's own working objects (a ledger page, a receipt, a timetable, a map, a menu card, a ticket, a plan drawing), used consistently and drawn with care, never as clip-art.",
     `- Signature motion: ${seed.motion}.`,
     `- Feature these compositions somewhere on the page: ${seed.compositions[0]}; ${seed.compositions[1]}.`,
+    seed.quickActions ? "- Mobile quick actions: visitors act from their phone, so add the quick-action row in the page flow below the first screen on phones (only the actions this business has: Call, Directions, Hours, Order or Book) using the quick-action pattern, and keep Call in the sticky header." : "",
     "</design_seed>",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
+}
+
+/**
+ * Whether a build gets the per-project design seed (and with it the concept step): a first website build with no
+ * preset style, no approved plan, no files and no static design to convert. The studio's default "automatic" style
+ * is no preset (its direction text only says so); before round 4 the route tested that text, so no app build ever
+ * got a seed.
+ */
+export function seedApplies(input: { kind: string; reviewing: boolean; plan: boolean; styleId: string | null | undefined; files: number; staticDesign: boolean }) {
+  const preset = Boolean(input.styleId?.trim()) && input.styleId !== "automatic";
+  return input.kind === "website" && !input.reviewing && !input.plan && !preset && input.files === 0 && !input.staticDesign;
 }

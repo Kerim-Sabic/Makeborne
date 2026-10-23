@@ -1,0 +1,14 @@
+{
+  "note": "Design-review effort cases for the model-orchestrator qualification (scope model-orchestrator-20261023): websites saved by the 21 October app-route run (read only), each reviewed from one fresh capture by the builder model at medium and at low effort. These sites already had one review when they were built, so a second review finds fewer problems; that is the conservative case for the low effort.",
+  "frozenAt": "2026-10-23",
+  "cases": [
+    { "id": "r01-hartwell", "site": "outputs/eval/runs/live-20261021T202136Z/w03-professional-hartwell-rook" },
+    { "id": "r02-hollis", "site": "outputs/eval/runs/live-20261021T202136Z/w07-trades-hollis-heating-plumbing" },
+    { "id": "r03-lumen", "site": "outputs/eval/runs/live-20261021T202136Z/w09-property-lumen-atelier" },
+    { "id": "r04-ledgerline", "site": "outputs/eval/runs/live-20261021T202136Z/w12-saas-ledgerline" },
+    { "id": "r05-foxed", "site": "outputs/eval/runs/live-20261021T202136Z/w14-creator-foxed-podcast" },
+    { "id": "r06-kafatamo", "site": "outputs/eval/runs/live-20261021T202136Z/w15-ecommerce-kafa-tamo" },
+    { "id": "r07-saltbush", "site": "outputs/eval/runs/live-20261021T202136Z/w17-trades-saltbush-auto" },
+    { "id": "r08-ridgeline", "site": "outputs/eval/runs/live-20261021T202136Z/w19-events-ridgeline-weddings" }
+  ]
+}
