@@ -82,6 +82,25 @@ export function buildMaterial(input: {
   return material;
 }
 
+/** A document stating it is about another company or branch. */
+const SEPARATE = /\b(?:a |an )?(?:separate|different|independent|unrelated) (?:company|business|firm|entity|branch)\b|\banother branch\b|\bnot (?:part of|affiliated with|connected to)\b|\bfor the [\p{L}' -]{2,40} branch(?: [\p{L}' -]{0,40})? only\b/iu;
+const COUNTRIES = ["uk", "united kingdom", "england", "scotland", "wales", "ireland", "usa", "united states", "canada", "australia", "new zealand", "croatia", "slovenia", "bosnia", "serbia",
+  "montenegro", "austria", "germany", "france", "spain", "italy", "portugal", "netherlands", "belgium", "switzerland", "poland", "sweden", "norway", "denmark", "finland", "greece"];
+const PLACE_STOP = new Set(["the", "our", "your", "their", "this", "that", "a", "an", "all", "every", "one", "two", "three", "january", "february", "march", "april", "may", "june", "july", "august", "september",
+  "october", "november", "december", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "saturdays", "sundays", "store", "shop", "person", "family", "town", "city", "centre", "center"]);
+/** Places a text names: proper nouns after "in", "based in", "serving", "served", "across", "near" (with a following ", Region"), and country names. Lower case. */
+export function placesIn(text: string): Set<string> {
+  const places = new Set<string>();
+  const sample = text.slice(0, 60_000);
+  const add = (value: string | undefined) => {
+    for (const word of (value ?? "").normalize("NFKC").split(/\s+/)) { const token = word.toLowerCase().replace(/[^\p{L}'-]/gu, ""); if (token.length >= 2 && !PLACE_STOP.has(token)) places.add(token); }
+  };
+  for (const match of sample.matchAll(/\b(?:in|based in|serving|serves|served|across|near|around)\s+((?:North|South|East|West|Central|Greater)\s)?(\p{Lu}[\p{L}'-]+(?:\s\p{Lu}[\p{L}'-]+)?)(?:,\s*(\p{Lu}[\p{L}'-]+(?:\s\p{Lu}[\p{L}'-]+)?))?/gu)) { add(match[2]); add(match[3]); }
+  const lower = ` ${sample.toLowerCase().replace(/[^\p{L}\s]/gu, " ")} `;
+  for (const country of COUNTRIES) if (lower.includes(` ${country} `)) places.add(country === "united kingdom" ? "uk" : country === "united states" ? "usa" : country);
+  return places;
+}
+
 /** Same name, different business: flagged and kept apart, never merged. */
 export function checkIdentity(material: Material): Identity {
   const notes: string[] = [], excluded: SourceId[] = [];
@@ -101,6 +120,23 @@ export function checkIdentity(material: Material): Identity {
       status = "conflict"; excluded.push(source.id);
       notes.push(`“${source.title}” names ${other.slice(0, 2).join(" and ")}, but this client's website is ${host}. It was kept apart until you confirm it is the same business.`);
     }
+  }
+  // A supplied document that says it is about a separate company or another branch is kept apart like one naming another site.
+  for (const source of material.sources) {
+    if (source.kind !== "document" || excluded.includes(source.id)) continue;
+    const match = SEPARATE.exec(source.text.slice(0, MAX_DOCUMENT_CHARS));
+    if (match) {
+      status = "conflict"; excluded.push(source.id);
+      notes.push(`“${source.title}” says it describes ${match[0].toLowerCase().includes("branch") ? "another branch" : "a separate business"} (“${match[0].slice(0, 80)}”). It was kept apart until you confirm it applies to this client.`);
+    }
+  }
+  // Same name, another place: where the person says the business is (notes, saved facts) vs where its own site says it works.
+  const stated = placesIn(material.sources.filter(source => source.kind === "notes" || source.kind === "knowledge").map(source => source.text).join("\n"));
+  const served = placesIn(material.sources.filter(source => source.kind === "page" && source.role !== "competitor" && !excluded.includes(source.id)).map(source => source.text).join("\n"));
+  if (stated.size && served.size && ![...stated].some(place => served.has(place))) {
+    status = "conflict";
+    const shown = (places: Set<string>) => [...places].slice(0, 3).map(place => place.length <= 3 ? place.toUpperCase() : place.replace(/(^|[\s-])\p{L}/gu, letter => letter.toUpperCase())).join(", ");
+    notes.push(`Your notes or saved facts place the business in ${shown(stated)}, but its website talks about ${shown(served)}. It may be a different business with the same name.`);
   }
   // The home page should show the business's name: every distinctive word of the company (or person) name.
   const names = [nameTokens(material.client.company), nameTokens(material.client.name)].filter(list => list.length);

@@ -25,7 +25,9 @@ export const GUARDS = [
   { id: "revenue", always: false, reason: "Revenue and other financial figures are never estimated; only a source that states them can be cited.",
     pattern: /\b(revenues?|turnover|annual sales|sales of|profits?|earnings|net income|valuation|arr|mrr|makes? (about |around |roughly )?[$€£]?\d[\d.,]*\s*[kmb]?\s*(a|per) (year|month))\b/i },
   { id: "followers", always: false, reason: "Follower and subscriber counts are never estimated; only a source that states them can be cited.",
-    pattern: /\b(followers?|subscribers?|following of|social reach|audience of [\d.,]+\s*[kmb]?)\b/i },
+    // A COUNT (a number, or "thousands/millions of", near the word), a following, a reach or an audience size; plain wording
+    // such as "bread box subscribers" is not a count (2026-10-24 paid run: the old pattern removed it).
+    pattern: /(\d[\d.,]*\s*[kmb]?\+?\s*(?:[\p{L}-]+\s+){0,2}(followers?|subscribers?|fans|members)\b|\b(followers?|subscribers?)\s+(?:of|at|count|number|total|reach(?:es|ed)?|grew|rose)\b[^.]{0,30}\d|\b(?:hundreds|thousands|millions|tens of thousands) of (?:[\p{L}-]+\s+)?(followers?|subscribers?|fans)\b|\b(?:large|huge|big|growing|loyal) (?:online |social )?following\b|\bfollowing of\b|\bsocial reach\b|\baudience of [\d.,]+\s*[kmb]?\b)/iu },
   { id: "demographics", always: false, reason: "Customer demographics are never inferred; only a source that states them can be cited.",
     pattern: /\b(aged? ?\d{1,2}|\d{1,2}\s?(-|–|to)\s?\d{1,2}(-| )?(year(-| )olds?|years? old)|millennials?|gen[ -]?[zxy]|boomers?|household income|income (brackets?|levels?)|ethnic\w*|demographics?|\d{1,3}\s?% (of )?(their |its |the )?(customers|audience|visitors|clients|buyers)|(mostly|predominantly|majority|largely) (women|men|female|male))\b/i },
 ] as const;
