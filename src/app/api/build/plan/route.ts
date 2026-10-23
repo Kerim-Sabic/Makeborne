@@ -166,7 +166,8 @@ export async function POST(request: Request) {
     const brand = await projectBrandKit(client, body.workspaceId, project);
     const { operation: envelope, ...requestBody } = body;
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
-      expectedVersion: body.expectedVersion, effort: body.effort, kind: "plan", ceiling: PLAN_CEILING_CREDITS, envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) } }).catch(error => {
+      expectedVersion: body.expectedVersion, effort: body.effort, kind: "plan", ceiling: PLAN_CEILING_CREDITS, envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) },
+      sources: { omitted: body.omittedSources ?? [], references: prepared.references } }).catch(error => {
       // SQL refuses a stale base version without saying so; name the versions instead.
       if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
         throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);

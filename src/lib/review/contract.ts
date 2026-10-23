@@ -46,7 +46,7 @@ export const ApprovedFactSchema = z.object({ id: short(64), statement: short(500
 export const ApprovedFactsSchema = z.object({ snapshotId: short(64), facts: z.array(ApprovedFactSchema).max(200) }).strict();
 export type ApprovedFact = z.infer<typeof ApprovedFactSchema>;
 export type ApprovedFacts = z.infer<typeof ApprovedFactsSchema>;
-export type ClaimKind = "price" | "percentage" | "quantity" | "year";
+export type ClaimKind = "price" | "percentage" | "quantity" | "year" | "time" | "phone" | "email" | "status";
 export type ClaimCheckResult = Readonly<{ text: string; kind: ClaimKind; supported: boolean; factId: string | null }>;
 /** "Approved facts + claims check": the knowledge module's checker plugs in here; claims.ts has a deterministic default. */
 export type ClaimsCheck = (text: string, facts: ApprovedFacts) => readonly ClaimCheckResult[];

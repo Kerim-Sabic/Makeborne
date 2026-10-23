@@ -16,6 +16,8 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const contract = require("./contract.ts"), claims = require("./claims.ts"), validate = require("./validate.ts"), reviewer = require("./reviewer.ts");
 const assemble = require("./assemble.ts"), loop = require("./loop.ts"), cross = require("./cross-provider.ts"), operation = require("./operation.ts");
 const deterministic = require("./deterministic.ts"), guard = require("./guard.ts");
+const reviewKnowledgeModule = require("./knowledge.ts"), brief_ = require("./brief.ts");
+const knowledgeContext = require("../knowledge/context.ts"), knowledgeTask = require("../knowledge/task-context.ts");
 const task = require("../agency/task.ts"), server = require("../builder/operation-server.ts");
 const { RunSpend, memoryGate } = require("../ai/run-spend.ts");
 const { aiCostUsdPerCredit } = require("../builder/pricing.ts");
@@ -43,7 +45,7 @@ function websiteRequest(extra = {}) {
     { id: "site.claims:/:0", check: "site.claims", location: route("/", "desktop"), status: "failed", measured: "\"€59\" (price) is not in the approved facts" },
   ];
   return assemble.assembleRequest({
-    subject: extra.subject ?? subject(), brief, facts, diagnostics,
+    subject: extra.subject ?? subject(), brief, facts: extra.facts ?? facts, diagnostics,
     evidence: { kind: "website", images: [image("img-root-desktop-1", "/ desktop 1440px, screen 1 of 1"), image("img-root-phone-1", "/ phone 390px, screen 1 of 1")],
       routes: [{ path: "/", text: extra.text ?? "Bread baked at dawn\nWeekly bread box: €59 per month\nOpen daily from seven until two", viewports: [
         { viewport: "desktop", width: 1440, height: 900, pageHeight: 900, capturedHeight: 900, images: ["img-root-desktop-1"] },
@@ -338,6 +340,85 @@ const keepAlive = setInterval(() => {}, 1000);
     const repaired = structuredClone(book); repaired.chapters[1].text = "Costs €49.";
     assert.equal(guard.documentGuard(book, repaired, [{ ...target[0], location: { kind: "page", page: 7, chapterId: "two" } }]).ok, true);
     assert.equal(guard.documentGuard(book, repaired, [{ ...target[0], location: { kind: "page", page: 5, chapterId: "one" } }]).ok, false);
+  });
+
+  // ---- Integration with stage 3: approved facts and the claims check from the knowledge module ----
+  const CLIENT = randomUUID();
+  const kfact = (over = {}) => ({ id: randomUUID(), clientId: CLIENT, kind: "observed_fact", key: "price.bread_box", label: "Weekly bread box", valueText: "€49 per month", unit: null, currency: "EUR",
+    validFrom: null, validTo: null, observedAt: null, status: "approved", supersedesId: null, conflictGroup: null, uncertainty: null, evidenceState: "live", revision: 2, trust: "approved", rank: 0, pending: [],
+    evidence: [{ id: randomUUID(), kind: "source", refId: randomUUID(), projectId: P, sha256: "a".repeat(64), extractionVersion: null, locator: {}, quote: "Bread box €49 a month", url: null, fetchedAt: null, title: "Price list" }], ...over });
+  const knowledgeItems = () => [kfact(), kfact({ key: "contact.phone", label: "Phone", valueText: "+387 33 123 456", currency: null }),
+    kfact({ kind: "inference", key: "positioning.popular", label: "Popular", valueText: "The most popular bakery in town", currency: null }),
+    kfact({ key: "hours.weekend", label: "Weekend hours", valueText: "Saturday 08:00–13:00", currency: null, pending: [{ id: randomUUID(), valueText: "Saturday 09:00–14:00", observedAt: null, replaces: true }] })];
+
+  await check("knowledge-backed approved facts: approved non-inference facts with citation ids; no knowledge = claims not checked", async () => {
+    const items = knowledgeItems();
+    const context = knowledgeContext.buildKnowledgeContext(items);
+    const known = reviewKnowledgeModule.reviewKnowledge({ context, snapshotId: null });
+    assert.deepEqual(known.facts.facts.map(fact => fact.id), [items[0], items[1], items[3]].map(knowledgeContext.citationId), "inferences are never approved facts for a review");
+    assert.match(known.facts.snapshotId, /^ctx-[0-9a-f]{40}$/, "a planning read is named by its context digest");
+    assert.equal(known.contextSha256, context.sha256);
+    assert.equal(contract.ApprovedFactsSchema.safeParse(known.facts).success, true);
+    assert.equal(reviewKnowledgeModule.reviewKnowledge({ context, snapshotId: "5b0e8a8e-1111-4222-8333-944455556666" }).facts.snapshotId, "5b0e8a8e-1111-4222-8333-944455556666");
+    const none = reviewKnowledgeModule.reviewFactsAndClaims(null, brief, claims.defaultClaimsCheck);
+    assert.deepEqual([none.facts, none.factsForChecks, none.claims], [brief_.NO_APPROVED_FACTS, null, claims.defaultClaimsCheck]);
+    const empty = reviewKnowledgeModule.reviewKnowledge({ context: knowledgeContext.buildKnowledgeContext([]), snapshotId: null });
+    assert.deepEqual([empty.facts.snapshotId, empty.facts.facts.length, empty.contextSha256], ["knowledge-none", 0, null], "a client with no approved facts: every claim must come from the brief");
+  });
+
+  await check("knowledge-backed claims check: prices, phones, status words and times traced to approved facts or the brief; findings use those facts", async () => {
+    const items = knowledgeItems();
+    const known = reviewKnowledgeModule.reviewKnowledge({ context: knowledgeContext.buildKnowledgeContext(items), snapshotId: null });
+    const { facts: approved, factsForChecks, claims: check } = reviewKnowledgeModule.reviewFactsAndClaims(known, brief, claims.defaultClaimsCheck);
+    assert.equal(factsForChecks, approved);
+    const byText = text => Object.fromEntries(check(text, approved).map(item => [item.text, [item.kind, item.supported, item.factId]]));
+    const price = knowledgeContext.citationId(items[0]), phone = knowledgeContext.citationId(items[1]), hours = knowledgeContext.citationId(items[3]);
+    assert.deepEqual(byText("Weekly bread box: €59 per month"), { "€59": ["price", false, null] });
+    assert.deepEqual(byText("Weekly bread box: €49 per month")["€49"], ["price", true, price]);
+    assert.deepEqual(byText("Call +387 33 123 456")["+387 33 123 456"], ["phone", true, phone]);
+    assert.equal(byText("Call +387 33 999 000")["+387 33 999 000"][1], false);
+    assert.deepEqual(byText("Award-winning bread")["award-winning"], ["status", false, null], "status words need an approved fact");
+    assert.equal(byText("The most popular bakery in town, voted best")["best"][1], false, "an inference never supports a claim");
+    assert.deepEqual(byText("Saturday 08:00–13:00")["08:00"], ["time", true, hours], "a disputed approved value stands until reviewed");
+    assert.equal(check("Weekly bread box: €49 per month", { ...approved, facts: [] })[0].supported, false, "only facts the review was given count");
+    // A factual model finding is grounded against these facts: a value the facts support is not a defect.
+    const request = websiteRequest({ facts: approved, text: "Weekly bread box: €49 per month\nGift box: €59 per month" });
+    const grounded = validate.groundFindings({ coverageNotes: [], findings: [
+      finding({ id: "supported", category: "factual", evidence: { type: "quote", text: "Weekly bread box: €49 per month", from: "artifact" }, factRefs: [], proposedRepair: "Check the price." }),
+      finding({ id: "unsupported", category: "factual", location: route("/", "phone"), evidence: { type: "quote", text: "Gift box: €59 per month", from: "artifact" }, factRefs: [price], proposedRepair: `Use the approved price [${price}] or remove it.` }),
+      finding({ id: "unknown-fact", category: "factual", location: route("/", "phone", "p"), evidence: { type: "quote", text: "Gift box: €59 per month", from: "artifact" }, factRefs: ["price-box"], proposedRepair: "Fix." }),
+    ] }, request, check);
+    assert.deepEqual(grounded.map(item => [item.id, item.grounding]), [["supported", "unverified"], ["unsupported", "grounded"], ["unknown-fact", "unverified"]]);
+    assert.match(grounded[0].note, /approved facts support this value/);
+    assert.match(reviewer.reviewerText(request), new RegExp(`\\[${price}\\] Weekly bread box: €49 per month`), "the reviewer sees the facts under their citation ids");
+  });
+
+  await check("model step: the knowledge is re-read with the operation id and snapshotted; changed facts end it uncharged with no call", async () => {
+    fake.db.clientId = CLIENT;
+    const items = knowledgeItems();
+    const planned = knowledgeContext.buildKnowledgeContext(items);
+    const known = reviewKnowledgeModule.reviewKnowledge({ context: planned, snapshotId: null });
+    const request = websiteRequest({ facts: known.facts });
+    const snapshots = [];
+    const hook = list => async input => knowledgeTask.knowledgeForTask(input, {
+      retriever: { retrieve: async r => ({ epoch: 1, asOf: r.asOf, items: list }) },
+      rpc: async (name, args) => { snapshots.push(args); return { data: { id: randomUUID(), epoch: 2 }, error: null }; }, onError: error => { throw error; } });
+    const resolved = await reviewTask();
+    assert.equal(resolved.clientId, CLIENT);
+    const model = scripted([{ content: [use("submit_result", RECORDED.none)] }]);
+    const { result, run } = await operation.runIndependentReview({ task: resolved, request, deterministic: detFindings(request), knowledgeSha256: known.contextSha256, deps: { ...runDeps(model), knowledge: hook(items) } });
+    assert.deepEqual([run.outcome, result.reviewer], ["result", "fresh_context"]);
+    assert.equal(snapshots.length, 1);
+    assert.deepEqual([snapshots[0].p_operation, snapshots[0].p_purpose, snapshots[0].p_context_sha256], [run.status.operation.id, "independent review", planned.sha256]);
+    assert.equal(finishCall().args.p_detail.knowledge.sha256, planned.sha256);
+    assert.equal(JSON.stringify(model.seen[0].messages[0].content).split(knowledgeContext.KNOWLEDGE_FRAME_OPEN).length, 1, "facts are given once, inside the reviewer text, not repeated as a knowledge block");
+    fake.rpcLog.length = 0;
+    const silent = scripted([]);
+    const changed = await operation.runIndependentReview({ task: await reviewTask(), request, deterministic: detFindings(request), knowledgeSha256: known.contextSha256,
+      deps: { ...runDeps(silent), knowledge: hook([{ ...items[0], revision: 3, valueText: "€52 per month" }, ...items.slice(1)]) } });
+    assert.deepEqual([changed.result.status, changed.result.unavailableReason, changed.run.charged, silent.seen.length], ["review_unavailable", "stale", 0, 0]);
+    assert.equal(changed.result.findings.filter(item => item.source === "deterministic").length, detFindings(request).length, "measured findings are still returned");
+    fake.db.clientId = null;
   });
 
   console.log(`\n${passed} independent review checks passed.`);

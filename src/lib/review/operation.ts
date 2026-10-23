@@ -24,6 +24,9 @@ export type ReviewRunOutcome = Readonly<{ result: ReviewResult; run: AgencyRunOu
 
 export async function runIndependentReview(input: {
   task: AgencyTask; request: ReviewRequest; deterministic: readonly Finding[]; claims?: ClaimsCheck;
+  /** The approved-facts context digest the request was assembled from (null: none). With deps.knowledge, the step
+   * re-reads the knowledge bound to its operation and refuses to run (uncharged) if it differs. */
+  knowledgeSha256?: string | null;
   deps: Omit<AgencyRunDeps, "specialists">;
 }): Promise<ReviewRunOutcome> {
   const { task, request } = input;
@@ -34,6 +37,9 @@ export async function runIndependentReview(input: {
   const run = await runAgencyTask<ModelReview>(task, {
     system: REVIEWER_SYSTEM, result: ModelReviewSchema, resultDescription: REVIEW_RESULT_DESCRIPTION,
     content: [{ type: "text", text: reviewerText(request) }, ...reviewerImages(request)],
+    // The approved facts are already in the reviewer text (request.facts); the prompt does not repeat them.
+    knowledgeInContent: true,
+    ...(input.deps.knowledge && input.knowledgeSha256 !== undefined ? { expectKnowledgeSha256: input.knowledgeSha256 } : {}),
     // Stored on the run: the grounded, server-validated review bound to this revision, not the raw answer.
     finalize: review => buildResult({ request, deterministic: input.deterministic, model: { ok: true, review }, claims }),
   }, { ...input.deps, model: port, specialists: [] });

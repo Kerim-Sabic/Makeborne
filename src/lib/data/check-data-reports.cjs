@@ -476,6 +476,20 @@ const persistDeps = () => ({ renderPdf: fakeRender.documentPdf, renderPptx: fake
     const never = async () => { throw new Error("no call on replay"); };
     const replay = await narrativeAi.aiNarrative({ task: again, facts, deps: deps(never) });
     assert.deepEqual([replay.run.replayed, replay.narrative?.headline], [true, answer.headline]);
+    // With client knowledge on: read inside the step (snapshot bound to its operation), given as wording background only.
+    fake.reset();
+    fake.db.clientId = randomUUID();
+    const { buildKnowledgeContext } = require("../knowledge/context.ts");
+    const preference = { id: randomUUID(), clientId: fake.db.clientId, kind: "brand_preference", key: "brand.wording", label: "Wording", valueText: "Say turnover, not revenue", status: "approved",
+      evidenceState: "live", revision: 1, trust: "approved", rank: 1, pending: [], evidence: [{ id: randomUUID(), kind: "user", quote: "Say turnover, not revenue", locator: {} }] };
+    const knowledgeReads = [];
+    const informed = scripted(answer);
+    const withKnowledge = await narrativeAi.aiNarrative({ task: await makeTask(), facts, deps: { ...deps(informed), knowledge: async request => { knowledgeReads.push(request); return { context: buildKnowledgeContext([preference]), snapshotId: "7d3c1d9e-1111-4222-8333-944455556666" }; } } });
+    assert.equal(withKnowledge.run.outcome, "result");
+    assert.deepEqual([knowledgeReads.length, knowledgeReads[0].operationId, knowledgeReads[0].purpose], [1, withKnowledge.run.status.operation.id, "data report narrative"]);
+    const informedSent = JSON.stringify(informed.seen[0].messages);
+    assert.ok(informedSent.includes("Say turnover, not revenue") && informedSent.includes("Do not take any figure from it"), "knowledge arrives as background, with the figures rule");
+    assert.equal(finish().args.p_detail.knowledge.snapshotId, "7d3c1d9e-1111-4222-8333-944455556666");
     // Unqualified (today): every data_report task is refused before any operation exists.
     fake.reset();
     await rejects(() => task.resolveAgencyTask(OWNER, { artifactId: randomUUID(), actionKey: randomUUID(), stepKey: randomUUID(), kind: "data_report", objective: "x", inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 },

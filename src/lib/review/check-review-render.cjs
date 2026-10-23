@@ -1,8 +1,12 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Real deterministic review checks on fixture websites, PDFs and PPTX files built in this harness (offline Chromium, no network, no paid call). */
 const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), Module = require("node:module"), assert = require("node:assert/strict");
 const load = Module._load;
+// Stored project objects for the asset-serving check (server-key storage reads are faked; the RLS client is faked below).
+const stored = new Map();
 Module._load = function(name, parent, main) {
   if (name === "server-only") return {};
+  if (/(^|\/)billing\/database$/.test(name)) return { billingDatabase: () => ({ storage: { from: bucket => ({ download: async objectPath => bucket === "project-assets" && stored.has(objectPath)
+    ? { data: new Blob([stored.get(objectPath)]), error: null } : { data: null, error: new Error("Object not found") } }) }, rpc: () => { throw Error("no RPC in the render harness"); } }) };
   if (name.startsWith("@/")) return load.call(this, path.join(__dirname, "../..", name.slice(2)), parent, main);
   return load.call(this, name, parent, main);
 };
@@ -15,6 +19,19 @@ const { inspectPdf } = require("./pdf-inspect.ts");
 const { emptyDocument } = require("../documents/editor.ts");
 const { documentPdf } = require("../documents/export-server.ts");
 const { deckPptx } = require("../documents/pptx.ts");
+const siteAssets = require("./website-assets.ts"), { resolveProjectImages } = require("../projects/source-assets.ts"), { RequestError } = require("../server/http.ts");
+const { createHash } = require("node:crypto");
+
+/** A minimal RLS-bound client: the rows this member can see (projects and registered assets). */
+function rlsClient(tables) {
+  return { from(table) {
+    const filters = [], query = { select: () => query, eq: (column, value) => { filters.push(row => row[column] === value); return query; },
+      in: (column, values) => { filters.push(row => values.includes(row[column])); return query; }, limit: () => query,
+      maybeSingle: async () => ({ data: (tables[table] ?? []).filter(row => filters.every(test => test(row)))[0] ?? null, error: null }),
+      then: (resolve, reject) => Promise.resolve({ data: (tables[table] ?? []).filter(row => filters.every(test => test(row))), error: null }).then(resolve, reject) };
+    return query;
+  } };
+}
 
 let passed = 0;
 async function check(name, fn) { const started = Date.now(); await fn(); passed++; console.log(`PASS ${name} (${((Date.now() - started) / 1000).toFixed(1)}s)`); }
@@ -209,6 +226,54 @@ const failed = (diagnostics, check) => diagnostics.filter(item => item.check ===
       await page.close();
       const clipped = deterministic.deckDiagnostics({ pptx: captured.pptx, exportError: null, slides, probes, facts, claims: claims.defaultClaimsCheck });
       assert.deepEqual(failed(clipped, "deck.text-clipped").map(item => item.location.slide), [1], "text overflowing its frame is measured; fitting text is not");
+    });
+
+    await check("website: the project's own images are served to the capture from verified storage; missing or changed bytes are broken, unconfirmed ones not checked", async () => {
+      const W = "6f1c2b8e-4a1d-4c3e-9d2a-7b5e8f0a1c20", P = "6f1c2b8e-4a1d-4c3e-9d2a-7b5e8f0a1c21";
+      const ids = ["6f0d0b8e-3f43-4c1f-9d55-0c5f8b6a1f10", "6f0d0b8e-3f43-4c1f-9d55-0c5f8b6a1f11", "6f0d0b8e-3f43-4c1f-9d55-0c5f8b6a1f12", "6f0d0b8e-3f43-4c1f-9d55-0c5f8b6a1f13"];
+      const hero = await png(800, 400, "#c9a46a"), oven = await png(400, 300, "#6a4a2a"), tampered = await png(400, 300, "#ff00ff"), later = await png(200, 200, "#3a6a8a");
+      const sha = bytes => createHash("sha256").update(bytes).digest("hex");
+      const asset = (id, name, bytes) => ({ id, path: `public/images/${name}.png`, sha256: sha(bytes), bytes: bytes.length, mediaType: "image/png" });
+      const assets = [asset(ids[0], "hero", hero), asset(ids[1], "oven", oven), asset(ids[2], "gone", oven), asset(ids[3], "later", later)];
+      const objectPath = item => `${W}/${P}/artwork/${item.id}.png`;
+      stored.clear();
+      stored.set(objectPath(assets[0]), hero);
+      stored.set(objectPath(assets[1]), tampered); // changed after registration: the sha256 no longer matches
+      stored.set(objectPath(assets[3]), later);    // its read fails transiently below
+      const client = rlsClient({ projects: [{ id: P, workspace_id: W }],
+        assets: assets.filter(item => item.id !== ids[2]).map(item => ({ id: item.id, workspace_id: W, project_id: P, object_path: objectPath(item), content_type: item.mediaType, sha256: item.sha256 })) });
+      const content = { schemaVersion: 1, kind: "website", title: "Harbour Bakery", sections: [], websiteSource: {
+        schemaVersion: 1, toolchainId: "react-vite-v1", entrypoint: "src/main.tsx", assets, routes: [{ path: "/", title: "Home" }],
+        files: [{ path: "index.html", content: "<!doctype html><html><head></head><body><div id=\"root\"></div></body></html>" }, { path: "package-lock.json", content: "{}" },
+          { path: "package.json", content: "{\"name\":\"bakery\"}" }, { path: "src/main.tsx", content: "export {};\n" }] } };
+      const snapshot = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Harbour Bakery</title><style>img{display:block;width:200px;height:100px}</style></head><body><div id="root"><main>
+        <h1>Bread baked at dawn</h1><img src="/images/hero.png" alt="Loaves on a shelf"><img src="/images/oven.png" alt="The oven"><img src="/images/gone.png" alt="The shop">
+        <img src="/images/later.png" alt="The harbour"><img src="https://cdn.example.com/x.png" alt="Remote"><p>Weekly bread box: €49 per month</p></main></div></body></html>`;
+      const built = siteAssets.reviewWebsiteHtmlWithAssets(content, snapshot, "http://127.0.0.1:3000");
+      assert.ok(built, "React sites get the asset-keeping review copy");
+      assert.deepEqual([...built.assets.keys()].sort(), ["/images/gone.png", "/images/hero.png", "/images/later.png", "/images/oven.png"]);
+      assert.ok(!built.html.includes("cdn.example.com"), "remote images are still dropped by the sanitiser");
+      assert.match(built.html, /img-src data: 'self'/);
+      let transient = true;
+      const images = siteAssets.projectImageResolver(built.assets, async item => {
+        if (item.id === ids[3] && transient) throw new RequestError("SOURCE_ASSET_UNCONFIRMED", "Project artwork could not be verified.", 503);
+        try { return (await resolveProjectImages(client, { workspaceId: W, projectId: P }, [{ id: item.id, path: item.path, sha256: item.sha256, mediaType: item.mediaType, bytes: item.bytes }]))[0].bytes; }
+        catch (error) { throw error instanceof RequestError && error.code === "SOURCE_ASSET_UNAVAILABLE" ? new siteAssets.ReviewAssetMissing(item.path) : error; }
+      });
+      const captured = await capture.captureWebsite({ routes: [{ path: "/", html: built.html }], assets: images.resolve, launch, absentSrcUnknown: true, screenshots: false });
+      const report = images.report();
+      assert.deepEqual([report.served, report.broken.sort(), report.unavailable], [["/images/hero.png"], ["/images/gone.png", "/images/oven.png"], ["/images/later.png"]]);
+      const diagnostics = deterministic.websiteDiagnostics({ probes: captured.probes, runtimeErrors: [], facts, claims: claims.defaultClaimsCheck });
+      const broken = failed(diagnostics, "site.broken-asset").map(item => item.measured).join(" | ");
+      assert.match(broken, /gone\.png/); assert.match(broken, /oven\.png/, "a changed object fails its sha256 check and is reported broken");
+      assert.ok(!/hero\.png|later\.png/.test(broken), "verified images load; unconfirmed ones are not called broken");
+      assert.ok(captured.coverage.notInspected.some(item => /image/.test(item.what)), "the unconfirmed image is listed as not inspected");
+      const desktop = captured.probes.find(probe => probe.viewport === "desktop");
+      assert.ok(desktop.report.failedImages.every(item => !/hero\.png/.test(item.src)));
+      // Before: every project image was "unavailable" (not checked). Now the same snapshot checks them.
+      const before = await capture.captureWebsite({ routes: [{ path: "/", html: built.html }], assets: async () => "unavailable", launch, absentSrcUnknown: true, screenshots: false });
+      assert.equal(failed(deterministic.websiteDiagnostics({ probes: before.probes, runtimeErrors: [], facts, claims: claims.defaultClaimsCheck }), "site.broken-asset").length, 0, "without the resolver nothing is checked");
+      transient = false;
     });
   } finally { await browser.close(); }
   console.log(`\n${passed} real-render review checks passed.`);

@@ -70,10 +70,10 @@ export async function readBrief(scope: Scope, briefId: string, rpc: Rpc = servic
 
 /** Approved knowledge first (bounded, cited, snapshotted); nothing when knowledge is off. */
 export function knowledgeReader(scope: Scope, artifactId: string | null) {
-  return async (objective: string, operationId: string | null): Promise<KnowledgeRead> => {
+  return async (objective: string, operationId: string | null, options?: { record?: boolean }): Promise<KnowledgeRead> => {
     if (!clientKnowledgeEnabled()) return null;
     const result = await knowledgeForAgencyTask({ actorId: scope.actorId, workspaceId: scope.workspaceId, clientId: scope.clientId, objective, purpose: "client research",
-      operationId, artifactId });
+      operationId, artifactId, record: options?.record });
     return { context: result.context, snapshotId: result.snapshotId };
   };
 }

@@ -10,6 +10,8 @@ import type { OperationStatus } from "../builder/operation-contract";
 import { AGENCY_KIND_POLICY, AgencyError, taskContext, taskDigest, type AgencyTask } from "./task";
 import { runTaskLoop, type AgencyTool, type LoopFailure, type LoopOutcome, type ModelPort, type ToolContext } from "./loop";
 import { runSpecialist, type SpecialistParent, type SpecialistSpec } from "./specialist";
+import type { KnowledgeContext } from "../knowledge/context";
+import { KnowledgeChanged } from "../knowledge/task-context";
 
 /**
  * The lead workflow for one agency task step, on the existing operation:
@@ -22,14 +24,24 @@ import { runSpecialist, type SpecialistParent, type SpecialistSpec } from "./spe
  */
 export function agencyTasksEnabled(env: Record<string, string | undefined> = process.env) { return env.MAKEBORNE_AGENCY_TASKS === "on"; }
 
+/** The client's approved knowledge for one step: bounded context plus the snapshot recorded WITH this step's operation. */
+export type TaskKnowledge = Readonly<{ context: KnowledgeContext; snapshotId: string | null }>;
+/** Everything comes from the server-verified task scope and the begun run; never from the browser. */
+export type TaskKnowledgeRequest = Readonly<{ actorId: string; workspaceId: string; clientId: string; artifactId: string; operationId: string; objective: string; purpose: string }>;
+
 export type AgencyLeadSpec<R> = Readonly<{
   system: string; result: z.ZodType<R>; resultDescription: string;
   /** Present for tasks that change the project: the candidate is saved only at the task's expected revision. */
   apply?: (result: R, task: AgencyTask) => Extract<OperationCandidate, { expectedVersion: number }>;
-  /** Extra content blocks after the objective in the first message (a reviewer's labelled images). */
-  content?: readonly unknown[];
+  /** Extra content blocks after the objective in the first message (a reviewer's labelled images); a function receives the step's knowledge. */
+  content?: readonly unknown[] | ((knowledge: TaskKnowledge | null) => readonly unknown[]);
   /** For data results: the server-side form stored on the run (e.g. a review grounded against its request). */
-  finalize?: (result: R, task: AgencyTask) => unknown;
+  finalize?: (result: R, task: AgencyTask, knowledge: TaskKnowledge | null) => unknown;
+  /** The content function renders the knowledge itself, so the prompt does not repeat it. */
+  knowledgeInContent?: boolean;
+  /** The caller already built its evidence from an earlier read with this context digest (null: no knowledge);
+   * a different context at the step (a fact changed in between) ends the step failed, uncharged, before any call. */
+  expectKnowledgeSha256?: string | null;
 }>;
 export type AgencyRunDeps = Readonly<{
   model: ModelPort; tools: Readonly<Record<string, AgencyTool>>; readInput: (index: number) => Promise<string>;
@@ -37,6 +49,12 @@ export type AgencyRunDeps = Readonly<{
   heartbeatMs?: number; pollMs?: number; maxSpecialistCalls?: number;
   /** Limits for this one step inside the task's ceiling (a multi-step task keeps room for its later steps). */
   stage?: Readonly<{ credits: number; providerMicrousd: number }>;
+  /**
+   * Approved client knowledge for kinds whose policy needs facts (research, data_report, independent_review).
+   * Called once, after the step's run exists, so the snapshot carries the operation id (knowledgeForAgencyTask;
+   * it retries once when the snapshot is refused as stale). Absent, or a task without a client: no knowledge.
+   */
+  knowledge?: (request: TaskKnowledgeRequest) => Promise<TaskKnowledge | null>;
 }>;
 export type AgencyRunOutcome = Readonly<{
   replayed: boolean; status: OperationStatus | null; outcome: string; charged: number; code?: string; message: string;
@@ -67,10 +85,26 @@ function recorded(status: OperationStatus, replayed: boolean): AgencyRunOutcome 
   return { replayed, status, outcome, charged: result?.charged ?? 0, ...(result?.code ? { code: result.code } : {}), message: customerMessage(outcome) };
 }
 
-function leadPrompt(task: AgencyTask) {
+function leadPrompt(task: AgencyTask, knowledge = "") {
   const inputs = task.inputs.map((input, index) => `${index}. ${input.kind} ${input.id}${input.version ? ` (version ${input.version})` : ""}`);
-  return [`Objective: ${task.objective}`, inputs.length ? `Inputs (read with read_input):\n${inputs.join("\n")}` : "No inputs."].join("\n\n");
+  return [`Objective: ${task.objective}`, inputs.length ? `Inputs (read with read_input):\n${inputs.join("\n")}` : "No inputs.", knowledge].filter(Boolean).join("\n\n");
 }
+
+const KNOWLEDGE_PURPOSE: Readonly<Record<string, string>> = Object.freeze({ research: "client research", data_report: "data report narrative", independent_review: "independent review" });
+class KnowledgeMismatch extends Error {}
+/** Reads the step's knowledge once its run exists (policy, a client and a reader are all required). */
+async function stepKnowledge<R>(task: AgencyTask, lead: AgencyLeadSpec<R>, deps: AgencyRunDeps, run: OperationRun): Promise<TaskKnowledge | null> {
+  if (!AGENCY_KIND_POLICY[task.kind].knowledge || !deps.knowledge || !task.clientId) {
+    if (lead.expectKnowledgeSha256) throw new KnowledgeMismatch("The evidence was built with knowledge this step cannot read.");
+    return null;
+  }
+  const knowledge = await deps.knowledge({ actorId: task.actorId, workspaceId: task.workspaceId, clientId: task.clientId, artifactId: task.artifactId,
+    operationId: run.operation.id, objective: task.objective, purpose: KNOWLEDGE_PURPOSE[task.kind] ?? task.kind });
+  if (lead.expectKnowledgeSha256 !== undefined && (knowledge?.context.used.length ? knowledge.context.sha256 : null) !== lead.expectKnowledgeSha256)
+    throw new KnowledgeMismatch("Client knowledge changed between preparing this step and starting it.");
+  return knowledge;
+}
+const knowledgeChanged = (error: unknown) => error instanceof KnowledgeMismatch || error instanceof KnowledgeChanged;
 
 function delegateTool(specs: readonly SpecialistSpec[], parent: () => SpecialistParent, limit: number): AgencyTool {
   const names = specs.map(spec => spec.name) as [string, ...string[]];
@@ -108,6 +142,19 @@ export async function runAgencyTask<R>(task: AgencyTask, lead: AgencyLeadSpec<R>
 }
 
 async function executeStep<R>(task: AgencyTask, lead: AgencyLeadSpec<R>, deps: AgencyRunDeps, run: OperationRun): Promise<AgencyRunOutcome> {
+  // Knowledge first, bound to this operation; a failure ends the step before any call, uncharged.
+  let knowledge: TaskKnowledge | null;
+  try { knowledge = await stepKnowledge(task, lead, deps, run); }
+  catch (error) {
+    const code = knowledgeChanged(error) ? "KNOWLEDGE_CHANGED" : "KNOWLEDGE_UNAVAILABLE";
+    try {
+      const finalization = await finishOperation(run, 0, "failed", { code, turns: 0 });
+      return { replayed: false, status: finalization, outcome: finalization.outcome, charged: finalization.charged, code, message: customerMessage("failed") };
+    } catch {
+      return { replayed: false, status: null, outcome: "recovery_pending", charged: 0, code: "OPERATION_RECOVERY_PENDING", message: customerMessage("recovery_pending") };
+    }
+  }
+  const knowledgeDetail = knowledge ? { knowledge: { snapshotId: knowledge.snapshotId, used: knowledge.context.used.length, sha256: knowledge.context.used.length ? knowledge.context.sha256 : null } } : {};
   const spend = createOperationSpend(run, deps.platformDeadline);
   const controller = new AbortController();
   const stopWatch = watchOperationCancellation(run, spend, controller, deps.pollMs);
@@ -135,7 +182,9 @@ async function executeStep<R>(task: AgencyTask, lead: AgencyLeadSpec<R>, deps: A
   const specialists = task.scale === "standard" && AGENCY_KIND_POLICY[task.kind].specialists ? deps.specialists ?? [] : [];
   let outcome: LoopOutcome<R>;
   try {
-    outcome = await runTaskLoop({ system: lead.system, prompt: lead.content?.length ? [{ type: "text", text: leadPrompt(task) }, ...lead.content] : leadPrompt(task), result: lead.result, resultDescription: lead.resultDescription,
+    const content = typeof lead.content === "function" ? lead.content(knowledge) : lead.content ?? [];
+    const prompt = leadPrompt(task, knowledge && !lead.knowledgeInContent ? knowledge.context.text : "");
+    outcome = await runTaskLoop({ system: lead.system, prompt: content.length ? [{ type: "text", text: prompt }, ...content] : prompt, result: lead.result, resultDescription: lead.resultDescription,
       tools: specialists.length ? [...tools, delegateTool(specialists, () => parent, deps.maxSpecialistCalls ?? 3)] : tools,
       maxTurns: task.settings.maxTurns, maxOutputTokens: task.settings.maxOutputTokens, spend, signal: controller.signal, model: deps.model, context,
       beforeDraft: () => beat(false), onTurn: turn => { progress = { stage: "working", turn }; } });
@@ -144,7 +193,7 @@ async function executeStep<R>(task: AgencyTask, lead: AgencyLeadSpec<R>, deps: A
   } finally {
     disposed = true; if (timer) clearTimeout(timer); stopWatch();
   }
-  const detail: Record<string, unknown> = { ...spendDetail(spend), chargeableMicrousd: chargeableMicrousd(spend), turns: outcome.turns,
+  const detail: Record<string, unknown> = { ...spendDetail(spend), chargeableMicrousd: chargeableMicrousd(spend), turns: outcome.turns, ...knowledgeDetail,
     // Unknown-usage attempts, for operators to reconcile against the provider ledger (ids, not names).
     uncertainCalls: spend.calls.filter(call => call.actualMicrousd === null).slice(0, 20).map(call => call.id),
     ...(outcome.ok ? { finished: true } : { code: outcome.code }) };
@@ -152,7 +201,7 @@ async function executeStep<R>(task: AgencyTask, lead: AgencyLeadSpec<R>, deps: A
   if (outcome.ok) {
     if (lead.apply) { name = "saved"; candidate = lead.apply(outcome.result, task); }
     // A finalizer that throws ends the step as failed (no charge) instead of leaving the run open.
-    else { try { candidate = { data: lead.finalize ? lead.finalize(outcome.result, task) : outcome.result }; name = "result"; } catch { candidate = undefined; } }
+    else { try { candidate = { data: lead.finalize ? lead.finalize(outcome.result, task, knowledge) : outcome.result }; name = "result"; } catch { candidate = undefined; } }
   } else if (INCOMPLETE.has(outcome.code)) name = "incomplete";
   try {
     const finalization = await finishOperation(run, chargeableMicrousd(spend), name, detail, candidate);

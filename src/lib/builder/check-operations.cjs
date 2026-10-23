@@ -85,6 +85,31 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
       assert.deepEqual(calls.map(call=>call.name),["makeborne_ai_operation_read"]);
     }
   });
+  await check("source choices (“Continue without it” + ingestion references) are recorded once and bind every continuation", async () => {
+    const reference = { sourceId: "inline:" + "d".repeat(64), sha256: "d".repeat(64), extractionVersion: "ingest-2026-10-23.1", format: "docx", status: "complete" };
+    const sources = { omitted: [{ name: "budget.xlsx", reason: "partial" }], references: [reference] };
+    await api.beginOperation(input({ sources }));
+    const context = calls[0].args.p_context;
+    assert.deepEqual(context.sources, { omitted: sources.omitted, references: [reference], sha256: api.sourcesFingerprint(sources) });
+    assert.equal(JSON.stringify(context).includes("private attachment"), false);
+    calls = [];
+    await api.beginOperation(input({ sources: { omitted: [], references: [] } }));
+    assert.equal("sources" in calls[0].args.p_context, false, "no key without choices: older requests keep their exact context");
+    const recorded = { attachmentsSha256: attachmentHash(input().request.attachments), sources: { sha256: api.sourcesFingerprint(sources) } };
+    handler = (name, args) => name === "makeborne_ai_operation_read" ? { data: { ...status(), requestContext: recorded }, error: null } : rpc(name, args);
+    const continued = input({ envelope: { id: operationId, stepKey, kind: "continuation" }, sources });
+    assert.ok((await api.beginOperation(continued)).run, "the same choices continue");
+    for (const changed of [{ ...sources, omitted: [] }, { ...sources, omitted: [{ name: "budget.xlsx", reason: "left-out" }] }, { ...sources, references: [{ ...reference, extractionVersion: "ingest-2026-11-01.1" }] }, null]) {
+      calls = [];
+      await assert.rejects(api.beginOperation({ ...continued, sources: changed }), error => error.code === "OPERATION_SOURCES_CHANGED");
+      assert.deepEqual(calls.map(call => call.name), ["makeborne_ai_operation_read"], "refused before any step or hold");
+    }
+    // An operation recorded without choices continues only without them; a visual-review stage is unaffected.
+    handler = (name, args) => name === "makeborne_ai_operation_read" ? { data: { ...status(), requestContext: { attachmentsSha256: recorded.attachmentsSha256 } }, error: null } : rpc(name, args);
+    await assert.rejects(api.beginOperation(continued), error => error.code === "OPERATION_SOURCES_CHANGED");
+    assert.ok((await api.beginOperation({ ...continued, sources: null })).run);
+    assert.ok((await api.beginOperation(input({ kind: "review", request: { message: "Review", attachments: [], review: { desktop: "new capture" } }, envelope: { id: operationId, stepKey, kind: "review" }, sources }))).run);
+  });
   await check("legacy reference state cannot authorize a silent continuation; status stays private",async()=>{
     handler=(name,args)=>name==="makeborne_ai_operation_read"?{data:{...status(),requestContext:{message:"Legacy"}},error:null}:rpc(name,args);
     await assert.rejects(api.beginOperation(input({envelope:{id:operationId,stepKey,kind:"continuation"}})),error=>error.code==="OPERATION_REFERENCES_UNAVAILABLE");

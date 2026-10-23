@@ -8,6 +8,7 @@ import { requireProviderCapacity } from "@/lib/ai/live-run";
 import type { AnthropicLike } from "@/lib/ai/anthropic-call";
 import { resolveAgencyScope } from "@/lib/builder/operation-server";
 import { agencyTasksEnabled } from "@/lib/agency/run";
+import { clientKnowledgeEnabled, knowledgeForAgencyTask } from "@/lib/knowledge/server";
 import { AgencyError, resolveAgencyTask } from "@/lib/agency/task";
 import { anthropicModelPort } from "@/lib/agency/model-port";
 import { inputReader } from "@/lib/agency/inputs";
@@ -102,7 +103,9 @@ export async function POST(request: Request, context: Context) {
       }
       await requireProviderCapacity("anthropic");
       const anthropic = new Anthropic({ maxRetries: 0, timeout: 60_000 }) as unknown as AnthropicLike;
-      const written = await aiNarrative({ task, facts: prepared.facts, deps: { model: anthropicModelPort(anthropic, task.settings), tools: {}, readInput: inputReader(task), platformDeadline: Date.now() + (maxDuration - 60) * 1000 } });
+      // Approved client knowledge (when on) is read inside the step and snapshotted with its operation; figures still come only from the facts sheet.
+      const written = await aiNarrative({ task, facts: prepared.facts, deps: { model: anthropicModelPort(anthropic, task.settings), tools: {}, readInput: inputReader(task), platformDeadline: Date.now() + (maxDuration - 60) * 1000,
+        ...(clientKnowledgeEnabled() ? { knowledge: knowledgeForAgencyTask } : {}) } });
       if (!written.narrative) throw new RequestError("NARRATIVE_UNVERIFIED", written.problems.length ? narrativeRefusal(written.problems) : `${written.run.message} Nothing was saved.`, 422);
       narrative = written.narrative;
     } else {

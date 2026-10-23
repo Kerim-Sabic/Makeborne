@@ -135,7 +135,9 @@ export async function POST(request: Request) {
     // SQL binds the stage to its original authorization and creates its hold atomically.
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
       expectedVersion: body.expectedVersion, effort: body.effort, kind: reviewing ? "review" : "build", ceiling,
-      envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) } }).catch(error => {
+      envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) },
+      // "Continue without it" choices and ingestion references are recorded with the operation; continuations must match.
+      sources: prepared ? { omitted: body.omittedSources ?? [], references: prepared.references } : null }).catch(error => {
       // SQL refuses a stale base version without saying so; name the versions instead.
       if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
         throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);

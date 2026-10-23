@@ -99,7 +99,7 @@ function claimDiagnostics(check: string, key: string, location: ReviewLocation, 
   if (!input.facts) return [diag(check, key, location, "not_checked", "", "no approved facts snapshot is available for this client")];
   const results = input.claims(text, input.facts);
   const unsupported = results.filter(result => !result.supported);
-  if (!unsupported.length) return [diag(check, key, location, "passed", results.length ? `${results.length} price/percentage claim(s), all in the approved facts` : "no price or percentage claims")];
+  if (!unsupported.length) return [diag(check, key, location, "passed", results.length ? `${results.length} claim(s) checked, all supported` : "no claims to check")];
   return unsupported.slice(0, 10).map((result, index) => diag(check, `${key}:${index}`, location, "failed", `"${result.text}" (${result.kind}) is not in the approved facts`));
 }
 

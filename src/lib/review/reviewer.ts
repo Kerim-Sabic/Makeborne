@@ -79,6 +79,8 @@ export function unavailableReason(code: LoopFailure | string | undefined, observ
   if (observed) return observed;
   if (code === "INVALID_TOOL_ARGUMENTS") return "malformed";
   if (code === "MAX_TURNS") return "no_result";
+  // The approved facts changed between assembling the evidence and starting the step: review again.
+  if (code === "KNOWLEDGE_CHANGED") return "stale";
   if (code === "RUN_BUDGET" || code === "HOLD_EXPIRED" || code === "PROVIDER_LIMIT" || code === "OVERRUN") return "budget";
   return "provider_failed";
 }

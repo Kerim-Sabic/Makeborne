@@ -10,17 +10,22 @@ import type { ClaimFact } from "./claims";
  * source), the database refuses the snapshot and this retrieves once more; a
  * second change ends with an error rather than a context nobody can explain.
  *
- * Integration (stage 1 run.ts is unchanged here): after beginAgencyOperation
- * returns a run, call knowledgeForTask with the task's actor, workspace and
- * client (from the server-verified task scope, never the browser) and the
- * operation id, then prepend `context.text` to the lead prompt and store
- * `snapshotId` in the step detail. Builders that generate client copy call
- * checkCopyClaims with `claimFacts(context)` and the brief before saving.
+ * Integration: runAgencyTask (agency/run.ts) calls its `knowledge` dependency
+ * once the step's run exists, for kinds whose policy needs facts, with the
+ * task's actor, workspace and client (from the server-verified task scope,
+ * never the browser) and the operation id; the context is added to the lead
+ * prompt (or the lead's content) and `snapshotId` is stored in the step
+ * detail. Builders that generate client copy call checkCopyClaims with
+ * `claimFacts(context)` and the brief before saving (not wired into the
+ * builder prompts yet; see the agency handoff).
  */
 export type Rpc = (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { code?: string; message?: string } | null }>;
 export type KnowledgeTaskInput = Readonly<{
   actorId: string; workspaceId: string; clientId: string | null; objective: string; purpose: string;
   operationId?: string | null; artifactId?: string | null; asOf?: string; includeProposed?: boolean; budget?: ContextBudget;
+  /** false: a planning read only (nothing is given to a model from it), so no snapshot is recorded. The step that uses
+   * the knowledge reads again with its operation id and records that snapshot. Default true. */
+  record?: boolean;
 }>;
 export type KnowledgeForTask = Readonly<{ context: KnowledgeContext; snapshotId: string | null; epoch: number; asOf: string }>;
 export class KnowledgeChanged extends Error { constructor() { super("Client knowledge changed while this task was preparing."); } }
@@ -36,7 +41,7 @@ export async function knowledgeForTask(input: KnowledgeTaskInput, deps: { retrie
     const result = await deps.retriever.retrieve({ actorId: input.actorId, workspaceId: input.workspaceId, clientId: input.clientId, query: input.objective,
       asOf, limit: Math.min(100, Math.max(1, budget.maxItems * 2)), includeProposed: input.includeProposed ?? false });
     const context = buildKnowledgeContext(result.items, budget);
-    if (!context.used.length) return Object.freeze({ context, snapshotId: null, epoch: result.epoch, asOf });
+    if (!context.used.length || input.record === false) return Object.freeze({ context, snapshotId: null, epoch: result.epoch, asOf });
     const { data, error } = await deps.rpc("makeborne_knowledge_snapshot", { p_actor: input.actorId, p_workspace: input.workspaceId, p_client: input.clientId,
       p_operation: input.operationId ?? null, p_artifact: input.artifactId ?? null, p_purpose: input.purpose, p_query: input.objective.slice(0, 1000),
       p_as_of: asOf, p_items: snapshotItems(context), p_context_sha256: context.sha256 });

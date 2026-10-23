@@ -5,6 +5,7 @@ import { textPrice } from "../ai/prices";
 import { RequestError } from "../server/http";
 import { AGENCY_OPERATION_KINDS } from "../builder/operation-contract";
 import type { AgencyInput, AgencyScope } from "../builder/operation-server";
+import { sourcesFingerprint, type OperationSources } from "../builder/operation-sources";
 import type { EffortLevel } from "../routing/effort";
 
 /**
@@ -59,14 +60,15 @@ export const AGENCY_SETTINGS: readonly QualifiedSetting[] = Object.freeze([
     qualifiedKinds: Object.freeze([]) as readonly AgencyKind[], evidence: "Not qualified: needs a recorded live qualification run per kind (no approved budget on 2026-10-23)." }),
 ]);
 
-/** Per-kind policy: tools a task of this kind may be granted, its credit ceiling and whether specialists may be used. */
-export type KindPolicy = Readonly<{ tools: readonly string[]; maxCredits: number; specialists: boolean }>;
+/** Per-kind policy: tools a task of this kind may be granted, its credit ceiling, whether specialists may be used and
+ * whether the step is given the client's approved knowledge (retrieved, bounded and snapshotted with the operation). */
+export type KindPolicy = Readonly<{ tools: readonly string[]; maxCredits: number; specialists: boolean; knowledge: boolean }>;
 export const AGENCY_KIND_POLICY: Readonly<Record<AgencyKind, KindPolicy>> = Object.freeze({
-  ingest: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 40, specialists: false }),
-  research: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 80, specialists: true }),
-  image_edit: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 60, specialists: false }),
-  independent_review: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 60, specialists: true }),
-  data_report: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 80, specialists: true }),
+  ingest: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 40, specialists: false, knowledge: false }),
+  research: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 80, specialists: true, knowledge: true }),
+  image_edit: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 60, specialists: false, knowledge: false }),
+  independent_review: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 60, specialists: true, knowledge: true }),
+  data_report: Object.freeze({ tools: Object.freeze(["read_input"]), maxCredits: 80, specialists: true, knowledge: true }),
 });
 
 export type AgencyTask = Readonly<{
@@ -76,6 +78,8 @@ export type AgencyTask = Readonly<{
   expectedRevision: number; actionKey: string; stepKey: string;
   /** "minor" tasks never get specialists: no research/review committee for a small edit. */
   scale: "minor" | "standard";
+  /** Files read through ingestion (and any the person chose to continue without), bound into the operation's context and digest. */
+  sources?: OperationSources;
 }>;
 
 export class AgencyError extends RequestError {}
@@ -122,8 +126,21 @@ export async function resolveAgencyTask(actor: string, body: unknown, deps: Reso
 
 /** Stored once with the operation. SQL re-verifies `inputs`, `projectId` and `clientId` against the artifact. */
 export function taskContext(task: AgencyTask): Record<string, unknown> {
+  const sourcesSha256 = sourcesFingerprint(task.sources);
   return { task: { objective: task.objective, inputs: task.inputs, projectId: task.projectId, clientId: task.clientId,
-    permittedTools: task.permittedTools, settings: task.settings.profile, scale: task.scale, ceilingCredits: task.ceilings.customerCredits } };
+    permittedTools: task.permittedTools, settings: task.settings.profile, scale: task.scale, ceilingCredits: task.ceilings.customerCredits,
+    // Present only when files were read or omitted, so tasks without them keep their exact digest.
+    ...(task.sources && sourcesSha256 ? { sources: { omitted: task.sources.omitted, references: task.sources.references, sha256: sourcesSha256 } } : {}) } };
+}
+
+/**
+ * Binds the ingestion references of the files a task read (and any "Continue without it" choices) to the task, server-side,
+ * after extraction. They become part of the operation's recorded context and input digest: a replay of the same action with a
+ * different extraction (another file, changed bytes, a new extraction version) is a different request and is refused.
+ */
+export function bindTaskSources(task: AgencyTask, sources: OperationSources): AgencyTask {
+  if (!sourcesFingerprint(sources)) return task;
+  return Object.freeze({ ...task, sources: Object.freeze({ omitted: [...sources.omitted], references: [...sources.references] }) });
 }
 
 /** The operation's input digest: equal requests replay, any change is a different request. */

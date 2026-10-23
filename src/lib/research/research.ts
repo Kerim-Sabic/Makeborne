@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { canonicalSourceJson } from "../projects/canonical-json";
 import type { KnowledgeContext } from "../knowledge/context";
 import { runAgencyTask, type AgencyRunDeps, type AgencyRunOutcome } from "../agency/run";
-import type { AgencyTask } from "../agency/task";
+import { bindTaskSources, type AgencyTask } from "../agency/task";
+import { ingestionReference } from "../ingest/record";
 import { ModelBriefSchema, ResearchBriefSchema, type ParsedModelBrief, type ResearchBrief, type ResearchRequest } from "./contract";
 import type { ResearchCache } from "./cache";
 import { deterministicBrief } from "./deterministic";
@@ -34,8 +35,9 @@ export type BriefStore = {
 };
 export type ResearchDeps = Readonly<{
   cache: ResearchCache; fetch?: FetchDeps; limits?: Partial<ResearchLimits>; now?: () => number;
-  /** Approved knowledge, read before anything is fetched (null when knowledge is off or the client has none). */
-  knowledge: (objective: string, operationId: string | null) => Promise<KnowledgeRead>;
+  /** Approved knowledge, read before anything is fetched (null when knowledge is off or the client has none).
+   * `record: false` is a planning read (no snapshot); the assisted step reads again with its operation id. */
+  knowledge: (objective: string, operationId: string | null, options?: { record?: boolean }) => Promise<KnowledgeRead>;
   /** Supplied documents, extracted by the ingestion pipeline (unreadable ones are reported, never guessed). */
   documents: () => Promise<{ documents: SuppliedDocument[]; unreadable: { name: string; detail: string }[] }>;
   briefs: BriefStore;
@@ -72,8 +74,9 @@ export async function runClientResearch(input: { request: ResearchRequest; clien
   const client = { ...input.client, url };
   const objective = researchObjective(client, url);
 
-  // 1. Read first: what is already known and what the person supplied.
-  const knowledge = await deps.knowledge(objective, null);
+  // 1. Read first: what is already known and what the person supplied. With an assisted step this is a planning
+  // read only: the step reads (and snapshots) the knowledge again once its operation exists.
+  const knowledge = await deps.knowledge(objective, null, { record: !deps.assisted });
   const { documents, unreadable } = await deps.documents();
   const notesWords = request.notes.trim() ? request.notes.trim().split(/\s+/).length : 0;
   const documentWords = documents.reduce((sum, item) => sum + item.record.text.split(/\s+/).length, 0);
@@ -93,20 +96,25 @@ export async function runClientResearch(input: { request: ResearchRequest; clien
 
   // 2. The client's own site and the supplied competitor pages, bounded and cached.
   const site = await readClientSite({ url, competitors: request.competitorUrls, readSubpages, limits, cache: deps.cache, deps: deps.fetch, now });
-  const material = buildMaterial({ client, site, documents, unreadable, notes: request.notes, knowledge, plan });
+  const materialFor = (read: KnowledgeRead) => buildMaterial({ client, site, documents, unreadable, notes: request.notes, knowledge: read, plan });
+  const material = materialFor(knowledge);
   const meta = () => ({ generatedAt: new Date(now()).toISOString(), limits: { pages: limits.maxPages, bytes: limits.maxBytes, ms: limits.timeMs, pagesRead: site.pagesRead, bytesRead: site.bytesRead, elapsedMs: now() - started } });
 
   // 3. Write and ground the brief.
   let brief: ResearchBrief, run: AgencyRunOutcome | null = null, operationId: string | null = null;
   if (deps.assisted) {
-    const { task } = deps.assisted;
+    // The documents read are bound to the operation (ingestion references: asset, sha256, extraction version).
+    const task = bindTaskSources(deps.assisted.task, { omitted: [], references: documents.slice(0, 5).map(item => ingestionReference(item.record, item.assetId)) });
+    // The material the model sees is rebuilt from the knowledge read inside the step (snapshot bound to the operation).
+    let stepMaterial = material;
     run = await runAgencyTask<ParsedModelBrief>(task, {
       system: RESEARCH_SYSTEM, result: ModelBriefSchema,
       resultDescription: "Submit the research brief. Facts cite source ids with word-for-word quotes; everything else is an inference or a question.",
-      content: modelContent(material),
+      content: read => { stepMaterial = materialFor(read); return modelContent(stepMaterial); },
+      knowledgeInContent: true,
       // Stored on the run: the grounded brief, never the raw answer.
-      finalize: answer => groundBrief(answer, material, { method: "assisted", ...meta() }),
-    }, { ...deps.assisted.deps, tools: {}, specialists: [] });
+      finalize: answer => groundBrief(answer, stepMaterial, { method: "assisted", ...meta() }),
+    }, { ...deps.assisted.deps, tools: {}, specialists: [], knowledge: step => deps.knowledge(objective, step.operationId) });
     operationId = run.status?.operation.id ?? null;
     const stored = run.outcome === "result" ? ResearchBriefSchema.safeParse(run.status?.result?.data) : null;
     if (!stored?.success) throw new ResearchError(run.code === "AGENCY_SETTINGS_UNQUALIFIED" ? "RESEARCH_UNAVAILABLE" : "RESEARCH_INCOMPLETE",

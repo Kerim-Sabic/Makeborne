@@ -20,7 +20,7 @@ const handlers = {
   makeborne_agency_task_scope(a) {
     if (a.p_artifact === db.forbiddenArtifact) return err("42501");
     if (a.p_inputs.some(input => input.sha256 === "f".repeat(64))) return err("PT409");
-    return { data: { workspaceId: W, projectId: P, clientId: null, artifactId: a.p_artifact, currentVersion: db.artifactVersion,
+    return { data: { workspaceId: W, projectId: P, clientId: db.clientId ?? null, artifactId: a.p_artifact, currentVersion: db.artifactVersion,
       inputs: a.p_inputs.map(input => ({ kind: input.kind, id: input.id, sha256: input.sha256 ?? "c".repeat(64), version: input.version ?? null, projectId: P })) }, error: null };
   },
   makeborne_ai_operation_create(a) {
@@ -138,6 +138,7 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const { z } = require("zod");
 const task = require("./task.ts"), loop = require("./loop.ts"), specialist = require("./specialist.ts"), run = require("./run.ts"), port = require("./model-port.ts");
 const server = require("../builder/operation-server.ts");
+const knowledgeTask = require("../knowledge/task-context.ts"), knowledgeContext = require("../knowledge/context.ts");
 const { RunSpend, SpendError, memoryGate } = require("../ai/run-spend.ts");
 const { aiCostUsdPerCredit } = require("../builder/pricing.ts");
 const RATE = Math.round(aiCostUsdPerCredit() * 1_000_000);
@@ -512,6 +513,118 @@ async function rejects(promise, code) { await assert.rejects(promise, error => {
     Object.defineProperty(spend, "chargeableMicrousd", { get: () => 400 });
     assert.equal(run.chargeableMicrousd(spend), 400);
     assert.equal(createHash("sha256").update("x").digest("hex").length, 64);
+  });
+
+  // ---- Integration: stage 3 knowledge in agency steps, stage 2 source choices in the envelope ----
+  const CLIENT = randomUUID();
+  const fact = (over = {}) => ({ id: randomUUID(), clientId: CLIENT, kind: "observed_fact", key: "price.flat_tyre_repair", label: "Flat tyre repair", valueText: "EUR 45", unit: null, currency: "EUR",
+    validFrom: null, validTo: null, observedAt: null, status: "approved", supersedesId: null, conflictGroup: null, uncertainty: null, evidenceState: "live", revision: 2, trust: "approved", rank: 0, pending: [],
+    evidence: [{ id: randomUUID(), kind: "source", refId: randomUUID(), projectId: P, sha256: "a".repeat(64), extractionVersion: null, locator: {}, quote: "Flat tyre repair: EUR 45", url: null, fetchedAt: null, title: "Price list" }], ...over });
+  /** The real knowledgeForTask over a fake retriever and snapshot RPC (SQL semantics: supabase/check-client-knowledge.sql). */
+  function knowledgeHook(items, { conflicts = 0 } = {}) {
+    const log = { retrievals: 0, snapshots: [], requests: [] };
+    let left = conflicts;
+    const hook = async request => {
+      log.requests.push(request);
+      return knowledgeTask.knowledgeForTask(request, {
+        retriever: { retrieve: async r => { log.retrievals++; return { epoch: 4, asOf: r.asOf, items: typeof items === "function" ? items(log.retrievals) : items }; } },
+        rpc: async (name, args) => { log.snapshots.push({ name, args }); if (left-- > 0) return { data: null, error: { code: "PT409" } }; return { data: { id: randomUUID(), epoch: 5 }, error: null }; },
+        onError: error => { throw Object.assign(new Error(error.message), { code: error.code }); },
+      });
+    };
+    hook.log = log;
+    return hook;
+  }
+
+  await check("knowledge: read once the step's run exists; snapshot carries the operation id; context in the prompt; snapshot id in the step detail", async () => {
+    db.clientId = CLIENT;
+    const resolved = await resolve();
+    assert.equal(resolved.clientId, CLIENT, "client from the SQL scope, never the browser");
+    const used = fact();
+    const hook = knowledgeHook([used]);
+    const model = scripted([{ content: [use("submit_result", { summary: "Repairs from EUR 45", facts: [] })] }]);
+    const outcome = await run.runAgencyTask(resolved, lead, deps(model, { knowledge: hook }));
+    assert.equal(outcome.outcome, "result");
+    const begin = rpcLog.findIndex(entry => entry.name === "makeborne_ai_operation_begin");
+    assert.ok(begin >= 0 && hook.log.requests.length === 1, "one knowledge read, after the step began");
+    const request = hook.log.requests[0];
+    assert.deepEqual([request.actorId, request.workspaceId, request.clientId, request.artifactId, request.operationId, request.purpose],
+      [ACTOR, W, CLIENT, ARTIFACT, outcome.status.operation.id, "client research"]);
+    const snapshot = hook.log.snapshots.at(-1).args;
+    assert.equal(snapshot.p_operation, outcome.status.operation.id, "the snapshot is recorded WITH the operation");
+    assert.deepEqual(snapshot.p_items.map(item => [item.factId, item.revision]), [[used.id, 2]]);
+    const prompt = model.seen[0].messages[0].content;
+    assert.ok(String(prompt).includes(knowledgeContext.KNOWLEDGE_FRAME_OPEN) && String(prompt).includes("EUR 45"), "the bounded knowledge block reaches the lead");
+    const finish = finishCall().args;
+    assert.equal(finish.p_detail.knowledge.used, 1);
+    assert.match(finish.p_detail.knowledge.snapshotId, /^[0-9a-f-]{36}$/);
+    assert.equal(finish.p_detail.knowledge.sha256, snapshot.p_context_sha256, "the step detail names the snapshotted context");
+    // Kinds whose policy has no knowledge (image_edit, ingest) and tasks without a client never read it.
+    const noPolicy = knowledgeHook([used]);
+    await run.runAgencyTask(await resolve({ kind: "image_edit" }), lead, deps(scripted([{ content: [use("submit_result", { summary: "S", facts: [] })] }]), { knowledge: noPolicy }));
+    db.clientId = null;
+    const noClient = knowledgeHook([used]);
+    await run.runAgencyTask(await resolve(), lead, deps(scripted([{ content: [use("submit_result", { summary: "S", facts: [] })] }]), { knowledge: noClient }));
+    assert.deepEqual([noPolicy.log.requests.length, noClient.log.requests.length], [0, 0]);
+    assert.deepEqual(Object.keys(task.AGENCY_KIND_POLICY).filter(kind => task.AGENCY_KIND_POLICY[kind].knowledge), ["research", "independent_review", "data_report"]);
+  });
+
+  await check("knowledge: a stale snapshot is retried once; changed twice ends the step failed and uncharged before any model call", async () => {
+    db.clientId = CLIENT;
+    const used = fact();
+    const once = knowledgeHook(attempt => attempt === 1 ? [used] : [{ ...used, revision: 3 }], { conflicts: 1 });
+    const model = scripted([{ content: [use("submit_result", { summary: "S", facts: [] })] }]);
+    const outcome = await run.runAgencyTask(await resolve(), lead, deps(model, { knowledge: once }));
+    assert.deepEqual([outcome.outcome, once.log.retrievals, once.log.snapshots.length], ["result", 2, 2]);
+    assert.equal(once.log.snapshots.at(-1).args.p_items[0].revision, 3, "the retry snapshots the revision actually used");
+    rpcLog = [];
+    const twice = knowledgeHook([used], { conflicts: 2 });
+    const silent = scripted([]);
+    const failed = await run.runAgencyTask(await resolve(), lead, deps(silent, { knowledge: twice }));
+    assert.deepEqual([failed.outcome, failed.charged, failed.code, silent.seen.length], ["failed", 0, "KNOWLEDGE_CHANGED", 0]);
+    assert.equal(rpcLog.some(entry => entry.name === "makeborne_ai_operation_provider_begin"), false, "no provider call was opened");
+    const unavailable = await run.runAgencyTask(await resolve(), lead, deps(scripted([]), { knowledge: async () => { throw Object.assign(new Error("down"), { code: "KNOWLEDGE_UNAVAILABLE" }); } }));
+    assert.deepEqual([unavailable.outcome, unavailable.charged, unavailable.code], ["failed", 0, "KNOWLEDGE_UNAVAILABLE"]);
+  });
+
+  await check("knowledge: evidence prepared from an earlier read must match the step's own read; content functions receive it", async () => {
+    db.clientId = CLIENT;
+    const used = fact();
+    const planned = knowledgeContext.buildKnowledgeContext([used]);
+    let received = null;
+    const content = knowledge => { received = knowledge; return [{ type: "text", text: `facts: ${knowledge?.context.used.length ?? 0}` }]; };
+    const same = await run.runAgencyTask(await resolve(), { ...lead, content, knowledgeInContent: true, expectKnowledgeSha256: planned.sha256 },
+      deps(scripted([{ content: [use("submit_result", { summary: "S", facts: [] })] }]), { knowledge: knowledgeHook([used]) }));
+    assert.equal(same.outcome, "result");
+    assert.equal(received.context.sha256, planned.sha256);
+    const changed = scripted([]);
+    const refused = await run.runAgencyTask(await resolve(), { ...lead, content, knowledgeInContent: true, expectKnowledgeSha256: planned.sha256 },
+      deps(changed, { knowledge: knowledgeHook([{ ...used, valueText: "EUR 49" }]) }));
+    assert.deepEqual([refused.outcome, refused.charged, refused.code, changed.seen.length], ["failed", 0, "KNOWLEDGE_CHANGED", 0]);
+    // Prepared without knowledge (null): a step that now finds approved facts is refused too.
+    const appeared = await run.runAgencyTask(await resolve(), { ...lead, expectKnowledgeSha256: null }, deps(scripted([]), { knowledge: knowledgeHook([used]) }));
+    assert.equal(appeared.code, "KNOWLEDGE_CHANGED");
+  });
+
+  await check("source choices: bound into the task context and digest only when present; a different extraction is a different request", async () => {
+    const resolved = await resolve();
+    const reference = { sourceId: randomUUID(), sha256: "b".repeat(64), extractionVersion: "ingest-2026-10-23.1", format: "xlsx", status: "complete" };
+    assert.equal("sources" in task.taskContext(resolved).task, false, "tasks without files keep their exact context and digest");
+    assert.equal(task.bindTaskSources(resolved, { omitted: [], references: [] }), resolved);
+    const bound = task.bindTaskSources(resolved, { omitted: [{ name: "old.docx", reason: "unreadable" }], references: [reference] });
+    const recorded = task.taskContext(bound).task.sources;
+    assert.deepEqual([recorded.omitted, recorded.references], [[{ name: "old.docx", reason: "unreadable" }], [reference]]);
+    assert.equal(recorded.sha256, server.sourcesFingerprint({ omitted: [{ name: "old.docx", reason: "unreadable" }], references: [reference] }));
+    assert.notEqual(task.taskDigest(bound), task.taskDigest(resolved));
+    assert.equal(task.taskDigest(task.bindTaskSources(resolved, { omitted: [{ name: "old.docx", reason: "unreadable" }], references: [reference] })), task.taskDigest(bound), "same choices, same digest");
+    assert.notEqual(task.taskDigest(task.bindTaskSources(resolved, { omitted: [{ name: "old.docx", reason: "unreadable" }], references: [{ ...reference, extractionVersion: "ingest-2026-11-01.1" }] })), task.taskDigest(bound));
+    // A replay of the same action with a different extraction is refused by the operation (different input digest).
+    const first = await run.runAgencyTask(bound, lead, deps(scripted([{ content: [use("submit_result", { summary: "S", facts: [] })] }])));
+    assert.equal(first.outcome, "result");
+    const create = rpcLog.find(entry => entry.name === "makeborne_ai_operation_create").args;
+    assert.deepEqual(create.p_context.task.sources.references, [reference]);
+    const other = task.bindTaskSources(resolved, { omitted: [], references: [{ ...reference, sha256: "c".repeat(64) }] });
+    await rejects(run.runAgencyTask(other, lead, deps(scripted([]))), "OPERATION_CONFLICT");
   });
 
   finished = true; clearInterval(keepAlive);

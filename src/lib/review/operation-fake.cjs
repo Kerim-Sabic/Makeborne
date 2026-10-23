@@ -18,7 +18,7 @@ const handlers = {
   makeborne_agency_task_scope(a) {
     if (a.p_artifact === db.forbiddenArtifact) return err("42501");
     if (a.p_inputs.some(input => input.sha256 === "f".repeat(64))) return err("PT409");
-    return { data: { workspaceId: W, projectId: P, clientId: null, artifactId: a.p_artifact, currentVersion: db.artifactVersion,
+    return { data: { workspaceId: W, projectId: P, clientId: db.clientId ?? null, artifactId: a.p_artifact, currentVersion: db.artifactVersion,
       inputs: a.p_inputs.map(input => ({ kind: input.kind, id: input.id, sha256: input.sha256 ?? "c".repeat(64), version: input.version ?? null, projectId: P })) }, error: null };
   },
   makeborne_ai_operation_create(a) {

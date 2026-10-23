@@ -66,7 +66,7 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const contract = require("./contract.ts"), page = require("./page.ts"), site = require("./site.ts"), cache = require("./cache.ts"), material = require("./material.ts");
 const validate = require("./validate.ts"), deterministic = require("./deterministic.ts"), search = require("./search.ts"), researchMod = require("./research.ts"), actions = require("./actions.ts");
 const prices = require("../ai/prices.ts");
-const { buildKnowledgeContext } = require("../knowledge/context.ts");
+const { buildKnowledgeContext, citationId } = require("../knowledge/context.ts");
 const task = require("../agency/task.ts"), server = require("../builder/operation-server.ts");
 const { aiCostUsdPerCredit } = require("../builder/pricing.ts");
 const RATE = Math.round(aiCostUsdPerCredit() * 1_000_000);
@@ -480,6 +480,36 @@ async function assistedTask(actionKey, stepKey) {
     store.briefs.clear();
     const third = await run();
     assert.equal(model.seen.length, 1); assert.equal(third.run.replayed, true); assert.equal(op.charged, chargedAfterFirst); assert.equal(store.briefs.size, 1);
+  });
+
+
+  await check("assisted research: the planning read records no snapshot; the step re-reads knowledge with its operation id; read documents are bound to the operation", async () => {
+    fake.db.clientId = CLIENT;
+    const fact = { id: randomUUID(), clientId: CLIENT, kind: "observed_fact", key: "offering.bread_box", label: "Bread box", valueText: "Weekly sourdough bread box delivered on Fridays", status: "approved",
+      evidenceState: "live", revision: 2, trust: "approved", rank: 1, pending: [], evidence: [{ id: randomUUID(), kind: "source", quote: "Weekly sourdough bread box", locator: {} }] };
+    const reads = [];
+    const stepSnapshot = randomUUID();
+    const knowledge = async (objective, operationId, options) => { reads.push({ operationId, record: options?.record ?? true }); return { context: buildKnowledgeContext([fact]), snapshotId: options?.record === false ? null : stepSnapshot }; };
+    const brochure = doc("Brochure.docx", "Harbour Bakery brochure. Visit harbour-bakery.test. We deliver a weekly sourdough bread box on Fridays.");
+    const answer = { offering: [{ text: "They deliver a weekly sourdough bread box on Fridays.", basis: "fact", citations: [{ source: citationId(fact), quote: "Weekly sourdough bread box delivered on Fridays" }] }],
+      recommendations: [{ deliverable: "website", title: "Enquiry-ready site", reason: "Visitors cannot send a message from the site today, which loses orders.", basedOn: ["offering:0"] }] };
+    const model = scripted([{ content: [submit(answer)] }]);
+    const actionKey = randomUUID(), stepKey = randomUUID();
+    const out = await researchMod.runClientResearch({ request: request({ actionKey, stepKey, artifactId: ARTIFACT }), client: clientProfile() },
+      deps({ knowledge, documents: async () => ({ documents: [brochure], unreadable: [] }),
+        assisted: { task: await assistedTask(actionKey, stepKey), deps: { model, readInput: async () => "", platformDeadline: Date.now() + 60_000, pollMs: 20, heartbeatMs: 50 } } }));
+    assert.equal(out.run.outcome, "result");
+    assert.deepEqual(reads, [{ operationId: null, record: false }, { operationId: out.row.operationId, record: true }], "planning read first, then the snapshotted read bound to the operation");
+    assert.equal(out.row.brief.knowledge.snapshotId, stepSnapshot, "the brief names the operation-bound snapshot");
+    assert.ok(JSON.stringify(model.seen[0].messages[0].content).includes(citationId(fact)), "the model's material comes from the step's knowledge");
+    assert.ok(out.row.brief.sections.offering[0].citations[0].source.startsWith("K-"), "the knowledge citation is grounded against the step's material");
+    const op = fake.db.ops.get(out.row.operationId);
+    assert.deepEqual(op.context.task.sources.references, [{ sourceId: brochure.assetId, sha256: brochure.record.sourceSha256, extractionVersion: "ingest-2026-10-23.1", format: "docx", status: "complete" }],
+      "the documents read (asset, sha256, extraction version) are recorded with the operation");
+    // Deterministic research (no assisted setting) records its snapshot on the planning read, as before.
+    reads.length = 0;
+    await researchMod.runClientResearch({ request: request(), client: clientProfile() }, deps({ knowledge }));
+    assert.deepEqual(reads, [{ operationId: null, record: true }]);
   });
 
   await check("Save to client: kept claims become PROPOSED facts with page evidence (url, fetched_at, sha256, quote); corrections are the person's statement; nothing is approved", async () => {

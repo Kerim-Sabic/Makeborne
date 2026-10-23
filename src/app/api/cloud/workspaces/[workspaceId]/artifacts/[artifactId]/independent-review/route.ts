@@ -9,6 +9,10 @@ import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
 import type { AnthropicLike } from "@/lib/ai/anthropic-call";
 import { resolveAgencyScope } from "@/lib/builder/operation-server";
+import { resolveProjectImages } from "@/lib/projects/source-assets";
+import { clientKnowledgeEnabled, knowledgeForAgencyTask } from "@/lib/knowledge/server";
+import { reviewFactsAndClaims, reviewKnowledge } from "@/lib/review/knowledge";
+import { ReviewAssetMissing, projectImageResolver, reviewWebsiteHtmlWithAssets } from "@/lib/review/website-assets";
 import { reviewWebsiteHtml } from "@/lib/client-review/server";
 import { dataUrls, loadDocumentImages } from "@/lib/documents/export-server";
 import { agencyTasksEnabled } from "@/lib/agency/run";
@@ -16,7 +20,7 @@ import { AgencyError, resolveAgencyTask } from "@/lib/agency/task";
 import { anthropicModelPort } from "@/lib/agency/model-port";
 import { inputReader } from "@/lib/agency/inputs";
 import { RoutePath, contentSha, type ReviewSubject } from "@/lib/review/contract";
-import { NO_APPROVED_FACTS, reviewBrief } from "@/lib/review/brief";
+import { reviewBrief } from "@/lib/review/brief";
 import { defaultClaimsCheck } from "@/lib/review/claims";
 import { bookDiagnostics, deckDiagnostics, deterministicFindings, websiteDiagnostics } from "@/lib/review/deterministic";
 import { assembleRequest } from "@/lib/review/assemble";
@@ -105,21 +109,55 @@ export async function POST(request: Request, context: Context) {
     databaseError(projectResult.error); databaseError(planResult.error);
     if (!projectResult.data) throw new RequestError("NOT_FOUND", "This project is unavailable.", 404);
     const plan = StoredPlanSchema.safeParse(planResult.data?.plan);
-    const { brief, declaredRoutes } = reviewBrief({ projectId: artifact.project_id, brief: mapProject(projectResult.data).brief, plan: plan.success ? plan.data : null });
-    // Approved facts come from the knowledge module once it is merged; until then claims are not checked (and the coverage says so).
-    const facts = NO_APPROVED_FACTS, factsForChecks = null, claims = defaultClaimsCheck;
+    const project = mapProject(projectResult.data);
+    const { brief, declaredRoutes } = reviewBrief({ projectId: artifact.project_id, brief: project.brief, plan: plan.success ? plan.data : null });
+    const objective = `Independent review of version ${subject.version} against the approved brief.`;
+
+    // The fresh-context reviewer runs only with agency tasks on and a qualified setting (none yet). Resolving the
+    // task first (no hold, no call) decides whether a model step follows, so the knowledge read below is either the
+    // recorded one (checks only) or a planning read that the step repeats and snapshots with its operation id.
+    const rate = Math.round(aiCostUsdPerCredit() * 1_000_000);
+    let task = null, unqualified = false;
+    if (agencyTasksEnabled()) {
+      try {
+        task = await resolveAgencyTask(user.id, { artifactId: subject.artifactId, actionKey: body.actionKey, stepKey: body.stepKey, kind: "independent_review",
+          objective, inputs: [{ kind: "artifact_version", id: version.id, version: subject.version }],
+          permittedTools: [], settings: body.settings, ceilingCredits: body.ceilingCredits, expectedRevision: subject.version }, { scope: resolveAgencyScope, rateMicrousd: rate });
+      } catch (error) {
+        if (!(error instanceof AgencyError && error.code === "AGENCY_SETTINGS_UNQUALIFIED")) throw error;
+        unqualified = true;
+      }
+    }
+    // Approved facts from the client's knowledge (stage 3) when it is on and the project belongs to a client;
+    // otherwise none, and claims are reported as not checked.
+    const knowledgeOn = clientKnowledgeEnabled() && Boolean(project.clientId);
+    const knowledge = knowledgeOn ? reviewKnowledge(await knowledgeForAgencyTask({ actorId: user.id, workspaceId, clientId: project.clientId, artifactId: subject.artifactId,
+      operationId: null, objective, purpose: "independent review", record: !task })) : null;
+    const { facts, factsForChecks, claims } = reviewFactsAndClaims(knowledge, brief, defaultClaimsCheck);
 
     let evidence, diagnostics, coverage;
     if (artifact.kind === "website") {
       if (!body.routes.length) throw new RequestError("SNAPSHOT_REQUIRED", "Open the preview so the latest render can be captured, then try again.", 409);
       const origin = new URL(request.url).origin;
+      let siteAssets: Parameters<typeof projectImageResolver>[0] = new Map();
       const routes = body.routes.map(route => {
+        // React sites keep their own image references; the capture serves them from the project's verified assets.
+        const withAssets = reviewWebsiteHtmlWithAssets(content, route.snapshot, origin);
+        if (withAssets) { siteAssets = withAssets.assets; return { path: route.path, html: withAssets.html }; }
         const html = reviewWebsiteHtml(content, route.snapshot, origin);
         if (!html) throw new RequestError("NOTHING_TO_REVIEW", "This website has no saved render to review.", 409);
         return { path: route.path, html };
       });
-      const captured = await captureWebsite({ routes, assets: async () => "unavailable", declaredRoutes, absentSrcUnknown: true });
+      const scope = { workspaceId, projectId: artifact.project_id };
+      const images = projectImageResolver(siteAssets, async asset => {
+        try { return (await resolveProjectImages(client, scope, [{ id: asset.id, path: asset.path, sha256: asset.sha256, mediaType: asset.mediaType, bytes: asset.bytes }]))[0].bytes; }
+        catch (error) { throw error instanceof RequestError && error.code === "SOURCE_ASSET_UNAVAILABLE" ? new ReviewAssetMissing(asset.path) : error; }
+      });
+      const captured = await captureWebsite({ routes, assets: images.resolve, declaredRoutes, absentSrcUnknown: true });
       evidence = captured.evidence; coverage = captured.coverage;
+      const served = images.report();
+      if (served.served.length && coverage.inspected.length < 60) coverage.inspected.push(`${served.served.length} project image(s) served from storage after a sha256 check`);
+      if (served.unavailable.length && coverage.notInspected.length < 40) coverage.notInspected.push({ what: `${served.unavailable.length} project image(s)`, reason: "their stored copies could not be confirmed during this review" });
       diagnostics = websiteDiagnostics({ probes: captured.probes, runtimeErrors: body.runtimeErrors, facts: factsForChecks, claims });
     } else {
       const doc = content.document;
@@ -139,22 +177,15 @@ export async function POST(request: Request, context: Context) {
     }
     const reviewRequest = assembleRequest({ subject, brief, facts, evidence, diagnostics, coverage });
     const deterministic = deterministicFindings(reviewRequest.diagnostics);
-    if (!agencyTasksEnabled()) return cloudJson({ subject, result: deterministicOnly(reviewRequest, deterministic, "reviewer_disabled", claims), operation: null });
+    if (!task) return cloudJson({ subject, result: deterministicOnly(reviewRequest, deterministic, unqualified ? "reviewer_not_qualified" : "reviewer_disabled", claims), operation: null });
 
-    const rate = Math.round(aiCostUsdPerCredit() * 1_000_000);
-    let task;
-    try {
-      task = await resolveAgencyTask(user.id, { artifactId: subject.artifactId, actionKey: body.actionKey, stepKey: body.stepKey, kind: "independent_review",
-        objective: `Independent review of version ${subject.version} against the approved brief.`, inputs: [{ kind: "artifact_version", id: version.id, version: subject.version }],
-        permittedTools: [], settings: body.settings, ceilingCredits: body.ceilingCredits, expectedRevision: subject.version }, { scope: resolveAgencyScope, rateMicrousd: rate });
-    } catch (error) {
-      if (error instanceof AgencyError && error.code === "AGENCY_SETTINGS_UNQUALIFIED") return cloudJson({ subject, result: deterministicOnly(reviewRequest, deterministic, "reviewer_not_qualified", claims), operation: null });
-      throw error;
-    }
     await requireProviderCapacity("anthropic");
     const anthropic = new Anthropic({ maxRetries: 0, timeout: 100_000 }) as unknown as AnthropicLike;
-    const { result, run } = await runIndependentReview({ task, request: reviewRequest, deterministic, claims, deps: {
+    // The step re-reads the same knowledge with its operation id (snapshot bound to the operation) and refuses,
+    // uncharged, if it differs from what this request was assembled with.
+    const { result, run } = await runIndependentReview({ task, request: reviewRequest, deterministic, claims, knowledgeSha256: knowledge?.contextSha256 ?? null, deps: {
       model: anthropicModelPort(anthropic, task.settings), tools: {}, readInput: inputReader(task), platformDeadline: Date.now() + (maxDuration - 15) * 1000,
+      ...(knowledgeOn ? { knowledge: knowledgeForAgencyTask } : {}),
     } });
     return cloudJson({ subject, result, operation: run.status ? { id: run.status.operation.id, outcome: run.outcome, charged: run.charged, message: run.message } : null });
   } catch (error) {

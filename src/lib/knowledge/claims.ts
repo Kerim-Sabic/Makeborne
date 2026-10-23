@@ -23,6 +23,8 @@ export type ClaimFinding = Readonly<{
   text: string; status: "unsupported" | "unapproved" | "disputed"; detail: string; factIds?: readonly string[];
 }>;
 export type ClaimReport = Readonly<{ ok: boolean; findings: readonly ClaimFinding[]; checked: number }>;
+/** Every judged claim, including the supported ones (for callers that must know a value IS supported, e.g. the reviewer). */
+export type JudgedClaim = Readonly<{ type: ClaimFinding["type"]; text: string; status: ClaimFinding["status"] | "supported"; factIds: readonly string[] }>;
 
 /** Status words that assert something about the business. */
 export const STATUS_WORDS = ["award", "awards", "award-winning", "certified", "accredited", "licensed", "licenced", "insured", "guaranteed", "guarantee", "warranty",
@@ -60,9 +62,9 @@ const times = (text: string) => {
 };
 const words = (text: string) => new Set(text.toLowerCase().match(/[#\p{L}\p{N}][\p{L}\p{N}/-]*/gu) ?? []);
 
-function judge(matching: Support[], type: ClaimFinding["type"], text: string, what: string): ClaimFinding | null {
+function judge(matching: Support[], type: ClaimFinding["type"], text: string, what: string): ClaimFinding | JudgedClaim {
   const approved = matching.filter(item => item.approved);
-  if (approved.length && approved.some(item => !item.disputed)) return null;
+  if (approved.length && approved.some(item => !item.disputed)) return { type, text, status: "supported", factIds: approved.filter(item => !item.disputed).flatMap(item => item.id ? [item.id] : []) };
   if (approved.length) return { type, text, status: "disputed", detail: `${what} matches an approved fact that a newer source disputes.`, factIds: approved.flatMap(item => item.id ? [item.id] : []) };
   if (matching.length) return { type, text, status: "unapproved", detail: `${what} matches only a suggested fact nobody has approved yet.`, factIds: matching.flatMap(item => item.id ? [item.id] : []) };
   return { type, text, status: "unsupported", detail: `${what} is not in the client's approved facts or the brief.` };
@@ -70,11 +72,22 @@ function judge(matching: Support[], type: ClaimFinding["type"], text: string, wh
 
 /** Checks lines of generated copy. */
 export function checkCopyClaims(copy: string | readonly string[], facts: readonly ClaimFact[], brief = ""): ClaimReport {
+  const { judged, checked } = judgeCopy(copy, facts, brief);
+  const findings = judged.filter((item): item is ClaimFinding => item.status !== "supported");
+  return Object.freeze({ ok: !findings.some(item => item.status !== "disputed"), findings: Object.freeze(findings), checked });
+}
+
+/** Every claim in the copy with its verdict, supported ones included (same rules as checkCopyClaims). */
+export function judgeCopyClaims(copy: string | readonly string[], facts: readonly ClaimFact[], brief = ""): readonly JudgedClaim[] {
+  return Object.freeze(judgeCopy(copy, facts, brief).judged.map(item => Object.freeze({ type: item.type, text: item.text, status: item.status, factIds: Object.freeze([...(item.factIds ?? [])]) })));
+}
+
+function judgeCopy(copy: string | readonly string[], facts: readonly ClaimFact[], brief: string): { judged: (ClaimFinding | JudgedClaim)[]; checked: number } {
   const lines = (typeof copy === "string" ? copy.split(/\n+/) : copy).map(cleanText).filter(Boolean);
   const base = supports(facts, brief);
-  const findings: ClaimFinding[] = [];
+  const findings: (ClaimFinding | JudgedClaim)[] = [];
   let checked = 0;
-  const add = (finding: ClaimFinding | null) => { checked++; if (finding && !findings.some(item => item.type === finding.type && item.text === finding.text)) findings.push(finding); };
+  const add = (finding: ClaimFinding | JudgedClaim) => { checked++; if (!findings.some(item => item.type === finding.type && item.text === finding.text)) findings.push(finding); };
   for (const line of lines) {
     if (ILLUSTRATIVE.test(line)) continue;
     const covered: [number, number][] = [];
@@ -112,7 +125,7 @@ export function checkCopyClaims(copy: string | readonly string[], facts: readonl
       add(judge(base.filter(item => words(item.text).has(word)), "status", word, `"${word}"`));
     }
   }
-  return Object.freeze({ ok: !findings.some(item => item.status !== "disputed"), findings: Object.freeze(findings), checked });
+  return { judged: findings, checked };
 }
 
 const SKIP_KEYS = new Set(["id", "src", "href", "url", "image", "images", "icon", "class", "classname", "style", "styles", "css", "type", "kind", "layout", "tone",
