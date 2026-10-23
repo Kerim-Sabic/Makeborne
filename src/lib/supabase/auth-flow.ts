@@ -1,3 +1,7 @@
+/** Plan choices that may ride through sign-up to /billing (kept in step with CREATION_PLANS; this file imports nothing). */
+const BILLING_TIERS = ["create", "studio", "scale"];
+const BILLING_INTERVALS = ["monthly", "yearly"];
+
 /** Rebuild only supported local destinations; never forward an arbitrary URL. */
 export function authDestination(next: string | null): string {
   if (next === "/auth/update-password") return next;
@@ -42,10 +46,22 @@ export function authDestination(next: string | null): string {
     const after = url.searchParams.get("next");
     if (after && (after.startsWith("/studio") || after.startsWith("/chat"))) safe.set("next", authDestination(after));
     if (url.searchParams.get("required") === "membership") safe.set("required", "membership");
-    const hash = ["#plans", "#support", "#credits", "#activity"].includes(url.hash) ? url.hash : "";
+    // A plan picked before sign-up: both values or neither, each from a fixed list.
+    const plan = url.searchParams.get("plan"), interval = url.searchParams.get("interval");
+    if (plan && interval && BILLING_TIERS.includes(plan) && BILLING_INTERVALS.includes(interval)) { safe.set("plan", plan); safe.set("interval", interval); }
+    const hash = ["#plans", "#support", "#credits", "#activity", "#topups"].includes(url.hash) ? url.hash : "";
     return `/billing${safe.size ? `?${safe}` : ""}${hash}`;
   }
   return "/studio";
+}
+
+/** The plan a /billing return link carries, after the same allow-list; null for every other destination. */
+export function billingPlanSelection(next: string | null): { tier: string; interval: string } | null {
+  const destination = authDestination(next);
+  if (!destination.startsWith("/billing?")) return null;
+  const query = new URL(destination, "https://makeborne.invalid").searchParams;
+  const tier = query.get("plan"), interval = query.get("interval");
+  return tier && interval ? { tier, interval } : null;
 }
 
 export function passwordRecoveryDestination(next: string | null): string {

@@ -10,12 +10,22 @@ import { loadUsageHistory } from "@/lib/billing/usage-history-server";
 import { unavailableBilling } from "@/lib/billing/view";
 import { getFreeTierOffer } from "@/lib/credits/server";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
-import { builderEstimates } from "@/lib/builder/credit-estimate";
+import { builderEstimates, MEASURED_RUN } from "@/lib/builder/credit-estimate";
+import { BUILDER_EFFORT } from "@/lib/builder/pricing";
+import { DEFAULT_EFFORT } from "@/lib/routing/effort";
+import { CREATION_PLANS, TAX_NOTE, matchPlanTier, pricePerCreditCents, usd } from "@/lib/billing/plans";
+import { configuredCreationOffers } from "@/lib/billing/creation-offers";
+import { topupCheckoutOpen } from "@/lib/billing/topups";
+import { authDestination } from "@/lib/supabase/auth-flow";
 import "./billing.css";
 import "./billing-topup-return.css";
 
+const credits = (value: number) => value.toLocaleString("en-US");
 // Signed-out visitors (and crawlers) see the public plans and questions; account details need sign-in.
-export const metadata: Metadata = publicPageMetadata("/billing", "Pricing: plans & credits | Makeborne", "Makeborne plans from $20 a month: monthly credits for websites, books and presentations, unlimited websites (fair use), credit packs, and a built-in client CRM.");
+export const metadata: Metadata = publicPageMetadata("/billing", "Pricing: plans & credits", `Makeborne plans from ${usd(CREATION_PLANS[0].monthlyCents)} a month: ${credits(CREATION_PLANS[0].monthlyCredits)} to ${credits(CREATION_PLANS[CREATION_PLANS.length - 1].monthlyCredits)} monthly credits for websites, books and presentations, a built-in client CRM, and a credit limit shown before every request.`);
+const LIVE = ["active", "canceling", "past_due"];
+const PLAN_CHIPS = CREATION_PLANS.map(plan => ({ id: plan.id, name: plan.name, price: usd(plan.monthlyCents) }));
+const PER_CREDIT = CREATION_PLANS.map(plan => pricePerCreditCents(plan.id));
 export const dynamic = "force-dynamic";
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -25,7 +35,24 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const [refundedPeriod, summary, showAutotopup, subscriptions] = user
     ? await Promise.all([accountRefundedPeriod(user.id), loadUsageHistory(user, { usage: params.usage, usageBefore: params.usageBefore }), autotopupPanelVisible(user.id), subscriptionSummaries(user.id)])
     : [null, unavailableBilling, false, null] as const;
-  return <BillingWorkspace subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
+  const unlimited = accountPrivileges.unlimitedCredits === true;
+  const live = Array.isArray(subscriptions) ? subscriptions.find(item => LIVE.includes(item.status)) ?? null : null;
+  // Plans before the account for anyone without a plan; members keep the dashboard first.
+  const plansFirst = !user || params.required === "membership" || refundedPeriod !== null || (Array.isArray(subscriptions) && !live && !unlimited);
+  const currentTier = live ? live.tier ?? matchPlanTier(live.name) : null;
+  const savedBrief = typeof params.next === "string" && /[?&](draft|claim)=/.test(authDestination(params.next));
+  const offers = (() => { try { return configuredCreationOffers(); } catch { return []; } })();
+  const topupsOpen = (() => { try { return topupCheckoutOpen(); } catch { return false; } })();
+  return <BillingWorkspace plansFirst={plansFirst} savedBrief={savedBrief} planChips={PLAN_CHIPS} pricePerCredit={{ min: Math.min(...PER_CREDIT), max: Math.max(...PER_CREDIT) }} plansOpen={await plansOpen(offers)} mediumCeilingCredits={BUILDER_EFFORT[DEFAULT_EFFORT].ceilingCredits} measuredRun={MEASURED_RUN} currentTier={currentTier} topupsOpen={topupsOpen} hasYearly={offers.some(offer => offer.interval === "yearly")} accountId={user?.id ?? null} taxNote={TAX_NOTE.long} subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
+}
+
+/** False before launch: no configured plan passes the database plan gate. Advisory only; checkout rechecks. */
+async function plansOpen(offers: ReturnType<typeof configuredCreationOffers>): Promise<boolean> {
+  if (!offers.length) return false;
+  try {
+    const { data, error } = await billingDatabase().rpc("makeborne_billing_creation_enabled", { p_plan_id: offers[0].planId });
+    return !error && data === true;
+  } catch { return false; }
 }
 
 /** The current billing period when its payment was refunded or charged back (creation paused). Unknown shows nothing. */

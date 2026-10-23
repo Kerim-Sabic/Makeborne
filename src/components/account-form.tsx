@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, LockKeyhole, Mail, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { accountError, authDestination, passwordRecoveryDestination } from "@/lib/supabase/auth-flow";
+import { accountError, authDestination, billingPlanSelection, passwordRecoveryDestination } from "@/lib/supabase/auth-flow";
+import { CREATION_PLANS, planPrice, usd } from "@/lib/billing/plans";
 
 type Mode = "login" | "signup" | "recovery";
 type Notice = { text: string; error: boolean };
@@ -32,6 +33,8 @@ export default function AccountForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [retryAt, setRetryAt] = useState(0);
   const [retryIn, setRetryIn] = useState(0);
+  /** Set only when the return link is a /billing plan: shows the choice, opens code entry and continues after the code. */
+  const [planChoice, setPlanChoice] = useState<{ name: string; price: string; credits: string } | null>(null);
 
   function returnDestination() {
     return authDestination(new URLSearchParams(window.location.search).get("next"));
@@ -62,6 +65,12 @@ export default function AccountForm() {
     queueMicrotask(() => {
       const query = new URLSearchParams(window.location.search);
       if (query.get("mode") === "signup") setMode("signup");
+      const selection = billingPlanSelection(query.get("next"));
+      const plan = selection && CREATION_PLANS.find(item => item.id === selection.tier);
+      if (plan && selection && (selection.interval === "monthly" || selection.interval === "yearly")) {
+        const price = planPrice(plan.id, selection.interval, false);
+        setPlanChoice({ name: plan.name, price: `${usd(price.standardCents)} a ${selection.interval === "yearly" ? "year" : "month"}`, credits: `${plan.monthlyCredits.toLocaleString("en-US")} credits` });
+      }
       const error = query.get("error");
       if (error) {
         setNotice({ error: true, text: error === "cloud-unavailable"
@@ -183,6 +192,8 @@ export default function AccountForm() {
       if (error) throw error;
       clearPendingEmail();
       setCode("");
+      // Only on the plan path: the code proves the email, so go straight back to the plan to pay.
+      if (planChoice && verification !== "recovery") { router.replace(returnDestination()); router.refresh(); return; }
       setVerified(true);
     } catch (error) {
       setNotice({ error: true, text: accountError(error) });
@@ -237,6 +248,7 @@ export default function AccountForm() {
           <h1 id="account-heading">{verified ? verification === "recovery" ? "You’re verified" : "Email confirmed" : verification ? "Check your inbox" : mode === "signup" ? "Make room for your ideas" : mode === "recovery" ? "Reset your password" : "Welcome back"}</h1>
           <p>{verified ? "You’re ready to continue." : verification ? verification === "recovery" ? "If an account uses this email, a reset link is on its way." : "Follow the confirmation link in your email to finish signing up." : mode === "signup" ? "Your next website, book or presentation starts here." : mode === "recovery" ? "We’ll help you get back to your projects." : "Pick up where your ideas left off."}</p>
         </div>
+        {planChoice && !verified && verification !== "recovery" && mode !== "recovery" && <p className="auth-plan-strip">{planChoice.name} · {planChoice.price} · {planChoice.credits}. Create your account, then pay in secure Whop checkout.</p>}
         {enabled === null ? <div className="auth-loading" role="status"><LoaderCircle className="auth-spinner" size={17} />Getting things ready…</div> : !enabled ? <>
           <div className="inline-info"><LockKeyhole size={20} /><p>Account access is temporarily unavailable.</p></div>
           <Link className="button primary" href="/">Back to home <ArrowRight size={16} /></Link>
@@ -245,7 +257,7 @@ export default function AccountForm() {
           <p className="auth-verification-footnote">Your projects, all in one place.</p>
         </> : verification ? <>
           <div className="auth-email-address"><Mail size={16} aria-hidden="true" /><strong>{email}</strong><button type="button" onClick={changeEmail} disabled={busy}>Change</button></div>
-          <details className="auth-code-entry">
+          <details className="auth-code-entry" open={planChoice !== null && verification !== "recovery"}>
             <summary>Have a verification code?</summary>
             <form onSubmit={verifyCode}>
               <label htmlFor="account-code">Code from your email</label>

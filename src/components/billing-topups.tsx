@@ -5,10 +5,14 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, Check, Coins, LoaderCircle, Plus } from "lucide-react";
 import { CREDIT_TOPUP_PACKS, formatCreditTopupPrice, type CreditTopupAvailability } from "@/lib/billing/topups-catalog";
 import { topupNavigationUrl } from "@/lib/billing/checkout-navigation";
+import { CREATION_PLANS, TAX_NOTE, type PlanId } from "@/lib/billing/plans";
 
 const money = formatCreditTopupPrice;
+/** Plan against plan-plus-pack, computed from both catalogues: topping up every month costs more than the next plan. */
+const COMPARE_PACK = CREDIT_TOPUP_PACKS.find(pack => pack.id === "boost_300") ?? CREDIT_TOPUP_PACKS[0];
+const UPGRADE_ROWS = CREATION_PLANS.slice(0, -1).map((plan, index) => ({ plan, next: CREATION_PLANS[index + 1] }));
 
-export default function BillingTopups() {
+export default function BillingTopups({ currentTier = null }: { currentTier?: PlanId | null }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string>(CREDIT_TOPUP_PACKS[0].id);
   const [availability, setAvailability] = useState<CreditTopupAvailability | null>(null);
@@ -83,12 +87,13 @@ export default function BillingTopups() {
             <input type="radio" name="credit-pack" value={item.id} checked={pack.id === item.id} onChange={() => { setSelectedId(item.id); setError(""); }} />
             <span className="billing-pack-surface">
               <span className="billing-pack-check" aria-hidden="true">{pack.id === item.id ? <Check size={11} strokeWidth={2.5} /> : <Plus size={11} />}</span>
-              <strong>{item.credits.toLocaleString("en-US")}</strong><span>credits</span>
+              <strong>{item.credits.toLocaleString("en-US")}</strong><span>credits</span><span className="billing-pack-label">{item.label}</span>
               <span className="billing-pack-cost">{money(item.priceCents)}</span>
             </span>
           </label>)}</div>
         </fieldset>
-        <p className="billing-pack-caption">{isPreview ? "Preview pricing · USD, before tax" : "One-time pricing · USD, before tax"}</p>
+        <p className="billing-pack-caption">{isPreview ? "Preview pack prices. Final pack price, expiry and refund terms are shown before you buy." : "Pack price, expiry and refund terms are shown before you buy."} USD. {TAX_NOTE.short}</p>
+        <div className="billing-upgrade-compare"><p>Topping up every month? A bigger plan costs less.</p><table><caption className="billing-sr-only">A plan plus a {COMPARE_PACK.credits.toLocaleString("en-US")}-credit pack against the next plan</caption><tbody>{UPGRADE_ROWS.map(({ plan, next }) => <tr key={plan.id}><td>{plan.name} + {COMPARE_PACK.credits.toLocaleString("en-US")}-credit pack: {money(plan.monthlyCents + COMPARE_PACK.priceCents)} for {(plan.monthlyCredits + COMPARE_PACK.credits).toLocaleString("en-US")} credits</td><td>{next.name}: {money(next.monthlyCents)} for {next.monthlyCredits.toLocaleString("en-US")}</td></tr>)}</tbody></table><a href={`mailto:admin@makeborne.com?subject=${encodeURIComponent(`Plan change: ${CREATION_PLANS.find(plan => plan.id === currentTier)?.name ?? "my plan"} to a bigger plan`)}`}>Ask to switch plans</a></div>
         <div className="billing-topup-benefits"><span><Check size={13} aria-hidden="true" />Keep your subscription</span><span><Check size={13} aria-hidden="true" />No automatic refill</span></div>
       </div>
       <div className="billing-topup-summary">
@@ -98,7 +103,7 @@ export default function BillingTopups() {
           {busy ? <><LoaderCircle size={15} className="billing-loading" />Continuing…</> : availability?.available ? <>Continue with {pack.credits.toLocaleString("en-US")} credits<ArrowUpRight size={14} /></> : <>Credit packs coming soon</>}
         </button>
         <p id="topup-availability" className="billing-topup-availability" role="status">{loadError ? "Availability could not be loaded." : availability === null ? "Checking availability…" : availability.available ? "Requires an active creation membership. Secure checkout with Whop." : "Purchases open when credit delivery is ready. An active creation membership will be required."}</p>
-        {loadError && <button className="billing-support-retry" type="button" onClick={() => { setLoadError(false); setAvailability(null); setRetry(value => value + 1); }}>Try again</button>}
+        {loadError && <button className="billing-retry" type="button" onClick={() => { setLoadError(false); setAvailability(null); setRetry(value => value + 1); }}>Try again</button>}
         {error && <p className="billing-checkout-error" role="alert">{error}</p>}
       </div>
     </div>
