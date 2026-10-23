@@ -193,6 +193,12 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.ok(BLOCKING_PROBLEM.test("Under prefers-reduced-motion .marquee-track wraps a marquee or tag band into several rows: keep it one row"));
     assert.ok(BLOCKING_PROBLEM.test("Page overflow: the page is 25 px wider than the screen at 390 px wide") && BLOCKING_PROBLEM.test("Wrapped band: ul.track") && BLOCKING_PROBLEM.test("Cut off: div.hero"));
     assert.ok(!BLOCKING_PROBLEM.test("Contrast: p") && !BLOCKING_PROBLEM.test("Comp fidelity: the top section"), "contrast and fidelity block once (a repeat goes ahead)");
+    // A fidelity finding whose measured numbers moved after a partial fix is the same problem: blocked once only (round G2 w01).
+    script.length = 0; seen.length = 0;
+    script.push({ content: [...site("d"), finish("g1")] }, { content: [finish("g2")] });
+    const moving = [["Comp fidelity: the \"menu\" section (desktop) is off its comp: give the image about 20% of the first 960 px of the section as in the comp (it covers 4%)"], ["Comp fidelity: the \"menu\" section (desktop) is off its comp: give the image about 20% of the first 960 px of the section as in the comp (it covers 9%)"]];
+    const settled = await run({ contrastCheck: async () => moving.shift() ?? [] });
+    assert.ok(settled.result.finished, "the re-measured fidelity finding is accepted on the repeat");
   });
 
   await check("regeneration rules: a new name, an existing generated image, never the client's own photos or logo; replaces and rejected go together", () => {

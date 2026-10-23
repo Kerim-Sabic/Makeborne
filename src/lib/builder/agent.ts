@@ -444,7 +444,12 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               // Covered text, content past the edge, page overflow and wrapped bands block every time; the rest once.
               const blocking = (findings ?? []).filter(finding => BLOCKING_PROBLEM.test(finding));
               if (findings) { layoutDefects = blocking; if (!blocking.length) cleanFiles = new Map(run.files.files); }
-              for (const finding of findings ?? []) if (BLOCKING_PROBLEM.test(finding) || !qualityReported.has(finding)) { qualityReported.add(finding); problems.push(finding); }
+              // A once-only problem is the same problem when only its measured numbers moved (a fidelity reading
+              // re-measured after a partial fix blocked w01 three times in round G2 and cost the build its finish).
+              for (const finding of findings ?? []) {
+                const key = BLOCKING_PROBLEM.test(finding) ? null : finding.replace(/[0-9]+(?:\.[0-9]+)?/g, "#");
+                if (key === null || !qualityReported.has(key)) { if (key) qualityReported.add(key); problems.push(finding); }
+              }
             }
             if (problems.length) { fail(`Not finished yet. Fix these problems, then call finish again:\n- ${problems.join("\n- ")}`); break; }
             // An unavailable compiler is not the model's to fix: keep the work and report it as unverified.
