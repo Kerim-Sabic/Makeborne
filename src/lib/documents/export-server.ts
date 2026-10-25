@@ -1,6 +1,5 @@
 import "server-only";
 import { chromium } from "playwright";
-import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DocumentSource } from "./schema";
 import { deckFaces, deckHtml } from "./render-deck";
@@ -8,8 +7,10 @@ import { bookHtml } from "./render-book";
 import { deckPptx } from "./pptx";
 import { FONTS } from "./theme";
 import { embeddedFontSources } from "./fonts-server";
+import { bookHeadings, bookPagesFromOutline, fixPdfBookmarks, pdfOutline } from "./book-pagination";
 import { chromiumLaunchOptions } from "../server/export";
 import { downloadProjectAsset } from "../cloud/asset-storage";
+import { fitArtwork } from "./artwork-fit";
 
 /** Read the document's generated artwork through the caller's RLS-bound client. */
 export async function loadDocumentImages(client: SupabaseClient, workspaceId: string, projectId: string, doc: DocumentSource) {
@@ -28,40 +29,47 @@ export async function loadDocumentImages(client: SupabaseClient, workspaceId: st
   return buffers;
 }
 
-/** Downscale for print: 300 dpi at the largest placement is plenty. */
+/** Downscale for print (300 dpi at the largest placement is plenty) within the export artwork limits: each image under
+ * 3 MB, all together under 12 MB (artwork-fit.ts). */
 async function dataUrls(buffers: Record<string, Buffer>) {
-  const urls: Record<string, string> = {};
-  for (const [name, bytes] of Object.entries(buffers)) {
-    const jpeg = await sharp(bytes, { limitInputPixels: 40_000_000 }).rotate().resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer();
-    urls[name] = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
-  }
-  return urls;
+  const fitted = await fitArtwork(buffers);
+  return Object.fromEntries(Object.entries(fitted).map(([name, jpeg]) => [name, `data:image/jpeg;base64,${jpeg.toString("base64")}`]));
 }
 
 /** Print the same HTML the preview shows, in an offline, script-free browser.
- * The document's typefaces are embedded: the serverless Chromium has only Open Sans. */
+ * The document's typefaces are embedded: the serverless Chromium has only Open Sans.
+ * Books print twice (book-pagination.ts): the first PDF's bookmarks give each
+ * chapter's page, and the second adds the contents page numbers and blank
+ * versos so chapter openers fall on right-hand pages. */
 export async function documentPdf(doc: DocumentSource, buffers: Record<string, Buffer>) {
   const images = await dataUrls(buffers);
   // A deck's art direction may add faces (monospaced labels) beyond its pairing.
   const fonts = await embeddedFontSources(doc.kind === "deck" ? deckFaces(doc) : FONTS[doc.theme.fonts].faces);
-  const html = doc.kind === "deck" ? deckHtml(doc, images, "print", fonts) : bookHtml(doc, images, "print", fonts);
   const browser = await chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
   try {
     const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: doc.kind === "deck" ? { width: 1280, height: 720 } : { width: 576, height: 864 } });
     await context.route("**/*", route => route.abort());
     const page = await context.newPage();
     page.setDefaultTimeout(30_000);
-    await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
-    await page.emulateMedia({ media: "print" });
-    // Embedded faces decode asynchronously; print only once they are ready.
-    await page.evaluate(() => document.fonts.ready.then(() => undefined));
-    return Buffer.from(await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: doc.kind === "book" }));
+    const print = async (html: string) => {
+      await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
+      await page.emulateMedia({ media: "print" });
+      // Embedded faces decode asynchronously; print only once they are ready.
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      return Buffer.from(await page.pdf({ printBackground: true, preferCSSPageSize: true, tagged: true, outline: doc.kind === "book" }));
+    };
+    if (doc.kind === "deck") return await print(deckHtml(doc, images, "print", fonts));
+    const first = await print(bookHtml(doc, images, "print", fonts));
+    const pages = bookPagesFromOutline(doc, pdfOutline(first));
+    // Bookmarks carry the headings as written (Chromium drops the space at a soft line break).
+    return fixPdfBookmarks(pages ? await print(bookHtml(doc, images, "print", fonts, pages)) : first, bookHeadings(doc));
   } finally {
     await browser.close();
   }
 }
 
-export async function documentPptx(doc: DocumentSource, buffers: Record<string, Buffer>) {
+/** `missing` receives the names of images the deck places but whose bytes could not be loaded (they are left out, not drawn as boxes). */
+export async function documentPptx(doc: DocumentSource, buffers: Record<string, Buffer>, missing: string[] = []) {
   if (doc.kind !== "deck") throw new Error("PPTX is available for presentations.");
-  return deckPptx(doc, buffers);
+  return deckPptx(doc, buffers, missing);
 }

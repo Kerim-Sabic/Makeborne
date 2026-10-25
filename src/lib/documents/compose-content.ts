@@ -1,10 +1,13 @@
 import type { Slide } from "./schema";
 import { FONTS, mix, readableOn, contrast } from "./theme";
-import { H, W, ellipse, estimateLines, glyphWidth, hline, measure, placed, rect, scaled, text, textWidth, vline, line, initials, image, type Ctx, type TextStyle, type ChartColors, type Tone } from "./scene-kit";
-import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, header, label, labelStyle, leadStyle, marker, numeral, numeralStyle, panel, stack, ruleColor } from "./design";
+import { H, W, ellipse, estimateLines, glyphWidth, hline, measure, placed, rect, scaled, text, textWidth, tryCompose, vline, line, initials, image, type Ctx, type TextStyle, type ChartColors, type Tone } from "./scene-kit";
+import { area, bodyStyle, display, displayStyle, divider, fitDisplay, footer, header, headlineUp, readableMark, label, labelStyle, leadStyle, marker, numberedRows, numeral, numeralMark, numeralStyle, panel, stack, ruleColor } from "./design";
 import { formatValue } from "./chart-svg";
 import { arrowPath } from "./graphics";
 import { path } from "./scene-kit";
+import { BAND_CHART_H } from "./compose-image";
+/** The least plot height a chart keeps under an image band. */
+export const BAND_CHART_MIN = 260;
 
 /** Points, agenda, numbers, charts, diagrams, comparisons, people, pricing and tables. */
 
@@ -16,7 +19,7 @@ function steps<T>(options: T[], fits: (option: T) => boolean) { return options.f
 
 export function pointsColumns(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
-  let top = header(ctx, slide, { standfirst: slide.body });
+  let top = header(ctx, slide, { standfirst: slide.body, size: headlineUp(ctx) });
   top += 44;
   const gap = n === 4 ? 32 : 48, colW = (a.w - gap * (n - 1)) / n, band = a.b - top;
   const numSize = Math.round((n <= 3 ? 64 : 52) * Math.max(1, ctx.dir.sizes.number / 176)), center = ctx.dir.axis === "center", align = center ? "center" as const : "left" as const;
@@ -41,32 +44,33 @@ export function pointsColumns(ctx: Ctx, slide: Slide) {
   footer(ctx);
 }
 
+/** Beside an image rail a title column would be a word per line: the title runs across the top, the rows below. */
+function pointsRowsStacked(ctx: Ctx, slide: Slide) {
+  const a = area(ctx), c = ctx.c, points = slide.points!;
+  const top = header(ctx, slide, { size: headlineUp(ctx), maxLines: 3, standfirst: slide.body }) + 24;
+  const rows = numberedRows(ctx, points, { x: a.x, r: a.r, top, bottom: a.b, mark: numeralMark(ctx), sizes: POINT_ROWS_STACKED,
+    title: ts => titleStyle(ctx, ts), body: (bs, titled) => bodyStyle(ctx, { size: bs, color: titled ? c.muted : c.ink }), pad: [28, 64], anchor: 0.3 });
+  if (!rows.fits) ctx.issues.push("the points have too much text beside the image");
+  footer(ctx);
+}
+/** POINT ROW SIZES ([item title, supporting text], largest first; the last step is the minimum). Beside an image
+ * rail the rows run the width of the text column, so they start larger than in the two-column composition. */
+export const POINT_ROWS_STACKED = [[40, 25], [38, 25], [36, 24], [34, 24], [32, 23], [30, 22], [28, 21], [26, 20], [24, 19], [22, 18]];
+export const POINT_ROWS = [[34, 23], [32, 22], [30, 22], [27, 21], [24, 20], [22, 19], [20, 18]];
+
 export function pointsRows(ctx: Ctx, slide: Slide) {
+  if (area(ctx).w < 760 && tryCompose(ctx, sub => pointsRowsStacked(sub, slide))) return;
   const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
-  const lw = Math.round(a.w * 0.36), rx = a.x + lw + 56, rw = a.r - rx;
+  const lw = Math.round(a.w * 0.36), rx = a.x + lw + 56;
   stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.headline, min: 32, sub: slide.body, subStyle: { size: 22 } }, { x: a.x, y: a.y, w: lw, h: a.b - a.y }, "top");
-  const numW = 64, tw = rw - numW;
-  const rowsAt = (ts: number, bs: number) => points.map(point => Math.max(36, (point.title ? measure(ctx, point.title, tw, titleStyle(ctx, ts)) + 6 : 0) + measure(ctx, point.text, tw, bodyStyle(ctx, { size: bs }))) + 40);
-  const [ts, bs] = steps([[30, 22], [27, 21], [24, 20], [22, 19], [20, 18]], ([t, b]) => rowsAt(t, b).reduce((s, h) => s + h, 0) <= a.b - a.y);
-  const rows = rowsAt(ts, bs), total = rows.reduce((s, h) => s + h, 0);
-  let y = a.y + Math.max(0, (a.b - a.y - total) * (n <= 3 ? 0.35 : 0));
-  points.forEach((point, i) => {
-    divider(ctx, rx, a.r, y, i === 0);
-    const inner = y + 20;
-    const ns = { ...numeralStyle(ctx, 26), lh: 1.1 };
-    text(ctx, numeral(ctx, i), { x: rx, y: inner + 2, w: numW - 8, h: Math.ceil(ns.size * 1.15) }, ns);
-    let ty = inner;
-    if (point.title) ty += text(ctx, point.title, { x: rx + numW, y: ty, w: tw }, titleStyle(ctx, ts)) + 6;
-    text(ctx, point.text, { x: rx + numW, y: ty, w: tw }, bodyStyle(ctx, { size: bs, color: point.title ? c.muted : c.ink }));
-    y += rows[i];
-  });
-  if (n) divider(ctx, rx, a.r, y);
+  numberedRows(ctx, points, { x: rx, r: a.r, top: a.y, bottom: a.b, mark: numeralMark(ctx), sizes: POINT_ROWS,
+    title: ts => titleStyle(ctx, ts), body: (bs, titled) => bodyStyle(ctx, { size: bs, color: titled ? c.muted : c.ink }), pad: [36, 72], anchor: n <= 3 ? 0.35 : 0 });
   footer(ctx);
 }
 
 export function pointsCards(ctx: Ctx, slide: Slide) {
   const a = area(ctx), points = slide.points!, n = points.length;
-  const top = header(ctx, slide, { standfirst: slide.body }) + 36;
+  const top = header(ctx, slide, { standfirst: slide.body, size: headlineUp(ctx) }) + 36;
   const cols = n <= 4 ? n : 3, rows = Math.ceil(n / cols), gap = 20, cw = (a.w - gap * (cols - 1)) / cols, band = a.b - top, ch = (band - gap * (rows - 1)) / rows, pad = cols >= 4 ? 24 : 30;
   const iw = cw - pad * 2, glyphS = rows > 1 ? 30 : 40;
   const contentH = (ts: number, bs: number) => Math.max(...points.map(point => glyphS + 24 + (point.title ? measure(ctx, point.title, iw, titleStyle(ctx, ts)) + 10 : 0) + measure(ctx, point.text, iw, bodyStyle(ctx, { size: bs })))) + pad * 2;
@@ -90,7 +94,7 @@ export function pointsCards(ctx: Ctx, slide: Slide) {
 
 export function pointsFeature(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, points = slide.points!, [first, ...rest] = points;
-  const top = header(ctx, slide) + 36, band = a.b - top, lw = Math.round(a.w * 0.47), rx = a.x + lw + 48, rw = a.r - rx;
+  const top = header(ctx, slide, { size: headlineUp(ctx) }) + 36, band = a.b - top, lw = Math.round(a.w * 0.47), rx = a.x + lw + 48, rw = a.r - rx;
   const ink = panel(ctx, { x: a.x, y: top, w: lw, h: band }, ctx.dir.panel !== "none" && ctx.dir.id !== "organic", 0);
   const pad = 40;
   const ns = numeralStyle(ctx, 72, { color: ink.accent });
@@ -115,7 +119,7 @@ export function pointsFeature(ctx: Ctx, slide: Slide) {
 export function pointsGrid(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, points = slide.points!, n = points.length;
   // Six cells need the height: a long headline steps down to one line rather than squeezing the grid.
-  const top = header(ctx, slide, { standfirst: slide.body, ...(n >= 5 ? { maxLines: 1, size: ctx.dir.sizes.headline * 0.9 } : {}) }) + 32;
+  const top = header(ctx, slide, { standfirst: slide.body, ...(n >= 5 ? { maxLines: 1, size: ctx.dir.sizes.headline * 0.9 } : { size: headlineUp(ctx) }) }) + 32;
   const cols = n === 4 ? 2 : 3, rows = Math.ceil(n / cols), band = a.b - top, boxed = ctx.dir.panel === "outline" || ctx.dir.panel === "heavy" || ctx.dir.panel === "fill";
   const gap = boxed ? 16 : 0, cw = (a.w - gap * (cols - 1)) / cols, ch = (band - gap * (rows - 1)) / rows, pad = boxed ? 28 : 24;
   const iw = cw - pad * 2 - (boxed ? 0 : 0);
@@ -178,7 +182,7 @@ const valueStyle = (ctx: Ctx, size: number, color: string): TextStyle => ({ font
 
 export function statsHero(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, stats = slide.stats!, n = stats.length;
-  let top = header(ctx, slide, { maxLines: 2 });
+  let top = header(ctx, slide, { maxLines: 2, size: headlineUp(ctx) });
   top += 24;
   if (n === 1) {
     const s = stats[0], vw = a.w * 0.6, size = oneLine(ctx, s.value, vw, Math.min(280, ctx.dir.sizes.number * 1.5), 80);
@@ -208,7 +212,7 @@ export function statsHero(ctx: Ctx, slide: Slide) {
 
 export function statsRow(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, stats = slide.stats!, n = stats.length;
-  const top = header(ctx, slide, { standfirst: n > 1 ? undefined : slide.body }) + 40, colW = a.w / n, inset = 32;
+  const top = header(ctx, slide, { standfirst: n > 1 ? undefined : slide.body, size: headlineUp(ctx) }) + 40, colW = a.w / n, inset = 32;
   const valueBox = colW - (n > 1 ? inset * 2 : inset), size = Math.min(...stats.map(s => oneLine(ctx, s.value, valueBox, n <= 2 ? 150 : n === 3 ? 124 : 100, 40)));
   const vh = Math.ceil(size * 1.04);
   // Labels shrink together until their longest word fits the column, so the row stays even.
@@ -233,7 +237,7 @@ export function statsRow(ctx: Ctx, slide: Slide) {
 
 export function statsTiles(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, p = ctx.theme.palette, stats = slide.stats!, n = stats.length;
-  const top = header(ctx, slide) + 36, gap = 16, tw = (a.w - gap * (n - 1)) / n, th = a.b - top, pad = n === 4 ? 24 : 32;
+  const top = header(ctx, slide, { size: headlineUp(ctx) }) + 36, gap = 16, tw = (a.w - gap * (n - 1)) / n, th = a.b - top, pad = n === 4 ? 24 : 32;
   const fills = ctx.dir.id === "colorblock" ? [p.accent, p.accent2, p.dark, p.surface] : ctx.dir.id === "brutalist" ? [c.signal, c.bg, c.bg, c.bg] : [c.strong, c.surface, c.surface, c.surface];
   const size = Math.min(...stats.map(s => oneLine(ctx, s.value, tw - pad * 2, n <= 2 ? 150 : n === 3 ? 120 : 92, 40)));
   stats.forEach((s, i) => {
@@ -276,8 +280,12 @@ export function chartColors(ctx: Ctx, c: Tone = ctx.c): ChartColors {
   return { ink: c.ink, muted: c.muted, grid: c.rule, series: [c.signal, c.accent2, mix(c.signal, c.bg, 0.5)], highlight: c.signal, highlightInk: c.accent, dim: mix(c.signal, c.bg, ctx.dir.ground === "dark" ? 0.6 : 0.72), background: c.bg };
 }
 const chartStyle = (ctx: Ctx) => ({ mono: ctx.dir.label.font === "mono", radius: ctx.dir.radius >= 20 ? 8 : ctx.dir.radius ? 3 : 0, grid: ctx.dir.id === "data" || ctx.dir.id === "swiss" || ctx.dir.id === "tech" });
-function chartPrim(ctx: Ctx, slide: Slide, box: { x: number; y: number; w: number; h: number }) {
-  ctx.prims.push({ k: "chart", ...box, chart: slide.chart!, colors: chartColors(ctx), style: chartStyle(ctx) });
+function chartPrim(ctx: Ctx, slide: Slide, box: { x: number; y: number; w: number; h: number }, textScale = 1) {
+  // Below this a chart's bars and labels no longer read (e.g. a long standfirst over a narrowed text zone).
+  if (box.h < 180 || box.w < 320) ctx.issues.push("the chart has too little room");
+  // Under an image band the plot must stay tall, or the side rail (a full-height chart) is the better placement.
+  else if ((ctx.frame?.y ?? 0) >= BAND_CHART_H && box.h < BAND_CHART_MIN) ctx.issues.push("the chart has too little room under the image band");
+  ctx.prims.push({ k: "chart", ...box, chart: slide.chart!, colors: chartColors(ctx), style: { ...chartStyle(ctx), ...(textScale !== 1 ? { text: textScale } : {}) } });
 }
 const focusOf = (slide: Slide) => {
   const chart = slide.chart!, values = chart.series[0].values;
@@ -288,22 +296,51 @@ function source(ctx: Ctx, slide: Slide, x: number, y: number, w: number) {
   if (slide.chart!.source) text(ctx, slide.chart!.source, { x, y, w, h: 20 }, { size: 13, color: ctx.c.muted, italic: true, lh: 1.3, ...(ctx.dir.label.font === "mono" ? { font: "mono" as const, italic: false, size: 12 } : {}) });
 }
 
+/** CHART CALLOUT SIZES. The annotated chart's headline is set 1.12× like points and numbers; its statistic up to
+ * CALLOUT_VALUE px (on one line), its caption at CALLOUT_CAPTION px (in steps to five lines, then down to CALLOUT_CAPTION_MIN), and the
+ * chart's own labels CHART_TEXT_UP× their base sizes in the preview, PDF and PPTX alike. */
+export const CALLOUT_VALUE = 132, CALLOUT_CAPTION = 38, CALLOUT_CAPTION_MIN = 18, CHART_TEXT_UP = 1.25;
+// A caption longer than five lines even at 22 px is set as before: from 30 px, fitted to the height left.
+const CALLOUT_CAPTIONS = [CALLOUT_CAPTION, 34, 30, 26, 22], CALLOUT_CAPTION_LONG = 30;
 export function chartAnnotated(ctx: Ctx, slide: Slide) {
-  const a = area(ctx), c = ctx.c, chart = slide.chart!;
-  const top = header(ctx, slide) + 28, cw = Math.round(a.w * 0.64), bottom = chart.source ? a.b - 22 : a.b;
-  chartPrim(ctx, slide, { x: a.x, y: top, w: cw, h: bottom - top });
-  source(ctx, slide, a.x, a.b - 14, cw);
-  const px = a.x + cw + 48, pw = a.r - px, f = focusOf(slide);
-  divider(ctx, px, a.r, top, true);
-  let y = top + 24;
-  if (chart.type !== "donut" && chart.series.length === 1) {
-    const size = oneLine(ctx, f.value, pw, 96, 40);
-    text(ctx, f.value, { x: px, y, w: pw, h: Math.ceil(size * 1.04) }, valueStyle(ctx, size, c.accent));
-    y += Math.ceil(size * 1.04) + 8;
+  const a = area(ctx), c = ctx.c, chart = slide.chart!, f = focusOf(slide), size = headlineUp(ctx);
+  const cw = Math.round(a.w * 0.62), px = a.x + cw + 48, pw = a.r - px;
+  // The headline shares the chart's column when it keeps 90% of its size there in no more lines; the callout then rises beside it instead of
+  // waiting below a full-width title, and the chart keeps the height.
+  const titleAt = (titleW?: number) => { const sub: Ctx = { ...ctx, prims: [], issues: [] }; header(sub, slide, { size, titleW }); return sub.prims.flatMap(prim => prim.k === "text" && prim.role === "title" ? [{ size: prim.size, lines: prim.text.split("\n").length }] : [])[0] ?? { size: 0, lines: 0 }; };
+  const [inColumn, across] = [titleAt(cw), titleAt()];
+  const beside = ctx.dir.header !== "centered" && inColumn.size >= across.size * 0.9 && inColumn.lines <= across.lines;
+  const top = header(ctx, slide, { size, ...(beside ? { titleW: cw } : {}) }) + 24;
+  const big = cw >= 560 && a.b - top >= 240;
+  // The source line goes under the callout when it fits there on one line (the plot then reaches the bottom), else under the chart.
+  const sourceBeside = !!chart.source && textWidth(ctx, chart.source, ctx.dir.label.font === "mono" ? { font: "mono", size: 12 } : { size: 13, italic: true }) <= pw;
+  chartPrim(ctx, slide, { x: a.x, y: top, w: cw, h: (chart.source && !sourceBeside ? a.b - 22 : a.b) - top }, big ? CHART_TEXT_UP : 1);
+  // The callout ends with the chart; it starts level with the chart when it fits, else higher.
+  const end = sourceBeside ? a.b - 30 : a.b, ceiling = beside ? a.y + 56 : top;
+  const single = chart.type !== "donut" && chart.series.length === 1;
+  const lab = single ? Math.ceil(labelStyle(ctx).size * 1.3) + 24 : 0;
+  // A short caption is set large; a longer one steps down until it takes at most five lines.
+  const captionAt = (px_: number) => ({ ...titleStyle(ctx, px_, { lh: 1.16 }), upper: false });
+  const captionSize = CALLOUT_CAPTIONS.find(step => !slide.body || measure(ctx, slide.body, pw, captionAt(step)) <= Math.ceil(scaled(ctx, step) * 1.16 * 5)) ?? CALLOUT_CAPTION_LONG;
+  const caption = captionAt(captionSize);
+  // The statistic gives way before the caption reaches its minimum.
+  const room = end - ceiling - 32 - lab - (slide.body ? measure(ctx, slide.body, pw, { ...caption, size: scaled(ctx, CALLOUT_CAPTION_MIN) }) : 0);
+  const vSize = single ? Math.max(40, Math.min(oneLine(ctx, f.value, pw, CALLOUT_VALUE, 40), Math.floor(room / 1.04))) : 0, vh = single ? Math.ceil(vSize * 1.04) : 0;
+  const notes = slide.points?.map(point => `${point.title ? `${point.title}: ` : ""}${point.text}`) ?? [];
+  const below = slide.body ? measure(ctx, slide.body, pw, caption) : notes.reduce((sum, note) => sum + measure(ctx, note, pw, bodyStyle(ctx, { size: 22 })) + 14, 0);
+  const need = 24 + (vh ? vh + 8 + lab : 0) + below;
+  let y = Math.max(ceiling, Math.min(top, end - need));
+  divider(ctx, px, a.r, y, true);
+  y += 24;
+  if (single) {
+    // The statistic is the slide's message: its accent reads at 4.5:1 like small text, not only the 3:1 of large type.
+    text(ctx, f.value, { x: px, y, w: pw, h: vh }, valueStyle(ctx, vSize, readableMark(ctx, c.accent)));
+    y += vh + 8;
     y += label(ctx, f.category, { x: px, y, w: pw }) + 24;
   }
-  if (slide.body) text(ctx, slide.body, { x: px, y, w: pw }, { ...titleStyle(ctx, 30, { lh: 1.2 }), maxH: bottom - y, min: 18, upper: false });
-  else if (slide.points) slide.points.forEach(point => { y += text(ctx, `${point.title ? `${point.title}: ` : ""}${point.text}`, { x: px, y, w: pw }, bodyStyle(ctx, { size: 20, color: c.ink, maxH: 120, min: 15 })) + 14; });
+  if (slide.body) text(ctx, slide.body, { x: px, y, w: pw }, { ...caption, maxH: end - y, min: CALLOUT_CAPTION_MIN });
+  else notes.forEach(note => { y += text(ctx, note, { x: px, y, w: pw }, bodyStyle(ctx, { size: 22, color: c.ink, maxH: Math.min(132, end - y), min: 15 })) + 14; });
+  if (sourceBeside) source(ctx, slide, px, a.b - 14, pw); else source(ctx, slide, a.x, a.b - 14, cw);
   footer(ctx);
 }
 
@@ -391,6 +428,7 @@ export function diagramBlocks(ctx: Ctx, slide: Slide) {
   const top = header(ctx, slide) + 32, gap = 12, colW = (a.w - gap * (n - 1)) / n, detailSize = n <= 4 ? 20 : 18;
   const detailRow = Math.max(0, ...d.items.map(item => item.detail ? measure(ctx, item.detail, colW - 8, bodyStyle(ctx, { size: detailSize })) : 0));
   const base = a.b - detailRow - (detailRow ? 22 : 0), maxH = base - top, minH = Math.max(150, maxH * 0.42);
+  if (minH > maxH) ctx.issues.push("the diagram blocks have no room under the title");
   d.items.forEach((item, i) => {
     const h = n === 1 ? maxH : minH + (maxH - minH) * i / (n - 1), x = a.x + i * (colW + gap), y = base - h;
     // Steps grow in height and in colour: tints of the signal colour, or the full palette in colour-block decks.
@@ -467,10 +505,8 @@ function compareSides(ctx: Ctx, slide: Slide, boxes: { x: number; y: number; w: 
     const b = boxes[i], ink = inks[i];
     let y = b.y + pad;
     y += text(ctx, side.heading, { x: b.x + pad, y, w: b.w - pad * 2 }, titleStyle(ctx, headSize, { color: ink.ink, maxH: 90, min: 22 })) + 26;
-    for (const point of side.points) {
-      line(ctx, b.x + pad, y + size * 0.72, b.x + pad + 16, y + size * 0.72, ink.accent, 3);
-      y += text(ctx, point, { x: b.x + pad + 30, y, w: b.w - pad * 2 - 30 }, bodyStyle(ctx, { size, color: ink.ink })) + 16;
-    }
+    // One text box per side: the items flow as rendered (no gaps from estimated per-item heights) and the PPTX gets one bulleted list.
+    text(ctx, side.points.join("\n"), { x: b.x + pad, y, w: b.w - pad * 2 }, bodyStyle(ctx, { size, color: ink.ink, list: { marker: "dash", color: ink.accent, indent: 30, gap: 16 } }));
   });
 }
 
@@ -497,7 +533,9 @@ export function compareColumns(ctx: Ctx, slide: Slide) {
   const a = area(ctx), c = ctx.c, top = header(ctx, slide) + 40, gap = 96, pw = (a.w - gap) / 2, h = a.b - top;
   vline(ctx, a.x + pw + gap / 2, top, a.b, ruleColor(ctx), 1.5);
   divider(ctx, a.x, a.x + pw, top, true); divider(ctx, a.x + pw + gap, a.r, top, true);
-  compareSides(ctx, slide, [{ x: a.x - 0, y: top - 14, w: pw, h }, { x: a.x + pw + gap, y: top - 14, w: pw, h }], [{ ink: c.ink, muted: c.muted, accent: c.muted }, { ink: c.ink, muted: c.muted, accent: c.accent }], 38, 0.0001);
+  // The headings hang below the rules (they used to start 14 px above them, so the rule ran through the heading).
+  const below = 20;
+  compareSides(ctx, slide, [{ x: a.x, y: top + below, w: pw, h: h - below }, { x: a.x + pw + gap, y: top + below, w: pw, h: h - below }], [{ ink: c.ink, muted: c.muted, accent: c.muted }, { ink: c.ink, muted: c.muted, accent: c.accent }], 38, 0.0001);
   footer(ctx);
 }
 
@@ -511,7 +549,7 @@ function monogram(ctx: Ctx, person: NonNullable<Slide["people"]>[number], i: num
   const fill = fills[i % fills.length];
   if (square) rect(ctx, { x, y, w: s, h: s, fill, ...(ctx.dir.panel === "heavy" ? { stroke: c.ink, strokeWidth: 3 } : {}) });
   else ellipse(ctx, { x, y, w: s, h: s, fill });
-  text(ctx, initials(person.name), { x, y, w: s, h: s }, { font: "heading", size: Math.round(s * 0.36), weight: 700, align: "center", valign: "middle", color: readableOn(fill, i % 2 ? c.accent2 : c.accent, c.ink, c.bg, "#FFFFFF"), lh: 1 });
+  text(ctx, initials(person.name), { x, y, w: s, h: s }, { font: "heading", size: Math.round(s * 0.36), weight: valueWeight(ctx), align: "center", valign: "middle", color: readableOn(fill, i % 2 ? c.accent2 : c.accent, c.ink, c.bg, "#FFFFFF"), lh: 1 });
 }
 
 export function teamRow(ctx: Ctx, slide: Slide) {

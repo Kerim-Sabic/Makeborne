@@ -1,7 +1,8 @@
 import type { Slide } from "./schema";
-import { mix, contrast, readableOn } from "./theme";
-import { H, W, ellipse, hline, image, line, measure, rect, scaled, text, toneColors, vline, type Ctx, type ImageTreatment } from "./scene-kit";
-import { area, display, divider, fitDisplay, footer, label, labelStyle, labelWidth, leadStyle, numeral, numeralStyle, sectionNumber, stack, displayStyle } from "./design";
+import { mix, contrast, luminance, readableOn } from "./theme";
+import { H, W, ellipse, hline, image, line, measure, rect, scaled, text, toneColors, tryCompose, vline, type Ctx, type ImageTreatment, type RectPrim } from "./scene-kit";
+import { scrimOpacity, zoneBrightness } from "./compose-image";
+import { area, display, divider, fitDisplay, footer, label, labelStyle, labelWidth, leadStyle, numberedRows, numeral, numeralStyle, sectionNumber, stack, displayStyle } from "./design";
 import { archPath, arrowPath, graphic, glowField, dotField } from "./graphics";
 import { path } from "./scene-kit";
 import type { GraphicKind } from "./directions";
@@ -78,8 +79,12 @@ export function coverCentered(ctx: Ctx, slide: Slide, closing = false) {
   const r = 30;
   if (ctx.dir.id === "organic") { path(ctx, archPath({ x: W / 2 - 26, y: 140, w: 52, h: 70 }), { fill: ctx.c.signal }); hline(ctx, W / 2 - 60, W / 2 + 60, 210, c.ink, 1.5); }
   else if (ctx.dir.id === "luxury" || ctx.dir.id === "editorial") {
-    ellipse(ctx, { x: W / 2 - r, y: 150, w: r * 2, h: r * 2, stroke: c.accent, strokeWidth: 1 });
-    path(ctx, [{ op: "M", x: W / 2, y: 172 }, { op: "L", x: W / 2 + 8, y: 180 }, { op: "L", x: W / 2, y: 188 }, { op: "L", x: W / 2 - 8, y: 180 }, { op: "Z" }], { fill: c.accent });
+    // The emblem is chosen by the deck's seed: a ringed diamond, a pair of rules with a diamond, or three rings.
+    const emblem = ctx.seed % 3;
+    if (emblem === 0) ellipse(ctx, { x: W / 2 - r, y: 150, w: r * 2, h: r * 2, stroke: c.accent, strokeWidth: 1 });
+    if (emblem === 1) { hline(ctx, W / 2 - 90, W / 2 - 20, 180, c.accent, 1); hline(ctx, W / 2 + 20, W / 2 + 90, 180, c.accent, 1); }
+    if (emblem === 2) [-34, 0, 34].forEach(dx => ellipse(ctx, { x: W / 2 + dx - 12, y: 168, w: 24, h: 24, stroke: c.accent, strokeWidth: 1 }));
+    else path(ctx, [{ op: "M", x: W / 2, y: 172 }, { op: "L", x: W / 2 + 8, y: 180 }, { op: "L", x: W / 2, y: 188 }, { op: "L", x: W / 2 - 8, y: 180 }, { op: "Z" }], { fill: c.accent });
   } else rect(ctx, { x: W / 2 - 24, y: 176, w: 48, h: 4, fill: c.signal });
   stack(ctx, { title: slide.title, size: closing ? ctx.dir.sizes.cover * 0.8 : ctx.dir.sizes.cover, min: 40, sub, subW: 760, align: "center" }, { x: 170, y: 232, w: W - 340, h: 330 }, "middle");
   if (ctx.deck.author && !closing) label(ctx, ctx.deck.author, { x: 240, y: 604, w: 800 }, { align: "center" });
@@ -119,10 +124,11 @@ export function coverGlow(ctx: Ctx, slide: Slide, closing = false) {
   const a = area(ctx), c = ctx.c, p = ctx.theme.palette, sub = subOf(slide);
   glowField(ctx, { x: 480, y: 0, w: 800, h: H }, [p.accent, p.accent2]);
   dotField(ctx, { x: 560, y: 40, w: 680, h: 640 }, c.ink, 0.3, true, 22);
-  const r = 230, cx = 930, cy = 330;
+  // The orbit's centre, size and the marker's angle follow the deck's seed.
+  const r = 200 + (ctx.seed % 4) * 15, cx = 880 + ((ctx.seed >> 2) % 5) * 22, cy = 300 + ((ctx.seed >> 5) % 4) * 18, angle = -Math.PI / 4 + ((ctx.seed >> 7) % 6) * 0.45;
   ellipse(ctx, { x: cx - r, y: cy - r, w: r * 2, h: r * 2, stroke: c.rule, strokeWidth: 1 });
   ellipse(ctx, { x: cx - r * 0.6, y: cy - r * 0.6, w: r * 1.2, h: r * 1.2, stroke: c.rule, strokeWidth: 1 });
-  ellipse(ctx, { x: cx + r * 0.7 - 5, y: cy - r * 0.72 - 5, w: 10, h: 10, fill: c.accent });
+  ellipse(ctx, { x: cx + r * Math.cos(angle) - 5, y: cy + r * Math.sin(angle) - 5, w: 10, h: 10, fill: c.accent });
   metaRow(ctx, slide, a.y, false);
   stack(ctx, { title: slide.title, size: closing ? ctx.dir.sizes.cover * 0.78 : ctx.dir.sizes.cover, min: 40, sub }, { x: a.x, y: a.y + 80, w: 760, h: H - 150 - (a.y + 80) }, closing ? "middle" : "bottom");
   hline(ctx, a.x, a.r, H - 84, c.rule, 1);
@@ -140,22 +146,25 @@ export function coverBoxed(ctx: Ctx, slide: Slide, closing = false) {
   }
   const right = ctx.deck.author || (closing ? "" : deckLabel(ctx, slide));
   if (right) label(ctx, right, { x: W - 48 - 520, y: 52, w: 520 }, { align: "right" });
-  const bandTop = 560;
+  // The ruled band's height and the column split follow the deck's seed.
+  const bandTop = 540 + (ctx.seed % 3) * 20, split = 820 + ((ctx.seed >> 3) % 4) * 40;
   hline(ctx, x0, x1, bandTop, c.ink, bw);
-  vline(ctx, 880, bandTop, H - x0, c.ink, bw);
+  vline(ctx, split, bandTop, H - x0, c.ink, bw);
   display(ctx, slide.title, { x: 48, y: 120, w: W - 96, h: bandTop - 120 - 24 }, closing ? ctx.dir.sizes.cover * 0.8 : ctx.dir.sizes.cover, { min: 44, valign: "bottom" });
-  if (sub) text(ctx, sub, { x: 48, y: bandTop + 22, w: 800, h: H - x0 - bandTop - 38 }, { ...leadStyle(ctx), size: 22, min: 16, maxH: H - x0 - bandTop - 38, color: c.ink });
-  rect(ctx, { x: 880 + bw, y: bandTop + bw / 2, w: x1 - 880 - bw - bw / 2, h: H - x0 - bandTop - bw, fill: c.signal });
-  path(ctx, arrowPath(1010, bandTop + 10, 110, 45), { fill: readableOn(c.signal, c.ink, c.bg) });
+  if (sub) text(ctx, sub, { x: 48, y: bandTop + 22, w: split - 80, h: H - x0 - bandTop - 38 }, { ...leadStyle(ctx), size: 22, min: 16, maxH: H - x0 - bandTop - 38, color: c.ink });
+  rect(ctx, { x: split + bw, y: bandTop + bw / 2, w: x1 - split - bw - bw / 2, h: H - x0 - bandTop - bw, fill: c.signal });
+  path(ctx, arrowPath(split + (x1 - split) / 2 - 55, bandTop + 10, 110, 45), { fill: readableOn(c.signal, c.ink, c.bg) });
 }
 
 export function coverArch(ctx: Ctx, slide: Slide, closing = false) {
   const a = area(ctx), c = ctx.c, p = ctx.theme.palette, sub = subOf(slide), gx = Math.round(W * 0.56);
   if (ctx.dir.id === "luxury") {
-    const aw = 300, ah = 470, ax = gx + (W - gx - aw) / 2, ay = (H - ah) / 2 + 10;
+    // Width, height and the inner mark follow the deck's seed, so two luxury decks do not share one window.
+    const v = ctx.seed % 4, aw = [300, 260, 340, 280][v], ah = [470, 500, 440, 480][v], ax = gx + (W - gx - aw) / 2, ay = (H - ah) / 2 + 10;
     path(ctx, archPath({ x: ax, y: ay, w: aw, h: ah }), { stroke: c.accent, strokeWidth: 1 });
     path(ctx, archPath({ x: ax + 22, y: ay + 22, w: aw - 44, h: ah - 22 }), { fill: c.surface });
-    ellipse(ctx, { x: ax + aw / 2 - 40, y: ay + 110, w: 80, h: 80, stroke: c.accent, strokeWidth: 1 });
+    if (v % 2) hline(ctx, ax + 60, ax + aw - 60, ay + 150, c.accent, 1);
+    else ellipse(ctx, { x: ax + aw / 2 - 40, y: ay + 110 + v * 20, w: 80, h: 80, stroke: c.accent, strokeWidth: 1 });
     hline(ctx, ax - 60, ax + aw + 60, ay + ah, c.rule, 1);
   } else graphic(ctx, "arches", { x: gx, y: 70, w: W - gx - 40, h: H - 150 });
   void p;
@@ -168,17 +177,53 @@ export function coverArch(ctx: Ctx, slide: Slide, closing = false) {
 export function coverImage(ctx: Ctx, slide: Slide, closing = false) {
   const a = area(ctx), sub = subOf(slide), name = slide.image!, mode = ctx.dir.image;
   if (mode === "full" || mode === "duotone" || mode === "mono") {
-    image(ctx, name, { x: 0, y: 0, w: W, h: H }, { treatment: treatment(ctx) });
-    rect(ctx, { x: 0, y: 260, w: W, h: H - 260, fill: "#000000", opacity: 0.72, fade: "up" });
-    const white = "#FFFFFF";
-    if (slide.eyebrow) label(ctx, slide.eyebrow, { x: a.x, y: 48, w: 700 }, { color: white });
-    stack(ctx, { title: slide.title, size: ctx.dir.sizes.cover * (closing ? 0.7 : 0.8), min: 40, sub, titleColor: white, subStyle: { color: "#EDEDED" } }, { x: a.x, y: 200, w: a.w * 0.8, h: H - 56 - 200 }, "bottom");
+    const tr = treatment(ctx), box = { x: 0, y: 0, w: W, h: H };
+    image(ctx, name, box, { crop: "center", ...(tr ? { treatment: tr } : {}) });
+    // A solid scrim behind the text block, sized from the image's measured brightness there, with a soft fade above it.
+    const fade: RectPrim = { k: "rect", x: 0, y: 0, w: W, h: 140, fill: "#000000", opacity: 0.6, fade: "up" }, scrim: RectPrim = { k: "rect", x: 0, y: 0, w: W, h: H, fill: "#000000", opacity: 0.6 };
+    ctx.prims.push(fade, scrim);
+    const white = "#FFFFFF", start = ctx.prims.length;
+    // The eyebrow sits with the title on the scrim, not alone on the bare image.
+    const s = stack(ctx, { label: slide.eyebrow, labelColor: white, title: slide.title, size: ctx.dir.sizes.cover * (closing ? 0.76 : 0.86), min: 40, sub, titleColor: white, subStyle: { color: "#EDEDED" } }, { x: a.x, y: 160, w: a.w * 0.8, h: H - 56 - 160 }, "bottom");
+    const top = Math.max(0, s.top - 36), zone = { x: 0, y: top, w: W, h: H - top };
+    const dimmest = Math.min(1, ...ctx.prims.slice(start).flatMap(prim => prim.k === "text" ? [luminance(prim.color)] : []));
+    const opacity = Math.round(scrimOpacity(zoneBrightness(ctx.deck.assets.find(asset => asset.name === name), box, zone, tr), dimmest) * 100) / 100;
+    Object.assign(scrim, { y: top, h: H - top, opacity });
+    if (top >= 140) Object.assign(fade, { y: top - 140, opacity }); else fade.opacity = 0;
+    if (!fade.opacity) ctx.prims.splice(ctx.prims.indexOf(fade), 1);
     return;
   }
+  if (mode !== "arch" && bleedCover(ctx, slide, closing)) return;
   const left = slide.imageSide === "left", ix = left ? 0 : W / 2, tx = left ? W / 2 + 56 : a.x, tw = W / 2 - 56 - a.x;
   if (mode === "arch") image(ctx, name, { x: ix + 80, y: 72, w: W / 2 - 160, h: H - 144 }, { mask: "arch" });
   else image(ctx, name, { x: ix + (left ? 0 : 24), y: 0, w: W / 2 - 24, h: H }, { treatment: treatment(ctx) });
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.cover * 0.62, min: 36, sub }, { x: tx, y: a.y + 30, w: tw, h: H - 120 - a.y }, "middle");
+  // Larger beside the image, but at most four lines: a longer title steps down instead.
+  const size = ctx.dir.sizes.cover * 0.7;
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size, min: 36, sub, maxTitleH: Math.ceil(scaled(ctx, size) * ctx.dir.display.lh * 4.2) }, { x: tx, y: a.y + 30, w: tw, h: H - 120 - a.y }, "middle");
+}
+
+/** Where a split direction's cover photograph is dark enough on the text side (measured: asset.luma), it runs
+ * full bleed with a solid scrim under the text half and a fade beyond, so white text reaches 4.5:1 while most
+ * of the picture stays visible. A bright (mean of the measured cell highlights on the text side above BLEED_MEAN_MAX, or needing a scrim
+ * above BLEED_SCRIM_MAX), unmeasured or portrait image keeps the split. */
+const BLEED_SCRIM_MAX = 0.55, BLEED_MEAN_MAX = 180;
+function bleedCover(ctx: Ctx, slide: Slide, closing: boolean) {
+  const name = slide.image!, asset = ctx.deck.assets.find(entry => entry.name === name);
+  if (!asset?.luma || asset.aspect === "portrait") return false;
+  const textLeft = slide.imageSide !== "left", side = asset.luma.filter((_, i) => textLeft ? i % 8 < 5 : i % 8 > 2);
+  if (side.reduce((sum, value) => sum + value, 0) / side.length > BLEED_MEAN_MAX) return false;
+  const a = area(ctx), white = "#FFFFFF", tw = Math.round(W * 0.56) - a.x, panel = a.x + tw + 40, fadeW = 300;
+  const words: Ctx = { ...ctx, prims: [], issues: [] };
+  const s = stack(words, { label: slide.eyebrow, labelColor: white, title: slide.title, size: ctx.dir.sizes.cover * (closing ? 0.72 : 0.8), min: 40, sub: subOf(slide), titleColor: white, subStyle: { color: "#EDEDED" } }, { x: textLeft ? a.x : W - a.x - tw, y: a.y + 30, w: tw, h: H - 120 - a.y }, "middle");
+  if (words.issues.length) return false;
+  const tr = treatment(ctx), box = { x: 0, y: 0, w: W, h: H }, top = Math.max(0, s.top - 32), zone = { x: textLeft ? 0 : W - panel, y: top, w: panel, h: Math.min(H, s.bottom + 32) - top };
+  const dimmest = Math.min(1, ...words.prims.flatMap(prim => prim.k === "text" ? [luminance(prim.color)] : []));
+  const opacity = Math.round(scrimOpacity(zoneBrightness(asset, box, zone, tr), dimmest) * 100) / 100;
+  if (opacity > BLEED_SCRIM_MAX) return false;
+  image(ctx, name, box, { crop: "center", ...(tr ? { treatment: tr } : {}) });
+  ctx.prims.push({ k: "rect", x: textLeft ? 0 : W - panel, y: 0, w: panel, h: H, fill: "#000000", opacity },
+    { k: "rect", x: textLeft ? panel : W - panel - fadeW, y: 0, w: fadeW, h: H, fill: "#000000", opacity, fade: textLeft ? "right" : "left" }, ...words.prims);
+  return true;
 }
 
 export function closingAsk(ctx: Ctx, slide: Slide) {
@@ -210,6 +255,45 @@ export function closingSplit(ctx: Ctx, slide: Slide) {
 }
 
 export function closingBoxed(ctx: Ctx, slide: Slide) { coverBoxed(ctx, slide, true); }
+
+/** The close as a decision: the ask on the left, the agreed next steps numbered on the right (step, then who/when),
+ * and the contact line (the slide body, else the presenter) under a rule. No decorative graphic competes with the ask. */
+export function closingNext(ctx: Ctx, slide: Slide) {
+  // Beside an image rail the ask runs across the top and the steps below, rather than a word per line.
+  if (area(ctx).w < 760 && tryCompose(ctx, sub => closingNextLayout(sub, slide, true))) return;
+  closingNextLayout(ctx, slide, false);
+}
+/** NEXT-STEP SIZES ([step, who/when], largest first; the last step is the minimum). */
+export const CLOSING_STEPS_STACKED = [[40, 25], [38, 24], [36, 24], [34, 23], [32, 22], [30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
+export const CLOSING_STEPS = [[34, 23], [32, 22], [30, 21], [27, 20], [24, 19], [22, 18], [20, 17]];
+function closingNextLayout(ctx: Ctx, slide: Slide, stacked: boolean) {
+  const a = area(ctx), c = ctx.c, steps = slide.points ?? [], sub = slide.subtitle;
+  const contact = slide.body ?? ctx.deck.author, foot = contact ? 64 : 0, bottom = a.b - foot;
+  // At most three lines: in a narrow column the ask is set smaller rather than one word per line.
+  const askSize = ctx.dir.sizes.cover * (stacked ? 0.6 : 0.66), lines = (count: number) => Math.ceil(scaled(ctx, askSize) * ctx.dir.display.lh * (count + 0.2));
+  // Above the steps the ask takes two lines when it keeps 85% of its size there, so the steps keep theirs; else three.
+  const twoLines = stacked && fitDisplay(ctx, slide.title, area(ctx).w, lines(2), askSize, 36).size >= scaled(ctx, askSize) * 0.85;
+  const maxTitleH = lines(twoLines ? 2 : 3);
+  const ask = { label: slide.eyebrow, title: slide.title, size: askSize, min: stacked ? 36 : 34, sub, subStyle: { size: 22 }, maxTitleH };
+  let rx: number, top: number;
+  if (stacked) {
+    const s = stack(ctx, ask, { x: a.x, y: a.y, w: a.w, h: Math.round((bottom - a.y) * 0.52) }, "top");
+    rx = a.x; top = s.bottom + 32;
+  } else {
+    const lw = Math.round(a.w * (a.w < 900 ? 0.46 : 0.42));
+    stack(ctx, ask, { x: a.x, y: a.y, w: lw, h: bottom - a.y }, "middle");
+    rx = a.x + lw + 56; top = a.y;
+  }
+  // The steps are numbered with figures at heading scale (a decision list, not a set of reasons).
+  const rows = numberedRows(ctx, steps, { x: rx, r: a.r, top, bottom, mark: "figure", markColor: c.accent, sizes: stacked ? CLOSING_STEPS_STACKED : CLOSING_STEPS,
+    title: ts => displayStyle(ctx, ts, { role: undefined, lh: 1.14, color: c.ink }), body: (bs, titled) => ({ size: bs, lh: 1.4, color: titled ? c.muted : c.ink }),
+    pad: stacked ? [28, 56] : [36, 64], anchor: stacked ? 0 : 0.5, closeRule: !contact });
+  if (!rows.fits) ctx.issues.push("the next steps have too much text for the closing slide");
+  if (contact) {
+    hline(ctx, a.x, a.r, a.b - foot + 18, c.rule, 1);
+    text(ctx, contact, { x: a.x, y: a.b - foot + 32, w: a.w, h: 28 }, { ...labelStyle(ctx), upper: false, tracking: 0, size: 17, weight: 600, color: c.ink, maxH: 28, min: 13 });
+  }
+}
 
 /* ---------- sections ---------- */
 
@@ -315,7 +399,7 @@ export function statementHanging(ctx: Ctx, slide: Slide) {
 
 export function statementCentered(ctx: Ctx, slide: Slide) {
   const a = area(ctx), body = slide.body ?? slide.subtitle;
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.86, min: 38, sub: body, subW: 760, align: "center", rule: ctx.dir.id !== "luxury" }, { x: a.x + 30, y: a.y + 70, w: a.w - 60, h: a.b - a.y - 90 }, "middle");
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.96, min: 38, sub: body, subW: 760, align: "center", rule: ctx.dir.id !== "luxury" }, { x: a.x + 30, y: a.y + 70, w: a.w - 60, h: a.b - a.y - 90 }, "middle");
   footer(ctx);
 }
 
@@ -323,7 +407,7 @@ export function statementField(ctx: Ctx, slide: Slide) {
   applyTone(ctx, fieldTone(ctx));
   const a = area(ctx), body = slide.body ?? slide.subtitle, gw = Math.round(a.w * 0.3), kind = pickGraphic(ctx, 3);
   graphic(ctx, kind === "glow" ? "rings" : kind, { x: a.r - gw, y: a.y + 20, w: gw, h: a.b - a.y - 40 });
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.9, min: 40, sub: body, subW: 680 }, { x: a.x, y: a.y, w: a.w - gw - 56, h: a.b - a.y }, "middle");
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement, min: 40, sub: body, subW: 680 }, { x: a.x, y: a.y, w: a.w - gw - 56, h: a.b - a.y }, "middle");
   footer(ctx);
 }
 
@@ -335,7 +419,7 @@ export function statementSplit(ctx: Ctx, slide: Slide) {
   const g = kind === "mosaic" ? { x: half, y: 0, w: W - half, h: H } : kind === "glow" ? { x: half - 80, y: 0, w: W - half + 80, h: H } : { x: half + 56, y: 80, w: W - half - 112, h: H - 160 };
   if (kind === "mosaic") { const tile = H / 4; graphic(ctx, kind, { x: W - Math.floor((W - half) / tile) * tile, y: 0, w: Math.floor((W - half) / tile) * tile, h: H }); if (W - Math.floor((W - half) / tile) * tile > half) rect(ctx, { x: half, y: 0, w: W - Math.floor((W - half) / tile) * tile - half, h: H, fill: c.strong }); }
   else graphic(ctx, kind, g);
-  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.72, min: 36, sub: body, subStyle: { size: 23 } }, { x: a.x, y: a.y, w: half - a.x - 64, h: a.b - a.y }, "middle");
+  stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.8, min: 36, sub: body, subStyle: { size: 23 } }, { x: a.x, y: a.y, w: half - a.x - 64, h: a.b - a.y }, "middle");
   text(ctx, String(ctx.index + 1).padStart(2, "0"), { x: a.x, y: 672, w: 80, h: 20 }, { size: 13, color: c.muted, weight: 600, lh: 1.3 });
 }
 

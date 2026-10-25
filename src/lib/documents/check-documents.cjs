@@ -22,8 +22,9 @@ const invalid = (editor, name, input, pattern) => assert.throws(() => editor.app
 (async () => {
   await check("tool definitions are plain object schemas for each kind", () => {
     const deckTools = docToolDefinitions("deck", true), bookTools = docToolDefinitions("book", false);
-    assert.deepEqual(deckTools.map(tool => tool.name), ["set_theme", "set_deck_details", "write_slide", "delete_slide", "move_slide", "generate_image", "finish"]);
-    assert.ok(!bookTools.some(tool => tool.name === "generate_image"));
+    assert.deepEqual(deckTools.map(tool => tool.name), ["set_theme", "set_deck_details", "write_slide", "delete_slide", "move_slide", "generate_image", "check_image", "finish"]);
+    assert.deepEqual(docToolDefinitions("deck", true, true).map(tool => tool.name), ["set_theme", "set_deck_details", "write_slide", "delete_slide", "move_slide", "render_slides", "check_slide", "generate_image", "check_image", "finish"], "full-image decks add the render and text-gate tools");
+    assert.ok(!bookTools.some(tool => tool.name === "generate_image" || tool.name === "check_image"));
     for (const tool of [...deckTools, ...bookTools]) { assert.equal(tool.input_schema.type, "object"); assert.equal(tool.input_schema.$schema, undefined); }
     assert.ok(JSON.stringify(deckTools.find(tool => tool.name === "write_slide").input_schema).includes("\"chart\""));
   });

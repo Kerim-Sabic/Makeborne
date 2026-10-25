@@ -8,8 +8,16 @@ import type { Weight } from "./directions";
  * content headers, footers, panels and numerals. Compositions use these so one
  * composition reads differently in every art direction. */
 
-export const area = (ctx: Ctx) => ({ x: ctx.dir.mx, y: ctx.dir.top, w: W - 2 * ctx.dir.mx, r: W - ctx.dir.mx, b: ctx.dir.bottom });
+export const area = (ctx: Ctx) => {
+  const f = ctx.frame, x = f?.x ?? ctx.dir.mx, r = f?.r ?? W - ctx.dir.mx;
+  return { x, y: f?.y ?? ctx.dir.top, w: r - x, r, b: f?.b ?? ctx.dir.bottom };
+};
 const headingWeight = (ctx: Ctx) => FONTS[ctx.theme.fonts].headingWeight as Weight;
+/** Points and numbers slides set their headline this much above the direction's size; long titles still step down to the fit minimum. */
+export const TITLE_UP = 1.12;
+export const headlineUp = (ctx: Ctx) => ctx.dir.sizes.headline * TITLE_UP;
+/** A colour for numerals and marks that reads at 4.5:1 on the slide: the accent, moved toward the ink only as far as needed. */
+export const readableMark = (ctx: Ctx, color: string) => [0, 0.15, 0.3, 0.45, 0.6, 0.75].map(amount => mix(color, ctx.c.ink, amount)).find(value => contrast(value, ctx.c.bg) >= 4.5) ?? ctx.c.ink;
 
 export function labelStyle(ctx: Ctx, extra: Partial<TextStyle> = {}): TextStyle {
   const l = ctx.dir.label, color = l.color === "accent" ? ctx.c.accent : l.color === "muted" ? ctx.c.muted : ctx.c.ink;
@@ -53,6 +61,82 @@ export function numeralStyle(ctx: Ctx, size: number, extra: Partial<TextStyle> =
   const n = ctx.dir.numerals, color = n.color === "accent" ? ctx.c.accent : n.color === "muted" ? ctx.c.muted : ctx.c.ink;
   return { font: n.font, size: n.font === "heading" ? scaled(ctx, size) : Math.round(size * 0.82), weight: n.weight ?? (n.font === "mono" ? 400 : headingWeight(ctx)), color, lh: 1, ...extra };
 }
+
+/* ---------- numbered rows (points, next steps) ---------- */
+
+/** How a numbered list marks its items: a filled badge carrying a live numeral (a circle, or a square in
+ * directions without rounding), or a figure at heading scale where the numerals are the direction's ornament
+ * (luxury's roman figures, architect's light numerals). Either way the numeral is real text, editable in PPTX. */
+export type NumeralMark = "circle" | "square" | "figure";
+export const numeralMark = (ctx: Ctx): NumeralMark => ctx.dir.id === "luxury" || ctx.dir.id === "architect" ? "figure" : ctx.dir.radius ? "circle" : "square";
+/** NUMBERED ROW SIZES. A badge is 1.4× the item title (40–60 px) and its numeral half the badge; a figure is
+ * 1.2× the item title. Both are measured from the item title actually set, so long items step down together. */
+export const BADGE_RATIO = 1.4, BADGE_MIN = 40, BADGE_MAX = 60, FIGURE_RATIO = 1.2, SPREAD_CLEAR = 28;
+export type NumberedRowsSpec = {
+  x: number; r: number; top: number; bottom: number; mark: NumeralMark;
+  /** The mark's hue (default: the direction's numeral colour); it is deepened until it reads at 4.5:1. */
+  markColor?: string;
+  /** [item title, supporting text] sizes, largest first: the largest step whose rows fit is set, else the last. */
+  sizes: number[][];
+  title: (size: number) => TextStyle; body: (size: number, titled: boolean) => TextStyle;
+  /** Padding per row (above plus below its content): at least pad[0]; spare height spreads the rows up to pad[1]. */
+  pad: [number, number];
+  /** Share of the height still left after spreading that goes above the list. */
+  anchor: number;
+  /** false when a rule below the list (e.g. the closing slide's contact line) already closes it. */
+  closeRule?: boolean;
+};
+/** Numbered rows between hairlines, filling the column: the numeral mark, then the item title and its supporting
+ * text beside it. Returns whether the smallest step still fits. */
+export function numberedRows(ctx: Ctx, items: { title?: string; text: string }[], spec: NumberedRowsSpec) {
+  const c = ctx.c, n = items.length, avail = spec.bottom - spec.top, numerals = items.map((_, i) => numeral(ctx, i));
+  const base = numeralStyle(ctx, 0), ink = readableMark(ctx, spec.markColor ?? base.color ?? c.ink);
+  const layout = ([t, b]: number[]) => {
+    const ts = spec.title(t), bs = (titled: boolean) => spec.body(b, titled), lineH = ts.size * (ts.lh ?? 1.14);
+    const badge = spec.mark === "figure" ? 0 : Math.max(BADGE_MIN, Math.min(BADGE_MAX, Math.round(ts.size * BADGE_RATIO)));
+    const figure: TextStyle = { ...base, size: Math.round(ts.size * FIGURE_RATIO), color: ink, lh: 1.05 };
+    // Office faces run wider than the measurement for some figures (roman numerals in Palatino): a figure keeps 15% in hand.
+    const numW = badge ? badge + 24 : Math.max(48, ...numerals.map(value => Math.ceil(textWidth(ctx, value, figure) * 1.15) + 24)), tw = spec.r - spec.x - numW;
+    const rows = items.map(item => {
+      const first = item.title ? lineH : (bs(false).size * (bs(false).lh ?? 1.4));
+      // A badge centres on the first line; a figure shares the item title's baseline.
+      const offset = badge ? Math.max(0, (badge - first) / 2) : 0;
+      const content = offset + (item.title ? measure(ctx, item.title, tw, ts) + 6 : 0) + measure(ctx, item.text, tw, bs(!!item.title));
+      return { offset, h: Math.ceil(Math.max(badge || figure.size * 1.05, content)) };
+    });
+    return { ts, bs, lineH, badge, figure, numW, tw, rows, sum: rows.reduce((s, row) => s + row.h, 0) };
+  };
+  const fitsAt = (step: number[]) => layout(step).sum + n * spec.pad[0] <= avail;
+  const step = spec.sizes.find(fitsAt) ?? spec.sizes[spec.sizes.length - 1], L = layout(step);
+  // Spreading stops short of the bottom, so the closing rule never doubles the footer's.
+  const pad = Math.max(spec.pad[0], Math.min(spec.pad[1], (avail - SPREAD_CLEAR - L.sum) / Math.max(1, n)));
+  const total = L.sum + n * pad;
+  let y = spec.top + Math.max(0, (avail - total) * spec.anchor);
+  items.forEach((item, i) => {
+    divider(ctx, spec.x, spec.r, y, i === 0);
+    const inner = y + pad / 2, row = L.rows[i], tx = spec.x + L.numW;
+    let ty = inner + row.offset;
+    if (L.badge) {
+      const d = L.badge, s = Math.round(d * 0.72), fill = ink;
+      if (spec.mark === "circle") ellipse(ctx, { x: spec.x, y: inner, w: d, h: d, fill });
+      else rect(ctx, { x: spec.x, y: inner, w: d, h: d, fill });
+      // The numeral sits inside the badge's inscribed square: the badge colour reads at 4.5:1 on the slide, so the slide colour reads at 4.5:1 on it.
+      // Half the badge (less in mono), smaller still where two figures in a wide face would not fit the square.
+      const style: TextStyle = { ...base, size: Math.round(d * (base.font === "mono" ? 0.42 : 0.5)), color: c.bg, align: "center", valign: "middle", lh: 1 };
+      while (style.size > 12 && textWidth(ctx, numerals[i], style) > s - 4) style.size--;
+      text(ctx, numerals[i], { x: spec.x + (d - s) / 2, y: inner + (d - s) / 2, w: s, h: s }, style);
+    } else {
+      const fy = ty + L.ts.size * 0.07 - (L.figure.size - L.ts.size) * 0.8;
+      text(ctx, numerals[i], { x: spec.x, y: fy, w: L.numW - 10, h: Math.ceil(L.figure.size * 1.05) }, L.figure);
+    }
+    if (item.title) ty += text(ctx, item.title, { x: tx, y: ty, w: L.tw }, L.ts) + 6;
+    // Supporting text breaks at balanced points too (no lone last word), the same in HTML and PPTX.
+    text(ctx, item.text, { x: tx, y: ty, w: L.tw }, { ...L.bs(!!item.title), balance: true });
+    y += row.h + pad;
+  });
+  if (n && spec.closeRule !== false) divider(ctx, spec.x, spec.r, y);
+  return { fits: fitsAt(step), title: L.ts.size, body: L.bs(true).size, mark: L.badge || L.figure.size };
+}
 /** The deck's chapter number for a section slide (its eyebrow when that is short and numeric). */
 export function sectionNumber(ctx: Ctx, slide: Slide) {
   if (slide.eyebrow && slide.eyebrow.length <= 4) return slide.eyebrow;
@@ -61,14 +145,16 @@ export function sectionNumber(ctx: Ctx, slide: Slide) {
 }
 
 /** Title block of a content slide in the direction's manner; returns where content may start. */
-export function header(ctx: Ctx, slide: Slide, opts: { x?: number; w?: number; size?: number; standfirst?: string; maxLines?: number } = {}) {
+/** opts.titleW keeps the headline within that width of the header's left edge (the furniture still spans w), so a column beside it stays clear. */
+export function header(ctx: Ctx, slide: Slide, opts: { x?: number; w?: number; size?: number; standfirst?: string; maxLines?: number; titleW?: number } = {}) {
   const a = area(ctx), d = ctx.dir, c = ctx.c, x = opts.x ?? a.x, w = opts.w ?? a.w, size = opts.size ?? d.sizes.headline;
   const center = d.header === "centered";
   let y = a.y;
   const eyebrow = slide.eyebrow;
   // Directions with a brand device in the top-right corner keep the headline clear of it.
   const device = signature(ctx, opts.x === undefined && opts.w === undefined && !center);
-  const titleBox = (tx: number, ty: number, tw0: number) => {
+  const titleBox = (tx: number, ty: number, tw00: number) => {
+    const tw0 = opts.titleW ? Math.min(tw00, x + opts.titleW - tx) : tw00;
     const tw = tw0 - (device && tx + tw0 > W - ctx.dir.mx - device ? device : 0);
     const max = Math.ceil(scaled(ctx, size) * d.display.lh * (opts.maxLines ?? 2) + 6);
     const fit = fitDisplay(ctx, slide.title, tw, max, size, 30);
@@ -164,7 +250,8 @@ export function signature(ctx: Ctx, draw: boolean) {
     return 90;
   }
   if (d.id === "tech") {
-    if (draw) ctx.prims.unshift({ k: "art", x: W - 520, y: 0, w: 520, h: 320, svg: `<defs><radialGradient id="sg${ctx.index}" cx="85%" cy="0%" r="80%"><stop offset="0" stop-color="${p.accent}" stop-opacity="0.32"/><stop offset="1" stop-color="${p.accent}" stop-opacity="0"/></radialGradient></defs><rect width="520" height="320" fill="url(#sg${ctx.index})"/>` });
+    // The corner glow would sit on the slide's image when it shares the canvas.
+    if (draw && !ctx.frame) ctx.prims.unshift({ k: "art", x: W - 520, y: 0, w: 520, h: 320, svg: `<defs><radialGradient id="sg${ctx.index}" cx="85%" cy="0%" r="80%"><stop offset="0" stop-color="${p.accent}" stop-opacity="0.32"/><stop offset="1" stop-color="${p.accent}" stop-opacity="0"/></radialGradient></defs><rect width="520" height="320" fill="url(#sg${ctx.index})"/>` });
     return 0;
   }
   return 0;
@@ -175,20 +262,24 @@ export function footer(ctx: Ctx) {
   // Architectural sheets carry crop marks; technical decks carry corner brackets.
   if (ctx.dir.id === "architect" || ctx.dir.id === "tech") {
     const m = 20, l = ctx.dir.id === "architect" ? 18 : 12, color = ctx.dir.id === "architect" ? ctx.c.ink : ctx.c.rule;
-    for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) { line(ctx, x, y, x + dx * l, y, color, 1); line(ctx, x, y, x, y + dy * l, color, 1); }
+    // Marks stay off a slide image that shares the canvas (only the text zone's corners).
+    const f = ctx.frame, free = (x: number, y: number) => !f || (x >= f.x - ctx.dir.mx && x <= f.r + ctx.dir.mx && y >= f.y - ctx.dir.top);
+    for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) if (free(x, y)) { line(ctx, x, y, x + dx * l, y, color, 1); line(ctx, x, y, x, y + dy * l, color, 1); }
   }
   const d = ctx.dir, c = ctx.c, a = area(ctx), page = String(ctx.index + 1).padStart(2, "0"), total = String(ctx.total).padStart(2, "0");
   const title = ctx.deck.title.length > 80 ? `${ctx.deck.title.slice(0, 78)}…` : ctx.deck.title, y = 672;
+  // Running titles keep clear of the folio in a narrowed text zone.
+  const tw = (wide: number) => Math.min(wide, a.w - 150);
   const small = (value: string, box: { x: number; w: number; align?: TextPrim["align"] }, extra: Partial<TextStyle> = {}) => text(ctx, value, { x: box.x, y, w: box.w, h: 20 }, { size: 13, color: c.muted, align: box.align ?? "left", lh: 1.3, ...extra });
   switch (d.footer) {
-    case "running": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: 760 }); small(`${page} / ${total}`, { x: a.r - 120, w: 120, align: "right" }, { weight: 600 }); return;
-    case "folio": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: 760 }, { upper: true, tracking: 0.14, size: 12 }); small(page, { x: a.r - 80, w: 80, align: "right" }, { font: "heading", size: 16, italic: true, color: c.ink }); return;
+    case "running": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: tw(760) }); small(`${page} / ${total}`, { x: a.r - 120, w: 120, align: "right" }, { weight: 600 }); return;
+    case "folio": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: tw(760) }, { upper: true, tracking: 0.14, size: 12 }); small(page, { x: a.r - 80, w: 80, align: "right" }, { font: "heading", size: 16, italic: true, color: c.ink }); return;
     case "corner": small(page, { x: a.r - 80, w: 80, align: "right" }, { weight: 700, color: c.ink, size: 15 }); return;
     case "center": small(`—  ${page}  —`, { x: W / 2 - 100, w: 200, align: "center" }, { tracking: 0.3, size: 12 }); return;
-    case "mono": rect(ctx, { x: a.x, y: y + 5, w: 8, h: 8, fill: c.accent }); small(`${page}/${total}`, { x: a.x + 18, w: 120 }, { font: "mono" }); small(title, { x: a.r - 700, w: 700, align: "right" }, { font: "mono", upper: true, size: 12 }); return;
-    case "bar": hline(ctx, a.x, a.r, 656, c.ink, d.rule?.width ?? 4); small(title, { x: a.x, w: 800 }, { font: "mono", upper: true, color: c.ink, weight: 700 }); small(`[${page}]`, { x: a.r - 120, w: 120, align: "right" }, { font: "mono", color: c.ink, weight: 700 }); return;
-    case "pill": small(title, { x: a.x, w: 760 }); rect(ctx, { x: a.r - 56, y: y - 6, w: 56, h: 30, fill: c.surface, radius: 15 }); text(ctx, page, { x: a.r - 56, y: y - 6, w: 56, h: 30 }, { size: 13, weight: 700, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); return;
-    case "box": small(title, { x: a.x, w: 760 }, { font: "mono", upper: true, size: 12 }); rect(ctx, { x: a.r - 52, y: y - 6, w: 52, h: 30, fill: c.bg, noFill: true, stroke: c.ink, strokeWidth: 1 }); text(ctx, page, { x: a.r - 52, y: y - 6, w: 52, h: 30 }, { font: "mono", size: 13, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); line(ctx, a.r - 72, y + 9, a.r - 60, y + 9, c.ink, 1); return;
+    case "mono": rect(ctx, { x: a.x, y: y + 5, w: 8, h: 8, fill: c.accent }); small(`${page}/${total}`, { x: a.x + 18, w: 120 }, { font: "mono" }); small(title, { x: a.r - tw(700), w: tw(700), align: "right" }, { font: "mono", upper: true, size: 12 }); return;
+    case "bar": hline(ctx, a.x, a.r, 656, c.ink, d.rule?.width ?? 4); small(title, { x: a.x, w: tw(800) }, { font: "mono", upper: true, color: c.ink, weight: 700 }); small(`[${page}]`, { x: a.r - 120, w: 120, align: "right" }, { font: "mono", color: c.ink, weight: 700 }); return;
+    case "pill": small(title, { x: a.x, w: tw(760) }); rect(ctx, { x: a.r - 56, y: y - 6, w: 56, h: 30, fill: c.surface, radius: 15 }); text(ctx, page, { x: a.r - 56, y: y - 6, w: 56, h: 30 }, { size: 13, weight: 700, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); return;
+    case "box": small(title, { x: a.x, w: tw(760) }, { font: "mono", upper: true, size: 12 }); rect(ctx, { x: a.r - 52, y: y - 6, w: 52, h: 30, fill: c.bg, noFill: true, stroke: c.ink, strokeWidth: 1 }); text(ctx, page, { x: a.r - 52, y: y - 6, w: 52, h: 30 }, { font: "mono", size: 13, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); line(ctx, a.r - 72, y + 9, a.r - 60, y + 9, c.ink, 1); return;
     default: return;
   }
 }

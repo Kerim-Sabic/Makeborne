@@ -63,6 +63,11 @@ export class ContextMeter {
   }
 }
 
+/** Per-image reservation for callers that plan ahead (docs-agent checkReserve). Images sent to the model are at most
+ * 1280 × 720, which messageTokenBound counts at about 1,414 tokens; 4,800 also covers models that read images at higher
+ * resolution. The meter itself counts each image by its pixel size (imageTokenBound). */
+export const IMAGE_BLOCK_TOKEN_BOUND = 4_800;
+
 /** Worst case for one image whose pixel size is unknown: the high-resolution vision tier
  * (2576 px long edge, ~3.75 MP) costs up to 4,784 tokens per image; with headroom. */
 export const IMAGE_TOKENS_UNKNOWN = 6_000;

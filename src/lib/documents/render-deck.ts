@@ -35,8 +35,8 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
   const kind = order === undefined ? "" : prim.k === "text" ? (prim.role === "title" ? " m-title" : " m-text") : prim.k === "line" ? " m-line" : prim.k === "art" ? " m-art" : prim.k === "image" ? " m-img" : prim.k === "chart" ? " m-chart" : " m-shape";
   switch (prim.k) {
     case "rect": {
-      const background = prim.noFill ? "transparent" : prim.fade === "up"
-        ? `linear-gradient(to top,${rgba(prim.fill, prim.opacity ?? 1)} 0%,${rgba(prim.fill, (prim.opacity ?? 1) * 0.75)} 45%,${rgba(prim.fill, 0)} 100%)`
+      const background = prim.noFill ? "transparent" : prim.fade
+        ? `linear-gradient(to ${prim.fade === "up" ? "top" : prim.fade},${rgba(prim.fill, prim.opacity ?? 1)} 0%,${rgba(prim.fill, (prim.opacity ?? 1) * 0.75)} 45%,${rgba(prim.fill, 0)} 100%)`
         : rgba(prim.fill, prim.opacity ?? 1);
       return `<div class="p${kind}" style="${box(prim)};background:${background}${prim.radius ? `;border-radius:${cq(prim.radius)}` : ""}${prim.stroke ? `;border:${cq(prim.strokeWidth ?? 1)} solid ${prim.stroke}` : ""}${motion}"></div>`;
     }
@@ -57,7 +57,7 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
         : `<div class="p ph${kind}" style="${box(prim)}${shape}${motion}"><span>${esc(prim.alt || prim.name)}</span></div>`;
     }
     case "chart":
-      return `<div class="p${kind}" style="${box(prim)}${motion}">${chartSvg(prim.chart, prim.w, prim.h, prim.colors, { heading: fonts.heading, body: prim.style?.mono ? MONO_STACK : fonts.body }, prim.style)}</div>`;
+      return `<div class="p${kind}" style="${box(prim)}${motion}">${chartSvg(prim.chart, prim.w, prim.h, prim.colors, { heading: fonts.heading, body: prim.style?.mono ? MONO_STACK : fonts.body, headingWeight: fonts.headingWeight }, prim.style)}</div>`;
     case "text": {
       const family = prim.font === "heading" ? "var(--heading)" : prim.font === "mono" ? "var(--mono)" : "var(--body)";
       const style = [box(prim), `font-family:${family}`, `font-size:${cq(prim.size)}`, `line-height:${prim.lh}`,
@@ -65,7 +65,11 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
         prim.tracking !== undefined ? `letter-spacing:${prim.tracking}em` : prim.font === "heading" ? `letter-spacing:${fonts.headingTracking}` : "",
         prim.font === "heading" && fonts.headingStretch ? `font-stretch:${fonts.headingStretch}` : "",
         prim.upper ? "text-transform:uppercase" : "", prim.italic ? "font-style:italic" : ""].filter(Boolean).join(";");
-      return `<div class="p t${prim.role === "title" ? " title" : ""}${kind}" style="${style}${motion}">${esc(prim.text)}</div>`;
+      // A list: one item per line, each with its hanging marker (the PPTX writes the same items as bulleted paragraphs).
+      const list = prim.list, items = list ? prim.text.split("\n") : [];
+      const marker = list ? (list.marker === "dash" ? `top:${cq(prim.size * 0.72 - 1.5)};width:${cq(16)};height:${cq(3)}` : `top:${cq(prim.size * 0.5)};width:${cq(8)};height:${cq(8)}`) : "";
+      const body = list ? items.map((item, i) => `<span class="li" role="listitem" style="display:block;position:relative;padding-left:${cq(list.indent)}${i < items.length - 1 ? `;margin-bottom:${cq(list.gap)}` : ""}"><i aria-hidden="true" style="position:absolute;left:0;${marker};background:${list.color}"></i>${esc(item)}</span>`).join("") : esc(prim.text);
+      return `<div class="p t${prim.role === "title" ? " title" : ""}${kind}"${list ? ' role="list"' : ""} style="${style}${motion}">${body}</div>`;
     }
   }
 }
@@ -134,7 +138,7 @@ export function deckHtml(deck: Deck, images: ImageMap, mode: DeckMode = "preview
   const empty = !total ? `<div class="empty">Slides appear here as they are written.</div>` : "";
   const css = `${fontFaceCss(deckFaces(deck), fonts)}*{box-sizing:border-box}html,body{margin:0}body{--heading:${pairing.heading};--body:${pairing.body};--mono:${MONO_STACK};font-family:var(--body);-webkit-font-smoothing:antialiased;font-kerning:normal;font-optical-sizing:auto}
 .slide{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;container-type:inline-size}
-.p{position:absolute;margin:0}.t{display:flex;flex-direction:column;white-space:pre-wrap;overflow-wrap:break-word}.t.title{text-wrap:balance}
+.p{position:absolute;margin:0}.t{display:flex;flex-direction:column;white-space:pre-wrap;overflow-wrap:break-word}
 .ph{display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,rgba(127,127,127,.12) 0 12px,rgba(127,127,127,.04) 12px 24px);color:rgba(90,90,90,.9);font:600 1.1cqw/1.3 var(--body);text-align:center;padding:2cqw}
 ${mode === "print"
     ? `@page{size:${W}px ${H}px;margin:0}body{width:${W}px}.slide{width:${W}px;height:${H}px;break-after:page}.slide:last-child{break-after:auto}`
