@@ -131,7 +131,7 @@ Next, after these 8:
 
 ## 5. What was built in Phase B
 
-See §8. It is filled in at the end of the build.
+Built: plan items 1–8, except the item 8 AI polish (faked and unqualified, as planned). Items 9–13 are not built. Details are in §8.
 
 ## 6. Integration points for Codex (not edited here)
 
@@ -152,4 +152,128 @@ See §8. It is filled in at the end of the build.
 
 ## 8. Built on `feature/crm-research` (Phase B)
 
-Filled in at the end of the build; see the handoff entry.
+The work is local only: nothing is pushed, merged or deployed. The flag `MAKEBORNE_CRM_RESEARCH=on` is off and set nowhere; every new route answers 404 `CRM_RESEARCH_DISABLED` before reading anything, and every new panel renders nothing. Spend: 0 AI, 0 cloud.
+
+**Commits:**
+- `74936d2`: migration and SQL suite.
+- `7f39816`: library, routes and offline harness.
+- `984ee33`: UI and mounted browser check.
+- A docs and handoff commit.
+
+### Migration `20261025300000_crm_research.sql`
+
+Additive only. It changes no existing object, and leaves the CRM write-protocol triggers untouched.
+
+- **`crm_site_checks`** stores the result of each website check.
+  - A prospect check (no client yet) expires in at most 31 days. A check attached to a client is kept.
+  - Only `client_id` and `expires_at` can be updated (column grant), and only once, to attach the check.
+- **`crm_next_steps`** holds the next-step text. `makeborne_crm_next_step_set` does a compare-and-set on `revision`, runs as the caller under RLS, and raises PT409 when the revision is stale.
+- **`crm_suppressions`** is the do-not-contact list: normalised lowercase email or domain, unique per workspace.
+- **`crm_duplicate_dismissals`** records "not the same business" for an ordered pair of clients in the same workspace.
+- **Access rules:**
+  - Members read their workspace's rows; owners and editors (`can_edit`) write them, and only as themselves (`created_by`/`updated_by = auth.uid()`).
+  - Anon has no access. Composite foreign keys keep every row inside its workspace.
+  - Deleting a client cascades to its checks, next step and dismissals.
+- **Retention:** `makeborne_crm_purge_expired_checks()` is service-role only. Scheduling it is an ops decision for Codex.
+- **Where it was applied:** the local isolated stack only (`supabase_db_makeborne-release-auth`, 127.0.0.1:55438). A rolled-back dry run came first and left the table absent; the migration was then applied in its own transaction. There was no `db push` and no cloud project was touched.
+
+### Library (`src/lib/crm-research/`)
+
+- **`site-check.ts`** checks one site with the research reader (`readClientSite`). That reader brings the guard rails, robots.txt handling, no social networks or sign-in pages, and per-check budgets (4 pages, 20 s, 600 KB per page). Up to 5 same-site links on the home page are then checked with a 64 KB cap; a "not found" answer counts as a broken link.
+  - **Findings:** https, phone layout, clear next step, no contact details, slow (one timed download, labelled as such), broken links, © year, legacy markup, enquiry form, tap-to-call, heavy page, structured data, opening hours, headline, search description, alt text, thin text.
+  - **Evidence:** each finding cites the URL, the time it was checked, the page's sha256, and the exact page line or measurement.
+  - **Conservative rules:** "no contact" and "no hours" are never claimed if anything that looks like contact details or opening hours appears on a page that was read.
+  - **Unreadable or missing sites:** an unreadable site has no score, only the reason. When no website is listed, the check says so and asks the person to confirm.
+- **`score.ts`** holds the scoring.
+  - The opportunity score is a visible points table, capped at 100.
+  - The fit score combines website opportunity (×0.5), "no website" (+40), public email (+15), public phone (+8), a category you serve (+15), and none of those (−10).
+  - Do-not-contact and "already a client" are hard stops.
+- **`match.ts`** finds duplicates and checks do-not-contact.
+  - Duplicates match on domain (ignoring `www` and the scheme; shared hosts such as wixsite and social sites don't count), email, a non-free email domain, phone (last 8 digits, including "Phone:" lines in notes) and name (legal suffixes and accents ignored).
+  - Pairs are bucketed by these keys rather than compared all against all.
+  - The do-not-contact list covers single emails, whole domains and subdomains.
+- **`pipeline.ts`** flags deals that need attention:
+  - **overdue:** the follow-up date has passed;
+  - **no next step:** an open deal has no follow-up date;
+  - **stalled:** the deal has been in its stage longer than the limit (Lead 21 days, Contacted 10, Conversation 14, Proposal 10). Stage age comes from the `Stage: A → B` entries in the activity log; a logged contact resets the clock.
+- **`timeline.ts`** merges outreach activity, emails, review links and decisions, projects, research briefs, facts (suggested and approved), website checks and the next step.
+- **`draft.ts`** writes the honest first email.
+  - It uses up to 3 measured findings, phrased as "when I looked at X on date", plus approved facts only.
+  - It includes the sender's identity and a fixed opt-out line, and it is refused for anyone on the do-not-contact list.
+  - `polishDraft` is a model seam that is unqualified, so it is refused. With a test port, a rewrite is rejected if it adds numbers, years, prices, emails, phone numbers or URLs, or if it drops the opt-out line.
+- **`facts.ts`** turns a check into PROPOSED knowledge only (`contact.phone`, `contact.email`, `address`, `opening_hours.listed`, `website.issue.<id>`). Each proposal carries url evidence: fetched_at, sha256 and, where the value appears on the page, the exact line.
+- **`server.ts`** has the reads and writes under RLS, plus:
+  - `addProspect`: checks do-not-contact first (409 `CONTACT_SUPPRESSED`), then duplicates (409 `POSSIBLE_DUPLICATE` with the matches, unless the person confirms). It then creates the client idempotently with `makeborne_create_record` and a request key, sets the outreach note, follow-up, lead source and tag, and attaches the check. Facts are proposed through `makeborne_knowledge_propose`, with the person as actor; this happens only when `MAKEBORNE_CLIENT_KNOWLEDGE=on` and stops if the person's permission changes.
+  - A limit of one check at a time per person and 4 per server.
+
+### Routes
+
+Both routes check the flag first. Writes are for owners and editors only; reviewers get 403.
+
+- **`GET/POST /api/cloud/workspaces/[ws]/crm`**
+  - GET returns needs-attention, duplicates and do-not-contact. `?probe=1` only answers whether the feature is on for this person, without reading workspace data.
+  - POST actions: `check`, `add`, `dismiss_duplicate`, `suppress`, `unsuppress`, `delete_check`.
+- **`GET/POST /api/cloud/workspaces/[ws]/clients/[client]/crm`**
+  - GET returns the client's check, timeline, attention items, next step, duplicates and do-not-contact state.
+  - POST actions: `check`, `next_step` (compare-and-set), `draft` (returns `sent:false`; nothing is sent), `propose`.
+
+### UI
+
+- **`crm/crm-insights.tsx`**, above the client list (one mount line in `account-clients.tsx`). It has four tabs:
+  - Needs attention;
+  - Check a business, which runs a check and offers "Add as client with this check" with duplicate confirmation;
+  - Possible duplicates, with "Not the same";
+  - Do not contact.
+- **`crm/client-crm.tsx`**, on the client's Outreach tab (one mount line). It shows:
+  - the next step;
+  - the website check, with "Suggest facts from this check";
+  - the first-email draft (Copy, and "Open the Email tab to send it");
+  - duplicate and do-not-contact banners;
+  - the timeline.
+- **`crm/lead-website-check.tsx`**: "Check website", then "Add with this check", under each Lead finder result. `lead-finder.tsx` gains an optional `check` slot and its import, and nothing else.
+- Customer copy names no provider or model.
+
+### Tests
+
+- **Offline harness** `src/lib/crm-research/check-crm-research.cjs`: 13/13. It uses a local 127.0.0.1 fixture server; no public network is used.
+  - Good, outdated, slow, no-https, robots-disallow, private-IP-redirect, missing, social and no-website sites. The real guard refuses 127.0.0.1, 10.x, localhost, ::1, credentials and non-standard ports.
+  - Fit determinism, duplicates, do-not-contact, attention and stall, timeline.
+  - The draft: no invented figures; polish is refused, and inventive or opt-out-dropping rewrites are rejected.
+  - Proposals carry citations.
+  - Lead → client: duplicate and do-not-contact refusals, idempotent replay, check attached, facts proposed and never approved, knowledge off, permission change.
+  - Boundaries.
+- **SQL** `supabase/check-crm-research.sql`, sections A–G PASS:
+  - A, B: RLS for checks and attach.
+  - C: next-step compare-and-set.
+  - D: do-not-contact and dismissals.
+  - E: cascade and purge.
+  - F: real knowledge entry point.
+  - G: real CRM write-protocol triggers.
+
+  Regressions on the migrated schema all pass: `check-client-knowledge`, `check-client-research`, `check-client-directory`, `check-agency-operations`, `check-brand-kits`.
+- **Mounted browser check** `scripts/check-crm-research-browser.cjs`: 9/9 in Chromium, Firefox and WebKit. It covers:
+  - off renders nothing;
+  - attention and prospect check, with duplicate confirmation that reuses the same request key;
+  - duplicates and do-not-contact;
+  - reviewer read-only;
+  - next-step conflict then save;
+  - the draft (copy only) and fact suggestions;
+  - do-not-contact blocks the draft;
+  - the Lead finder row check;
+  - 375 px.
+
+  Screenshots are in the session scratchpad `crm-research/`.
+- **Existing checks:** `check-lead-finder` 22/22 (its harness stubs the new row check like its other imports), plus `check-connections-browser`, `check-trust-copy-browser` and `check-command-palette-browser`.
+- **Build:** `npm test` 196/196, `tsc --noEmit` clean, full `eslint .` clean, `next build --webpack` exit 0 (both routes built).
+
+### Not done, and needs owner or Codex
+
+- **Mail send enforcement** of the do-not-contact list. See §6.
+- **A no-AI Lead finder.** This is a pricing decision and a Codex route; see §6.
+- **Saved views.**
+- **Merging duplicates.**
+- **Benchmarking against local competitors.**
+- **A concurrent two-session race** for the next-step compare-and-set. Postgres row locking with `where revision = expected` gives the guarantee, but no two-connection test was written.
+- **A real signed-in end-to-end run** against a local Next server.
+- **Scheduling the purge.**
+- **Review and decisions:** Codex should review the migration and the two routes' trust boundary. The owner should decide on flag activation and the AI polish qualification (§7).

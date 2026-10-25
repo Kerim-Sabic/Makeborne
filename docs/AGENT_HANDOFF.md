@@ -1917,3 +1917,68 @@ Fixes A–F, each reproduced by an offline check before the fix: 39b636f, 5fdf7e
 - **Scope totals:** Anthropic $7.000255 of $15, OpenAI $0.744806 of $6.50.
 
 Report: `docs/release-review/agency-qualification-20261024.md` §7, and §16 of the handoff. The owner's sign-off of the measured edit bounds (D8 extension) is still required. Acknowledgment is not assumed.
+
+### Claude — CRM and lead research, 25 October 2026 (local only; not pushed, merged or deployed; NOT part of the minimum launch)
+Owner request: "make sure crm is best possible and research of clients and leads in smartest and best possible". This is a separate track from `release/minimum-launch-20261025`, and that candidate and its worktree were not touched.
+
+**Where:** branch `feature/crm-research` in worktree `.claude/worktrees/crm-research`, from `feature/agency-workflow` c455a66. node_modules is a junction; never `--force` remove the worktree.
+
+**Commits:** 74936d2 (migration + SQL), 7f39816 (lib + routes + harness), 984ee33 (UI + mounted check), plus a docs commit.
+
+**Spend:** 0 AI, 0 cloud.
+
+**Read:** `docs/release-review/crm-research-audit-20261025.md` on the branch, for the inventory, the gap analysis against HubSpot, Pipedrive, folk, Attio, Apollo, Clay and Close (official pages, cited), the top-8 plan and the build record.
+
+**Built (all deterministic):**
+- A website check of a prospect's or client's public site, scored 0–100 for opportunity:
+  - It reuses the client-research reader, so robots.txt, the guard rails and the budgets apply.
+  - Every finding cites url, checked-at, sha256 and a quote or measurement.
+  - An unreadable site gets no score.
+- A transparent fit score.
+- "Add as client with this check": do-not-contact and duplicate refusals first, then an idempotent create. Facts are created as PROPOSED knowledge only.
+- Duplicate suggestions with "Not the same". Nothing is merged.
+- Needs attention: overdue, no next step, or stalled per stage.
+- Next-step text with compare-and-set.
+- A do-not-contact list.
+- A unified client timeline.
+- An honest first-email draft:
+  - It uses only measured findings and approved facts, the sender's identity and an opt-out line.
+  - It is copy-only and never sent.
+  - The AI polish seam is faked, unqualified and refused.
+
+**UI:**
+- A client-list panel.
+- A client Outreach-tab block.
+- "Check website" under each Lead finder result.
+
+Shared-file edits are small:
+- `account-clients.tsx`: 2 imports + 2 mount lines.
+- `lead-finder.tsx`: an optional `check` slot.
+- `check-lead-finder.cjs`: one stub.
+
+**Flag:** `MAKEBORNE_CRM_RESEARCH=on`, off and set nowhere. While it is off, routes answer 404 and panels render nothing.
+
+**Migration** `20261025300000_crm_research.sql`:
+- Additive. It adds `crm_site_checks`, `crm_next_steps` (+ `makeborne_crm_next_step_set`), `crm_suppressions`, `crm_duplicate_dismissals` and the service-only `makeborne_crm_purge_expired_checks`.
+- RLS: members read; owners and editors write, as themselves.
+- It was applied ONLY to the local isolated stack `supabase_db_makeborne-release-auth`, after a rolled-back dry run. There was no `db push`.
+
+**Tests:**
+- New offline harness 13/13, using a local 127.0.0.1 fixture server; no public network.
+- SQL `supabase/check-crm-research.sql` A–G PASS. This includes the real knowledge entry point and the real CRM write-protocol triggers.
+- Regressions pass: knowledge, research, client-directory, agency-operations and brand-kits.
+- Mounted browser check `scripts/check-crm-research-browser.cjs` 9/9 in Chromium, Firefox and WebKit.
+- `npm test` 196/196; tsc clean; full eslint clean; `next build --webpack` exit 0.
+
+**Needs Codex (owner of mail and the Lead-finder route):**
+- **Enforce the do-not-contact list in the mail send path and in sequences.** Call `suppressionFor` on `crm_suppressions` in `mail/engine.ts` `sendEmail` and at enroll and step time; refuse with 409 `CONTACT_SUPPRESSED`.
+- **Optionally, a no-AI Lead finder path** when chat is off. This is an owner pricing decision: do delivered leads still cost 0.2 credits each?
+- **Review the migration and both routes' trust boundary.**
+- **Schedule the purge if this is activated.**
+
+**Needs the owner:**
+- **Flag activation.** Nothing is qualified for production.
+- **Optional AI polish qualification:** about 40 calls, under $0.50 expected, $1 cap.
+- **Web search stays refused,** because the result-token ceiling is still the blocker.
+
+Acknowledgment is not assumed.
