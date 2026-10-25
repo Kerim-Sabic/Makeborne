@@ -1,0 +1,91 @@
+{
+  "at": "2026-10-25T21:44:56.307Z",
+  "activated": false,
+  "apiVersionDate": "2025-01-01",
+  "offers": [
+    {
+      "tier": "scale",
+      "interval": "yearly",
+      "id": "plan_uAni1CxtnkD8j",
+      "renewalPrice": 950.4,
+      "billingPeriod": 365,
+      "initialPrice": 0,
+      "trial": null,
+      "visibility": "hidden",
+      "stock": null,
+      "unlimitedStock": false,
+      "companyId": "biz_CV9cZg1zFX3h7f",
+      "closed": true
+    },
+    {
+      "tier": "scale",
+      "interval": "monthly",
+      "id": "plan_AJDmGRXPbkgV9",
+      "renewalPrice": 99,
+      "billingPeriod": 30,
+      "initialPrice": 0,
+      "trial": null,
+      "visibility": "hidden",
+      "stock": null,
+      "unlimitedStock": false,
+      "companyId": "biz_CV9cZg1zFX3h7f",
+      "closed": true
+    },
+    {
+      "tier": "studio",
+      "interval": "yearly",
+      "id": "plan_jXC1Ihy89I2V0",
+      "renewalPrice": 470.4,
+      "billingPeriod": 365,
+      "initialPrice": 0,
+      "trial": null,
+      "visibility": "hidden",
+      "stock": null,
+      "unlimitedStock": false,
+      "companyId": "biz_CV9cZg1zFX3h7f",
+      "closed": true
+    },
+    {
+      "tier": "studio",
+      "interval": "monthly",
+      "id": "plan_L8g7nPoOyQXRX",
+      "renewalPrice": 49,
+      "billingPeriod": 30,
+      "initialPrice": 0,
+      "trial": null,
+      "visibility": "hidden",
+      "stock": null,
+      "unlimitedStock": false,
+      "companyId": "biz_CV9cZg1zFX3h7f",
+      "closed": true
+    },
+    {
+      "tier": "create",
+      "interval": "yearly",
+      "id": "plan_XSD4xNiNgwxuH",
+      "renewalPrice": 192,
+      "billingPeriod": 365,
+      "initialPrice": 0,
+      "trial": null,
+      "visibility": "hidden",
+      "stock": null,
+      "unlimitedStock": false,
+      "companyId": "biz_CV9cZg1zFX3h7f",
+      "closed": true
+    },
+    {
+      "tier": "create",
+      "interval": "monthly",
+      "id": "plan_ZP50769xuOJp1",
+      "renewalPrice": 20,
+      "billingPeriod": 30,
+      "initialPrice": 0,
+      "trial": null,
+      "visibility": "hidden",
+      "stock": null,
+      "unlimitedStock": false,
+      "companyId": "biz_CV9cZg1zFX3h7f",
+      "closed": true
+    }
+  ]
+}

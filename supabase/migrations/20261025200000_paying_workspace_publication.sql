@@ -19,12 +19,16 @@
 --  * User-initiated mutations (request a preparation, promote it to live) still
 --    require the existing strict, fresh check (has_creation_membership_for_actor)
 --    in addition. Administrators are unaffected on every path.
+--  * Publication authority and the legacy live writer share finance's
+--    membership advisory lock, so a refund and a publish commit in a defined
+--    order; membership locks are acquired before membership row locks.
 --  * The legacy outline publisher (save_site_v4 live path) also rejects refunded
 --    or charged-back periods, matching the trusted path.
 -- Serving (makeborne_hosting.owner_can_host), fair-use limits (50 new sites a
 -- day and 1,000 live sites per workspace in save_site_v2; 30 preparations an
 -- hour per account; output size and file limits), the namespace guards and the
--- last-good retained output are unchanged.
+-- last-good retained output are unchanged. New preparations are additionally
+-- capped at 10 per workspace per rolling hour (owner launch limit).
 begin;
 
 create table makeborne_private.trusted_publication_scope (
@@ -103,7 +107,7 @@ end $$;
 
 create or replace function makeborne_private.publication_authority(p_actor uuid,p_session uuid,p_expires timestamptz,p_workspace uuid,p_artifact uuid)
 returns public.artifacts language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
-declare a public.artifacts%rowtype;
+declare a public.artifacts%rowtype; v_membership text;
 begin
  perform 1 from public.workspaces where id=p_workspace and owner_id=p_actor for update;
  if not found then raise exception 'Owner required' using errcode='42501'; end if;
@@ -112,6 +116,14 @@ begin
  perform makeborne_private.check_submission_session(p_actor,p_session,p_expires);
  perform 1 from makeborne_private.account_privileges where user_id=p_actor for share;
  perform 1 from makeborne_private.billing_settings where singleton for share;
+ -- BEGIN publication payment serialization. Match finance's exclusive
+ -- makeborne.plan lock BEFORE taking membership row locks. A refund cannot
+ -- commit between entitlement verification and publication commit. Shared
+ -- locks permit unrelated publication reads and preserve finance lock order.
+ for v_membership in select membership_id from public.billing_memberships where user_id=p_actor order by membership_id loop
+  perform pg_advisory_xact_lock_shared(hashtextextended('makeborne.plan:'||v_membership,0));
+ end loop;
+ -- END publication payment serialization.
  perform 1 from public.billing_memberships m join makeborne_private.billing_access_plans b on b.plan_id=m.plan_id
   where m.user_id=p_actor for share of m,b;
  -- Plan access before rollout scope, so a lapsed account hears about its plan.
@@ -120,7 +132,7 @@ begin
  return a;
 end $$;
 
--- Body identical to 20261013180000 except the marked fresh-access line.
+-- Body identical to 20261013180000 except fresh access and the workspace cap.
 create or replace function makeborne_private.request_publication_preparation(p_actor uuid,p_session uuid,p_expires timestamptz,p_workspace uuid,p_artifact uuid,
  p_version integer,p_revision integer,p_slug text,p_interactive boolean,p_request uuid) returns jsonb
 language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
@@ -148,6 +160,11 @@ begin
  perform makeborne_private.check_publication_sources(p_workspace,a.project_id,v.content);
  select revision into rev from public.hosted_sites where artifact_id=p_artifact for update;
  if coalesce(rev,0)<>p_revision then raise exception 'Publication changed' using errcode='PT409'; end if;
+ -- publication_authority holds this workspace row FOR UPDATE, so concurrent
+ -- requests with different keys/artifacts cannot exceed the workspace limit.
+ -- Replays return above and never spend another preparation.
+ if (select count(*) from makeborne_private.publication_preparations where workspace_id=p_workspace and created_at>clock_timestamp()-interval '1 hour')>=10 then
+  raise exception 'Workspace preparation limit reached' using errcode='MB429'; end if;
  if (select count(*) from makeborne_private.publication_preparations where actor_id=p_actor and created_at>clock_timestamp()-interval '1 hour')>=30 then
   raise exception 'Preparation limit reached' using errcode='MB429'; end if;
  insert into makeborne_private.publication_preparations(actor_id,requested_session_id,workspace_id,project_id,artifact_id,version_id,version_number,
@@ -189,11 +206,11 @@ begin
 end $$;
 
 -- Legacy outline publisher: refunded or charged-back periods cannot go live.
--- Body identical to 20261013180000 except the marked line.
+-- Body identical to 20261013180000 except the live access check and payment locks.
 create or replace function makeborne_hosting.save_site_v4(p_actor uuid,p_workspace uuid,p_artifact uuid,p_version integer,p_slug text,p_html text,p_live boolean,p_revision integer,p_request uuid,
  p_interactive boolean,p_script text,p_files jsonb,p_isolated_html text) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare result jsonb;
+declare result jsonb; v_membership text;
 begin
  perform 1 from public.workspaces where id=p_workspace for update;
  perform 1 from public.artifacts where id=p_artifact and workspace_id=p_workspace for update;
@@ -202,8 +219,17 @@ begin
   raise exception 'Trusted publication preparation required' using errcode='42501'; end if;
  -- 20261025200000: same creation predicate as the trusted path (adds refund/dispute
  -- revocation). Non-owners still reach the existing 'Owner required' refusal.
- if p_live and exists(select 1 from public.workspaces where id=p_workspace and owner_id=p_actor)
-  and not makeborne_private.has_creation_membership_for_actor(p_actor) then raise exception 'Creation membership required' using errcode='MB402'; end if;
+ if p_live and exists(select 1 from public.workspaces where id=p_workspace and owner_id=p_actor) then
+ -- BEGIN publication payment serialization. Match finance's exclusive
+ -- makeborne.plan lock BEFORE taking membership row locks. A refund cannot
+ -- commit between entitlement verification and publication commit. Shared
+ -- locks permit unrelated publication reads and preserve finance lock order.
+ for v_membership in select membership_id from public.billing_memberships where user_id=p_actor order by membership_id loop
+  perform pg_advisory_xact_lock_shared(hashtextextended('makeborne.plan:'||v_membership,0));
+ end loop;
+ -- END publication payment serialization.
+  if not makeborne_private.has_creation_membership_for_actor(p_actor) then raise exception 'Creation membership required' using errcode='MB402'; end if;
+ end if;
  result:=makeborne_hosting.promote_retained_site_v4(p_actor,p_workspace,p_artifact,p_version,p_slug,p_html,p_live,p_revision,p_request,p_interactive,p_script,p_files,p_isolated_html);
  if p_live then delete from makeborne_hosting.site_routes where artifact_id=p_artifact; end if;
  return result;

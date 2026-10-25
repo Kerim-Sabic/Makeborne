@@ -29,6 +29,39 @@ let checks=0;async function check(name,fn){reset();await fn();checks++;console.l
  await check('Cancellation checked from current membership despite paid list',async()=>{membership.status='canceled';assert.equal(await recovery.recoverCreationCheckout(user,request),'review');assert.equal(bound,0)});
  await check('Crash after binding retries financial settlement, never allocates before it',async()=>{failSettlement=true;await assert.rejects(recovery.recoverCreationCheckout(user,request));assert.equal(bound,1);assert.equal(observations,0);assert.equal(finished.at(-1).p_state,'pending');failSettlement=false;assert.equal(await recovery.recoverCreationCheckout(user,request),'recovered');assert.equal(observations,1)});
  await check('Stale finish is surfaced as an error',async()=>{finishAllowed=false;await assert.rejects(recovery.recoverCreationCheckout(user,request))});
+ await check('Eleven abandoned checkouts rotate oldest-first across successful financial runs; review/errors remain partial',async()=>{
+  const rows=Array.from({length:11},(_,i)=>({user_id:user,request_id:`44444444-4444-4444-8444-${String(i+1).padStart(12,'0')}`,updated:i}));
+  let tick=11,active,mode='pending';const attempted=[],runs=[];
+  const queueDb={async rpc(name,args){
+   if(name==='makeborne_due_checkout_recoveries')return{data:[...rows].sort((a,b)=>a.updated-b.updated).slice(0,args.p_limit),error:null};
+   if(name==='makeborne_claim_checkout_recovery'){active=args.p_request;attempted.push(active);return{data:{user_id:user,request_id:active,checkout_id:'ch_owned',plan_id:'plan_create',lease},error:null}};
+   if(name==='makeborne_finish_checkout_recovery'){rows.find(r=>r.request_id===args.p_request).updated=tick++;return{data:true,error:null}};
+   throw Error('Unexpected queue RPC '+name);
+  }};
+  const queueRecovery=load('./checkout-recovery.ts',{...modules,'./database':{billingDatabase:()=>queueDb},'./whop':{...whop,whopGet:async path=>{
+   if(mode==='error')throw Error('Provider unavailable');
+   if(path.startsWith('/checkout_configurations/'))return{...checkout,metadata:{makeborne_request_id:active}};
+   return{data:[],page_info:{has_next_page:mode==='review',end_cursor:null}};
+  }}});
+  const job=load('./reconcile-job.ts',{});
+  const deps={companyId:'biz_merchant',rpc:async(name,args)=>{
+   if(name==='makeborne_billing_job_begin')return{data:1,error:null};
+   if(name==='makeborne_billing_job_due_memberships')return{data:[],error:null};
+   if(name==='makeborne_billing_job_finish')runs.push(args);
+   return{data:{},error:null};
+  },recoverCheckouts:()=>queueRecovery.recoverDueCreationCheckouts()};
+  const first=await job.runPlanCreditReconcileJob(deps);
+  assert.equal(first.status,'succeeded');assert.equal(first.stats.checkoutRecoveryBacklog,true);
+  assert.equal(attempted.length,10);assert.equal(bound,0);assert.equal(observations,0);
+  const second=await job.runPlanCreditReconcileJob(deps);
+  assert.equal(second.status,'succeeded');assert.equal(second.stats.checkoutRecoveryBacklog,true);
+  assert.equal(attempted[10],rows[10].request_id,'Unprocessed eleventh checkout is first next run');
+  assert.equal(new Set(attempted).size,11);assert.equal(runs[1].p_status,'succeeded');
+  // The SQL is authoritative for ordering; the fake queue models this exact clause.
+  const sql=fs.readFileSync('supabase/migrations/20261021125359_checkout_payment_recovery.sql','utf8');
+  assert(sql.includes("order by coalesce(r.updated_at,'1970-01-01'),c.created_at,c.request_id"));
+  for(const failure of ['review','error']){mode=failure;const result=await job.runPlanCreditReconcileJob(deps);assert.equal(result.status,'partial');assert.equal(result.stats.checkoutRecoveryFailures,10)}
+ });
  const route=fs.readFileSync('src/app/api/billing/checkout-status/route.ts','utf8');assert(route.indexOf('requireBillingUser()')<route.indexOf('recoverCreationCheckout(user.id'));assert(route.includes('.eq("user_id", user.id)'));assert(!fs.readFileSync(require.resolve('./checkout-recovery.ts'),'utf8').includes('makeborne_record_whop_membership'));
  console.log(checks+' checkout recovery checks pass; live provider/SQL qualification is separate');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -44,7 +44,7 @@ export type ReconcileJobOptions = { pageSize?: number; maxMemberships?: number; 
 export type ReconcileJobResult = {
   status: "skipped" | "succeeded" | "partial" | "failed"; runId: number | null;
   stats: { processed: number; failed: number; bindingMismatch: number; unknownPlan: number; observationsGranted: number;
-    paymentsRecorded: number; paymentsGranted: number; paymentsReconciled: number; paymentsNotFunded: number; paymentPagesIncomplete: number; paymentEvidenceSkipped: number; reconciledMemberships: number; reconcileGranted: number; expiryWallets: number; expiredProviderCalls: number; budgetExhausted: boolean; backlog: boolean; checkoutRecoveries: number; checkoutRecoveryFailures: number };
+    paymentsRecorded: number; paymentsGranted: number; paymentsReconciled: number; paymentsNotFunded: number; paymentPagesIncomplete: number; paymentEvidenceSkipped: number; reconciledMemberships: number; reconcileGranted: number; expiryWallets: number; expiredProviderCalls: number; budgetExhausted: boolean; backlog: boolean; checkoutRecoveryBacklog: boolean; checkoutRecoveries: number; checkoutRecoveryFailures: number };
   errors: string[];
 };
 
@@ -53,7 +53,7 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
   const pageSize = options.pageSize ?? 50, maxMemberships = options.maxMemberships ?? 200, staleSeconds = options.staleSeconds ?? 20 * 3600;
   const leaseSeconds = options.leaseSeconds ?? 300, budgetMs = options.budgetMs ?? 240_000, lookbackMs = (options.paymentLookbackDays ?? 120) * 86_400_000;
   const stats: ReconcileJobResult["stats"] = { processed: 0, failed: 0, bindingMismatch: 0, unknownPlan: 0, observationsGranted: 0,
-    paymentsRecorded: 0, paymentsGranted: 0, paymentsReconciled: 0, paymentsNotFunded: 0, paymentPagesIncomplete: 0, paymentEvidenceSkipped: 0, reconciledMemberships: 0, reconcileGranted: 0, expiryWallets: 0, expiredProviderCalls: 0, budgetExhausted: false, backlog: false, checkoutRecoveries: 0, checkoutRecoveryFailures: 0 };
+    paymentsRecorded: 0, paymentsGranted: 0, paymentsReconciled: 0, paymentsNotFunded: 0, paymentPagesIncomplete: 0, paymentEvidenceSkipped: 0, reconciledMemberships: 0, reconcileGranted: 0, expiryWallets: 0, expiredProviderCalls: 0, budgetExhausted: false, backlog: false, checkoutRecoveryBacklog: false, checkoutRecoveries: 0, checkoutRecoveryFailures: 0 };
   const errors: string[] = [];
   const begin = await deps.rpc("makeborne_billing_job_begin", { p_job: "plan_credits", p_lease_seconds: leaseSeconds });
   if (begin.error) throw new Error(`Job lease unavailable: ${begin.error.code ?? begin.error.message ?? "error"}`);
@@ -72,7 +72,10 @@ export async function runPlanCreditReconcileJob(deps: ReconcileJobDeps, options:
       const discovery = await deps.recoverCheckouts();
       stats.checkoutRecoveries = discovery.recovered;
       stats.checkoutRecoveryFailures = discovery.failed;
-      stats.backlog = discovery.backlog;
+      // Unchecked checkout lookahead includes ordinary abandoned/unpaid links.
+      // It is not a failed financial pass; keep it visible independently while
+      // actual discovery failures/review outcomes still make the run partial.
+      stats.checkoutRecoveryBacklog = discovery.backlog;
     }
     pages: while (attempted.size < maxMemberships) {
       if (now() - started > budgetMs) { stats.budgetExhausted = true; break; }

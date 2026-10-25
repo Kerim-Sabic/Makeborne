@@ -16,8 +16,8 @@ const headers = { "Cache-Control": "no-store" };
 
 /**
  * Plan credit reconciliation (Vercel Cron sends GET with the bearer secret).
- * Disabled unless MAKEBORNE_BILLING_RECONCILE_ENABLED=true; production
- * scheduling stays off until reviewed (docs/BILLING_PLAN_CREDITS.md).
+ * Disabled unless MAKEBORNE_BILLING_RECONCILE_ENABLED=true; vercel.json
+ * schedules the enabled job daily (docs/BILLING_PLAN_CREDITS.md).
  * `?health=1` returns the monitoring view without running the job.
  */
 async function handle(request: Request) {

@@ -26,7 +26,7 @@ export type PriceEvidence = {
 
 export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvidence[]>[
   {
-    provider: "anthropic", model: "claude-opus-5-5", label: "Claude Opus 5.5", verifiedAt: "2026-10-12",
+    provider: "anthropic", model: "claude-opus-5-5", label: "Claude Opus 5.5", verifiedAt: "2026-10-25",
     idSource: "https://platform.claude.com/docs/en/about-claude/models/overview (Claude API ID column)",
     priceSources: ["https://platform.claude.com/docs/en/about-claude/pricing (Model pricing table)",
       "https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback (Billing and rate limits)"],
@@ -39,7 +39,7 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
       "Fallback attempts are billed per attempt in usage.iterations."],
   },
   {
-    provider: "anthropic", model: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", verifiedAt: "2026-10-12",
+    provider: "anthropic", model: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", verifiedAt: "2026-10-25",
     idSource: "https://platform.claude.com/docs/en/about-claude/models/overview (Claude API ID column)",
     priceSources: ["https://platform.claude.com/docs/en/about-claude/pricing (Model pricing table)"],
     components: { input: 2, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.1, output: 10 },
@@ -47,7 +47,7 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
       "Used only when configured as an explicit fallback."],
   },
   {
-    provider: "anthropic", model: "claude-haiku-5-5", label: "Claude Haiku 5.5", verifiedAt: "2026-10-13",
+    provider: "anthropic", model: "claude-haiku-5-5", label: "Claude Haiku 5.5", verifiedAt: "2026-10-25",
     idSource: "https://platform.claude.com/docs/en/about-claude/models/overview (Claude API ID column)",
     priceSources: ["https://platform.claude.com/docs/en/about-claude/pricing (Model pricing table, \"Claude Haiku 5.5 (for prompts up to 100,000 tokens)\")"],
     components: { input: 0.1, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, output: 0.5 },

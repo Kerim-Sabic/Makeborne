@@ -11,6 +11,7 @@ let offerAvailable=true;
 // Exact-checkout recovery (checkout-recovery.ts): 'pending' means Whop lists no paid payment for that checkout now.
 let recovery='pending',recoveryCalls=[];
 const modules={
+ '@/lib/billing/plans':{BILLING_TERMS_VERSION:'2026-10-25-beta-v9'},
  '@/lib/billing/creation-offers':{verifiedCreationOffer:async()=>offerAvailable?{planId:'plan_fixture'}:null},
  '@/lib/billing/access':{requireBillingUser:async()=>({id:'user_fixture'})},'@/lib/billing/config':{billingConfig:()=>config},'@/lib/billing/database':{billingDatabase:()=>db},
  '@/lib/billing/checkout-recovery':{recoverCreationCheckout:async(user,request)=>{recoveryCalls.push([user,request]);if(recovery==='throw')throw Object.assign(Error('provider unavailable'),{code:'CHECKOUT_RECOVERY_UNVERIFIED'});return recovery}},
@@ -22,7 +23,12 @@ const ctx={exports:{},Response,process:{env:{}},require:n=>modules[n]??require(n
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(require.resolve('../../app/api/billing/checkout/route.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ctx);
 const request=(selection={planId:'plan_fixture'})=>new Request('http://localhost:3048/api/billing/checkout',{method:'POST',body:JSON.stringify({...selection,requestId:'00000000-0000-4000-8000-000000000001',next:'/studio'})});
 (async()=>{
- assert.equal((await ctx.exports.POST(request())).status,200);assert(saved);assert.equal(payload.redirect_url,'https://sandbox.whop.com/');
+ assert.equal((await ctx.exports.POST(request())).status,200);assert(saved);assert.equal(payload.redirect_url,'https://sandbox.whop.com/');assert.equal(payload.metadata.makeborne_terms_version,'2026-10-25-beta-v9');
+ ctx.process.env.MAKEBORNE_WHOP_STAGING_SANDBOX='true';
+ ctx.process.env.VERCEL_URL='makeborne-release-staging-abc123def-kerimsabic-6594s-projects.vercel.app';
+ assert.equal((await ctx.exports.POST(request())).status,200);assert.equal(payload.redirect_url,'https://'+ctx.process.env.VERCEL_URL+'/billing/return?request=00000000-0000-4000-8000-000000000001');
+ for(const host of ['makeborne.com','attacker.invalid','makeborne-other-abc123def-kerimsabic-6594s-projects.vercel.app',undefined]){ctx.process.env.VERCEL_URL=host;const before=providerCalls;assert.equal((await ctx.exports.POST(request())).status,503);assert.equal(providerCalls,before,'Unknown return host never contacts provider');}
+ delete ctx.process.env.MAKEBORNE_WHOP_STAGING_SANDBOX;delete ctx.process.env.VERCEL_URL;
  saved=false;response={...response,company_id:'biz_other'};assert.equal((await ctx.exports.POST(request())).status,503);assert(!saved);
  response={...response,company_id:'biz_fixture',plan:{id:'plan_other'}};assert.equal((await ctx.exports.POST(request())).status,503);
  response={...response,plan:{id:'plan_fixture'}};config.sandbox=false;assert.equal((await ctx.exports.POST(request())).status,200);assert.equal(payload.redirect_url,'https://makeborne.com/billing/return?request=00000000-0000-4000-8000-000000000001');

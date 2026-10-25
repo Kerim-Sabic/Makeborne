@@ -16,6 +16,18 @@ The owner's words: "nothing free at start and u can adjust pricing … make it s
 - **Top-ups are unchanged** ($12 / $32 / $95; they never undercut a plan). The proposed new packs are $8 / 100, $21 / 300 and $68 / 1,000 credits. They need an additive catalog migration and matching Whop products, so they are left to Codex.
 - **Whop:** the existing hidden plans keep their old renewal prices. Checkout refuses them until new plans exist at these prices (see `docs/WHOP_ACCESS_SETUP.md`).
 
+## Owner minimum paid beta decisions — 2026-10-25
+
+Supersedes earlier conflicting launch proposals for this specific minimum beta; implementation and production activation still require qualification and final GO.
+
+- Plans $20/$49/$99 monthly and $192/$470.40/$950.40 yearly, 300/750/1,550 monthly credits. Full unused-payment refunds only, via support; annual payments are assessed across all their allocations. No trial, founder checkout or automatic plan switching.
+- Production daily limits global=Anthropic=$10, OpenAI off; no per-user daily AI cap. Global provider limit is the AI emergency stop, never creation_enabled. Owner sets provider-console monthly backstop separately.
+- $5 Anthropic staging build and $3 publishing compute are separate test allowances, reserved before use; no new recurring subscription authorized.
+- Paying-workspace publishing only after B3 staging qualification. At most10 preparations/workspace/rolling hour;24hbackground positive verification accepted. Ended subscriptions keep saved bytes but stop serving immediately, no grace.
+- Failed November20 renewal probes require WHOP_CREATION_ENABLED=false before November24. Keep probes untouched until then.
+- Existing packs $12/$32/$95 unchanged; pack checkout/images/custom domains/Gmail automation/continuous GitHub/agency/model routing stay outside this beta. Future branches require separate qualification/activation approvals.
+- No production database/env/merge/deploy/activation until final owner GO. Hidden out-of-stock production offers may be prepared now as explicitly authorized.
+
 ## Owner decisions confirmed to Codex — 2026-10-13
 
 These supersede the earlier recommendations below:

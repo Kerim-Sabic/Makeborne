@@ -84,7 +84,7 @@ declare
  w_adm uuid; w_adm2 uuid; w_pay uuid; w_non uuid; w_ref uuid; w_lap uuid; w_oth uuid; w_fair uuid;
  a_adm uuid; a_adm2 uuid; a_pay uuid; a_pay2 uuid; a_non uuid; a_ref uuid; a_ref_legacy uuid; a_lap uuid; a_oth uuid; a_fair uuid;
  m_pay text; m_ref text; m_lap text; m_fair text; pay_id text;
- prep uuid; prep2 uuid; worker uuid; state jsonb; result jsonb; i integer; tag text:=left(pg_temp.token(),8);
+ prep uuid; prep2 uuid; replay_key uuid; rate_actor uuid:=gen_random_uuid(); rate_session uuid; w_rate uuid; a_rate uuid; worker uuid; state jsonb; result jsonb; i integer; tag text:=left(pg_temp.token(),8);
 begin
  assert (select mode='production' from makeborne_private.site_address_namespace_policy where singleton), 'production namespace expected';
  assert (select mode='allowlist' from makeborne_private.trusted_publication_scope where singleton), 'migration must start in allowlist scope';
@@ -268,14 +268,46 @@ begin
   raise exception 'Live site 1,001 accepted'; exception when sqlstate 'MB429' then assert sqlerrm like 'Fair-use limit of 1,000%', sqlerrm; end;
  assert (select pp.state from makeborne_private.publication_preparations pp where pp.id=prep)='ready';
  raise notice 'PASS 50 new sites a day and 1,000 live sites per workspace still refuse a paying workspace (MB429)';
- i:=(select count(*) from makeborne_private.publication_preparations where actor_id=fair and created_at>clock_timestamp()-interval '1 hour');
+ i:=(select count(*) from makeborne_private.publication_preparations where workspace_id=w_fair and created_at>clock_timestamp()-interval '1 hour');
  loop
   begin perform public.makeborne_request_publication_preparation(fair,s_fair,now()+interval '20 minutes',w_fair,a_fair,1,0,'fair-'||tag,false,gen_random_uuid());
-  exception when sqlstate 'MB429' then exit; end;
-  i:=i+1; if i>30 then raise exception 'Preparation rate limit bypassed'; end if;
+  exception when sqlstate 'MB429' then assert sqlerrm='Workspace preparation limit reached', sqlerrm; exit; end;
+  i:=i+1; if i>10 then raise exception 'Workspace preparation rate limit bypassed'; end if;
  end loop;
- assert i=30, 'preparation limit was '||i;
- raise notice 'PASS 30 publication preparations an hour per account still enforced';
+ assert i=10, 'workspace preparation limit was '||i;
+ -- Idempotent replay remains usable at the cap and consumes no new slot.
+ select request_id into replay_key from makeborne_private.publication_preparations where id=prep;
+ result:=public.makeborne_request_publication_preparation(fair,s_fair,now()+interval '20 minutes',w_fair,a_fair,1,0,'fair-'||tag,false,replay_key);
+ assert (result->>'id')::uuid=prep, 'capped preparation replay changed';
+ assert (select count(*) from makeborne_private.publication_preparations where workspace_id=w_fair)=10;
+ -- A different artifact in the same workspace cannot bypass the shared cap.
+ a_rate:=pg_temp.website(w_fair,fair);
+ begin perform public.makeborne_request_publication_preparation(fair,s_fair,now()+interval '20 minutes',w_fair,a_rate,1,0,'fair-other-'||tag,false,gen_random_uuid());
+  raise exception 'Workspace limit bypassed using another artifact';
+ exception when sqlstate 'MB429' then assert sqlerrm='Workspace preparation limit reached', sqlerrm; end;
+ raise notice 'PASS 10 preparations per workspace per rolling hour; replay and other-artifact boundaries preserved';
+ -- A second workspace has its own ten slots. The schema permits one owned
+ -- workspace per account, so retain the independent actor-wide defense by
+ -- checking its deployed definition instead of inventing an invalid fixture.
+ rate_session:=pg_temp.account(rate_actor,false);
+ perform pg_temp.member(rate_actor,plan,'active',now()+interval '20 days',now(),true);
+ w_rate:=pg_temp.workspace(rate_actor,'Independent preparation limit fixture');
+ a_rate:=pg_temp.website(w_rate,rate_actor);
+ for i in 1..10 loop
+  perform public.makeborne_request_publication_preparation(rate_actor,rate_session,now()+interval '20 minutes',w_rate,a_rate,1,0,'rate-'||tag,false,gen_random_uuid());
+ end loop;
+ assert (select count(*) from makeborne_private.publication_preparations where workspace_id=w_rate)=10;
+ assert pg_get_functiondef('makeborne_private.request_publication_preparation(uuid,uuid,timestamptz,uuid,uuid,integer,integer,text,boolean,uuid)'::regprocedure)
+  like '%where actor_id=p_actor and created_at>clock_timestamp()-interval ''1 hour'')>=30%', 'actor-wide 30/hour defense missing';
+ -- Failed attempts count toward the rolling cap; old attempts age out.
+ update makeborne_private.publication_preparations pp set state='failed',worker_id=null,lease_until=null where pp.workspace_id=w_fair and pp.state='queued';
+ begin perform public.makeborne_request_publication_preparation(fair,s_fair,now()+interval '20 minutes',w_fair,a_fair,1,0,'fair-'||tag,false,gen_random_uuid());
+  raise exception 'Failed preparations did not count toward workspace limit';
+ exception when sqlstate 'MB429' then assert sqlerrm='Workspace preparation limit reached', sqlerrm; end;
+ update makeborne_private.publication_preparations set created_at=clock_timestamp()-interval '61 minutes' where workspace_id=w_fair;
+ perform public.makeborne_request_publication_preparation(fair,s_fair,now()+interval '20 minutes',w_fair,a_fair,1,0,'fair-'||tag,false,gen_random_uuid());
+ assert (select count(*) from makeborne_private.publication_preparations where workspace_id=w_fair and created_at>clock_timestamp()-interval '1 hour')=1;
+ raise notice 'PASS account ceiling remains in deployed definition; separate workspaces, failed attempts and rolling-hour expiry checked';
 
  -- 8. Address namespace in production still refuses the staging QA labels.
  begin perform public.makeborne_request_publication_preparation(oth,s_oth,now()+interval '20 minutes',w_oth,a_oth,1,0,'release-check',false,gen_random_uuid());

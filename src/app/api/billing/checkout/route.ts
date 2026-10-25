@@ -3,6 +3,7 @@ import { requireBillingUser } from "@/lib/billing/access";
 import { billingConfig } from "@/lib/billing/config";
 import { billingDatabase } from "@/lib/billing/database";
 import { verifiedCreationOffer } from "@/lib/billing/creation-offers";
+import { BILLING_TERMS_VERSION } from "@/lib/billing/plans";
 import { checkoutUrl, whopRequest } from "@/lib/billing/whop";
 import { recoverCreationCheckout } from "@/lib/billing/checkout-recovery";
 import { authDestination } from "@/lib/supabase/auth-flow";
@@ -45,6 +46,17 @@ async function assertResumable(userId: string, requestId: string) {
   throw new RequestError("CHECKOUT_PENDING", "Your earlier checkout is still being confirmed. Please don’t pay twice; try again in a minute or email admin@makeborne.com.", 409);
 }
 
+function checkoutReturnUrl(sandbox: boolean, requestId: string) {
+  if (!sandbox) return `${SITE.url}/billing/return?request=${requestId}`;
+  if (process.env.MAKEBORNE_WHOP_STAGING_SANDBOX !== "true") return "https://sandbox.whop.com/";
+  // billingConfig has already required the exact staging project/database/merchant.
+  // Use its immutable deployment hostname, never a request Origin or caller URL.
+  const host = process.env.VERCEL_URL;
+  if (!host || !/^makeborne-release-staging-[a-z0-9]{9}-kerimsabic-6594s-projects\.vercel\.app$/.test(host))
+    throw new RequestError("CHECKOUT_UNAVAILABLE", "The staging checkout return address is not configured.", 503);
+  return `https://${host}/billing/return?request=${requestId}`;
+}
+
 export async function POST(request: Request) {
   try {
     sameOrigin(request);
@@ -57,6 +69,7 @@ export async function POST(request: Request) {
     if (!offer) throw new RequestError("PLAN_UNAVAILABLE", "This plan's price and availability could not be confirmed. Please refresh and choose an available plan.", 503);
     const { planId } = offer;
     const { requestId } = parsed.data;
+    const redirectUrl = checkoutReturnUrl(config.sandbox, requestId);
     const db = billingDatabase();
     const { data: databaseEnabled, error: flagError } = await db.rpc("makeborne_billing_creation_enabled", { p_plan_id: planId });
     if (flagError || databaseEnabled !== true) throw new RequestError("CREATION_PLANS_NOT_OPEN", "Creation memberships are not available for purchase yet.", 503);
@@ -96,10 +109,10 @@ export async function POST(request: Request) {
     }
     const response = checkoutSchema.safeParse(await whopRequest("/checkout_configurations", {
       mode: "payment", plan_id: planId,
-      metadata: { makeborne_request_id: requestId },
-      // Whop requires HTTPS. The isolated sandbox has no public app origin;
-      // return to its own home and inspect delivery locally, never production.
-      redirect_url: config.sandbox ? "https://sandbox.whop.com/" : `${SITE.url}/billing/return?request=${requestId}`,
+      metadata: { makeborne_request_id: requestId, makeborne_terms_version: BILLING_TERMS_VERSION },
+      // Production returns only to Makeborne. Staging returns only to its exact
+      // reviewed deployment; a local sandbox without HTTPS stays on Whop.
+      redirect_url: redirectUrl,
     }));
     if (!response.success || response.data.company_id !== config.companyId || response.data.plan.id !== planId) throw new RequestError("CHECKOUT_UNVERIFIED", "We could not confirm this checkout. No access has been activated.", 503);
     const url = checkoutUrl(response.data.purchase_url);

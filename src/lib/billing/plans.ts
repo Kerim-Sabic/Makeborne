@@ -3,7 +3,7 @@ import type { BuilderEstimates } from "../builder/credit-estimate";
 /** Public prices in integer USD cents. Provider IDs and credentials stay server-side.
  * Set on 23 Oct 2026 at or below the main competitors' plans; the comparison is in
  * docs/market/teardown-2026-10-23/deep/pricing-economics.md. */
-export const BILLING_TERMS_VERSION = "2026-10-23-standard-v8";
+export const BILLING_TERMS_VERSION = "2026-10-25-beta-v9";
 export const CREATION_PLANS = [
   { id: "create", name: "Create", monthlyCents: 2000, monthlyCredits: 300, sites: "unlimited", description: "For your own projects, one at a time." },
   { id: "studio", name: "Studio", monthlyCents: 4900, monthlyCredits: 750, sites: "unlimited", description: "For freelancers delivering client work every month." },

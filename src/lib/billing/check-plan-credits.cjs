@@ -38,7 +38,7 @@ const { CREATION_CATALOG, SUPPORT } = config;
 
   await check("every configured plan ID resolves; overrides add or change plans; unknown and malformed IDs fail closed", () => {
     const parsed = schedule.parsePlanCreditRules(CREATION_CATALOG,
-      "plan_Yearly1:create:yearly, plan_Studio2:studio, plan_Scale3:scale:monthly, plan_qs8XNbKQsowC6:studio:yearly, bogus, plan_x:enterprise, plan_y:create:weekly, plan_z:create:yearly:extra, " + SUPPORT.planId + ":create",
+      "plan_Yearly1:create:yearly, plan_Studio2:studio, plan_Scale3:scale:monthly, " + CREATION_CATALOG.create + ":studio:yearly, bogus, plan_x:enterprise, plan_y:create:weekly, plan_z:create:yearly:extra, " + SUPPORT.planId + ":create",
       [SUPPORT.planId]);
     const rules = Object.fromEntries([...parsed.rules].map(([id, rule]) => [id, `${rule.tier}/${rule.interval}`]));
     assert.deepEqual(rules, {

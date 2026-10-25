@@ -20,7 +20,7 @@ export function publicationDatabaseError(error: {code?: string; message?: string
     throw new RequestError("PUBLISHING_NOT_ENABLED", `Publishing is not switched on for this workspace yet. ${UNCHANGED}`, 403);
   if (error.code === "MB429") throw stage === "promote"
     ? new RequestError("PUBLISHING_LIMIT", "A fair-use publishing limit was reached (50 new websites a day, or 1,000 live websites in a workspace). Your current live site is unchanged. Try again tomorrow or contact support.", 429)
-    : new RequestError("PREPARATION_LIMIT", `You can prepare up to 30 publications an hour. Try again later. ${UNCHANGED}`, 429);
+    : new RequestError("PREPARATION_LIMIT", `You can prepare up to 10 publications per workspace an hour, with a maximum of 30 across your account. Try again later. ${UNCHANGED}`, 429);
   databaseError(error);
 }
 

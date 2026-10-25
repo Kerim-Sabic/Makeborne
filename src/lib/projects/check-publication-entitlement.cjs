@@ -99,7 +99,8 @@ async function rejects(promise, code, status, message) {
     assert.equal(e.code, "PUBLISHING_NOT_ENABLED"); assert.equal(e.status, 403); assert.match(e.message, /not switched on for this workspace/);
     e = map({ code: "42501", message: "Owner required" }, "request");
     assert.equal(e.code, "ACCESS_DENIED", "ownership refusals keep the shared wording");
-    e = map({ code: "MB429", message: "Preparation limit reached" }, "request"); assert.equal(e.code, "PREPARATION_LIMIT"); assert.match(e.message, /30 publications an hour/);
+    e = map({ code: "MB429", message: "Preparation limit reached" }, "request"); assert.equal(e.code, "PREPARATION_LIMIT"); assert.match(e.message, /10 publications per workspace an hour/); assert.match(e.message, /maximum of 30 across your account/);
+    e = map({ code: "MB429", message: "Workspace preparation limit reached" }, "request"); assert.equal(e.code, "PREPARATION_LIMIT"); assert.equal(e.status, 429); assert.match(e.message, /10 publications per workspace an hour/); assert.match(e.message, UNCHANGED);
     e = map({ code: "MB429", message: "Daily publishing limit reached" }, "promote"); assert.equal(e.code, "PUBLISHING_LIMIT"); assert.match(e.message, /50 new websites a day, or 1,000 live websites/);
     assert.equal(map({ code: "PT409" }, "read").code, "DATABASE_ERROR");
   });
