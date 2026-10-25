@@ -87,15 +87,20 @@ export async function checkServerIdentity(origin, { timeoutMs = 60_000 } = {}) {
   const named = login.text.match(CLOUD_HOST);
   if (named) problems.push(`the /login page names a cloud Supabase host ("${named[0]}")`);
 
-  const scripts = [...login.text.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)]
-    .map(match => new URL(match[1].replace(/&amp;/g, '&'), origin))
-    .filter(url => url.origin === new URL(origin).origin && url.pathname.startsWith('/_next/'));
+  // Script tags, plus the page chunks webpack dev (used from a git worktree) names only in the page's flight data, e.g. static/chunks/app/login/page.js.
+  const sources = [...login.text.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(match => match[1].replace(/&amp;/g, '&'))
+    .concat([...login.text.matchAll(/(?:\/_next\/)?static\/chunks\/[\w\-./%[\]]+\.js/g)].map(match => match[0].startsWith('/_next/') ? match[0] : `/_next/${match[0]}`));
+  const scripts = [...new Map(sources.map(src => new URL(src, origin))
+    .filter(url => url.origin === new URL(origin).origin && url.pathname.startsWith('/_next/'))
+    .map(url => [url.pathname, url])).values()];
   facts.scripts = scripts.length;
   for (const url of scripts) {
     let body;
     try { body = (await get(url.href, timeoutMs)).text; } catch (error) { problems.push(`GET ${url.pathname} failed: ${error.message}`); continue; }
-    if (body.includes(`"${ISOLATED_SUPABASE_URL}"`)) facts.scriptsWithLocalUrl++;
-    for (const match of body.matchAll(CONFIGURED_URL)) facts.configuredUrls.push(CLOUD_HOST.test(match[1]) ? mask(match[1]) : match[1]);
+    // webpack dev wraps each module in an eval string, so the same code appears there with escaped quotes.
+    const code = body.replaceAll('\\"', '"').replaceAll('\\n', '\n');
+    if (code.includes(`"${ISOLATED_SUPABASE_URL}"`)) facts.scriptsWithLocalUrl++;
+    for (const match of code.matchAll(CONFIGURED_URL)) facts.configuredUrls.push(CLOUD_HOST.test(match[1]) ? mask(match[1]) : match[1]);
     for (const match of body.matchAll(CLOUD_PROJECT)) facts.cloudProjectUrls.push(mask(match[0]));
   }
   facts.configuredUrls = [...new Set(facts.configuredUrls)];

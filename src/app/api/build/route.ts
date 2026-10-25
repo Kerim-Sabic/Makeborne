@@ -9,7 +9,9 @@ import { EffortLevelSchema } from "@/lib/routing/effort";
 import { ProjectFiles } from "@/lib/builder/files";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
-import { designSeedBlock } from "@/lib/builder/design-seed";
+import { designSeedBlock, seedApplies } from "@/lib/builder/design-seed";
+import { renderedContrastCheck } from "@/lib/builder/contrast-gate";
+import { BuildBriefSchema, DesignAnswersSchema, briefTone, designAnswersBlock, enhancedBriefBlock, requiredSections } from "@/lib/builder/enhanced-brief";
 import { imageConfiguration } from "@/lib/builder/images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
@@ -54,10 +56,18 @@ const BuildRequest = z.object({
   approvedMaximum: z.number().int().positive().optional(),
   /** Which advisor conversation and brief revision a new request came from (ids only; recorded with the operation). */
   provenance: AdvisorProvenanceSchema.optional(),
+  /** The enhanced brief the client approved before a first build (as returned, or edited by them). */
+  brief: BuildBriefSchema.optional(),
+  /** The client's one-click design answers (theme, vibe, imagery, action, sections, colour). */
+  design: DesignAnswersSchema.optional(),
 }).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review)
   .refine(body => body.planRevision === undefined || Boolean(body.plan))
   // Provenance belongs to the request that starts an operation, never to an automatic stage or review.
-  .refine(body => !body.provenance || (body.mode === "build" && (!body.operation || "actionKey" in body.operation)));
+  .refine(body => !body.provenance || (body.mode === "build" && (!body.operation || "actionKey" in body.operation)))
+  // Like provenance, the approved brief and answers start an operation; its later stages read them back from it.
+  // An enhanced or analysed brief starts a Create build only; the client's design answers start a Create build or an approved plan's build.
+  .refine(body => !body.brief || (body.mode === "build" && !body.plan && (!body.operation || "actionKey" in body.operation)))
+  .refine(body => !body.design || (body.mode === "build" && (!body.operation || "actionKey" in body.operation)));
 
 const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "false" && Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -145,16 +155,23 @@ export async function POST(request: Request) {
     const history = versions.filter(version => version.number <= artifact.current_version).slice(0, 6).reverse()
       .map(version => `v${version.number}: ${version.changeSummary}`).join("\n");
     const approvedPlan = body.plan ?? operation.originalPlan;
+    // Bound to the operation: a continuation uses exactly the brief and answers the request was authorized with.
+    const approvedBrief = reviewing ? undefined : body.brief ?? operation.originalBrief;
+    const design = reviewing ? undefined : body.design ?? operation.originalDesign;
     const direction = styleDirection(project.styleId, current.style);
-    // First builds without a preset, plan or prior design get per-project art-direction starting points.
-    const seed = artifact.kind === "website" && !reviewing && !approvedPlan && !direction && !files.files.size && !current.content.website
-      ? designSeedBlock({ seed: artifact.project_id, brief: [project.brief, project.audience, project.purpose, artifact.title].filter(Boolean).join("\n"),
-        images: BUILDER_EFFORT[body.effort].maxImages > 0 && Boolean(imageConfiguration().model), brand: Boolean(brand) })
+    // First builds without a preset (the default "automatic" style is none), plan or prior design get per-project
+    // art-direction starting points and the concept step.
+    const seed = seedApplies({ kind: artifact.kind, reviewing: Boolean(reviewing), plan: Boolean(approvedPlan), styleId: project.styleId, files: files.files.size, staticDesign: Boolean(current.content.website) })
+      ? designSeedBlock({ seed: artifact.project_id, brief: [project.brief, project.audience, project.purpose, artifact.title, operation.originalMessage ?? body.message, approvedBrief?.text].filter(Boolean).join("\n"),
+        images: BUILDER_EFFORT[body.effort].maxImages > 0 && Boolean(imageConfiguration().model) && design?.imagery !== "type", brand: Boolean(brand), design,
+        tone: briefTone(approvedBrief?.text) })
       : "";
     const context = [
       `<project title="${artifact.title.replace(/"/g, "'")}">`,
       `Brief: ${project.brief || "(none)"}`,
       project.audience ? `Audience: ${project.audience}` : "", project.purpose ? `Purpose: ${project.purpose}` : "",
+      designAnswersBlock(design),
+      approvedBrief ? enhancedBriefBlock(approvedBrief) : "",
       `Visual direction: ${direction || "No preset — choose the best direction for this business."}`,
       seed,
       brand ? websiteBrandBlock(brand, logo) : "",
@@ -186,7 +203,16 @@ export async function POST(request: Request) {
 
     const response = websiteBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
       message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments,
-      limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : undefined, maxDuration });
+      limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
+      // First build: the concept step (2-3 concepts scored on the rubric, the strongest built) inside this run.
+      concept: Boolean(seed),
+      // Rendered contrast at finish, measured in the export pipeline's Chromium on this app's origin (fail open without a browser).
+      contrastCheck: process.env.MAKEBORNE_CONTRAST_GATE === "off" ? undefined : renderedContrastCheck({ origin: new URL(request.url).origin, launch: async () => {
+        const [{ chromium }, { chromiumLaunchOptions }] = await Promise.all([import("playwright"), import("@/lib/server/export")]);
+        return chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
+      } }),
+      // Completeness gate: every section the approved brief lists, and every must-have the client chose.
+      required: reviewing ? undefined : { sections: approvedBrief ? requiredSections(approvedBrief.text) : [], design, brief: [project.brief, operation.originalMessage ?? body.message].filter(Boolean).join("\n") } });
     reserved = null;
     return response;
   } catch (error) {

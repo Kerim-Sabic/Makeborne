@@ -22,3 +22,5 @@ supabase/migrations/20261021125359_checkout_payment_recovery.sql text eol=lf
 supabase/migrations/20261021133151_billing_financial_reconcile_freshness.sql text eol=lf
 supabase/migrations/20261025200000_paying_workspace_publication.sql text eol=lf
 supabase/release-review/rollback-paying-workspace-publication.sql text eol=lf
+# Durable brief-enhancement actions: not applied to staging yet; freeze canonical LF.
+supabase/migrations/20261022100000_brief_enhancement_actions.sql text eol=lf
