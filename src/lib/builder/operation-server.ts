@@ -13,6 +13,8 @@ import { databaseGate, SETTLEMENT_WINDOW_MS, CLOCK_SKEW_MS } from "../ai/live-ru
 import type { CreditHold } from "../credits/server";
 import type { EffortLevel } from "../routing/effort";
 import { OperationSnapshotSchema, OperationStatusSchema, type OperationRequest, type OperationSnapshot, type OperationStatus } from "./operation-contract";
+import { sourcesContext, sourcesFingerprint, type OperationSources } from "./operation-sources";
+export { OperationSourcesSchema, sourcesContext, sourcesFingerprint, type OperationSources } from "./operation-sources";
 
 const internalSnapshot = OperationSnapshotSchema.extend({ rateMicrousd: z.number().int().positive(), providerRemainingMicrousd: z.number().int().nonnegative() });
 const runSchema = z.object({ id: z.string().uuid(), reference: z.string(), fence: z.string().uuid(), amount: z.number().int().nonnegative(), exempt: z.boolean(), reservedAt: z.union([z.string(), z.number()]), expiresAt: z.union([z.string(), z.number()]) });
@@ -29,8 +31,9 @@ export type OperationRun = {
 };
 export type OperationCandidate = {
   content: unknown; style: unknown; assetIds: string[]; summary: string; expectedVersion: number;
-} | { stored: unknown };
-export type OperationOutcome = "saved" | "review_no_change" | "incomplete" | "failed" | "plan";
+} | { stored: unknown } | { data: unknown };
+/** "result": an agency task's typed data, persisted without writing the project (agency kinds only). */
+export type OperationOutcome = "saved" | "review_no_change" | "incomplete" | "failed" | "plan" | "result";
 export type OperationFinalization = OperationStatus & { charged: number; outcome: string };
 
 export class OperationError extends RequestError {
@@ -150,6 +153,8 @@ const requestBrandKit = (request: unknown) => typeof request === "object" && req
 export async function beginOperation(input: {
   actor: string; workspaceId: string; artifactId: string; expectedVersion: number; effort: EffortLevel;
   kind: "build" | "review" | "plan"; ceiling: number; request: unknown; envelope: OperationRequest;
+  /** Omitted files and ingestion references (prepareBuilderSources); recorded at creation, re-checked on continuation. */
+  sources?: OperationSources | null;
 }): Promise<{ run: OperationRun | null; status: OperationStatus }> {
   const digest = createHash("sha256").update(canonicalSourceJson(input.request)).digest("hex");
   const attachmentsSha256 = attachmentFingerprint(input.request);
@@ -161,7 +166,7 @@ export async function beginOperation(input: {
       p_action: input.envelope.actionKey, p_kind: input.kind, p_effort: input.effort,
       p_initial_version: input.expectedVersion, p_input_hash: digest, p_credit_cap: input.ceiling,
       p_rate_microusd: Math.round(aiCostUsdPerCredit() * 1_000_000),
-      p_context: operationContext(input.request, attachmentsSha256),
+      p_context: { ...operationContext(input.request, attachmentsSha256), ...sourcesContext(input.sources) },
     });
     checkRefusal(created);
     id = snapshot(created.operation ?? created).id;
@@ -183,6 +188,10 @@ export async function beginOperation(input: {
       const original = z.object({ attachmentsSha256: z.string().regex(/^[a-f0-9]{64}$/) }).safeParse(existingData.requestContext);
       if (!original.success) throw new OperationError("OPERATION_REFERENCES_UNAVAILABLE", "This request was started with an older builder. Start a new request with your original reference files.", 409, existing.operation);
       if (original.data.attachmentsSha256 !== attachmentsSha256) throw new OperationError("OPERATION_REFERENCES_CHANGED", "Continue with the same reference files used for this request. Restore the originals or start a new request with your current files.", 409, existing.operation);
+      // The same "Continue without it" choices and the same extraction of each file (an operation recorded without
+      // source choices continues only without them).
+      const recorded = (existingData.requestContext as { sources?: { sha256?: unknown } } | null)?.sources?.sha256;
+      if ((typeof recorded === "string" ? recorded : null) !== sourcesFingerprint(input.sources)) throw new OperationError("OPERATION_SOURCES_CHANGED", "Continue with the same files and the same “Continue without it” choices used for this request, or start a new request.", 409, existing.operation);
     }
   }
   const kind = "id" in input.envelope ? input.envelope.kind : input.kind;
@@ -315,4 +324,97 @@ export function operationReplayResponse(status: OperationStatus): Response {
     events.push(result.code ? { ...result, type: "error", operation: status.operation } : { ...result, type: "done", operation: status.operation });
   }
   return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" } });
+}
+
+// ---- Agency task operations (additive; migration 20261023200000) ----
+// The same operation, run, fence, credit hold and provider gate as the builder.
+// These helpers add only the agency scope binding, a fenced heartbeat and a
+// customer-safe progress read. Spending still goes through createOperationSpend.
+
+const uuidText = z.string().uuid();
+const AgencyInputSchema = z.object({
+  kind: z.enum(["source", "asset", "artifact_version"]), id: uuidText, sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  version: z.number().int().positive().nullable(), projectId: uuidText,
+}).strict();
+export const AgencyScopeSchema = z.object({
+  workspaceId: uuidText, projectId: uuidText, clientId: uuidText.nullable(), artifactId: uuidText,
+  currentVersion: z.number().int().nonnegative(), inputs: z.array(AgencyInputSchema).max(50),
+}).strict();
+export type AgencyScope = z.infer<typeof AgencyScopeSchema>;
+export type AgencyInput = AgencyScope["inputs"][number];
+
+/** Workspace, project and client come from the artifact in SQL, never from the browser; every input is checked against them. */
+export async function resolveAgencyScope(actor: string, artifactId: string, inputs: unknown[]): Promise<AgencyScope> {
+  const { data, error } = await billingDatabase().rpc("makeborne_agency_task_scope", { p_actor: actor, p_artifact: artifactId, p_inputs: inputs });
+  if (error) {
+    if (error.code === "42501") throw new OperationError("AGENCY_SCOPE_FORBIDDEN", "This project or one of its inputs is unavailable to this account.", 403);
+    if (error.code === "PT409") throw new OperationError("AGENCY_INPUT_CHANGED", "An input changed after it was chosen. Reload the project's sources and choose again.", 409);
+    if (error.code === "22023") throw new OperationError("AGENCY_INPUT_INVALID", "One of the chosen inputs cannot be used for this task.", 400);
+    throw unavailable();
+  }
+  const parsed = AgencyScopeSchema.safeParse(data);
+  if (!parsed.success) throw unavailable();
+  return parsed.data;
+}
+
+/** Creates (or replays) the agency operation with its verified scope, then begins (or replays) one step. */
+export async function beginAgencyOperation(input: {
+  actor: string; workspaceId: string; artifactId: string; kind: string; effort: EffortLevel; expectedVersion: number;
+  ceiling: number; providerCapMicrousd: number; context: Record<string, unknown>; digest: string; actionKey: string; stepKey: string;
+  /** Credits this one step may hold (default: the whole ceiling). Must be the same on a replay of the step. */
+  stageCap?: number;
+}): Promise<{ run: OperationRun | null; status: OperationStatus }> {
+  const created = await call("makeborne_ai_operation_create", {
+    p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_action: input.actionKey, p_kind: input.kind,
+    p_effort: input.effort, p_initial_version: input.expectedVersion, p_input_hash: input.digest, p_credit_cap: input.ceiling,
+    p_rate_microusd: Math.round(aiCostUsdPerCredit() * 1_000_000), p_context: input.context,
+  });
+  checkRefusal(created);
+  const operation = snapshot(created.operation ?? created);
+  if (operation.kind !== input.kind) throw new OperationError("OPERATION_CONFLICT", messages.OPERATION_CONFLICT, 409, operation);
+  const data = await call("makeborne_ai_operation_begin", {
+    p_actor: input.actor, p_operation: operation.id, p_step: input.stepKey, p_kind: input.kind,
+    p_input_hash: input.digest, p_expected_version: input.expectedVersion, p_stage_cap: Math.min(input.stageCap ?? input.ceiling, input.ceiling),
+  });
+  checkRefusal(data);
+  const status = publicStatus(data);
+  if (data.replayed === true) return { run: null, status };
+  const parsedRun = runSchema.safeParse(data.run), parsedOperation = internalSnapshot.safeParse(data.operation);
+  if (!parsedRun.success || !parsedOperation.success) throw unavailable();
+  const value = parsedRun.data;
+  const epoch = (time: string | number) => typeof time === "number" ? time : Date.parse(time);
+  const reservedAt = epoch(value.reservedAt), expiresAt = epoch(value.expiresAt);
+  if (!Number.isFinite(reservedAt) || !Number.isFinite(expiresAt) || !Number.isSafeInteger(input.providerCapMicrousd) || input.providerCapMicrousd <= 0) throw unavailable();
+  return { status, run: { actor: input.actor, workspaceId: input.workspaceId, artifactId: input.artifactId, id: value.id, fence: value.fence,
+    hold: { userId: input.actor, reference: value.reference, amount: value.amount, exempt: value.exempt, reservedAt },
+    operation: status.operation, rateMicrousd: parsedOperation.data.rateMicrousd,
+    // The task's own provider ceiling can only lower the operation's remaining provider allowance.
+    providerAllowanceMicrousd: Math.min(parsedOperation.data.providerRemainingMicrousd, input.providerCapMicrousd), expiresAt } };
+}
+
+const HeartbeatSchema = z.object({ active: z.boolean(), cancelRequested: z.boolean(), expiresAt: z.string(), renewed: z.boolean() });
+export type OperationHeartbeat = { active: boolean; cancelRequested: boolean; expiresAt: number; renewed: boolean };
+/** Fenced liveness and durable progress for the active run; `renew` asks for a lease inside the hold and operation bounds. */
+export async function heartbeatOperation(run: OperationRun, progress: Record<string, unknown> | null, renew: boolean, signal?: AbortSignal): Promise<OperationHeartbeat> {
+  const data = await call("makeborne_ai_operation_heartbeat", { p_actor: run.actor, p_run: run.id, p_fence: run.fence, p_progress: progress, p_renew: renew }, signal);
+  const parsed = HeartbeatSchema.safeParse(data);
+  const expiresAt = parsed.success ? Date.parse(parsed.data.expiresAt) : NaN;
+  if (!parsed.success || !Number.isFinite(expiresAt)) throw unavailable();
+  if (parsed.data.renewed && expiresAt > run.expiresAt) run.expiresAt = expiresAt;
+  return { ...parsed.data, expiresAt };
+}
+
+const ProgressSchema = z.object({
+  operation: OperationSnapshotSchema,
+  runs: z.array(z.object({ id: uuidText, kind: z.string(), status: z.string(), outcome: z.string().nullable(), heartbeatAt: z.string().nullable(),
+    progress: z.record(z.string(), z.unknown()).nullable(), expiresAt: z.string(), cancelRequested: z.boolean() })),
+  calls: z.object({ inProgress: z.number().int().nonnegative(), uncertain: z.number().int().nonnegative(), settled: z.number().int().nonnegative() }),
+});
+export type OperationProgress = z.infer<typeof ProgressSchema>;
+/** Recorded state only (refresh/reconnect never relaunches). Counts, not provider or model names. */
+export async function readOperationProgress(input: { actor: string; workspaceId: string; artifactId: string; id: string }, signal?: AbortSignal): Promise<OperationProgress> {
+  const data = await call("makeborne_ai_operation_progress", { p_actor: input.actor, p_workspace: input.workspaceId, p_artifact: input.artifactId, p_operation: input.id }, signal);
+  const parsed = ProgressSchema.safeParse(data);
+  if (!parsed.success) throw unavailable();
+  return { ...parsed.data, operation: normalizedSnapshot(parsed.data.operation) };
 }

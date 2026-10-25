@@ -8,7 +8,7 @@ function check(name, fn) { fn(); passed++; console.log(`PASS ${name}`); }
 const read = file => fs.readFileSync(path.join(__dirname, file), "utf8");
 const file = (id, name) => ({id, name, size: 10, type: "", blob: {size: 10}});
 
-check("a ready PDF says page-level reading isn't reported; there is no invented 'partial' state", () => {
+check("a ready PDF without the ingestion check says page-level reading isn't reported; 'partial' exists only for a measured result", () => {
   const report = decideSources([file("1", "menu.pdf"), file("2", "hero.png")], new Map([
     ["1", {kind: "readable", mediaType: "application/pdf", bytes: 10, digest: "a"}],
     ["2", {kind: "readable", mediaType: "image/png", bytes: 10, digest: "b"}],
@@ -17,7 +17,13 @@ check("a ready PDF says page-level reading isn't reported; there is no invented 
   assert.equal(report.entries[0].reason, `AI reads this file with your next request. ${PDF_PAGES_NOTE}`);
   assert.match(PDF_PAGES_NOTE, /^The whole PDF is sent, but Makeborne doesn’t receive a page-by-page report, so it can’t show whether a page \(such as a scan or a chart\) was only partly understood\./);
   assert.equal(report.entries[1].reason, "AI reads this file with your next request.", "images keep the plain reason");
-  assert.deepEqual(Object.keys(SOURCE_STATE_LABELS), ["ready", "local-only", "unsupported", "too-large", "failed", "checking"], "no partial state is claimed");
+  assert.deepEqual(Object.keys(SOURCE_STATE_LABELS), ["ready", "local-only", "unsupported", "too-large", "failed", "partial", "checking"]);
+  // "partial" is never inferred: it comes only from the server's extraction record (measured coverage).
+  const measured = decideSources([file("3", "prices.xlsx")], new Map([["3", {kind: "incomplete", sourceType: "x", bytes: 10,
+    inspection: {status: "partial", message: "Only part of this file could be read: Sheet “Bad” couldn’t be read.", coverage: {unit: "sheets", total: 2, read: 1, visual: "none", notes: []}, counts: {tables: 0, images: 0, slides: 0, sheets: 2, characters: 1}, details: {}, warnings: [], unsupported: [], format: "xlsx"}}]]));
+  assert.equal(measured.entries[0].state, "partial");
+  assert.equal(measured.entries[0].blocking, true);
+  assert.match(measured.entries[0].reason, /1 of 2 sheets read.*remove it, or choose “Continue without it”/);
 });
 
 check("the studio creation modal and the build conversation use the shared classifier and labels", () => {

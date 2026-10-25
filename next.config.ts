@@ -19,6 +19,9 @@ const DOCUMENT_FONT_FILES = [
   "@fontsource-variable/archivo/files/archivo-SUBSET-wdth-*.woff2",
 ].flatMap((file) => ["latin", "latin-ext"].map((subset) => `./node_modules/${file.replace("SUBSET", subset)}`));
 
+/** Source parsers run in a worker thread loaded by path at run time (src/lib/ingest/worker-host.ts). */
+const INGEST_WORKER_FILES = ["./src/lib/ingest/parse-worker.cjs", "./src/lib/ingest/parsers/*.cjs"];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // PDF export runs Chromium; on Vercel it comes from @sparticuz/chromium's packed binary.
@@ -28,7 +31,10 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // Compile check at the end of a website build (src/lib/builder/compile.ts):
     // the service runs bin/esbuild with node, which loads esbuild.wasm by path.
-    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm"],
+    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm", ...INGEST_WORKER_FILES],
+    "/api/build/plan": INGEST_WORKER_FILES,
+    "/api/build/sources": INGEST_WORKER_FILES,
+    "/api/cloud/workspaces/*/artifacts/*/sources": INGEST_WORKER_FILES,
     "/admin": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm"],
     // Playwright loads its registry and runtime resources dynamically. Include
     // them explicitly for both export entry points in serverless deployments.
@@ -36,6 +42,8 @@ const nextConfig: NextConfig = {
     // Document PDFs embed their open-licensed faces (src/lib/documents/fonts.ts):
     // the serverless Chromium has only Open Sans, and fonts-server.ts reads these files.
     "/api/cloud/workspaces/*/artifacts/*/document-export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", ...DOCUMENT_FONT_FILES],
+    // Data reports read the stored spreadsheet in the ingestion worker and render the PDF/PPTX they save.
+    "/api/cloud/workspaces/*/artifacts/*/data-reports": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", ...DOCUMENT_FONT_FILES, ...INGEST_WORKER_FILES],
   },
   // Old and guessed pricing links land on the plans page (308, cached by clients and search engines).
   async redirects() {

@@ -42,3 +42,12 @@ export async function readPendingUpload(scope: Required<Scope>, objectPath: stri
   try { return await read(objectPath); }
   catch (error) { return { data: null, error }; }
 }
+
+/** Same as readPendingUpload, for an AI source file the editor's browser just stored at the
+ * server-built path `<workspace>/<project>/sources/<sha256>.<ext>` (src/lib/ingest/storage.ts). */
+export async function readPendingSourceUpload(scope: Required<Scope>, objectPath: string, read: Reader = serverReader, init?: { signal?: AbortSignal }): Promise<Download> {
+  if (unsafePath(scope, objectPath) || !/^[a-f0-9]{64}\.(docx|pptx|xlsx|csv|pdf)$/.test(objectPath.slice(`${scope.workspaceId}/${scope.projectId}/sources/`.length))
+    || !objectPath.startsWith(`${scope.workspaceId}/${scope.projectId}/sources/`)) return { data: null, error: new Error("ASSET_PATH_INVALID") };
+  try { return await read(objectPath, init); }
+  catch (error) { return { data: null, error }; }
+}

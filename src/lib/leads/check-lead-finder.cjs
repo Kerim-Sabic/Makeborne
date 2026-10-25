@@ -469,6 +469,8 @@ const publicResolve = async () => [{ address: "93.184.216.34", family: 4 }];
       if (parent?.filename === uiPath && name === "../mail/modal") return { __esModule: true, default: ({ children }) => React.createElement("div", null, children) };
       if (parent?.filename === uiPath && name === "../cloud-api") return {};
       if (parent?.filename === uiPath && name === "./lead-api") return {};
+      // The CRM research row check (its own harness: src/lib/crm-research, scripts/check-crm-research-browser.cjs) renders nothing while its flag is off.
+      if (parent?.filename === uiPath && name === "../crm/lead-website-check") return { __esModule: true, default: () => null };
       return previousLoad.call(this, name, parent, main);
     };
     try {

@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { BuilderAttachmentsSchema, builderAttachmentBlocks, MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
+import { MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
+import { BuilderSourcesSchema, OmittedSourcesSchema } from "@/lib/ingest/request";
+import { prepareBuilderSources } from "@/lib/ingest/builder-sources";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
 import { mapProject, mapVersion } from "@/lib/cloud/mappers";
@@ -44,7 +46,10 @@ const BuildRequest = z.object({
   expectedVersion: z.number().int().nonnegative(),
   message: z.string().trim().min(1).max(8000),
   effort: EffortLevelSchema.default("medium"),
-  attachments: BuilderAttachmentsSchema.default([]),
+  attachments: BuilderSourcesSchema.default([]),
+  /** Attached files the user explicitly chose to continue without (named to the model; never automatic).
+   * Optional rather than defaulted so requests without it keep their exact input hash. */
+  omittedSources: OmittedSourcesSchema.optional(),
   /** An approved Plan mode plan the build must follow. */
   plan: SitePlanSchema.optional(),
   /** The saved plan revision the customer approved; required with `plan`. */
@@ -130,6 +135,10 @@ export async function POST(request: Request) {
       const issue = approvedPlanIssue(stored.success ? stored.data : null, { plan: body.plan, revision: body.planRevision });
       if (issue) throw new RequestError("PLAN_REVISION_CONFLICT", issue, 409);
     }
+    // Source files are read (Office/CSV extraction in an isolated worker, stored references
+    // verified) before admission: an unreadable file stops here, before any hold exists.
+    const prepared = reviewing ? null : await prepareBuilderSources(body.attachments, body.omittedSources ?? [],
+      { client, scope: { workspaceId: body.workspaceId, projectId: artifact.project_id }, signal: request.signal });
     // The brand kit is resolved before admission and fingerprinted into the request, so a
     // kit edited mid-request cannot silently change a started operation.
     const brand = await projectBrandKit(client, body.workspaceId, project);
@@ -137,7 +146,9 @@ export async function POST(request: Request) {
     // SQL binds the stage to its original authorization and creates its hold atomically.
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
       expectedVersion: body.expectedVersion, effort: body.effort, kind: reviewing ? "review" : "build", ceiling,
-      envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) } }).catch(error => {
+      envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) },
+      // "Continue without it" choices and ingestion references are recorded with the operation; continuations must match.
+      sources: prepared ? { omitted: body.omittedSources ?? [], references: prepared.references } : null }).catch(error => {
       // SQL refuses a stale base version without saying so; name the versions instead.
       if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
         throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);
@@ -192,7 +203,7 @@ export async function POST(request: Request) {
     // A review also sees the design comps the first build was made from (the fidelity check), before the screenshots.
     const attachments: BetaContentBlockParam[] = reviewing
       ? [...await designCompBlocks(client, scope, files.files.get("src/App.tsx")), ...reviewAttachments(reviewing)]
-      : builderAttachmentBlocks(body.attachments);
+      : prepared!.blocks;
     // A review may regenerate one generated image that reads as AI-made or cannot be cropped right; never on a type-only design.
     const generatedImages = [...files.assets.keys()].filter(path => /^public\/images\/(?!_r\/)/.test(path) && !/^public\/images\/(?:photo-[0-9]+|brand-logo)\.webp$/.test(path)).length;
     const reviewImages = reviewing ? reviewImageLimit({ imagery: operation.originalDesign?.imagery, siteImages: generatedImages }) : 0;

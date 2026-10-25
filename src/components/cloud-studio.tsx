@@ -23,6 +23,8 @@ import { brandSwatches as kitSwatches, parseBrandKit } from "@/lib/brand/kit";
 import { brandRequest } from "./brand-kit-api";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
+import ImageEditAction from "./image-edit-panel";
+import DataReportAction from "./data-report-panel";
 import BuildConversation from "./build-conversation";
 import LiveBuilder, { type LiveUpdate } from "./live-builder";
 import { useProjectAdvisorHandoff } from "./advisor-handoff";
@@ -1820,6 +1822,8 @@ export function CloudEditor({
           canStart={!dirty && !conflict && !uncertainSave && !recovery && !busy}
           onOutputVersionChange={setGeneratedVersionId}
           onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
+        {(artifact.kind === "book" || artifact.kind === "presentation") && role !== "reviewer" && !live && <DataReportAction accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id}
+          expectedVersion={expectedVersion} disabled={dirty || busy || uncertainSave || conflict || !!recovery || lockChangePending} onGenerated={() => void load()} />}
         {view === "preview" && previewDocument && <DocumentPreview key={`${accountId}:${workspaceId}:${artifact.id}`} document={previewDocument} focus={useLiveBuilder ? live?.focus : undefined}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={useLiveBuilder && Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} toolbar={toolbarSlot} />}
         {view === "preview" && preview === "start-builder" && liveDocument && <div className="lp-empty dp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
@@ -1918,6 +1922,9 @@ export function CloudEditor({
                       maxLength={50000}
                       onChange={(e) => editBlock(s.id, b.id, e.target.value)}
                     />
+                    {b.assetId && role !== "reviewer" && !content.document && <ImageEditAction accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} assetId={b.assetId}
+                      defaultUse={{ kind: "block", sectionId: s.id, blockId: b.id }} expectedVersion={expectedVersion}
+                      disabled={dirty || busy || b.locked || uncertainSave || conflict || !!recovery || lockChangePending} onAccepted={() => void load()} />}
                   </div>
                 ))}
                 {s.slideDesign&&<p className="small-note">Custom slide composition. Editing text preserves its placement; new content needs a canvas element.</p>}

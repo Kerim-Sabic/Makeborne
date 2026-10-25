@@ -268,6 +268,8 @@ export function assertSupportedImageRequest(request: { model: string; quality: s
   // Low and medium; high only when the router asks for it (small text), never xhigh or max (no bound).
   if (!(request.quality === "medium" || request.quality === "low" || (request.quality === "high" && request.allowHigh))) throw new UnsupportedConfigurationError(`image quality "${request.quality}"`);
   if ((request.n ?? 1) !== 1) throw new UnsupportedConfigurationError("more than one image per call");
+  // Image input is refused on every generation path. The only path that may send an image is the
+  // separately priced and qualified edit path (image-edit-prices.ts / image-edit-call.ts).
   if (request.hasImageInput) throw new UnsupportedConfigurationError("image input");
   if (!price.outputTokens[request.quality as ImageQuality]?.[request.size as ImageSize]) throw new UnsupportedConfigurationError(`image size "${request.size}" at quality "${request.quality}"`);
 }

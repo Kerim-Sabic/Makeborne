@@ -1,0 +1,14 @@
+.data-report-panel { display: grid; gap: 12px; margin: 8px 0; padding: 12px; border: 1px solid var(--line, #d9d6cf); border-radius: 10px; background: var(--surface, #fff); }
+.data-report-panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.data-report-panel h4, .data-report-panel h5 { margin: 0; font-size: 0.95rem; }
+.data-report-form, .data-report-settings, .data-report-preview, .data-report-result { display: grid; gap: 10px; }
+.data-report-form label, .data-report-settings label { display: grid; gap: 4px; font-size: 0.85rem; }
+.data-report-panel fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.data-report-panel legend { font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
+.data-report-check { display: flex !important; align-items: center; gap: 6px; font-size: 0.85rem; }
+.data-report-panel table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.data-report-panel th, .data-report-panel td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid var(--line, #e7e3db); }
+.data-report-panel td p { margin: 2px 0 0; }
+.data-report-scroll { max-height: 320px; overflow: auto; }
+.data-report-warnings { margin: 0; padding-left: 18px; font-size: 0.8rem; }
+.data-report-panel select[multiple] { min-height: 88px; }

@@ -1027,7 +1027,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
             }} />}
             {tab === "clients" && !opportunityClient && (
               <AccountClients initialDevice={!!clientDetail} onOpenProject={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} onCreate={(workspaceId, client, prefill) => {
-                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(prefill?.brief ?? ""); setInitialTitle(prefill?.title ?? ""); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating("website");
+                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(prefill?.brief ?? ""); setInitialTitle(prefill?.title ?? ""); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating(prefill?.kind ?? "website");
               }} target={accountClientRoute} navigate={accountClient => openRoute({ tab: "clients", projectId: null, clientId: null, accountClient })} deviceClients={
               <ClientWorkspace
                 clients={workspace.clients}
