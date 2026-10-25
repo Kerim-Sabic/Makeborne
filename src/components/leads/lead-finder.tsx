@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, AtSign, Check, Globe2, List, Loader2, Mail, MapPin, Phone, Search, Sparkles, UserPlus, Users, X } from "lucide-react";
 import Modal from "../mail/modal";
 import { api, CloudError } from "../cloud-api";
@@ -10,6 +10,7 @@ import { normalizeTag } from "@/lib/leads";
 import { CATEGORIES } from "@/lib/leads/osm";
 import { AUDIENCES, LEAD_FINDER, leadFinderMaxCredits, leadFinderTypicalCredits, PLATFORMS, type FoundLead, type LeadFindEvent, type LeadSeed } from "@/lib/leads/finder-types";
 import type { CloudClient } from "@/lib/cloud/contracts";
+import LeadWebsiteCheck from "../crm/lead-website-check";
 
 type Mode = "local" | "creators" | "list";
 type Platform = typeof PLATFORMS[number];
@@ -199,7 +200,8 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
             <button type="button" className="button primary" disabled={!picked.size || Boolean(adding)} onClick={() => void addPicked()}>
               {adding ? <><Loader2 size={16} className="ac-spin" />Adding {adding.done}/{adding.total}…</> : <><UserPlus size={16} />Add {picked.size} to clients</>}</button>
           </div>
-          <ol className="lf-list-results">{result.leads.map(lead => <LeadRow key={lead.id} lead={lead} picked={picked.has(lead.id)} onToggle={() => toggle(lead.id)} onMoreLike={() => moreLike(lead)} disabled={Boolean(adding)} />)}</ol>
+          <ol className="lf-list-results">{result.leads.map(lead => <LeadRow key={lead.id} lead={lead} picked={picked.has(lead.id)} onToggle={() => toggle(lead.id)} onMoreLike={() => moreLike(lead)} disabled={Boolean(adding)}
+            check={<LeadWebsiteCheck accountId={accountId} workspaceId={workspaceId} lead={lead} tag={tag} disabled={Boolean(adding)} />} />)}</ol>
         </> : <p className="lf-empty">Everyone we found is already in your clients, or had no public way to contact them. Try a nearby city or a related niche.</p>}
         {error && <p className="lf-error" role="alert">{error}</p>}
         <div className="lf-after">
@@ -225,7 +227,7 @@ function Progress({ run, mode, onCancel }: { run: Run; mode: Mode; onCancel: () 
   </div>;
 }
 
-function LeadRow({ lead, picked, onToggle, onMoreLike, disabled }: { lead: FoundLead; picked: boolean; onToggle: () => void; onMoreLike: () => void; disabled: boolean }) {
+function LeadRow({ lead, picked, onToggle, onMoreLike, disabled, check }: { lead: FoundLead; picked: boolean; onToggle: () => void; onMoreLike: () => void; disabled: boolean; check?: ReactNode }) {
   const level = tier(lead.score);
   return <li className={`lf-row${picked ? " is-picked" : ""}`}>
     <input type="checkbox" checked={picked} onChange={onToggle} disabled={disabled} aria-label={`Select ${lead.name}`} />
@@ -247,6 +249,7 @@ function LeadRow({ lead, picked, onToggle, onMoreLike, disabled }: { lead: Found
         {lead.note && <span className="lf-chip is-quiet">{lead.note}</span>}
         <button type="button" className="lf-more" disabled={disabled || !LEAD_FINDER.discoveryAvailable} title={!LEAD_FINDER.discoveryAvailable ? "Similar-lead discovery is temporarily unavailable. Search the map or paste another list." : undefined} onClick={onMoreLike}><Sparkles size={12} />More like this{!LEAD_FINDER.discoveryAvailable ? " · unavailable" : ""}</button>
       </div>
+      {check}
     </div>
   </li>;
 }

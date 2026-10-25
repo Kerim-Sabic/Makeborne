@@ -18,6 +18,8 @@ import LeadRedesign from "./lead-redesign";
 import ClientPortalPanel from "./client-portal-panel";
 import ClientKnowledge from "./client-knowledge";
 import ClientResearch from "./client-research";
+import CrmInsights from "./crm/crm-insights";
+import ClientCrm from "./crm/client-crm";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -424,6 +426,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
       {!full || !snapshot || fresh !== full.id ? !openError && <DetailSkeleton /> : <>
         {view === "outreach" && <LeadProfileCard key={`lead:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} clientWebsite={full.website} lead={leadMeta.leads[full.id]}
           stage={String(full.outreach?.stage ?? "Lead")} hasEmail={!!full.email} overdue={followUpBucket(full.outreach, today) === "overdue"} canEdit={canEdit} onChange={lead => leadMeta.update(full.id, lead)} />}
+        {view === "outreach" && <ClientCrm key={`crm:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} onOpenClient={open} onOpenEmail={() => setView("email")} />}
         {view === "outreach" && canEdit && <ClientFollowUpDraft accountId={accountId} workspaceId={snapshot.workspace.id} client={full} onLogged={client => { saved(client); setOutreachRevision(value => value + 1); setMessage("Logged as sent. The next follow-up is scheduled."); }} />}
         {view === "outreach" && <CloudClientOutreach embedded key={`${full.id}:${outreachRevision}`} initialClient={full} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={backToList} onSaved={saved} />}
         {view === "details" && <ClientDetails key={full.id} client={full} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={backToList} notify={setMessage} saved={async () => {
@@ -489,6 +492,8 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     {message && <p role="status" className="ac-message">{message}</p>}
     {directory.error && <p role="alert">{directory.error}</p>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />
+    {snapshot && layout === "list" && !adding && !importing && <CrmInsights key={`crm:${accountId}:${snapshot.workspace.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} refreshKey={refreshKey} onOpenClient={open}
+      onAdded={text => { setMessage(text); setRefreshKey(key => key + 1); refreshOnboarding(); }} />}
     {snapshot && snapshot.workspace.role === "owner" && layout !== "email" && !adding && !importing && <EnquiryLeads key={`${accountId}:${snapshot.workspace.id}:${refreshKey}`} accountId={accountId} workspaceId={snapshot.workspace.id}
       onAdded={text => { setMessage(text); setRefreshKey(key => key + 1); refreshOnboarding(); }} />}
     {importing && <section className="ac-import" aria-labelledby="ac-import-title">

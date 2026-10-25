@@ -393,7 +393,7 @@ const W = randomUUID(), USER = randomUUID();
     }
     const lib = fs.readdirSync(__dirname).filter(file => file.endsWith(".ts")).map(file => fs.readFileSync(path.join(__dirname, file), "utf8")).join("\n");
     assert.ok(!/sendEmail|mail\/engine|\/mail\b.*POST|knowledge_review|publish\(/.test(lib), "no sending, approving or publishing");
-    const ui = ["crm/crm-insights.tsx", "crm/client-crm.tsx", "crm/website-check-card.tsx"].map(file => path.join(__dirname, "../../components", file)).filter(fs.existsSync).map(file => fs.readFileSync(file, "utf8"));
+    const ui = ["crm/crm-insights.tsx", "crm/client-crm.tsx", "crm/website-check-card.tsx", "crm/lead-website-check.tsx"].map(file => path.join(__dirname, "../../components", file)).map(file => fs.readFileSync(file, "utf8"));
     const customer = [...ui, JSON.stringify(siteCheck.NOT_CHECKED), lib.match(/"[^"\n]{12,}"/g).join("\n")].join("\n");
     assert.ok(!/claude|anthropic|openai|\bgpt|sonnet|opus|haiku|gemini|\bllm\b/i.test(customer), "customer copy names no provider or model");
     const sql = fs.readFileSync(path.join(__dirname, "../../../supabase/migrations/20261025300000_crm_research.sql"), "utf8");

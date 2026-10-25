@@ -38,6 +38,8 @@ export async function GET(request: Request, context: Context) {
     requireCrmResearch();
     const { workspaceId } = await context.params;
     const { client, workspace } = await cloudContext(workspaceId);
+    // ?probe=1: is this available to this person (no workspace data read)?
+    if (new URL(request.url).searchParams.get("probe") === "1") return cloudJson({ enabled: true, canEdit: workspace?.role !== "reviewer" });
     const today = day.safeParse(new URL(request.url).searchParams.get("day"));
     if (!today.success) throw new RequestError("INVALID_DAY", "Send today's date from your calendar.");
     return cloudJson({ enabled: true, canEdit: workspace?.role !== "reviewer", ...await overview(client, workspaceId, today.data) });
