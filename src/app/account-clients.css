@@ -3,7 +3,7 @@
 .ac-source button { border: 0; background: transparent; color: var(--text-muted); padding: 10px 15px; border-radius: 10px; font: inherit; font-size: 13px; cursor: pointer; }
 .ac-source button[aria-pressed="true"] { background: #eeebfa; color: #594799; }
 .ac-heading { display: flex; gap: 24px; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-.ac-heading h1 { font-size: clamp(26px, 3vw, 36px); font-weight: 500; letter-spacing: -.045em; margin: 10px 0; }
+.ac-heading h1 { font-size: clamp(26px, calc(3vw / var(--ui-zoom, 1)), 36px); font-weight: 500; letter-spacing: -.045em; margin: 10px 0; }
 .ac-heading p, .ac-add p { font-size: 14px; line-height: 1.6; color: var(--text-muted); }
 .ac-toolbar { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
 .ac-search { flex: 1; display: flex; gap: 10px; align-items: center; min-width: 210px; border: 1px solid #e8e6ee; background: white; border-radius: 12px; padding: 0 14px; }
@@ -141,12 +141,12 @@
 @media (prefers-reduced-motion: reduce) { .cb-card, .cb-column, .cb-board, .ac-row-actions { transition: none; } .cb-card:hover { transform: none; } }
 
 /* Command palette */
-.cp-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; justify-items: center; align-items: start; padding: 12vh 16px 16px; background: #1d17282e; backdrop-filter: blur(3px); animation: cp-fade .14s ease; }
+.cp-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; justify-items: center; align-items: start; padding: calc(12vh / var(--ui-zoom, 1)) 16px 16px; background: #1d17282e; backdrop-filter: blur(3px); animation: cp-fade .14s ease; }
 .cp-dialog { width: min(620px, 100%); background: #fff; border: 1px solid #e7e2ef; border-radius: 18px; box-shadow: 0 24px 70px #1d172840; overflow: hidden; animation: cp-rise .16s ease; }
 .cp-search { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid #f0edf4; color: #8a8199; }
 .cp-search input { flex: 1; border: 0; outline: none; font: inherit; font-size: 15px; color: #251f30; background: transparent; }
 .cp-search kbd { font: 600 11px/1 inherit; border: 1px solid #e6e2ee; border-radius: 6px; padding: 3px 6px; color: #8f88a0; }
-.cp-results { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
+.cp-results { list-style: none; margin: 0; padding: 6px; max-height: calc(50vh / var(--ui-zoom, 1)); overflow-y: auto; }
 .cp-results li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px; cursor: pointer; color: #6f6880; }
 .cp-results li.is-active { background: #f3effa; color: #4b3a6b; }
 .cp-results li span { display: grid; gap: 2px; flex: 1; min-width: 0; }
@@ -237,7 +237,7 @@
 .mc-status.is-active { background: #ece7fb; color: #4f3c80; }
 .mc-status.is-replied { background: #e6f5ec; color: #2f7a4f; }
 .mc-status.is-paused, .mc-status.is-failed { background: #fff3e6; color: #92561c; }
-.mc-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: start center; padding: 6vh 16px 24px; background: #1d17283a; backdrop-filter: blur(3px); overflow-y: auto; }
+.mc-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: start center; padding: calc(6vh / var(--ui-zoom, 1)) 16px 24px; background: #1d17283a; backdrop-filter: blur(3px); overflow-y: auto; }
 .mc-sheet { width: min(720px, 100%); background: #fff; border-radius: 20px; border: 1px solid #e7e2ef; box-shadow: 0 24px 70px #1d172840; padding: 24px; display: grid; gap: 12px; }
 .mc-sheet h3 { margin: 0; font-size: 19px; font-weight: 560; }
 .mc-field { display: grid; gap: 6px; font-size: 12.5px; color: #6f687c; }
@@ -294,7 +294,7 @@
 .pq-setup { display: grid; gap: 12px; }
 .pq-hint { display: block; font-size: 11.5px; color: #9089a0; margin-top: 2px; }
 .pq-progress { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: #5d5170; background: #f7f4fc; border-radius: 12px; padding: 9px 12px; }
-.pq-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: 58vh; overflow-y: auto; padding-right: 4px; }
+.pq-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: calc(58vh / var(--ui-zoom, 1)); overflow-y: auto; padding-right: 4px; }
 .pq-card { display: grid; gap: 8px; border: 1px solid #ebe7f1; border-radius: 14px; padding: 12px 14px; background: #fff; transition: border-color .15s ease, opacity .15s ease; }
 .pq-card header { display: flex; align-items: center; gap: 10px; }
 .pq-card header > div { display: grid; gap: 2px; flex: 1; min-width: 0; }

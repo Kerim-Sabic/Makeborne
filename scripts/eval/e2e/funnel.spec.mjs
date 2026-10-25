@@ -83,7 +83,8 @@ async function createdBy(click, step) {
 
 async function openComposer(brief, mode) {
   await page.goto('/studio');
-  await page.getByRole('heading', { name: 'What will you make next?' }).waitFor();
+  // New users see the prompt-first welcome; returning users see 'Projects' with the composer below (S1). Both mount it.
+  await page.getByRole('region', { name: 'Start with a brief' }).waitFor();
   const composer = page.getByRole('region', { name: 'Start with a brief' });
   await composer.getByRole('button', { name: 'Website', exact: true }).click();
   await composer.locator('textarea#studio-brief').fill(brief);
@@ -121,7 +122,7 @@ test.describe('S1 funnel (isolated stack, AI off)', () => {
 
   test('sign in', async () => {
     await signIn(page);
-    await expect(page.getByRole('heading', { name: 'What will you make next?' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: /^(What will you make next\?|Projects)$/ })).toBeVisible();
   });
 
   test('brief: a website brief becomes a saved project', async () => {

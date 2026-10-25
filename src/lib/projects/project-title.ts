@@ -23,6 +23,7 @@ const LONG_NUMBER = /\d{5,}/g;
 const YEAR_RANGE = /^(?:19|20)\d{2}\s*[-–/]\s*(?:19|20)?\d{2}$/;
 const LEAD_IN = /^(?:(?:hi|hello|hey|please)\b[,!]?\s*)*(?:(?:can|could|would|will) you\s+)?(?:please\s+)?(?:(?:help me|help us|i want|i need|i would like|i'd like|we want|we need|we would like|we'd like|let's|lets)\s+(?:to\s+)?)?(?:(?:plan|create|build|make|design|write|draft|prepare|turn|shape|structure|start|put together)\b\s*)?/i;
 const ARTICLE = /^(?:a|an|the|my|our)\s+/i;
+const CUT_NUMBER = /\s+\p{N}[\p{N}.,:/-]*$/u;
 const TRAILING = /(?:\s+(?:for|to|with|and|or|of|the|a|an|in|at|on|by|from|via|call|email|contact|phone|see|visit|including)|[\s,.&+'’#-])+$/;
 
 /** Links, email addresses, handles, phone numbers (7+ digits) and long numbers in the text. */
@@ -69,6 +70,11 @@ export function fallbackProjectTitle(brief: string, kind: TitleKind): string {
     const cut = text.slice(0, FALLBACK_TITLE_MAX + 1);
     const space = cut.lastIndexOf(" ");
     text = (space >= 20 ? cut.slice(0, space) : cut.slice(0, FALLBACK_TITLE_MAX)).replace(TRAILING, "");
+    // A cut can strand the start of a date or count ("on 14"), so drop a bare trailing number and the joining word before it.
+    for (let previous = ""; previous !== text && text.length > 20; ) {
+      previous = text;
+      text = text.replace(CUT_NUMBER, "").replace(TRAILING, "");
+    }
   }
   if ((text.match(/\p{L}/gu) ?? []).length < 2) return placeholderTitle(kind);
   return text.charAt(0).toLocaleUpperCase("en") + text.slice(1);

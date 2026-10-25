@@ -56,7 +56,7 @@
 .private-preview-canvas iframe{display:block;width:100%;height:100%;min-width:0;border:0;background:white;border-radius:5px;box-shadow:0 2px 8px #2023420a}
 .private-preview-mobile iframe{max-width:390px}
 .private-website-preview:fullscreen{margin:0;padding:16px;background:#f1f2f6;overflow:auto}
-.private-website-preview:fullscreen .private-preview-canvas{height:calc(100vh - 100px)}
+.private-website-preview:fullscreen .private-preview-canvas{height:calc(calc(100vh / var(--ui-zoom, 1)) - 100px)}
 .private-preview-loading{position:absolute;z-index:1;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;padding:10px 16px;border:1px solid #e5e7ee;border-radius:10px;background:#fff;font-size:12px;color:#606579;white-space:nowrap}
 @media(max-width:600px){.private-preview-toolbar{gap:6px;padding:8px}.private-preview-canvas{padding:6px;height:560px}.private-preview-label{font-size:12px}}
 .cloud-version-live, .cloud-version-current { display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; vertical-align:middle; }

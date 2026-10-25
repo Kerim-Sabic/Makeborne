@@ -704,7 +704,7 @@
 .cw-workspace { --cw-border: #e5e8ef; --cw-muted: #687286; color: #253047; max-width: 1280px; }
 .cw-header { margin-bottom: 28px; align-items: flex-end; }
 .cw-eyebrow { font-size: 10px; font-weight: 650; letter-spacing: .13em; color: #757e95; }
-.cw-header h1 { font-size: clamp(30px, 3vw, 40px); font-weight: 550; margin: 8px 0 9px; }
+.cw-header h1 { font-size: clamp(30px, calc(3vw / var(--ui-zoom, 1)), 40px); font-weight: 550; margin: 8px 0 9px; }
 .cw-primary { border: 1px solid #625cdd; border-radius: 12px; background: linear-gradient(135deg, #6159d9, #7564e1); box-shadow: 0 3px 8px #6259d921; }
 .cw-primary:hover { background: #5a51c9; }
 .cw-secondary { border-radius: 10px; }

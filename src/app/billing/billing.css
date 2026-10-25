@@ -1,4 +1,4 @@
-.billing-shell{min-height:100vh;background:linear-gradient(180deg,#f8f7fc 0,#fff 520px);color:#292531;padding:0 40px 24px;font-family:var(--font-inter),Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.billing-shell{min-height:calc(100vh / var(--ui-zoom, 1));background:linear-gradient(180deg,#f8f7fc 0,#fff 520px);color:#292531;padding:0 40px 24px;font-family:var(--font-inter),Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .billing-top{height:84px;max-width:1120px;margin:auto;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eae7ef;gap:20px}
 .billing-brand{display:inline-flex;align-items:center;gap:9px;font-size:22px;font-weight:650;letter-spacing:-.8px}
 

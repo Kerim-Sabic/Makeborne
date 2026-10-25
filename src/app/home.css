@@ -1,4 +1,4 @@
-.mk-home{background:#fff;color:#202024;min-height:100vh;font-family:var(--font-inter),Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.mk-home{background:#fff;color:#202024;min-height:calc(100vh / var(--ui-zoom, 1));font-family:var(--font-inter),Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .mk-nav{height:82px;padding:0 48px;display:flex;align-items:center;justify-content:space-between;position:relative;z-index:10;border-bottom:1px solid #f1f1f3;background:#fff}
 .mk-wordmark{display:inline-flex;align-items:center;gap:9px;font-size:24px;font-weight:650;letter-spacing:-1.1px;line-height:1}
 .mk-nav-middle{display:flex;align-items:center;gap:30px;margin-left:55px;font-size:13px;color:#606065}
@@ -9,13 +9,13 @@
 .mk-account .studio-account-link{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 2px;border:0;background:transparent;box-shadow:none;color:inherit;font-size:13px;font-weight:500;text-decoration:none;cursor:pointer;list-style:none}
 .mk-account .studio-account-menu summary::-webkit-details-marker{display:none}
 .mk-account .studio-account-link:hover{color:#29232f;background:transparent}
-.mk-account .studio-account-popover{position:absolute;z-index:50;right:0;top:calc(100% + 10px);width:min(270px,calc(100vw - 40px));padding:16px;border:1px solid #e9e5ed;border-radius:14px;background:#fff;box-shadow:0 12px 40px #30284517;display:grid;gap:8px}
+.mk-account .studio-account-popover{position:absolute;z-index:50;right:0;top:calc(100% + 10px);width:min(270px,calc(calc(100vw / var(--ui-zoom, 1)) - 40px));padding:16px;border:1px solid #e9e5ed;border-radius:14px;background:#fff;box-shadow:0 12px 40px #30284517;display:grid;gap:8px}
 .mk-account .studio-account-popover>span{font-size:10px;color:#82788d}
 .mk-account .studio-account-popover strong{padding-bottom:10px;border-bottom:1px solid #f0edf3;color:#413847;font-size:12px;font-weight:550;overflow-wrap:anywhere}
 .mk-account .studio-account-popover>a,.mk-account .studio-account-popover>button{display:flex;align-items:center;gap:9px;min-height:40px;margin:0;padding:9px 10px;border:0;border-radius:8px;background:transparent;color:#655970;font-size:12px;font-weight:450;text-align:left;cursor:pointer}
 .mk-account .studio-account-popover>a:hover,.mk-account .studio-account-popover>button:hover{background:#f6f3f9;color:#41314f}
 .mk-account .studio-account-popover>button:disabled{opacity:.6;cursor:wait}
-.mk-account .studio-account-error{position:absolute;z-index:51;right:0;top:calc(100% + 10px);width:min(270px,calc(100vw - 40px));padding:12px;background:#fff8eb;color:#725526;border:1px solid #eedcc0;border-radius:10px;font-size:12px;line-height:1.5}
+.mk-account .studio-account-error{position:absolute;z-index:51;right:0;top:calc(100% + 10px);width:min(270px,calc(calc(100vw / var(--ui-zoom, 1)) - 40px));padding:12px;background:#fff8eb;color:#725526;border:1px solid #eedcc0;border-radius:10px;font-size:12px;line-height:1.5}
 .mk-account :is(a,button,summary):focus-visible{outline:2px solid #9276bd;outline-offset:3px}
 .mk-account-home-mobile{border-top:1px solid #eeebf2;padding-top:8px}
 .mk-account-home-mobile .studio-account-link{width:100%;justify-content:flex-start}
@@ -33,7 +33,7 @@
 .mk-atmosphere span:nth-child(3){width:45%;height:250px;left:34%;bottom:-180px;background:#f9dbba;opacity:.95}
 .mk-hero-content{max-width:850px;margin:auto;text-align:center;padding:49px 24px 66px;position:relative;z-index:1}
 .mk-announcement{display:inline-flex;align-items:center;gap:11px;border:1px solid #e5e7ed;background:#ffffffb8;border-radius:50px;padding:7px 12px;font-size:9px;font-weight:600;letter-spacing:1.05px;color:#60636c;box-shadow:0 2px 5px #1b255303}
-.mk-hero h1{font-size:clamp(38px,4.65vw,64px);font-weight:500;line-height:1.08;letter-spacing:-3.6px;margin:24px 0 15px;color:#242429}
+.mk-hero h1{font-size:clamp(38px,calc(4.65vw / var(--ui-zoom, 1)),64px);font-weight:500;line-height:1.08;letter-spacing:-3.6px;margin:24px 0 15px;color:#242429}
 .mk-mobile-break{display:none}
 .mk-hero-subtitle{font-size:15px;letter-spacing:-.18px;color:#6a6c76;margin:0 0 29px;line-height:1.6}
 .mk-format-switch{display:inline-flex;gap:3px;padding:4px;background:#e9edf67a;border:1px solid #e2e6ee;border-radius:11px;margin-bottom:16px}
@@ -144,10 +144,10 @@
 .mk-hero{z-index:5}.mk-discovery{position:relative;z-index:1}
 
 /* A compact, readable ending to the page: real capabilities, one next step. */
-.mk-client-band{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:clamp(40px,7vw,100px);width:calc(100% - 96px);max-width:1224px;margin:0 auto 80px;padding:54px 56px;border:1px solid #eae8ee;border-radius:24px;background:linear-gradient(120deg,#fcfbfd,#f7f6fb);scroll-margin-top:32px}
+.mk-client-band{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:clamp(40px,calc(7vw / var(--ui-zoom, 1)),100px);width:calc(100% - 96px);max-width:1224px;margin:0 auto 80px;padding:54px 56px;border:1px solid #eae8ee;border-radius:24px;background:linear-gradient(120deg,#fcfbfd,#f7f6fb);scroll-margin-top:32px}
 .mk-client-copy{max-width:390px}
 .mk-client-copy .mk-overline{display:block;color:#746b85;font-size:10px;font-weight:550;letter-spacing:1.2px}
-.mk-client-copy h2{margin:18px 0 17px;color:#2e2836;font-size:clamp(32px,3.2vw,43px);font-weight:500;line-height:1.12;letter-spacing:-1.8px;text-wrap:balance}
+.mk-client-copy h2{margin:18px 0 17px;color:#2e2836;font-size:clamp(32px,calc(3.2vw / var(--ui-zoom, 1)),43px);font-weight:500;line-height:1.12;letter-spacing:-1.8px;text-wrap:balance}
 .mk-client-copy p{max-width:350px;margin:0;color:#77717f;font-size:14px;line-height:1.75;text-wrap:pretty}
 .mk-client-cta{display:inline-flex;align-items:center;justify-content:center;gap:15px;min-height:44px;margin-top:26px;padding:0 16px;border:1px solid #ded9e6;border-radius:10px;background:#fff;color:#453750;font-size:12px;font-weight:550;box-shadow:0 2px 3px #31224103}
 .mk-client-cta:hover{border-color:#c9bfd8;background:#fdfcfe;color:#584185;box-shadow:0 3px 9px #31224108}
@@ -164,7 +164,7 @@
 .mk-client-workflow li:last-child .mk-workflow-step{background:#f0ecf7;border-color:#e4ddec;color:#6f5f86}
 .mk-client-workflow h3{margin:1px 0 5px;font-size:13px;font-weight:550;line-height:1.5;letter-spacing:-.15px;color:#4c4257}
 .mk-client-workflow p{margin:0;font-size:12px;line-height:1.65;color:#746b7f;text-wrap:pretty}
-.mk-footer{padding:38px max(48px,calc((100vw - 1224px)/2)) 0;background:#fff;border-top:1px solid #eeecf1;color:#8c8596;font-size:12px}
+.mk-footer{padding:38px max(48px,calc((calc(100vw / var(--ui-zoom, 1)) - 1224px)/2)) 0;background:#fff;border-top:1px solid #eeecf1;color:#8c8596;font-size:12px}
 .mk-footer-main{display:flex;align-items:center;justify-content:space-between;gap:36px;padding-bottom:30px}
 .mk-footer .mk-wordmark{color:#49414f;font-size:21px;letter-spacing:-.8px}
 .mk-footer-brand p{margin:12px 0 0;color:#746b7f;font-size:12px;line-height:1.6}

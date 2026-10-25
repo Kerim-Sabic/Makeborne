@@ -29,7 +29,7 @@ check("the fallback is short, readable and deterministic", () => {
     "Help me structure a presentation that explains my idea clearly.": "Presentation that explains my idea clearly",
     "Dr. Smith's dental clinic in Sarajevo": "Dr. Smith's dental clinic in Sarajevo",
     "Build a 10-slide pitch deck for Series A. Then a summary.": "10-slide pitch deck for Series A",
-    "I want to create a landing page for Hiša Burja, a guesthouse in Bled with 6 rooms and a sauna and a long list of amenities": "Landing page for Hiša Burja, a guesthouse in Bled with 6",
+    "I want to create a landing page for Hiša Burja, a guesthouse in Bled with 6 rooms and a sauna and a long list of amenities": "Landing page for Hiša Burja, a guesthouse in Bled",
     "website": "Website",
   };
   for (const [brief, title] of Object.entries(cases)) {
@@ -39,6 +39,8 @@ check("the fallback is short, readable and deterministic", () => {
   }
   const long = fallbackProjectTitle("Wordy ".repeat(40), "book");
   assert.ok(long.length <= FALLBACK_TITLE_MAX && !/\s$/.test(long), "cut at a word boundary");
+  assert.equal(fallbackProjectTitle("A presentation for Harbour Dental York's open evening on 14 November with the new hygiene team", "presentation"), "A presentation for Harbour Dental York's open evening", "a cut never strands half a date");
+  assert.equal(fallbackProjectTitle("Quarterly review 2025-2026 for the board", "presentation"), "Quarterly review 2025-2026 for the board", "numbers inside an uncut title stay");
 });
 check("contact details, links, handles and long numbers never reach the title", () => {
   const briefs = [

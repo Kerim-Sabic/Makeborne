@@ -120,8 +120,9 @@ export const PAGES = Object.freeze([
   {
     id: 'studio', path: '/studio', signedIn: true,
     ready: async page => {
-      await page.getByRole('heading', { name: 'What will you make next?' }).waitFor({ timeout: 120_000 });
-      await page.getByRole('heading', { name: 'Your saved projects' }).waitFor({ timeout: 60_000 });
+      // Returning users (S1 library): one 'Projects' heading, then the list of saved projects.
+      await page.getByRole('heading', { level: 1, name: 'Projects', exact: true }).waitFor({ timeout: 120_000 });
+      await page.getByRole('list', { name: /^\d+ projects?$/ }).waitFor({ timeout: 60_000 });
     },
   },
   {

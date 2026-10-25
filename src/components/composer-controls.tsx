@@ -27,12 +27,14 @@ export default function ComposerControls({ mode, onMode, effort, onEffort }: {
       const viewportRight = viewportLeft + (viewport?.width ?? window.innerWidth);
       const above = Math.max(0, bounds.top - viewportTop - 20);
       const below = Math.max(0, viewportBottom - bounds.bottom - 20);
-      const desiredHeight = element.scrollHeight + 2;
+      // Measured positions are screen pixels; on large screens the page is zoomed (--ui-zoom), so styles are written in page pixels.
+      const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      const desiredHeight = (element.scrollHeight + 2) * zoom;
       // Prefer the space above the composer, without covering the control.
       const opensAbove = above >= desiredHeight || above > below;
-      element.style.maxHeight = `${opensAbove ? above : below}px`;
-      element.style.top = `${opensAbove ? bounds.top - element.offsetHeight - 8 : bounds.bottom + 8}px`;
-      element.style.left = `${Math.max(viewportLeft + 12, Math.min(bounds.left, viewportRight - element.offsetWidth - 12))}px`;
+      element.style.maxHeight = `${(opensAbove ? above : below) / zoom}px`;
+      element.style.top = `${opensAbove ? bounds.top / zoom - element.offsetHeight - 8 : bounds.bottom / zoom + 8}px`;
+      element.style.left = `${Math.max(viewportLeft + 12, Math.min(bounds.left, viewportRight - element.offsetWidth * zoom - 12)) / zoom}px`;
     };
     place();
     window.addEventListener("resize", place);

@@ -26,7 +26,7 @@
 .gs-ring { width: 32px; height: 32px; transform: rotate(-90deg); }
 .gs-ring circle { fill: none; stroke: #ece7f5; stroke-width: 4; }
 .gs-ring circle.is-fill { stroke: #6a48d8; stroke-linecap: round; transition: stroke-dasharray .5s cubic-bezier(.22, 1, .36, 1); }
-.gs-panel { width: min(380px, calc(100vw - 32px)); max-height: min(560px, calc(100dvh - 110px)); overflow: auto; padding: 18px; border-radius: 20px; background: #fff; border: 1px solid #ebe6f2; box-shadow: 0 30px 60px -28px #2b1f5c80; animation: gs-in .22s cubic-bezier(.22, 1, .36, 1); }
+.gs-panel { width: min(380px, calc(calc(100vw / var(--ui-zoom, 1)) - 32px)); max-height: min(560px, calc(calc(100dvh / var(--ui-zoom, 1)) - 110px)); overflow: auto; padding: 18px; border-radius: 20px; background: #fff; border: 1px solid #ebe6f2; box-shadow: 0 30px 60px -28px #2b1f5c80; animation: gs-in .22s cubic-bezier(.22, 1, .36, 1); }
 @keyframes gs-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
 .gs-panel header { position: relative; display: flex; justify-content: space-between; gap: 10px; }
 .gs-panel h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.3px; color: #201a2e; }
@@ -56,3 +56,8 @@
   .gs-paths button { padding: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .gs-panel, .gs-bar span, .gs-ring circle.is-fill, .gs-paths button { animation: none; transition: none; } }
+/* On phones the closed pill shrinks to its progress ring; the label stays as its accessible name. */
+@media (max-width: 650px) {
+  .gs:not(.is-open) .gs-pill { padding: 6px; }
+  .gs:not(.is-open) .gs-pill span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
