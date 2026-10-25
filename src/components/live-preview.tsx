@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { AlertTriangle, CornerDownLeft, Maximize2, Monitor, MousePointerClick, RotateCw, SlidersHorizontal, Smartphone, Tablet, Wand2 } from "lucide-react";
@@ -8,11 +8,13 @@ import { bundleProject } from "@/lib/builder/browser-bundler";
 import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { HOME, PREVIEW_HISTORY_KEY, PREVIEW_PATH_PARAM, formatPreviewPath, frameHashFor, isMissingPage, normalizePath, parseFrameHash, parsePreviewPath, preparePreviewDocument, previewPageTitle, samePage, withPreviewPathParam,
   type PreviewPage, type PreviewRoute, type PreviewStart } from "@/lib/builder/preview-route";
-import { PREVIEW_ACTIONS } from "@/lib/builder/action-semantics";
-import type { ElementDescription, ElementLoc, StyleField, VisualEdit } from "@/lib/builder/visual-edit";
+import { PREVIEW_ACTIONS, previewProblemTitle, type PreviewProblem, type PreviewSubject } from "@/lib/builder/action-semantics";
+import type { ElementDescription, StyleField, VisualEdit } from "@/lib/builder/visual-edit";
+import { newVisualEditSession, type VisualEditSession } from "@/lib/builder/visual-edit-session";
 import type { WebsiteProjectSource } from "@/lib/projects/website-source";
 import type { PickedElement } from "./visual-editor-panel";
 import { readCloudImage } from "./cloud-api";
+import { compileBlockedByAssets, describeAssetProblem, loadPreviewAssets, type AssetLoad, type AssetProblem } from "@/lib/builder/preview-assets";
 import responsive from "../../infra/project-runtime/responsive-images.cjs";
 import "@/app/visual-editor.css";
 
@@ -24,12 +26,20 @@ type Device = "desktop" | "tablet" | "mobile";
 const WIDTHS: Record<Device, number | null> = { desktop: null, tablet: 820, mobile: 390 };
 const STYLE_KEYS: StyleField[] = ["color", "backgroundColor", "fontSize", "fontWeight", "textAlign", "padding", "margin", "borderRadius"];
 const NO_ROUTES: PreviewRoute[] = [];
+const NO_IMAGES: Record<string, string> = {};
+const NO_PROBLEMS: AssetProblem[] = [];
+const NO_HISTORY: VisualEditSession["history"] = [];
 /** "", "#" and "#/" all show the home page. */
 const frameHashKey = (hash: string) => hash === "" || hash === "#" || hash === "#/" ? "#/" : hash;
 
 /** Saved project source plus where click-to-edit changes go. */
 export type VisualEditHost = {
   source: WebsiteProjectSource;
+  /** Kept by the host for this website so edit mode, Undo and the selection survive another tab unmounting the preview. */
+  session?: VisualEditSession;
+  onSession?: Dispatch<SetStateAction<VisualEditSession>>;
+  /** How the last click-to-edit change stands, e.g. "Saved as version 4", shown in the edit panel with Undo. */
+  status?: string;
   /** Set while editing would conflict with saving, building or review state. */
   disabledReason?: string;
   onApply: (next: WebsiteProjectSource, summary: string) => void;
@@ -51,17 +61,28 @@ const toDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
  * With `visualEdit`, owners and editors can click elements to change text,
  * links, images and style directly in the source — no model call.
  * Page, query, fragment target, title, scroll and focus are tracked apart;
- * `syncUrl` mirrors the page on the editor URL so a reload returns to it. */
-export default function LivePreview({ files, assets, scope, building, onFixError, visualEdit, routes = NO_ROUTES, syncUrl = false, responseTimeoutMs = 10_000, toolbar }: {
+ * `syncUrl` mirrors the page on the editor URL so a reload returns to it.
+ * `snapshot` shows an earlier saved version read-only (History): it keeps no
+ * scroll memory, so the editor's own preview is unaffected. */
+export default function LivePreview({ files, assets, scope, building, subject = null, onFixError, recover, onBuilt, visualEdit, routes = NO_ROUTES, syncUrl = false, snapshot, responseTimeoutMs = 10_000, toolbar }: {
   files: Record<string, string>;
   assets: Asset[];
   scope: { accountId: string; workspaceId: string; artifactId: string };
   building?: boolean;
-  onFixError?: (message: string) => void;
+  /** What these files are, so an error names the version (or the unsaved edits) it belongs to. */
+  subject?: PreviewSubject | null;
+  /** Hands the error to the builder composer for review; it never sends a request. */
+  onFixError?: (problem: PreviewProblem) => void;
+  /** Offered with a build error: restore an earlier saved version (the host's restore, one explicit click). */
+  recover?: { label: string; effect: string; blocked?: string; onRestore: () => void };
+  /** Each compile of these files: `revision` is previewFileRevision(files), `ok` false for a build error. */
+  onBuilt?: (result: { revision: string; ok: boolean }) => void;
   visualEdit?: VisualEditHost;
   /** Saved page routes of this version. Unknown paths show a not-found state. */
   routes?: PreviewRoute[];
   syncUrl?: boolean;
+  /** The saved version number this read-only preview shows. */
+  snapshot?: number;
   responseTimeoutMs?: number;
   /** The editor's single preview toolbar: when given, the size, page and preview controls render there (one row above
    * the canvas) instead of in this preview's own bar. Notices, the page-path form and the frame stay here. */
@@ -75,9 +96,11 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   const [transportError, setTransportError] = useState("");
   const [retrying, setRetrying] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
-  const [images, setImages] = useState<Record<string, string>>({});
-  const [missingImages, setMissingImages] = useState(0);
+  // Project images, as loaded for one exact identity (account, workspace, artifact, asset list, attempt). A result for another
+  // identity is never used, and the first compile waits for this one (see assetsReady below).
+  const [assetLoad, setAssetLoad] = useState<{ key: string } & AssetLoad>({ key: "", images: {}, problems: [] });
   const [imageAttempt, setImageAttempt] = useState(0);
+  const [assetBlocked, setAssetBlocked] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [notice, setNotice] = useState("");
   const cache = useRef(new Map<string, string>());
@@ -102,14 +125,22 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   const retryingRef = useRef(false);
   const setPage = useCallback((next: PreviewPage) => { pageRef.current = next; setPageState(next); }, []);
 
-  // Click-to-edit state. `inspecting` drives the tagged build.
-  const [editing, setEditing] = useState(false);
+  // Click-to-edit state. `inspecting` drives the tagged build. Edit mode, Undo and the selected element are a
+  // session: the host's when it keeps them across tabs (another tab unmounts this preview), else this preview's own.
+  const [ownSession, setOwnSession] = useState<VisualEditSession>(newVisualEditSession);
+  const session = visualEdit?.session ?? ownSession, updateSession = visualEdit?.onSession ?? setOwnSession;
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; });
+  const editing = session.editing;
+  const setEditing = useCallback((on: boolean) => updateSession(current => ({ ...current, editing: on })), [updateSession]);
   const [engine, setEngine] = useState<EditEngine | null>(null);
   const [picked, setPicked] = useState<PickedElement | null>(null);
   const [editNote, setEditNote] = useState("");
-  const [history, setHistory] = useState<{ source: WebsiteProjectSource; loc: ElementLoc | null; index: number }[]>([]);
-  const produced = useRef<WebsiteProjectSource | null>(null);
-  const restore = useRef<{ loc: string | null; index: number; y: number }>({ loc: null, index: 0, y: 0 });
+  // Undo only covers this session's own edits, and only while the source is still the one the last of them produced.
+  const source = visualEdit?.source;
+  const history = source && session.produced === source ? session.history : NO_HISTORY;
+  // Where the frame was scrolled in edit mode, so a rebuild brings the selection back in place.
+  const editScroll = useRef(0);
   const inspecting = editing && Boolean(visualEdit) && !visualEdit?.disabledReason && !building;
 
   useEffect(() => {
@@ -117,44 +148,32 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     let cancelled = false;
     import("@/lib/builder/visual-edit").then(module => { if (!cancelled) setEngine(module); }, () => { if (!cancelled) { setEditing(false); setEditNote("Click-to-edit could not start in this browser."); } });
     return () => { cancelled = true; };
-  }, [inspecting, engine]);
+  }, [inspecting, engine, setEditing]);
 
-  // Undo only covers this session's own edits on the current source.
-  const source = visualEdit?.source;
-  useEffect(() => {
-    if (source && source !== produced.current) { produced.current = null; setHistory([]); }
-  }, [source]);
-
-  // Load project images once per asset id and keep them as data URLs.
+  // Load project images once per asset id and keep them as data URLs. Responsive copies (srcset) are for the published
+  // site; the preview uses the originals.
   const assetKey = assets.map(asset => `${asset.id}:${asset.path}`).sort().join("|");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- assetKey captures the asset list
+  const originals = useMemo(() => assets.filter(asset => !responsive.isVariantPath(asset.path)), [assetKey]);
+  const loadKey = `${scope.accountId}|${scope.workspaceId}|${scope.artifactId}|${assetKey}|${imageAttempt}`;
   useEffect(() => {
+    if (!originals.length) return;
     const controller = new AbortController();
-    void (async () => {
-      const next: Record<string, string> = {};
-      let missing = 0;
-      // Responsive copies (srcset) are for the published site; the preview uses the originals.
-      for (const asset of assets.filter(asset => !responsive.isVariantPath(asset.path))) {
-        let url = cache.current.get(asset.id);
-        if (!url) {
-          try {
-            const blob = await readCloudImage(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/assets/${asset.id}`, scope.accountId, controller.signal);
-            url = await toDataUrl(blob);
-            cache.current.set(asset.id, url);
-          } catch { missing++; continue; }
-        }
-        next[`/${asset.path.replace(/^public\//, "")}`] = url;
-      }
-      if (!controller.signal.aborted) { setImages(next); setMissingImages(missing); }
-    })();
+    loadPreviewAssets(originals, async (asset, signal) => toDataUrl(await readCloudImage(`/api/cloud/workspaces/${scope.workspaceId}/artifacts/${scope.artifactId}/assets/${asset.id}`, scope.accountId, signal)),
+      { signal: controller.signal, cache: cache.current })
+      .then(result => { if (!controller.signal.aborted) setAssetLoad({ key: loadKey, ...result }); }, () => { /* superseded or unmounted: a newer load owns the preview */ });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- assetKey captures the asset list
-  }, [assetKey, scope.accountId, scope.workspaceId, scope.artifactId, imageAttempt]);
+  }, [loadKey, originals, scope.accountId, scope.workspaceId, scope.artifactId]);
+  // A project with no images is ready at once; otherwise only the load for this exact identity counts.
+  const assetsReady = !originals.length || assetLoad.key === loadKey;
+  const images = originals.length && assetLoad.key === loadKey ? assetLoad.images : NO_IMAGES;
+  const assetProblems = originals.length && assetLoad.key === loadKey ? assetLoad.problems : NO_PROBLEMS;
 
   /** Where a new preview document starts: the current page, its target and scroll. */
   function startState(): PreviewStart {
     const current = pageRef.current;
     let y = scrollY.current;
-    if (y === null) {
+    if (y === null && snapshot === undefined) {
       try {
         const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
         if (saved?.page === formatPreviewPath(current) && Number.isFinite(saved.y)) y = Math.max(0, Math.round(saved.y));
@@ -166,25 +185,35 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   // Rebuild shortly after files settle; keep the last good render on errors.
   // Each new document gets a new frame so updates never add browser history.
   const fileKey = useMemo(() => previewFileRevision(files), [files]);
+  const builtRef = useRef(onBuilt);
+  useEffect(() => { builtRef.current = onBuilt; });
   useEffect(() => {
+    // Never compile a saved project against images that are still loading: that reported a false "Cannot find" build error.
+    if (!assetsReady) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       const result = await bundleProject(files, images, "preview", { inspect: inspecting });
       if (cancelled) return;
+      setAssetBlocked(!result.ok && result.kind !== "transport" && compileBlockedByAssets(result.error, assetProblems));
       if (result.ok) {
         responded.current = false;
         const start = startState();
         lastHash.current = frameHashKey(start.hash);
         setHtml(preparePreviewDocument(result.html, start)); setFrameKey(key => key + 1);
         setBuildError(""); setTransportError(""); setRuntimeError("");
+        builtRef.current?.({ revision: fileKey, ok: true });
       }
       else if (inspecting) { setEditing(false); setPicked(null); setEditNote("Click-to-edit couldn't read this project's code. Use Code, or ask the builder."); }
       else if (result.kind === "transport") { setTransportError(result.error); retryingRef.current = false; setRetrying(false); }
-      else { setBuildError(result.error); retryingRef.current = false; setRetrying(false); }
+      else {
+        setBuildError(result.error); retryingRef.current = false; setRetrying(false);
+        // An image that could not be reached is not a code error; a genuinely missing image is.
+        if (!compileBlockedByAssets(result.error, assetProblems.filter(problem => problem.reason !== "missing"))) builtRef.current?.({ revision: fileKey, ok: false });
+      }
     }, building ? 700 : 150);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fileKey captures every path and full file content; startState reads refs
-  }, [fileKey, images, building, reloadKey, inspecting]);
+  }, [fileKey, images, assetProblems, assetsReady, building, reloadKey, inspecting]);
 
   // A document that never reports back is a preview connection problem, not a build error.
   useEffect(() => {
@@ -243,8 +272,8 @@ export default function LivePreview({ files, assets, scope, building, onFixError
       const data = event.data;
       if (data.type === "ready") responded.current = true;
       if (data.type === "runtime-error") setRuntimeError(String(data.message).slice(0, 600));
-      if (data.type === "ready" && inspecting) (event.source as Window).postMessage({ source: "makeborne-host", type: "edit-mode", on: true, ...restore.current }, "*");
-      if (data.type === "scroll" && Number.isFinite(data.y)) restore.current.y = Math.max(0, Math.round(data.y));
+      if (data.type === "ready" && inspecting) (event.source as Window).postMessage({ source: "makeborne-host", type: "edit-mode", on: true, ...sessionRef.current.selection, y: editScroll.current }, "*");
+      if (data.type === "scroll" && Number.isFinite(data.y)) editScroll.current = Math.max(0, Math.round(data.y));
       if (data.type === "location" && typeof data.hash === "string") {
         const key = frameHashKey(data.hash);
         const current = pageRef.current;
@@ -257,7 +286,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
         if (Number.isFinite(data.y)) {
           scrollY.current = Math.max(0, Math.round(data.y));
           scrollMemory.current.set(formatPreviewPath(next), scrollY.current);
-          try { sessionStorage.setItem(storageKey, JSON.stringify({ page: formatPreviewPath(next), y: scrollY.current })); } catch { /* per-viewer convenience only */ }
+          if (snapshot === undefined) try { sessionStorage.setItem(storageKey, JSON.stringify({ page: formatPreviewPath(next), y: scrollY.current })); } catch { /* per-viewer convenience only */ }
         }
       }
       if (data.type === "rendered" && Number(data.text) > 0) {
@@ -269,14 +298,14 @@ export default function LivePreview({ files, assets, scope, building, onFixError
         const target = parsePreviewPath(data.href);
         if (target) goRef.current(target);
       }
-      if (data.type === "deselect") { setPicked(null); restore.current.loc = null; }
+      if (data.type === "deselect") { setPicked(null); updateSession(current => ({ ...current, selection: { ...current.selection, loc: null } })); }
       if (data.type === "select" && engine) {
         const loc = engine.parseLoc(data.loc);
         if (!loc) return;
         const style: PickedElement["style"] = {};
         for (const key of STYLE_KEYS) if (typeof data.style?.[key] === "string") style[key] = data.style[key].slice(0, 80);
         const index = Number.isInteger(data.index) ? Math.max(0, data.index) : 0;
-        restore.current = { ...restore.current, loc: engine.formatLoc(loc), index };
+        updateSession(current => ({ ...current, selection: { loc: engine.formatLoc(loc), index } }));
         setPicked({ loc, index, count: Number.isInteger(data.count) ? data.count : 1, tag: String(data.tag ?? "").slice(0, 20),
           text: String(data.text ?? "").slice(0, 2000), hasParent: data.hasParent === true, style });
         setEditNote("");
@@ -284,13 +313,17 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     };
     window.addEventListener("message", listen);
     return () => window.removeEventListener("message", listen);
-  }, [inspecting, engine, storageKey, setPage, syncOuter]);
+  }, [inspecting, engine, updateSession, storageKey, snapshot, setPage, syncOuter]);
 
   // Turning edit mode off clears the selection; the rebuild drops the tags.
   function toggleEditing() {
-    if (editing) { setEditing(false); setPicked(null); setEditNote(""); restore.current = { loc: null, index: 0, y: restore.current.y }; return; }
+    if (editing) { updateSession(current => ({ ...current, editing: false, selection: { loc: null, index: 0 } })); setPicked(null); setEditNote(""); return; }
     setEditNote(""); setEditing(true);
   }
+  // Leaving edit mode from the panel (its close button or Escape) returns focus to Edit, which stays on screen.
+  const editButton = useRef<HTMLButtonElement>(null);
+  function closePanel() { toggleEditing(); editButton.current?.focus(); }
+  function deselect() { toFrame({ type: "deselect" }); setPicked(null); updateSession(current => ({ ...current, selection: { ...current.selection, loc: null } })); }
 
   const description: ElementDescription | null = useMemo(() => engine && picked && source ? engine.describeElement(source, picked.loc, picked.text) : null, [engine, picked, source]);
   const projectImages = useMemo(() => (source?.assets ?? []).filter(asset => !responsive.isVariantPath(asset.path)).map(asset => {
@@ -302,10 +335,9 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     if (!engine || !visualEdit || !picked || visualEdit.disabledReason) return;
     const result = engine.applyVisualEdit(visualEdit.source, edit, projectImages.map(image => image.path));
     if (!result.ok) { setEditNote(result.message); return; }
-    setHistory(entries => [...entries.slice(-29), { source: visualEdit.source, loc: picked.loc, index: picked.index }]);
-    produced.current = result.source;
     const loc = engine.remapLoc(picked.loc, result.change);
-    restore.current = { ...restore.current, loc: loc ? engine.formatLoc(loc) : null, index: picked.index };
+    updateSession(current => ({ ...current, history: [...history.slice(-29), { source: visualEdit.source, loc: picked.loc, index: picked.index }], produced: result.source,
+      selection: { loc: loc ? engine.formatLoc(loc) : null, index: picked.index } }));
     setPicked(loc ? { ...picked, loc, text: edit.kind === "text" ? edit.value : picked.text } : null);
     setEditNote("");
     visualEdit.onApply(result.source, result.summary);
@@ -314,9 +346,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     if (!engine || !visualEdit || visualEdit.disabledReason) return;
     const last = history.at(-1);
     if (!last) return;
-    setHistory(entries => entries.slice(0, -1));
-    produced.current = last.source;
-    restore.current = { ...restore.current, loc: last.loc ? engine.formatLoc(last.loc) : null, index: last.index };
+    updateSession(current => ({ ...current, history: history.slice(0, -1), produced: last.source, selection: { loc: last.loc ? engine.formatLoc(last.loc) : null, index: last.index } }));
     setPicked(null);
     visualEdit.onApply(last.source, "Undid a visual edit");
   }
@@ -334,25 +364,28 @@ export default function LivePreview({ files, assets, scope, building, onFixError
   }
 
   const width = WIDTHS[device];
-  const problem = buildError || runtimeError;
+  // A compile that failed only because images could not be reached is shown as an image problem, not a build error.
+  const problem = assetBlocked ? "" : buildError || runtimeError;
   const missing = isMissingPage(page, routes);
   const pageTitle = previewPageTitle(page, routes, frameTitle);
   const knownRoutes = routes.map(route => ({ ...route, path: normalizePath(route.path) }));
+  // The page a picked element is on, by its saved route name (the document title is often the same on every page).
+  const editPage = { title: knownRoutes.find(route => route.path === page.path)?.title || (page.path === "/" ? "Home" : page.path), path: page.path };
   const editTitle = !visualEdit ? "" : building ? "Wait for the build to finish" : visualEdit.disabledReason ?? (editing ? "Stop editing" : "Click elements in the preview to edit them");
-  const status = building ? "Building live…" : transportError ? "Preview connection lost" : retrying ? "Reconnecting…" : buildError ? "Needs a fix" : inspecting ? (picked ? "Editing" : "Click anything to edit it") : html ? missing ? "Page not found" : "Live preview" : "Preparing preview…";
+  const status = building ? "Building live…" : !assetsReady ? html ? "Updating preview…" : "Loading preview…" : transportError ? "Preview connection lost" : retrying ? "Reconnecting…" : buildError ? assetBlocked ? "Images unavailable" : "Needs a fix" : inspecting ? (picked ? "Editing" : "Click anything to edit it") : html ? missing ? "Page not found" : snapshot === undefined ? "Live preview" : `Saved version ${snapshot} · read only` : "Preparing preview…";
   const idle = status === "Live preview";
   const pageSelect = (knownRoutes.length > 1 || missing) && <select className="dp-jump lp-page" aria-label="Preview page" value={missing ? "" : page.path}
     onChange={event => { const route = knownRoutes.find(item => item.path === event.target.value); if (route) go({ path: route.path, query: "", target: "" }); }}>
     {missing && <option value="" disabled>Not found · {page.path}</option>}
     {knownRoutes.map(route => <option key={route.path} value={route.path}>{route.title ? `${route.title} · ${route.path}` : route.path}</option>)}
   </select>;
-  const editButton = visualEdit && <button type="button" className="lp-edit" aria-pressed={inspecting} disabled={!editing && (Boolean(visualEdit.disabledReason) || Boolean(building) || !html)} title={editTitle} onClick={toggleEditing}>
+  const editControl = visualEdit && <button ref={editButton} type="button" className="lp-edit" aria-pressed={inspecting} disabled={!editing && (Boolean(visualEdit.disabledReason) || Boolean(building) || !html)} title={editTitle} onClick={toggleEditing}>
     <MousePointerClick size={14} />{inspecting ? "Done" : "Edit"}</button>;
   const toolbarControls = toolbar && createPortal(<div className="lp-toolbar">
     {pageSelect}
     {/* "Live preview" is the resting state: announced, not shown. Building, errors and edit mode show here as one short label. */}
     <span className="lp-status" role="status" data-idle={idle || undefined}>{status}</span>
-    {editButton}
+    {editControl}
     <EditorMenu collapse label="Preview options" className="lp-tools" trigger={<SlidersHorizontal size={16} aria-hidden="true" />}>
       <div className="lp-devices" role="group" aria-label="Preview size">
         {([["desktop", Monitor, "Desktop"], ["tablet", Tablet, "Tablet"], ["mobile", Smartphone, "Phone"]] as const).map(([value, Icon, name]) =>
@@ -363,7 +396,8 @@ export default function LivePreview({ files, assets, scope, building, onFixError
       <button type="button" aria-label="Full screen preview" title="Full screen preview" onClick={() => void frame.current?.requestFullscreen?.().catch(() => undefined)}><Maximize2 size={15} aria-hidden="true" /><span className="editor-menu-label">Full screen</span></button>
     </EditorMenu>
   </div>, toolbar);
-  return <section className="lp" aria-label="Website preview" data-preview-path={formatPreviewPath(page)} data-preview-title={pageTitle} data-preview-focus={focusDescriptor || undefined}>
+  const label = snapshot === undefined ? "Website preview" : `Preview of saved version ${snapshot}`;
+  return <section className="lp" aria-label={label} data-preview-path={formatPreviewPath(page)} data-preview-title={pageTitle} data-preview-focus={focusDescriptor || undefined}>
     {toolbar ? toolbarControls : <header className="lp-bar">
       <div className="lp-devices" role="group" aria-label="Preview size">
         {([["desktop", Monitor], ["tablet", Tablet], ["mobile", Smartphone]] as const).map(([value, Icon]) =>
@@ -376,7 +410,7 @@ export default function LivePreview({ files, assets, scope, building, onFixError
       </select>}
       <span className="lp-status" role="status">{status}</span>
       <div className="lp-actions">
-        {visualEdit && <button type="button" className="lp-edit" aria-pressed={inspecting} disabled={!editing && (Boolean(visualEdit.disabledReason) || Boolean(building) || !html)} title={editTitle} onClick={toggleEditing}>
+        {visualEdit && <button ref={editButton} type="button" className="lp-edit" aria-pressed={inspecting} disabled={!editing && (Boolean(visualEdit.disabledReason) || Boolean(building) || !html)} title={editTitle} onClick={toggleEditing}>
           <MousePointerClick size={14} />{inspecting ? "Done" : "Edit"}</button>}
         {knownRoutes.length > 0 && <button type="button" aria-label="Go to a page path" aria-expanded={pathOpen} title="Open a page or section by its path" onClick={() => { setPathOpen(open => !open); setPathError(""); }}><CornerDownLeft size={15} /></button>}
         <button type="button" aria-label="Reload preview" title={PREVIEW_ACTIONS.reload.effect} onClick={() => setReloadKey(key => key + 1)}><RotateCw size={15} /></button>
@@ -397,11 +431,25 @@ export default function LivePreview({ files, assets, scope, building, onFixError
     </div>}
     {problem && !building && !transportError && <div className="lp-problem" role="alert">
       <AlertTriangle size={16} />
-      <div><strong>{buildError ? "The site has a build error" : "The site hit an error while running"}</strong><pre>{problem}</pre></div>
-      {onFixError && <button type="button" className="button primary small" title={PREVIEW_ACTIONS.fixError.effect} onClick={() => onFixError(problem)}><Wand2 size={14} />{PREVIEW_ACTIONS.fixError.label}</button>}
+      <div><strong>{previewProblemTitle(buildError ? "build" : "runtime", subject)}</strong><pre>{problem}</pre>
+        {buildError && recover && <p className="lp-problem-note" id={`lp-recover-${scope.artifactId}`}>{recover.blocked ?? recover.effect}</p>}
+        {onFixError && <p className="lp-problem-note" id={`lp-fix-${scope.artifactId}`}>{PREVIEW_ACTIONS.fixError.effect}</p>}</div>
+      <div className="lp-problem-actions">
+        {buildError && recover && <button type="button" className="button secondary small" disabled={Boolean(recover.blocked)} aria-describedby={`lp-recover-${scope.artifactId}`} onClick={recover.onRestore}>{recover.label}</button>}
+        {onFixError && <button type="button" className="button primary small" aria-describedby={`lp-fix-${scope.artifactId}`} onClick={() => onFixError({ kind: buildError ? "build" : "runtime", message: problem })}><Wand2 size={14} />{PREVIEW_ACTIONS.fixError.label}</button>}
+      </div>
     </div>}
-    {missingImages > 0 && !building && <div className="lp-problem" role="status"><AlertTriangle size={16} /><div>{missingImages === 1 ? "One project image" : `${missingImages} project images`} couldn&apos;t be loaded, so the preview shows the rest.</div>
-      <button type="button" className="button secondary small" onClick={() => setImageAttempt(attempt => attempt + 1)}>Load images again</button></div>}
+    {assetProblems.length > 0 && !building && !transportError && <div className="lp-problem" role={assetBlocked ? "alert" : "status"}>
+      <AlertTriangle size={16} />
+      <div><strong>{assetBlocked ? "The preview can't show this site yet" : assetProblems.length === 1 ? "One project image is missing from the preview" : `${assetProblems.length} project images are missing from the preview`}</strong>
+        <ul className="lp-problem-list">{assetProblems.map(problem => <li key={problem.path}>{describeAssetProblem(problem)}</li>)}</ul>
+        <p className="lp-problem-note">{assetProblems.some(problem => problem.reason === "missing")
+          ? "A saved file uses an image that isn't in this project. Upload it in Code or change the reference; your saved files are unchanged."
+          : assetProblems.some(problem => problem.reason === "denied")
+            ? "This account can't read these images. Check you're signed in to the account that owns the project."
+            : "This is a loading problem, not a build error. Your saved files are unchanged and nothing was sent to the builder."}</p></div>
+      {assetProblems.some(problem => problem.reason === "unavailable" || problem.reason === "invalid") && <button type="button" className="button secondary small" onClick={() => setImageAttempt(attempt => attempt + 1)}>Load images again</button>}
+    </div>}
     {!inspecting && editNote && <div className="lp-problem" role="status"><AlertTriangle size={16} /><div>{editNote}</div></div>}
     {notice && <p className="lp-notice" role="status">{notice}</p>}
     <div className="lp-body">
@@ -409,13 +457,13 @@ export default function LivePreview({ files, assets, scope, building, onFixError
         {html ? <iframe
           key={frameKey}
           ref={frame}
-          title="Website preview"
+          title={label}
           hidden={missing}
           sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
           referrerPolicy="no-referrer"
           srcDoc={html}
           style={{ width: width ? `${width}px` : "100%" }}
-        /> : <div className="lp-empty">{building || (!buildError && !transportError) ? "Your website will appear here as it's built." : transportError ? "Preview connection lost. Try again re-renders the same saved files." : "The first build needs a fix — ask the builder to repair it."}</div>}
+        /> : <div className="lp-empty" role="status">{building ? "Your website will appear here as it's built." : !assetsReady || (!buildError && !transportError) ? "Loading the saved website…" : assetBlocked ? "The preview appears once its images can be loaded." : transportError ? "Preview connection lost. Try again re-renders the same saved files." : snapshot !== undefined ? "This saved version can't be shown: it has a build error." : "The first build needs a fix — ask the builder to repair it."}</div>}
         {html && missing && <div className="lp-missing" role="region" aria-labelledby={`lp-missing-${scope.artifactId}`}>
           <h2 id={`lp-missing-${scope.artifactId}`}>Page not found</h2>
           <p><code>{formatPreviewPath(page)}</code> isn&apos;t a page in this saved version of the site. Nothing was created, generated or charged.</p>
@@ -424,8 +472,8 @@ export default function LivePreview({ files, assets, scope, building, onFixError
             <li key={route.path}><button type="button" className="lp-missing-link" onClick={() => go({ path: route.path, query: "", target: "" })}>{route.title || route.path} <span>{route.path}</span></button></li>)}</ul>}
         </div>}
       </div>
-      {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} note={editNote} canUndo={history.length > 0}
-        onEdit={apply} onUndo={undo} onClose={toggleEditing}
+      {inspecting && <VisualEditorPanel picked={picked} description={description} images={projectImages} swatches={visualEdit?.swatches} note={editNote} status={visualEdit?.status} page={editPage} canUndo={history.length > 0}
+        onEdit={apply} onUndo={undo} onClose={closePanel} onDeselect={deselect}
         onParent={() => toFrame({ type: "select-parent" })}
         onAsk={visualEdit?.onAsk} />}
     </div>

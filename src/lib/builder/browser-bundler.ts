@@ -116,8 +116,8 @@ const scriptSafe = (code: string) => code.replace(/<\/(script)/gi, "<\\/$1").rep
 /** Small runtime injected into previews: reports errors to the editor and keeps
  * in-page links inside the sandbox (srcdoc documents inherit the parent URL).
  * Edit mode (inspect builds only, switched on by the host) outlines the element
- * under the pointer and reports the clicked element's source location and
- * computed style instead of letting the click reach the site. */
+ * under the pointer and reports the clicked (or keyboard-focused) element's
+ * source location and computed style instead of letting the click reach the site. */
 const PREVIEW_SHIM = `<script>(function(){
 var post=function(m){try{parent.postMessage(Object.assign({source:"makeborne-preview"},m),"*")}catch(e){}};
 var START=${PREVIEW_START_MARKER},own=false,rawReplace=history.replaceState;
@@ -139,6 +139,7 @@ function edit(on){editing=on;if(on&&!hover)hover=layer("rgba(91,63,140,.55)","rg
 document.addEventListener("pointermove",function(e){if(!editing)return;var el=within(e.target);place(hover,el&&el!==chosen?el:null)},true);
 document.addEventListener("pointerleave",function(){place(hover,null)});
 ["click","dblclick","submit","auxclick"].forEach(function(name){document.addEventListener(name,function(e){if(!editing)return;e.preventDefault();e.stopPropagation();if(name==="click"){var el=within(e.target);if(el)select(el)}},true)});
+document.addEventListener("focusin",function(e){if(!editing)return;var el=within(e.target);if(el&&el!==chosen)select(el)},true);
 addEventListener("scroll",function(){if(!editing)return;place(box,chosen);place(hover,null);clearTimeout(scrollWait);scrollWait=setTimeout(function(){post({type:"scroll",y:scrollY})},150)},{passive:true});
 addEventListener("resize",function(){place(box,chosen)});
 addEventListener("keydown",function(e){if(editing&&e.key==="Escape"&&chosen){clear();post({type:"deselect"})}});

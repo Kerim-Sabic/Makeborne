@@ -51,6 +51,7 @@ check("one plain line on audience and indexing, honest for test, local and publi
 check("saved, checked and live are three facts; newer saved changes are called out", () => {
   const record = {version: 4, kind: "search", at: "2026-10-20T10:00:00Z", prepared: true};
   assert.deepEqual(versionFacts({saved: 5, dirty: false, checked: record, live: 3}), {saved: "Saved version 5", checked: "Checked version 4 (prepared pages) · older than saved", live: "Live version 3",
+    preview: "Preview: version 5", previewState: "saved",
     notice: "Newer saved changes aren’t live yet: version 5 is saved, version 3 is live. Publish to update the site.", checkedVersion: 4, liveVersion: 3});
   const same = versionFacts({saved: 5, dirty: false, checked: {...record, version: 5, prepared: false}, live: 5});
   assert.equal(same.notice, null); assert.equal(same.checked, "Checked version 5");
@@ -63,6 +64,18 @@ check("saved, checked and live are three facts; newer saved changes are called o
   assert.equal(versionFacts({saved: 2, dirty: false, checked: {...record, version: 9}, live: 2}).checkedVersion, null, "a record for a version this editor doesn't have is ignored");
 });
 
+check("preview is a fourth fact: building, build error, unsaved edits or the saved version, in that order", () => {
+  const facts = preview => versionFacts({saved: 5, dirty: false, checked: null, live: 5, preview});
+  assert.equal(facts({building: false, failed: false, draft: false}).preview, "Preview: version 5");
+  assert.equal(facts({building: false, failed: false, draft: true}).preview, "Preview: unsaved edits");
+  assert.equal(facts({building: false, failed: true, draft: true}).preview, "Preview: build error", "a failed build is named even for unsaved edits");
+  assert.equal(facts({building: true, failed: true, draft: true}).preview, "Preview building…", "a build in progress replaces the last result");
+  assert.equal(versionFacts({saved: 5, dirty: true, checked: null, live: 5}).preview, "Preview: unsaved edits", "unsaved edits are never shown as the saved version");
+  assert.equal(versionFacts({saved: 0, dirty: false, checked: null, live: "offline"}).preview, "Preview: nothing saved yet");
+  assert.deepEqual(["building", "error", "draft", "saved"].map(state => facts({building: state === "building", failed: state === "error", draft: state === "draft"}).previewState), ["building", "error", "draft", "saved"]);
+  assert.equal(facts({building: false, failed: false, draft: true}).saved, "Saved version 5", "the preview fact doesn't change the saved fact");
+});
+
 check("the check record: only saved versions without unsaved edits count; malformed or foreign values are ignored", () => {
   assert.equal(checkCounts(3, false), true); assert.equal(checkCounts(3, true), false); assert.equal(checkCounts(0, false), false);
   assert.deepEqual(parseCheckRecord('{"version":3,"kind":"search","at":"2026-10-20T10:00:00.000Z","prepared":false}'), {version: 3, kind: "search", at: "2026-10-20T10:00:00.000Z", prepared: false});
@@ -73,7 +86,9 @@ check("the check record: only saved versions without unsaved edits count; malfor
 check("wiring: header facts, History 'Checked', Copy link, report, audience line and SEO on the prepared output", () => {
   const studio = read("components/cloud-studio.tsx");
   // The facts sit in the project details popover of the header (websites only); scripts/check-editor-header-browser.cjs checks them mounted.
-  assert.ok(studio.includes('details={artifact.kind === "website" ? <>') && studio.includes('<VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} />'));
+  assert.ok(studio.includes('details={artifact.kind === "website" ? <>') && studio.includes('<VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} preview={previewFact} />'));
+  assert.ok(studio.includes("failed: previewBuild?.ok === false && previewBuild.revision === previewRevision"), "a build error counts only for the exact files that failed");
+  assert.ok(read("components/website-source-editor.tsx").includes("Preview rebuilds from this code in your browser, unsaved edits included; nothing is published until you publish."), "the Code tab describes what Preview does");
   assert.ok(studio.includes('v.number === checkRecord?.version && <span className="cloud-version-checked"'));
   assert.equal((studio.match(/onPublished=\{\(\) => setLiveRefresh\(value => value \+ 1\)\}/g) ?? []).length, 2, "both publish panels refresh the header");
   const trusted = read("components/trusted-website-publish.tsx");

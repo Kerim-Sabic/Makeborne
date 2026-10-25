@@ -149,7 +149,7 @@ export default function WebsiteSourceEditor({source, readOnly, onChange, subject
   }
   return <section className="source-editor" aria-label="Website code editor">
     <header className="source-editor-heading"><div><span className="eyebrow">PROJECT SOURCE</span><h3>Your website, in code</h3></div><span className="source-editor-badge">{readOnly ? "Read only" : "Autosave on"}</span></header>
-    <p className="source-editor-guidance">Edits save as new versions after you pause. Preview shows the last verified build; editing does not rebuild or publish it. Use History to restore a saved version.</p>
+    <p className="source-editor-guidance">Edits save as new versions after you pause. Preview rebuilds from this code in your browser, unsaved edits included; nothing is published until you publish. Use History to restore a saved version.</p>
     <div className="source-editor-layout">
       <aside className="source-editor-files" aria-label="Project files">
         <SourceSearchPanel source={source} subject={subject} onOpenFile={path => {setSelected(path); setDeleting(false); setMessage("");}} onOpenLine={(path, from, to, line) => revealAt({path, line, from, to})}>

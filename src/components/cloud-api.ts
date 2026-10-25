@@ -313,9 +313,10 @@ export async function readCloudImage(path: string, expectedAccount: string, sign
   const response = await fetch(path, { headers: { "X-Makeborne-Account": expectedAccount }, cache: "no-store", signal });
   if (!response.ok) {
     const result = await response.json().catch(() => null);
-    throw new Error(result?.error?.message || "Artwork is unavailable. Check access or try again.");
+    // The status lets the preview tell a missing or denied image from a passing failure worth retrying.
+    throw Object.assign(new Error(result?.error?.message || "Artwork is unavailable. Check access or try again."), { status: response.status });
   }
-  if (response.headers.get("content-type")?.split(";")[0] !== "image/webp") throw new Error("Invalid artwork response.");
+  if (response.headers.get("content-type")?.split(";")[0] !== "image/webp") throw Object.assign(new Error("Invalid artwork response."), { status: response.status, invalid: true });
   const blob = await response.blob();
   if (signal.aborted || accountId !== expectedAccount || revision !== accountRevision) throw new Error("Your account changed. Reopen this project.");
   if (!blob.size || blob.size > 8 * 1024 * 1024) throw new Error("Artwork preview exceeds the supported size.");

@@ -112,7 +112,7 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled: locked, disabledReason, sendBlocked = null, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback or an advisor brief (with its mode and effort). Never sent automatically. */
   prefill?: { key: string; text: string; target?: EditTarget; mode?: "create" | "plan"; effort?: EffortLevel } | null;
@@ -129,7 +129,9 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   baseFiles: Record<string, string>; baseAssets: { id: string; path: string }[];
   defaultEffort?: EffortLevel; disabled?: boolean;
   /** Shown while disabled, when the reason is something the user can act on. */
-  disabledReason?: string; autoStart?: string | null;
+  disabledReason?: string;
+  /** Why a request must wait while typing may go on (e.g. an edit is still saving): blocks sending only, never the text. */
+  sendBlocked?: string | null; autoStart?: string | null;
   /** "plan" starts the first message in Plan mode (from a Plan-first creation). */
   autoStartMode?: "create" | "plan";
   onLive: (update: LiveUpdate | null) => void;
@@ -140,10 +142,12 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   estimates?: BuilderEstimates | null;
 }) {
   const copy = COPY[kind], website = kind === "website";
+  // Every request waits while locked or blocked; only `locked` stops typing.
+  const disabled = Boolean(locked) || Boolean(sendBlocked);
+  const blockedReason = locked ? disabledReason : sendBlocked ?? undefined;
   const [turns, setTurns] = useState<Turn[]>([]);
   const transcript = useChatHistory(accountId, workspaceId, artifactId, turns);
   const previousTurns = transcript.messages;
-  const blockedReason = disabled ? disabledReason : undefined;
   const [draft, setDraft] = useState("");
   const [effort, setEffort] = useState<EffortLevel>(defaultEffort ?? "medium");
   const sourceOwner = attachmentOwner(accountId);
@@ -723,6 +727,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     proceed(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode, answers && questions && website ? designAnswers(questions, answers) : {}, text);
   };
   const submit = (text: string) => {
+    if (disabled) return;
     // A selected element must still be exactly what the user saw; otherwise refuse instead of editing another one.
     const issue = targetIssue(target, text, baseFiles, version);
     if (issue) { setNotice(issue); return; }
@@ -939,7 +944,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         <span><button type="button" disabled={busy || Boolean(draft.trim())} onClick={() => { setDraft(earlier.text); setEarlier(null); if (pendingScope) clearPendingRequest(browserStorage(), pendingScope); }}>Put it back in the composer</button>
         <button type="button" onClick={() => { setEarlier(null); if (pendingScope) clearPendingRequest(browserStorage(), pendingScope); }}>Dismiss</button></span>
       </div>}
-      {target && draft.includes(targetReference(target)) && <p className="lb-target"><span>Editing {target.label} · {targetReference(target)} · selected in version {target.version}</span>
+      {target && draft.includes(targetReference(target)) && <p className="lb-target"><span>Editing {target.label}<small>{targetReference(target)} · selected in version {target.version}</small></span>
         <button type="button" onClick={() => setTarget(null)}>Clear target</button></p>}
       {provenance && <p className="lb-provenance" data-status={provenance.status}><span>{provenance.status === "pending" ? `From ${provenanceLabel(provenance.provenance)} · recorded with your next request. The advice itself changed nothing here.` : `Started from ${provenanceLabel(provenance.provenance)}`}</span>
         {provenance.status === "pending" && onProvenance && <button type="button" disabled={busy} onClick={() => onProvenance(null)}>Don’t record</button>}</p>}
@@ -951,7 +956,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         note="Saved on this device for this project. Leave out skips a file for this request only; × deletes the saved copy. Continuing uses the original request’s files." />
 
       {sources.error && <p className="lb-notice" role="alert">{sources.error}</p>}
-      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
+      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || locked || operationRunning || Boolean(previewingRecovery)}
         onChange={event => setDraft(event.target.value)}
         onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(draft); } }} />
       <div className="lb-controls">
