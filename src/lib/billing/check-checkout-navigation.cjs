@@ -7,7 +7,7 @@ const context = { exports: {}, URL, Error };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(`${__dirname}/checkout-navigation.ts`, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, context);
-const { topupNavigationUrl: resolve } = context.exports;
+const { topupNavigationUrl: resolve, creationNavigationUrl } = context.exports;
 const live = "https://whop.com/checkout/ch_test123/";
 const sandbox = "https://sandbox.whop.com/checkout/ch_test123/?session=fixture";
 let checks = 0;
@@ -25,4 +25,16 @@ for (const url of [null, {}, "not a url", "//whop.com/checkout/ch_test", "http:/
 }
 const component = fs.readFileSync(`${__dirname}/../../components/billing-topups.tsx`, "utf8");
 assert.match(component, /window\.location\.assign\(topupNavigationUrl\(data\?\.url, window\.location\.origin\)\)/);
+const staging = 'https://makeborne-release-staging-dbc6yifb8-kerimsabic-6594s-projects.vercel.app';
+assert.equal(creationNavigationUrl(sandbox, staging), sandbox); checks++;
+assert.throws(() => resolve(sandbox, staging), /could not be verified/); checks++;
+for (const origin of ['https://makeborne.com', 'https://makeborne-release-staging.vercel.app',
+  'https://makeborne-release-staging-abcdefghi-other-team.vercel.app',
+  staging + '.evil.test', staging.replace('https:', 'http:'), staging + ':444',
+  staging.replace('https://', 'https://user@'), staging.replace('dbc6yifb8', 'short')]) {
+  assert.throws(() => creationNavigationUrl(sandbox, origin), /could not be verified/); checks++;
+}
+assert.equal(creationNavigationUrl(live, 'https://makeborne.com'), live); checks++;
+const creation = fs.readFileSync(`${__dirname}/../../components/creation-plans.tsx`, 'utf8');
+assert.match(creation, /window\.location\.assign\(creationNavigationUrl\(data\?\.url, window\.location\.origin\)\)/);
 console.log(`${checks + 1} checkout navigation checks passed; no network or checkout actions.`);

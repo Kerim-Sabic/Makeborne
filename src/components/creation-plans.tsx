@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { BookOpen, Globe, Presentation } from "lucide-react";
 import { CREATION_PLANS, RECOMMENDED_BADGE, RECOMMENDED_PLAN, TAX_NOTE, YEARLY_DISCOUNT_PERCENT, creditMultiple, mediumFloor, planOutcomes, planPrice, usd, type BillingInterval, type PlanId, type PlanOutcome } from "@/lib/billing/plans";
 import { authDestination } from "@/lib/supabase/auth-flow";
+import { creationNavigationUrl } from "@/lib/billing/checkout-navigation";
 import type { BuilderEstimates, MeasuredRun } from "@/lib/builder/credit-estimate";
 
 type Availability = { authenticated: boolean; existingMember: boolean; offers: { tier: PlanId; interval: BillingInterval; totalCents: number; monthlyCredits: number }[] };
@@ -117,10 +118,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
     if (response.status === 401) { login(choice); return; }
     const data = await response.json().catch(() => null);
     if (response.ok) {
-      const url = new URL(data?.url);
-      const localSandbox = ["localhost", "127.0.0.1"].includes(window.location.hostname) && url.origin === "https://sandbox.whop.com";
-      if ((!localSandbox && url.origin !== "https://whop.com") || url.username || url.password || !/^\/checkout\/ch_[A-Za-z0-9]+\/?$/.test(url.pathname)) throw new Error("unverified");
-      window.location.assign(url.href);
+      window.location.assign(creationNavigationUrl(data?.url, window.location.origin));
       return;
     }
     const code = typeof data?.error?.code === "string" ? data.error.code : "";
