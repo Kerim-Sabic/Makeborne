@@ -193,6 +193,36 @@ async function main(){
    routeEnv.env={...env,MAKEBORNE_PUBLICATION_WORKSPACE_IDS:randomUUID()};assert.equal((await POST(request())).status,403);assert.equal(reads,1);
   }finally{routeTransport=async()=>{throw Error('UNEXPECTED_TEST_NETWORK');};routeData=null;routeEnv.env={};}
  });
+ await check('entitled production scope (20261025200000) needs exact production identity, no list, and still reauthorizes through the load RPC',async()=>{
+  const {publicationBrokerProfile}=load('src/lib/projects/publication-broker-profile.ts'),{PRODUCTION}=load('infra/publication-controller/profiles.mjs');
+  const f=fixture(),production=PRODUCTION.brokerOrigin;
+  const env={MAKEBORNE_PUBLICATION_ASSET_BROKER_ENABLED:'true',MAKEBORNE_HOSTING_NAMESPACE:'production',MAKEBORNE_PUBLICATION_ASSET_BROKER_ORIGIN:production,NEXT_PUBLIC_SUPABASE_URL:`https://${PRODUCTION.projectRef}.supabase.co`,VERCEL_PROJECT_ID:PRODUCTION.projectId,VERCEL_ENV:'production',MAKEBORNE_PUBLICATION_WORKSPACE_SCOPE:'entitled'};
+  const profile=publicationBrokerProfile(env);assert.equal(profile.workspaceScope,'entitled');assert.equal(profile.workspaceIds,undefined);
+  assert.equal(publicationBrokerProfile({...env,MAKEBORNE_PUBLICATION_WORKSPACE_SCOPE:'',MAKEBORNE_PUBLICATION_WORKSPACE_IDS:f.workspaceId}).workspaceScope,'allowlist');
+  for(const patch of [{MAKEBORNE_PUBLICATION_WORKSPACE_IDS:f.workspaceId},{MAKEBORNE_PUBLICATION_WORKSPACE_SCOPE:'all'},{MAKEBORNE_PUBLICATION_WORKSPACE_SCOPE:'ENTITLED'},{VERCEL_ENV:'preview'},
+   {MAKEBORNE_STAGING_QA_WORKSPACE_ID:f.workspaceId},{MAKEBORNE_HOSTING_NAMESPACE:'staging',NEXT_PUBLIC_SUPABASE_URL:STAGING_SUPABASE_URL,MAKEBORNE_PUBLICATION_ASSET_BROKER_ORIGIN:origin,MAKEBORNE_STAGING_QA_WORKSPACE_ID:f.workspaceId,VERCEL_PROJECT_ID:undefined}])
+   assert.throws(()=>publicationBrokerProfile({...env,...patch}),/PUBLICATION_PROFILE_INVALID/);
+  const {workspaceId,...rest}=f.deps,deps={...rest,origin:production,namespace:'production',workspaceScope:'entitled'};
+  for(const bad of [{...deps,workspaceIds:[workspaceId]},{...deps,workspaceId},{...deps,namespace:'staging',origin},{...deps,workspaceScope:'everyone'}])assert.throws(()=>publicationAssetBroker(bad),/CONFIG_INVALID/);
+  const down=publicationSourceDownloader({secret,origin:production,namespace:'production',now:()=>now,fetch:async(u,init)=>publicationAssetBroker(deps)(new Request(u,init))});
+  assert.deepEqual(Buffer.from(await down('',17,new AbortController().signal,f.context)),f.bytes);assert.equal(f.calls.load.length,2);
+  // Database refusal (lapsed plan, unlisted scope, other workspace) surfaces as a load failure: no bytes are read.
+  const reads=f.calls.read.length;const refused={...deps,async load(){throw new Error('PUBLICATION_ASSET_UNAVAILABLE');}};
+  await assert.rejects(publicationSourceDownloader({secret,origin:production,namespace:'production',now:()=>now,fetch:async(u,init)=>publicationAssetBroker(refused)(new Request(u,init))})('',17,new AbortController().signal,f.context));
+  assert.equal(f.calls.read.length,reads);
+  // Identity checks other than the list still apply: a record outside the loaded workspace is refused.
+  const moved={...deps,async load(){const v=structuredClone(f.loaded);v.assetRecords[0].workspace_id=randomUUID();return v;}};
+  await assert.rejects(publicationSourceDownloader({secret,origin:production,namespace:'production',now:()=>now,fetch:async(u,init)=>publicationAssetBroker(moved)(new Request(u,init))})('',17,new AbortController().signal,f.context));
+  assert.equal(f.calls.read.length,reads);
+  routeData=f.loaded;routeEnv.env={...env,MAKEBORNE_PUBLICATION_ASSET_BROKER_SECRET:secret,SUPABASE_SECRET_KEY:'sb_secret_fixture'};
+  routeTransport=async target=>{assert.equal(new URL(target).origin,`https://${PRODUCTION.projectRef}.supabase.co`);return new Response(f.bytes);};
+  try{
+   const body=JSON.stringify(f.context),time=String(Math.floor(Date.now()/1000)),before=routeCalls.length;
+   const response=await POST(new Request(production+contract.PUBLICATION_ASSET_PATH,{method:'POST',body,headers:{'content-type':'application/json','x-makeborne-asset-time':time,'x-makeborne-asset-signature':contract.publicationAssetSignature(secret,production,time,body)}}));
+   assert.equal(response.status,200);assert.deepEqual(Buffer.from(await response.arrayBuffer()),f.bytes);assert.equal(routeCalls.length-before,2);
+   assert(routeCalls.slice(before).every(call=>call.name==='makeborne_load_publication_preparation'));
+  }finally{routeTransport=async()=>{throw Error('UNEXPECTED_TEST_NETWORK');};routeData=null;routeEnv.env={};}
+ });
  console.log(`${checks} private publication source transport groups passed; only mocked network/storage, no cloud calls.`);
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

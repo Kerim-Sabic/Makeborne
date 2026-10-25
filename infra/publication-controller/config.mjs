@@ -18,9 +18,13 @@ export function parseControllerConfig(value,env,{read=readFileSync,nodeMajor=Num
  if(Object.keys(env).some(k=>/^(PG|SUPABASE|NEXT_PUBLIC_SUPABASE|POSTGRES|AWS_|R2_|VERCEL_)/.test(k)
   ||['DATABASE_URL','NODE_OPTIONS','NODE_TLS_REJECT_UNAUTHORIZED','NODE_EXTRA_CA_CERTS','NODE_USE_ENV_PROXY','NODE_USE_SYSTEM_CA','SSL_CERT_FILE','SSL_CERT_DIR','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY'].includes(k.toUpperCase())))invalid();
  const profile=publicationProfile(value?.namespace),production=profile.namespace==='production';
- const scopeKey=production?'workspaceAllowlist':'qaWorkspaceId';
+ // Production schema 2: exact workspace list. Schema 3: every workspace the
+ // database authority admits (verified plan access, migration 20261025200000).
+ const entitled=production&&value?.schemaVersion===3;
+ const scopeKey=!production?'qaWorkspaceId':entitled?'workspaceScope':'workspaceAllowlist';
  if(!exact(value,['schemaVersion','namespace','supabaseProjectRef',scopeKey,'database','vercel','broker','output','approvedFile','approvedSha256'])
-  ||value.schemaVersion!==(production?2:1)||value.supabaseProjectRef!==profile.projectRef||!production&&!uuid.test(value.qaWorkspaceId)
+  ||value.schemaVersion!==(production?(entitled?3:2):1)||value.supabaseProjectRef!==profile.projectRef||!production&&!uuid.test(value.qaWorkspaceId)
+  ||entitled&&value.workspaceScope!=='entitled'
   ||!exact(value.database,['host','port','database','user','caFile'])||value.database.host!==profile.databaseHost||value.database.port!==5432||value.database.database!=='postgres'
   ||!new RegExp(`^makeborne_publication_controller_${profile.namespace}(?:_[a-z0-9]{1,16})?$`).test(value.database.user)
   ||!exact(value.vercel,['teamId','projectId'])||value.vercel.teamId!==profile.teamId||value.vercel.projectId!==profile.projectId
@@ -29,7 +33,7 @@ export function parseControllerConfig(value,env,{read=readFileSync,nodeMajor=Num
   ||production&&Object.hasOwn(env,'MBPUB_BROKER_PROTECTION_BYPASS')
   ||!exact(value.output,['accountId','bucket'])||!/^[a-f0-9]{32}$/.test(value.output.accountId)||value.output.bucket!==profile.bucket
   ||!hash.test(value.approvedSha256))invalid();
- const workspaces=production?publicationWorkspaces(value.workspaceAllowlist):Object.freeze([value.qaWorkspaceId]);
+ const workspaces=entitled?Object.freeze([]):production?publicationWorkspaces(value.workspaceAllowlist):Object.freeze([value.qaWorkspaceId]);
  const approvedBytes=file(value.approvedFile,8192,read);
  if(createHash('sha256').update(approvedBytes).digest('hex')!==value.approvedSha256)invalid();
  const approved=JSON.parse(approvedBytes.toString('utf8'));
@@ -41,7 +45,7 @@ export function parseControllerConfig(value,env,{read=readFileSync,nodeMajor=Num
  if([approved.compiler.image,approved.renderer.image].some(ref=>!ref.replace(/^vcr\.vercel\.com\//,'').startsWith(profile.imagePrefix)))invalid();
  const ca=file(value.database.caFile,131072,read).toString('utf8');
  if(!/^\s*-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----\s*$/.test(ca)||ca.includes('PRIVATE KEY'))invalid();
- return Object.freeze({namespace:profile.namespace,qaWorkspaceId:production?undefined:value.qaWorkspaceId,workspaceAllowlist:workspaces,sitesDomain:profile.sitesDomain,
+ return Object.freeze({namespace:profile.namespace,qaWorkspaceId:production?undefined:value.qaWorkspaceId,workspaceScope:entitled?'entitled':'allowlist',workspaceAllowlist:workspaces,sitesDomain:profile.sitesDomain,
   database:Object.freeze({host:profile.databaseHost,port:5432,database:'postgres',user:value.database.user,
    password:secret(env,'MBPUB_DB_PASSWORD',/^[^\x00-\x1f\x7f]{16,1024}$/),ssl:Object.freeze({ca,rejectUnauthorized:true,servername:profile.databaseHost,minVersion:'TLSv1.2'}),
    max:1,connectionTimeoutMillis:5000,idleTimeoutMillis:1000,application_name:'makeborne-publication-controller-'+profile.namespace}),
