@@ -868,10 +868,10 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
       </div>
       <p className="lb-plan-note">Attach PNG, JPEG, WebP, GIF, PDF, TXT or Markdown. Up to 5 files, 3 MB combined; text up to 200,000 characters.</p>
-      {blockedReason && <p className="lb-notice">{blockedReason}</p>}
       </details>
       {notice && <p className="lb-notice" role="status">{notice}</p>}
-      {blockedReason && !notice && <p className="lb-availability" role="status" title={blockedReason}>Sending unavailable <span>See request details</span></p>}
+      {/* Why sending is off (AI paused, today's limit, a draft to save) is shown in full, never only behind the collapsed details. */}
+      {blockedReason && !notice && <p className="lb-availability" role="status">{blockedReason}</p>}
     </form>
   </aside>;
 }

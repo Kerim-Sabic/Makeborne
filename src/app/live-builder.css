@@ -191,8 +191,7 @@
 .lb-request-details > summary { cursor:pointer; padding:9px 2px 2px; display:flex; justify-content:space-between; gap:8px; }
 .lb-request-details > summary span { opacity:.8; }
 .lb-request-details[open] > summary { margin-bottom:8px; }
-.lb-availability { margin:7px 2px 0; font-size:11px; color:var(--text-muted); }
-.lb-availability span { opacity:.75; margin-left:6px; }
+.lb-availability { margin:7px 2px 0; font-size:12px; line-height:1.4; color:var(--text-muted); }
 .lb-history > .lb-turn:first-of-type { margin-top:12px; }
 .lb-history > p { font-size:11px; margin:0 0 12px; }
 
