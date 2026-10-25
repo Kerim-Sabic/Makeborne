@@ -63,7 +63,7 @@ const renderedContrastCheck = fs.existsSync(path.join(REPO, 'src/lib/builder/con
 const { ProjectFiles } = loadApp('src/lib/builder/files.ts');
 const { RunSpend, memoryGate } = loadApp('src/lib/ai/run-spend.ts');
 const { BUILDER_EFFORT } = loadApp('src/lib/builder/pricing.ts');
-const { reviewCreditCeiling, REVIEW_MAX_TURNS, autoReviewRounds } = loadApp('src/lib/builder/review-policy.ts');
+const { reviewCreditCeiling, REVIEW_MAX_TURNS, autoReviewRounds, reviewImageLimit } = loadApp('src/lib/builder/review-policy.ts');
 const { reviewRequest, reviewAttachments, ReviewInputSchema } = loadApp('src/lib/builder/review.ts');
 const { compileVerdict } = loadApp('src/lib/builder/compile.ts');
 const imagesModule = values.images ? loadApp('src/lib/builder/images.ts') : null;
@@ -116,7 +116,7 @@ try {
     const reservation = await budget.reserve({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. ${values.effort}` });
     // Images: the run's whole image allowance (max images x the dearest allowed medium bound) reserved under the OpenAI sub-cap.
     const imageModels = imagesModule ? imagesModule.imageConfiguration().models : [];
-    const imageBoundUsd = imageModels.length ? policy.maxImages * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
+    const imageBoundUsd = imageModels.length ? (policy.maxWebsiteImages ?? policy.maxImages) * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
     const imageReservation = imageBoundUsd ? await budget.reserve({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
     let openaiMicrousd = 0, openaiUncertain = false;
     const imageBytes = new Map();
@@ -219,7 +219,8 @@ try {
         if (capture.coverageIssue) stages.push({ name: 'review', skipped: capture.coverageIssue });
         else {
           const input = ReviewInputSchema.parse({ round: 1, ...capture });
-          await stage('review', reviewRequest(input), { attachments: reviewAttachments(input), capMicrousd: Math.round(reviewCreditCeiling(policy.ceilingCredits) * RATE * 1e6), limits: { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } });
+          await stage('review', reviewRequest(input), { attachments: reviewAttachments(input), capMicrousd: Math.round(reviewCreditCeiling(policy.ceilingCredits) * RATE * 1e6), limits: { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), replaceOnly: true,
+            maxImages: reviewImageLimit({ imagery: prep.design?.imagery, siteImages: [...files.assets.keys()].filter(path => /^public\/images\/(?!_r\/)/.test(path) && !/^public\/images\/(?:photo-[0-9]+|brand-logo)\.webp$/.test(path)).length }) } });
         }
       }
     } catch (error) { outcome = `error: ${String(error.message).slice(0, 200)}`; }

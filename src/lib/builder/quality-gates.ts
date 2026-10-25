@@ -64,6 +64,21 @@ const isStyle = (path: string) => path.endsWith(".css");
 const join = (files: ReadonlyMap<string, string>, test: (path: string) => boolean) => [...files].filter(([path]) => test(path)).map(([, content]) => content).join("\n");
 
 /** CSS with every block opened by `opener` (an @media prelude ending in "{") removed, braces matched. */
+/** The bodies of the blocks a CSS opener starts (e.g. every @media (prefers-reduced-motion: reduce) block). */
+export function blocksOf(css: string, opener: RegExp) {
+  const out: string[] = [];
+  for (const match of css.matchAll(opener)) {
+    let depth = 1, index = match.index! + match[0].length;
+    const start = index;
+    for (; index < css.length && depth > 0; index++) {
+      if (css[index] === "{") depth++;
+      else if (css[index] === "}") depth--;
+    }
+    out.push(css.slice(start, index - 1));
+  }
+  return out;
+}
+
 export function withoutBlocks(css: string, opener: RegExp) {
   let out = "", at = 0;
   for (const match of css.matchAll(opener)) {
@@ -157,6 +172,13 @@ export function qualityProblems({ files, changed, routes = [], required }: Quali
   if (/\[data-reveal[^{]*\{[^}]*opacity:\s*0(?![.\d])/.test(withoutBlocks(touchedStyles, /@media\s*\(\s*prefers-reduced-motion:\s*no-preference\s*\)\s*\{/g))) {
     problems.push("A [data-reveal] hidden state sits outside @media (prefers-reduced-motion: no-preference) and html.js: move it inside both gates so content is never stuck invisible.");
   }
+
+  // Marquee and tag bands stay one row, also when motion is reduced (a reduced-motion wrap left an orphan word on a
+  // second line of a lime tag band in round 3D; the rendered gate checks the moving state).
+  const wrappingBands = blocksOf(touchedStyles, /@media[^{]*prefers-reduced-motion:\s*reduce[^{]*\{/g).flatMap(block => [...block.matchAll(/([^{}]+)\{([^{}]*)\}/g)])
+    .filter(([, selector, body]) => /marquee|ticker|scroller|band|ribbon/i.test(selector) && /flex-wrap:\s*wrap|white-space:\s*normal/.test(body))
+    .map(([, selector]) => selector.trim().slice(-60));
+  if (wrappingBands.length) problems.push(`Under prefers-reduced-motion ${[...new Set(wrappingBands)].slice(0, 2).join(", ")} wraps a marquee or tag band into several rows: keep it one row (flex-wrap: nowrap, white-space: nowrap, overflow: clip on the band, the edge faded with mask-image, the duplicate hidden), never a wrapped second line.`);
 
   // Fixed or sticky bars and floating buttons at the bottom of the screen cover content: the judge
   // penalised floating buttons and, in round 4, fixed quick-action bars sitting over menus and tickets.

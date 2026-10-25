@@ -1,0 +1,24 @@
+{
+  "id": "w21-wellness-north-quay-physio",
+  "order": 25,
+  "format": "website",
+  "direction": "wellness",
+  "title": "North Quay Physio",
+  "shared": true,
+  "brief": "I'm Siobhán Hurley, a chartered physiotherapist. I run North Quay Physio in Cork city with one other physio, Darragh Lyons, and a part-time Pilates instructor. Most of our patients are runners, desk workers with back and neck pain, and people coming back after knee or hip surgery. Services: assessment and treatment, sports injury rehab, post-surgery rehab, and small-group clinical Pilates (maximum six people). A first appointment is 45 minutes, follow-ups 30. Prices and the clinic address are still being confirmed, so keep them as clearly marked placeholders. We're open Monday to Friday 8am to 8pm and Saturday 9am to 1pm. No referral is needed, and many health insurers give a partial refund, but we can't promise one. The main goal is booking a first appointment, so make that easy on a phone. The booking request form isn't connected yet: it must not ask for medical history and must not say a booking is confirmed. Email hello@northquayphysio.example. No patient testimonials, success rates or \"Cork's best\" claims.",
+  "source": {
+    "type": "persona",
+    "path": "held out: written on 22 October 2026 for the Lovable comparison, after every tuning round; never used to tune Makeborne",
+    "adaptation": "Owner voice with concrete supplied services, hours and limits. Clinic and people are fictional. Ireland has no reserved fictional phone range, so contact is email only and the address stays a placeholder."
+  },
+  "persona": null,
+  "mustHave": [
+    "the four services and the 45/30 minute appointment lengths",
+    "hours Monday to Friday 8am to 8pm and Saturday 9am to 1pm",
+    "prices and address shown as marked placeholders",
+    "booking request that asks no medical history and does not confirm a booking",
+    "the insurer refund stated without a promise; no referral needed",
+    "email as a mailto: link"
+  ],
+  "notes": "Held out from tuning (22 October 2026). Built once on each tool for the comparison."
+}

@@ -15,7 +15,7 @@
  */
 import type { Browser } from "playwright";
 import type { ContrastFinding } from "./rendered-contrast";
-import type { CoveredText, CutOff } from "./contrast-probe";
+import type { CompDeviation, CompReading, CoveredText, CutOff, PageOverflow, WrappedBand } from "./contrast-probe";
 
 const HOST_PATH = "/__makeborne-contrast-host";
 const STATE = { default: "", hover: " on hover", focus: " on keyboard focus", invalid: " in its error state" } as const;
@@ -33,6 +33,25 @@ export function coveredProblem(item: CoveredText) {
 }
 
 /** A boxed element with text running past the screen edge (a hero card off the page). */
+/** Problems that block finish every time they are found (never accepted on a repeat): text hidden under another
+ * element, content past the screen edge, a page wider than the screen and a band wrapped onto a second row. */
+export { BLOCKING_PROBLEM } from "./contrast-gate-rules";
+
+/** The page scrolls sideways (W9). */
+export function overflowProblem(item: PageOverflow) {
+  return `Page overflow: the page is ${item.px} px wider than the screen at ${item.width} px wide; the outermost element past the edge is ${item.element}${item.text ? ` ("${item.text}")` : ""}. Size it to its column (max-width: 100%, min-width: 0, overflow-wrap: anywhere for long words, smaller display type on phones), or clip a full-bleed band with overflow: clip on its section; never overflow-x: hidden on html or body. Then call finish again.`;
+}
+
+/** A section built further from its design comp than allowed (measured at the comp's viewport). */
+export function fidelityProblem(item: CompDeviation) {
+  return `Comp fidelity: the "${item.section}" section (${item.viewport}) is off its comp: ${item.fix}, unless that breaks the 360 px, overlap or contrast rules. Then call finish again.`;
+}
+
+/** A marquee or tag band that wraps into a second row. */
+export function wrappedProblem(item: WrappedBand) {
+  return `Wrapped band: ${item.element} ("${item.text}") breaks into ${item.rows} rows at ${item.width} px wide. A marquee or tag band is always one row: flex-wrap: nowrap on the track, white-space: nowrap on its items and overflow: clip on the band; under prefers-reduced-motion it stops but stays one row (fade the edge with mask-image, hide the duplicate), never a wrapped second line. Then call finish again.`;
+}
+
 export function cutOffProblem(item: CutOff) {
   return `Cut off: ${item.element} ("${item.text}") runs past the ${item.side} edge of the screen at ${item.width} px wide. Keep everything inside the page margins at every width down to 360 px: size cards, panels and product mocks to their column (max-width: 100%), let rows wrap, and on small phones move secondary header items into the menu; only images and full-width bands may bleed. Then call finish again.`;
 }
@@ -49,7 +68,7 @@ export function contrastProblems(findings: readonly ContrastFinding[]) {
  */
 export function renderedContrastCheck(input: { origin: string; launch: () => Promise<Browser>; timeoutMs?: number }) {
   const origin = new URL(input.origin).origin;
-  return async (files: ReadonlyMap<string, string>): Promise<readonly string[] | null> => {
+  return async (files: ReadonlyMap<string, string>, options: { comps?: readonly CompReading[] } = {}): Promise<readonly string[] | null> => {
     let browser: Browser | null = null;
     try {
       browser = await input.launch();
@@ -61,11 +80,12 @@ export function renderedContrastCheck(input: { origin: string; launch: () => Pro
       await page.goto(`${origin}${HOST_PATH}`, { waitUntil: "load" });
       await page.addScriptTag({ url: `${origin}/builder-runtime/contrast-probe.js` });
       const result = await page.evaluate(async record => {
-        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[]; cutOff?: CutOff[] }> } }).__makeborneContrast;
+        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>, readings?: readonly CompReading[]) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[]; cutOff?: CutOff[]; wrapped?: WrappedBand[]; overflow?: PageOverflow[]; fidelity?: CompDeviation[] }> } }).__makeborneContrast;
         if (!probe) throw new Error("contrast probe unavailable");
-        return probe.probeContrast(record);
-      }, Object.fromEntries(files));
-      return [...(result.covered ?? []).slice(0, 4).map(coveredProblem), ...(result.cutOff ?? []).slice(0, 2).map(cutOffProblem), ...contrastProblems(result.findings)];
+        return probe.probeContrast(record.files, record.readings);
+      }, { files: Object.fromEntries(files), readings: [...(options.comps ?? [])] });
+      return [...(result.covered ?? []).slice(0, 4).map(coveredProblem), ...(result.cutOff ?? []).slice(0, 2).map(cutOffProblem), ...(result.wrapped ?? []).slice(0, 1).map(wrappedProblem),
+        ...(result.overflow ?? []).slice(0, 2).map(overflowProblem), ...(result.fidelity ?? []).slice(0, 3).map(fidelityProblem), ...contrastProblems(result.findings)];
     } catch (error) {
       console.error(JSON.stringify({ event: "builder_contrast_unverified", reason: error instanceof Error ? error.message.slice(0, 200) : "unavailable" }));
       return null;

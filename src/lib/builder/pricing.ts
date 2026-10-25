@@ -32,13 +32,17 @@ export function aiCostUsdPerCredit(env: Record<string, string | undefined> = pro
 export const creditsForUsd = (usd: number) => Math.max(0, Math.ceil(usd / aiCostUsdPerCredit() - 1e-9));
 
 /** Builder behavior per effort level. The credit ceiling is the most a single
- * request may charge; the run stops gracefully before exceeding it. */
-export const BUILDER_EFFORT: Record<EffortLevel, { intensity: "low" | "medium" | "high" | "xhigh" | "max"; maxTurns: number; maxImages: number; ceilingCredits: number; maxTokens: number }> = {
-  light: { intensity: "low", maxTurns: 8, maxImages: 1, ceilingCredits: 20, maxTokens: 32000 },
-  medium: { intensity: "medium", maxTurns: 12, maxImages: 3, ceilingCredits: 50, maxTokens: 64000 },
-  high: { intensity: "high", maxTurns: 16, maxImages: 4, ceilingCredits: 90, maxTokens: 64000 },
-  super_high: { intensity: "xhigh", maxTurns: 20, maxImages: 6, ceilingCredits: 140, maxTokens: 96000 },
-  ultra: { intensity: "max", maxTurns: 28, maxImages: 8, ceilingCredits: 240, maxTokens: 128000 },
+ * request may charge; the run stops gracefully before exceeding it. maxImages
+ * is the deck and book allowance; websites use maxWebsiteImages (owner, 22
+ * October 2026: as many images as the best-looking site needs). Both stay
+ * inside a third of the run's allowance, and websites inside the hosting
+ * limits (responsive-images.cjs siteImageFits). */
+export const BUILDER_EFFORT: Record<EffortLevel, { intensity: "low" | "medium" | "high" | "xhigh" | "max"; maxTurns: number; maxImages: number; maxWebsiteImages: number; ceilingCredits: number; maxTokens: number }> = {
+  light: { intensity: "low", maxTurns: 8, maxImages: 1, maxWebsiteImages: 3, ceilingCredits: 20, maxTokens: 32000 },
+  medium: { intensity: "medium", maxTurns: 12, maxImages: 3, maxWebsiteImages: 6, ceilingCredits: 50, maxTokens: 64000 },
+  high: { intensity: "high", maxTurns: 16, maxImages: 4, maxWebsiteImages: 8, ceilingCredits: 90, maxTokens: 64000 },
+  super_high: { intensity: "xhigh", maxTurns: 20, maxImages: 6, maxWebsiteImages: 10, ceilingCredits: 140, maxTokens: 96000 },
+  ultra: { intensity: "max", maxTurns: 28, maxImages: 8, maxWebsiteImages: 12, ceilingCredits: 240, maxTokens: 128000 },
 };
 /** Smallest balance worth starting a run with. */
 export const MINIMUM_RUN_CREDITS = 2;

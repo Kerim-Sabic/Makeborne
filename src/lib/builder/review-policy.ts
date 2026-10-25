@@ -64,3 +64,10 @@ export function reviewCreditCeiling(effortCeiling: number): number {
 }
 /** Tool-loop turns for one review round (look, fix, verify, finish). */
 export const REVIEW_MAX_TURNS = 6;
+/** Images one review round may generate: one regenerated image (an image the screenshots show
+ * reads as AI-made, is badly cropped beyond CSS or shows the wrong subject), only when the site
+ * already carries generated images and the client did not choose a type-only design. The image is
+ * paid from the round's existing credit ceiling and its third-of-allowance image budget. */
+export function reviewImageLimit(input: { imagery?: string | null; siteImages: number }): 0 | 1 {
+  return input.imagery === "type" || input.siteImages < 1 ? 0 : 1;
+}

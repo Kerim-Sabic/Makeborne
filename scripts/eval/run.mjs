@@ -36,10 +36,19 @@ import { parseArgs } from 'node:util';
 import pg from 'pg';
 import { REPO, RUNS, BRIEFS_DIR, ensureDir, isLintable, writeJson, rel, stamp } from './lib/paths.mjs';
 import { isolatedStack, qualityFixture, assertLocalOrigin, API, DB_PORT } from './lib/stack.mjs';
-import { CapReached, DuplicateReservation, TEST_ROOT_ENV, capUsd, ensureLedger, fits, isTestBudget, ledgerEntries, reserve, settle, summary as budgetSummary } from './lib/budget.mjs';
+import { CapReached, DuplicateReservation, TEST_ROOT_ENV, capUsd as designCapUsd, ensureLedger, fits as designFits, fitsScoped, isTestBudget, ledgerEntries, reserve as designReserve, reserveScoped, scopeSummary, settle, summary as designSummary } from './lib/budget.mjs';
 import { readSse, lastOperation } from './lib/sse.mjs';
 import { captureForReview, describeCapture, saveShots, selfTest as captureSelfTest } from './lib/capture-review.mjs';
 import { exportFixtures, exportRedesigns, withReadOnly } from './lib/fixtures.mjs';
+
+// EVAL_BUDGET_SCOPE: book this run against a recorded scoped allowance (a capApprovals record with `scope` and
+// `allowance`, see lib/budget.mjs recordScopedAllowance) instead of the design cap. Every reservation then carries
+// the scope and must fit that allowance and the ledger-wide caps; an unrecorded scope refuses before any paid call.
+const BUDGET_SCOPE = process.env.EVAL_BUDGET_SCOPE?.trim() || null;
+const reserve = BUDGET_SCOPE ? args => reserveScoped({ provider: 'anthropic', ...args, scope: BUDGET_SCOPE }) : designReserve;
+const fits = BUDGET_SCOPE ? bound => fitsScoped(BUDGET_SCOPE, bound) : designFits;
+const budgetSummary = BUDGET_SCOPE ? () => { const scoped = scopeSummary(BUDGET_SCOPE); return { ...scoped, capUsd: scoped.allowanceUsd }; } : designSummary;
+const capUsd = BUDGET_SCOPE ? () => budgetSummary().capUsd : designCapUsd;
 
 const require = createRequire(import.meta.url);
 const { loadApp } = require('./lib/app-modules.cjs');
@@ -1829,7 +1838,7 @@ export async function runLive({ report, approval, only, max, images, rerun = fal
   const runId = `live-${stamp()}`;
   const runDir = ensureDir(path.join(RUNS, runId));
   const startedAt = new Date().toISOString();
-  writeJson(path.join(runDir, 'approval.json'), { approval: approval.trim(), envApproved: true, at: startedAt, capUsd: capUsd(), remainingUsd: report.budget.remainingUsd, briefs: selected.map(brief => brief.id), images: Boolean(images), rerun: Boolean(rerun), websiteMode: plan ? 'plan' : 'create' });
+  writeJson(path.join(runDir, 'approval.json'), { approval: approval.trim(), envApproved: true, at: startedAt, capUsd: capUsd(), remainingUsd: report.budget.remainingUsd, briefs: selected.map(brief => brief.id), images: Boolean(images), rerun: Boolean(rerun), websiteMode: plan ? 'plan' : 'create', ...(BUDGET_SCOPE ? { budgetScope: BUDGET_SCOPE } : {}) });
   const items = [];
   let stopped = null, fatal = null, identity = null;
   const control = createLiveControl({ runDir, runId, deps: {
