@@ -31,6 +31,7 @@ Never add a public prefix to these variables:
 | `WHOP_API_KEY` | Company-scoped API credential |
 | `WHOP_COMPANY_ID` | `biz_CV9cZg1zFX3h7f` |
 | `WHOP_ACCESS_PLAN_IDS` | Comma-separated creation plan IDs; coffee is rejected |
+| `WHOP_CREATION_CHECKOUT_PLAN_IDS` | Optional exact list for new checkout; retain historical access/credit mappings separately. Empty, duplicate, malformed or unknown IDs close checkout. Omit only where each tier/cadence has one access mapping. |
 | `WHOP_WEBHOOK_SECRET` | Endpoint's literal `ws_...` signing secret |
 | `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key for authoritative billing records |
 | `MAKEBORNE_BILLING_MIGRATIONS_VERIFIED` | Set true only after applying and verifying the billing migration |

@@ -27,6 +27,18 @@ const route=load(require.resolve('../../app/api/billing/availability/route.ts'),
  config.enabled=false;assert.equal((await offers.configuredCreationOffers()).length,0);config.enabled=true;
  config.planConfigIssues=[{problem:'bad'}];assert.equal(offers.configuredCreationOffers().length,0);config.planConfigIssues=[];
  env.WHOP_PLAN_CREDIT_MAP+=',plan_duplicate:create:monthly';config.accessPlanIds.push('plan_duplicate');assert.equal(offers.configuredCreationOffers().length,1);config.accessPlanIds.pop();
+ // Historical memberships must remain reconcilable without becoming new offers.
+ config.accessPlanIds.push('plan_duplicate');
+ env.WHOP_CREATION_CHECKOUT_PLAN_IDS='plan_month,plan_year';
+ assert.equal(offers.configuredCreationOffers().length,2,'explicit checkout plans isolate legacy entitlement rules');
+ assert.equal(await offers.verifiedCreationOffer({planId:'plan_duplicate'}),null);
+ for(const invalid of ['', 'plan_unknown', 'not-a-plan', 'plan_month,plan_month', 'plan_month,']){
+  env.WHOP_CREATION_CHECKOUT_PLAN_IDS=invalid;
+  assert.equal(offers.configuredCreationOffers().length,0,'invalid checkout selection fails closed: '+invalid);
+ }
+ env.WHOP_CREATION_CHECKOUT_PLAN_IDS='plan_month,plan_year';
+ config.accessPlanIds.pop();
+ delete env.WHOP_CREATION_CHECKOUT_PLAN_IDS;
  let response=await route.GET(), body=await response.json();assert.equal(body.authenticated,false);assert.equal(body.offers.length,2);assert.equal(JSON.stringify(body).includes('plan_month'),false);assert.equal(response.headers.get('cache-control'),'private, no-store');
  user={id:'fixture'};members=[{membership_id:'mem_fixture'}];before=providerCalls;body=await(await route.GET()).json();assert.equal(body.existingMember,true);assert.equal(body.offers.length,0);assert.equal(providerCalls,before);
  dbError={message:'offline'};assert.equal((await route.GET()).status,503);
