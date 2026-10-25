@@ -8,9 +8,12 @@ const rows=value=>{const chain={eq:()=>chain,order:()=>chain,in:()=>chain,limit:
 const db={rpc:async()=>({data:true}),from:table=>({insert:async()=>({error:insertError}),update:()=>({eq:()=>({eq:async()=>{saved=true;return {}}})}),
  select:()=>rows(()=>table==='billing_memberships'?memberRows:openRows)})};
 let offerAvailable=true;
+// Exact-checkout recovery (checkout-recovery.ts): 'pending' means Whop lists no paid payment for that checkout now.
+let recovery='pending',recoveryCalls=[];
 const modules={
  '@/lib/billing/creation-offers':{verifiedCreationOffer:async()=>offerAvailable?{planId:'plan_fixture'}:null},
  '@/lib/billing/access':{requireBillingUser:async()=>({id:'user_fixture'})},'@/lib/billing/config':{billingConfig:()=>config},'@/lib/billing/database':{billingDatabase:()=>db},
+ '@/lib/billing/checkout-recovery':{recoverCreationCheckout:async(user,request)=>{recoveryCalls.push([user,request]);if(recovery==='throw')throw Object.assign(Error('provider unavailable'),{code:'CHECKOUT_RECOVERY_UNVERIFIED'});return recovery}},
  '@/lib/billing/whop':{checkoutUrl:x=>x,whopRequest:async(path,body)=>{providerCalls++;assert.equal(path,'/checkout_configurations');payload=body;return response}},
  '@/lib/supabase/auth-flow':{authDestination:x=>x},'@/lib/site-metadata':{SITE:{url:'https://makeborne.com'}},
  '@/lib/server/http':{RequestError,sameOrigin(){},boundedJson:r=>r.json(),apiError:e=>Response.json({code:e.code},{status:e.status??500})},
@@ -27,15 +30,21 @@ const request=(selection={planId:'plan_fixture'})=>new Request('http://localhost
  // An abandoned checkout must not lock the account: the open checkout for the same plan resumes, without a new provider call.
  insertError={code:'PBC02'};openRows=[{request_id:'r1',plan_id:'plan_fixture',purchase_url:'https://whop.com/checkout/ch_open',status:'ready',checkout_id:'ch_open'}];memberRows=[];
  let before=providerCalls,res=await ctx.exports.POST(request());assert.equal(res.status,200);assert.deepEqual(await res.json(),{url:'https://whop.com/checkout/ch_open',resumed:true});assert.equal(providerCalls,before);
+ assert.deepEqual(recoveryCalls.at(-1),['user_fixture','r1'],'Resume first re-checks the open checkout with Whop');
+ // Missing/late first webhook: the unbound checkout may already be paid. Never send the buyer back to pay it again.
+ for(const [outcome,code] of [['recovered','CHECKOUT_ALREADY_COMPLETED'],['review','CHECKOUT_PENDING'],['skipped','CHECKOUT_PENDING'],['throw','CHECKOUT_PENDING']]){
+  recovery=outcome;res=await ctx.exports.POST(request());assert.equal(res.status,409,outcome);const body=await res.json();assert.equal(body.code,code,outcome);assert(!('url' in body),'No checkout URL when '+outcome);assert.equal(providerCalls,before,'No new checkout when '+outcome);}
+ recovery='pending';
  openRows=[{...openRows[0],plan_id:'plan_other'}];res=await ctx.exports.POST(request());assert.equal(res.status,409);assert.equal((await res.json()).code,'CHECKOUT_ALREADY_OPEN');
  openRows=[{request_id:'r2',plan_id:'plan_fixture',purchase_url:null,status:'pending',checkout_id:null}];assert.equal((await ctx.exports.POST(request())).status,409,'An uncertain provider attempt still needs support');
  openRows=[{request_id:'r3',plan_id:'plan_fixture',purchase_url:'https://whop.com/checkout/ch_paid',status:'ready',checkout_id:'ch_paid'}];memberRows=[{checkout_id:'ch_paid'}];assert.equal((await ctx.exports.POST(request())).status,409,'A paid checkout is never resumed');
  assert.equal(providerCalls,before,'No blocked path contacts Whop');insertError=undefined;
  insertError={code:'23505'};openRows=[{plan_id:'plan_fixture',return_path:'/studio',status:'ready',purchase_url:'https://whop.com/checkout/ch_used',checkout_id:'ch_used'}];memberRows=[{membership_id:'mem_expired',checkout_id:'ch_used'}];before=providerCalls;
  res=await ctx.exports.POST(request());assert.equal(res.status,409);assert.equal((await res.json()).code,'CHECKOUT_ALREADY_COMPLETED');assert.equal(providerCalls,before);
- memberRows=[];assert.equal((await ctx.exports.POST(request())).status,200,'An unbound same-key checkout still resumes');assert.equal(providerCalls,before);insertError=undefined;
+ memberRows=[];assert.equal((await ctx.exports.POST(request())).status,200,'An unbound same-key checkout still resumes');assert.deepEqual(recoveryCalls.at(-1),['user_fixture','00000000-0000-4000-8000-000000000001']);
+ for(const [outcome,code] of [['recovered','CHECKOUT_ALREADY_COMPLETED'],['review','CHECKOUT_PENDING'],['throw','CHECKOUT_PENDING']]){recovery=outcome;res=await ctx.exports.POST(request());assert.equal(res.status,409);assert.equal((await res.json()).code,code,'Same-key retry of a possibly paid checkout: '+outcome);}recovery='pending';assert.equal(providerCalls,before);assert.equal(providerCalls,before);insertError=undefined;
  offerAvailable=false;before=providerCalls;assert.equal((await ctx.exports.POST(request())).status,503);assert.equal(providerCalls,before);offerAvailable=true;
  assert.equal((await ctx.exports.POST(request({tier:'create',interval:'yearly'}))).status,200);
  before=providerCalls;assert.equal((await ctx.exports.POST(request({tier:'create',interval:'yearly',priceCents:1}))).status,400);assert.equal(providerCalls,before);
- console.log('PASS checkout contract: merchant/plan validation; HTTPS returns; duplicate subscription and checkout blocked before provider call; abandoned checkout resumes for the same plan');
+ console.log('PASS checkout contract: merchant/plan validation; HTTPS returns; duplicate subscription and checkout blocked before provider call; abandoned checkout resumes for the same plan only after Whop shows no paid payment on it; a paid-but-unbound checkout is recovered or held, never re-offered');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -4,6 +4,7 @@ import { billingConfig } from "@/lib/billing/config";
 import { billingDatabase } from "@/lib/billing/database";
 import { verifiedCreationOffer } from "@/lib/billing/creation-offers";
 import { checkoutUrl, whopRequest } from "@/lib/billing/whop";
+import { recoverCreationCheckout } from "@/lib/billing/checkout-recovery";
 import { authDestination } from "@/lib/supabase/auth-flow";
 import { SITE } from "@/lib/site-metadata";
 import { apiError, boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
@@ -28,6 +29,20 @@ async function openCheckout(db: Db, userId: string) {
   if (membershipError) return null;
   const bound = new Set((memberships ?? []).map(row => row.checkout_id));
   return (checkouts ?? []).find(row => !row.checkout_id || !bound.has(row.checkout_id)) ?? null;
+}
+
+/**
+ * An unbound checkout is not proof that it was never paid: the first webhook can be
+ * missing or late, and one Whop checkout accepts more than one payment attempt.
+ * Before sending the buyer back to it, the same exact-checkout recovery as the return
+ * page and cron must find NO paid payment ("pending"). A recovered purchase is reported
+ * as complete; every other outcome (lease/cooldown, review, provider error) fails closed.
+ */
+async function assertResumable(userId: string, requestId: string) {
+  const outcome = await recoverCreationCheckout(userId, requestId).catch(() => "unverified" as const);
+  if (outcome === "pending") return;
+  if (outcome === "recovered") throw new RequestError("CHECKOUT_ALREADY_COMPLETED", "This checkout has already been paid and your plan is active. You do not need to pay again.", 409);
+  throw new RequestError("CHECKOUT_PENDING", "Your earlier checkout is still being confirmed. Please don’t pay twice; try again in a minute or email admin@makeborne.com.", 409);
 }
 
 export async function POST(request: Request) {
@@ -56,8 +71,10 @@ export async function POST(request: Request) {
         // Never a second checkout: resume the open one for the same plan (an abandoned
         // checkout must not lock the account), otherwise ask to finish it or contact support.
         const open = await openCheckout(db, user.id);
-        if (open && open.status === "ready" && open.purchase_url && open.plan_id === planId)
+        if (open && open.status === "ready" && open.purchase_url && open.plan_id === planId && open.checkout_id) {
+          await assertResumable(user.id, open.request_id);
           return Response.json({ url: checkoutUrl(open.purchase_url), resumed: true }, { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
+        }
         throw new RequestError("CHECKOUT_ALREADY_OPEN", open && open.status === "ready" && open.plan_id !== planId
           ? "You already have an open checkout for a different plan. Finish that checkout, or contact support to change it."
           : "You already have a checkout awaiting confirmation. Complete the existing checkout or contact support before starting another.", 409);
@@ -72,6 +89,7 @@ export async function POST(request: Request) {
           .eq("checkout_id", previous.checkout_id).limit(1);
         if (boundError) throw new RequestError("CHECKOUT_UNAVAILABLE", "This checkout could not be confirmed. Please try again shortly.", 503);
         if (bound?.length) throw new RequestError("CHECKOUT_ALREADY_COMPLETED", "This checkout has already been used. Review your billing and contact support before starting another subscription.", 409);
+        await assertResumable(user.id, requestId);
         return Response.json({ url: checkoutUrl(previous.purchase_url) }, { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
       }
       throw new RequestError("CHECKOUT_PENDING", "This checkout is still being confirmed. Please wait before trying again.", 409);

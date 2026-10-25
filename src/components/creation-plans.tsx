@@ -129,7 +129,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
       if (isResume) setNotice({ role: "alert", text: stillPending });
       else if (previous && !resumed.current) { lastSent.current = previous; write("session", LAST_SENT, previous); setNotice({ role: "alert", action: "resume", text: `You already started a checkout for ${planName(previous.tier)}, ${previous.interval}. You can finish it now, or email admin@makeborne.com to switch plans.` }); }
       else setNotice({ role: "alert", text: "You already have a checkout in progress. Finish it in the Whop page you opened, or email admin@makeborne.com to switch plans." });
-    } else if (code === "CHECKOUT_PENDING") setNotice({ role: "alert", text: isResume ? stillPending : "Your last checkout is still being prepared. Please don’t pay twice; try again in a minute." });
+    } else if (code === "CHECKOUT_PENDING") setNotice({ role: "alert", text: isResume ? stillPending : "Your last checkout is still being confirmed. Please don’t pay twice; try again in a minute, or email admin@makeborne.com if this doesn’t change." });
     else if (code === "CHECKOUT_ALREADY_COMPLETED") { forget(); pending.current = null; setResume(null); setNotice({ role: "status", action: "studio", text: "That checkout is already complete." }); }
     else if (code === "SUBSCRIPTION_ALREADY_EXISTS") setNotice({ role: "alert", text: "You already have a plan." });
     else if (code === "CREATION_PLANS_NOT_OPEN") setNotice({ role: "alert", text: "Plans aren’t open yet. Nothing was charged." });
