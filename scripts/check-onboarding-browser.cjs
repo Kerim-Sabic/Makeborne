@@ -112,6 +112,19 @@ async function main() {
       assert.ok(requests.includes(`GET /api/cloud/workspaces/${workspaceId}/onboarding`));
       assert.ok(!requests.includes("GET /api/workspaces"), "the known workspace is used directly");
     });
+    await scenario("welcome-keeps-keyboard-focus-inside", async page => {
+      await page.goto(`${base}/?view=studio`);
+      await welcome(page).waitFor({ timeout: 15000 });
+      const inside = () => page.evaluate(() => Boolean(document.activeElement?.closest("[role=dialog]")));
+      const focused = () => page.evaluate(() => document.activeElement?.textContent?.trim().slice(0, 40) ?? "");
+      for (let index = 0; index < 8; index++) { await page.keyboard.press("Tab"); assert.ok(await inside(), `Tab ${index + 1} stays in the welcome (${await focused()})`); }
+      await page.getByRole("button", { name: "Close" }).focus();
+      await page.keyboard.press("Shift+Tab");
+      assert.ok(await inside(), "Shift+Tab from the first control stays in the welcome");
+      assert.match(await focused(), /look around first/, "and wraps to the last control");
+      await page.keyboard.press("Escape");
+      await welcome(page).waitFor({ state: "detached" });
+    });
     await scenario("phone-390", async page => {
       await page.goto(`${base}/?view=studio`);
       await welcome(page).waitFor({ timeout: 15000 });
