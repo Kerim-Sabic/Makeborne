@@ -13,6 +13,8 @@ import { logAiStop } from "./website-run";
 import { aiStop } from "../ai/failure";
 import { DocumentEditor, emptyDocument } from "../documents/editor";
 import { bookImagePlanFromBrief, deckModeFromBrief } from "../documents/creation-options";
+import { artTextModel, newDocumentFormat, type ImageOptions } from "../documents/art-formats";
+import { imageConfiguration } from "./images";
 import { projectDocument, documentAssetIds } from "../documents/project";
 import { wordCount } from "../documents/book-markup";
 import { runDocumentBuilder, type DocBuilderEvent, type DocBuilderRun } from "./docs-agent";
@@ -40,7 +42,12 @@ export type DocumentBuildInput = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: DocBuilderRun["storeImage"];
+  /** The client's image quality and shape from the composer (validated by the route); applied to the document. */
+  imageOptions?: ImageOptions;
+  /** Image models (tests); production reads the allowlist. */
+  imageModels?: string[];
 };
+
 
 /** Model-facing context: brief, style, history, and the current document. */
 export function documentContext(input: Pick<DocumentBuildInput, "artifact" | "project" | "current" | "versions" | "brand">, editor: DocumentEditor, fresh: boolean) {
@@ -78,8 +85,17 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
   // image plan from its questions or brief (creation-options.ts). Saved documents keep what they have.
   const options = `${input.project.brief}
 ${input.message}`;
+  const artModel = artTextModel(input.imageModels ?? imageConfiguration().models);
+  const format = newDocumentFormat(artifact.kind, options, input.imageOptions, artModel);
+  // A new full-image deck carries the reference's furniture: a tiny page number on every slide (and the wordmark the designer sets).
   const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId,
-    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options) } : { slideMode: deckModeFromBrief(options).mode }));
+    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options), shape: "shape" in format ? format.shape : undefined, quality: format.quality, bookArt: true }
+      : { slideMode: deckModeFromBrief(options).mode, aspect: "aspect" in format ? format.aspect : undefined, quality: format.quality, pageNumbers: true }));
+  // A saved document takes the composer's new choices (the route checked they can render).
+  if (current.content.document && input.imageOptions) {
+    if (editor.doc.kind === "deck") editor.setDeckFormat({ aspect: input.imageOptions.aspect, quality: input.imageOptions.quality });
+    else editor.setBookFormat({ shape: input.imageOptions.shape, quality: input.imageOptions.quality });
+  }
   const context = [documentContext(input, editor, fresh), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n");
   const encoder = new TextEncoder();
   const controller = new AbortController();

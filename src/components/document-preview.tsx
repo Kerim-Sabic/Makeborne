@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as R
 import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Play, X } from "lucide-react";
 import type { Deck, DocumentSource } from "@/lib/documents/schema";
 import { deckHtml } from "@/lib/documents/render-deck";
-import { BOOK_TRIM, bookHtml, chapterLabel } from "@/lib/documents/render-book";
+import { bookHtml, bookTrim, chapterLabel } from "@/lib/documents/render-book";
 import { wordCount } from "@/lib/documents/book-markup";
 
 /** About 230 words a minute, rounded for display. */
@@ -212,10 +212,12 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
     const page = frame.current?.contentDocument, body = page?.body;
     if (doc.kind !== "book" || !page || !body) return;
     // The frame's own viewport width, excluding its scrollbar.
-    const scale = Math.min(1, page.documentElement.clientWidth / (BOOK_TRIM.width * 96 + 32));
+    // A picture book's spreads show two pages side by side.
+    const pageWidth = bookTrim(doc).width * 96 * (doc.imagePlan?.placement === "picture" ? 2 : 1);
+    const scale = Math.min(1, page.documentElement.clientWidth / (pageWidth + 32));
     if (scale < 0.999) body.style.setProperty("zoom", String(Math.max(0.3, Math.floor(scale * 1000) / 1000)));
     else body.style.removeProperty("zoom");
-  }, [doc.kind]);
+  }, [doc]);
   useEffect(() => {
     const element = frame.current;
     if (!element || typeof ResizeObserver === "undefined") return;

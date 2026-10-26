@@ -19,6 +19,7 @@ export const BOOK_IMAGE_OPTIONS = [
   { value: "every6", label: "Openers plus one every ~6 pages", hint: "Figures where they help the reader" },
   { value: "every3", label: "Openers plus one every ~3 pages" },
   { value: "rich", label: "Richly illustrated", hint: "About one picture per spread" },
+  { value: "picture", label: "Picture book", hint: "Each spread one illustration, words on the art (children's books)" },
 ] as const;
 export const BOOK_IMAGE_STYLE_TOPIC = "Image style";
 export const BOOK_IMAGE_STYLE_OPTIONS = [
@@ -60,6 +61,7 @@ export function bookImagePlanFromBrief(brief: string): BookImagePlan {
   const source = where.toLowerCase() || text;
   if (/^no images?\b|\bno (images|pictures|illustrations|photos)\b(?!\s+of\b)|\b(text|type)[- ]only\b|\bwithout (any )?(images|pictures|illustrations)\b/.test(source)) placement = "none";
   else if (/\bcover only\b|\bonly (a |the )?cover( image)?\b|\bjust (a |the )?cover\b/.test(source)) placement = "cover";
+  else if (/^picture book\b|\b(children'?s|kids'?|bedtime) picture book\b|\bpicture[- ]book spreads?\b|\bwords on the (art|illustrations?)\b/.test(source)) placement = "picture";
   else if (/\brichly illustrated\b|\b(one|an image|a picture) (per|on every|every) spread\b|\bheavily illustrated\b|\bpicture book\b/.test(source)) placement = "rich";
   else if (every) { placement = "every"; everyPages = Math.min(40, Math.max(2, Number(every[1] ?? every[2]))); }
   else if (/\bchapter openers?\b|\bopeners?\b/.test(where.toLowerCase())) placement = "openers";

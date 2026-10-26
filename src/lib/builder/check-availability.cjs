@@ -25,9 +25,12 @@ const status = (data, error = null) => async () => ({ data, error });
 // The GET body carries availability plus measured credit ranges (credits only); availability is asserted exactly, estimates by shape.
 const get = async () => {
   const response = await route.GET(); assert.equal(response.headers.get("Cache-Control"), "no-store");
-  const { estimates, ...availability } = await response.json();
+  const { estimates, documentImages, ...availability } = await response.json();
   assert.ok(estimates && estimates.firstBuild && estimates.reviewRound, "credit estimates accompany every answer");
   assert.ok(!/micro|usd|cost|budget/i.test(JSON.stringify(estimates)), "estimates are credit ranges, never provider amounts");
+  // Image quality and shape offers for presentations and books: credits per image, never provider amounts or model names.
+  assert.ok(documentImages && documentImages.presentation && documentImages.book, "image quality offers accompany every answer");
+  assert.ok(!/micro|usd|cost|budget|gpt|sunburst|flare|openai/i.test(JSON.stringify(documentImages)), "offers name no provider, model or amount");
   return availability;
 };
 

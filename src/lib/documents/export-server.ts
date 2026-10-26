@@ -2,8 +2,9 @@ import "server-only";
 import { chromium } from "playwright";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DocumentSource } from "./schema";
-import { deckFaces, deckHtml } from "./render-deck";
-import { bookHtml } from "./render-book";
+import { deckFaces, deckHtml, deckPage } from "./render-deck";
+import { bookHtml, bookPagePx } from "./render-book";
+import { pageKind, verifiedPage } from "./book-art";
 import { deckPptx } from "./pptx";
 import { FONTS } from "./theme";
 import { embeddedFontSources } from "./fonts-server";
@@ -47,7 +48,7 @@ export async function documentPdf(doc: DocumentSource, buffers: Record<string, B
   const fonts = await embeddedFontSources(doc.kind === "deck" ? deckFaces(doc) : FONTS[doc.theme.fonts].faces);
   const browser = await chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
   try {
-    const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: doc.kind === "deck" ? { width: 1280, height: 720 } : { width: 576, height: 864 } });
+    const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block", viewport: doc.kind === "deck" ? deckPage(doc) : bookPagePx(doc) });
     await context.route("**/*", route => route.abort());
     const page = await context.newPage();
     page.setDefaultTimeout(30_000);
@@ -60,7 +61,8 @@ export async function documentPdf(doc: DocumentSource, buffers: Record<string, B
     };
     if (doc.kind === "deck") return await print(deckHtml(doc, images, "print", fonts));
     const first = await print(bookHtml(doc, images, "print", fonts));
-    const pages = bookPagesFromOutline(doc, pdfOutline(first));
+    const spreads = doc.chapters.filter(chapter => verifiedPage(doc, chapter.id) && pageKind(doc, chapter.id) === "spread").map(chapter => chapter.id);
+    const pages = bookPagesFromOutline(doc, pdfOutline(first), spreads);
     // Bookmarks carry the headings as written (Chromium drops the space at a soft line break).
     return fixPdfBookmarks(pages ? await print(bookHtml(doc, images, "print", fonts, pages)) : first, bookHeadings(doc));
   } finally {

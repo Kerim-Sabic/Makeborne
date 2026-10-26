@@ -1,8 +1,9 @@
-import type { Deck, FontPairing, Slide, SlideFrame } from "./schema";
-import { FONTS, contrast, mix } from "./theme";
+import type { Deck, DeckAspect, FontPairing, Slide, SlideFrame } from "./schema";
+import { contrast, mix } from "./theme";
 import { directionOf } from "./directions";
 import { formatValue } from "./chart-svg";
 import { W, H, type Prim, type RectPrim, type SlideScene } from "./scene-kit";
+import { AVOID_AI_LOOK, NUMBER_WORDS as COUNT_WORDS, TYPE_STYLE, accentInText, article, capital, displayLines, quotedLines, swatch, tailNoText, tailSlide } from "./art-direction";
 
 /** Full-image slides (owner, Kerim, 22 Oct 2026: "for presentations i want each slide full image gen ... each slide
  * fully unique nice modern not looking ai slop and text also generated"). Each slide of a deck in image mode is one
@@ -13,9 +14,15 @@ import { W, H, type Prim, type RectPrim, type SlideScene } from "./scene-kit";
  * engine instead, so a deck is never shown with wrong words. */
 
 export const ART_COMPOSITION = "full-image";
-/** Generated canvas (the only landscape size with a measured bound) and the 16:9 band cut from it. */
+/** The legacy canvas (1536x1024, measured at medium and high) and the 16:9 band cut from it; other shapes and
+ * qualities choose their canvas through art-formats.ts (artCell). */
 export const ART_SOURCE = { width: 1536, height: 1024 } as const;
 export const ART_CROP = { left: 0, top: 80, width: 1536, height: 864 } as const;
+/** The canvas a render is generated on and the part of it that becomes the slide. */
+export type ArtCanvas = { size: `${number}x${number}`; crop: { left: number; top: number; width: number; height: number } };
+export const LEGACY_CANVAS: ArtCanvas = { size: "1536x1024", crop: ART_CROP };
+export const deckAspect = (deck: { art?: Deck["art"] }): DeckAspect => deck.art?.aspect ?? "16:9";
+const ASPECT_WORDS: Record<DeckAspect, string> = { "16:9": "16:9", "4:3": "4:3", "1:1": "square 1:1", "9:16": "vertical 9:16" };
 /** Image slides read in seconds and image models misspell long text: these are the hard limits a render needs. */
 /** Clear space on the finished slide above the first line of text and below the last (the gate enforces it), and the
  * same margin on the 1536×1024 canvas the prompt describes: 80 px cropped + 6.5% of 864 px ≈ 136 px ≈ 14%. */
@@ -83,6 +90,17 @@ export function slideText(slide: Slide): ArtLine[] {
   return out;
 }
 
+/** The small furniture a full-image slide carries besides its own words (the reference's wordmark and page number). */
+export function slideFurniture(deck: Pick<Deck, "slides"> & { art?: Deck["art"] }, slide: Slide): ArtLine[] {
+  const out: ArtLine[] = [];
+  if (deck.art?.wordmark) out.push({ role: "wordmark (small)", text: deck.art.wordmark });
+  const index = deck.slides.findIndex(entry => entry.id === slide.id);
+  if (deck.art?.pageNumbers && index >= 0) out.push({ role: "page number (tiny)", text: String(index + 1).padStart(2, "0") });
+  return out;
+}
+/** Every word the gate expects on a render: the slide's own words, then its furniture. */
+export const gateText = (deck: Pick<Deck, "slides"> & { art?: Deck["art"] }, slide: Slide) => [...slideText(slide), ...slideFurniture(deck, slide)];
+
 /** A short stable key of a slide's visible words: a render is shown only while the slide still says what was verified. */
 export function textKey(slide: Slide) {
   let hash = 0x811c9dc5;
@@ -105,13 +123,20 @@ export function artTextIssues(slide: Slide): string[] {
 
 export type DeckArt = NonNullable<Deck["art"]>;
 export type ArtRender = DeckArt["renders"][number];
-type DeckLike = Pick<Deck, "assets"> & { art?: Deck["art"] };
+type DeckLike = Pick<Deck, "assets"> & { art?: Deck["art"]; slides?: Deck["slides"] };
 
-/** The asset to show as this whole slide, or null to draw the editable layout. */
+/** The asset to show as this whole slide, or null to draw the editable layout. A render is shown only while the slide
+ * says what was verified, in the deck's current shape, with the wordmark it shows and at the page number it shows. */
 export function verifiedArt(deck: DeckLike, slide: Slide): string | null {
   if (deck.art?.mode !== "image") return null;
   const render = deck.art.renders.find(entry => entry.slide === slide.id);
   if (!render || render.outcome !== "passed" || !render.image || render.verified !== textKey(slide)) return null;
+  if ((render.aspect ?? "16:9") !== deckAspect(deck)) return null;
+  if ((render.wordmark ?? "") !== (deck.art.wordmark ?? "")) return null;
+  if (deck.slides && (render.page !== undefined || deck.art.pageNumbers)) {
+    const page = deck.slides.findIndex(entry => entry.id === slide.id) + 1;
+    if (deck.art.pageNumbers ? render.page !== page : render.page !== undefined) return null;
+  }
   return deck.assets.some(asset => asset.name === render.image) ? render.image : null;
 }
 
@@ -177,21 +202,33 @@ function plateScene(scene: SlideScene, plate: { name: string; luma?: number[]; s
 
 /** The prompt for a text-free plate behind an editable slide: same design system and palette, the area where the live
  * text goes left as a calm, nearly plain field. `text` is that area on the slide (px of the 1280×720 canvas). */
-export function platePrompt(deck: Pick<Deck, "theme" | "slides" | "title"> & { art?: Deck["art"] }, slide: Slide, text: Box, fix?: string) {
+export function platePrompt(deck: Pick<Deck, "theme" | "slides" | "title"> & { art?: Deck["art"] }, slide: Slide, text: Box, fix?: string, canvas: ArtCanvas = LEGACY_CANVAS) {
   const index = deck.slides.findIndex(entry => entry.id === slide.id), total = deck.slides.length;
   const { palette, imageStyle } = deck.theme;
   const ground = slide.tone === "dark" ? palette.dark : slide.tone === "accent" ? palette.accent : palette.background;
-  // Slide px to canvas %: the 1536×1024 canvas is cropped to the slide's 1536×864 band starting 80 px down.
-  const pctX = (x: number) => Math.round(x / W * 100), pctY = (y: number) => Math.round((ART_CROP.top + y / H * ART_CROP.height) / ART_SOURCE.height * 100);
+  // Editable layouts are 1280x720; on a taller page they sit centred, so the reserved area is measured on the page first.
+  const page = PAGE_HEIGHT[deckAspect(deck)], top = (page - H) / 2;
+  const [cw, ch] = canvas.size.split("x").map(Number);
+  const pctX = (x: number) => Math.round((canvas.crop.left + x / W * canvas.crop.width) / cw * 100), pctY = (y: number) => Math.round((canvas.crop.top + (top + y) / page * canvas.crop.height) / ch * 100);
   return [
-    `A text-free background plate for slide ${index + 1} of ${total} of the presentation "${deck.title}": the artwork behind a slide whose words are set separately as live text. It belongs to the same deck as the other slides.`,
-    `DECK DESIGN SYSTEM (the same on every slide): ${deck.art?.system ?? ""}`,
-    `Palette: ground ${ground}, surface ${palette.surface}, ink ${palette.ink}, accent ${palette.accent}, second accent ${palette.accent2}, dark ${palette.dark}.${imageStyle ? ` Imagery: ${imageStyle}.` : ""}`,
-    `RESERVED AREA: from ${pctX(text.x)}% to ${pctX(text.x + text.w)}% across and from ${pctY(text.y)}% to ${pctY(text.y + text.h)}% down the canvas the slide's text will be set. Keep that area a calm, nearly plain field of ${ground} with at most a faint paper grain: no objects, lines, patterns or strong tone changes inside it. Put the imagery, the recurring motif and any texture in the rest of the canvas, quietly, so it frames the text.`,
-    "Absolutely no text, letters, numbers, labels, logos, charts, tables, icons or user interface anywhere. The top 8% and bottom 8% of the canvas are cropped away: continue the background there.",
-    "Avoid the AI look: no oversaturated colour, HDR glow, lens flare, plastic or posed people, clip-art or random gradients.",
+    `A text-free background plate for slide ${index + 1} of ${total} of the presentation "${deck.title}": the artwork behind a slide whose words are set separately as live text, in the same family as the deck's other slides.`,
+    `${swatch(ground)} ground, ${swatch(palette.surface)} surface, ${swatch(palette.accent)} accent, ${swatch(palette.dark)} for deep areas.${imageStyle ? ` Imagery: ${imageStyle}.` : ""}`,
+    `Deck design system (the same on every slide): ${deck.art?.system ?? ""}`,
+    `Reserved area: from ${pctX(text.x)}% to ${pctX(text.x + text.w)}% across and from ${pctY(text.y)}% to ${pctY(text.y + text.h)}% down the canvas the slide's text will be set. Keep that area a calm, nearly plain field of ${swatch(ground)} with at most a faint paper grain: no objects, lines, patterns or strong tone changes inside it. Put the imagery, the recurring motif and any texture in the rest of the canvas, quietly, so it frames the text.`,
+    cropNote(canvas, "continue the background there"),
+    AVOID_AI_LOOK,
+    tailNoText(ASPECT_WORDS[deckAspect(deck)]),
     fix ? `CORRECTION — the previous attempt had these problems; fix them: ${fix}` : "",
   ].filter(Boolean).join("\n\n");
+}
+/** Page height (px, 1280 wide) of each slide shape. */
+export const PAGE_HEIGHT: Record<DeckAspect, number> = { "16:9": 720, "4:3": 960, "1:1": 1280, "9:16": 2276 };
+/** What the prompt says about a cropped canvas: which margins are cut away. */
+function cropNote(canvas: ArtCanvas, then: string) {
+  const [cw, ch] = canvas.size.split("x").map(Number);
+  const y = Math.round(canvas.crop.top / ch * 1000) / 10, x = Math.round(canvas.crop.left / cw * 1000) / 10;
+  if (!x && !y) return "";
+  return y ? `The top ${y}% and bottom ${y}% of the canvas are cropped away to make the finished slide: ${then}.` : `The left ${x}% and right ${x}% of the canvas are cropped away to make the finished slide: ${then}.`;
 }
 
 /** The pairing for a deck's editable slides, from the art system's type description: the bundled faces closest to it,
@@ -240,45 +277,114 @@ export function artPlanIssues(deck: Pick<Deck, "slides"> & { art?: Deck["art"] }
   return issues;
 }
 
-const ROLE_GUIDE: Partial<Record<Slide["layout"], string>> = {
-  cover: "the cover: the deck's most striking image and the title set large",
-  closing: "the closing ask: the decision requested, with the next steps",
-  section: "a section divider: a short number and title, bold and spare",
-  agenda: "the agenda: a short numbered list",
-  statement: "a big statement: one sentence set huge",
-  stats: "the key numbers, set huge",
-  chart: "the data slide: an accurate chart is the hero",
-  diagram: "the process or structure, drawn clearly",
-  compare: "a comparison of two options",
-  quote: "a quotation",
-  image: "an image-led story moment",
-  split: "an image-led story slide",
-  points: "a few short points",
-  table: "a compact table",
-  team: "the people (no photographs of real people: initials or abstract marks)",
-  pricing: "the options and prices",
-  canvas: "a typographic poster moment",
-};
 
-/** The image prompt for one full-image slide: the deck's design system, this slide's composition and its exact words. */
-export function artPrompt(deck: Pick<Deck, "theme" | "slides" | "title"> & { art?: Deck["art"] }, slide: Slide, fix?: string) {
+/** Each frame's default split, in the reference's exact percentages; a slide's art.layout overrides it. */
+export const FRAME_LAYOUT: Record<SlideFrame, string> = {
+  "full-bleed": "The image runs full-bleed across 100% of the slide; the type block sits on its calmest area, the left 45% or the lower 40%",
+  split: "Left 46%: a solid type field on the ground colour; right 54%: a full-bleed image to the slide's edges, hard edge, no frame",
+  "type-poster": "Typography is the image: the type block spans about 70% of the slide width on the ground colour, with at most one small image accent",
+  "big-number": "The figures fill the left 60% at poster size; the right 40% holds a small supporting image or stays empty",
+  "chart-feature": "Headline across the top 30%; the chart across the lower 60% at full width inside the margins",
+  "card-grid": "Headline across the top 25%; below it the tiles on a strict equal grid across the full width",
+  timeline: "Headline across the top 30%; the steps along one horizontal line across the full width below it",
+  quote: "The quotation set large across the left 65%; a quiet image or texture in the right 35%",
+  comparison: "Headline across the top 25%; below it two equal 50% columns with a thin divider, the recommended side emphasised",
+  "inset-frame": "Type on the left 45%; the image inset like a gallery print inside generous margins on the right 55%",
+  collage: "Layered image fragments over about 60% of the slide; type overlapping them deliberately in the remaining space",
+  diagram: "Headline across the top 25%; the diagram across the lower 70% at full width",
+};
+const ROLE_NAME: Partial<Record<Slide["layout"], string>> = {
+  cover: "Title slide", closing: "The closing slide", section: "A section divider slide", agenda: "The agenda slide", statement: "A statement slide", stats: "A numbers slide",
+  chart: "A chart slide", diagram: "A process slide", compare: "A comparison slide", quote: "A quotation slide", image: "An image-led slide", split: "An image-led story slide",
+  points: "A key-points slide", table: "A table slide", team: "The team slide", pricing: "The pricing slide", canvas: "A typographic poster slide",
+};
+const q = (text: string) => `"${text.replace(/"/g, "'")}"`;
+const sentence = (text: string) => /[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
+/** A title whose accent is its last words breaks before the accent, as the reference sets "A second" / "oven.". */
+function accentLines(title: string, accent: string | undefined, huge: boolean) {
+  const lines = displayLines(title, huge ? 3 : 6);
+  if (!accent || title.includes("\n")) return lines;
+  const clean = title.trim(), tail = accent.trim();
+  if (lines.length > 1 && lines[lines.length - 1].toLowerCase().endsWith(tail.toLowerCase())) return lines;
+  if (clean.toLowerCase().endsWith(tail.toLowerCase()) && clean.length > tail.length + 2 && clean.split(/\s+/).length >= 2) return [clean.slice(0, clean.length - tail.length).trim(), clean.slice(clean.length - tail.length)];
+  return lines;
+}
+
+/** The words of a slide as the reference writes them: every line quoted exactly, display lines broken, accent named. */
+export function slideCopy(deck: Pick<Deck, "theme" | "slides"> & { art?: Deck["art"] }, slide: Slide): string[] {
+  const { palette, fonts } = deck.theme, style = TYPE_STYLE[fonts], accent = slide.art?.accent;
+  const out: string[] = [];
+  const titleBlock = slide.layout === "canvas" ? slide.blocks?.find(block => block.type === "text" && (block.style === "display" || block.style === "headline")) : undefined;
+  const titleText = slide.layout === "canvas" ? (titleBlock?.type === "text" ? titleBlock.text : undefined) : slide.title;
+  const accentClause = (text: string) => accent && accentInText(accent, text) ? ` with ${q(accent)} in ${swatch(palette.accent)}${style.italicAccent ? " italic" : ""}` : "";
+  const size = ["cover", "statement", "section", "canvas", "closing"].includes(slide.layout) ? "huge" : "large";
+  if (slide.eyebrow) out.push(`a small label ${q(slide.eyebrow)} above the headline`);
+  if (titleText) out.push(`${article(size)} ${style.heading} headline ${quotedLines(titleText, accentLines(titleText, accent, size === "huge"))}${accentClause(titleText)}`);
+  if (slide.layout === "canvas") {
+    for (const block of slide.blocks ?? []) if (block.type === "text" && block.text !== titleText) out.push(`a ${block.style} line ${q(block.text)}`);
+    return out;
+  }
+  if (slide.subtitle) out.push(`below it a line ${q(slide.subtitle)}`);
+  if (slide.body) out.push(`a short line ${q(slide.body)}`);
+  if (slide.points?.length) out.push(`${COUNT_WORDS[slide.points.length - 1]} short items in ${style.body}: ${slide.points.map((point, i) => `${i + 1}) ${point.title ? `${q(point.title)} with ` : ""}${q(point.text)}`).join("; ")}`);
+  if (slide.stats?.length) out.push(`${slide.stats.length === 1 ? "one big figure" : `${COUNT_WORDS[slide.stats.length - 1]} big figures in a row`} with small labels underneath: ${slide.stats.map(stat => `${q(stat.value)} labelled ${q(stat.label)}${stat.detail ? ` and ${q(stat.detail)}` : ""}`).join(", ")}`);
+  if (slide.chart) {
+    const chart = slide.chart, multi = chart.series.length > 1;
+    out.push(`a clean minimal ${chart.type} chart in ${swatch(palette.accent)}${multi ? ` with a legend ${chart.series.map(series => q(series.name)).join(" ")}` : ""}, labelled ${chart.categories.map(category => q(category)).join(" ")}, with exactly these values written once each as labels: ${chart.categories.map((category, i) => `${category} ${chart.series.map(series => q(formatValue(chart, series.values[i]))).join(" / ")}`).join(", ")}${chart.highlight !== undefined ? `; ${q(chart.categories[chart.highlight])} highlighted, the others muted` : ""}; bars, points or slices in exact proportion to the values; no axis numbers or tick values${chart.source ? `; a tiny source line ${q(chart.source)}` : ""}`);
+  }
+  if (slide.diagram) out.push(`a drawn ${slide.diagram.kind} with ${slide.diagram.items.length} labelled steps: ${slide.diagram.items.map(item => `${q(item.label)}${item.detail ? ` (${q(item.detail)})` : ""}`).join(", ")}${slide.diagram.axes ? `; axes ${q(slide.diagram.axes.x)} and ${q(slide.diagram.axes.y)}` : ""}`);
+  if (slide.compare) out.push(`two columns: left headed ${q(slide.compare.left.heading)} with ${slide.compare.left.points.map(q).join(", ")}; right (emphasised) headed ${q(slide.compare.right.heading)} with ${slide.compare.right.points.map(q).join(", ")}`);
+  if (slide.quote) out.push(`a large quotation ${q(`“${slide.quote.text.replace(/^["“]|["”]$/g, "")}”`)}${slide.quote.attribution ? ` with the attribution ${q(`— ${slide.quote.attribution.replace(/^[—–-]\s*/, "")}`)}` : ""}`);
+  if (slide.table) out.push(`a compact table with the headings ${slide.table.columns.filter(Boolean).map(q).join(" ")} and the rows ${slide.table.rows.map(row => row.map(q).join(" ")).join("; ")}`);
+  if (slide.people?.length) out.push(`${slide.people.length} people as initials monograms (no photographs), each with ${slide.people.map(person => `${q(person.name)} ${q(person.role)}${person.detail ? ` ${q(person.detail)}` : ""}`).join("; ")}`);
+  if (slide.tiers?.length) out.push(`${slide.tiers.length} options side by side: ${slide.tiers.map(tier => [tier.name, tier.price, tier.period, tier.description, ...tier.features].filter(Boolean).map(text => q(text!)).join(" ")).join("; ")}`);
+  return out;
+}
+
+/** The image prompt for one full-image slide, in the reference pattern: one precise art-direction paragraph (brand,
+ * colours as words plus hex, typeface style, the split in percentages, every line quoted with its breaks, the accent,
+ * the wordmark and page number, the subject), the deck's design system, the safe margins and TAIL_SLIDE. */
+export function artPrompt(deck: Pick<Deck, "theme" | "slides" | "title"> & { art?: Deck["art"] }, slide: Slide, fix?: string, canvas: ArtCanvas = LEGACY_CANVAS) {
   const index = deck.slides.findIndex(entry => entry.id === slide.id), total = deck.slides.length;
-  const { palette, fonts, imageStyle, mood } = deck.theme;
-  const pairing = FONTS[fonts], direction = directionOf(deck.theme);
-  const ground = slide.tone === "dark" ? `deep ${palette.dark} background with light type` : slide.tone === "accent" ? `${palette.accent} colour field` : `${palette.background} background with ${palette.ink} type`;
-  const text = slideText(slide).map(line => `- ${line.role}: "${line.text.replace(/"/g, "'")}"`).join("\n") + (slideNumerals(slide) ? `\n(The items may carry the step numbers 1 to ${slideNumerals(slide)} as numerals; no other numbers.)` : "");
-  const chart = slide.chart ? `\nChart: a ${slide.chart.type} chart; ${slide.chart.categories.map((category, i) => `${category} = ${slide.chart!.series.map(series => series.values[i]).join(" / ")}`).join(", ")}. Bar lengths, line points or slices in exact proportion to these values, each value written once as its label${slide.chart.highlight !== undefined ? `; ${slide.chart.categories[slide.chart.highlight]} highlighted in ${palette.accent}, the others muted` : ""}. No axis numbers, gridline labels or tick values beyond these labels.` : "";
+  const { palette, fonts, imageStyle, mood } = deck.theme, style = TYPE_STYLE[fonts], direction = directionOf(deck.theme);
+  const ground = slide.tone === "dark" ? palette.dark : slide.tone === "accent" ? palette.accent : palette.background;
+  const ink = slide.tone === "light" || !slide.tone ? palette.ink : contrast("#FFFFFF", ground) >= contrast(palette.ink, ground) ? palette.background : palette.ink;
+  const frame = slide.art?.frame ?? "split";
+  const role = ROLE_NAME[slide.layout] ?? "A slide";
+  const furniture = slideFurniture(deck, slide);
+  const wordmark = furniture.find(line => line.role.startsWith("wordmark")), page = furniture.find(line => line.role.startsWith("page"));
+  const parts = [
+    ...(wordmark ? [`a small wordmark ${q(wordmark.text)} at the top-left`] : []),
+    ...slideCopy(deck, slide),
+    ...(page ? [`bottom-left a tiny page number ${q(page.text)}`] : []),
+  ];
+  const numerals = slideNumerals(slide);
+  const paragraph = [
+    `${role} (slide ${index + 1} of ${total}) of a premium presentation ${q(deck.title)}${deck.art?.wordmark && deck.art.wordmark !== deck.title ? ` for ${q(deck.art.wordmark)}` : ""}: ${swatch(ground)} background, ${swatch(ink)} text, ${swatch(palette.accent)} accent; ${article(style.heading)} for headlines and ${article(style.body)} for text and figures.`,
+    sentence(slide.art?.layout ?? FRAME_LAYOUT[frame]),
+    `${sentence(capital(parts.join("; ")))}${numerals ? ` The items may carry the step numbers 1 to ${numerals} as numerals; no other numbers.` : ""}`,
+    slide.art?.subject ? sentence(`The image: ${slide.art.subject}`) : "",
+    slide.art?.brief ? sentence(`Composition: ${slide.art.brief}`) : "",
+  ].filter(Boolean).join(" ");
+  const margins = cropNote(canvas, `keep every word inside the rest, and on the finished slide at least ${ART_SAFE_MARGIN_PCT}% of its height clear above the first line and below the last`)
+    || `Keep at least ${ART_SAFE_MARGIN_PCT}% of the slide's height clear above the first line of text and below the last, and text at least 6% from the left and right edges.`;
   return [
-    `Design one finished 16:9 presentation slide: slide ${index + 1} of ${total} of "${deck.title}". It is a flat, print-ready slide (not a photo of a screen or a mock-up), designed to the standard of a world-class keynote by a top studio such as Pentagram, Stripe or Apple: a precise grid, generous margins, one clear focal point, confident contrast in scale between the title and everything else.`,
-    `DECK DESIGN SYSTEM (identical on every slide, so the deck reads as one family): ${deck.art?.system || mood || direction.name}`,
-    `Palette: background ${palette.background}, surface ${palette.surface}, ink ${palette.ink}, muted ${palette.muted}, accent ${palette.accent}, second accent ${palette.accent2}, dark ${palette.dark}. Typography: ${pairing.label} style (${pairing.voice}); headings in the heading face, everything else in the body face, set crisply with real kerning.${imageStyle ? ` Imagery: ${imageStyle}.` : ""}`,
-    `THIS SLIDE: ${ROLE_GUIDE[slide.layout] ?? slide.layout}. Composition "${slide.art?.frame ?? "split"}" — ${FRAME_NOTES[slide.art?.frame ?? "split"]}. ${slide.art?.brief ?? ""} Ground: ${ground}.`,
-    `TEXT: render exactly these words, each once, spelled exactly letter for letter, with their capitalisation and punctuation, and no other words, letters or numbers anywhere:\n${text}${chart}`,
-    `SAFE MARGINS: the top ${ART_CANVAS_MARGIN_PCT}% and bottom ${ART_CANVAS_MARGIN_PCT}% of the canvas hold no words at all, not even a small label or eyebrow (the top and bottom 8% are cropped away to make the 16:9 slide, and the finished slide keeps ${ART_SAFE_MARGIN_PCT}% clear above the first line and below the last); continue the background there. Keep text at least 6% from the left and right edges.`,
-    "Avoid the AI look: no oversaturated colour, no HDR glow, no lens flare, no plastic-looking or posed stock people, no clip-art or emoji icons, no random gradients or bokeh, no fake user interface, no watermark, logo, page number, signature or lorem ipsum. Photographs look like real editorial photography; illustration is one consistent hand.",
+    paragraph,
+    `Deck design system (identical on every slide, so the deck reads as one family): ${deck.art?.system || mood || direction.name}${imageStyle ? ` Imagery: ${imageStyle}.` : ""}`,
+    `${margins} Render exactly the quoted words, each once, letter for letter with their capitalisation and punctuation, and no other words, letters or numbers anywhere: no logo, signature, watermark or lorem ipsum.`,
+    AVOID_AI_LOOK,
+    tailSlide(ASPECT_WORDS[deckAspect(deck)]),
     fix ? `CORRECTION — the previous attempt of this slide had these problems; fix them: ${fix}` : "",
   ].filter(Boolean).join("\n\n");
 }
+/** Why a slide's accent cannot be drawn: it must be words of the slide's own text. */
+export function artAccentIssue(slide: Slide) {
+  const accent = slide.art?.accent;
+  if (!accent) return null;
+  return slideText(slide).some(line => accentInText(accent, line.text)) ? null : `art.accent "${accent}" is not in the slide's text; name words the slide actually shows`;
+}
+/** Display line breaks of a slide title, as the prompt quotes them. */
+export const titleLines = (slide: Slide) => displayLines(slide.title);
 
 const normalise = (value: string) => value.toLowerCase()
   .replace(/[‘’‚‛′`´]/g, "'").replace(/[“”„″]/g, '"').replace(/[‐-―−]/g, "-")
@@ -300,13 +406,15 @@ const casedTokens = (value: string) => value.replace(/[\u2018\u2019\u201a\u201b\
  * capital first letter (title-case styling). Anything else, such as "iT" for "it", is a rendering error. */
 const casingOk = (want: string, seen: string) => seen === want || seen === want.toUpperCase() || seen === want.charAt(0).toUpperCase() + want.slice(1);
 
+/** Digits-only tokens compare without leading zeros (a page number "03" read as "3"). */
+const numeric = (token: string) => /^\d+$/.test(token) ? token.replace(/^0+(?=\d)/, "") : token;
 export function compareSlideText(expected: readonly string[], transcript: string, options: { numerals?: number } = {}): TextComparison {
   const want = new Map<string, number>();
-  for (const token of expected.flatMap(textTokens)) want.set(token, (want.get(token) ?? 0) + 1);
+  for (const token of expected.flatMap(textTokens).map(numeric)) want.set(token, (want.get(token) ?? 0) + 1);
   // Step numbers 1..N on an ordered list or diagram are design, not copy: each may appear once.
   const numerals = new Set(Array.from({ length: options.numerals ?? 0 }, (_, i) => String(i + 1)));
   const extra: string[] = [];
-  for (const token of textTokens(transcript)) {
+  for (const token of textTokens(transcript).map(numeric)) {
     const left = want.get(token) ?? 0;
     if (left > 0) want.set(token, left - 1); else if (!numerals.delete(token.replace(/^0+(?=\d)/, ""))) extra.push(token);
   }
@@ -347,8 +455,10 @@ export function describeComparison(result: TextComparison) {
  * generated image they could never be edited, so such a slide is never rendered as one image. */
 const PLACEHOLDER = /(?<!\[)\[(?!\[)[^\][\n]{1,60}\](?!\()|\b(?:TBD|TBC|TBA|N\/A|XX+|lorem ipsum)\b|\?\?+|_{3,}/i;
 export function artPlaceholders(slide: Slide): string[] {
-  return slideText(slide).flatMap(line => { const match = PLACEHOLDER.exec(line.text); return match ? [`${line.role}: "${match[0]}"`] : []; });
+  return slideText(slide).flatMap(line => { const match = placeholderIn(line.text); return match ? [`${line.role}: "${match}"`] : []; });
 }
+/** The first fill-in field in a text, or null. */
+export const placeholderIn = (text: string) => PLACEHOLDER.exec(text)?.[0] ?? null;
 
 /** Status words that state a fact about the client's business: on a slide each must be the brief's own word in the
  * same form ("raised" is not "raising"), or the slide claims something the client never said. */

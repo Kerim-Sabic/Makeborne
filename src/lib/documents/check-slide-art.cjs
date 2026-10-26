@@ -118,7 +118,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.ok(artTextIssues(wordy).some(issue => /words besides the title/.test(issue)));
     assert.ok(artTextIssues({ ...SLIDES[1], title: "one two three four five six seven eight nine ten eleven" }).some(issue => /title has 11 words/.test(issue)));
     const prompt = artPrompt({ ...editor.doc, art: { mode: "image", system: SYSTEM, renders: [] } }, editor.doc.slides[2]);
-    for (const part of [SYSTEM, "Demand doubles by August", '"360"', "chart-feature", "16:9", "Avoid the AI look", "no other words"]) assert.ok(prompt.includes(part), part);
+    for (const part of [SYSTEM, "Demand doubles by August", '"360"', "Headline across the top 30%", "16:9", "Never the AI look", "no other words", "#A9471F"]) assert.ok(prompt.includes(part), part);
   });
 
   // ---- The gate end to end, with fakes: pass; misspelling -> regenerate -> pass; misspelling twice -> live-text fallback ----
@@ -144,7 +144,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     const renders = Object.fromEntries(editor.doc.art.renders.map(entry => [entry.slide, entry]));
     assert.deepEqual([renders.cover.outcome, renders.cover.attempts, renders.why.outcome, renders.why.attempts, renders.demand.outcome, renders.demand.attempts], ["passed", 1, "passed", 2, "fallback", 2]);
     assert.equal(images.log.prompts.length, 6, "three first attempts, two regenerations and one plate for the fallback slide, no more");
-    assert.match(images.log.prompts[5], /text-free background plate[\s\S]*RESERVED AREA: from \d+% to \d+% across[\s\S]*Absolutely no text/, "the plate reserves the live text's area");
+    assert.match(images.log.prompts[5], /text-free background plate[\s\S]*Reserved area: from \d+% to \d+% across[\s\S]*Absolutely no text/, "the plate reserves the live text's area");
     assert.ok(images.log.prompts[3].includes("CORRECTION") || images.log.prompts[4].includes("CORRECTION"));
     assert.ok(images.log.prompts.slice(3).some(prompt => /missing or misspelled/.test(prompt)), "the corrected prompt names the misspelling");
     assert.ok(images.log.prompts.slice(3).some(prompt => /exact proportion/.test(prompt)), "the model's fix reaches the corrected prompt");
@@ -292,8 +292,8 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.equal(scrims.length, 1, "one scrim: behind the heading on the busy plate, none over the badge");
     assert.ok(scrims[0].x >= 140 && scene.prims.indexOf(scrims[0]) === scene.prims.findIndex(prim => prim.k === "text" && prim.text === "Market size") - 1);
     const prompt = artPrompt({ ...editor.doc }, editor.doc.slides[0]);
-    assert.match(prompt, /top 14% and bottom 14% of the canvas hold no words at all/);
-    assert.match(prompt, /keeps 6\.5% clear above the first line/);
+    assert.match(prompt, /top 7\.8% and bottom 7\.8% of the canvas are cropped away/);
+    assert.match(prompt, /at least 6\.5% of its height clear above the first line/);
     assert.equal(ART_SAFE_MARGIN_PCT, 6.5);
   });
 
