@@ -134,13 +134,21 @@ type OutputTokens = ImagePrice["outputTokens"];
  * (image-call.ts); an excess stops routing to that model until reviewed (image-health.ts).
  * Partial images (+100 output tokens each) are never requested.
  */
+/**
+ * Second measurement, 2026-10-26 (owner, Kerim: "approved quality test, OpenAI $9.20, Claude $19", scope
+ * quality-v14-20261026): the sizes and qualities the client's document shapes and the website comps want, one call
+ * per cell on sunburst (21 calls, $1.70; outputs/eval/image-cells/quality-v14-20261026/results.jsonl). The three flare
+ * parity cells (high 2560x1440, high 1536x2304, xhigh 2048x1536) returned exactly the sunburst counts, so these cells
+ * apply to both models like the first measurement's.
+ */
 export const MEASURED_IMAGE_OUTPUT_TOKENS: Readonly<Record<string, { evidence: string; observed: OutputTokens }>> = Object.freeze(Object.fromEntries(
   ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"].map(model => [model, {
-    evidence: "outputs/eval/image-research/20261020/results.jsonl (owner-approved research, ledger kind openai-image-research)",
+    evidence: "outputs/eval/image-research/20261020/results.jsonl (owner-approved research, ledger kind openai-image-research); outputs/eval/image-cells/quality-v14-20261026/results.jsonl (scope quality-v14-20261026, ledger kind openai-image-cells)",
     observed: {
       low: { "1024x1024": 196, "1536x1024": 158 },
       medium: { "1024x1024": 439, "1024x1536": 343, "1536x1024": 343 },
-      high: { "1536x1024": 1372 },
+      high: { "1536x1024": 1372, "2560x1440": 1843, "2048x1536": 2223, "1920x1920": 3276, "1440x2560": 1843, "1536x2304": 2127, "2560x1280": 1520, "1600x1280": 1846, "2880x1152": 1213, "1152x2496": 1288 },
+      xhigh: { "2560x1440": 3276, "2048x1536": 3952, "1920x1920": 5823, "1440x2560": 3276, "1536x2304": 3811, "2560x1280": 2702, "1600x1280": 3304, "2880x1152": 2213, "1152x2496": 2341 },
     },
   }])));
 export const MEASURED_HEADROOM = 1.5;
