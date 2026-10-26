@@ -145,6 +145,9 @@ async function main() {
     await scenario("keyboard-menu-and-escape-return-focus", {}, async (page, { writes }) => {
       await menuButton(page).focus();
       await page.keyboard.press("ArrowDown");
+      // feature/library-redesign's card menu: Open first, then Rename (then live-link actions when the site is live).
+      assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Open");
+      await page.keyboard.press("ArrowDown");
       assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Rename…");
       await page.keyboard.press("Enter");
       await dialog(page).waitFor();
@@ -154,7 +157,9 @@ async function main() {
       assert.deepEqual(writes, []);
     });
     await scenario("reviewers-get-no-rename", { role: "reviewer" }, async page => {
-      assert.equal(await menuButton(page).count(), 0, "no card menu without an action");
+      // Every library-redesign card has a menu (Open); a reviewer's has no Rename in it.
+      await menuButton(page).click();
+      assert.deepEqual(await page.getByRole("menuitem").allTextContents(), ["Open"], "a reviewer's card menu offers Open only");
       assert.equal(await page.getByText(/Rename/).count(), 0);
     });
   } finally { await browser.close(); server.close(); }
