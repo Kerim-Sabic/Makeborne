@@ -54,7 +54,10 @@ async function main(){
     await r.fulfill({headers:{'Content-Type':'text/event-stream'},body:events.map(e=>'data: '+JSON.stringify(e)+'\n\n').join('')});
    });
    if(mode==='recovery')await page.addInitScript(({ids})=>{sessionStorage.setItem(`makeborne:operation:v1:${ids.account}:${ids.workspace}:${ids.artifact}:build`,JSON.stringify({actionKey:'66666666-6666-4666-8666-666666666666',id:ids.operation}));},{ids});
-   await page.goto(base);await page.getByText('Up to 50 credits for this request, including automatic refinements.',{exact:true}).waitFor();
+   await page.goto(base);
+   // The maximum is on screen before Send in the Request details summary (13b1343); the full limit sentence and the measured range sit behind it.
+   const details=page.locator('.lb-request-details > summary');await details.getByText('Up to 50 credits',{exact:true}).waitFor();await details.click();
+   await page.getByText('Up to 50 credits for this request, including automatic refinements.',{exact:true}).waitFor();
    // A first build shows the measured range, never an invented one.
    await page.getByText('In testing, a first website at Medium used 16–45 credits (20 test websites, no AI images). You pay only for what is used.',{exact:true}).waitFor();
    if(mode==='fail'){
