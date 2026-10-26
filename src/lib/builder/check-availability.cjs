@@ -25,11 +25,14 @@ const status = (data, error = null) => async () => ({ data, error });
 // The GET body carries availability plus measured credit ranges (credits only); availability is asserted exactly, estimates by shape.
 const get = async () => {
   const response = await route.GET(); assert.equal(response.headers.get("Cache-Control"), "no-store");
-  const { estimates, features, ...availability } = await response.json();
+  const { estimates, features, documentImages, ...availability } = await response.json();
   // Unqualified generation features: exactly what the server's flags say, booleans only (lib/builder/features.ts).
   assert.deepEqual(features, { briefEnhancer: process.env.MAKEBORNE_BRIEF_ENHANCER === "on", fullImageSlides: process.env.MAKEBORNE_DECK_FULL_IMAGE === "on", documentImages: false }, "features follow the server flags; no image model is configured here");
   assert.ok(estimates && estimates.firstBuild && estimates.reviewRound, "credit estimates accompany every answer");
   assert.ok(!/micro|usd|cost|budget/i.test(JSON.stringify(estimates)), "estimates are credit ranges, never provider amounts");
+  // Image quality and shape offers for presentations and books: credits per image, never provider amounts or model names.
+  assert.ok(documentImages && documentImages.presentation && documentImages.book, "image quality offers accompany every answer");
+  assert.ok(!/micro|usd|cost|budget|gpt|sunburst|flare|openai/i.test(JSON.stringify(documentImages)), "offers name no provider, model or amount");
   return availability;
 };
 

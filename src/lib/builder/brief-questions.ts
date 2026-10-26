@@ -303,7 +303,7 @@ export function isBriefQuestion(value: unknown): value is BriefQuestion {
   const item = value as Record<string, unknown>;
   return shortText(item.id, 32) && shortText(item.question, 140) && shortText(item.why, 160) && shortText(item.topic, 60) && shortText(item.custom, 80)
     && (item.multi === undefined || typeof item.multi === "boolean") && (item.color === undefined || typeof item.color === "boolean")
-    && Array.isArray(item.options) && item.options.length <= (item.multi ? 8 : 6) && item.options.every(option => {
+    && Array.isArray(item.options) && item.options.length <= (item.multi ? 8 : 7) && item.options.every(option => {
       const record = option as Record<string, unknown>;
       return !!option && typeof option === "object" && shortText(record.value, 20) && shortText(record.label, 60)
         && (record.hint === undefined || shortText(record.hint, 80))

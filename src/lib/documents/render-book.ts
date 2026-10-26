@@ -6,9 +6,15 @@ import { esc } from "./chart-svg";
 import type { ImageMap } from "./render-deck";
 import { authoredBookCover } from "./render-book-cover";
 import { estimateLines } from "./slide-scene";
+import { BOOK_SHAPE_SPECS } from "./art-formats";
+import { bookShape, isPictureBook, pageAlt, pageKind, verifiedPage } from "./book-art";
 
 /** 6 × 9 in trim with a wider inside (gutter) margin. */
 export const BOOK_TRIM = { width: 6, height: 9, top: 0.75, bottom: 0.85, inside: 0.82, outside: 0.62 } as const;
+/** The trim of a book in its chosen page shape (portrait 6 x 9, square 8.5 x 8.5, landscape 10 x 8 in), same margins. */
+export const bookTrim = (book: Pick<Book, "shape">) => ({ ...BOOK_TRIM, ...BOOK_SHAPE_SPECS[bookShape(book)].trim });
+/** The page in CSS px (96 per inch): the PDF printer's viewport and the preview's scale. */
+export const bookPagePx = (book: Pick<Book, "shape">) => { const trim = bookTrim(book); return { width: Math.round(trim.width * 96), height: Math.round(trim.height * 96) }; };
 /** CSS string literal that can never close the surrounding <style> element. */
 const cssString = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/</g, "\\00003C").replace(/>/g, "\\00003E").replace(/[\n\r]+/g, " ")}"`;
 const ordinal = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
@@ -120,14 +126,18 @@ export function bookHtml(book: Book, images: ImageMap, mode: "preview" | "print"
   // Typographic covers per motif; "orbit" keeps the original disc and ring.
   const coverMarks = motif === "grid" ? `<div class="m-rule top"></div><div class="m-rule bottom"></div><div class="m-square"></div>`
     : motif === "band" ? `<div class="m-band"></div>` : motif === "frame" ? `<div class="m-frame"></div>` : motif === "quiet" ? "" : `<div class="disc"></div><div class="ring"></div>`;
-  const cover = book.cover.composition ? authoredBookCover(book, images) : `<section class="full cover${coverArt ? " has-art" : ""}${coverArt || motif === "orbit" ? "" : ` motif-${motif}`}">
+  // A verified generated cover is the whole cover; its words are in the picture (and, invisibly, in the page for search and bookmarks).
+  const coverPage = verifiedPage(book, "cover"), coverSrc = coverPage ? images[coverPage] : undefined;
+  const cover = coverPage && coverSrc ? `<section class="full page-full cover-full"><img class="page-art" src="${esc(coverSrc)}" alt="${esc(pageAlt(book, "cover"))}"><h1 class="art-words">${inlineHtml(book.title)}</h1></section>`
+    : book.cover.composition ? authoredBookCover(book, images) : `<section class="full cover${coverArt ? " has-art" : ""}${coverArt || motif === "orbit" ? "" : ` motif-${motif}`}">
 ${coverArt ? `<img class="cover-art" src="${esc(coverArt)}" alt="${esc(book.assets.find(asset => asset.name === book.cover.image)?.alt ?? "")}"><div class="scrim"></div>` : coverMarks}
 <div class="cover-top">${book.cover.tagline ? `<p class="tagline">${inlineHtml(book.cover.tagline)}</p>` : ""}<h1>${inlineHtml(book.title)}</h1>${book.subtitle ? `<p class="subtitle">${inlineHtml(book.subtitle)}</p>` : ""}</div>
 ${book.author ? `<p class="cover-author">${inlineHtml(book.author)}</p>` : ""}</section>`;
   const titlePage = `<section class="full front title-page"><div><h2>${inlineHtml(book.title)}</h2>${book.subtitle ? `<p class="subtitle">${inlineHtml(book.subtitle)}</p>` : ""}<div class="rule"></div>${book.author ? `<p class="by">${inlineHtml(book.author)}</p>` : ""}</div></section>`;
   const year = new Date().getFullYear();
   const rights = `<section class="full front rights">${book.dedication ? `<p class="dedication">${inlineHtml(book.dedication)}</p>` : "<span></span>"}<div class="legal"><p>Copyright \u00A9 ${year}${book.author ? ` ${esc(book.author)}` : ""}. All rights reserved.</p><p>Designed and typeset with Makeborne.</p></div></section>`;
-  const toc = paginateContents(book);
+  // A picture book reads spread by spread: no contents page.
+  const toc = isPictureBook(book) ? { compact: false, pages: [] as number[][] } : paginateContents(book);
   // Page numbers only where a measured print pass supplied them (the preview has no pages).
   const pageOf = (index: number) => { const page = mode === "print" ? pages?.chapters[book.chapters[index].id] : undefined; return page ? `<b class="pg">${page}</b>` : ""; };
   const contents = toc.pages.map((entries, page) => `<section class="full front contents${toc.compact ? " compact" : ""}"><h2>${page ? "Contents, continued" : "Contents"}</h2><ol start="${entries[0] + 1}">${entries.map(index => `<li><a href="#chapter-${esc(book.chapters[index].id)}"><span>${esc(chapterLabel(book, index))}</span>${pageOf(index)}${inlineHtml(book.chapters[index].title)}</a></li>`).join("")}</ol></section>`).join("");
@@ -139,6 +149,22 @@ ${book.author ? `<p class="cover-author">${inlineHtml(book.author)}</p>` : ""}</
     const opener = inline ? `<header class="inline-opener">${artwork}${heading}</header>` : `<section class="full opener${chapter.image ? " has-art" : ""}${chapter.label !== undefined ? " custom-label" : ""}" id="chapter-${esc(chapter.id)}">
 ${artwork || (chapter.label === undefined ? `<div class="numeral">${chapterNumber(book, index)}</div>` : "")}
 <div class="opener-text">${heading}</div></section>`;
+    // A verified generated page replaces the typeset opener; a verified picture-book spread replaces the whole chapter
+    // (two facing pages cut from one wide picture; the words are on the art).
+    const page = verifiedPage(book, chapter.id), pageSrc = page ? images[page] : undefined, pageType = page ? pageKind(book, chapter.id) : null;
+    const blankFirst = mode === "print" && pages?.blankBefore.includes(chapter.id) ? `<section class="full blank" aria-hidden="true"></section>` : "";
+    if (pageSrc && pageType === "spread") {
+      const alt = esc(pageAlt(book, chapter.id));
+      const half = (side: "left" | "right") => `<section class="full page-full spread-half ${side}"${side === "left" ? ` id="chapter-${esc(chapter.id)}"` : ""}><img class="page-art" src="${esc(pageSrc)}" alt="${side === "left" ? alt : ""}"${side === "right" ? ' aria-hidden="true"' : ""}>${side === "left" ? `<h2 class="art-words">${inlineHtml(chapter.title)}</h2>` : ""}</section>`;
+      return `${blankFirst}${mode === "print" ? `${half("left")}${half("right")}` : `<div class="spread">${half("left")}${half("right")}</div>`}`;
+    }
+    if (pageSrc && pageType === "opener" && !inline) {
+      const generated = `<section class="full page-full opener-full" id="chapter-${esc(chapter.id)}"><img class="page-art" src="${esc(pageSrc)}" alt="${esc(pageAlt(book, chapter.id))}"><h2 class="art-words">${inlineHtml(chapter.title)}</h2></section>`;
+      const blocksOf = parseBookMarkup(chapter.text);
+      const bodyOf = blocksOf.length ? blocksOf.map((block, at) => blockHtml(block, book, images, at === 0 && block.type === "paragraph" && block.text.length >= LEAD_MIN_CHARS)).join("") : `<p class="pending">This chapter is being written\u2026</p>`;
+      const headOf = mode === "preview" ? `<div class="runhead"><span>${esc(book.title)}</span><span>${esc(chapter.title)}</span></div>` : "";
+      return `${blankFirst}${generated}<section class="chapter" style="page:ch-${index}">${headOf}${bodyOf}</section>`;
+    }
     const blocks = parseBookMarkup(chapter.text);
     const body = blocks.length ? blocks.map((block, at) => blockHtml(block, book, images, at === 0 && block.type === "paragraph" && block.text.length >= LEAD_MIN_CHARS)).join("") : `<p class="pending">This chapter is being written\u2026</p>`;
     const head = mode === "preview" ? `<div class="runhead"><span>${esc(book.title)}</span><span>${esc(chapter.title)}</span></div>` : "";
@@ -148,7 +174,7 @@ ${artwork || (chapter.label === undefined ? `<div class="numeral">${chapterNumbe
   }).join("");
   const empty = !book.chapters.length ? `<section class="full front waiting"><p>Chapters appear here as they are written.</p></section>` : "";
 
-  const T = BOOK_TRIM, muted = p.muted;
+  const T = bookTrim(book), muted = p.muted;
   const runningHeads = book.chapters.map((chapter, index) => `@page ch-${index}:right{@top-right{content:${cssString(chapter.title.length > 60 ? `${chapter.title.slice(0, 58)}…` : chapter.title)}}}`).join("");
   const marginBox = `font-family:${fonts.body};font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:${muted};vertical-align:bottom;padding-bottom:.18in`;
   const folio = `font-family:${fonts.body};font-size:8.5pt;color:${muted};vertical-align:top;padding-top:.22in`;
@@ -246,7 +272,10 @@ ul.checklist{list-style:none;margin-left:1.5em}li.check{position:relative}li.che
 .chapter th,.chapter td{overflow-wrap:anywhere}
 .chapter td{padding:.42em .55em;border-bottom:.5pt solid ${mix(muted, p.background, 0.6)};vertical-align:top}
 .chapter tbody tr:last-child td{border-bottom:none}
-.pending{color:${muted};font-style:italic}.waiting{color:${muted};font-style:italic}`;
+.pending{color:${muted};font-style:italic}.waiting{color:${muted};font-style:italic}
+.page-full{background:${p.dark}}.page-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.art-words{position:absolute;left:0;top:0;margin:0;width:1px;height:1px;overflow:hidden;font-size:1px;line-height:1;color:transparent;white-space:nowrap}
+.spread-half .page-art{width:200%;max-width:none}.spread-half.right .page-art{left:-100%}`;
   const css = mode === "print"
     ? `${shared}
 @page{size:${T.width}in ${T.height}in;margin:${T.top}in ${T.outside}in ${T.bottom}in ${T.inside}in;background:${p.background}}
@@ -260,6 +289,7 @@ html,body{background:${p.background}}
     : `${shared}
 body{background:#E7E5E0;padding:28px 16px 64px}
 .full,.chapter{margin:0 auto 26px;box-shadow:0 1px 2px rgba(0,0,0,.08),0 14px 34px rgba(20,20,30,.13)}
+.spread{display:flex;justify-content:center;margin:0 auto 26px;width:max-content;box-shadow:0 1px 2px rgba(0,0,0,.08),0 14px 34px rgba(20,20,30,.13)}.spread .full{margin:0;box-shadow:none}
 .chapter{width:${T.width}in;background:${p.background};padding:${T.top}in ${T.outside}in ${T.bottom}in ${T.inside}in;min-height:3in}
 .runhead{display:flex;justify-content:space-between;gap:1em;margin:-.42in 0 .3in;font-size:6.5pt;letter-spacing:.14em;text-transform:uppercase;color:${muted};text-indent:0}
 .runhead span{min-width:0;overflow-wrap:anywhere}.runhead span:last-child{text-align:right}`;

@@ -40,6 +40,7 @@ import { renamedContent, renameSummary } from "@/lib/projects/library-rename";
 import { isPlaceholderTitle } from "@/lib/projects/project-title";
 import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
 import { FEATURES_OFF, parseBuilderFeatures, type BuilderFeatures } from "@/lib/builder/features";
+import { parseDocumentImageOffers, type DocumentImageOffers } from "@/lib/documents/art-formats";
 import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
 import { choosePreview, editorEntry, hasBuilderSource, savedFormat, startingDraftHasContent } from "@/lib/cloud/saved-preview";
@@ -1194,12 +1195,13 @@ export function CloudEditor({
   const [builder, setBuilder] = useState<BuilderAvailability>(BUILDER_OFF);
   const [builderEstimates, setBuilderEstimates] = useState<BuilderEstimates | null>(null);
   const [builderFeatures, setBuilderFeatures] = useState<BuilderFeatures>(FEATURES_OFF);
+  const [documentImages, setDocumentImages] = useState<DocumentImageOffers | null>(null);
   const [live, setLive] = useState<LiveUpdate | null>(null);
   const [autoStart, setAutoStart] = useState<string | null>(null);
   const [autoStartMode, setAutoStartMode] = useState<"create" | "plan">("create");
   useEffect(() => {
     let current = true;
-    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) { setBuilder(parseBuilderAvailability(value)); setBuilderEstimates(parseBuilderEstimates(value?.estimates)); setBuilderFeatures(parseBuilderFeatures(value?.features)); } }).catch(() => undefined);
+    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) { setBuilder(parseBuilderAvailability(value)); setBuilderEstimates(parseBuilderEstimates(value?.estimates)); setBuilderFeatures(parseBuilderFeatures(value?.features)); setDocumentImages(parseDocumentImageOffers(value?.documentImages)); } }).catch(() => undefined);
     return () => { current = false; };
   }, [artifact.kind]);
   const recoveryKey = `makeborne.cloud-draft.${accountId}.${workspaceId}.${artifact.id}`;
@@ -1737,7 +1739,7 @@ export function CloudEditor({
           defaultEffort={project?.effort} disabled={!content || !builder.available || savePaused || conflict || uncertainSave || !!recovery} disabledReason={savePaused || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting}
           sendBlocked={dirty ? "Saving your edit…" : busy ? "Loading saved versions…" : null} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
           provenance={advisorBrief.provenance} onProvenance={advisorBrief.update}
-          kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates} features={builderFeatures}
+          kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates} features={builderFeatures} imageOffers={documentImages} projectBrief={project?.brief ?? ""}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }}
           brandKit={brandKitName} onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}

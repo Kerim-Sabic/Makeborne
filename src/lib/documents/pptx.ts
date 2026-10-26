@@ -4,7 +4,7 @@ import JSZip from "jszip";
 import sharp from "sharp";
 import type { Deck } from "./schema";
 import { FONTS } from "./theme";
-import { ART_COMPOSITION, artAlt } from "./slide-art";
+import { ART_COMPOSITION, PAGE_HEIGHT, PLATE_COMPOSITION, artAlt, deckAspect } from "./slide-art";
 import { composeSlide, H, W, type ArtPrim, type ChartPrim, type ImagePrim, type PathPrim, type Prim, type TextPrim } from "./slide-scene";
 
 /** Office face for monospaced labels (the preview and PDF embed JetBrains Mono). */
@@ -118,8 +118,12 @@ function geometry(prim: PathPrim) {
  * to `missing` so the caller can report it. */
 export async function deckPptx(deck: Deck, images: Record<string, Buffer | undefined>, missing: string[] = []) {
   const pptx = new PptxGenJS();
-  pptx.defineLayout({ name: "MAKEBORNE_16x9", width: W / IN, height: H / IN });
-  pptx.layout = "MAKEBORNE_16x9";
+  // The slide size follows the deck's shape (always 1280 px = 13.333 in wide); editable layouts are 1280x720 and are
+  // moved down to sit centred on a taller slide, exactly as in the preview and PDF.
+  const pageHeight = PAGE_HEIGHT[deckAspect(deck)], offset = (pageHeight - H) / 2;
+  const layout = `MAKEBORNE_${deckAspect(deck).replace(":", "x")}`;
+  pptx.defineLayout({ name: layout, width: W / IN, height: pageHeight / IN });
+  pptx.layout = layout;
   pptx.title = deck.title;
   pptx.author = deck.author || "Makeborne";
   pptx.subject = deck.subtitle ?? "";
@@ -140,15 +144,18 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
       // description and at the top of the speaker notes, and the title in a title placeholder just below the slide
       // (Microsoft's documented way to give a slide an accessible title that is not shown or printed).
       const prim = scene.prims[0] as ImagePrim, bytes = images[prim.name], words = artAlt(source);
-      if (bytes) slide.addImage({ data: await fullSlide(bytes, Math.min(3_000_000, Math.floor(12_000_000 / artSlides))), x: 0, y: 0, w: inch(W), h: inch(H), altText: words, objectName: `Image ${prim.name}` });
+      if (bytes) slide.addImage({ data: await fullSlide(bytes, Math.min(3_000_000, Math.floor(12_000_000 / artSlides))), x: 0, y: 0, w: inch(W), h: inch(pageHeight), altText: words, objectName: `Image ${prim.name}` });
       else if (!missing.includes(prim.name)) missing.push(prim.name);
-      slide.addText(source.title, { objectName: "Title", x: 0, y: inch(H) + 0.15, w: inch(W), h: 0.6, margin: 0, fontFace: fonts.pptxHeading, fontSize: 20, color: color(deck.theme.palette.ink) });
+      slide.addText(source.title, { objectName: "Title", x: 0, y: inch(pageHeight) + 0.15, w: inch(W), h: 0.6, margin: 0, fontFace: fonts.pptxHeading, fontSize: 20, color: color(deck.theme.palette.ink) });
       slide.addNotes(`Slide text: ${words}
 
 ${source.notes}`);
       continue;
     }
-    for (const prim of scene.prims as Prim[]) {
+    // On a taller slide the editable layout moves down onto the centred band; its plate (made in the slide's shape) fills the slide.
+    const platePrim = offset && scene.composition?.startsWith(`${PLATE_COMPOSITION}-`) && scene.prims[0]?.k === "image" ? scene.prims[0] : null;
+    const placed = offset ? [...(platePrim ? [{ ...platePrim, y: 0, h: pageHeight }] : []), ...shiftScene((platePrim ? scene.prims.slice(1) : scene.prims) as Prim[], offset)] : scene.prims;
+    for (const prim of placed as Prim[]) {
       switch (prim.k) {
         case "rect":
           slide.addShape(prim.radius ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), ...(prim.fade ? { objectName: prim.fade === "up" ? FADE : `${FADE} ${prim.fade}` } : {}),
@@ -219,6 +226,17 @@ ${source.notes}`);
     slide.addNotes(source.notes);
   }
   return withTransitions(Buffer.from(await pptx.write({ outputType: "nodebuffer" }) as ArrayBuffer), marks);
+}
+
+/** An editable layout moved down by `dy` px (a 1280x720 layout centred on a taller slide). */
+export function shiftScene(prims: Prim[], dy: number): Prim[] {
+  return prims.map(prim => {
+    switch (prim.k) {
+      case "line": return { ...prim, y1: prim.y1 + dy, y2: prim.y2 + dy };
+      case "path": return { ...prim, y: prim.y + dy, d: prim.d.map(seg => seg.op === "Z" ? seg : seg.op === "C" ? { ...seg, y: seg.y + dy, y1: seg.y1 + dy, y2: seg.y2 + dy } : { ...seg, y: seg.y + dy }) };
+      default: return { ...prim, y: prim.y + dy };
+    }
+  });
 }
 
 const DECORATIVE = "makeborne:decorative", FADE = "Scrim fade";
