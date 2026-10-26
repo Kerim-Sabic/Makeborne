@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { type CSSProperties, useRef, useState } from "react";
 import { ArrowUp, ArrowUpRight, BookOpen, Check, Globe2, Menu, Presentation, X } from "lucide-react";
 import ComposerControls from "./composer-controls";
+import DocumentImageControls, { imageChoiceLines, initialImageChoice, useDocumentImageOffers, type ImageChoice } from "./document-image-controls";
 import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import StudioAccount from "./studio-account";
 import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
@@ -51,6 +52,11 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
   const [kind, setKind] = useState<Kind>("website");
   const [mode, setMode] = useState<"create" | "plan">("create");
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
+  // Presentations and books: the slide or page shape and image quality, written into the brief as the client's answers.
+  const imageOffers = useDocumentImageOffers();
+  const [imageChoices, setImageChoices] = useState<{ presentation?: ImageChoice; book?: ImageChoice }>({});
+  const docKind = kind === "website" ? null : kind;
+  const imageChoice = docKind ? imageChoices[docKind] ?? initialImageChoice(docKind, imageOffers) : null;
   const [brief, setBrief] = useState("");
   const [selectedStyles, setSelectedStyles] = useState<Partial<Record<Kind, Style>>>({});
   const selectedStyle = selectedStyles[kind];
@@ -98,7 +104,8 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
       const requestId = crypto.randomUUID();
       const nonce = crypto.randomUUID();
       const generationConsent=immediateWebsite?permissions.consent??undefined:undefined;
-      const draft = { kind, brief: brief.trim(), styleId: selectedStyle?.id ?? AUTOMATIC_STYLE.id, style: selectedStyle, mode, effort, requestId, attachmentOwner: owner, generationConsent };
+      const withChoices = docKind && imageChoice ? `${brief.trim()}\n\n${imageChoiceLines(docKind, imageChoice)}` : brief.trim();
+      const draft = { kind, brief: withChoices.slice(0, 20000), styleId: selectedStyle?.id ?? AUTOMATIC_STYLE.id, style: selectedStyle, mode, effort, requestId, attachmentOwner: owner, generationConsent };
       await saveCreationDraft(owner, requestId, nonce, draft);
       sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify(draft));
       unsent.submitted();
@@ -147,6 +154,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
             <div className="mk-composer-bottom">
               <AttachFilesButton onFiles={attachments.add} disabled={!attachments.ready || busy} busy={attachments.busy} />
               <ComposerControls mode={mode} onMode={setMode} effort={effort} onEffort={setEffort} />
+              {docKind && imageChoice && <DocumentImageControls className="mk-image-controls" kind={docKind} value={imageChoice} offers={imageOffers} disabled={busy} onChange={next => setImageChoices(previous => ({ ...previous, [docKind]: next }))} />}
               <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim() || !accessReady || immediateWebsite&&!permissions.consent} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
             </div>
           </form>

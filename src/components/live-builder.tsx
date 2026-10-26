@@ -12,6 +12,8 @@ import { autoReviewRounds, reviewCoverageIssue, reviewCreditCeiling } from "@/li
 import { BUILDER_EFFORT } from "@/lib/builder/pricing";
 import { PLAN_CEILING_CREDITS } from "@/lib/builder/plan";
 import type { BuilderEstimates } from "@/lib/builder/credit-estimate";
+import type { DocumentImageOffers } from "@/lib/documents/art-formats";
+import DocumentImageControls, { creditImpact, imageOptionsOf, initialImageChoice, type ImageChoice } from "./document-image-controls";
 import { meterEvent, meterLost, meterRefused, newRunMeter, runReceipt, formatDuration, type EnhancedReceipt, type RunMeter, type RunReceipt } from "@/lib/builder/run-receipt";
 import { readCloudImage } from "./cloud-api";
 import PlanCard from "./plan-card";
@@ -111,7 +113,7 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled: locked, disabledReason, sendBlocked = null, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled: locked, disabledReason, sendBlocked = null, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null, imageOffers = null, projectBrief = "" }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback or an advisor brief (with its mode and effort). Never sent automatically. */
   prefill?: { key: string; text: string; target?: EditTarget; mode?: "create" | "plan"; effort?: EffortLevel } | null;
@@ -139,6 +141,10 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   kind?: "website" | "book" | "presentation"; baseDocument?: DocumentSource;
   /** Measured credit ranges from GET /api/build, shown before a first build. */
   estimates?: BuilderEstimates | null;
+  /** Books and presentations: what each image quality costs per generated slide or page (GET /api/build). */
+  imageOffers?: DocumentImageOffers | null;
+  /** The project brief: a new document's shape and quality chosen at creation are read from its answer lines. */
+  projectBrief?: string;
 }) {
   const copy = COPY[kind], website = kind === "website";
   // Every request waits while locked or blocked; only `locked` stops typing.
@@ -147,6 +153,13 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [effort, setEffort] = useState<EffortLevel>(defaultEffort ?? "medium");
+  // Presentations and books: the slide or page shape and image quality, from the saved document (or the brief's answers)
+  // until the client changes them; sent with each new request and saved on the document.
+  const docKind = kind === "website" ? null : kind;
+  const imageControls = Boolean(docKind) && !(baseDocument?.kind === "deck" && baseDocument.art?.mode !== "image" && baseDocument.slides.length > 0);
+  const imageTouched = useRef(false);
+  const [imageChoice, setImageChoice] = useState<ImageChoice | null>(() => docKind ? initialImageChoice(docKind, imageOffers, projectBrief, baseDocument) : null);
+  useEffect(() => { if (docKind && !imageTouched.current) setImageChoice(initialImageChoice(docKind, imageOffers, projectBrief, baseDocument)); }, [docKind, imageOffers, projectBrief, baseDocument]);
   const sourceOwner = attachmentOwner(accountId);
   const sourceContext = projectAttachmentKey(`${accountId}:${workspaceId}:${artifactId}`);
   const sources = useFileAttachments(sourceOwner, sourceContext);
@@ -477,7 +490,9 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         // The approved enhanced brief and the client's answers start the operation; later stages read them from it.
         ...("actionKey" in requestOperation && !options?.plan && options?.brief ? { brief: options.brief } : {}),
         // Design answers also bind an approved plan's build (the plan carries its own direction; the answers keep must-haves and imagery).
-        ...("actionKey" in requestOperation && options?.design && Object.keys(options.design).length ? { design: options.design } : {}) }, reply.id, live, meter);
+        ...("actionKey" in requestOperation && options?.design && Object.keys(options.design).length ? { design: options.design } : {}),
+        // The client's image shape and quality start the request; the run saves them on the document.
+        ...("actionKey" in requestOperation && docKind && imageChoice && imageControls ? { imageOptions: imageOptionsOf(docKind, imageChoice) } : {}) }, reply.id, live, meter);
       outcome = result ? "done" : lastRefusal.current ? "refused" : "uncertain";
       if (brief && outcome === "done") briefSent(brief);
       if (request) releaseRequest(request, outcome, !options?.plan);
@@ -541,7 +556,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       if (sourceSession.active) { addReceipt(meter); await finishRun(); }
     }
     return outcome;
-  }, [accountId, balance, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, briefSent, busy, disabled, effort, finishRun, holdRequest, onLive, operationRunning, pendingBrief, pendingScope, planner, previewingRecovery, refreshBalance, releaseRequest, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
+  }, [accountId, balance, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, briefSent, busy, disabled, docKind, effort, imageChoice, imageControls, finishRun, holdRequest, onLive, operationRunning, pendingBrief, pendingScope, planner, previewingRecovery, refreshBalance, releaseRequest, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
 
   /** Manual "Review design" for the current saved version. */
   const review = useCallback(async () => {
@@ -964,6 +979,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           <button type="button" aria-pressed={mode === "plan"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
         </div>}
         <label className="lb-attach" aria-label="Attach files"><Paperclip size={15} /><input type="file" multiple accept={BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
+        {docKind && imageChoice && imageControls && <DocumentImageControls kind={docKind} value={imageChoice} offers={imageOffers} disabled={busy || operationRunning || Boolean(previewingRecovery)}
+          onChange={next => { imageTouched.current = true; setImageChoice(next); }} />}
         <select aria-label="Effort" value={effort} disabled={busy || operationRunning || Boolean(previewingRecovery)} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}
         </select>
@@ -984,6 +1001,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         <p className="lb-estimate-detail">{mode === "plan" ? "A failed plan is not charged. If you choose Stop, confirmed usage is charged and unused credits are returned."
           : measured ? `In testing, a first ${kind} at ${EFFORT_PRESENTATION[effort].label} used ${measured.min}–${measured.max} credits (${measured.samples} test ${kind}s, no AI images). You pay only for what is used.`
           : `You pay only for what is used, never more than ${ceiling} credits without your approval.`}</p>
+        {docKind && imageChoice && imageControls && imageOffers && mode !== "plan" && <p className="lb-estimate-detail lb-image-impact">{creditImpact(docKind, imageOffers, imageChoice)}</p>}
         {/* Phones: one line instead of the three above (limit, measured range, balance). */}
         <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
       </div>
