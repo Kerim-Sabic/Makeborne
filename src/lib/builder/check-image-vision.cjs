@@ -220,6 +220,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.equal(measured.comps.length, 1);
       assert.deepEqual([measured.comps[0].heavy, measured.comps[0].headlineLines, measured.comps[0].imageAreaPct], [true, 2, 50]);
       assert.equal(result.compFidelity, findings === null ? "not_checked" : findings.length ? "failed" : "passed");
+      assert.match(result.summary, findings === null ? /Design comp comparison: not checked/ : findings.length ? /Design comp comparison: failed/ : /Design comp comparison: passed — measured hero \(desktop\); this final measurement supersedes/);
       assert.equal(result.finished, findings === null || findings.length === 0);
       assert.equal(imageCalls.length, 0, "saved-reference verification buys no new images");
     }

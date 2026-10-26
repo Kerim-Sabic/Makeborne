@@ -546,7 +546,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     const missing = compsAvailable && concept ? compPlan(concept.sections).filter(label => !labels.includes(label)) : [];
     compCoverage = { measured: compFidelity === "not_checked" ? [] : labels, notChecked: [...new Set([...missing, ...(compFidelity === "not_checked" ? labels : [])])] };
     if (missing.length && compFidelity === "passed") compFidelity = "not_checked";
-    if (compFidelity !== "passed") summary = `${summary}${summary ? "\n\n" : ""}Design comp comparison: ${compFidelity === "failed" ? "failed — the saved progress still differs from its design reference" : missing.length ? `not checked for ${missing.join(", ")} — those references were not generated` : "not checked — the desktop/phone render comparison was unavailable"}.`;
+    // The model writes its notes before finish measures the render. Always add
+    // the server's final verdict so earlier estimates cannot hide a real pass.
+    summary = `${summary}${summary ? "\n\n" : ""}Design comp comparison: ${compFidelity === "passed" ? `passed — measured ${compCoverage.measured.join(", ")}; this final measurement supersedes any earlier estimates in the builder notes` : compFidelity === "failed" ? "failed — the saved progress still differs from its design reference" : missing.length ? `not checked for ${missing.join(", ")} — those references were not generated` : "not checked — the desktop/phone render comparison was unavailable"}.`;
     if (compFidelity === "failed") finished = false;
   }
   return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept, compFidelity, compCoverage };
