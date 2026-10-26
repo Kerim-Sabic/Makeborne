@@ -57,7 +57,7 @@ export default function CrmInsights({ accountId, workspaceId, refreshKey = 0, on
 function AttentionList({ items, onOpen }: { items: Attention[]; onOpen: (id: string) => void }) {
   if (!items.length) return <p className="crm-muted crm-empty">Every open deal has a follow-up date and recent activity.</p>;
   return <ul className="crm-attention">{items.map(item => <li key={item.id}>
-    <button type="button" onClick={() => onOpen(item.id)}><strong>{item.company || item.name}</strong><span className="crm-stage">{item.stage}</span>
+    <button type="button" onClick={() => onOpen(item.id)}><strong>{item.name || item.company}</strong>{item.company && item.name && item.company !== item.name && <span className="crm-muted">{item.company}</span>}<span className="crm-stage">{item.stage}</span>
       <span className="crm-reasons">{item.items.map(reason => <em key={reason.kind} className={`is-${reason.kind}`}>{reason.text}</em>)}</span>
       {item.nextStep && <small>Next: {item.nextStep}</small>}</button></li>)}</ul>;
 }

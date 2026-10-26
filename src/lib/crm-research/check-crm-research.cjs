@@ -401,6 +401,35 @@ const W = randomUUID(), USER = randomUUID();
     assert.deepEqual([...sql.matchAll(/kind in \('email','domain'\)/g)].length, 1);
   });
 
+  await check("journey audit 26 Oct: a business is never greeted by its first word, a missing sender name never reads \"I'm I.\", match reasons say which key matched, overviews name clients as the list does", async () => {
+    const at = { status: "checked", checkedAt: "2026-10-26T09:00:00Z", host: "oliveandthyme.test", findings: [{ id: "mobile", title: "Not built for phones", detail: "", level: "high" }] };
+    // The real reproduction: a client named after the business, a signed-in person without a display name.
+    const olive = draftMod.openingDraft({ sender: { name: "" }, recipient: { name: "Olive & Thyme Deli", company: "Olive & Thyme Ltd", email: "hello@oliveandthyme.test" }, check: at });
+    assert.match(olive.body, /^Hi there,/); assert.doesNotMatch(olive.body, /I'm I\.|\nI$/);
+    assert.match(olive.body, /I'm \[your name\]\./); assert.match(olive.body, /Best,\n\[your name\]/);
+    assert.ok(olive.warnings.some(item => /\[your name\]/.test(item)), "the person is told to add their name");
+    for (const [name, company, hello] of [["Saffron Table", "", "there"], ["North Street Barbers", "North Street Barbers", "there"], ["Bright Smile Dental", "Bright Smile Dental Care", "there"], ["Rana Haddad", "Saffron Table", "Rana"], ["Lana Hadžić", "Dental Studio Lana", "Lana"], ["rana", "Saffron Table", "there"]])
+      assert.match(draftMod.openingDraft({ sender: { name: "Kerim" }, recipient: { name, company } }).body, new RegExp(`^Hi ${hello},`), `${name} / ${company}`);
+    assert.match(draftMod.openingDraft({ sender: { name: "Kerim Sabic", business: "Horalix Studio" }, recipient: { name: "Rana Haddad", company: "Saffron Table" } }).body, /I'm Kerim Sabic from Horalix Studio\.\n[\s\S]*Best,\nKerim Sabic\nHoralix Studio$/);
+    // Email at a client's website domain is reported as such, not as "Same website".
+    const reasons = match.matchReasons({ id: "n", name: "Olive and Thyme", email: "orders@oliveandthyme.test", website: "http://localhost:3061/" }, { id: "o", name: "Olive & Thyme Deli", company: "Olive & Thyme Ltd", website: "https://oliveandthyme.test" });
+    assert.ok(reasons.some(item => item.kind === "domain" && /email/i.test(item.text) && item.text.includes("oliveandthyme.test")), JSON.stringify(reasons));
+    assert.ok(!reasons.some(item => item.text.startsWith("Same website")));
+    assert.ok(match.matchReasons({ id: "x", name: "A", website: "https://olive.test" }, { id: "y", name: "B", website: "olive.test" }).some(item => item.text === "Same website (olive.test)"));
+    // Needs attention, duplicates and do-not-contact name each client as the client list does (name first).
+    const ws = randomUUID(), rows = [
+      { id: randomUUID(), workspace_id: ws, name: "Olive & Thyme Deli", company: "Olive & Thyme Ltd", email: "hello@oliveandthyme.test", website: "https://oliveandthyme.test", notes: "", outreach: { stage: "Lead" }, created_at: "2026-10-20T00:00:00Z" },
+      { id: randomUUID(), workspace_id: ws, name: "Olive and Thyme", company: "", email: "orders@oliveandthyme.test", website: "", notes: "", outreach: { stage: "Lead" }, created_at: "2026-10-21T00:00:00Z" },
+    ];
+    const db = fakeDb({ clients: rows, crm_suppressions: [{ id: randomUUID(), workspace_id: ws, kind: "email", value: "hello@oliveandthyme.test", created_at: "2026-10-22T00:00:00Z" }] });
+    const view = await server.overview(db, ws, "2026-10-26");
+    assert.ok(view.attention.some(item => item.name === "Olive & Thyme Deli" && item.company === "Olive & Thyme Ltd"));
+    assert.deepEqual(view.suppressedClients.map(item => item.name), ["Olive & Thyme Deli"]);
+    assert.ok(view.duplicates.some(pair => [pair.aName, pair.bName].includes("Olive & Thyme Deli")), JSON.stringify(view.duplicates));
+    const insights = fs.readFileSync(path.join(__dirname, "../../components/crm/crm-insights.tsx"), "utf8");
+    assert.match(insights, /<strong>\{item\.name \|\| item\.company\}<\/strong>/, "the attention list leads with the client's name");
+  });
+
   finished = true;
   console.log(`\n${passed} CRM research checks passed.`);
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { clearInterval(keepAlive); fixture.closeAllConnections?.(); fixture.close(); });

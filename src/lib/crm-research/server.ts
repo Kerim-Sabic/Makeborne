@@ -70,10 +70,11 @@ const asMatch = (row: ClientRow): MatchRecord => ({ id: row.id, name: row.name, 
 
 export async function overview(db: SupabaseClient, workspaceId: string, today: string) {
   const [rows, blocked, dismissed, steps] = await Promise.all([directory(db, workspaceId), suppressions(db, workspaceId), dismissals(db, workspaceId), nextSteps(db, workspaceId)]);
-  const names = new Map(rows.map(row => [row.id, row.company || row.name]));
+  // The client list shows each client by name (company second): use the same name here.
+  const names = new Map(rows.map(row => [row.id, row.name || row.company || ""]));
   const attention = needsAttention(rows.map(row => ({ id: row.id, name: row.name, company: row.company, createdAt: row.created_at, outreach: row.outreach, nextStep: steps.get(row.id)?.text ?? null })), today);
   const duplicates = duplicatePairs(rows.map(asMatch), dismissed, 50).map(pair => ({ ...pair, aName: names.get(pair.a) ?? "", bName: names.get(pair.b) ?? "" }));
-  const contacted = rows.filter(row => suppressionFor(blocked, row)).map(row => ({ id: row.id, name: row.company || row.name }));
+  const contacted = rows.filter(row => suppressionFor(blocked, row)).map(row => ({ id: row.id, name: row.name || row.company || "" }));
   return { attention, duplicates, suppressions: blocked, suppressedClients: contacted.slice(0, 50), truncated: rows.length >= DIRECTORY_LIMIT, clients: rows.length };
 }
 

@@ -31,7 +31,21 @@ export const OPT_OUT = "If this isn't useful, just reply “no thanks” and I w
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dateLabel = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; };
 const clean = (value: string | null | undefined, max = 200) => (value ?? "").replace(/[<>\r\n\t]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
-const first = (name: string) => clean(name, 60).split(" ")[0] || "there";
+/** Words that mark a record name as a business, not a person ("Olive & Thyme Deli", "North Street Barbers"). */
+const BUSINESS_WORDS = /\b(ltd|llc|inc|gmbh|d\.?o\.?o|plc|co|company|group|agency|studio|studios|shop|store|deli|cafe|café|bar|bistro|restaurant|kitchen|bakery|salon|barbers?|clinic|dental|dentist|hotel|gym|fitness|market|services|solutions|design|media|consulting|partners|associates)\b/i;
+/**
+ * Greets a person by first name only when the record clearly names a person: the
+ * client has a separate company and the name looks like a person's (two or three
+ * words of letters, no "&", digits or business words). Otherwise "Hi there", so a
+ * business is never greeted as "Hi Olive".
+ */
+const greeting = (name: string, company: string) => {
+  const person = clean(name, 60), words = person.split(" ");
+  const looksPersonal = words.length >= 2 && words.length <= 3 && words.every(word => /^\p{Lu}[\p{L}'’-]*$/u.test(word)) && !BUSINESS_WORDS.test(person);
+  return looksPersonal && company && company.toLowerCase() !== person.toLowerCase() ? words[0] : "there";
+};
+/** Shown where the sender's name belongs until they add it, so the email always says who it is from. */
+export const SENDER_PLACEHOLDER = "[your name]";
 /** What each finding means for their customers, in one clause (no numbers beyond the finding's own). */
 const PHRASE: Partial<Record<CheckFinding["id"], string>> = {
   https: "the site opens without https, so browsers show visitors a “Not secure” warning",
@@ -53,10 +67,11 @@ export function openingDraft(input: DraftInput): Draft {
   if (!clean(input.recipient.name)) throw new DraftRefused("NO_RECIPIENT", "Add the client's name first.");
   const uses: Draft["uses"] = [], warnings: string[] = [];
   const business = clean(input.recipient.company) || clean(input.recipient.name);
-  const sender = clean(input.sender.name, 80) || "I", senderBusiness = clean(input.sender.business, 80);
+  const senderName = clean(input.sender.name, 80), sender = senderName || SENDER_PLACEHOLDER, senderBusiness = clean(input.sender.business, 80);
+  if (!senderName) warnings.push(`Replace ${SENDER_PLACEHOLDER} with your name before sending: the email has to say who it's from.`);
   const check = input.check && input.check.status === "checked" ? input.check : null;
   const picked = (check?.findings ?? []).filter(item => PHRASE[item.id]).slice(0, 3);
-  const lines: string[] = [`Hi ${first(input.recipient.name)},`, ""];
+  const lines: string[] = [`Hi ${greeting(input.recipient.name, clean(input.recipient.company))},`, ""];
   lines.push(`I'm ${sender}${senderBusiness ? ` from ${senderBusiness}` : ""}.${input.offer ? ` ${clean(input.offer, 240).replace(/\.?$/, ".")}` : ""}`);
   if (picked.length && check) {
     lines.push("", `When I looked at ${check.host ?? "your website"} on ${dateLabel(check.checkedAt)}, I noticed that:`);
