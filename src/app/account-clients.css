@@ -98,7 +98,7 @@
 @media (hover: none), (max-width: 650px) { .ac-row-actions { opacity: 1; padding: 0 17px 14px 73px; } .ac-list .ac-row { flex-wrap: wrap; } .ac-row-open { padding: 17px; } }
 .ac-heading-actions { display: flex; align-items: center; gap: 10px; }
 .ac-palette-hint { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #e6e2ee; background: #ffffffc0; color: #6f6880; font: inherit; font-size: 13px; padding: 9px 12px; border-radius: 11px; cursor: pointer; }
-.ac-palette-hint kbd { font: 600 11px/1 inherit; border: 1px solid #e6e2ee; border-radius: 6px; padding: 3px 6px; color: #8f88a0; background: #fff; }
+.ac-palette-hint kbd { font: 600 11px/1 inherit; border: 1px solid #e6e2ee; border-radius: 6px; padding: 3px 6px; color: #777088; background: #fff; }
 .ac-layout { display: inline-flex; padding: 3px; border: 1px solid #e8e6ee; border-radius: 12px; background: #fff; }
 .ac-layout button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: #77708a; font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 9px; cursor: pointer; }
 .ac-layout button[aria-checked="true"] { background: #f0ebfa; color: #4f3c80; font-weight: 550; }
@@ -145,7 +145,7 @@
 .cp-dialog { width: min(620px, 100%); background: #fff; border: 1px solid #e7e2ef; border-radius: 18px; box-shadow: 0 24px 70px #1d172840; overflow: hidden; animation: cp-rise .16s ease; }
 .cp-search { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid #f0edf4; color: #8a8199; }
 .cp-search input { flex: 1; border: 0; outline: none; font: inherit; font-size: 15px; color: #251f30; background: transparent; }
-.cp-search kbd { font: 600 11px/1 inherit; border: 1px solid #e6e2ee; border-radius: 6px; padding: 3px 6px; color: #8f88a0; }
+.cp-search kbd { font: 600 11px/1 inherit; border: 1px solid #e6e2ee; border-radius: 6px; padding: 3px 6px; color: #777088; }
 .cp-results { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
 .cp-results li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px; cursor: pointer; color: #6f6880; }
 .cp-results li.is-active { background: #f3effa; color: #4b3a6b; }
@@ -506,7 +506,7 @@
 .lf-main { display: grid; gap: 7px; min-width: 0; }
 .lf-name { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .lf-name strong { font-size: 15px; font-weight: 600; color: #221c30; overflow-wrap: anywhere; }
-.lf-name span { font-size: 12px; color: #857d91; }
+.lf-name span { font-size: 12px; color: #776f83; }
 .lf-why { margin: 0; font-size: 13px; line-height: 1.55; color: #4f4760; }
 .lf-angle { display: flex; gap: 6px; margin: 0; font-size: 13px; line-height: 1.55; color: #5b4783; }
 .lf-angle svg { flex: none; margin-top: 4px; color: #8a5cf2; }

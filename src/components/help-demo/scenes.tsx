@@ -27,7 +27,7 @@ function Composer({ s, placeholder }: { s: DemoState; placeholder: string }) {
   const formats: [string, string, ReactNode][] = [["website", "Website", <Globe2 key="w" size={14} />], ["book", "Book", <BookOpen key="b" size={14} />], ["presentation", "Presentation", <Presentation key="p" size={14} />]];
   const files = (s.files as string[] | undefined) ?? [];
   return <div className="dm-hero">
-    <h1>What will you make next?</h1>
+    <p className="dm-title">What will you make next?</p>
     <div className="dm-switch">{formats.map(([id, label, icon]) => <span key={id} data-demo={`fmt-${id}`} className={s.format === id ? "is-on" : ""}>{icon}{label}</span>)}</div>
     <div className="dm-composer">
       <div className="dm-textarea" data-demo="brief" data-demo-aim="left">{t(s.brief) ? <>{t(s.brief)}{caret(s, "brief")}</> : <em>{placeholder}</em>}</div>

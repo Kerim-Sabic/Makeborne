@@ -13,7 +13,7 @@
 .portal-back { display: inline-block; margin-bottom: 16px; color: var(--p-muted); font-size: 13.5px; text-decoration: none; }
 .portal-back:hover { color: var(--p-ink); }
 .portal-foot { text-align: center; padding: 18px 20px 26px; }
-.portal-foot a { display: inline-flex; align-items: center; gap: 6px; color: var(--p-muted); font-size: 12px; text-decoration: none; opacity: 0.8; }
+.portal-foot a { display: inline-flex; align-items: center; gap: 6px; color: var(--p-muted); font-size: 12px; text-decoration: none; }
 .portal-foot a:hover { opacity: 1; }
 
 .portal-title, .portal h1 { margin: 0 0 18px; font-size: clamp(24px, 4vw, 32px); line-height: 1.15; letter-spacing: -0.02em; font-weight: 650; text-wrap: balance; }
@@ -116,6 +116,8 @@
   .pf-block select { grid-column: 1 / -1; }
   .pe-actions { justify-content: stretch; }
   .pe-actions .portal-button { width: 100%; }
+  /* 16px keeps phone browsers from zooming the page when a field is focused. */
+  .portal input:not([type="checkbox"]):not([type="radio"]), .portal select, .portal textarea { font-size: 16px; }
 }
 .portal a svg, .portal-chip svg { display: inline; vertical-align: -2px; }
 .pe-head a { display: inline-flex; align-items: center; gap: 4px; }

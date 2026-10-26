@@ -14,7 +14,7 @@ export default function PortalShell({ brand, email, children, back }: { brand?: 
   return <div className="portal" style={brandStyle(brand)}>
     <header className="portal-top">
       <div className="portal-top-inner">
-        <Link href="/portal" className="portal-agency" aria-label={brand ? `${brand.name} client portal` : "Client portal"}>
+        <Link href="/portal" className="portal-agency">
           {/* eslint-disable-next-line @next/next/no-img-element -- agency logo stored as a data: URL */}
           {brand?.logo ? <img src={brand.logo} alt="" /> : <span className="portal-agency-mark" aria-hidden="true">{(brand?.name ?? "Client portal").slice(0, 1)}</span>}
           <span>{brand?.name ?? "Client portal"}</span>

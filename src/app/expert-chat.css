@@ -1,9 +1,9 @@
 .advisor-page{min-height:100dvh;display:grid;grid-template-columns:254px minmax(0,1fr);background:#fff;color:#26252d}
 .advisor-sidebar{background:#f8f8fa;border-right:1px solid #ebeaee;padding:27px 18px;display:flex;flex-direction:column;gap:26px}
 .advisor-brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:650;letter-spacing:-.8px;padding:0 10px}
-.advisor-back{display:flex;align-items:center;gap:8px;color:#77737f;font-size:12px;padding:0 10px}
+.advisor-back{display:flex;align-items:center;gap:8px;min-height:32px;color:#736f7b;font-size:12px;padding:0 10px}
 .advisor-back:hover{color:#272330}
-.advisor-sidebar-label{display:flex;justify-content:space-between;align-items:center;padding:0 10px;font-size:11px;font-weight:550;color:#77737f}
+.advisor-sidebar-label{display:flex;justify-content:space-between;align-items:center;padding:0 10px;font-size:11px;font-weight:550;color:#736f7b}
 .advisor-sidebar-label>span{font-size:12px;border:1px solid #e2dfe8;border-radius:5px;padding:2px 6px;font-weight:400}
 .advisor-picker{display:grid;gap:7px;margin-top:-12px}
 .advisor-person{display:flex;align-items:center;gap:11px;border:1px solid transparent;border-radius:11px;padding:12px 10px;background:transparent;text-align:left}
@@ -11,7 +11,7 @@
 .advisor-person.is-selected{background:#fff;border-color:#e8e4ee;box-shadow:0 2px 4px #30234504}
 .advisor-person strong,.advisor-person small{display:block}
 .advisor-person strong{font-weight:550;font-size:13px}
-.advisor-person small{font-size:11px;color:#817a8b;margin-top:3px}
+.advisor-person small{font-size:11px;color:#797283;margin-top:3px}
 .advisor-avatar{width:34px;height:34px;flex-shrink:0;display:grid;place-items:center;border-radius:11px;font-family:Georgia,serif;font-size:19px}
 .advisor-avatar-mira{background:#ece5f7;color:#765999}
 .advisor-avatar-atlas{background:#e6ede9;color:#527264}
