@@ -178,8 +178,12 @@ export function pageOverflow(doc: Document, view: Window, width: number): PageOv
 }
 
 /** What the builder read from a design comp (read_comp): the headline's cap height and the image's share of the frame. */
-export type CompReading = { section: string; viewport: "desktop" | "mobile"; headlineCapHeightPct: number; imageAreaPct: number; imageSide: "left" | "right" | "full" | "none" };
-export type CompDeviation = { section: string; viewport: "desktop" | "mobile"; metric: "headline" | "image-area" | "image-side"; comp: number | string; built: number | string; fix: string };
+export type CompReading = { section: string; viewport: "desktop" | "mobile"; headlineCapHeightPct: number; imageAreaPct: number; imageSide: "left" | "right" | "full" | "none"; ground?: string; heavy?: boolean };
+export type CompDeviation = { section: string; viewport: "desktop" | "mobile"; metric: "headline" | "image-area" | "image-side" | "ground" | "weight"; comp: number | string; built: number | string; fix: string };
+/** How far apart two colours are (0-441, plain RGB distance): above GROUND_DISTANCE the built ground is another colour. */
+export const GROUND_DISTANCE = 90;
+const rgbOf = (value: string) => { const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/.exec(value); return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null; };
+const hexOf = ({ r, g, b }: { r: number; g: number; b: number }) => `#${[r, g, b].map(v => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
 /** Cap height of a typical display face as a share of its font size. */
 export const CAP_HEIGHT = 0.7;
 /** The comp's frame as a viewport (comp-prompt.ts COMP_SHAPE): a desktop comp is a 16:9 first screen at 1440 px,
@@ -243,12 +247,35 @@ export function compFidelity(doc: Document, view: Window, width: number, reading
     if (!target) continue;
     const top = target.getBoundingClientRect().top, bottom = top + frame.height;
     // The largest text in the section's first frame.
-    let size = 0;
+    let size = 0, biggest: Element | null = null;
     for (const el of Array.from(target.querySelectorAll("*"))) {
       if (!Array.from(el.childNodes).some(node => node.nodeType === 3 && (node.textContent ?? "").trim().length > 1)) continue;
       const box = el.getBoundingClientRect(), style = view.getComputedStyle(el);
       if (box.top >= bottom || box.bottom <= top || style.visibility === "hidden" || style.display === "none") continue;
-      size = Math.max(size, parseFloat(style.fontSize) || 0);
+      const fontSize = parseFloat(style.fontSize) || 0;
+      if (fontSize > size) { size = fontSize; biggest = el; }
+    }
+    // A heavy display face in the comp (bold, black, heavy) stays heavy: the live w01 v2 build set its bold comp
+    // headline in a light serif.
+    if (reading.heavy && biggest) {
+      const weight = parseInt(view.getComputedStyle(biggest).fontWeight, 10) || 400;
+      if (weight < 600) out.push({ section: id, viewport: reading.viewport, metric: "weight", comp: "bold", built: weight,
+        fix: `set the headline in a bold cut (font-weight 600 or more of a face that has it) as the comp's heavy display type (it is ${weight})` });
+    }
+    // The ground the headline sits on (the first opaque background behind it), against the comp's ground colour: the
+    // references carry their colour as one confident field, and a build that swaps it for a neutral loses that.
+    if (reading.ground && biggest && reading.imageSide !== "full") {
+      let ground: { r: number; g: number; b: number } | null = null;
+      for (let el: Element | null = biggest; el && !ground; el = el.parentElement) {
+        const colour = rgbOf(view.getComputedStyle(el).backgroundColor);
+        if (colour && colour.a >= 0.9) ground = colour;
+      }
+      ground ??= rgbOf(view.getComputedStyle(doc.body).backgroundColor) ?? { r: 255, g: 255, b: 255 };
+      const want = parseInt(reading.ground.slice(1), 16), wanted = { r: want >> 16 & 255, g: want >> 8 & 255, b: want & 255 };
+      const distance = Math.hypot(ground.r - wanted.r, ground.g - wanted.g, ground.b - wanted.b);
+      if (distance > GROUND_DISTANCE)
+        out.push({ section: id, viewport: reading.viewport, metric: "ground", comp: reading.ground.toUpperCase(), built: hexOf(ground),
+          fix: `set the ground behind the headline to the comp's ${reading.ground.toUpperCase()} as a flat, full-strength field (it is ${hexOf(ground)})` });
     }
     const compCap = reading.headlineCapHeightPct / 100 * frame.height, builtCap = size * CAP_HEIGHT;
     if (compCap >= 12 && builtCap < compCap * 0.85)

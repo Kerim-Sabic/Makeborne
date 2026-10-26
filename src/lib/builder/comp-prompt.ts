@@ -96,8 +96,16 @@ export function colourName(value: string) {
   return s > 0.75 && l > 0.45 ? `bright ${hue}` : hue;
 }
 
-/** Why a comp input cannot be drawn as written (the model rewrites it), or []. */
-export function compInputIssues(input: CompInput): string[] {
+/** True for the first screen of the page (its comp shows the header); later sections are drawn without it. */
+export const isFirstScreen = (section: string, sections?: readonly { id: string }[]) => sections?.[0]?.id === section || /^(top|hero|home|first|intro|landing)/i.test(section);
+/** Whether a comp's headline is drawn heavy: the comp prompt asks for the heaviest cut of the face unless the type
+ * words name a light one (the live w01 v2 comp, "elegant condensed high-contrast serif", came out bold and its build
+ * set a light serif). */
+export const heavyType = (type: string) => !/\b(light|thin|hairline|extra[- ]?light)\b/i.test(type);
+/** Why a comp input cannot be drawn as written (the model rewrites it), or []. `firstScreen`: the page's first screen
+ * (only its desktop comp shows the header and its navigation; every live quality-v14 run lost two calls asking for
+ * navigation on section comps that have no header). */
+export function compInputIssues(input: CompInput, firstScreen = true): string[] {
   const issues: string[] = [];
   const sum = (areas: string[]) => input.layout.filter(item => areas.includes(item.area)).reduce((total, item) => total + item.pct, 0);
   const areas = new Set(input.layout.map(item => item.area));
@@ -107,7 +115,7 @@ export function compInputIssues(input: CompInput): string[] {
   else if ((areas.has("top") || areas.has("bottom")) && sum(["top", "bottom"]) !== 100) issues.push(`layout: top + bottom must be 100% (they are ${sum(["top", "bottom"])}%)`);
   if (new Set(input.layout.map(item => item.area)).size !== input.layout.length) issues.push("layout: each area once");
   if (!input.lines.some(line => line.role === "headline")) issues.push("lines: the screen needs its headline (role headline)");
-  if (input.viewport === "desktop" && !input.nav?.length) issues.push("nav: a desktop screen spells out its 2-4 top navigation items");
+  if (input.viewport === "desktop" && firstScreen && !input.nav?.length) issues.push("nav: the desktop first screen spells out its 2-4 top navigation items");
   if (input.accent && !input.lines.some(line => splitLines(line.text).join(" ").includes(input.accent!.words.trim()))) issues.push(`accent: "${input.accent.words}" is not in any line; quote words that are`);
   const total = input.lines.reduce((count, line) => count + wordCount(line.text), 0) + wordCount(input.cta.label);
   if (total > COMP_WORDS[input.viewport]) issues.push(`${total} words besides the navigation; at most ${COMP_WORDS[input.viewport]} on a ${input.viewport} comp (put the rest of the copy in the code, not the comp)`);
@@ -129,7 +137,7 @@ function lineWords(line: CompInput["lines"][number], input: CompInput) {
   const parts = splitLines(line.text), quoted = parts.map(quote).join(" / ");
   const accent = input.accent && parts.join(" ").includes(input.accent.words.trim()) ? ` with ${quote(input.accent.words)} ${input.accent.treatment.trim()}` : "";
   switch (line.role) {
-    case "headline": return `a huge ${input.type.trim()} headline${parts.length > 1 ? ` on ${NUMBER[parts.length - 1] ?? parts.length} lines` : ""} ${quoted}${accent}`;
+    case "headline": return `a huge ${input.type.trim().replace(/^(huge|giant|massive)\s+/i, "")} headline${parts.length > 1 ? ` on ${NUMBER[parts.length - 1] ?? parts.length} lines` : ""} ${quoted}${accent}`;
     case "eyebrow": return `a small label ${quoted}${accent} above it`;
     case "subline": return `a short line ${quoted}${accent}`;
     default: return `a small line ${quoted}${accent}`;
@@ -140,11 +148,12 @@ const pill = (cta: CompInput["cta"]) => `a ${colourName(cta.color)} ${cta.style 
 /** The comp prompt in the reference pattern: the paragraph, the crop note when the canvas is cut to the shape, the
  * phone first-screen rule, the art system, then the tail. `size` is the canvas the call generates. */
 export function compPrompt(input: CompInput, concept: { artSystem?: ArtSystem; chosen: Pick<Concept, "name">; sections?: readonly SectionPlan[] }, size: ImageSize = input.viewport === "desktop" ? "1536x1024" : "1024x1536") {
-  const desktop = input.viewport === "desktop", first = concept.sections?.[0]?.id === input.section || /^(top|hero|home|first|intro|landing)/i.test(input.section);
+  const desktop = input.viewport === "desktop", first = isFirstScreen(input.section, concept.sections);
   const job = concept.sections?.find(section => section.id === input.section)?.job;
   const { ground, ink, accent } = input.colors;
   const screen = desktop ? (first ? "The homepage" : `A section of the homepage${job ? ` (${job.replace(/\.$/, "")})` : ""}`) : (first ? "The first phone screen of the homepage" : `A phone screen of the homepage${job ? ` (${job.replace(/\.$/, "")})` : ""}`);
-  const nav = desktop
+  const nav = desktop && !first ? "No header or navigation: this screen is a section further down the page."
+    : desktop
     ? `Top navigation: wordmark ${quote(input.brand)} left${input.mark ? ` with ${input.mark.trim()}` : ""}; ${(input.nav ?? []).map(quote).join(", ")} right of centre; ${pill(input.cta)} right.`
     : `Top bar: wordmark ${quote(input.brand)} left${input.mark ? ` with ${input.mark.trim()}` : ""}, a simple menu icon right.`;
   const layout = input.layout.map(item => `${AREA[item.area]}${item.area === "full" ? "" : ` ${item.pct}%`}: ${item.content.trim().replace(/\.$/, "")}.`).join(" ");
@@ -160,6 +169,7 @@ export function compPrompt(input: CompInput, concept: { artSystem?: ArtSystem; c
     cropNote,
     phone,
     art ? `Art system: palette ${art.palette}. Type: ${art.type}. Imagery: ${art.imagery}. Motif: ${art.motif}.` : "",
+    `Colours flat and at full strength exactly as given, like a printed poster: no washed-out tints, no gradients, no vignette. The headline set at poster scale${heavyType(input.type) ? " in the heaviest cut of its typeface" : ""}, its longest line spanning most of the type field.`,
     "Any other body copy appears only as quiet thin lines, never as words. Real-looking photography or a crafted drawing as the art system says; never stock-looking, no AI look (oversaturation, HDR glow, plastic skin).",
     desktop ? TAIL_SITE : TAIL_PHONE,
   ].filter(Boolean).join("\n");

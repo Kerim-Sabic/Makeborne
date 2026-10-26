@@ -347,7 +347,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       const early = events.find(event => event.type === "tool_error" && event.tool === "generate_comp");
       assert.match(early.message, /Record the concept/);
       const conceptResult = seen[2].messages.at(-1).content.find(block => block.type === "tool_result");
-      assert.match(conceptResult.content, /Your next step is the design comps: in one response call generate_comp at least four times/, "the concept result makes the comps the next step");
+      assert.ok(conceptResult.content.includes("Your next step is the design comps: in one response call generate_comp") && /for exactly these: .+ \(desktop\), .+ \(mobile\)/.test(conceptResult.content), "the concept result makes the comps the next step, by section id");
       const results = seen[3].messages.at(-1).content.filter(block => block.type === "tool_result");
       const made = results.filter(block => Array.isArray(block.content));
       assert.ok(made.length >= 2 && made.length <= MAX_COMPS, `comps inside the image third (${made.length})`);
@@ -384,7 +384,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.ok(events.filter(event => event.type === "image_start" && event.comp).length === made.length);
       const recorded = compsFromSource(files.files.get("src/App.tsx"));
       assert.equal(recorded.length, made.length); assert.equal(recorded[0].section, "top"); assert.match(recorded[0].asset, /^c0000000-/);
-      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" }, "the reading travels in the concept comment to the review");
+      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right", ground: "#1D3FA8", heavy: true }, "the reading (with the comp's ground and weight) travels in the concept comment to the review");
       const readResults = seen[4].messages.at(-1).content.filter(block => block.type === "tool_result");
       assert.match(readResults[0].content, /largest headline's cap height at least 85% of 9% of the frame/);
       assert.match(readResults[1].content, /There is no desktop comp for "nowhere"/);
