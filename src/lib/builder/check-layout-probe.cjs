@@ -80,8 +80,9 @@ const ONE_ROW = `<style>${BASE}.marquee{background:#c6f04a;color:#1d1430;overflo
       const toned = await probe(`${hero(40)}<section id="top"><h1>Bristol, cooked in season.</h1><img style="left:0" alt="" width="720" height="960" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></section>`, 1440, [reading]);
       assert.deepEqual(toned.fidelity.map(item => item.metric).sort(), ["headline", "image-side"]);
       const headline = toned.fidelity.find(item => item.metric === "headline");
-      assert.equal(headline.comp, 86); assert.equal(headline.built, 28);
-      assert.match(fidelityProblem(headline), /Comp fidelity: the "top" section \(desktop\) is off its comp: set the largest headline to at least 105px at 1440 px wide/);
+      // The desktop comp frame is 1440 x 810 (16:9): 9% of 810 px is a 73 px cap height.
+      assert.equal(headline.comp, 73); assert.equal(headline.built, 28);
+      assert.match(fidelityProblem(headline), /Comp fidelity: the "top" section \(desktop\) is off its comp: set the largest headline to at least 89px at 1440 px wide/);
       const faithful = await probe(`${hero(110)}<section id="top"><h1>Bristol, cooked in season.</h1><img style="left:720px" alt="" width="720" height="960" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></section>`, 1440, [reading]);
       assert.deepEqual(faithful.fidelity, []);
       assert.deepEqual((await probe(`${hero(40)}<section id="top"><h1>Small</h1></section>`, 390, [reading])).fidelity, [], "a desktop reading is measured at 1440 only");
