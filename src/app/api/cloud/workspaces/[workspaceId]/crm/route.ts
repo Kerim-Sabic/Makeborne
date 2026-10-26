@@ -56,7 +56,7 @@ export async function POST(request: Request, context: Context) {
     requireEditor(workspace?.role);
     if (body.action === "check") {
       const check = await guardedCheck(user.id, body.url || null);
-      const checkId = await storeCheck(client, { workspaceId, userId: user.id, clientId: null, check });
+      const checkId = await storeCheck(serviceRpc(), { workspaceId, userId: user.id, clientId: null, check });
       const { matches, suppressed } = await prospectContext(client, workspaceId, { name: body.name || check.host || body.url, website: check.finalUrl ?? body.url, email: body.email, phone: body.phone });
       const fit = fitScore({ check, website: body.url, email: body.email || check.contacts.find(item => item.kind === "email")?.value, phone: body.phone || check.contacts.find(item => item.kind === "phone")?.value,
         category: body.category, targets: body.targets, suppressed: Boolean(suppressed), existing: matches.some(item => item.strength === "strong") });

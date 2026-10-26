@@ -1,4 +1,4 @@
--- CRM research tables (20261025300000). Disposable local stack only; every fixture rolls back.
+-- CRM research tables (20261025300000 + 20261026120000 server-only writes). Disposable local stack only; every fixture rolls back.
 -- Run: docker exec -i supabase_db_makeborne-release-auth psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/check-crm-research.sql
 -- Sections run as the authenticated role with a signed-in subject (RLS applies), like the browser's server calls.
 \set ON_ERROR_STOP on
@@ -21,35 +21,58 @@ begin
  perform set_config('crm.ids', jsonb_build_object('o',o,'ed',ed,'rv',rv,'st',st,'w',w,'w2',w2,'c1',c1,'c2',c2,'c3',c3)::text, true);
 end $$;
 
--- A. Website checks: editors store prospect checks (they expire), reviewers read only, other workspaces see nothing; no spoofed author.
+-- A. Website checks are stored only by the server (service role, actor from the verified session): the browser cannot insert,
+--    authorship, expiry and the check time are set or bounded in SQL, reviewers and strangers are refused, reads are as before.
 do $$
 declare ids jsonb:=current_setting('crm.ids')::jsonb; w uuid:=(ids->>'w')::uuid; w2 uuid:=(ids->>'w2')::uuid; ed uuid:=(ids->>'ed')::uuid; rv uuid:=(ids->>'rv')::uuid; st uuid:=(ids->>'st')::uuid;
- c1 uuid:=(ids->>'c1')::uuid; chk uuid; n integer;
+ c1 uuid:=(ids->>'c1')::uuid; c3 uuid:=(ids->>'c3')::uuid; chk uuid; chk2 uuid; n integer;
+ good jsonb:=jsonb_build_object('url','https://prospect.test/','finalUrl','https://prospect.test/','status','checked','score',62,'checkerVersion','crm-site-check-2026-10-25.1','checkedAt',now(),'result','{"findings":[]}'::jsonb);
 begin
  perform pg_temp.as_user(ed); set local role authenticated;
- insert into public.crm_site_checks(workspace_id,url,status,score,result,checker_version,checked_at,expires_at,created_by)
-  values(w,'https://prospect.test/','checked',62,'{"findings":[]}','crm-site-check-2026-10-25.1',now(),now()+interval '30 days',ed) returning id into chk;
- begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by) values(w,'https://x.test/','checked','{}','v1',now(),now()+interval '1 day',(ids->>'o')::uuid); raise exception 'spoofed author'; exception when insufficient_privilege then null; end;
- begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,created_by) values(w,'https://x.test/','checked','{}','v1',now(),ed); raise exception 'prospect check without expiry'; exception when check_violation then null; end;
- begin insert into public.crm_site_checks(workspace_id,client_id,url,status,result,checker_version,checked_at,expires_at,created_by) values(w,c1,'https://x.test/','checked','{}','v1',now(),now()+interval '1 day',ed); raise exception 'client check with expiry'; exception when check_violation then null; end;
- begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by) values(w,'https://x.test/','checked','{}','v1',now(),now()+interval '90 days',ed); raise exception 'long expiry'; exception when check_violation then null; end;
- begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by) values(w,'https://x.test/','guessed','{}','v1',now(),now()+interval '1 day',ed); raise exception 'unknown status'; exception when check_violation then null; end;
+ begin insert into public.crm_site_checks(workspace_id,url,final_url,status,score,result,checker_version,checked_at,expires_at,created_by)
+  values(w,'https://forged.test/','https://forged.test/','checked',99,'{"findings":[]}','v1',now(),now()+interval '30 days',ed); raise exception 'editor inserted a check directly'; exception when insufficient_privilege then null; end;
+ begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by)
+  values(w,'https://x.test/','no_website','{}','v1','2099-01-01',('2099-01-01'::timestamptz)+interval '30 days',ed); raise exception 'editor kept a check until 2099'; exception when insufficient_privilege then null; end;
+ begin perform public.makeborne_crm_site_check_save(ed,w,null,good); raise exception 'browser called the server-only save'; exception when insufficient_privilege then null; end;
  reset role;
+ set local role anon;
+ begin perform public.makeborne_crm_site_check_save(ed,w,null,good); raise exception 'anon called the save'; exception when insufficient_privilege then null; end;
+ reset role;
+
+ set local role service_role;
+ chk:=public.makeborne_crm_site_check_save(ed,w,null,good);
+ assert (select created_by=ed and client_id is null and expires_at>now()+interval '29 days' and expires_at<=now()+interval '30 days' and score=62 from public.crm_site_checks where id=chk),'prospect check: author from the session, 30-day expiry set in SQL';
+ chk2:=public.makeborne_crm_site_check_save(ed,w,c1,good||jsonb_build_object('score',40));
+ assert (select client_id=c1 and expires_at is null from public.crm_site_checks where id=chk2),'a client check is kept with the client';
+ begin perform public.makeborne_crm_site_check_save(ed,w,null,good||jsonb_build_object('checkedAt','2099-01-01T00:00:00Z')); raise exception 'future check time'; exception when sqlstate '22023' then null; end;
+ begin perform public.makeborne_crm_site_check_save(ed,w,null,good||jsonb_build_object('checkedAt',now()-interval '2 days')); raise exception 'stale check time'; exception when sqlstate '22023' then null; end;
+ begin perform public.makeborne_crm_site_check_save(ed,w,null,good||jsonb_build_object('checkedAt','yesterday-ish')); raise exception 'unreadable check time'; exception when sqlstate '22023' then null; end;
+ begin perform public.makeborne_crm_site_check_save(ed,w,null,good||jsonb_build_object('result','[]'::jsonb)); raise exception 'result not an object'; exception when sqlstate '22023' then null; end;
+ begin perform public.makeborne_crm_site_check_save(ed,w,null,good||jsonb_build_object('url','javascript:alert(1)')); raise exception 'checked without a web address'; exception when check_violation then null; end;
+ begin perform public.makeborne_crm_site_check_save(ed,w,null,good||jsonb_build_object('status','guessed')); raise exception 'unknown status'; exception when check_violation then null; end;
+ begin perform public.makeborne_crm_site_check_save(rv,w,null,good); raise exception 'reviewer saved a check'; exception when insufficient_privilege then null; end;
+ begin perform public.makeborne_crm_site_check_save(st,w,null,good); raise exception 'stranger saved a check'; exception when insufficient_privilege then null; end;
+ begin perform public.makeborne_crm_site_check_save(gen_random_uuid(),w,null,good); raise exception 'unknown actor saved a check'; exception when insufficient_privilege then null; end;
+ begin perform public.makeborne_crm_site_check_save(ed,w,c3,good); raise exception 'check for another workspace''s client'; exception when sqlstate 'P0002' then null; end;
+ -- The table bounds hold for every writer, the service role included.
+ begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by) values(w,'https://x.test/','inaccessible','{}','v1',now()+interval '1 day',now()+interval '2 days',ed); raise exception 'check time after it was stored'; exception when check_violation then null; end;
+ begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by,created_at) values(w,'https://x.test/','inaccessible','{}','v1',now(),now()+interval '30 days',ed,now()-interval '5 days'); raise exception 'expiry past 31 days of storing'; exception when check_violation then null; end;
+ begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,created_by) values(w,'https://x.test/','checked','{}','v1',now(),ed); raise exception 'prospect check without expiry'; exception when check_violation then null; end;
+ reset role;
+
  perform pg_temp.as_user(rv); set local role authenticated;
  assert (select count(*) from public.crm_site_checks where id=chk)=1,'reviewer reads';
- begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by) values(w,'https://r.test/','checked','{}','v1',now(),now()+interval '1 day',rv); raise exception 'reviewer inserted'; exception when insufficient_privilege then null; end;
  update public.crm_site_checks set client_id=c1, expires_at=null where id=chk; get diagnostics n=row_count; assert n=0,'reviewer cannot attach';
  delete from public.crm_site_checks where id=chk; get diagnostics n=row_count; assert n=0,'reviewer cannot delete';
  reset role;
  perform pg_temp.as_user(st); set local role authenticated;
  assert (select count(*) from public.crm_site_checks where workspace_id=w)=0,'another workspace sees nothing';
- begin insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by) values(w,'https://s.test/','checked','{}','v1',now(),now()+interval '1 day',st); raise exception 'stranger inserted'; exception when insufficient_privilege then null; end;
  reset role;
  set local role anon;
  begin perform count(*) from public.crm_site_checks; raise exception 'anon read'; exception when insufficient_privilege then null; end;
  reset role;
  perform set_config('crm.chk', chk::text, true);
- raise notice 'PASS crm A: editors store prospect checks that expire (bounded), authors cannot be spoofed, reviewers read only, other workspaces and anon see nothing';
+ raise notice 'PASS crm A: checks are stored only by the server (no browser insert, no 2099 expiry, bounded check time, author from the session), reviewers and strangers refused, reads unchanged';
 end $$;
 
 -- B. Attaching a check to a client: only client_id/expires_at change, once, within the workspace.
@@ -67,7 +90,7 @@ begin
  raise notice 'PASS crm B: attach changes only the client link, once, never to another workspace''s client; results cannot be rewritten';
 end $$;
 
--- C. Next step: compare-and-set through the RPC, as the caller (RLS applies).
+-- C. Next step: compare-and-set through the RPC only (direct INSERT/UPDATE/DELETE revoked; the RPC is the authority).
 do $$
 declare ids jsonb:=current_setting('crm.ids')::jsonb; w uuid:=(ids->>'w')::uuid; w2 uuid:=(ids->>'w2')::uuid; ed uuid:=(ids->>'ed')::uuid; o uuid:=(ids->>'o')::uuid; rv uuid:=(ids->>'rv')::uuid;
  c1 uuid:=(ids->>'c1')::uuid; c3 uuid:=(ids->>'c3')::uuid; x jsonb; n integer;
@@ -76,6 +99,12 @@ begin
  x:=public.makeborne_crm_next_step_set(w,c1,'Send the quote',0); assert (x->>'revision')::int=1 and x->>'text'='Send the quote','first next step';
  begin perform public.makeborne_crm_next_step_set(w,c1,'Other',0); raise exception 'stale create'; exception when sqlstate 'PT409' then null; end;
  x:=public.makeborne_crm_next_step_set(w,c1,'Call about the quote',1); assert (x->>'revision')::int=2,'cas update';
+ -- An editor cannot step around the revision check with a direct write.
+ begin update public.crm_next_steps set text='Overwrite', revision=1 where client_id=c1; raise exception 'editor bypassed compare-and-set'; exception when insufficient_privilege then null; end;
+ begin update public.crm_next_steps set text='Overwrite' where client_id=c1; raise exception 'editor updated directly'; exception when insufficient_privilege then null; end;
+ begin delete from public.crm_next_steps where client_id=c1; raise exception 'editor deleted directly'; exception when insufficient_privilege then null; end;
+ begin insert into public.crm_next_steps(client_id,workspace_id,text,revision,updated_by) values((ids->>'c2')::uuid,w,'Direct',9,ed); raise exception 'editor inserted directly'; exception when insufficient_privilege then null; end;
+ assert (select text='Call about the quote' and revision=2 and updated_by=ed from public.crm_next_steps where client_id=c1),'only the RPC wrote';
  reset role;
  perform pg_temp.as_user(o); set local role authenticated;
  begin perform public.makeborne_crm_next_step_set(w,c1,'Owner overwrite with stale view',1); raise exception 'stale update'; exception when sqlstate 'PT409' then null; end;
@@ -86,14 +115,16 @@ begin
  reset role;
  perform pg_temp.as_user(rv); set local role authenticated;
  begin perform public.makeborne_crm_next_step_set(w,c1,'Reviewer',2); raise exception 'reviewer wrote'; exception when insufficient_privilege then null; end;
- update public.crm_next_steps set text='direct' where client_id=c1; get diagnostics n=row_count; assert n=0,'reviewer cannot update directly (RLS)';
+ begin update public.crm_next_steps set text='direct' where client_id=c1; raise exception 'reviewer updated directly'; exception when insufficient_privilege then null; end;
  assert (select count(*) from public.crm_next_steps where client_id=c1)=1,'reviewer reads';
  reset role;
  perform pg_temp.as_user((ids->>'st')::uuid); set local role authenticated;
  begin perform public.makeborne_crm_next_step_set(w,c1,'Stranger',2); raise exception 'stranger wrote'; exception when insufficient_privilege then null; end;
  assert (select count(*) from public.crm_next_steps where workspace_id=w)=0,'stranger reads nothing';
  reset role;
- raise notice 'PASS crm C: next step compare-and-set (stale create and stale update refused with PT409, nothing changed), no markup, editors only, other workspaces refused';
+ assert has_function_privilege('authenticated','public.makeborne_crm_next_step_set(uuid,uuid,text,integer)','execute'),'editors still save through the RPC';
+ assert (select prosecdef from pg_proc where oid='public.makeborne_crm_next_step_set(uuid,uuid,text,integer)'::regprocedure),'the RPC no longer needs table privileges';
+ raise notice 'PASS crm C: next step compare-and-set is the only writer (direct insert/update/delete refused), stale writes refused with PT409, no markup, editors only, other workspaces refused';
 end $$;
 
 -- D. Do-not-contact list and duplicate dismissals.
@@ -129,7 +160,8 @@ end $$;
 do $$
 declare ids jsonb:=current_setting('crm.ids')::jsonb; w uuid:=(ids->>'w')::uuid; ed uuid:=(ids->>'ed')::uuid; c1 uuid:=(ids->>'c1')::uuid; n integer;
 begin
- insert into public.crm_site_checks(workspace_id,url,status,result,checker_version,checked_at,expires_at,created_by) values(w,'https://old.test/','checked','{}','v1',now()-interval '40 days',now()-interval '10 days',ed);
+ insert into public.crm_site_checks(workspace_id,url,final_url,status,result,checker_version,checked_at,expires_at,created_by,created_at) values(w,'https://old.test/','https://old.test/','checked','{}','v1',now()-interval '40 days',now()-interval '10 days',ed,now()-interval '40 days');
+ assert not has_function_privilege('authenticated','public.makeborne_crm_site_check_save(uuid,uuid,uuid,jsonb)','execute') and has_function_privilege('service_role','public.makeborne_crm_site_check_save(uuid,uuid,uuid,jsonb)','execute'),'checks are saved by the server only';
  assert not has_function_privilege('authenticated','public.makeborne_crm_purge_expired_checks()','execute'),'browsers cannot purge';
  assert not has_function_privilege('anon','public.makeborne_crm_next_step_set(uuid,uuid,text,integer)','execute'),'anon cannot set next steps';
  n:=public.makeborne_crm_purge_expired_checks(); assert n=1,'expired prospect check purged';

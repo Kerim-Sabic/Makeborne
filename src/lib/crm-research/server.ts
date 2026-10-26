@@ -16,9 +16,12 @@ import { needsAttention, type PipelineClient } from "./pipeline";
 
 /**
  * Server side of CRM research. Flag MAKEBORNE_CRM_RESEARCH=on (off by default,
- * checked first on every route: 404 otherwise). All reads and writes use the
+ * checked first on every route: 404 otherwise). Reads and writes use the
  * signed-in person's database client, so row-level security decides what they
- * can see (members) and change (owners and editors). Knowledge proposals go
+ * can see (members) and change (owners and editors), with two exceptions that
+ * keep results honest: a website check is stored only by this server (storeCheck,
+ * a service-role function given the session's user), and a next step is
+ * changed only through its compare-and-set function. Knowledge proposals go
  * through the existing knowledge entry point with that person as the actor,
  * which re-checks their role. Nothing here sends email or approves facts.
  */
@@ -81,17 +84,21 @@ export async function overview(db: SupabaseClient, workspaceId: string, today: s
 // ---------- prospect checks ----------
 export const CheckRowSchema = z.object({ id: z.string().uuid(), client_id: z.string().uuid().nullable(), url: z.string(), final_url: z.string().nullable(), status: z.string(), score: z.number().nullable(),
   result: z.record(z.string(), z.unknown()), checked_at: z.string(), expires_at: z.string().nullable() }).passthrough();
-export async function storeCheck(db: SupabaseClient, input: { workspaceId: string; userId: string; clientId: string | null; check: SiteCheck; now?: number }) {
-  const now = input.now ?? Date.now();
+/**
+ * Stores a check this server just made. Browsers cannot insert checks (migration 20261026120000): the
+ * service-role function takes the actor from the verified session (`userId`), re-checks that person's
+ * editor role and membership, bounds the check time and sets the PROSPECT_CHECK_DAYS expiry in SQL.
+ */
+export async function storeCheck(rpc: Rpc, input: { workspaceId: string; userId: string; clientId: string | null; check: SiteCheck }) {
   const result = JSON.parse(JSON.stringify(input.check)) as Record<string, unknown>;
   if (JSON.stringify(result).length > 60_000) { (result as { findings?: unknown[] }).findings = (input.check.findings ?? []).slice(0, 10); (result as { strengths?: unknown[] }).strengths = []; }
-  const row = { workspace_id: input.workspaceId, client_id: input.clientId, url: (input.check.url ?? input.check.input ?? "").slice(0, 2048) || "(none)", final_url: input.check.finalUrl, status: input.check.status,
-    reason: input.check.reason, score: input.check.score, result, checker_version: CHECKER_VERSION, checked_at: input.check.checkedAt,
-    expires_at: input.clientId ? null : new Date(Math.min(Date.parse(input.check.checkedAt) || now, now) + PROSPECT_CHECK_DAYS * 86_400_000).toISOString(), created_by: input.userId };
-  const { data, error } = await db.from("crm_site_checks").insert(row).select("id").single();
-  databaseError(error);
-  if (!data) throw new RequestError("CHECK_NOT_SAVED", "The website check couldn't be saved. Try again.", 503);
-  return data.id as string;
+  const check = { url: (input.check.url ?? input.check.input ?? "").slice(0, 2048) || "(none)", finalUrl: input.check.finalUrl, status: input.check.status,
+    reason: input.check.reason, score: input.check.score, checkerVersion: CHECKER_VERSION, checkedAt: input.check.checkedAt, result };
+  const { data, error } = await rpc("makeborne_crm_site_check_save", { p_actor: input.userId, p_workspace: input.workspaceId, p_client: input.clientId, p_check: check });
+  if (error?.code === "42501") throw new RequestError("EDITOR_REQUIRED", "Only owners and editors can change client research.", 403);
+  if (error?.code === "P0002") throw new RequestError("NOT_FOUND", "This client is unavailable in this workspace.", 404);
+  if (error || typeof data !== "string") throw new RequestError("CHECK_NOT_SAVED", "The website check couldn't be saved. Try again.", 503);
+  return data;
 }
 export async function readCheck(db: SupabaseClient, workspaceId: string, id: string) {
   const { data, error } = await db.from("crm_site_checks").select("id,client_id,url,final_url,status,score,result,checked_at,expires_at").eq("workspace_id", workspaceId).eq("id", id).maybeSingle();

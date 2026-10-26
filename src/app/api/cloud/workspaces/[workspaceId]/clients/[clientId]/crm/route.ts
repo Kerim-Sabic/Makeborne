@@ -88,7 +88,7 @@ export async function POST(request: Request, context: Context) {
     requireEditor(workspace?.role);
     if (body.action === "check") {
       const check = await guardedCheck(user.id, row.website || null);
-      const id = await storeCheck(db, { workspaceId, userId: user.id, clientId, check });
+      const id = await storeCheck(serviceRpc(), { workspaceId, userId: user.id, clientId, check });
       return cloudJson({ check: { id, ...check, attached: true } }, 201);
     }
     if (body.action === "next_step") return cloudJson({ nextStep: await setNextStep(db, workspaceId, clientId, cleanNextStep(body.text), body.expectedRevision) });
