@@ -177,6 +177,21 @@ async function main() {
       await capture(page, `saved-website-${width}x${height}`);
     });
 
+    await scenario("large-screen scaling on (MAKEBORNE_UI_SCALE, data-ui-scale) at 2560x1440: the chrome scales by --ui-zoom and the editor still fits the screen", { width: 2560, height: 1440 }, async page => {
+      await page.evaluate(() => document.documentElement.setAttribute("data-ui-scale", "on"));
+      await ready(page); await frame(page);
+      await page.waitForTimeout(150);
+      const zoom = await page.evaluate(() => Number(getComputedStyle(document.documentElement).getPropertyValue("--ui-zoom")));
+      assert.equal(zoom, 1.6, "2560x1440 scales by 1.6");
+      const m = await measure(page);
+      assert.equal(m.overflowX, 0, "no horizontal page scroll"); assert.deepEqual(m.outside, [], "no control outside the viewport");
+      assert.ok(Math.abs(m.header.height - 52 * zoom) <= 2, `header scales (${m.header.height})`);
+      const fit = await page.evaluate(() => ({ bottom: document.querySelector(".workbench-layout").getBoundingClientRect().bottom, inner: innerHeight, scroll: document.documentElement.scrollHeight - innerHeight }));
+      assert.ok(fit.bottom <= fit.inner + 1, `the editor ends inside the screen (${Math.round(fit.bottom)} of ${fit.inner})`);
+      assert.ok(fit.scroll <= 1, `no vertical page scroll (${fit.scroll})`);
+      await capture(page, "saved-website-2560x1440-scaled");
+    });
+
     await scenario("project details: facts and the live address in one popover; Escape, outside click and Tab out close it; focus returns", { live: 2 }, async page => {
       await ready(page);
       const button = header(page).getByRole("button", { name: "Ovenbird Bakehouse" });
@@ -185,7 +200,8 @@ async function main() {
       const details = page.getByRole("group", { name: "Project details" });
       await details.waitFor();
       await details.getByText("Live version 2", { exact: true }).waitFor();
-      assert.deepEqual(await details.getByRole("list", { name: "Saved, checked and live versions" }).locator("li").allInnerTexts(), ["Saved version 3", "Not checked yet", "Live version 2"]);
+      // editor-quality adds what the Preview tab shows as the fourth fact (version-facts.tsx).
+      assert.deepEqual(await details.getByRole("list", { name: "Saved, checked, live and preview versions" }).locator("li").allInnerTexts(), ["Saved version 3", "Not checked yet", "Live version 2", "Preview: version 3"]);
       assert.match(await details.locator(".version-facts-notice").innerText(), /version 3 is saved, version 2 is live/);
       const link = details.getByRole("link", { name: /sites\.makeborne\.com\/ovenbird-test/ });
       assert.equal(await link.getAttribute("href"), "https://sites.makeborne.com/ovenbird-test");

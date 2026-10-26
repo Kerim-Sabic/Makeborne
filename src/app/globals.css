@@ -32,19 +32,21 @@ html {
 }
 /* Large screens keep the proportions the interface has at about 1600 x 800 px instead of shrinking into the middle of the
    screen: the whole page scales in steps by width, each step only while the screen is tall enough to leave about 800 px.
-   Viewport units divide by --ui-zoom, so full-height layouts still fit the screen. Below 1700 px nothing changes. */
+   Viewport units divide by --ui-zoom, so full-height layouts still fit the screen. Below 1700 px nothing changes.
+   Not yet qualified on staging: it applies only when the server sets MAKEBORNE_UI_SCALE=on (data-ui-scale on <html>,
+   src/app/layout.tsx); otherwise --ui-zoom stays 1 at every size. */
 :root { --ui-zoom: 1; }
-@media (min-width: 1700px) and (min-height: 850px) { :root { --ui-zoom: 1.0625; } }
-@media (min-width: 1800px) and (min-height: 900px) { :root { --ui-zoom: 1.125; } }
-@media (min-width: 1920px) and (min-height: 960px) { :root { --ui-zoom: 1.2; } }
-@media (min-width: 2048px) and (min-height: 1024px) { :root { --ui-zoom: 1.28; } }
-@media (min-width: 2240px) and (min-height: 1120px) { :root { --ui-zoom: 1.4; } }
-@media (min-width: 2400px) and (min-height: 1200px) { :root { --ui-zoom: 1.5; } }
-@media (min-width: 2560px) and (min-height: 1280px) { :root { --ui-zoom: 1.6; } }
-@media (min-width: 2880px) and (min-height: 1440px) { :root { --ui-zoom: 1.8; } }
-@media (min-width: 3200px) and (min-height: 1600px) { :root { --ui-zoom: 2; } }
-@media (min-width: 3440px) and (min-height: 1720px) { :root { --ui-zoom: 2.15; } }
-@media (min-width: 3840px) and (min-height: 1920px) { :root { --ui-zoom: 2.4; } }
+@media (min-width: 1700px) and (min-height: 850px) { :root[data-ui-scale="on"] { --ui-zoom: 1.0625; } }
+@media (min-width: 1800px) and (min-height: 900px) { :root[data-ui-scale="on"] { --ui-zoom: 1.125; } }
+@media (min-width: 1920px) and (min-height: 960px) { :root[data-ui-scale="on"] { --ui-zoom: 1.2; } }
+@media (min-width: 2048px) and (min-height: 1024px) { :root[data-ui-scale="on"] { --ui-zoom: 1.28; } }
+@media (min-width: 2240px) and (min-height: 1120px) { :root[data-ui-scale="on"] { --ui-zoom: 1.4; } }
+@media (min-width: 2400px) and (min-height: 1200px) { :root[data-ui-scale="on"] { --ui-zoom: 1.5; } }
+@media (min-width: 2560px) and (min-height: 1280px) { :root[data-ui-scale="on"] { --ui-zoom: 1.6; } }
+@media (min-width: 2880px) and (min-height: 1440px) { :root[data-ui-scale="on"] { --ui-zoom: 1.8; } }
+@media (min-width: 3200px) and (min-height: 1600px) { :root[data-ui-scale="on"] { --ui-zoom: 2; } }
+@media (min-width: 3440px) and (min-height: 1720px) { :root[data-ui-scale="on"] { --ui-zoom: 2.15; } }
+@media (min-width: 3840px) and (min-height: 1920px) { :root[data-ui-scale="on"] { --ui-zoom: 2.4; } }
 body {
   margin: 0;
   background: var(--canvas);

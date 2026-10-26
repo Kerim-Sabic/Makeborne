@@ -41,7 +41,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${serif.variable}`}>
+    // Large-screen scaling (globals.css --ui-zoom) is off unless the server sets MAKEBORNE_UI_SCALE=on.
+    <html lang="en" className={`${inter.variable} ${serif.variable}`} data-ui-scale={process.env.MAKEBORNE_UI_SCALE === "on" ? "on" : undefined}>
       <body>{children}</body>
     </html>
   );
