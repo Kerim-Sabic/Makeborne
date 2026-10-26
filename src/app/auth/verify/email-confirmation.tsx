@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import { useState } from "react";
 import { ArrowRight, Check, LockKeyhole, MailCheck, LoaderCircle } from "lucide-react";
 import BrandMark from "@/components/brand-mark";
@@ -49,6 +50,6 @@ export default function EmailConfirmation({ tokenHash, type, next }: { tokenHash
         <p className="auth-verification-footnote">{complete ? "Your projects, all in one place." : "Only continue if you requested this email."}</p>
       </section>
     </div>
-    <footer className="auth-footer"><span>© 2026 Makeborne</span><span>Websites. Books. Presentations.</span></footer>
+    <footer className="auth-footer"><span>© 2026 Makeborne</span><LegalLinks /></footer>
   </main>;
 }

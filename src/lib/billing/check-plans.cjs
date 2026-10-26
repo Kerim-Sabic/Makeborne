@@ -44,7 +44,7 @@ function loadComponent(name, modules) {
   return context.exports.default;
 }
 const link = {default: ({children, ...props}) => React.createElement("a", props, children)};
-const CreationPlans = loadComponent("creation-plans", {"next/link": link, "next/navigation": {useRouter: () => ({push() {}})}, "@/lib/billing/plans": catalogue, "@/lib/supabase/auth-flow": require("../supabase/auth-flow.ts"), "@/lib/billing/checkout-navigation": require("./checkout-navigation.ts")});
+const CreationPlans = loadComponent("creation-plans", {"next/link": link, "next/navigation": {useRouter: () => ({push() {}})}, "@/lib/billing/plans": catalogue, "@/lib/supabase/auth-flow": require("../supabase/auth-flow.ts"), "@/lib/billing/checkout-navigation": require("./checkout-navigation.ts"), "@/lib/legal/versions": require("../legal/versions.ts")});
 const text = html => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
 const estimates = require("../builder/credit-estimate.ts");
 const pricing = renderToStaticMarkup(React.createElement(CreationPlans));
@@ -99,6 +99,7 @@ assert.doesNotMatch(costs, /failed runs are free/i);
 const withoutMeasurements = renderToStaticMarkup(React.createElement(BillingCreditCosts, {estimates: null}));
 assert.doesNotMatch(withoutMeasurements, /test websites/);
 const BillingWorkspace = loadComponent("billing-workspace", {
+  "@/components/legal/legal-links": {default: () => null},
   "next/link": link,
   "./billing-credit-costs": {default: BillingCreditCosts},
   "./brand-mark": {default: () => null},

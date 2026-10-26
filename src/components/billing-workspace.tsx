@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import { ArrowUpRight, Bookmark, CircleHelp, CreditCard, Layers3, ReceiptText, Search, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import BrandMark from "./brand-mark";
 import BillingPlans from "./billing-plans";
@@ -148,7 +149,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
         {questions}
         {costTable}
       </>}
-      <footer id="support" className="billing-footer"><span>© 2026 Makeborne</span><Link href="/billing/terms">Subscription, credit and refund terms</Link><Link href="/privacy">Privacy</Link><Link href="/help">Help</Link><span>Billing support: <a href="mailto:admin@makeborne.com">admin@makeborne.com</a></span></footer>
+      <footer id="support" className="billing-footer"><span>© 2026 Makeborne</span><Link href="/billing/terms">Subscription, credit and refund terms</Link><LegalLinks /><Link href="/withdraw">Withdraw</Link><Link href="/help">Help</Link><span>Billing support: <a href="mailto:admin@makeborne.com">admin@makeborne.com</a></span></footer>
     </main>
   </div>;
 }

@@ -3,14 +3,16 @@ import { requireBillingUser } from "@/lib/billing/access";
 import { billingConfig } from "@/lib/billing/config";
 import { billingDatabase } from "@/lib/billing/database";
 import { verifiedCreationOffer } from "@/lib/billing/creation-offers";
-import { BILLING_TERMS_VERSION } from "@/lib/billing/plans";
+import { BILLING_TERMS_VERSION, WITHDRAWAL_CONSENT_VERSION } from "@/lib/billing/plans";
 import { checkoutUrl, whopRequest } from "@/lib/billing/whop";
 import { recoverCreationCheckout } from "@/lib/billing/checkout-recovery";
 import { authDestination } from "@/lib/supabase/auth-flow";
 import { SITE } from "@/lib/site-metadata";
 import { apiError, boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
 
-const commonInput = { requestId: z.string().uuid(), next: z.string().max(2000).optional() };
+// withdrawalConsent: the version of the immediate-start request the buyer ticked (creation-plans.tsx). Optional
+// for now (Codex review): recorded in the Whop checkout metadata when it matches the current version.
+const commonInput = { requestId: z.string().uuid(), next: z.string().max(2000).optional(), withdrawalConsent: z.string().max(80).optional() };
 const inputSchema = z.union([
   z.object({ ...commonInput, tier: z.enum(["create", "studio", "scale"]), interval: z.enum(["monthly", "yearly"]) }).strict(),
   z.object({ ...commonInput, planId: z.string().regex(/^plan_[A-Za-z0-9]+$/) }).strict(),
@@ -110,7 +112,8 @@ export async function POST(request: Request) {
     }
     const response = checkoutSchema.safeParse(await whopRequest("/checkout_configurations", {
       mode: "payment", plan_id: planId,
-      metadata: { makeborne_request_id: requestId, makeborne_terms_version: BILLING_TERMS_VERSION },
+      metadata: { makeborne_request_id: requestId, makeborne_terms_version: BILLING_TERMS_VERSION,
+        ...(WITHDRAWAL_CONSENT_VERSION && parsed.data.withdrawalConsent === WITHDRAWAL_CONSENT_VERSION ? { makeborne_withdrawal_consent: WITHDRAWAL_CONSENT_VERSION } : {}) },
       // Production returns only to Makeborne. Staging returns only to its exact
       // reviewed deployment; a local sandbox without HTTPS stays on Whop.
       redirect_url: redirectUrl,

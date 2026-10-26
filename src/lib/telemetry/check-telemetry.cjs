@@ -105,7 +105,8 @@ check("disclosure matches enforcement: privacy notice states the real fields, sa
   assert.match(sql, /delete from makeborne_private\.telemetry_salts where day < v_day - 1;/);
   for (const table of ["studio_visits", "app_error_days"]) assert.match(sql, new RegExp(`delete from makeborne_private\\.${table} where day < v_day - 400;`));
   assert.match(sql, /delete from makeborne_private\.app_error_groups where last_seen < now\(\) - interval '400 days';/);
-  const privacy = read("app/privacy/page.tsx");
+  // The notice is docs/legal/privacy.md (rendered by app/privacy/page.tsx).
+  const privacy = fs.readFileSync(path.join(src, "..", "docs", "legal", "privacy.md"), "utf8");
   assert.doesNotMatch(privacy, /deleted after two days|so it cannot identify you|without emails, ids or tokens/);
   assert.match(privacy, /deleted when the first visit is counted two or more days later/);
   assert.match(privacy, /Visit counts and error reports are deleted after about 400 days/);

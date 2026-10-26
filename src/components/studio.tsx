@@ -2,6 +2,7 @@
 import "@/app/studio-refresh.css";
 import { z } from "zod";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { creationStyles, styleConcept } from "@/lib/creation-styles";
@@ -1166,6 +1167,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   </section>
                   <SiteBadgeSetting />
                 </div>
+                <nav className="settings-legal" aria-label="Legal documents"><LegalLinks /><Link href="/billing/terms">Billing terms</Link><Link href="/withdraw">Withdraw from a purchase</Link><span>Privacy requests: <a href="mailto:admin@makeborne.com">admin@makeborne.com</a></span></nav>
               </>
             )}
           </main>

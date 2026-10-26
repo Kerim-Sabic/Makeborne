@@ -29,6 +29,6 @@ export default function PortalShell({ brand, email, children, back }: { brand?: 
       {back && <Link href={back.href} className="portal-back">← {back.label}</Link>}
       {children}
     </main>
-    <footer className="portal-foot"><a href="https://makeborne.com" target="_blank" rel="noreferrer noopener"><BrandMark size={14} /> Powered by Makeborne</a></footer>
+    <footer className="portal-foot"><a href="https://makeborne.com" target="_blank" rel="noreferrer noopener"><BrandMark size={14} /> Powered by Makeborne</a> <Link href="/terms">Terms</Link> <Link href="/privacy">Privacy</Link></footer>
   </div>;
 }

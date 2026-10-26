@@ -4,6 +4,9 @@ import type { BuilderEstimates } from "../builder/credit-estimate";
  * Set on 23 Oct 2026 at or below the main competitors' plans; the comparison is in
  * docs/market/teardown-2026-10-23/deep/pricing-economics.md. */
 export const BILLING_TERMS_VERSION = "2026-10-25-beta-v9";
+/** Version of the EU/UK immediate-start request and withdrawal acknowledgement ticked before checkout
+ * (WITHDRAWAL_CONSENT_TEXT in src/lib/legal/versions.ts). Change both together. */
+export const WITHDRAWAL_CONSENT_VERSION = "withdrawal-2026-10-26";
 export const CREATION_PLANS = [
   { id: "create", name: "Create", monthlyCents: 2000, monthlyCredits: 300, sites: "unlimited", description: "For your own projects, one at a time." },
   { id: "studio", name: "Studio", monthlyCents: 4900, monthlyCredits: 750, sites: "unlimited", description: "For freelancers delivering client work every month." },
