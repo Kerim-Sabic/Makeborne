@@ -56,8 +56,9 @@ export default function ComposerControls({ mode, onMode, effort, onEffort }: {
   }, [open]);
   return <div className="creation-controls">
     <div className="composer-mode" role="group" aria-label="Creation mode">
-      <button type="button" aria-pressed={mode === "create"} onClick={() => onMode("create")}><Sparkles size={14} />Create</button>
-      <button type="button" aria-pressed={mode === "plan"} onClick={() => onMode("plan")}><ListChecks size={14} />Plan</button>
+      {/* Named as modes, so they are never confused with the composer's own "Create this project" / "Plan this project" button. */}
+      <button type="button" aria-pressed={mode === "create"} aria-label="Create mode" title="Create mode: builds straight from your brief" onClick={() => onMode("create")}><Sparkles size={14} aria-hidden="true" />Create</button>
+      <button type="button" aria-pressed={mode === "plan"} aria-label="Plan mode" title="Plan mode: agrees a plan with you before building" onClick={() => onMode("plan")}><ListChecks size={14} aria-hidden="true" />Plan</button>
     </div>
     <button ref={trigger} type="button" className="creation-effort-trigger" aria-haspopup="dialog" aria-controls={open ? `${id}-effort` : undefined} aria-expanded={open} title="Thinking effort" onClick={() => setOpen(!open)} onKeyDown={event => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); } }}><span className="creation-effort-label">Effort</span><span>{EFFORT_PRESENTATION[effort].label}</span><ChevronDown size={14} aria-hidden="true" /></button>
     {open && createPortal(<div ref={panel} className="creation-effort-panel" id={`${id}-effort`} role="dialog" aria-label="Thinking effort" onKeyDown={event => {

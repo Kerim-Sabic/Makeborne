@@ -164,6 +164,18 @@ async function main() {
       assert.match(await panel.innerText(), /1 step opens when AI does/);
       await panel.getByRole("button", { name: "Add clients" }).waitFor();
     }, viewport);
+    await scenario("composer-create-controls-have-distinct-names", async page => {
+      await page.goto(`${base}/?view=studio`);
+      await welcome(page).waitFor({ timeout: 15000 });
+      await page.getByRole("button", { name: /look around first/ }).click();
+      // The mode toggle and the submit button both read "Create"; their accessible names must tell them apart (journey audit C1).
+      const named = await page.evaluate(() => [...document.querySelectorAll("button")].filter(button => button.offsetParent).map(button => (button.getAttribute("aria-label") || button.textContent || "").trim()).filter(name => /^(create|plan)\b/i.test(name)));
+      assert.equal(new Set(named.map(name => name.toLowerCase())).size, named.length, `distinct names: ${JSON.stringify(named)}`);
+      assert.equal(await page.getByRole("button", { name: "Create", exact: true }).count(), 0, "no control is named just Create");
+      assert.equal(await page.getByRole("button", { name: "Create mode", exact: true }).getAttribute("aria-pressed"), "true");
+      await page.getByRole("button", { name: "Plan mode", exact: true }).click();
+      await page.getByRole("button", { name: "Plan this project", exact: true }).waitFor();
+    });
     await scenario("phone-390", async page => {
       await page.goto(`${base}/?view=studio`);
       await welcome(page).waitFor({ timeout: 15000 });
