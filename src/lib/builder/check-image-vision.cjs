@@ -196,13 +196,14 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     const { BLOCKING_PROBLEM } = require("./contrast-gate-rules.ts");
     assert.ok(BLOCKING_PROBLEM.test("Under prefers-reduced-motion .marquee-track wraps a marquee or tag band into several rows: keep it one row"));
     assert.ok(BLOCKING_PROBLEM.test("Page overflow: the page is 25 px wider than the screen at 390 px wide") && BLOCKING_PROBLEM.test("Wrapped band: ul.track") && BLOCKING_PROBLEM.test("Cut off: div.hero"));
-    assert.ok(!BLOCKING_PROBLEM.test("Contrast: p") && !BLOCKING_PROBLEM.test("Comp fidelity: the top section"), "contrast and fidelity block once (a repeat goes ahead)");
-    // A fidelity finding whose measured numbers moved after a partial fix is the same problem: blocked once only (round G2 w01).
+    assert.ok(!BLOCKING_PROBLEM.test("Contrast: p") && BLOCKING_PROBLEM.test("Comp fidelity: the top section"), "comp drift must not be accepted on a repeat");
+    // A partial fix is still a failure until a fresh measurement actually passes.
     script.length = 0; seen.length = 0;
     script.push({ content: [...site("d"), finish("g1")] }, { content: [finish("g2")] });
     const moving = [["Comp fidelity: the \"menu\" section (desktop) is off its comp: give the image about 20% of the first 960 px of the section as in the comp (it covers 4%)"], ["Comp fidelity: the \"menu\" section (desktop) is off its comp: give the image about 20% of the first 960 px of the section as in the comp (it covers 9%)"]];
-    const settled = await run({ contrastCheck: async () => moving.shift() ?? [] });
-    assert.ok(settled.result.finished, "the re-measured fidelity finding is accepted on the repeat");
+    const settled = await run({ limits: { maxTurns: 2 }, contrastCheck: async () => moving.shift() ?? [] });
+    assert.equal(settled.result.finished, false, "a second mismatching measurement cannot finish");
+    assert.equal(settled.events.filter(event => event.type === "tool_error" && /Comp fidelity:/.test(event.message)).length, 2);
   });
 
   await check("regeneration rules: a new name, an existing generated image, never the client's own photos or logo; replaces and rejected go together", () => {
@@ -340,9 +341,12 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       script.push({ content: [comp("k0", "top")] }, { content: [{ type: "tool_use", id: "c1", name: "concept", input }] },
         { content: [comp("k1", "top"), comp("k2", "rates"), comp("k3", "work"), comp("k4", "top", "mobile"), comp("k5", "visit"), comp("k6", "band"), comp("k7", "stories"), comp("k8", "faq")] },
         { content: [{ type: "tool_use", id: "r1", name: "read_comp", input: { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" } }, { type: "tool_use", id: "r2", name: "read_comp", input: { section: "nowhere", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" } }, gen("g1", { name: "hero-bench" })] },
-        { content: [...site("z"), finish("f1")] }, { content: [finish("f1b")] });
+        { content: [...site("z"), finish("f1")] }, { content: [finish("f1b")] },
+        { content: [...[ ["rates", "desktop"], ["work", "desktop"], ["top", "mobile"], ["visit", "desktop"], ["band", "desktop"], ["stories", "desktop"] ].map(([section, viewport], index) => ({ type: "tool_use", id: `read-rest-${index}`, name: "read_comp", input: { section, viewport, headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" } })), finish("f1c")] });
       const { result, events, files } = await run({ concept: true, storeComp });
       assert.ok(result.finished);
+      assert.equal(result.compFidelity, "not_checked", "comp generation alone is never proof of rendered fidelity");
+      assert.match(result.summary, /Design comp comparison: not checked/);
       assert.ok(seen[0].tools.includes("generate_comp"), "offered on a first build with a text-capable model");
       const early = events.find(event => event.type === "tool_error" && event.tool === "generate_comp");
       assert.match(early.message, /Record the concept/);
@@ -384,11 +388,11 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.ok(events.filter(event => event.type === "image_start" && event.comp).length === made.length);
       const recorded = compsFromSource(files.files.get("src/App.tsx"));
       assert.equal(recorded.length, made.length); assert.equal(recorded[0].section, "top"); assert.match(recorded[0].asset, /^c0000000-/);
-      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right", ground: "#1D3FA8", heavy: true }, "the reading (with the comp's ground and weight) travels in the concept comment to the review");
+      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right", ground: "#1D3FA8", heavy: true, headlineLines: 2 }, "the reading (with server-derived line count, ground and weight) travels to the review");
       const readResults = seen[4].messages.at(-1).content.filter(block => block.type === "tool_result");
       assert.match(readResults[0].content, /largest headline's cap height at least 85% of 9% of the frame/);
       assert.match(readResults[1].content, /There is no desktop comp for "nowhere"/);
-      assert.ok(events.some(event => event.type === "tool_error" && event.tool === "finish" && /Record read_comp for rates \(desktop\)/.test(event.message)), "unread comps are asked for once at finish");
+      assert.equal(events.filter(event => event.type === "tool_error" && event.tool === "finish" && /Record read_comp for rates \(desktop\)/.test(event.message)).length, 2, "unread comps block every finish until read");
       // A photograph asked for before any comp is sent back once to the comps; a repeat goes ahead.
       script.length = 0; seen.length = 0; imageCalls.length = 0;
       script.push({ content: [{ type: "tool_use", id: "c2", name: "concept", input }] }, { content: [gen("g7", { name: "hero-bench" })] }, { content: [gen("g8", { name: "hero-bench" })] }, { content: [...site("w"), finish("f9")] });

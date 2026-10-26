@@ -63,7 +63,7 @@ function clientFor(state, user) {
       return structuredClone(out);
     };
     const builder = {
-      select() { return builder; }, eq(key, value) { filters.push(row => row[key] === value); return builder; }, in(key, values) { filters.push(row => values.includes(row[key])); return builder; },
+      select() { return builder; }, eq(key, value) { filters.push(row => (key.startsWith("provenance->>") ? row.provenance?.[key.slice(13)] : row[key]) === value); return builder; }, in(key, values) { filters.push(row => values.includes(row[key])); return builder; },
       gt(key, value) { filters.push(row => row[key] > value); return builder; }, order(key, options) { order = key; ascending = options?.ascending !== false; return builder; }, limit(n) { limit = n; return builder; },
       async maybeSingle() { const out = rows(); return { data: out[0] ?? null, error: null }; },
       insert(row) { insertRow = row; return builder; },

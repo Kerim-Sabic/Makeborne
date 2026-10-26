@@ -16,7 +16,7 @@ import { dataReportsEnabled, GenerateRequestSchema, prepareReport, previewView, 
 import { TEMPLATES, TEMPLATE_IDS, plainNarrative } from "@/lib/data/templates";
 import { checkNarrative, narrativeRefusal, renderNarrative, type Narrative } from "@/lib/data/narrative";
 import { aiNarrative } from "@/lib/data/narrative-ai";
-import { persistDataReport } from "@/lib/data/persist";
+import { committedReport, persistDataReport, reportRequestFingerprint, type PersistResult } from "@/lib/data/persist";
 import { listSpreadsheetSources, loadSpreadsheet } from "@/lib/data/server";
 import { DataError } from "@/lib/data/dataset";
 
@@ -85,6 +85,17 @@ export async function POST(request: Request, context: Context) {
     databaseError(versionError);
     if (!versionRow) throw new RequestError("REPORT_STALE", "Save this project before adding a report to it.", 409);
     const currentVersion = mapVersion(versionRow);
+    const requestFingerprint = reportRequestFingerprint(body);
+    const respond = (saved: PersistResult) => {
+      const base = `/api/cloud/workspaces/${workspaceId}/artifacts/${artifact.id}/document-export`;
+      return cloudJson({ replayed: saved.replayed, version: saved.version,
+        files: saved.files.map(file => ({ format: file.format, bytes: file.bytes, sha256: file.sha256, url: `${base}?format=${file.format}&version=${saved.version.number}&stored=1` })),
+        facts: { digest: prepared.facts.digest, figures: prepared.facts.facts.length, charts: prepared.facts.charts.length } }, saved.replayed ? 200 : 201);
+    };
+    // Authorization and source/facts validation above still apply on retry. Replay BEFORE resolving a
+    // new agency task: its expected revision is intentionally older after this action's successful save.
+    const replay = await committedReport(client, scope, artifact.id, body.expectedVersion, body.actionKey, requestFingerprint);
+    if (replay) return respond(replay);
 
     let narrative: Narrative;
     if (body.narrative === "ai") {
@@ -115,12 +126,9 @@ export async function POST(request: Request, context: Context) {
     }
 
     const saved = await persistDataReport({ client, scope, artifact, current: currentVersion, expectedVersion: body.expectedVersion, actionKey: body.actionKey, facts: prepared.facts,
-        narrative: renderNarrative(narrative, prepared.facts), narrativeSource: body.narrative, mode: body.mode, title: body.title, sourceName: name, sourceAsset: { id: body.source.assetId, sha256: body.source.sha256 } },
+        narrative: renderNarrative(narrative, prepared.facts), narrativeSource: body.narrative, mode: body.mode, title: body.title, sourceName: name, sourceAsset: { id: body.source.assetId, sha256: body.source.sha256 }, requestFingerprint },
         { renderPdf: documentPdf, renderPptx: documentPptx, loadImages: doc => loadDocumentImages(client, workspaceId, scope.projectId, doc) });
-    const base = `/api/cloud/workspaces/${workspaceId}/artifacts/${artifact.id}/document-export`;
-    return cloudJson({ replayed: saved.replayed, version: saved.version,
-      files: saved.files.map(file => ({ format: file.format, bytes: file.bytes, sha256: file.sha256, url: `${base}?format=${file.format}&version=${saved.version.number}&stored=1` })),
-      facts: { digest: prepared.facts.digest, figures: prepared.facts.facts.length, charts: prepared.facts.charts.length } }, saved.replayed ? 200 : 201);
+    return respond(saved);
   } catch (error) {
     return cloudError(error instanceof DataError ? new RequestError(error.code, error.message, error.status) : error);
   } finally {

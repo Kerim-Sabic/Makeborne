@@ -47,6 +47,7 @@ export type DocumentBuildInput = {
   imageOptions?: ImageOptions;
   /** Image models (tests); production reads the allowlist. */
   imageModels?: string[];
+  continuation?: boolean;
 };
 
 
@@ -117,7 +118,7 @@ ${input.message}`;
         let result;
         try {
           result = await runDocumentBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, editor, effort: input.effort,
-            spend, request: input.message, context, attachments: input.attachments, emit, signal: controller.signal, deadline: Date.now() + (input.maxDuration - 20) * 1000,
+            spend, request: input.message, context, attachments: input.attachments, emit, signal: controller.signal, deadline: Date.now() + (input.maxDuration - 20) * 1000, continuation: input.continuation,
             anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage });
         } catch (error) {
           if (!editor.changed || (error as { code?: string }).code === "REFUSED" || aiStop(error)) throw error;
@@ -125,6 +126,12 @@ ${input.message}`;
           result = { summary: "Saved the progress made so far. Ask me to continue to finish the remaining parts.", credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, stopped: spend.stopped };
         }
         const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped };
+        if (result.requiresApproval) {
+          if (input.operation) emit(operationTerminal(await finishOperation(input.operation, 0, "failed", { ...detail, code: "OPERATION_BUDGET_REACHED", message: result.summary,
+            version: artifact.current_version, changed: false, finished: false })));
+          else { await releaseRun(hold, 0, "insufficient_art_allowance", detail); emit({ type: "error", code: "OPERATION_BUDGET_REACHED", message: result.summary }); }
+          return;
+        }
         if (!editor.changed) {
           if (input.operation) {
             // Nothing usable saved: never charged (provider cost absorbed). A finished no-change request stays chargeable.

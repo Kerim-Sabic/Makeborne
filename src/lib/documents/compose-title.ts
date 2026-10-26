@@ -357,7 +357,7 @@ export function sectionIndex(ctx: Ctx, slide: Slide) {
     const y = y0 + i * rowH, current = section.index === ctx.index;
     if (i) divider(ctx, lx, a.r, y);
     if (current) rect(ctx, { x: lx - 18, y: y + 12, w: 6, h: rowH - 24, fill: c.accent });
-    text(ctx, numeral(ctx, i), { x: lx, y: y + 14, w: 56, h: 24 }, { font: ctx.dir.label.font === "mono" ? "mono" : "body", size: 15, weight: 700, color: current ? c.accent : c.muted, lh: 1.3 });
+    text(ctx, numeral(ctx, i), { x: lx, y: y + 14, w: 56, h: 24 }, { structural: true, font: ctx.dir.label.font === "mono" ? "mono" : "body", size: 15, weight: 700, color: current ? c.accent : c.muted, lh: 1.3 });
     text(ctx, section.title, { x: lx + 60, y: y + 12, w: lw - 60, h: rowH - 18 }, { size: current ? 20 : 18, min: 13, maxH: rowH - 18, weight: current ? 700 : 400, color: current ? c.ink : c.muted, lh: 1.25 });
   });
 }
@@ -420,7 +420,7 @@ export function statementSplit(ctx: Ctx, slide: Slide) {
   if (kind === "mosaic") { const tile = H / 4; graphic(ctx, kind, { x: W - Math.floor((W - half) / tile) * tile, y: 0, w: Math.floor((W - half) / tile) * tile, h: H }); if (W - Math.floor((W - half) / tile) * tile > half) rect(ctx, { x: half, y: 0, w: W - Math.floor((W - half) / tile) * tile - half, h: H, fill: c.strong }); }
   else graphic(ctx, kind, g);
   stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.statement * 0.8, min: 36, sub: body, subStyle: { size: 23 } }, { x: a.x, y: a.y, w: half - a.x - 64, h: a.b - a.y }, "middle");
-  text(ctx, String(ctx.index + 1).padStart(2, "0"), { x: a.x, y: 672, w: 80, h: 20 }, { size: 13, color: c.muted, weight: 600, lh: 1.3 });
+  text(ctx, String(ctx.index + 1).padStart(2, "0"), { x: a.x, y: 672, w: 80, h: 20 }, { structural: true, size: 13, color: c.muted, weight: 600, lh: 1.3 });
 }
 
 /* ---------- quotes ---------- */

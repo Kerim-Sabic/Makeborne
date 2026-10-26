@@ -74,7 +74,7 @@ export const COMP_INPUT_JSON = {
 };
 
 const quote = (value: string) => `"${value.replace(/"/g, "'").trim()}"`;
-const splitLines = (text: string) => text.split(/\s+\/\s+|\n/).map(part => part.trim()).filter(Boolean);
+export const splitLines = (text: string) => text.split(/\s+\/\s+|\n/).map(part => part.trim()).filter(Boolean);
 const NUMBER = ["one", "two", "three", "four", "five", "six"];
 const wordCount = (text: string) => splitLines(text).join(" ").split(/\s+/).filter(Boolean).length;
 /** At most this many words on a comp besides the navigation (image models set short copy well). */
@@ -169,7 +169,7 @@ export function compPrompt(input: CompInput, concept: { artSystem?: ArtSystem; c
     cropNote,
     phone,
     art ? `Art system: palette ${art.palette}. Type: ${art.type}. Imagery: ${art.imagery}. Motif: ${art.motif}.` : "",
-    `Colours flat and at full strength exactly as given, like a printed poster: no washed-out tints, no gradients, no vignette. The headline set at poster scale${heavyType(input.type) ? " in the heaviest cut of its typeface" : ""}, its longest line spanning most of the type field.`,
+    `Colours flat and at full strength exactly as given, like a printed poster: no washed-out tints, no gradients, no vignette. The headline set at poster scale${heavyType(input.type) ? " in a real bold cut reproducible in live code (serifs: Fraunces, Playfair Display, Newsreader or Cormorant at 600–700; never the single-weight Instrument Serif or DM Serif Display)" : ""}, its longest line spanning most of the type field.`,
     "Any other body copy appears only as quiet thin lines, never as words. Real-looking photography or a crafted drawing as the art system says; never stock-looking, no AI look (oversaturation, HDR glow, plastic skin).",
     desktop ? TAIL_SITE : TAIL_PHONE,
   ].filter(Boolean).join("\n");

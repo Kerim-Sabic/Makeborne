@@ -248,6 +248,27 @@ const failed = (diagnostics, check) => diagnostics.filter(item => item.check ===
       assert.deepEqual(failed(clipped, "deck.text-clipped").map(item => item.location.slide), [1], "text overflowing its frame is measured; fitting text is not");
     });
 
+    await check("deck claim review ignores server counters but retains factual numbers, prices, dates and notes", async () => {
+      const deck = emptyDocument("deck", "Studio plan");
+      deck.slides = [
+        { id: "steps", layout: "points", tone: "light", title: "Our process", notes: "Discuss the process.", points: [{ text: "Listen carefully" }, { text: "Build thoughtfully" }] },
+        { id: "facts", layout: "stats", tone: "light", title: "Business figures", notes: "Target 25% growth.", stats: [{ value: "1", label: "studio" }, { value: "2027", label: "opening" }, { value: "6 weeks", label: "duration" }, { value: "€99", label: "fee" }] },
+      ];
+      const captured = await capture.captureDeck(deck, {}, {}, { launch, screenshots: false });
+      const probes = captured.probes;
+      assert.ok(/\b0?1\b/.test(probes[0].text), "visible counter retained for render evidence");
+      assert.doesNotMatch(probes[0].claimText, /\d/, "only generated counters excluded from factual copy");
+      for (const value of ["1", "2027", "6 weeks", "€99"]) assert.ok(probes[1].claimText.includes(value), value);
+      const emptyFacts = { snapshotId: "empty", facts: [] };
+      const checker = require("./knowledge.ts").knowledgeClaimsCheck({ facts: emptyFacts, claimFacts: [], contextSha256: null }, { ...brief, summary: "Studio process", requirements: [] });
+      const diagnostics = deterministic.deckDiagnostics({ pptx: captured.pptx, exportError: null, slides: deck.slides.map(slide => ({ ...slide, hasChart: false })), probes, facts: emptyFacts, claims: checker });
+      const claimFailures = failed(diagnostics, "deck.claims");
+      assert.ok(!claimFailures.some(item => item.location.slideId === "steps"), JSON.stringify(claimFailures));
+      assert.ok(claimFailures.some(item => item.location.slideId === "facts"));
+      assert.ok(checker("1", emptyFacts).some(item => !item.supported), "a bare user-authored one is still checked");
+      assert.ok(claimFailures.some(item => /25/.test(item.measured)), "speaker-note claims stay checked");
+    });
+
     await check("website: the project's own images are served to the capture from verified storage; missing or changed bytes are broken, unconfirmed ones not checked", async () => {
       const W = "6f1c2b8e-4a1d-4c3e-9d2a-7b5e8f0a1c20", P = "6f1c2b8e-4a1d-4c3e-9d2a-7b5e8f0a1c21";
       const ids = ["6f0d0b8e-3f43-4c1f-9d55-0c5f8b6a1f10", "6f0d0b8e-3f43-4c1f-9d55-0c5f8b6a1f11", "6f0d0b8e-3f43-4c1f-9d55-0c5f8b6a1f12", "6f0d0b8e-3f43-4c1f-9d55-0c5f8b6a1f13"];

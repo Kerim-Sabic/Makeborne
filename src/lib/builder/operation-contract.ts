@@ -25,6 +25,7 @@ export type OperationEvent = { type: "operation"; operation: OperationSnapshot }
 export const OperationResultSchema = z.object({
   runId: z.string().uuid().optional(), version: credits.optional(), summary: z.string().optional(),
   changed: z.boolean().optional(), finished: z.boolean().optional(), charged: credits,
+  compFidelity: z.enum(["passed", "failed", "not_checked"]).optional(),
   code: z.string().optional(), message: z.string().optional(), stored: z.unknown().optional(), persisted: z.boolean().optional(),
   /** An agency task's typed data result and the project revision it was produced against. */
   data: z.unknown().optional(), basedOnVersion: credits.optional(),

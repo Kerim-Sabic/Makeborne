@@ -49,7 +49,7 @@ function splitText(ctx: Ctx, slide: Slide, x: number, w: number) {
       void i;
     });
   } else stack(ctx, { label: slide.eyebrow, title: slide.title, size: ctx.dir.sizes.headline, min: 30, sub: slide.body, subStyle: { size: 23 } }, { x, y: a.y + 20, w, h: a.b - a.y - 40 }, "middle");
-  text(ctx, String(ctx.index + 1).padStart(2, "0"), { x, y: 672, w: 80, h: 20 }, { size: 13, color: c.muted, weight: 600, lh: 1.3 });
+  text(ctx, String(ctx.index + 1).padStart(2, "0"), { x, y: 672, w: 80, h: 20 }, { structural: true, size: 13, color: c.muted, weight: 600, lh: 1.3 });
 }
 
 export function splitHalf(ctx: Ctx, slide: Slide) {

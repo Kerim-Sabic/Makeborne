@@ -63,8 +63,10 @@ export type DocBuilderRun = {
   storeImage?: (request: { name: string; prompt: string; model: string }, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
   /** Image models to route among (tests); production reads the allowlist (imageConfiguration). */
   imageModels?: string[];
+  /** Server-derived operation kind; never inferred from the user's prose. */
+  continuation?: boolean;
 };
-export type DocBuilderResult = { summary: string; credits: number; usd: number; finished: boolean; stopped: string | null; checks: CheckRecord[] };
+export type DocBuilderResult = { summary: string; credits: number; usd: number; finished: boolean; stopped: string | null; checks: CheckRecord[]; requiresApproval?: boolean };
 
 const LIVE_TOOLS = new Set(["set_theme", "set_deck_details", "set_book_details", "write_slide", "delete_slide", "move_slide", "write_chapter", "edit_chapter", "delete_chapter", "move_chapter"]);
 /** Full-image slides of decks saved before the client's quality choice: medium (A/B of 22 Oct 2026: correct spelling of
@@ -534,6 +536,19 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     pendingImages.clear();
   }
 
+  // A continuation already has an approved art plan. Do not buy another planning turn
+  // merely to discover that its render/check cannot fit. Count context without generating,
+  // then render ONE pending slide directly; the first paid text turn verifies its words.
+  if (run.continuation && art && deferredAtStart.length) {
+    lastContext = await meter.bound(messages);
+    if (!canAffordImage()) return { summary: "The remaining slide needs more allowance for both its image and text check. Your saved work is unchanged. Approve additional credits to continue at the selected quality.",
+      credits: 0, usd: 0, finished: false, stopped: null, checks, requiresApproval: true };
+    const target = deferredAtStart[0];
+    if (!renderRefusal(slideOf(target), target)) {
+      const content = await renderSlide(target, 1);
+      messages.push({ role: "user", content });
+    }
+  }
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
     const deadline = Math.min(run.deadline, spend.deadline);
     if (run.signal.aborted || Date.now() > deadline - 45_000) break;

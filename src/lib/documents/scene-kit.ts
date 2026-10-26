@@ -7,7 +7,7 @@ import type { DirectionSpec, FontRole, Weight } from "./directions";
  * approves in the preview is what they export. */
 export const W = 1280, H = 720;
 
-export type TextPrim = { k: "text"; x: number; y: number; w: number; h: number; text: string; font: FontRole; size: number; weight: Weight; color: string; align: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; lh: number; tracking?: number; upper?: boolean; italic?: boolean; role?: "title" | "body"; list?: TextList };
+export type TextPrim = { k: "text"; x: number; y: number; w: number; h: number; text: string; font: FontRole; size: number; weight: Weight; color: string; align: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; lh: number; tracking?: number; upper?: boolean; italic?: boolean; role?: "title" | "body"; list?: TextList; structural?: boolean };
 /** One text box holding a list: each line of `text` is an item with a hanging marker; items are `gap` px apart. The PPTX writes one bulleted text box. */
 export type TextList = { marker: "dash" | "square"; color: string; indent: number; gap: number };
 export type RectPrim = { k: "rect"; x: number; y: number; w: number; h: number; fill: string; opacity?: number; radius?: number; fade?: "up" | "left" | "right"; stroke?: string; strokeWidth?: number; noFill?: true };
@@ -158,7 +158,7 @@ export type Ctx = {
 };
 export type Frame = { x: number; r: number; y: number; b: number };
 /** balance: explicit balanced line breaks (as display type always gets), e.g. for a list item's supporting text. */
-export type TextStyle = { font?: FontRole; size: number; min?: number; maxH?: number; weight?: Weight; color?: string; align?: TextPrim["align"]; valign?: TextPrim["valign"]; lh?: number; tracking?: number; upper?: boolean; italic?: boolean; role?: TextPrim["role"]; list?: TextList; balance?: boolean };
+export type TextStyle = { font?: FontRole; size: number; min?: number; maxH?: number; weight?: Weight; color?: string; align?: TextPrim["align"]; valign?: TextPrim["valign"]; lh?: number; tracking?: number; upper?: boolean; italic?: boolean; role?: TextPrim["role"]; list?: TextList; balance?: boolean; structural?: boolean };
 
 /** Glyph width factor and measuring mode for one text style; bold widens by the
  * pairing's measured bold ratio and letter-spacing widens every glyph. */
@@ -213,7 +213,7 @@ export function text(ctx: Ctx, value: string, box: { x: number; y: number; w: nu
   const display = style.role === "title" || (font === "heading" && size >= 20) || (style.balance && !style.list);
   const shown = display ? balancedBreaks(value, box.w, size, cw, mode) : value;
   ctx.prims.push({ k: "text", x: box.x, y: box.y, w: box.w, h: Math.max(h, Math.ceil(size * lh)), text: shown, font, size, weight,
-    color, align: style.align ?? "left", valign: style.valign ?? "top", lh, ...(style.tracking !== undefined ? { tracking: style.tracking } : {}), ...(style.upper ? { upper: true } : {}), ...(style.italic ? { italic: true } : {}), ...(style.role ? { role: style.role } : {}), ...(style.list ? { list: style.list } : {}) });
+    color, align: style.align ?? "left", valign: style.valign ?? "top", lh, ...(style.tracking !== undefined ? { tracking: style.tracking } : {}), ...(style.upper ? { upper: true } : {}), ...(style.italic ? { italic: true } : {}), ...(style.role ? { role: style.role } : {}), ...(style.list ? { list: style.list } : {}), ...(style.structural ? { structural: true } : {}) });
   return Math.max(h, Math.ceil(size * lh));
 }
 export const rect = (ctx: Ctx, prim: Omit<RectPrim, "k">) => { ctx.prims.push({ k: "rect", ...prim }); };

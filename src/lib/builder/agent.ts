@@ -24,7 +24,7 @@ import { CONCEPT_TOOL, CompReadingSchema, MAX_COMPS, checkConcept, compPlan, com
 import { storeProjectImage } from "./images";
 import { COMP_PREVIEW_EDGE, imagePreview, type ImagePreview } from "./image-variants";
 import sharp from "sharp";
-import { COMP_INPUT_JSON, COMP_SHAPE, COMP_WORDS, CompInputSchema, compCell, compInputIssues, compPrompt, compText, heavyType, isFirstScreen } from "./comp-prompt";
+import { COMP_INPUT_JSON, COMP_SHAPE, COMP_WORDS, CompInputSchema, compCell, compInputIssues, compPrompt, compText, heavyType, isFirstScreen, splitLines } from "./comp-prompt";
 
 export { compPrompt } from "./comp-prompt";
 
@@ -138,7 +138,7 @@ export type BuilderRun = {
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds.
  * build: the finish-time compile verdict when the run finished, null otherwise. */
-export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null; concept?: ConceptRecord | null };
+export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null; concept?: ConceptRecord | null; compFidelity?: "passed" | "failed" | "not_checked" };
 
 /** Agentic edit loop: Claude edits the in-memory project through tools until it
  * calls finish with a project that passes static checks and compiles, or the budget runs out. */
@@ -169,6 +169,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const cutouts = imageModels.some(supportsTransparentImages);
   const textImages = imageModels.some(model => TEXT_IMAGE_MODELS.includes(model));
   let imagesUsed = 0, summary = "", title: string | undefined, finished = false, malformedTurns = 0;
+  let compFidelity: BuilderResult["compFidelity"];
   let concept: ConceptRecord | null = null;
   // Regeneration: each slot is regenerated at most once. Names replaced (or being replaced), and the replacements.
   const replacedNames = new Set<string>(), replacementNames = new Set<string>();
@@ -188,7 +189,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const compsAvailable = designCompsEnabled() && Boolean(run.concept) && !run.limits?.replaceOnly && imageLimit > 0 && textImages;
   // In call order (the jobs finish in any order); a failed comp leaves its slot empty.
   const comps: DesignComp[] = [], compSlots: (DesignComp | undefined)[] = [];
-  let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = 0, readingsAsked = false;
+  let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = 0;
   // The project as it was the last time the rendered layout check found no blocking defect, and the defects of the
   // latest check: a run that ends with a defect it could not fix restores that version instead of saving the defect.
   let cleanFiles: Map<string, string> | null = null, layoutDefects: string[] = [];
@@ -417,7 +418,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               const preview = await imagePreview(stored.data ?? bytes, { maxEdge: COMP_PREVIEW_EDGE }).catch(() => null);
               return { stored, preview };
             }).then(({ stored, preview }) => {
-              compSlots[slot] = { section: input.section, viewport: input.viewport, asset: stored.id, ground: input.colors.ground.toUpperCase(), ...(heavyType(input.type) ? { heavy: true } : {}) };
+              compSlots[slot] = { section: input.section, viewport: input.viewport, asset: stored.id, ground: input.colors.ground.toUpperCase(), headlineLines: splitLines(input.lines.find(line => line.role === "headline")!.text).length, ...(heavyType(input.type) ? { heavy: true } : {}) };
               comps.splice(0, comps.length, ...compSlots.filter((entry): entry is DesignComp => Boolean(entry)));
               record.comps = [...comps];
               run.emit({ type: "status", message: `Design comp ready: ${input.section} (${input.viewport})` });
@@ -429,7 +430,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const input = ToolInputs.read_comp.parse(use.input);
             const comp = comps.find(entry => entry.section === input.section && entry.viewport === input.viewport);
             if (!comp || !concept) { fail(`There is no ${input.viewport} comp for "${input.section}" to read.`); break; }
-            comp.reading = { ...input, ...(comp.ground ? { ground: comp.ground } : {}), ...(comp.heavy ? { heavy: true } : {}) };
+            comp.reading = { ...input, ...(comp.ground ? { ground: comp.ground } : {}), ...(comp.headlineLines ? { headlineLines: comp.headlineLines } : {}), ...(comp.heavy ? { heavy: true } : {}) };
             concept.comps = [...comps];
             results.push({ type: "tool_result", tool_use_id: use.id, content: `Reading recorded for ${input.section} (${input.viewport}). At finish the built section is measured against it at ${input.viewport === "desktop" ? "1440" : "390"} px: its largest headline's cap height at least 85% of ${input.headlineCapHeightPct}% of the frame, and the image covering about ${input.imageAreaPct}% of the section's first screen${input.viewport === "desktop" && input.imageSide !== "none" && input.imageSide !== "full" ? ` on the ${input.imageSide}` : ""}.` });
             break;
@@ -451,7 +452,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (run.concept && !concept && !qualityReported.has(noConcept)) { qualityReported.add(noConcept); problems.push(noConcept); }
             // Every comp is read before finish, so the build can be measured against it (asked once).
             const unread = comps.filter(comp => !comp.reading);
-            if (unread.length && !readingsAsked) { readingsAsked = true; problems.push(`Record read_comp for ${unread.map(comp => `${comp.section} (${comp.viewport})`).join(", ")}: the headline cap height and image share you read from each comp; finish then measures the built sections against them.`); }
+            if (unread.length) { problems.push(`Record read_comp for ${unread.map(comp => `${comp.section} (${comp.viewport})`).join(", ")}: the headline cap height and image share you read from each comp; finish then measures the built sections against them.`); }
             // A rejected image still in use: its slot should show the regenerated one (once: a repeat is accepted).
             for (const [rejected, replacement] of replacedBy) {
               const stale = `The page still shows /images/${rejected}.webp, which you rejected and regenerated as /images/${replacement}.webp: point that slot at the new src with its width and height.`;
@@ -476,6 +477,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               // A review measures the build against the comp readings in the concept comment.
               const readings = (replaceOnly ? compsFromSource(run.files.files.get("src/App.tsx")) : comps).map(comp => comp.reading).filter((reading): reading is CompReadingValues => Boolean(reading));
               const findings = await run.contrastCheck(run.files.files, readings.length ? { comps: readings } : undefined).catch(() => null);
+              if (readings.length) compFidelity = findings === null ? "not_checked" : findings.some(finding => /^Comp fidelity:/.test(finding)) ? "failed" : "passed";
               // Covered text, content past the edge, page overflow and wrapped bands block every time; the rest once.
               const blocking = (findings ?? []).filter(finding => BLOCKING_PROBLEM.test(finding));
               if (findings) { layoutDefects = blocking; if (!blocking.length) cleanFiles = new Map(run.files.files); }
@@ -529,7 +531,13 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     const commented = withConceptComment(app, concept);
     if (commented !== app) { run.files.write("src/App.tsx", commented); run.emit({ type: "file", path: "src/App.tsx", op: "write", content: commented }); }
   }
-  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept };
+  const savedComps = concept?.comps ?? compsFromSource(run.files.files.get("src/App.tsx"));
+  if (savedComps.length) {
+    compFidelity ??= "not_checked";
+    if (compFidelity !== "passed") summary = `${summary}${summary ? "\n\n" : ""}Design comp comparison: ${compFidelity === "failed" ? "failed — the saved progress still differs from its design reference" : "not checked — the desktop/phone render comparison was unavailable"}.`;
+    if (compFidelity === "failed") finished = false;
+  }
+  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept, compFidelity };
 }
 
 /** Tool result for a design comp: how to read it and what to build from it. */

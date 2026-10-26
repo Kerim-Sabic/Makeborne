@@ -13,6 +13,7 @@ import type { Chart, DocumentSource, Theme } from "../documents/schema";
 import { storeProjectImage } from "../builder/images";
 import { buildDocument, type ChartImages } from "./documents";
 import type { FactsSheet } from "./facts";
+import type { GenerateRequest } from "./report";
 import type { RenderedNarrative } from "./narrative";
 import { REPORT_FILE_TYPES, documentSha, reportAssetId, reportObjectPath, type ReportFormat } from "./files";
 
@@ -69,15 +70,35 @@ export type PersistInput = {
   current: ArtifactVersion; expectedVersion: number; actionKey: string;
   facts: FactsSheet; narrative: RenderedNarrative; narrativeSource: "plain" | "ai";
   mode: "replace" | "append"; title?: string; sourceName: string; sourceAsset: { id: string; sha256: string };
+  requestFingerprint?: string;
 };
 export type PersistResult = { replayed: boolean; version: { id: string; number: number }; files: StoredReportFile[]; documentSha: string; artifact?: ReturnType<typeof mapArtifact> };
 
 const stale = () => new RequestError("REPORT_STALE", "The project changed since these numbers were checked. Reload it and generate again. Nothing was saved.", 409);
 
+/** Bind a retry to the validated request, independent of JSON property order. */
+export function reportRequestFingerprint(request: GenerateRequest): string {
+  const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable)
+    : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, stable(v)])) : value;
+  return createHash("sha256").update(JSON.stringify(stable({ source: request.source, template: request.template, dataset: request.dataset, roles: request.roles,
+    options: request.options, expectedVersion: request.expectedVersion, expectedFactsDigest: request.expectedFactsDigest, mode: request.mode, title: request.title, narrative: request.narrative }))).digest("hex");
+}
+
 /** A version this action already saved (retry after an uncertain response): found through its facts file's provenance. */
-export async function committedReport(client: SupabaseClient, scope: Scope, artifactId: string, afterVersion: number, actionKey: string): Promise<PersistResult | null> {
+export async function committedReport(client: SupabaseClient, scope: Scope, artifactId: string, afterVersion: number, actionKey: string, requestFingerprint?: string): Promise<PersistResult | null> {
+  if (requestFingerprint) {
+    // Bind the action even when a caller changes expectedVersion or a save response was lost.
+    // Unreferenced outputs may remain after a failed save, but never authorize a different request.
+    const bindings = await client.from("assets").select("provenance").eq("workspace_id", scope.workspaceId).eq("project_id", scope.projectId)
+      .eq("provenance->>kind", "data_report_facts").eq("provenance->>actionKey", actionKey).limit(2);
+    if (bindings.error) throw new RequestError("CLOUD_UNAVAILABLE", "The report action could not be verified. Try again.", 503);
+    if ((bindings.data ?? []).some(row => {
+      const p = row.provenance as Record<string, unknown>;
+      return p.requestFingerprint !== requestFingerprint || (p.artifactId !== undefined && p.artifactId !== artifactId);
+    })) throw new RequestError("REPORT_ACTION_CONFLICT", "This action was already used for a different report request. Use the original request or start a new action.", 409);
+  }
   const versions = await client.from("artifact_versions").select("id,version_number,asset_manifest").eq("workspace_id", scope.workspaceId).eq("artifact_id", artifactId)
-    .gt("version_number", afterVersion).order("version_number", { ascending: true }).limit(10);
+    .eq("version_number", afterVersion + 1).limit(1);
   if (versions.error) throw new RequestError("CLOUD_UNAVAILABLE", "The project could not be read. Try again.", 503);
   for (const version of versions.data ?? []) {
     const ids = Array.isArray(version.asset_manifest) ? version.asset_manifest as string[] : [];
@@ -87,7 +108,19 @@ export async function committedReport(client: SupabaseClient, scope: Scope, arti
     const mine = (assets.data ?? []).filter(row => { const p = row.provenance as Record<string, unknown> | null; return p?.actionKey === actionKey && (p.kind === "data_report_facts" || p.kind === "data_report_file"); });
     const factsRow = mine.find(row => (row.provenance as Record<string, unknown>).kind === "data_report_facts");
     if (!factsRow) continue;
-    const files = mine.map(row => { const p = row.provenance as Record<string, unknown>; return { format: (p.kind === "data_report_facts" ? "facts" : p.format) as ReportFormat, assetId: row.id as string, sha256: row.sha256 as string, bytes: Number(p.byteLength) || 0 }; });
+    const provenance = factsRow.provenance as Record<string, unknown>;
+    if (requestFingerprint && provenance.requestFingerprint !== requestFingerprint)
+      throw new RequestError("REPORT_ACTION_CONFLICT", "This action was already used for a different or older report request. Use the original request or start a new action.", 409);
+    if (provenance.reportFiles !== undefined && (!Array.isArray(provenance.reportFiles) || provenance.reportFiles.length > 2))
+      throw new RequestError("REPORT_REPLAY_UNAVAILABLE", "The saved report files could not be verified. Nothing was generated again.", 503);
+    const fileRows = Array.isArray(provenance.reportFiles) ? [factsRow, ...provenance.reportFiles.map(file => {
+      if (!file || typeof file !== "object") throw new RequestError("REPORT_REPLAY_UNAVAILABLE", "The saved report files could not be verified. Nothing was generated again.", 503);
+      const ref = file as StoredReportFile;
+      const row = (assets.data ?? []).find(row => row.id === ref.assetId && row.sha256 === ref.sha256 && row.content_type === REPORT_FILE_TYPES[ref.format]);
+      if (!row || !["pdf", "pptx"].includes(ref.format)) throw new RequestError("REPORT_REPLAY_UNAVAILABLE", "The saved report files could not be verified. Nothing was generated again.", 503);
+      return { ...row, provenance: { ...(row.provenance as Record<string, unknown>), format: ref.format } };
+    })] : mine;
+    const files = fileRows.map(row => { const p = row.provenance as Record<string, unknown>; return { format: (p.kind === "data_report_facts" ? "facts" : p.format) as ReportFormat, assetId: row.id as string, sha256: row.sha256 as string, bytes: Number(p.byteLength) || 0 }; });
     return { replayed: true, version: { id: version.id as string, number: version.version_number as number }, files, documentSha: String((factsRow.provenance as Record<string, unknown>).documentSha ?? "") };
   }
   return null;
@@ -95,7 +128,7 @@ export async function committedReport(client: SupabaseClient, scope: Scope, arti
 
 export async function persistDataReport(input: PersistInput, deps: PersistDeps): Promise<PersistResult> {
   const { client, scope, artifact, facts } = input;
-  const replay = await committedReport(client, scope, artifact.id, input.expectedVersion, input.actionKey);
+  const replay = await committedReport(client, scope, artifact.id, input.expectedVersion, input.actionKey, input.requestFingerprint);
   if (replay) return replay;
   if (artifact.current_version !== input.expectedVersion || input.current.number !== input.expectedVersion) throw stale();
   const base = input.current.content.document ?? null;
@@ -125,11 +158,12 @@ export async function persistDataReport(input: PersistInput, deps: PersistDeps):
   } catch {
     throw new RequestError("REPORT_EXPORT_FAILED", "The report files couldn’t be produced. Nothing was saved; please try again.", 500);
   }
-  const common = { actionKey: input.actionKey, template: facts.template, factsDigest: facts.digest, documentSha: sha, source: { assetId: input.sourceAsset.id, sha256: input.sourceAsset.sha256 } };
-  const factsFile = await storeReportFile(client, scope, "facts", Buffer.from(JSON.stringify({ ...facts, report: { documentSha: sha, narrative: { source: input.narrativeSource, text: input.narrative } } }, null, 1)),
-    { kind: "data_report_facts", ...common });
-  const files = [factsFile, await storeReportFile(client, scope, "pdf", pdf, { kind: "data_report_file", format: "pdf", ...common, factsAssetId: factsFile.assetId })];
-  if (pptx) files.push(await storeReportFile(client, scope, "pptx", pptx, { kind: "data_report_file", format: "pptx", ...common, factsAssetId: factsFile.assetId }));
+  const common = { actionKey: input.actionKey, artifactId: artifact.id, requestFingerprint: input.requestFingerprint, template: facts.template, factsDigest: facts.digest, documentSha: sha, source: { assetId: input.sourceAsset.id, sha256: input.sourceAsset.sha256 } };
+  const outputs = [await storeReportFile(client, scope, "pdf", pdf, { kind: "data_report_file", format: "pdf", ...common })];
+  if (pptx) outputs.push(await storeReportFile(client, scope, "pptx", pptx, { kind: "data_report_file", format: "pptx", ...common }));
+  const factsFile = await storeReportFile(client, scope, "facts", Buffer.from(JSON.stringify({ ...facts, report: { actionKey: input.actionKey, requestFingerprint: input.requestFingerprint, documentSha: sha, narrative: { source: input.narrativeSource, text: input.narrative } } }, null, 1)),
+    { kind: "data_report_facts", ...common, reportFiles: outputs });
+  const files = [factsFile, ...outputs];
   const content = { schemaVersion: 1, kind: artifact.kind, title: builtTitle(input.current.content.title, doc.title, "", artifact.kind).slice(0, 200), sections: projectDocument(doc), document: doc };
   const assetIds = [...new Set([...input.current.assetIds, ...documentAssetIds(doc), ...files.map(file => file.assetId)].map(id => id.toLowerCase()))];
   const { data, error } = await client.rpc("makeborne_save_artifact_version", {
@@ -140,7 +174,7 @@ export async function persistDataReport(input: PersistInput, deps: PersistDeps):
   if (error) {
     if (error.code === "PT409" || error.code === "40001") throw stale();
     if (error.code === "42501") throw new RequestError("ACCESS_DENIED", "You do not have permission to change this work.", 403);
-    if (error.code === "MB409") { const again = await committedReport(client, scope, artifact.id, input.expectedVersion, input.actionKey); if (again) return again; }
+    if (error.code === "MB409") { const again = await committedReport(client, scope, artifact.id, input.expectedVersion, input.actionKey, input.requestFingerprint); if (again) return again; }
     throw new RequestError("CLOUD_OUTCOME_UNKNOWN", "Saving could not be confirmed. Retry the same request before doing anything else.", 503);
   }
   if (!data || typeof data !== "object" || !data.version) throw new RequestError("CLOUD_UNAVAILABLE", "Saving did not return a valid version.", 503);

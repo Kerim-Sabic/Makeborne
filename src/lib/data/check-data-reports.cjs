@@ -398,6 +398,42 @@ const persistDeps = () => ({ renderPdf: fakeRender.documentPdf, renderPptx: fake
     assert.equal(cloud.log.filter(entry => entry.op === "save").length, 1);
   });
 
+  await check("report retry binds immutable request, survives later edits and preserves content-deduplicated outputs", async () => {
+    cloud = makeCloud();
+    const artifactId = addArtifact(cloud, "presentation"), source = addSource(cloud, CAMPAIGN_CSV, "campaigns.csv");
+    const loaded = await server.loadSpreadsheet(clientFor(cloud, OWNER), { workspaceId: W1, projectId: P1 }, source);
+    const facts = report.prepareReport(loaded.record, report.ReportRequestSchema.parse({ source, template: "campaign_report" }), loaded.name).facts;
+    const req = report.GenerateRequestSchema.parse({ source, template: "campaign_report", expectedVersion: 1, actionKey: randomUUID(), expectedFactsDigest: facts.digest, narrative: "ai" });
+    const fingerprint = persist.reportRequestFingerprint(req);
+    assert.equal(fingerprint, persist.reportRequestFingerprint({ ...req, source: { sha256: source.sha256, assetId: source.assetId } }));
+    assert.notEqual(fingerprint, persist.reportRequestFingerprint({ ...req, title: "Changed" }));
+    const client = clientFor(cloud, OWNER), scope = { workspaceId: W1, projectId: P1 };
+    const input = { client, scope, artifact: { id: artifactId, kind: "presentation", current_version: 1 }, current: versionOf(cloud, artifactId, 1), expectedVersion: 1, actionKey: req.actionKey,
+      requestFingerprint: fingerprint, facts, narrative: narrative.renderNarrative(templates.plainNarrative(facts), facts), narrativeSource: "ai", mode: "replace", sourceName: "campaigns.csv", sourceAsset: { id: source.assetId, sha256: source.sha256 } };
+    const saved = await persist.persistDataReport(input, persistDeps());
+    const old = cloud.tables.artifact_versions.find(row => row.artifact_id === artifactId && row.version_number === 2);
+    for (let i = 3; i <= 16; i++) cloud.tables.artifact_versions.push({ ...structuredClone(old), id: randomUUID(), version_number: i });
+    cloud.tables.artifacts.find(row => row.id === artifactId).current_version = 16;
+    const replay = await persist.committedReport(client, scope, artifactId, 1, req.actionKey, fingerprint);
+    assert.equal(replay.version.number, 2);
+    assert.deepEqual(replay.files.map(file => file.assetId), saved.files.map(file => file.assetId));
+    await rejects(() => persist.committedReport(client, scope, artifactId, 1, req.actionKey, persist.reportRequestFingerprint({ ...req, title: "Changed" })), "REPORT_ACTION_CONFLICT");
+    await rejects(() => persist.committedReport(client, scope, artifactId, 16, req.actionKey, persist.reportRequestFingerprint({ ...req, expectedVersion: 16 })), "REPORT_ACTION_CONFLICT");
+    assert.equal(await persist.committedReport(clientFor(cloud, OUTSIDER), scope, artifactId, 1, req.actionKey, fingerprint), null);
+    const second = await persist.persistDataReport({ ...input, artifact: { ...input.artifact, current_version: 16 }, current: versionOf(cloud, artifactId, 16), expectedVersion: 16, actionKey: randomUUID(), requestFingerprint: "b".repeat(64) }, persistDeps());
+    assert.notEqual(saved.files[0].assetId, second.files[0].assetId, "facts carry action identity even for identical content");
+    const secondReplay = await persist.committedReport(client, scope, artifactId, 16, cloud.tables.assets.find(row => row.id === second.files[0].assetId).provenance.actionKey, "b".repeat(64));
+    assert.deepEqual(secondReplay.files.map(file => file.format).sort(), ["facts", "pdf", "pptx"]);
+    // Real route, with agency admission closed: a committed AI response must replay before task/revision admission.
+    process.env.MAKEBORNE_DATA_REPORTS = "on"; delete process.env.MAKEBORNE_AGENCY_TASKS; currentUser = OWNER;
+    const route = require("../../app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/data-reports/route.ts");
+    const response = await route.POST(new Request(`http://localhost/api/cloud/workspaces/${W1}/artifacts/${artifactId}/data-reports`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...req, action: "generate" }) }), { params: Promise.resolve({ workspaceId: W1, artifactId }) });
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    assert.equal((await response.json()).replayed, true);
+    assert.equal(fake.rpcLog.length, 0, "no operation, hold or provider admission on exact retry");
+    delete process.env.MAKEBORNE_DATA_REPORTS;
+  });
+
   await check("persist: stale project, uncertain save, missing JSON storage type and reviewer are refused without a partial version", async () => {
     cloud = makeCloud();
     const artifactId = addArtifact(cloud, "presentation");

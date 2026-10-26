@@ -31,7 +31,7 @@ export function pointsColumns(ctx: Ctx, slide: Slide) {
     let titleRow = 0;
     points.forEach((point, i) => {
       const x = a.x + i * (colW + gap);
-      text(sub, numeral(ctx, i), { x, y: top, w: colW, h: nh }, ns);
+      text(sub, numeral(ctx, i), { x, y: top, w: colW, h: nh }, { ...ns, structural: true });
       divider(sub, center ? x + colW / 2 - 20 : x, center ? x + colW / 2 + 20 : x + colW, top + nh + 12, true);
       if (point.title) titleRow = Math.max(titleRow, measure(ctx, point.title, colW, titleStyle(ctx, ts)) + 14);
     });
@@ -82,7 +82,7 @@ export function pointsCards(ctx: Ctx, slide: Slide) {
       const strong = ctx.dir.id !== "colorblock" && ctx.dir.id !== "organic" && i === 0 && ctx.dir.panel !== "none";
       const ink = panel(sub, { x, y, w: cw, h: height }, strong, i);
       marker(sub, i, x + pad, y + pad, glyphS, strong ? ink.ink : ink.accent);
-      if (ctx.dir.id === "tech" || ctx.dir.id === "brutalist" || ctx.dir.id === "architect") text(sub, numeral(ctx, i), { x: x + cw - pad - 60, y: y + pad, w: 60, h: 22 }, { font: "mono", size: 14, color: ink.muted, align: "right", lh: 1.3 });
+      if (ctx.dir.id === "tech" || ctx.dir.id === "brutalist" || ctx.dir.id === "architect") text(sub, numeral(ctx, i), { x: x + cw - pad - 60, y: y + pad, w: 60, h: 22 }, { structural: true, font: "mono", size: 14, color: ink.muted, align: "right", lh: 1.3 });
       const th = point.title ? measure(ctx, point.title, iw, titleStyle(ctx, ts)) + 10 : 0, bh = measure(ctx, point.text, iw, bodyStyle(ctx, { size: bs }));
       let ty = Math.max(y + pad + glyphS + 24, y + height - pad - th - bh);
       if (point.title) ty += text(sub, point.title, { x: x + pad, y: ty, w: iw }, titleStyle(ctx, ts, { color: ink.ink })) + 10;
@@ -98,7 +98,7 @@ export function pointsFeature(ctx: Ctx, slide: Slide) {
   const ink = panel(ctx, { x: a.x, y: top, w: lw, h: band }, ctx.dir.panel !== "none" && ctx.dir.id !== "organic", 0);
   const pad = 40;
   const ns = numeralStyle(ctx, 72, { color: ink.accent });
-  text(ctx, numeral(ctx, 0), { x: a.x + pad, y: top + pad, w: 200, h: Math.ceil(ns.size * 1.04) }, ns);
+  text(ctx, numeral(ctx, 0), { x: a.x + pad, y: top + pad, w: 200, h: Math.ceil(ns.size * 1.04) }, { ...ns, structural: true });
   const s = stack({ ...ctx, c: { ...c, ink: ink.ink, muted: ink.muted, accent: ink.accent } } as Ctx, { title: first.title ?? first.text, size: 40, min: 24, sub: first.title ? first.text : undefined, subStyle: { size: 22, color: ink.muted, font: "body", italic: false }, extra: { role: undefined }, gap: 18 }, { x: a.x + pad, y: top + pad + 96, w: lw - pad * 2, h: band - pad * 2 - 96 }, "bottom");
   void s;
   const rowsAt = (bs: number) => rest.map(point => (point.title ? measure(ctx, point.title, rw, titleStyle(ctx, bs + 3)) + 4 : 0) + measure(ctx, point.text, rw, bodyStyle(ctx, { size: bs })) + 36);
@@ -136,7 +136,7 @@ export function pointsGrid(ctx: Ctx, slide: Slide) {
     }
     const ix = x + (boxed || col > 0 ? pad : 0);
     if (boxed && ctx.dir.id !== "brutalist") marker(ctx, i, x + cw - pad - 30, y + pad, 30, ink.accent);
-    text(ctx, numeral(ctx, i), { x: ix, y: y + pad, w: 80, h: 22 }, { ...labelStyle(ctx), font: ctx.dir.numerals.font === "mono" ? "mono" : "body", color: ink.accent, size: 15 });
+    text(ctx, numeral(ctx, i), { x: ix, y: y + pad, w: 80, h: 22 }, { structural: true, ...labelStyle(ctx), font: ctx.dir.numerals.font === "mono" ? "mono" : "body", color: ink.accent, size: 15 });
     // Copy sits low in the cell; the numeral marks the top.
     const th = point.title ? measure(ctx, point.title, iw, titleStyle(ctx, ts)) + 8 : 0, bh = measure(ctx, point.text, iw, bodyStyle(ctx, { size: bs }));
     let ty = Math.max(y + pad + 34, y + ch - pad - th - bh);
@@ -155,7 +155,7 @@ export function agendaList(ctx: Ctx, slide: Slide) {
     const y = a.y + i * rowH;
     divider(ctx, rx, a.r, y, i === 0);
     const ns = numeralStyle(ctx, size, { lh: 1.05 });
-    text(ctx, numeral(ctx, i), { x: rx, y: y + 14, w: numW - 16, h: Math.ceil(ns.size * 1.1) }, ns);
+    text(ctx, numeral(ctx, i), { x: rx, y: y + 14, w: numW - 16, h: Math.ceil(ns.size * 1.1) }, { ...ns, structural: true });
     const main = item.title ?? item.text, detail = item.title ? item.text : undefined;
     const th = text(ctx, main, { x: rx + numW, y: y + 12, w: rw - numW }, titleStyle(ctx, size, { maxH: detail ? rowH * 0.5 : rowH - 24, min: 18 }));
     if (detail) text(ctx, detail, { x: rx + numW, y: y + 16 + th, w: rw - numW }, bodyStyle(ctx, { size: 19, maxH: rowH - th - 28, min: 15 }));
@@ -385,7 +385,7 @@ export function diagramRail(ctx: Ctx, slide: Slide) {
       if (d.kind === "process") {
         const last = i === n - 1;
         sub.prims.push({ k: "ellipse", x: cx - r, y: mid - r, w: r * 2, h: r * 2, fill: last ? c.signal : c.bg, stroke: last ? c.signal : c.accent, strokeWidth: 3 });
-        text(sub, String(i + 1), { x: cx - r, y: mid - r, w: r * 2, h: r * 2 }, { font: ctx.dir.numerals.font === "mono" ? "mono" : "heading", size: big ? 38 : 32, align: "center", valign: "middle", color: last ? readableOn(c.signal, c.bg, c.ink, "#FFFFFF") : c.accent, weight: 700, lh: 1 });
+        text(sub, String(i + 1), { x: cx - r, y: mid - r, w: r * 2, h: r * 2 }, { structural: true, font: ctx.dir.numerals.font === "mono" ? "mono" : "heading", size: big ? 38 : 32, align: "center", valign: "middle", color: last ? readableOn(c.signal, c.bg, c.ink, "#FFFFFF") : c.accent, weight: 700, lh: 1 });
         labelRow = Math.max(labelRow, text(sub, item.label, { x: cx - col / 2 + 14, y: mid + r + 28, w: col - 28 }, titleStyle(ctx, labelSize, { align: "center" })));
       } else {
         sub.prims.push({ k: "ellipse", x: cx - 14, y: mid - 14, w: 28, h: 28, fill: c.bg, stroke: c.accent, strokeWidth: 5 });
@@ -408,7 +408,7 @@ export function diagramSteps(ctx: Ctx, slide: Slide) {
     d.items.forEach((item, i) => {
       const x = a.x + i * (colW + gap);
       const ns = numeralStyle(ctx, numSize, { color: i === n - 1 ? c.accent : ctx.dir.numerals.color === "ink" ? c.ink : c.accent });
-      text(sub, d.kind === "timeline" ? String(i + 1).padStart(2, "0") : numeral(ctx, i), { x, y: top, w: colW, h: Math.ceil(ns.size * 1.02) }, ns);
+      text(sub, d.kind === "timeline" ? String(i + 1).padStart(2, "0") : numeral(ctx, i), { x, y: top, w: colW, h: Math.ceil(ns.size * 1.02) }, { ...ns, structural: true });
       if (i < n - 1) path(sub, arrowPath(x + colW - 34 + gap / 2, top + numSize * 0.5 - 17, 34, 0), { fill: c.rule });
       labelRow = Math.max(labelRow, measure(ctx, item.label, colW, titleStyle(ctx, labelSize)));
     });
@@ -437,7 +437,7 @@ export function diagramBlocks(ctx: Ctx, slide: Slide) {
     const outline = ctx.dir.id === "architect" || ctx.dir.id === "brutalist";
     rect(ctx, { x, y, w: colW, h, fill, radius: Math.min(ctx.dir.radius, 18), ...(outline ? { stroke: c.ink, strokeWidth: ctx.dir.id === "brutalist" ? 4 : 1 } : {}) });
     const ink = readableOn(fill, "#FFFFFF", "#111111", c.ink, c.bg);
-    text(ctx, numeral(ctx, i), { x: x + 18, y: y + 16, w: colW - 36, h: 22 }, { font: ctx.dir.label.font === "mono" ? "mono" : "body", size: 15, weight: 700, color: ink, lh: 1.3 });
+    text(ctx, numeral(ctx, i), { x: x + 18, y: y + 16, w: colW - 36, h: 22 }, { structural: true, font: ctx.dir.label.font === "mono" ? "mono" : "body", size: 15, weight: 700, color: ink, lh: 1.3 });
     text(ctx, item.label, { x: x + 18, y: y + 46, w: colW - 36, h: Math.min(h - 62, 140) }, titleStyle(ctx, n <= 4 ? 28 : 23, { color: ink, maxH: Math.min(h - 62, 140), min: 16 }));
   });
   hline(ctx, a.x, a.r, base, c.ink, 2);
@@ -481,7 +481,7 @@ export function diagramClassic(ctx: Ctx, slide: Slide) {
     d.items.forEach((item, i) => {
       const angle = -Math.PI / 2 + i * 2 * Math.PI / n, nx = cx + r * Math.cos(angle), ny = cy + r * Math.sin(angle);
       ellipse(ctx, { x: nx - 26, y: ny - 26, w: 52, h: 52, fill: c.accent });
-      text(ctx, String(i + 1), { x: nx - 26, y: ny - 26, w: 52, h: 52 }, { font: "heading", size: 22, weight: 700, align: "center", valign: "middle", color: readableOn(c.accent, "#FFFFFF", "#111111"), lh: 1 });
+      text(ctx, String(i + 1), { x: nx - 26, y: ny - 26, w: 52, h: 52 }, { structural: true, font: "heading", size: 22, weight: 700, align: "center", valign: "middle", color: readableOn(c.accent, "#FFFFFF", "#111111"), lh: 1 });
       const right = Math.cos(angle) > 0.2, left = Math.cos(angle) < -0.2, boxW = 300;
       const bx = right ? nx + 40 : left ? nx - 40 - boxW : nx - boxW / 2;
       const by = right || left ? ny - 24 : Math.sin(angle) < 0 ? ny - 34 - (item.detail ? 54 : 30) : ny + 34;

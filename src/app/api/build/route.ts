@@ -233,7 +233,7 @@ export async function POST(request: Request) {
     // Books and presentations: structured document builder (same credits, versions and SSE contract).
     if (artifact.kind === "book" || artifact.kind === "presentation") {
       const response = documentBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, project, current, versions, brand,
-        message: body.message, effort: body.effort, attachments, maxDuration, ...(body.imageOptions ? { imageOptions: body.imageOptions } : {}) });
+        message: body.message, effort: body.effort, attachments, maxDuration, continuation: Boolean(envelope && "id" in envelope && envelope.kind === "continuation"), ...(body.imageOptions ? { imageOptions: body.imageOptions } : {}) });
       reserved = null;
       return response;
     }

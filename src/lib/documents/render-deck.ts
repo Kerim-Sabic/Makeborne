@@ -75,7 +75,7 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
       const list = prim.list, items = list ? prim.text.split("\n") : [];
       const marker = list ? (list.marker === "dash" ? `top:${cq(prim.size * 0.72 - 1.5)};width:${cq(16)};height:${cq(3)}` : `top:${cq(prim.size * 0.5)};width:${cq(8)};height:${cq(8)}`) : "";
       const body = list ? items.map((item, i) => `<span class="li" role="listitem" style="display:block;position:relative;padding-left:${cq(list.indent)}${i < items.length - 1 ? `;margin-bottom:${cq(list.gap)}` : ""}"><i aria-hidden="true" style="position:absolute;left:0;${marker};background:${list.color}"></i>${esc(item)}</span>`).join("") : esc(prim.text);
-      return `<div class="p t${prim.role === "title" ? " title" : ""}${kind}"${list ? ' role="list"' : ""} style="${style}${motion}">${body}</div>`;
+      return `<div class="p t${prim.role === "title" ? " title" : ""}${kind}"${prim.structural ? ' data-mb-structural="true"' : ""}${list ? ' role="list"' : ""} style="${style}${motion}">${body}</div>`;
     }
   }
 }

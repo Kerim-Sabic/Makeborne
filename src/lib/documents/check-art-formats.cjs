@@ -254,6 +254,31 @@ const deckWith = (art = {}) => {
     assert.match(tallAnthropic.log.streams[0].messages[0].content.at(-1).text, /Every slide is vertical 9:16 \(9:16\): compose for that shape \(a tall, phone-first page/);
   });
 
+  await check("Best deck continuation: no paid planning when allowance cannot fund render/check; an approved continuation renders before its first text turn", async () => {
+    const pending = () => {
+      const editor = deckWith({ quality: "best" });
+      editor.apply("delete_slide", { id: "numbers" });
+      editor.doc.art.renders = [{ slide: "cover", attempts: 0, outcome: "fallback", problems: [], deferred: true }];
+      return editor;
+    };
+    const low = pending(), noText = fakeAnthropic([]), noImages = fakeImages();
+    const before = JSON.stringify(low.doc);
+    const stopped = await run(low, noText, noImages, undefined, { continuation: true, spend: spendFor(1) });
+    assert.equal(stopped.requiresApproval, true);
+    assert.deepEqual([stopped.credits, stopped.usd, noText.log.streams.length, noImages.log.bodies.length], [0, 0, 0, 0]);
+    assert.equal(JSON.stringify(low.doc), before, "insufficient allowance preserves every saved slide");
+    const editor = pending(), images = fakeImages();
+    const model = fakeAnthropic([
+      () => { assert.equal(images.log.bodies.length, 1, "existing approved art rendered before planning"); return [toolUse("check_slide", { id: "cover", transcript: gateText(editor.doc, editor.doc.slides[0]).map(line => line.text).join(" "), artifacts: [], verdict: "pass" })]; },
+      [toolUse("finish", { summary: "Cover completed." })],
+    ]);
+    const result = await run(editor, model, images, undefined, { continuation: true });
+    assert.equal(result.finished, true, result.summary);
+    assert.equal(editor.doc.art.quality, "best");
+    assert.ok(verifiedArt(editor.doc, editor.doc.slides[0]));
+    assert.equal(images.log.bodies.length, 1);
+  });
+
   // ---- Books: generated cover, openers and picture-book spreads ----
   const bookTheme = { palette: { background: "#F3EBDD", surface: "#E8DCC8", ink: "#1B2433", muted: "#4F5866", accent: "#C8892B", accent2: "#3B5878", dark: "#14203A" }, fonts: "fraunces", mood: "Warm", imageStyle: "Gouache and coloured pencil on rich textured paper", motif: "quiet" };
   const BOOK_SYSTEM = "Gouache and coloured pencil on rich textured paper, deep navy and warm amber; the title hand-lettered in large cream letters; a small lantern motif recurs on every page.";

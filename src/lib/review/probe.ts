@@ -201,7 +201,7 @@ export function probeWebsite(args: { width: number; targets?: string[] }): Probe
   };
 }
 
-export type SlideProbe = { slide: number; text: string; clipped: { text: string; px: number; axis: "box" | "slide" }[] };
+export type SlideProbe = { slide: number; text: string; claimText?: string; clipped: { text: string; px: number; axis: "box" | "slide" }[] };
 /** Deck slides (render-deck print mode): text that overflows its frame or runs past the slide edge. */
 export function probeSlides(): SlideProbe[] {
   const clean = (value: string | null | undefined, max = 120) => (value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -217,6 +217,10 @@ export function probeSlides(): SlideProbe[] {
       else if (rect.right > frame.right + 2 || rect.bottom > frame.bottom + 2 || rect.left < frame.left - 2 || rect.top < frame.top - 2)
         clipped.push({ text, px: Math.round(Math.max(rect.right - frame.right, rect.bottom - frame.bottom, frame.left - rect.left, frame.top - rect.top)), axis: "slide" });
     }
-    return { slide: index + 1, text: clean((slide as HTMLElement).innerText, 4000), clipped };
+    // Only server-authored scene counters carry this marker. User text, stats, dates,
+    // durations, chart labels and notes remain subject to factual checks, even "1".
+    const claimText = Array.from(slide.querySelectorAll(".t, svg text")).filter(el => !el.closest('[data-mb-structural="true"]'))
+      .map(el => (el as HTMLElement).innerText ?? el.textContent ?? "").join("\n").slice(0, 4000);
+    return { slide: index + 1, text: clean((slide as HTMLElement).innerText, 4000), claimText, clipped };
   });
 }

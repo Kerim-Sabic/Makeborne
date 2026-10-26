@@ -236,6 +236,15 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
     const stream = await events(documentBuildResponse(runnerInput(await fresh())));
     assert.equal(stream.at(-1).type, "done"); assert.equal(stream.at(-1).finished, false); assert.equal(finishCall().args.p_candidate.content.document.kind, "book");
   });
+  await check("document continuation needing allowance saves no candidate and charges zero", async () => {
+    documentAgent = async input => { assert.equal(input.continuation, true); return { summary: "Approve additional credits for render and check.", finished: false, requiresApproval: true, credits: 0, usd: 0 }; };
+    const stream = await events(documentBuildResponse({ ...runnerInput(await fresh()), continuation: true }));
+    assert.equal(finishCall().args.p_outcome, "failed");
+    assert.equal(finishCall().args.p_candidate, null);
+    assert.equal(stream.at(-1).code, "OPERATION_BUDGET_REACHED");
+    assert.equal(stream.at(-1).charged, 0);
+    assert.equal(stream.at(-1).changed, false);
+  });
   await check("planning stores and charges together; replay includes usable estimates and recommendation", async () => {
     planner = async () => ({ plan });
     const stream = await events(planStreamResponse({ ...runnerInput(await fresh()), previousPlan: null, previousRevision: 0, basedOnVersion: 1, persist() { throw Error("Independent plan persistence bypass"); } }));

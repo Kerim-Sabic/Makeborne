@@ -124,10 +124,10 @@ export function numberedRows(ctx: Ctx, items: { title?: string; text: string }[]
       // Half the badge (less in mono), smaller still where two figures in a wide face would not fit the square.
       const style: TextStyle = { ...base, size: Math.round(d * (base.font === "mono" ? 0.42 : 0.5)), color: c.bg, align: "center", valign: "middle", lh: 1 };
       while (style.size > 12 && textWidth(ctx, numerals[i], style) > s - 4) style.size--;
-      text(ctx, numerals[i], { x: spec.x + (d - s) / 2, y: inner + (d - s) / 2, w: s, h: s }, style);
+      text(ctx, numerals[i], { x: spec.x + (d - s) / 2, y: inner + (d - s) / 2, w: s, h: s }, { ...style, structural: true });
     } else {
       const fy = ty + L.ts.size * 0.07 - (L.figure.size - L.ts.size) * 0.8;
-      text(ctx, numerals[i], { x: spec.x, y: fy, w: L.numW - 10, h: Math.ceil(L.figure.size * 1.05) }, L.figure);
+      text(ctx, numerals[i], { x: spec.x, y: fy, w: L.numW - 10, h: Math.ceil(L.figure.size * 1.05) }, { ...L.figure, structural: true });
     }
     if (item.title) ty += text(ctx, item.title, { x: tx, y: ty, w: L.tw }, L.ts) + 6;
     // Supporting text breaks at balanced points too (no lone last word), the same in HTML and PPTX.
@@ -272,14 +272,14 @@ export function footer(ctx: Ctx) {
   const tw = (wide: number) => Math.min(wide, a.w - 150);
   const small = (value: string, box: { x: number; w: number; align?: TextPrim["align"] }, extra: Partial<TextStyle> = {}) => text(ctx, value, { x: box.x, y, w: box.w, h: 20 }, { size: 13, color: c.muted, align: box.align ?? "left", lh: 1.3, ...extra });
   switch (d.footer) {
-    case "running": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: tw(760) }); small(`${page} / ${total}`, { x: a.r - 120, w: 120, align: "right" }, { weight: 600 }); return;
-    case "folio": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: tw(760) }, { upper: true, tracking: 0.14, size: 12 }); small(page, { x: a.r - 80, w: 80, align: "right" }, { font: "heading", size: 16, italic: true, color: c.ink }); return;
-    case "corner": small(page, { x: a.r - 80, w: 80, align: "right" }, { weight: 700, color: c.ink, size: 15 }); return;
-    case "center": small(`—  ${page}  —`, { x: W / 2 - 100, w: 200, align: "center" }, { tracking: 0.3, size: 12 }); return;
-    case "mono": rect(ctx, { x: a.x, y: y + 5, w: 8, h: 8, fill: c.accent }); small(`${page}/${total}`, { x: a.x + 18, w: 120 }, { font: "mono" }); small(title, { x: a.r - tw(700), w: tw(700), align: "right" }, { font: "mono", upper: true, size: 12 }); return;
-    case "bar": hline(ctx, a.x, a.r, 656, c.ink, d.rule?.width ?? 4); small(title, { x: a.x, w: tw(800) }, { font: "mono", upper: true, color: c.ink, weight: 700 }); small(`[${page}]`, { x: a.r - 120, w: 120, align: "right" }, { font: "mono", color: c.ink, weight: 700 }); return;
-    case "pill": small(title, { x: a.x, w: tw(760) }); rect(ctx, { x: a.r - 56, y: y - 6, w: 56, h: 30, fill: c.surface, radius: 15 }); text(ctx, page, { x: a.r - 56, y: y - 6, w: 56, h: 30 }, { size: 13, weight: 700, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); return;
-    case "box": small(title, { x: a.x, w: tw(760) }, { font: "mono", upper: true, size: 12 }); rect(ctx, { x: a.r - 52, y: y - 6, w: 52, h: 30, fill: c.bg, noFill: true, stroke: c.ink, strokeWidth: 1 }); text(ctx, page, { x: a.r - 52, y: y - 6, w: 52, h: 30 }, { font: "mono", size: 13, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); line(ctx, a.r - 72, y + 9, a.r - 60, y + 9, c.ink, 1); return;
+    case "running": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: tw(760) }); small(`${page} / ${total}`, { x: a.r - 120, w: 120, align: "right" }, { structural: true, weight: 600 }); return;
+    case "folio": hline(ctx, a.x, a.r, 660, c.rule, 1); small(title, { x: a.x, w: tw(760) }, { upper: true, tracking: 0.14, size: 12 }); small(page, { x: a.r - 80, w: 80, align: "right" }, { structural: true, font: "heading", size: 16, italic: true, color: c.ink }); return;
+    case "corner": small(page, { x: a.r - 80, w: 80, align: "right" }, { structural: true, weight: 700, color: c.ink, size: 15 }); return;
+    case "center": small(`—  ${page}  —`, { x: W / 2 - 100, w: 200, align: "center" }, { structural: true, tracking: 0.3, size: 12 }); return;
+    case "mono": rect(ctx, { x: a.x, y: y + 5, w: 8, h: 8, fill: c.accent }); small(`${page}/${total}`, { x: a.x + 18, w: 120 }, { structural: true, font: "mono" }); small(title, { x: a.r - tw(700), w: tw(700), align: "right" }, { font: "mono", upper: true, size: 12 }); return;
+    case "bar": hline(ctx, a.x, a.r, 656, c.ink, d.rule?.width ?? 4); small(title, { x: a.x, w: tw(800) }, { font: "mono", upper: true, color: c.ink, weight: 700 }); small(`[${page}]`, { x: a.r - 120, w: 120, align: "right" }, { structural: true, font: "mono", color: c.ink, weight: 700 }); return;
+    case "pill": small(title, { x: a.x, w: tw(760) }); rect(ctx, { x: a.r - 56, y: y - 6, w: 56, h: 30, fill: c.surface, radius: 15 }); text(ctx, page, { x: a.r - 56, y: y - 6, w: 56, h: 30 }, { structural: true, size: 13, weight: 700, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); return;
+    case "box": small(title, { x: a.x, w: tw(760) }, { font: "mono", upper: true, size: 12 }); rect(ctx, { x: a.r - 52, y: y - 6, w: 52, h: 30, fill: c.bg, noFill: true, stroke: c.ink, strokeWidth: 1 }); text(ctx, page, { x: a.r - 52, y: y - 6, w: 52, h: 30 }, { structural: true, font: "mono", size: 13, color: c.ink, align: "center", valign: "middle", lh: 1.2 }); line(ctx, a.r - 72, y + 9, a.r - 60, y + 9, c.ink, 1); return;
     default: return;
   }
 }

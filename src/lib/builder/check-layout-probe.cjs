@@ -108,6 +108,18 @@ const ONE_ROW = `<style>${BASE}.marquee{background:#c6f04a;color:#1d1430;overflo
       assert.deepEqual((await probe(page(700), 1440, [reading])).fidelity, []);
       assert.deepEqual((await probe(page(300), 1440, [{ ...reading, heavy: undefined }])).fidelity, [], "a light comp keeps its light build");
     });
+    await check("comp fidelity: real bold faces, headline line count and missing sections cannot silently pass", async () => {
+      const page = (family, words) => `<style>${BASE}#top{height:810px}h1{font-family:'${family}';font-size:80px;font-weight:700;line-height:1.2;width:1100px}</style><section id="top"><h1>${words}</h1></section>`;
+      const reading = { section: "top", viewport: "desktop", headlineCapHeightPct: 3, imageAreaPct: 0, imageSide: "none", heavy: true, headlineLines: 2 };
+      const faithful = await probe(page("Georgia", "Fixed by<br><em>Friday.</em>"), 1440, [reading]);
+      assert.deepEqual(faithful.fidelity, []);
+      const fakeBold = await probe(page("Instrument Serif", "Fixed by<br>Friday."), 1440, [reading]);
+      assert.match(String(fakeBold.fidelity.find(item => item.metric === "weight")?.built), /no real bold cut/);
+      const wrapped = await probe(page("Georgia", "Fixed<br>by<br>Friday."), 1440, [reading]);
+      assert.equal(wrapped.fidelity.find(item => item.metric === "lines")?.built, 3);
+      const missing = await probe(`<main><p>No section</p></main>`, 1440, [{ ...reading, section: "pricing" }]);
+      assert.equal(missing.fidelity[0]?.metric, "not-checked");
+    });
     await check("page overflow: a page wider than the phone screen is measured with the element past the edge", async () => {
       const wide = await probe(`<style>${BASE}.giant{font-size:140px;white-space:nowrap}</style><main><p class="giant">GOOD DOG</p></main>`, 390);
       assert.ok(wide.overflow && wide.overflow.px > 1); assert.match(wide.overflow.element, /^p\.giant/);

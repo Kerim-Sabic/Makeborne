@@ -175,7 +175,7 @@ export function deckDiagnostics(input: { pptx: PptxInspection | null; exportErro
     const index = probe.slide - 1, id = input.slides[index]?.id ?? String(probe.slide);
     probe.clipped.forEach((item, n) => out.push(diag("deck.text-clipped", `${id}:${n}`, slideAt(index), "failed", `"${item.text}" overflows ${item.axis === "box" ? "its text frame" : "the slide"} by ${item.px}px`)));
     if (!probe.clipped.length) out.push(diag("deck.text-clipped", id, slideAt(index), "passed", "all text fits its frame"));
-    out.push(...claimDiagnostics("deck.claims", id, slideAt(index), `${probe.text}\n${input.slides[index]?.notes ?? ""}`, input));
+    out.push(...claimDiagnostics("deck.claims", id, slideAt(index), `${probe.claimText ?? probe.text}\n${input.slides[index]?.notes ?? ""}`, input));
   }
   return out;
 }

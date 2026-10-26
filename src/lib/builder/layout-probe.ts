@@ -1,8 +1,9 @@
 /**
  * Rendered layout checks of the finish gate (run by contrast-probe.ts in the headless browser on the prepared,
  * script-free page): text another element is painted over, panels cut off at the screen edge, and marquee or tag
- * bands that wrap into a second row. Plain DOM code with no imports, so offline checks can bundle it alone.
+ * bands that wrap into a second row. DOM code plus static font metadata; no server dependencies.
  */
+import fontCatalog from "../../../infra/project-runtime/font-catalog.json";
 
 export type CoveredText = { text: string; element: string; by: string; width: number };
 export type CutOff = { text: string; element: string; side: "left" | "right"; width: number };
@@ -178,8 +179,8 @@ export function pageOverflow(doc: Document, view: Window, width: number): PageOv
 }
 
 /** What the builder read from a design comp (read_comp): the headline's cap height and the image's share of the frame. */
-export type CompReading = { section: string; viewport: "desktop" | "mobile"; headlineCapHeightPct: number; imageAreaPct: number; imageSide: "left" | "right" | "full" | "none"; ground?: string; heavy?: boolean };
-export type CompDeviation = { section: string; viewport: "desktop" | "mobile"; metric: "headline" | "image-area" | "image-side" | "ground" | "weight"; comp: number | string; built: number | string; fix: string };
+export type CompReading = { section: string; viewport: "desktop" | "mobile"; headlineCapHeightPct: number; imageAreaPct: number; imageSide: "left" | "right" | "full" | "none"; ground?: string; heavy?: boolean; headlineLines?: number };
+export type CompDeviation = { section: string; viewport: "desktop" | "mobile"; metric: "headline" | "image-area" | "image-side" | "ground" | "weight" | "lines" | "not-checked"; comp: number | string; built: number | string; fix: string };
 /** How far apart two colours are (0-441, plain RGB distance): above GROUND_DISTANCE the built ground is another colour. */
 export const GROUND_DISTANCE = 90;
 const rgbOf = (value: string) => { const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/.exec(value); return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null; };
@@ -244,7 +245,7 @@ export function compFidelity(doc: Document, view: Window, width: number, reading
     const id = reading.section.trim();
     const target = doc.getElementById(id) ?? doc.querySelector(`[data-section="${id}"]`)
       ?? (/^(top|hero|home|first|intro|landing)/i.test(id) ? doc.querySelector("main section, section, main > *") : null);
-    if (!target) continue;
+    if (!target) { out.push({ section: id, viewport: reading.viewport, metric: "not-checked", comp: "section present", built: "missing", fix: "restore the named section so its design can be measured; this comparison was not checked" }); continue; }
     const top = target.getBoundingClientRect().top, bottom = top + frame.height;
     // The largest text in the section's first frame.
     let size = 0, biggest: Element | null = null;
@@ -255,11 +256,28 @@ export function compFidelity(doc: Document, view: Window, width: number, reading
       const fontSize = parseFloat(style.fontSize) || 0;
       if (fontSize > size) { size = fontSize; biggest = el; }
     }
+    const heading = biggest?.closest("h1,h2,h3");
+    if (heading && target.contains(heading)) biggest = heading;
+    if (!biggest) { out.push({ section: id, viewport: reading.viewport, metric: "not-checked", comp: "visible headline", built: "missing", fix: "restore a visible live headline so the comp's typography can be measured" }); continue; }
+    if (reading.headlineLines) {
+      const tops: number[] = [], tolerance = Math.max(2, size * 0.12), walker = doc.createTreeWalker(biggest, 4);
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        if (!node.textContent?.trim()) continue;
+        const range = doc.createRange(); range.selectNodeContents(node);
+        for (const rect of Array.from(range.getClientRects())) if (rect.width > 0 && rect.height > 0 && !tops.some(top => Math.abs(top - rect.top) <= tolerance)) tops.push(rect.top);
+      }
+      if (tops.length !== reading.headlineLines) out.push({ section: id, viewport: reading.viewport, metric: "lines", comp: reading.headlineLines, built: tops.length,
+        fix: `preserve the comp's ${reading.headlineLines} headline lines (built ${tops.length}); choose a real compatible face and adjust width/tracking or explicit line breaks without shrinking below the readable scale` });
+    }
     // A heavy display face in the comp (bold, black, heavy) stays heavy: the live w01 v2 build set its bold comp
     // headline in a light serif.
     if (reading.heavy && biggest) {
       const weight = parseInt(view.getComputedStyle(biggest).fontWeight, 10) || 400;
-      if (weight < 600) out.push({ section: id, viewport: reading.viewport, metric: "weight", comp: "bold", built: weight,
+      const family = view.getComputedStyle(biggest).fontFamily.split(",")[0].replace(/["']/g, "").trim();
+      const face = fontCatalog.find(face => face.family.toLowerCase() === family.toLowerCase());
+      const supportsBold = !face || Math.max(...face.weight.split(/\s+/).map(Number)) >= 600;
+      if (weight < 600 || !supportsBold) out.push({ section: id, viewport: reading.viewport, metric: "weight", comp: "bold", built: supportsBold ? weight : `${family}: no real bold cut`,
         fix: `set the headline in a bold cut (font-weight 600 or more of a face that has it) as the comp's heavy display type (it is ${weight})` });
     }
     // The ground the headline sits on (the first opaque background behind it), against the comp's ground colour: the
