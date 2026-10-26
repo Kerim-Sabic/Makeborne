@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Source_Serif_4 } from "next/font/google";
 import { SITE } from "@/lib/site-metadata";
+import LaunchBanner from "@/components/launch/launch-banner";
+import { launchState } from "@/lib/launch/config";
 import "./globals.css";
 import "./account-refresh.css";
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
@@ -40,10 +42,12 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Launch countdown banner (informational; it never changes sales). Hidden once MAKEBORNE_LAUNCH_COUNTDOWN is not "on".
+  const launch = launchState();
   return (
     // Large-screen scaling (globals.css --ui-zoom) is off unless the server sets MAKEBORNE_UI_SCALE=on.
     <html lang="en" className={`${inter.variable} ${serif.variable}`} data-ui-scale={process.env.MAKEBORNE_UI_SCALE === "on" ? "on" : undefined}>
-      <body>{children}</body>
+      <body>{launch.enabled && <LaunchBanner launchAt={launch.launchAt} serverPhase={launch.phase} dateShort={launch.text.short} timeText={launch.text.time} testOverrides={launch.testOverrides} />}{children}</body>
     </html>
   );
 }

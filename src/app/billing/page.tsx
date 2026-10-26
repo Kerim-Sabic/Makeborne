@@ -17,6 +17,9 @@ import { CREATION_PLANS, TAX_NOTE, matchPlanTier, pricePerCreditCents, usd } fro
 import { configuredCreationOffers } from "@/lib/billing/creation-offers";
 import { topupCheckoutOpen } from "@/lib/billing/topups";
 import { authDestination } from "@/lib/supabase/auth-flow";
+import { plansOnSale } from "@/lib/billing/plans-on-sale";
+import { launchState } from "@/lib/launch/config";
+import PlansOpenLine from "@/components/launch/plans-open-line";
 import "./billing.css";
 import "./billing-topup-return.css";
 
@@ -43,16 +46,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const savedBrief = typeof params.next === "string" && /[?&](draft|claim)=/.test(authDestination(params.next));
   const offers = (() => { try { return configuredCreationOffers(); } catch { return []; } })();
   const topupsOpen = (() => { try { return topupCheckoutOpen(); } catch { return false; } })();
-  return <BillingWorkspace plansFirst={plansFirst} savedBrief={savedBrief} planChips={PLAN_CHIPS} pricePerCredit={{ min: Math.min(...PER_CREDIT), max: Math.max(...PER_CREDIT) }} plansOpen={await plansOpen(offers)} mediumCeilingCredits={BUILDER_EFFORT[DEFAULT_EFFORT].ceilingCredits} measuredRun={MEASURED_RUN} currentTier={currentTier} topupsOpen={topupsOpen} hasYearly={offers.some(offer => offer.interval === "yearly")} accountId={user?.id ?? null} taxNote={TAX_NOTE.long} subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
-}
-
-/** False before launch: no configured plan passes the database plan gate. Advisory only; checkout rechecks. */
-async function plansOpen(offers: ReturnType<typeof configuredCreationOffers>): Promise<boolean> {
-  if (!offers.length) return false;
-  try {
-    const { data, error } = await billingDatabase().rpc("makeborne_billing_creation_enabled", { p_plan_id: offers[0].planId });
-    return !error && data === true;
-  } catch { return false; }
+  const plansOpen = await plansOnSale(offers);
+  // Informational launch line near the plans. It never changes what the plan buttons do.
+  const launch = launchState();
+  const launchLine = launch.enabled && launch.phase !== "after" && !plansOpen ? <PlansOpenLine launchAt={launch.launchAt} serverNow={launch.serverNow} dateText={launch.text} /> : null;
+  return <BillingWorkspace launchLine={launchLine} plansFirst={plansFirst} savedBrief={savedBrief} planChips={PLAN_CHIPS} pricePerCredit={{ min: Math.min(...PER_CREDIT), max: Math.max(...PER_CREDIT) }} plansOpen={plansOpen} mediumCeilingCredits={BUILDER_EFFORT[DEFAULT_EFFORT].ceilingCredits} measuredRun={MEASURED_RUN} currentTier={currentTier} topupsOpen={topupsOpen} hasYearly={offers.some(offer => offer.interval === "yearly")} accountId={user?.id ?? null} taxNote={TAX_NOTE.long} subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
 }
 
 /** The current billing period when its payment was refunded or charged back (creation paused). Unknown shows nothing. */

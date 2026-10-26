@@ -1,0 +1,143 @@
+/* Full-page launch screen on `/` before launch. One deliberate night look in both colour schemes: the home page's
+   own blue, coral and peach atmosphere after dark, so the reveal opens from night onto the bright home page.
+   Everything that moves is transform or opacity; card sizes are fixed, so nothing shifts as digits change. */
+.mbl{--ink:#0b0a14;--card-w:clamp(64px,7.2vw,112px);--card-h:calc(var(--card-w)*1.3);--card-r:calc(var(--card-w)*.13);
+  position:fixed;inset:0;z-index:1000;overflow:hidden auto;overscroll-behavior:contain;color:#f4f2fb;background:var(--ink);
+  font-family:var(--font-inter),Arial,sans-serif;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.mbl[data-stage="opening"],.mbl[data-stage="live"]{background:transparent}
+.mbl-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* Two halves of the night sky; at the reveal they part to show the page underneath. */
+.mbl-panel{position:fixed;left:0;right:0;height:calc(50% + 1px);overflow:hidden;background:var(--ink);will-change:transform;
+  transition:transform 1.25s cubic-bezier(.77,0,.18,1) .18s}
+.mbl-panel-top{top:0}.mbl-panel-bottom{bottom:0}
+.mbl-aura,.mbl-grain{position:absolute;left:0;right:0;height:calc(200% - 2px);pointer-events:none}
+.mbl-panel-top>*{top:0}.mbl-panel-bottom>*{bottom:0}
+.mbl-aura{background:
+  radial-gradient(58% 44% at 16% 96%,rgba(86,122,236,.46),transparent 70%),
+  radial-gradient(52% 40% at 86% 98%,rgba(243,165,138,.34),transparent 70%),
+  radial-gradient(38% 32% at 52% 108%,rgba(249,219,186,.30),transparent 72%),
+  radial-gradient(52% 40% at 50% -8%,rgba(104,86,222,.30),transparent 70%),
+  linear-gradient(180deg,#0b0a14 0%,#0f0d1e 55%,#161329 100%);
+  animation:mbl-drift 26s ease-in-out infinite alternate}
+.mbl-grain{opacity:.07;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.mbl-panel-top::after,.mbl-panel-bottom::after{content:"";position:absolute;left:0;right:0;height:1px;opacity:0;transition:opacity .3s ease;
+  background:linear-gradient(90deg,transparent,#a9bcff 25%,#c9b1ff 50%,#ffcdb3 75%,transparent)}
+.mbl-panel-top::after{bottom:0}.mbl-panel-bottom::after{top:0}
+.mbl-seam{position:fixed;left:0;right:0;top:50%;height:2px;margin-top:-1px;opacity:0;transform:scaleX(0);pointer-events:none;z-index:1;
+  background:linear-gradient(90deg,transparent,#a9bcff 20%,#fff 50%,#ffcdb3 80%,transparent);box-shadow:0 0 18px 2px #c9b1ff80}
+.mbl-sweep{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.9;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.045) 50%,transparent 58%);transform:translate3d(-70%,0,0);animation:mbl-sweep 11s ease-in-out 1.5s infinite}
+
+.mbl-content{position:relative;z-index:2;min-height:100%;display:grid;grid-template-rows:auto 1fr auto;padding:26px 48px 26px;
+  transition:opacity .38s ease,transform .5s ease}
+.mbl-content>*{position:relative;z-index:1}
+.mbl-header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.mbl-wordmark{display:inline-flex;align-items:center;gap:9px;color:#fff;font-size:22px;font-weight:650;letter-spacing:-1px;line-height:1}
+.mbl-signin{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border:1px solid rgba(255,255,255,.16);border-radius:999px;color:#dcd8ee;font-size:13px;font-weight:500;transition:background-color .16s ease,border-color .16s ease}
+.mbl-signin:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.28)}
+.mbl a:focus-visible{outline:2px solid #c9b1ff;outline-offset:3px}
+
+.mbl-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px 0}
+.mbl-eyebrow{display:inline-flex;align-items:center;gap:10px;margin:0 0 clamp(26px,5vh,46px);padding:7px 14px 7px 12px;border:1px solid rgba(255,255,255,.11);border-radius:999px;
+  background:rgba(255,255,255,.04);color:#c2bcdc;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase}
+.mbl-dot{width:7px;height:7px;border-radius:50%;background:#ffb59a;box-shadow:0 0 0 0 rgba(255,181,154,.55);animation:mbl-pulse 2.4s ease-out infinite}
+
+/* The clock and "We're live" share one grid cell, so the swap never moves the text below. */
+.mbl-stack{display:grid;place-items:center}
+.mbl-stack>*{grid-area:1/1}
+.mbl-clock{transition:opacity .45s ease,transform .6s cubic-bezier(.5,0,.75,0)}
+.mbl-clock-units{display:flex;gap:clamp(14px,2.6vw,40px)}
+.mbl-unit{display:flex;flex-direction:column;align-items:center;gap:14px}
+.mbl-cards{display:flex;gap:6px}
+.mbl-unit-label{color:#aaa4c8;font-size:11px;font-weight:550;letter-spacing:.22em;text-transform:uppercase}
+.mbl-card{position:relative;display:block;width:var(--card-w);height:var(--card-h);perspective:calc(var(--card-w)*6);border-radius:var(--card-r);
+  font-size:calc(var(--card-w)*1.02);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.04em;color:#f7f5ff;
+  box-shadow:0 0 0 1px rgba(255,255,255,.07),0 26px 50px -26px rgba(0,0,0,.9),0 10px 24px -14px rgba(57,42,140,.55);transition:box-shadow .5s ease}
+.mbl-half{position:absolute;left:0;right:0;height:50%;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.mbl-half>span{display:block;height:200%;line-height:var(--card-h);text-align:center}
+.mbl-half.mbl-top{top:0;border-radius:var(--card-r) var(--card-r) 0 0;transform-origin:50% 100%;
+  background:linear-gradient(180deg,#2c2749,#231f3e);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 -1px 0 rgba(0,0,0,.6)}
+.mbl-half.mbl-bottom{bottom:0;border-radius:0 0 var(--card-r) var(--card-r);transform-origin:50% 0;
+  background:linear-gradient(180deg,#1e1b36,#18152e);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.mbl-half.mbl-bottom>span{transform:translateY(-50%)}
+.mbl-flap-top{z-index:2;animation:mbl-flip-top .3s cubic-bezier(.55,.06,.68,.19) both}
+.mbl-flap-bottom{z-index:2;animation:mbl-flip-bottom .36s cubic-bezier(.2,.75,.3,1.08) .3s both}
+.mbl-flap-top::after,.mbl-flap-bottom::after{content:"";position:absolute;inset:0;pointer-events:none}
+.mbl-flap-top::after{background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.5));animation:mbl-shade-in .3s ease-in both}
+.mbl-flap-bottom::after{background:linear-gradient(0deg,rgba(0,0,0,0),rgba(0,0,0,.45));animation:mbl-shade-out .36s ease-out .3s both}
+
+.mbl-live-title{margin:0;font-size:clamp(54px,9vw,128px);font-weight:600;letter-spacing:-.055em;line-height:1.05;opacity:0;transform:translate3d(0,26px,0) scale(.98);
+  pointer-events:none;transition:opacity .6s ease .12s,transform .9s cubic-bezier(.2,.9,.25,1) .12s}
+.mbl-live-title span{display:inline-block;padding:0 .04em;background:linear-gradient(100deg,#fff 20%,#dccfff 42%,#ffd5c0 58%,#fff 80%);background-size:250% 100%;background-position:100% 0;
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+
+.mbl-date{margin:clamp(30px,5.5vh,54px) 0 0;color:#f4f2fb;font-size:clamp(21px,2.3vw,31px);font-weight:500;letter-spacing:-.025em;line-height:1.3}
+.mbl-date-lead{display:block;margin-bottom:10px;color:#aaa4c8;font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase}
+.mbl-date-sep{color:#8d86b0}
+.mbl-local{min-height:1.6em;margin:8px 0 0;color:#c2bcdc;font-size:14px;line-height:1.6}
+.mbl-tagline{max-width:36ch;text-wrap:balance;margin:20px 0 0;color:#d4cfea;font-size:15px;line-height:1.6;letter-spacing:-.1px}
+
+.mbl-foot{display:flex;align-items:center;justify-content:space-between;gap:16px 24px;flex-wrap:wrap}
+.mbl-follow{display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:0 17px;border:1px solid rgba(255,255,255,.16);border-radius:999px;
+  background:rgba(255,255,255,.035);color:#efecfa;font-size:13px;font-weight:500;transition:background-color .16s ease,border-color .16s ease}
+.mbl-follow:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.3)}
+.mbl-foot-links{display:flex;gap:22px}
+.mbl-foot-links a{display:inline-flex;align-items:center;min-height:44px;color:#cfcae6;font-size:12px}
+.mbl-foot-links a:hover{color:#fff}
+.mbl-confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
+
+/* Zero, then "We're live", then the screen parts. */
+.mbl[data-stage="zero"] .mbl-card{box-shadow:0 0 0 1px rgba(255,255,255,.12),0 26px 50px -26px rgba(0,0,0,.9),0 0 46px -8px rgba(201,177,255,.65)}
+.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-clock{opacity:0;transform:scale(.9)}
+.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-live-title{opacity:1;transform:none}
+.mbl[data-stage="live"] .mbl-live-title span{animation:mbl-shine 1.7s cubic-bezier(.3,.6,.3,1) .25s both}
+.mbl[data-stage="opening"]{pointer-events:none;overflow:hidden}
+.mbl[data-stage="opening"] .mbl-content{opacity:0;transform:scale(1.015)}
+.mbl[data-stage="opening"] .mbl-panel-top{transform:translate3d(0,-101%,0)}
+.mbl[data-stage="opening"] .mbl-panel-bottom{transform:translate3d(0,101%,0)}
+.mbl[data-stage="opening"] .mbl-panel::after{opacity:1}
+.mbl[data-stage="opening"] .mbl-seam{animation:mbl-seam .9s ease forwards}
+.mbl[data-stage="opening"] .mbl-sweep{display:none}
+
+@keyframes mbl-flip-top{from{transform:rotateX(0)}to{transform:rotateX(-90deg)}}
+@keyframes mbl-flip-bottom{from{transform:rotateX(90deg)}to{transform:rotateX(0)}}
+@keyframes mbl-shade-in{from{opacity:0}to{opacity:1}}
+@keyframes mbl-shade-out{from{opacity:1}to{opacity:0}}
+@keyframes mbl-drift{from{transform:translate3d(-1.5%,1%,0) scale(1.02)}to{transform:translate3d(1.5%,-1.5%,0) scale(1.07)}}
+@keyframes mbl-sweep{0%{transform:translate3d(-70%,0,0)}38%,100%{transform:translate3d(70%,0,0)}}
+@keyframes mbl-pulse{0%{box-shadow:0 0 0 0 rgba(255,181,154,.55)}70%,100%{box-shadow:0 0 0 9px rgba(255,181,154,0)}}
+@keyframes mbl-shine{from{background-position:100% 0}to{background-position:0 0}}
+@keyframes mbl-seam{0%{opacity:0;transform:scaleX(0)}25%{opacity:1;transform:scaleX(1)}100%{opacity:0;transform:scaleX(1)}}
+
+@media(max-width:640px){
+  .mbl{--card-w:clamp(52px,19vw,84px)}
+  .mbl-content{padding:18px 16px 18px}
+  .mbl-wordmark{font-size:20px}
+  .mbl-signin{min-height:40px;padding:0 14px;font-size:12px}
+  .mbl-main{padding:22px 0}
+  .mbl-clock-units{display:grid;grid-template-columns:repeat(2,auto);gap:22px 18px;justify-content:center}
+  .mbl-unit{gap:10px}
+  .mbl-unit-label{font-size:10px}
+  .mbl-cards{gap:5px}
+  .mbl-date{font-size:21px}
+  .mbl-date-lead{font-size:11px}
+  .mbl-date-sep{display:block;height:0;overflow:hidden}
+  .mbl-tagline{font-size:14px;max-width:32ch}
+  .mbl-foot{flex-direction:column;justify-content:center}
+  .mbl-foot-links{gap:18px}
+}
+@media(max-height:620px) and (min-width:641px){.mbl{--card-w:clamp(56px,6vw,90px)}.mbl-eyebrow{margin-bottom:20px}.mbl-date{margin-top:24px}}
+
+/* Reduced motion: nothing drifts, sweeps or flips; at zero the screen simply cross-fades to the page. */
+@media(prefers-reduced-motion:reduce){
+  .mbl-aura,.mbl-sweep,.mbl-dot,.mbl-live-title span{animation:none!important}
+  .mbl-sweep{display:none}
+  .mbl-panel,.mbl-content,.mbl-clock,.mbl-live-title,.mbl-card{transition:none}
+  .mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-clock{transform:none}
+  .mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-live-title{transform:none}
+  .mbl[data-stage="opening"]{opacity:0;transition:opacity .6s ease}
+  .mbl[data-stage="opening"] .mbl-panel{transform:none}
+  .mbl[data-stage="opening"] .mbl-content{opacity:1;transform:none}
+  .mbl-seam,.mbl-panel::after{display:none}
+}
