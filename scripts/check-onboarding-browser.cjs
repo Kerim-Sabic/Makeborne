@@ -128,6 +128,18 @@ async function main() {
       await page.keyboard.press("Escape");
       await welcome(page).waitFor({ state: "detached" });
     });
+    await scenario("phone-navigation-drawer-is-not-covered-by-the-checklist", async page => {
+      await page.goto(`${base}/?view=studio`);
+      await welcome(page).waitFor({ timeout: 15000 });
+      await page.getByRole("button", { name: /look around first/ }).click();
+      await pill(page).click();
+      await page.locator(".gs-panel").waitFor();
+      await page.getByRole("button", { name: "Toggle navigation" }).click();
+      await page.locator("#studio-navigation").waitFor();
+      assert.equal(await page.locator(".gs-panel, .gs-pill").count(), 0, "the checklist steps aside while the drawer is open");
+      await page.keyboard.press("Escape");
+      await pill(page).waitFor();
+    }, { width: 390, height: 844 });
     await scenario("phone-390", async page => {
       await page.goto(`${base}/?view=studio`);
       await welcome(page).waitFor({ timeout: 15000 });
