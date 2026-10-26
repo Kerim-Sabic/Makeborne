@@ -2,6 +2,8 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
 import { RequestError } from "@/lib/server/http";
+import { requireProviderCapacity } from "@/lib/ai/live-run";
+import { agencyTasksEnabled } from "@/lib/agency/run";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import type { AnthropicLike } from "@/lib/ai/anthropic-call";
 import { anthropicModelPort } from "@/lib/agency/model-port";
@@ -14,6 +16,21 @@ import type { ImageEditDeps } from "@/lib/images/edit/run";
 /** Off unless MAKEBORNE_IMAGE_EDITING=on on the server; the browser cannot enable it. */
 export function requireImageEditing() {
   if (!imageEditingEnabled()) throw new RequestError("IMAGE_EDITING_UNAVAILABLE", "Image editing isn't available yet.", 404);
+}
+
+/**
+ * A generated edit is paid agency work (one Anthropic step, then one OpenAI edit), so it also needs the
+ * agency switch: MAKEBORNE_IMAGE_EDITING=on alone never starts paid work. Resize, crop and accept make no
+ * provider call and need only the image-editing switch.
+ */
+export function generatedEditsEnabled() { return imageEditingEnabled() && agencyTasksEnabled(); }
+export function requireGeneratedEdits() {
+  if (!generatedEditsEnabled()) throw new RequestError("IMAGE_EDITING_UNAVAILABLE", "Image editing isn't available yet.", 404);
+}
+/** Before any operation or credit hold: a clean 503 while either provider's spending is paused or today's limit is used. */
+export async function requireEditProviders() {
+  await requireProviderCapacity("anthropic");
+  await requireProviderCapacity("openai");
 }
 
 /** The body must name this route's artifact. */

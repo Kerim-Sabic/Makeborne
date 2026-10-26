@@ -259,7 +259,7 @@ const usage = (output = 400, image = 1100, text = 300) => ({ input_tokens: image
 const okResponse = (bytes = editedPng, extra = {}) => async () => ({ data: [{ b64_json: bytes.toString("base64") }], output_format: "png", usage: usage(), ...extra });
 function deps(extra = {}) {
   const client = memberClient();
-  return { client, deps: { env: { MAKEBORNE_IMAGE_EDITING: "on" }, assets: server.projectEditAssets(client, { workspaceId: W, projectId: P }), model: fakeModel(), imageClient, toUpload: async upload => upload,
+  return { client, deps: { env: { MAKEBORNE_IMAGE_EDITING: "on", MAKEBORNE_AGENCY_TASKS: "on" }, assets: server.projectEditAssets(client, { workspaceId: W, projectId: P }), model: fakeModel(), imageClient, toUpload: async upload => upload,
     rateMicrousd: RATE, platformDeadline: Date.now() + 280000, settings: SETTINGS, table: TABLE, allowedModels: ALLOWED, pollMs: 20, heartbeatMs: 1000,
     readInput: () => async index => JSON.stringify({ input: index, note: "Image content is not included in this step." }), ...extra } };
 }
@@ -327,6 +327,9 @@ async function check(name, fn) {
     const original = registerAsset(await picture(1024, 1024)); outlineArtifact(original.id);
     const { deps: d } = deps();
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, env: {} }), "IMAGE_EDITING_UNAVAILABLE");
+    // Image editing alone never starts paid agency work: the agency switch is required too (S3).
+    await rejects(run.runImageEdit(ACTOR, body(original), { ...d, env: { MAKEBORNE_IMAGE_EDITING: "on" } }), "IMAGE_EDITING_UNAVAILABLE");
+    await rejects(run.estimateImageEdit(body(original), { ...d, env: { MAKEBORNE_IMAGE_EDITING: "on", MAKEBORNE_AGENCY_TASKS: "true" } }), "IMAGE_EDITING_UNAVAILABLE");
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, settings: [] }), "AGENCY_SETTINGS_UNQUALIFIED");
     assert.ok(task.AGENCY_SETTINGS.some(setting => setting.qualifiedKinds.includes("image_edit")), "shipped registry: image_edit proposed after the 2026-10-24 qualification (flags remain off)");
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, table: {} }), "EDIT_UNSUPPORTED");
@@ -705,7 +708,22 @@ async function check(name, fn) {
     assert.doesNotMatch(messages, NAMES);
   });
 
-  console.log(`${passed}/22 image-edit checks passed.`);
-  if (passed !== 22) process.exitCode = 1;
+  await check("routes: a generated edit needs the agency switch, and both providers' capacity is checked before the edit (and its hold) starts", async () => {
+    const dir = path.join(root, "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/image-edits");
+    const shared = fs.readFileSync(path.join(dir, "shared.ts"), "utf8");
+    assert.match(shared, /generatedEditsEnabled\(\) \{ return imageEditingEnabled\(\) && agencyTasksEnabled\(\); \}/);
+    assert.match(shared, /requireProviderCapacity\("anthropic"\);\s*await requireProviderCapacity\("openai"\)/);
+    for (const [file, call] of [["route.ts", "runImageEdit("], ["estimate/route.ts", "estimateImageEdit("]]) {
+      const source = fs.readFileSync(path.join(dir, file), "utf8"), post = source.slice(source.indexOf("export async function POST"));
+      const order = ["requireGeneratedEdits()", "editContext(", "await requireEditProviders()", call].map(item => post.indexOf(item));
+      assert.ok(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1])), `${file}: gate, then context, then capacity, then the edit`);
+    }
+    assert.match(fs.readFileSync(path.join(dir, "route.ts"), "utf8"), /available: generatedEditsEnabled\(\)/, "the panel is offered only when a generated edit can run");
+    // Resize, crop and accept make no provider call: the image-editing switch is enough.
+    for (const file of ["deterministic/route.ts", "accept/route.ts"]) assert.doesNotMatch(fs.readFileSync(path.join(dir, file), "utf8"), /requireGeneratedEdits|requireEditProviders/);
+  });
+
+  console.log(`${passed}/23 image-edit checks passed.`);
+  if (passed !== 23) process.exitCode = 1;
   process.exit(process.exitCode ?? 0);
 })().catch(error => { console.error(error); process.exit(1); });
