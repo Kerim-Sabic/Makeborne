@@ -155,7 +155,15 @@ begin
   select count(*) into n from makeborne_private.retained_account_records where subject_ref = subj and source_table in ('plan_payments','credit_ledger','billing_memberships','usage_ledger');
   assert n = 4, 'financial/accounting records not retained: '||n;
   assert not exists(select 1 from makeborne_private.retained_account_records where subject_ref = subj and record::text like '%'||c||'%'), 'retained record not pseudonymized';
+  -- Research counters (20261026120100) carry the actor id without a foreign key: the erase removes the account's own only.
+  if to_regclass('makeborne_private.research_daily_uses') is not null then
+    execute 'insert into makeborne_private.research_daily_uses(actor_id, workspace_id, kind) values ($1, $2, ''site_check''), ($3, $4, ''client_research'')' using c, wc, a, wb;
+  end if;
   perform public.makeborne_account_deletion_step(del, lease2, 'erase');
+  if to_regclass('makeborne_private.research_daily_uses') is not null then
+    execute 'select count(*) from makeborne_private.research_daily_uses where actor_id = $1' into n using c; assert n = 0, 'research counter kept for the deleted account';
+    execute 'select count(*) from makeborne_private.research_daily_uses where actor_id = $1' into n using a; assert n = 1, 'another account research counter touched';
+  end if;
   assert not exists(select 1 from public.workspaces where id = wc) and not exists(select 1 from public.clients where workspace_id = wc), 'owned workspace kept';
   assert not exists(select 1 from public.usage_ledger where workspace_id = wc);
   assert (select reviewer_id from public.reviews where body = 'C review in B') = b, 'shared review not handed to owner';

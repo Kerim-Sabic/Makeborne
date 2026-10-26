@@ -464,6 +464,14 @@ begin
     delete from makeborne_private.generation_budgets where workspace_id = any(ws);
     delete from makeborne_private.crm_migration_audit where workspace_id = any(ws);
     delete from makeborne_private.workspace_creation_receipts where actor_id = u or workspace_id = any(ws);
+    -- Per-person research counters (20261026120100, which sorts after this migration): no foreign key, so removed here.
+    if to_regclass('makeborne_private.research_daily_uses') is not null then
+      execute 'delete from makeborne_private.research_daily_uses where actor_id = $1 or workspace_id = any($2)' using u, ws;
+    end if;
+    -- Published sites go before the workspaces: hosted_sites has a NO ACTION key to artifact_versions as well as its
+    -- cascade from artifacts, and whether the cascade or the key check runs first depends on trigger OIDs (a dump-restored
+    -- database fails the cascade). Deleting them first is the same end state; their dependants cascade from them.
+    delete from public.hosted_sites where workspace_id = any(ws);
     delete from public.workspaces where id = any(ws);
     -- Other people's workspaces: leave them, keep their content with its owner.
     delete from public.workspace_members where user_id = u;

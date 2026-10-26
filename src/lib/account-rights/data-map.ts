@@ -93,6 +93,7 @@ export const DATA_MAP: readonly DataMapEntry[] = Object.freeze([
   { table: "makeborne_private.live_provider_calls", export: null, deletion: "pseudonymize", reason: "Vendor spend ledger (accounting).", period: TAX },
   { table: "makeborne_private.live_provider_days", export: null, deletion: "system", reason: "Daily totals." },
   { table: "makeborne_private.live_provider_limits", export: null, deletion: "system", reason: "Global limits." },
+  { table: "makeborne_private.research_daily_uses", export: null, deletion: "delete", reason: "Per-person daily counter for website checks and client research (20261026120100); timestamps only, no content." },
   { table: "claude_pilot_runs", export: null, deletion: "retain", reason: "Internal pilot runs (usage); result excluded.", period: TAX },
   { table: "makeborne_private.claude_pilot_budget", export: null, deletion: "system", reason: "Global pilot budget." },
   // Email
