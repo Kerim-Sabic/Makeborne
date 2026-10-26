@@ -2,7 +2,7 @@
  * Run: node scripts/check-library-previews-browser.cjs            (current component)
  *      node scripts/check-library-previews-browser.cjs --baseline 6b78269   (pre-change component; expected to fail) */
 const fs = require("node:fs"), path = require("node:path"), assert = require("node:assert/strict"), { execFileSync } = require("node:child_process");
-const { build } = require("esbuild"), { browserType, engineLabel } = require("./browser-engine.cjs"), { createServer } = require("node:http"), ts = require("typescript"), Module = require("node:module");
+const { build } = require("esbuild"), { browserType, engineLabel, engineOnly } = require("./browser-engine.cjs"), { createServer } = require("node:http"), ts = require("typescript"), Module = require("node:module");
 
 const root = path.join(__dirname, "..");
 const baseline = process.argv.includes("--baseline") ? process.argv[process.argv.indexOf("--baseline") + 1] : null;
@@ -437,7 +437,14 @@ ${fs.readFileSync(path.join(root, "src/app/library-preview.css"), "utf8")}`;
       const stops = [];
       for (let n = 0; n < 26; n++) { await page.keyboard.press("Tab"); stops.push(await page.evaluate(() => { const e = document.activeElement; return e.id || e.className || e.tagName; })); if (stops.at(-1) === "after") break; }
       const cardStops = stops.filter(stop => /^account-project-(link|menu)$/.test(stop));
-      assert.equal(cardStops.join(","), Array(4).fill("account-project-link,account-project-menu").join(","), `each card: open, then its menu: ${stops.join(" > ")}`);
+      // WebKit's default Tab order (as in Safari) skips links, so the card's open link is a Tab stop only in Chromium and Firefox.
+      // In WebKit every card must still give exactly its menu, in order, and its open link must still be keyboard-focusable.
+      if (engineOnly(["chromium", "firefox"], "Tab reaching each card's open link (WebKit's default Tab order skips links)")) {
+        assert.equal(cardStops.join(","), Array(4).fill("account-project-link,account-project-menu").join(","), `each card: open, then its menu: ${stops.join(" > ")}`);
+      } else {
+        assert.equal(cardStops.join(","), Array(4).fill("account-project-menu").join(","), `each card: its menu: ${stops.join(" > ")}`);
+        assert.equal(await page.evaluate(() => [...document.querySelectorAll(".account-project-link")].filter(link => { link.focus(); return document.activeElement === link && link.tabIndex >= 0; }).length), 4, "each card's open link is keyboard-focusable");
+      }
       assert.ok(!stops.some(stop => /IFRAME|library-card/.test(stop)), "the preview frame is never focused");
       assert.equal(stops.at(-1), "after");
       for (const width of [1440, 800, 375, 320]) {
