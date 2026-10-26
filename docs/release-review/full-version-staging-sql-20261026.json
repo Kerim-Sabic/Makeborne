@@ -1,7 +1,7 @@
 {
   "generated": "2026-10-26T11:49:13.251Z",
   "head": "f901a59",
-  "note": "Disposable --network=none containers (public.ecr.aws/supabase/postgres:17.11.0.002), bootstrap as scripts/rehearse-candidate.mjs: platform schema, production schema dump, production baseline versions, populated fixture, legacy pause, then migrations, then every supabase/check-*.sql. base = release/minimum-launch-20261025 0877345; full = this branch in timestamp order; staging = live main chain + staging-applied 20261025200000, 20261026013451 and five GitHub qualification migrations (from cbbf74d, not in this branch) first, then this branch remaining ten in timestamp order (as --include-all / apply script). Containers removed.",
+  "note": "Disposable --network=none containers (public.ecr.aws/supabase/postgres:17.11.0.002), bootstrap as scripts/rehearse-candidate.mjs: platform schema, production schema dump, production baseline versions, populated fixture, legacy pause, then migrations, then every supabase/check-*.sql. base = release/minimum-launch-20261025 0877345; full = this branch in timestamp order; staging = live main chain + staging-applied 20261025200000, 20261026013451 and six GitHub qualification migrations (from qualification/github-continuous-20261025 297957c, not in this branch) first, then this branch remaining ten in timestamp order (as --include-all / apply script). Containers removed.",
   "scenarios": [
     {
       "scenario": "base",
@@ -1648,17 +1648,17 @@
     },
     {
       "scenario": "staging",
-      "container": "makeborne_candidate_fullstaging_staging_20261026114659",
+      "container": "makeborne_candidate_fullstaging_staging_20261026120623",
       "image": "public.ecr.aws/supabase/postgres:17.11.0.002",
       "networkMode": "none",
-      "startedAt": "2026-10-26T11:46:59.761Z",
-      "finishedAt": "2026-10-26T11:48:38.548Z",
+      "startedAt": "2026-10-26T12:06:23.954Z",
+      "finishedAt": "2026-10-26T12:07:59.805Z",
       "containerRemoved": true,
       "stagingTouched": false,
       "productionTouched": false,
       "providerCalls": 0,
-      "migrationsApplied": 105,
-      "recordedVersions": 125,
+      "migrationsApplied": 106,
+      "recordedVersions": 126,
       "allMigrationsApplied": true,
       "order": [
         {
@@ -2047,6 +2047,11 @@
           "githubQualificationOnly": true
         },
         {
+          "file": "20261026111931_github_sync_enable_verification.sql",
+          "sha256": "e06099996c7e7c6d66581b0cea244ff433e85efeb36c2a491ad26b1b5c3d5c7a",
+          "githubQualificationOnly": true
+        },
+        {
           "file": "20261022100000_brief_enhancement_actions.sql",
           "sha256": "75dca905bfcd06eab46e65a12ea249413d746b7e45019003dd82c1859c92663f"
         },
@@ -2087,7 +2092,7 @@
           "sha256": "12b6001d51dc9c0ab96d22bd471be1554acc5bad23fd55df007f3ca711403ec7"
         }
       ],
-      "fingerprint": "d086dfb9c31f1e525239391105e2e172",
+      "fingerprint": "756da4974cbe8d5854b33b048542d244",
       "fingerprintUnchangedByChecks": true,
       "droppedPublicFunctions": [],
       "anonExecutableSecurityDefiners": 3,
@@ -2095,43 +2100,43 @@
         "check-account-chat-history.sql": {
           "ok": true,
           "passes": 3,
-          "ms": 296
+          "ms": 287
         },
         "check-account-data-rights.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 346
+          "ms": 359
         },
         "check-account-privileges.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 280
+          "ms": 308
         },
         "check-admin-console.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 272
+          "ms": 277
         },
         "check-agency-operations-concurrency.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 241,
+          "ms": 283,
           "error": "ERROR:  syntax error at or near \":\"\nLINE 1: ...lect set_config('makeborne.allow_fixture_commit', :'allow_fi...\n                                                             ^"
         },
         "check-agency-operations.sql": {
           "ok": true,
           "passes": 10,
-          "ms": 411
+          "ms": 369
         },
         "check-ai-operation-cancellation.sql": {
           "ok": true,
           "passes": 5,
-          "ms": 319
+          "ms": 300
         },
         "check-ai-operations.sql": {
           "ok": true,
           "passes": 2,
-          "ms": 416
+          "ms": 406
         },
         "check-app-observability.sql": {
           "ok": true,
@@ -2141,395 +2146,395 @@
         "check-artifact-card-previews.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 295
+          "ms": 307
         },
         "check-artifact-title-search.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 2619
+          "ms": 2573
         },
         "check-billing-lifecycle-concurrency.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 249,
+          "ms": 259,
           "error": "ERROR:  password or GSSAPI delegated credentials required\nDETAIL:  Non-superusers must provide a password in the connection string or send delegated GSSAPI credentials.\nCONTEXT:  SQL statement \"SELECT extensions.dblink_connect('billingadmin',conn)\""
         },
         "check-billing-lifecycle.sql": {
           "ok": true,
           "passes": 6,
-          "ms": 297
+          "ms": 324
         },
         "check-billing-ux.sql": {
           "ok": true,
           "passes": 8,
-          "ms": 379
+          "ms": 359
         },
         "check-brand-kits.sql": {
           "ok": true,
           "passes": 5,
-          "ms": 337
+          "ms": 298
         },
         "check-brief-enhancements.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 375
+          "ms": 347
         },
         "check-browser-acl.sql": {
           "ok": false,
           "passes": 2,
-          "ms": 315,
+          "ms": 285,
           "error": "ERROR:  SECURITY DEFINER without an empty search_path: public.rls_auto_enable\nCONTEXT:  PL/pgSQL function inline_code_block line 45 at ASSERT\n"
         },
         "check-budget-reservations.sql": {
           "ok": true,
           "passes": 27,
-          "ms": 274
+          "ms": 323
         },
         "check-checkout-recovery.sql": {
           "ok": true,
           "passes": 2,
-          "ms": 266
+          "ms": 276
         },
         "check-client-directory.sql": {
           "ok": true,
           "passes": 11,
-          "ms": 379
+          "ms": 368
         },
         "check-client-knowledge.sql": {
           "ok": true,
           "passes": 12,
-          "ms": 441
+          "ms": 392
         },
         "check-client-outreach.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 261
+          "ms": 285
         },
         "check-client-portal.sql": {
           "ok": true,
           "passes": 12,
-          "ms": 422
+          "ms": 413
         },
         "check-client-projects.sql": {
           "ok": true,
           "passes": 9,
-          "ms": 488
+          "ms": 528
         },
         "check-client-research.sql": {
           "ok": true,
           "passes": 6,
-          "ms": 288
+          "ms": 271
         },
         "check-client-review-document-assets.sql": {
           "ok": true,
           "passes": 2,
-          "ms": 264
+          "ms": 277
         },
         "check-client-review-links.sql": {
           "ok": true,
           "passes": 6,
-          "ms": 291
+          "ms": 311
         },
         "check-creation-repurchase.sql": {
           "ok": true,
           "passes": 5,
-          "ms": 280
+          "ms": 304
         },
         "check-credit-autotopup.sql": {
           "ok": true,
           "passes": 4,
-          "ms": 341
+          "ms": 339
         },
         "check-credit-lots-concurrency.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 297,
+          "ms": 264,
           "error": "ERROR:  could not establish connection\nDETAIL:  could not translate host name \"supabase_db_makeborne-local\" to address: Temporary failure in name resolution\nCONTEXT:  SQL statement \"SELECT extensions.dblink_connect('admin',conn)\""
         },
         "check-credit-lots-expiry.sql": {
           "ok": true,
           "passes": 10,
-          "ms": 382
+          "ms": 381
         },
         "check-credit-wallets-concurrency.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 224,
+          "ms": 251,
           "error": "ERROR:  could not establish connection\nDETAIL:  could not translate host name \"supabase_db_makeborne-local\" to address: Temporary failure in name resolution\nCONTEXT:  SQL statement \"SELECT extensions.dblink_connect('holder',conn)\""
         },
         "check-credit-wallets.sql": {
           "ok": true,
           "passes": 11,
-          "ms": 335
+          "ms": 324
         },
         "check-crm-concurrency.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 242,
+          "ms": 285,
           "error": "ERROR:  Refusing to run: use a disposable database with no clients, no CRM audit rows and an unfrozen expand state (see docs/CRM_STAGE_TRANSITION.md, \"Concurrency check\").\nCONTEXT:  PL/pgSQL function inline_code_block line 14 at RAISE\n"
         },
         "check-crm-lead-profile.sql": {
           "ok": true,
           "passes": 3,
-          "ms": 281
+          "ms": 270
         },
         "check-crm-mail-boundaries.sql": {
           "ok": true,
           "passes": 4,
-          "ms": 269
+          "ms": 265
         },
         "check-crm-mail-security.sql": {
           "ok": true,
           "passes": 4,
-          "ms": 317
+          "ms": 284
         },
         "check-crm-mail-upgrade.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 267,
-          "error": "ERROR:  update or delete on table \"mail_sequences\" violates foreign key constraint \"mail_enrollments_sequence_workspace_fk\" on table \"mail_enrollments\"\nDETAIL:  Key (id, workspace_id)=(644704dd-78cc-402b-bbb5-1d5a87b748b8, 9607080d-296d-4268-854c-e86a321560f4) is still referenced from table \"mail_enrollments\".\nCONTEXT:  SQL statement \"update public.mail_sequences set workspace_id=other_ws where id=s\""
+          "ms": 253,
+          "error": "ERROR:  update or delete on table \"mail_sequences\" violates foreign key constraint \"mail_enrollments_sequence_workspace_fk\" on table \"mail_enrollments\"\nDETAIL:  Key (id, workspace_id)=(08dc7270-d0d1-4654-92fa-9f70a181bfba, 6bb3cb2a-f254-4bb6-b7c8-2a99f6bf5793) is still referenced from table \"mail_enrollments\".\nCONTEXT:  SQL statement \"update public.mail_sequences set workspace_id=other_ws where id=s\""
         },
         "check-crm-research.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 338
+          "ms": 318
         },
         "check-crm-sales-delivery.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 452
+          "ms": 422
         },
         "check-custom-domains.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 288
+          "ms": 312
         },
         "check-durable-jobs.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 269
+          "ms": 254
         },
         "check-financial-reconcile-freshness.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 268
+          "ms": 287
         },
         "check-generation-authority.sql": {
           "ok": true,
           "passes": 5,
-          "ms": 385
+          "ms": 421
         },
         "check-generation-caps.sql": {
           "ok": true,
           "passes": 8,
-          "ms": 335
+          "ms": 321
         },
         "check-generation-dispatch.sql": {
           "ok": true,
           "passes": 22,
-          "ms": 258
+          "ms": 309
         },
         "check-generation-result.sql": {
           "ok": true,
           "passes": 6,
-          "ms": 311
+          "ms": 345
         },
         "check-generation-settlement.sql": {
           "ok": true,
           "passes": 8,
-          "ms": 281
+          "ms": 316
         },
         "check-github-connection-refresh.sql": {
           "ok": true,
           "passes": 6,
-          "ms": 266
+          "ms": 296
         },
         "check-hosting-modes.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 285
+          "ms": 299
         },
         "check-live-ai-spend-concurrency.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 263,
+          "ms": 269,
           "error": "ERROR:  could not establish connection\nDETAIL:  could not translate host name \"supabase_db_makeborne-local\" to address: Temporary failure in name resolution\nCONTEXT:  SQL statement \"SELECT extensions.dblink_connect('admin', conn)\""
         },
         "check-live-ai-spend.sql": {
           "ok": true,
           "passes": 8,
-          "ms": 266
+          "ms": 320
         },
         "check-local-pilot-lock.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 255,
+          "ms": 259,
           "error": "ERROR:  Local pilot budget is not locked\nCONTEXT:  PL/pgSQL function inline_code_block line 5 at RAISE\n"
         },
         "check-locked-content.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 292
+          "ms": 281
         },
         "check-mail-granted-scopes-upgrade.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 258,
+          "ms": 261,
           "error": "ERROR:  syntax error at or near \"__MAIL_SCOPE_MIGRATION__\"\nLINE 1: __MAIL_SCOPE_MIGRATION__\n        ^"
         },
         "check-mail-granted-scopes.sql": {
           "ok": true,
           "passes": 4,
-          "ms": 287
+          "ms": 284
         },
         "check-paying-workspace-publication.sql": {
           "ok": true,
           "passes": 17,
-          "ms": 1060
+          "ms": 1153
         },
         "check-plan-approval-idempotency.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 271
+          "ms": 290
         },
         "check-plan-credit-allocations.sql": {
           "ok": true,
           "passes": 13,
-          "ms": 458
+          "ms": 432
         },
         "check-plan-credit-concurrency.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 277,
+          "ms": 272,
           "error": "ERROR:  could not establish connection\nDETAIL:  could not translate host name \"supabase_db_makeborne-local\" to address: Temporary failure in name resolution\nCONTEXT:  SQL statement \"SELECT extensions.dblink_connect('admin',conn)\""
         },
         "check-plan-credit-rollover.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 277
+          "ms": 295
         },
         "check-plan-payment-refunds.sql": {
           "ok": true,
           "passes": 12,
-          "ms": 431
+          "ms": 497
         },
         "check-proposal-storage.sql": {
           "ok": true,
           "passes": 11,
-          "ms": 270
+          "ms": 279
         },
         "check-publication-controller-boundary.sql": {
           "ok": true,
           "passes": 2,
-          "ms": 283
+          "ms": 279
         },
         "check-publication-production-profile.sql": {
           "ok": true,
           "passes": 4,
-          "ms": 296
+          "ms": 265
         },
         "check-publication-sandbox-journal.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 265
+          "ms": 294
         },
         "check-publication-worker-authority.sql": {
           "ok": true,
           "passes": 2,
-          "ms": 278
+          "ms": 263
         },
         "check-research-daily-limits.sql": {
           "ok": true,
           "passes": 3,
-          "ms": 320
+          "ms": 272
         },
         "check-review-link-views.sql": {
           "ok": true,
           "passes": 10,
-          "ms": 323
+          "ms": 303
         },
         "check-scope-matrix.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 333,
+          "ms": 278,
           "error": "ERROR:  insert or update on table \"objects\" violates foreign key constraint \"objects_bucketId_fkey\"\nDETAIL:  Key (bucket_id)=(project-assets) is not present in table \"buckets\".\nCONTEXT:  SQL statement \"insert into storage.objects(bucket_id,name,owner) values('project-assets',path,o)\""
         },
         "check-site-address-changes.sql": {
           "ok": true,
           "passes": 4,
-          "ms": 305
+          "ms": 287
         },
         "check-site-address-namespace.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 229
+          "ms": 260
         },
         "check-site-analytics.sql": {
           "ok": true,
           "passes": 10,
-          "ms": 453
+          "ms": 429
         },
         "check-site-badge-setting.sql": {
           "ok": true,
           "passes": 6,
-          "ms": 297
+          "ms": 282
         },
         "check-site-enquiries.sql": {
           "ok": true,
           "passes": 5,
-          "ms": 282
+          "ms": 274
         },
         "check-site-sitemap.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 262
+          "ms": 260
         },
         "check-topup-fulfillment.sql": {
           "ok": true,
           "passes": 9,
-          "ms": 311
+          "ms": 319
         },
         "check-topup-status.sql": {
           "ok": true,
           "passes": 3,
-          "ms": 263
+          "ms": 273
         },
         "check-trusted-publication.sql": {
           "ok": true,
           "passes": 8,
-          "ms": 324
+          "ms": 345
         },
         "check-unified-creation.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 301
+          "ms": 291
         },
         "check-unlimited-sites.sql": {
           "ok": true,
           "passes": 7,
-          "ms": 1393
+          "ms": 1355
         },
         "check-usage-history-scale.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 266,
+          "ms": 285,
           "error": "ERROR:  DISPOSABLE_DATABASE_REQUIRED\nCONTEXT:  PL/pgSQL function inline_code_block line 5 at RAISE\n"
         },
         "check-usage-history-v2-scale.sql": {
           "ok": false,
           "passes": 0,
-          "ms": 256,
+          "ms": 244,
           "error": "ERROR:  DISPOSABLE_DATABASE_REQUIRED\nCONTEXT:  PL/pgSQL function inline_code_block line 5 at RAISE\n"
         },
         "check-usage-history.sql": {
           "ok": true,
           "passes": 5,
-          "ms": 323
+          "ms": 351
         },
         "check-usage-payment-history.sql": {
           "ok": true,
           "passes": 1,
-          "ms": 275
+          "ms": 308
         }
       }
     }

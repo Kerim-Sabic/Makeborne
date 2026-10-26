@@ -64,15 +64,14 @@ Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launc
 | 7 | 20261025200000_paying_workspace_publication | Codex | **applied** 25 Oct | — |
 | 8 | 20261025300000_crm_research | crm-research | not applied | **sorts before applied 20261026013451** |
 | 9 | 20261026013451_prevent_unsupported_creation_repurchase | Codex | **applied** 26 Oct | — |
-| 10 | 20261026100000_account_data_rights | account-data-rights (+ f901a59) | not applied | **sorts before applied 20261026110734** (GitHub, see below) |
+| 10 | 20261026100000_account_data_rights | account-data-rights (+ f901a59) | not applied | **sorts before applied 20261026110734 / 20261026111931** (GitHub, see below) |
 | 11 | 20261026120000_crm_server_writes | hardening S9 | not applied | after every known applied version |
 | 12 | 20261026120100_research_daily_limits | hardening S12 | not applied | after every known applied version |
 
 **For Codex's apply:**
 
 - **8 of the 10 unapplied migrations sort before a version staging already records.** A plain `supabase db push` refuses them; it needs `--include-all`, or your `apply-staging-migrations.mjs` path. Never a bare push.
-- **Staging records migrations this branch does not have.** Your GitHub qualification applied 20261026015749 and 20261026110734 to staging (and, I assume, 20261022193315, 20261023191334 and 20261025100000 before them; please confirm from `schema_migrations`). They are not in this branch, so the CLI will also report remote versions missing locally. Use the apply script; do not `migration repair` them away. The app code on this branch does not use those GitHub tables (additive, unused).
-- If 20261026111931_github_sync_enable_verification (uncommitted in `work/github-continuous-20261025`) is applied first, 11 and 12 also become out of order.
+- **Staging records migrations this branch does not have.** Your GitHub qualification (runtime 84bc61e, docs 297957c) applied its migrations to staging: 20261026015749, 20261026110734 and, per your final handback, 20261026111931; I assume 20261022193315, 20261023191334 and 20261025100000 too. Please confirm from `schema_migrations`. They are not in this branch, so the CLI will also report remote versions missing locally. Use the apply script; do not `migration repair` them away. The app code on this branch does not use those GitHub tables (additive, unused). 11 and 12 still sort after 20261026111931.
 - `.gitattributes` now pins LF for 2–6, 8, 10, 11 and 12 (1, 7 and 9 were already pinned). Blobs were already LF; `git ls-files --eol` shows `i/lf w/lf` for all twelve.
 
 ### 3.2 Fresh disposable chain: results
@@ -83,7 +82,7 @@ Harness: `scripts/rehearse-full-version-chain.mjs` (added here). Same bootstrap 
 |---|---|---|---|---|---|
 | base: Codex 0877345 | timestamp | 90/90 | 64/77 | 0 | 3 |
 | **full: this branch** | timestamp | **100/100** | **71/85** (453 PASS lines) | 0 | 3 (unchanged) |
-| **staging order** | live main chain + 20261025200000 + 20261026013451 + the 5 GitHub migrations (from cbbf74d) first, then this branch's other 10 in timestamp order (= `--include-all`) | **105/105** | **71/85**, identical to full | 0 | 3 |
+| **staging order** | live main chain + 20261025200000 + 20261026013451 + the 6 GitHub migrations (from 297957c) first, then this branch's other 10 in timestamp order (= `--include-all`) | **106/106** | **71/85**, identical to full | 0 | 3 |
 
 Requested suites, base / full / staging order (all PASS, counts are PASS lines):
 
