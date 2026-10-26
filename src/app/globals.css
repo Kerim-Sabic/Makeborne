@@ -3002,3 +3002,9 @@ label input[type="color"] {
 .unsent-draft-notice button:hover { background: #f1f4fb; }
 .unsent-draft-notice button:disabled { opacity: .6; cursor: default; }
 .mk-unsent-draft { justify-content: center; text-align: center; }
+
+/* Phones zoom the whole page when a field under 16px gets focus (iOS Safari), so on touch screens every
+   text field, select and text area is at least 16px. The 6-digit code field stays at its larger size. */
+@media (max-width: 760px) and (pointer: coarse) {
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"]), select, textarea):not(.auth-otp-input) { font-size: 16px !important; }
+}
