@@ -31,6 +31,8 @@ import { requirePricedModel } from "@/lib/ai/model-check";
 import { SitePlanSchema, StoredPlanSchema, planToBrief } from "@/lib/builder/plan";
 import { approvedMaximumIssue, approvedPlanIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { websiteBrandBlock } from "@/lib/brand/kit";
+import { ART_QUALITIES, BOOK_SHAPES, DECK_ASPECTS } from "@/lib/documents/schema";
+import { artTextModel, documentImageOffers, imageOptionsIssue } from "@/lib/documents/art-formats";
 import { ensureBrandLogo, projectBrandKit } from "@/lib/brand/server";
 import { importTheirPhotos, photosContext } from "@/lib/leads/redesign-server";
 import { CONTENT_CONTRACT } from "@/lib/builder/content-prompt";
@@ -67,6 +69,9 @@ const BuildRequest = z.object({
   brief: BuildBriefSchema.optional(),
   /** The client's one-click design answers (theme, vibe, imagery, action, sections, colour). */
   design: DesignAnswersSchema.optional(),
+  /** Presentations and books: the client's image quality and slide or page shape (composer controls). Checked against
+   * the measured image cells below; applied to the document by the run. */
+  imageOptions: z.object({ quality: z.enum(ART_QUALITIES).optional(), aspect: z.enum(DECK_ASPECTS).optional(), shape: z.enum(BOOK_SHAPES).optional() }).strict().optional(),
 }).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review)
   .refine(body => body.planRevision === undefined || Boolean(body.plan))
   // Provenance belongs to the request that starts an operation, never to an automatic stage or review.
@@ -83,9 +88,11 @@ export async function GET() {
   const availability = await builderAvailability({ configured: builderEnabled(), priced: () => requirePricedModel(builderModel()), capacity: () => providerCapacity("anthropic") });
   // Measured credit ranges for the composer's estimate, in credits at the live rate (no provider call).
   // Unqualified generation features stay off unless their server-side flag is "on" (lib/builder/features.ts).
-  // Image questions for books and decks only where images can be made now: a configured model and open OpenAI spending.
-  const documentImages = availability.configured && Boolean(imageConfiguration().model) ? await providerCapacity("openai").then(capacity => capacity === "available", () => false) : false;
-  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()), features: { ...builderFeatures(), documentImages } }, { headers: { "Cache-Control": "no-store" } });
+  // Image questions and controls for books and decks only where images can be made now: a configured model and open OpenAI spending.
+  const imagesNow = availability.configured && Boolean(imageConfiguration().model) ? await providerCapacity("openai").then(capacity => capacity === "available", () => false) : false;
+  // Image quality and shape for presentations and books: what each costs per image, before anything is generated.
+  const documentImages = documentImageOffers(artTextModel(imageConfiguration().models), aiCostUsdPerCredit());
+  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()), features: { ...builderFeatures(), documentImages: imagesNow }, documentImages }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -119,6 +126,14 @@ export async function POST(request: Request) {
       ?? (artifact.current_version === 0 ? blankVersion(artifact.id, artifact.kind, artifact.title, user.id) : undefined);
     if (!current) throw new RequestError("NOT_FOUND", "The current revision is unavailable.", 404);
     if (reviewing && !current.content.websiteSource?.files.length) throw new RequestError("NOTHING_TO_REVIEW", "Build the website before reviewing its design.", 409);
+    // Image quality and shape: documents only, and only a choice a measured image size can render (refused before any hold).
+    if (body.imageOptions) {
+      if (artifact.kind === "website") throw new RequestError("INVALID_BUILD", "Image quality and shape apply to presentations and books.", 400);
+      const saved = current.content.document;
+      const issue = imageOptionsIssue(artifact.kind as "presentation" | "book", body.imageOptions, artTextModel(imageConfiguration().models),
+        saved?.kind === "deck" ? { aspect: saved.art?.aspect } : saved?.kind === "book" ? { shape: saved.shape } : {});
+      if (issue) throw new RequestError("IMAGE_OPTION_UNAVAILABLE", issue, 409);
+    }
 
     const policy = BUILDER_EFFORT[body.effort];
     // A review round is a focused pass with its own, smaller ceiling.
@@ -218,7 +233,7 @@ export async function POST(request: Request) {
     // Books and presentations: structured document builder (same credits, versions and SSE contract).
     if (artifact.kind === "book" || artifact.kind === "presentation") {
       const response = documentBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, project, current, versions, brand,
-        message: body.message, effort: body.effort, attachments, maxDuration });
+        message: body.message, effort: body.effort, attachments, maxDuration, ...(body.imageOptions ? { imageOptions: body.imageOptions } : {}) });
       reserved = null;
       return response;
     }

@@ -76,7 +76,8 @@ export const ART_EXPECTED_RENDER_USD = 0.025;
  * run's $1.50, and the run keeps a tenth in reserve for finish. Books and editable decks keep a third. */
 export const ART_IMAGE_SHARE = 0.7;
 /** Slides one run can expect to render within its image share (planning only; never a cap on the deck's length). */
-export const deckArtSlidesFor = (allowanceUsd: number) => Math.max(0, Math.floor(allowanceUsd * ART_IMAGE_SHARE / ART_EXPECTED_RENDER_USD + 1e-9));
+/** `renderUsd`: the expected cost of one render at the deck's chosen quality and canvas (art-formats.ts expectedRenderUsd). */
+export const deckArtSlidesFor = (allowanceUsd: number, renderUsd = ART_EXPECTED_RENDER_USD) => Math.max(0, Math.floor(allowanceUsd * ART_IMAGE_SHARE / renderUsd + 1e-9));
 /** Books: the client's image plan (documents/book-images.ts) plus one regeneration for about one image in four. */
 export const BOOK_IMAGE_CAP = 30;
 export function bookImageMax(planned: number) {

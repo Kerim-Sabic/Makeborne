@@ -137,7 +137,8 @@ export function fixPdfBookmarks(pdf: Buffer, headings: string[]): Buffer {
 }
 
 /** Each chapter's first page and the recto blanks, from the bookmarks of a print without blanks. Null when a chapter cannot be found. */
-export function bookPagesFromOutline(book: Pick<Book, "title" | "chapters">, outline: { title: string; page: number }[]): BookPages | null {
+/** `spreads`: chapters printed as a two-page spread, whose left page must fall on a left-hand (even) page. */
+export function bookPagesFromOutline(book: Pick<Book, "title" | "chapters">, outline: { title: string; page: number }[], spreads: readonly string[] = []): BookPages | null {
   // Chapter headings follow the title page and the contents in the bookmarks.
   let at = 0;
   outline.forEach((entry, index) => { if (/^contents(continued)?$/.test(norm(entry.title))) at = index + 1; });
@@ -153,7 +154,7 @@ export function bookPagesFromOutline(book: Pick<Book, "title" | "chapters">, out
   const pages: BookPages = { chapters: {}, blankBefore: [] };
   book.chapters.forEach((chapter, index) => {
     let page = first[index] + shift;
-    if (chapter.opening !== "inline" && page % 2 === 0) { pages.blankBefore.push(chapter.id); shift++; page++; }
+    if (spreads.includes(chapter.id) ? page % 2 === 1 : chapter.opening !== "inline" && page % 2 === 0) { pages.blankBefore.push(chapter.id); shift++; page++; }
     pages.chapters[chapter.id] = page;
   });
   return pages;

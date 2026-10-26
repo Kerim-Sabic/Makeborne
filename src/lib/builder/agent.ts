@@ -20,11 +20,11 @@ import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
 import { qualityProblems, type QualityInput } from "./quality-gates";
 import { BLOCKING_PROBLEM } from "./contrast-gate-rules";
-import { CONCEPT_TOOL, CompReadingSchema, MAX_COMPS, checkConcept, compsFromSource, imagePlanNote, sitePlanNote, withConceptComment, type CompReadingValues, type ConceptRecord, type DesignComp } from "./concept";
+import { CONCEPT_TOOL, CompReadingSchema, MAX_COMPS, checkConcept, compPlan, compsFromSource, compsNextStep, imagePlanNote, sitePlanNote, withConceptComment, type CompReadingValues, type ConceptRecord, type DesignComp } from "./concept";
 import { storeProjectImage } from "./images";
 import { COMP_PREVIEW_EDGE, imagePreview, type ImagePreview } from "./image-variants";
 import sharp from "sharp";
-import { COMP_INPUT_JSON, COMP_SHAPE, COMP_WORDS, CompInputSchema, compCell, compInputIssues, compPrompt, compText } from "./comp-prompt";
+import { COMP_INPUT_JSON, COMP_SHAPE, COMP_WORDS, CompInputSchema, compCell, compInputIssues, compPrompt, compText, heavyType, isFirstScreen } from "./comp-prompt";
 
 export { compPrompt } from "./comp-prompt";
 
@@ -188,7 +188,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const compsAvailable = designCompsEnabled() && Boolean(run.concept) && !run.limits?.replaceOnly && imageLimit > 0 && textImages;
   // In call order (the jobs finish in any order); a failed comp leaves its slot empty.
   const comps: DesignComp[] = [], compSlots: (DesignComp | undefined)[] = [];
-  let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = false, readingsAsked = false;
+  let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = 0, readingsAsked = false;
   // The project as it was the last time the rendered layout check found no blocking defect, and the defects of the
   // latest check: a run that ends with a defect it could not fix restores that version instead of saving the defect.
   let cleanFiles: Map<string, string> | null = null, layoutDefects: string[] = [];
@@ -313,7 +313,21 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const input = ToolInputs.generate_image.parse(use.input);
             if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Use CSS, typography and inline SVG."); break; }
             // Comp-first: the photographs follow the comps they belong to (asked once; a repeat goes ahead).
-            if (compsAvailable && concept && compsStarted < MIN_COMPS && !compsAsked) { compsAsked = true; fail(`Design comps come first on this build and only ${compsStarted} ${compsStarted === 1 ? "was" : "were"} made: in one response call generate_comp for the first screen (desktop), the phone first screen (mobile) and the two heart sections the brief names, then read_comp for each, then generate the photographs each comp shows.`); break; }
+            // Also before the concept is recorded: the live quality-v14 w05 run had its concept refused, generated the photos in
+            // the same step (no concept yet, so this gate did not apply), recorded the concept later and never made a comp.
+            // Asked up to twice while the comp budget still affords another comp (the live quality-v14 sites stopped at two).
+            const textModel = imageModels.find(model => TEXT_IMAGE_MODELS.includes(model));
+            const deskCell = textModel ? compCell(textModel, "desktop") : null;
+            const compBound = textModel && deskCell?.ok ? imageCallBoundMicrousd(textModel, deskCell.quality, deskCell.size, "x".repeat(4000)) : Infinity;
+            const compAffordable = imageReservedMicrousd + Math.max(0, imageLimit - imagesUsed) * imageBound + compBound <= spend.allowanceMicrousd / 3;
+            if (compsAvailable && compsStarted < MIN_COMPS && compsAsked < 2 && (compsAsked === 0 || compAffordable)) {
+              compsAsked++;
+              const made = new Set(comps.map(comp => `${comp.section} (${comp.viewport})`));
+              const missing = compPlan(concept?.sections).filter(entry => !made.has(entry));
+              fail(concept ? `Design comps come first on this build and only ${compsStarted} ${compsStarted === 1 ? "was" : "were"} made${missing.length ? `; still missing: ${missing.join(", ")}` : ""}. In one response call generate_comp for ${missing.length ? "those" : "the first screen (desktop), the phone first screen (mobile) and the two heart sections"}, then read_comp for each, then generate the photographs each comp shows.`
+                : "On this first build the order is: record the concept (fix what its tool result asked for), then the design comps (generate_comp for the first screen, the phone first screen and the two heart sections, then read_comp for each), then the photographs each comp shows. No photograph before that.");
+              break;
+            }
             if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             if (!responsive.siteImageFits([...run.files.assets.values()])) { fail("This site already holds as many images as a published site can carry. Reuse an existing image or use CSS/SVG artwork."); break; }
             if (run.files.assets.has(`public/images/${input.name}.webp`)) { fail(`An image named ${input.name} already exists at /images/${input.name}.webp. Reuse it or choose a new name.`); break; }
@@ -365,7 +379,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (!concept) { fail("Record the concept, with its art system and section plan, before generating design comps."); break; }
             if (compsStarted >= MAX_COMPS) { fail(`At most ${MAX_COMPS} design comps per build. Build the other sections from the art system and the comps you have.`); break; }
             if (comps.some(comp => comp.section === input.section && comp.viewport === input.viewport)) { fail(`There is already a ${input.viewport} comp for ${input.section}.`); break; }
-            const issues = compInputIssues(input);
+            const issues = compInputIssues(input, isFirstScreen(input.section, concept.sections));
             if (issues.length) { fail(`Rewrite this comp: ${issues.join("; ")}.`); break; }
             // The reference pattern: the exact words are quoted in the paragraph and placed exactly, so the 2.5 model that
             // sets text where asked (sunburst, else flare) is preferred. The canvas is the best measured one for this model
@@ -403,7 +417,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               const preview = await imagePreview(stored.data ?? bytes, { maxEdge: COMP_PREVIEW_EDGE }).catch(() => null);
               return { stored, preview };
             }).then(({ stored, preview }) => {
-              compSlots[slot] = { section: input.section, viewport: input.viewport, asset: stored.id };
+              compSlots[slot] = { section: input.section, viewport: input.viewport, asset: stored.id, ground: input.colors.ground.toUpperCase(), ...(heavyType(input.type) ? { heavy: true } : {}) };
               comps.splice(0, comps.length, ...compSlots.filter((entry): entry is DesignComp => Boolean(entry)));
               record.comps = [...comps];
               run.emit({ type: "status", message: `Design comp ready: ${input.section} (${input.viewport})` });
@@ -415,7 +429,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const input = ToolInputs.read_comp.parse(use.input);
             const comp = comps.find(entry => entry.section === input.section && entry.viewport === input.viewport);
             if (!comp || !concept) { fail(`There is no ${input.viewport} comp for "${input.section}" to read.`); break; }
-            comp.reading = input;
+            comp.reading = { ...input, ...(comp.ground ? { ground: comp.ground } : {}), ...(comp.heavy ? { heavy: true } : {}) };
             concept.comps = [...comps];
             results.push({ type: "tool_result", tool_use_id: use.id, content: `Reading recorded for ${input.section} (${input.viewport}). At finish the built section is measured against it at ${input.viewport === "desktop" ? "1440" : "390"} px: its largest headline's cap height at least 85% of ${input.headlineCapHeightPct}% of the frame, and the image covering about ${input.imageAreaPct}% of the section's first screen${input.viewport === "desktop" && input.imageSide !== "none" && input.imageSide !== "full" ? ` on the ${input.imageSide}` : ""}.` });
             break;
@@ -426,7 +440,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (!checked.ok) { fail(checked.problem); break; }
             concept = checked.record;
             run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why, ...(concept.imagePlan ? { shots: concept.imagePlan.shots.length } : {}), ...(concept.sections ? { compositions: concept.sections.map(section => section.composition) } : {}) });
-            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}). ${sitePlanNote(concept)}${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan, { comps: compsAvailable })}` : ""}${compsAvailable && !concept.imagePlan ? " Your next step is the design comps: in one response call generate_comp at least four times: the first screen (desktop), the phone first screen (viewport mobile) and the two heart sections the brief names (listings, menu, services or collection), plus the other key sections while the image budget allows. Then record each comp with read_comp." : ""}` });
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}). ${sitePlanNote(concept)}${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan, { comps: compsAvailable, sections: concept.sections })}` : ""}${compsAvailable && !concept.imagePlan ? ` ${compsNextStep(concept.sections)}` : ""}` });
             break;
           }
           case "finish": {

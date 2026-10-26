@@ -42,8 +42,11 @@ const copy = value => structuredClone(value);
     // unchanged. check-book-list-markers.cjs reproduces the old clipping.
     // Re-pinned 2026-10-22 (book CSS only) for print pagination: widows/orphans 3, long tables breaking between
     // rows, run-in subheads, checklists, sidebar lists and contents page numbers. The DOM hashes above are unchanged.
-    assert.equal(hash(bookHtml(book, {})), "f5f270e37976e9ea4733ba295d25863be97ab12e86be9bb26612511b3d3b549a");
-    assert.equal(hash(bookHtml(book, {}, "print")), "28389efce40ff950b66c1e5f2ca199ded1d051a1e3928d451640229d83f60460");
+    // Re-pinned 2026-10-26 (book CSS only) for generated pages: .page-full, .page-art, .art-words, .spread-half and the
+    // preview's .spread. With those rules removed both outputs are byte-identical to the previous hashes
+    // (f5f270e3... preview, 28389efc... print); the DOM hashes above are unchanged.
+    assert.equal(hash(bookHtml(book, {})), "0c623d76eae92420a91a055d622936d7cc991f13c111ce20ab1371ecc7c99a46");
+    assert.equal(hash(bookHtml(book, {}, "print")), "3e77902ed5dc19502e96ae7c7a5d7bd05c99cc05cb7d6ebbcb187f9184274cb8");
     assert.equal(hash(deckHtml(deck, {})), "a966b9cf1140ff03e3c69407690dd852d3979fcf8e0938eb78fcd8c0dac80dda");
     assert.equal(hash(JSON.stringify(deck.slides.map((s, i) => composeSlide(deck, s, i, 2)))), "e7ed212fe3227b8184f008e819965cfae71a25559a959fbe920c03b543a06655");
   });

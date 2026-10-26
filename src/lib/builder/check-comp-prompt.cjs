@@ -62,16 +62,66 @@ const CONCEPT = { chosen: { name: "Friday promise" }, artSystem: { palette: "cob
     assert.equal(colourName("#1D3FA8"), "cobalt blue"); assert.equal(colourName("#F4EDE3"), "warm cream"); assert.equal(colourName("#111111"), "near-black");
   });
 
+  await check("the comp plan names the four comps by section id; the gate asks twice and names the missing ones; comps keep their ground", () => {
+    const { compPlan, compsNextStep, compsFromSource, conceptComment } = require("./concept.ts");
+    const sections = [{ id: "top", composition: "editorial-split", job: "x" }, { id: "menu", composition: "price-list", job: "x" }, { id: "book", composition: "form-panel", job: "x" }, { id: "room", composition: "full-bleed-photo", job: "x" }];
+    assert.deepEqual(compPlan(sections), ["top (desktop)", "top (mobile)", "menu (desktop)", "room (desktop)"], "forms, contact cards and quotes are not heart sections");
+    assert.match(compsNextStep(sections), /call generate_comp 4 times, for exactly these: top \(desktop\), top \(mobile\), menu \(desktop\), room \(desktop\)/);
+    const agent = fs.readFileSync(path.join(__dirname, "agent.ts"), "utf8");
+    assert.match(agent, /compsAsked < 2 && \(compsAsked === 0 \|\| compAffordable\)/, "asked up to twice while another comp is affordable");
+    assert.match(agent, /still missing: \$\{missing\.join\(", "\)\}/);
+    assert.match(agent, /ground: input\.colors\.ground\.toUpperCase\(\)/);
+    const record = { chosen: { name: "A", headline: "B c d", device: "e", archetype: "f", ground: "g", action: "h", angle: "i", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } }, runnersUp: [], why: "why",
+      comps: [{ section: "top", viewport: "desktop", asset: "00000000-0000-4000-8000-000000000001", ground: "#1D3FA8", reading: { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 50, imageSide: "right", ground: "#1D3FA8" } }] };
+    const back = compsFromSource(`${conceptComment(record)}
+export default function App() {}`);
+    assert.equal(back[0].reading.ground, "#1D3FA8"); assert.equal(back[0].ground, "#1D3FA8");
+    const prompt = compPrompt(BIKES, CONCEPT, "2560x1440");
+    assert.match(prompt, /Colours flat and at full strength exactly as given, like a printed poster/);
+    assert.match(prompt, /The headline set at poster scale in the heaviest cut of its typeface/);
+    const builder = fs.readFileSync(path.join(__dirname, "prompt.ts"), "utf8");
+    assert.match(builder, /SIGNATURE COLOUR AND SCALE/); assert.match(builder, /never a wider, lighter or different family than the comp shows/);
+  });
+
+  await check("section comps are drawn without the header and need no navigation; heavy type is the default and travels to the review", () => {
+    const { compInputIssues, isFirstScreen, heavyType } = require("./comp-prompt.ts");
+    const { compsFromSource, conceptComment } = require("./concept.ts");
+    const section = { ...BIKES, section: "repairs", nav: undefined };
+    assert.ok(isFirstScreen("top") && !isFirstScreen("repairs", [{ id: "top" }]));
+    assert.deepEqual(compInputIssues(section, false), [], "a section comp needs no navigation (every live run lost two calls to it)");
+    assert.match(compInputIssues(section, true).join(" "), /the desktop first screen spells out its 2-4 top navigation items/);
+    const prompt = compPrompt(section, { ...CONCEPT, sections: [{ id: "top", composition: "editorial-split", job: "x" }, { id: "repairs", composition: "price-list", job: "the prices" }] }, "2560x1440");
+    assert.match(prompt, /No header or navigation: this screen is a section further down the page\./);
+    assert.doesNotMatch(prompt, /Top navigation:/);
+    assert.ok(heavyType("elegant condensed high-contrast serif") && !heavyType("thin hairline serif"));
+    assert.doesNotMatch(compPrompt({ ...BIKES, type: "huge bold condensed sans" }, CONCEPT, "2560x1440"), /a huge huge/);
+    const record = { chosen: { name: "A", headline: "B c d", device: "e", archetype: "f", ground: "g", action: "h", angle: "i", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } }, runnersUp: [], why: "why",
+      comps: [{ section: "top", viewport: "desktop", asset: "00000000-0000-4000-8000-000000000001", ground: "#3B1830", heavy: true, reading: { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 50, imageSide: "right", ground: "#3B1830", heavy: true } }] };
+    const back = compsFromSource(`${conceptComment(record)}\nexport default function App() {}`);
+    assert.equal(back[0].reading.heavy, true); assert.equal(back[0].reading.ground, "#3B1830");
+    const agent = fs.readFileSync(path.join(__dirname, "agent.ts"), "utf8");
+    assert.ok(agent.includes("compInputIssues(input, isFirstScreen(input.section, concept.sections))"));
+  });
+
+  await check("photographs wait for the comps on a first build, also while the concept is not recorded yet (live w05)", () => {
+    const agent = fs.readFileSync(path.join(__dirname, "agent.ts"), "utf8");
+    assert.ok(agent.includes("if (compsAvailable && compsStarted < MIN_COMPS && compsAsked < 2 && (compsAsked === 0 || compAffordable)) {"), "the comp gate does not wait for a recorded concept");
+    assert.match(agent, /record the concept \(fix what its tool result asked for\), then the design comps/);
+  });
+
   await check("comp canvas and quality: native sizes first once measured, else the measured canvas cut to the shape; never an unmeasured cell", async () => {
     assert.deepEqual(COMP_CANVASES.desktop, ["2560x1440", "1536x1024"]); assert.deepEqual(COMP_CANVASES.mobile, ["1152x2496", "1024x1536"]);
     for (const size of [...COMP_CANVASES.desktop, ...COMP_CANVASES.mobile]) assert.equal(sizeIssue(size), null, size);
-    // Today 2560x1440 high is unmeasured: desktop comps are high on 1536x1024, cut to 16:9.
+    // Measured 26 Oct 2026 (scope quality-v14-20261026): desktop comps render natively at 2560x1440 high, the phone comp at 1152x2496 high.
     const desk = compCell("gpt-image-2.5-sunburst", "desktop");
-    assert.deepEqual([desk.ok, desk.quality, desk.size, desk.native, desk.crop], [true, "high", "1536x1024", false, { left: 0, top: 80, width: 1536, height: 864 }]);
-    // No high phone canvas is measured: medium on 1024x1536, cut to 390:844.
+    assert.deepEqual([desk.ok, desk.quality, desk.size, desk.native, desk.crop], [true, "high", "2560x1440", true, { left: 0, top: 0, width: 2560, height: 1440 }]);
     const phone = compCell("gpt-image-2.5-flare", "mobile");
-    assert.deepEqual([phone.ok, phone.quality, phone.size, phone.native], [true, "medium", "1024x1536", false]);
+    assert.deepEqual([phone.ok, phone.quality, phone.size], [true, "high", "1152x2496"]);
     assert.ok(Math.abs(phone.crop.width / phone.crop.height - 390 / 844) < 0.01);
+    // A model with only the published sizes: high on the measured 3:2 / 2:3 canvases, cut to shape.
+    const fallback = compCell("gpt-image-2", "desktop"), fallbackPhone = compCell("gpt-image-2", "mobile");
+    assert.deepEqual([fallback.size, fallback.native, fallback.crop], ["1536x1024", false, { left: 0, top: 80, width: 1536, height: 864 }]);
+    assert.deepEqual([fallbackPhone.quality, fallbackPhone.size, fallbackPhone.native], ["high", "1024x1536", false]);
     assert.equal(compCell("gpt-image-unknown", "desktop").ok, false, "a model without measurements has no comp canvas");
     assert.deepEqual(COMP_FRAME, COMP_SHAPE, "the finish gate measures comps in the comps' own frame");
   });

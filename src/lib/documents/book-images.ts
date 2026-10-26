@@ -16,7 +16,8 @@ export function plannedBookImages(book: Pick<Book, "imagePlan" | "chapters">): P
   const textPages = Math.round(book.chapters.reduce((sum, chapter) => sum + wordCount(chapter.text), 0) / WORDS_PER_TEXT_PAGE);
   const pageOpeners = book.chapters.filter(chapter => chapter.opening !== "inline").length;
   const cover = plan.placement === "none" ? 0 : 1;
-  const openers = plan.placement === "none" || plan.placement === "cover" ? 0 : pageOpeners;
+  // A picture book: every chapter is one illustrated spread with its words on the art (counted as its opener).
+  const openers = plan.placement === "none" || plan.placement === "cover" ? 0 : plan.placement === "picture" ? book.chapters.length : pageOpeners;
   const figures = plan.placement === "every" ? Math.floor(textPages / (plan.everyPages ?? 6)) : plan.placement === "rich" ? Math.floor(textPages / 2) : 0;
   return { cover, openers, figures, total: cover + openers + figures, textPages };
 }
@@ -34,6 +35,7 @@ export function bookImagePlanText(book: Pick<Book, "imagePlan" | "chapters">) {
     : plan.placement === "cover" ? "A cover image only: no chapter openers or figures."
     : plan.placement === "openers" ? "A cover image and a landscape opener image for every chapter that opens on its own page; no figures in the text."
     : plan.placement === "every" ? `A cover, an opener for every chapter that opens on its own page, and inside the text one figure about every ${plan.everyPages ?? 6} pages (about one per ${(plan.everyPages ?? 6) * WORDS_PER_TEXT_PAGE} words), placed where it helps.`
+    : plan.placement === "picture" ? "A picture book: a cover, and every chapter is ONE double-page spread whose few words (at most 45) are set on the illustration; keep each chapter's text to those words, no subheadings, lists or figures."
     : "Richly illustrated: a cover, an opener for every chapter that opens on its own page, and about one figure per spread (one per two text pages, about one per 460 words).";
   const style = `${STYLE_WORDS[plan.style]}${plan.technique ? `: ${plan.technique}` : ""}`;
   const counts = book.chapters.length ? ` For the book as written so far that is about ${planned.total} image${planned.total === 1 ? "" : "s"} (${planned.cover} cover, ${planned.openers} opener${planned.openers === 1 ? "" : "s"}, ${planned.figures} figure${planned.figures === 1 ? "" : "s"}).` : "";
@@ -47,7 +49,7 @@ export function bookImageIssues(book: Book): { blocking: string[]; advisory: str
   const openers = book.chapters.filter(chapter => chapter.image).length;
   if (plan.placement === "none" && (book.cover.image || openers || figures.length)) blocking.push("The client asked for no images: remove the cover image, chapter opener images and figures.");
   if (plan.placement === "cover" && (openers || figures.length)) blocking.push("The client asked for a cover image only: remove chapter opener images and figures.");
-  if (plan.placement === "openers" && figures.length) blocking.push("The client asked for a cover and chapter openers only: remove the figures from the text.");
+  if ((plan.placement === "openers" || plan.placement === "picture") && figures.length) blocking.push(plan.placement === "picture" ? "A picture book's chapters are spreads with their words on the art: remove the figures from the text." : "The client asked for a cover and chapter openers only: remove the figures from the text.");
   if (plan.placement === "every" || plan.placement === "rich") {
     const planned = plannedBookImages(book).figures;
     if (planned >= 2 && figures.length < Math.ceil(planned * 0.6)) advisory.push(`The image plan asks for about ${planned} figures in the text and the book has ${figures.length}. Add figures where they genuinely help the reader (an explanatory drawing, a step, a place), each with a short honest caption, or say in your summary why fewer fit.`);

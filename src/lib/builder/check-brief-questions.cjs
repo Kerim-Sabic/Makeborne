@@ -83,7 +83,7 @@ check("books ask how many pictures first and their style last, besides kind, rea
   assert.deepEqual(ids("book", "A short, friendly guide for freelancers on cash flow, no images"), [], "no images: neither image question");
   assert.deepEqual(ids("book", "A short, friendly guide for freelancers on cash flow, one picture every 4 pages in watercolour"), []);
   const images = standardQuestion("book", "images"), style = standardQuestion("book", "imagestyle");
-  assert.deepEqual(images.options.map(option => option.value), ["none", "cover", "openers", "every6", "every3", "rich"]);
+  assert.deepEqual(images.options.map(option => option.value), ["none", "cover", "openers", "every6", "every3", "rich", "picture"]);
   assert.deepEqual(style.options.map(option => option.value), ["photo", "illustration", "technique", "auto"]);
   for (const question of [images, style]) assert.ok(isBriefQuestion(question), question.id);
 });
@@ -103,7 +103,7 @@ check("answers are written into the brief in plain words; skipped questions are 
 check("every question is complete and option values are unique", () => {
   for (const kind of ["website", "presentation", "book"]) for (const question of briefQuestions(kind, "")) {
     assert.ok(question.question.endsWith("?") && question.why && question.topic && question.custom, `${kind}/${question.id}`);
-    assert.ok(question.options.length >= (question.color ? 2 : 3) && question.options.length <= (question.multi ? 8 : 6), question.id);
+    assert.ok(question.options.length >= (question.color ? 2 : 3) && question.options.length <= (question.multi ? 8 : 7), question.id);
     assert.equal(new Set(question.options.map(option => option.value)).size, question.options.length);
     assert.ok(isBriefQuestion(question), `${kind}/${question.id} passes the client-side check`);
   }

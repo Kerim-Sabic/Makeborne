@@ -16,7 +16,7 @@ async function main() {
     plugins: [{ name: "fixture", setup(b) {
       b.onResolve({ filter: /render-deck$|render-book$|book-markup$|cloud-api$/ }, args => ({ path: args.path, namespace: "mock" }));
       b.onLoad({ filter: /render-deck$/, namespace: "mock" }, () => ({ contents: renderDeck, loader: "js" }));
-      b.onLoad({ filter: /render-book$/, namespace: "mock" }, () => ({ contents: "export const BOOK_TRIM = {}; export function bookHtml() { return ''; } export function chapterLabel() { return ''; }", loader: "js" }));
+      b.onLoad({ filter: /render-book$/, namespace: "mock" }, () => ({ contents: "export const BOOK_TRIM = {}; export function bookTrim() { return { width: 6, height: 9 }; } export function bookHtml() { return ''; } export function chapterLabel() { return ''; }", loader: "js" }));
       b.onLoad({ filter: /book-markup$/, namespace: "mock" }, () => ({ contents: "export function wordCount() { return 0; }", loader: "js" }));
       b.onLoad({ filter: /cloud-api$/, namespace: "mock" }, () => ({ contents: "export async function readCloudImage() { throw new Error('no images'); }", loader: "js" }));
       b.onLoad({ filter: /\.css$/ }, () => ({ contents: "", loader: "js" }));

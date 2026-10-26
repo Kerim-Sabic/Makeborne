@@ -16,10 +16,12 @@ Module._load = function(name, parent, main) {
     return { message: { content: next.content, stop_reason: "tool_use", usage: { input_tokens: 10, output_tokens: 10 } } };
   } };
   if (name === "./images" && fromAgent) return { imageConfiguration: () => ({ model: testModels[0], models: [...testModels], issue: null }), IMAGE_SIZES: { landscape: "1536x1024", portrait: "1024x1536", square: "1024x1024" }, openaiImageClient: () => ({}) };
-  // The image provider: every call returns the fixture picture; nothing is sent anywhere.
+  // The image provider: every call returns the fixture picture (resized to a native comp size, as the provider returns it); nothing is sent anywhere.
   if (name === "../ai/image-call" && fromAgent) return { startBudgetedImage: async input => {
     imageCalls.push(input);
-    return { done: Promise.resolve(imageBytes), detail: Promise.resolve({ model: input.model, quality: input.quality, size: input.size, boundMicrousd: 1, costMicrousd: 42_000, outputTokens: 1000, boundOutputTokens: 2000, overrun: false }) };
+    const [width, height] = String(input.size).split("x").map(Number);
+    const native = !["1536x1024", "1024x1536", "1024x1024"].includes(input.size);
+    return { done: native ? require("sharp")(imageBytes).resize(width, height, { fit: "fill" }).png().toBuffer() : Promise.resolve(imageBytes), detail: Promise.resolve({ model: input.model, quality: input.quality, size: input.size, boundMicrousd: 1, costMicrousd: 42_000, outputTokens: 1000, boundOutputTokens: 2000, overrun: false }) };
   } };
   return load.call(this, name, parent, main);
 };
@@ -345,7 +347,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       const early = events.find(event => event.type === "tool_error" && event.tool === "generate_comp");
       assert.match(early.message, /Record the concept/);
       const conceptResult = seen[2].messages.at(-1).content.find(block => block.type === "tool_result");
-      assert.match(conceptResult.content, /Your next step is the design comps: in one response call generate_comp at least four times/, "the concept result makes the comps the next step");
+      assert.ok(conceptResult.content.includes("Your next step is the design comps: in one response call generate_comp") && /for exactly these: .+ \(desktop\), .+ \(mobile\)/.test(conceptResult.content), "the concept result makes the comps the next step, by section id");
       const results = seen[3].messages.at(-1).content.filter(block => block.type === "tool_result");
       const made = results.filter(block => Array.isArray(block.content));
       assert.ok(made.length >= 2 && made.length <= MAX_COMPS, `comps inside the image third (${made.length})`);
@@ -364,26 +366,25 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       for (const part of [/cobalt blue background #1D3FA8/, /Top navigation: wordmark "Spoke & Chain" left with a small chainring mark; "Repairs", "Bikes", "Workshop" right of centre; a [a-z ]*lime pill "Book a repair" \(#C6F04A\) right\./, /Left 46%: solid cobalt #1D3FA8 type field/, /Right 54%: full-bleed photograph\./,
         /a huge bold condensed sans headline on two lines "Wheels trued" \/ "while you wait\." with "while you wait\." in lime/, /The photograph: a crisp studio photograph of a vintage teal steel road bike/, /Flat, straight-on, pixel-perfect screenshot of the homepage filling the entire 16:9 image edge to edge/, /no garbled letters, no lorem ipsum\./, /Render this text in the image, spelled exactly/])
         assert.match(desk.prompt, part);
-      // 2560x1440 high is not measured yet: the measured 1536x1024 high canvas, cut to 16:9 (the prompt keeps the cut margins clear), with allowHigh.
-      assert.equal(desk.quality, "high"); assert.equal(desk.size, "1536x1024"); assert.equal(desk.allowHigh, true);
-      assert.match(desk.prompt, /The top 7\.8% and bottom 7\.8% of the canvas are cropped away/);
+      // Measured 26 Oct 2026: the reference's own cell, 2560x1440 high, natively (nothing cut), with allowHigh.
+      assert.equal(desk.quality, "high"); assert.equal(desk.size, "2560x1440"); assert.equal(desk.allowHigh, true);
+      assert.doesNotMatch(desk.prompt, /cropped away/);
       const storedDesk = stored.find(item => item.viewport === "desktop");
-      assert.deepEqual([storedDesk.quality, storedDesk.size, storedDesk.crop], ["high", "1536x1024", { left: 0, top: 80, width: 1536, height: 864 }]);
+      assert.deepEqual([storedDesk.quality, storedDesk.size, storedDesk.crop], ["high", "2560x1440", null], "native: stored as generated, no crop");
       const shot = made.find(block => block.content[0].source)?.content[0];
       const dims = await sharp(Buffer.from(shot.source.data, "base64")).metadata();
       assert.equal(Math.round(dims.width / dims.height * 100), Math.round(16 / 9 * 100), "the stored comp is 16:9");
-      // The phone comp: no high canvas is measured for phones, so medium on the measured 1024x1536 canvas, cut to the 390x844 screen, with the first-screen rule.
+      // The phone comp: high on the measured 1152x2496 canvas (the 390x844 screen's own shape), with the first-screen rule.
       const phone = imageCalls.find(call => /^The first phone screen of the homepage/.test(call.prompt));
       if (phone) {
-        assert.equal(phone.quality, "medium"); assert.equal(phone.size, "1024x1536");
-        assert.match(phone.prompt, /left \d+(\.\d)?% and right \d+(\.\d)?% of the canvas are cropped away/);
+        assert.equal(phone.quality, "high"); assert.equal(phone.size, "1152x2496");
         assert.match(phone.prompt, /one phone screen, 390 × 844 px: the top bar, the whole headline and the "Book a repair" pill sit fully inside it/);
         assert.match(phone.prompt, /Flat, straight-on, pixel-perfect screenshot of the phone screen/);
       }
       assert.ok(events.filter(event => event.type === "image_start" && event.comp).length === made.length);
       const recorded = compsFromSource(files.files.get("src/App.tsx"));
       assert.equal(recorded.length, made.length); assert.equal(recorded[0].section, "top"); assert.match(recorded[0].asset, /^c0000000-/);
-      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right" }, "the reading travels in the concept comment to the review");
+      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right", ground: "#1D3FA8", heavy: true }, "the reading (with the comp's ground and weight) travels in the concept comment to the review");
       const readResults = seen[4].messages.at(-1).content.filter(block => block.type === "tool_result");
       assert.match(readResults[0].content, /largest headline's cap height at least 85% of 9% of the frame/);
       assert.match(readResults[1].content, /There is no desktop comp for "nowhere"/);
