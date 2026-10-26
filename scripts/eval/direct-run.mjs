@@ -120,9 +120,12 @@ try {
     fs.mkdirSync(itemDir, { recursive: true });
     const boundUsd = operationCapMicrousd / 1e6;
     const reservation = await book({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${ledgerNote()}. ${values.approval}. ${values.effort}` });
-    // Images: the run's whole image allowance (max images x the dearest allowed medium bound) reserved under the OpenAI sub-cap.
+    // Images: the run's worst case reserved under the OpenAI cap. The first build's images (design comps at high quality
+    // included) stay within a third of its allowance (agent.ts); each continuation may add its photo count at the dearest
+    // allowed medium bound and the review one replacement. Never more than the whole operation.
     const imageModels = imagesModule ? imagesModule.imageConfiguration().models : [];
-    const imageBoundUsd = imageModels.length ? (policy.maxWebsiteImages ?? policy.maxImages) * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
+    const photoBound = imageModels.length ? Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) : 0;
+    const imageBoundUsd = imageModels.length ? Math.min(operationCapMicrousd, Math.ceil(operationCapMicrousd / 3) + (2 * (policy.maxWebsiteImages ?? policy.maxImages) + 1) * photoBound) / 1e6 : 0;
     const imageReservation = imageBoundUsd ? await book({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${ledgerNote()}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
     let openaiMicrousd = 0, openaiUncertain = false;
     const imageBytes = new Map();
