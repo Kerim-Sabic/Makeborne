@@ -7,19 +7,21 @@
  * - MAKEBORNE_DESIGN_COMPS: comp-first website builds (generate_comp / read_comp are not offered).
  * - MAKEBORNE_DECK_FULL_IMAGE: full-image slides (new decks are editable text slides; the slide-style
  *   question is not asked).
+ * documentImages is not a flag: it says whether this deployment can generate images right now (an image model is
+ * configured and OpenAI spending is open), so books and decks never ask image questions they could not honour.
  * These sit on top of the existing gates (AI provider limits, builder configuration, the image model
  * allowlist), which still apply when a flag is on.
  */
-export type BuilderFeatures = { briefEnhancer: boolean; fullImageSlides: boolean };
-export const FEATURES_OFF: BuilderFeatures = Object.freeze({ briefEnhancer: false, fullImageSlides: false });
+export type BuilderFeatures = { briefEnhancer: boolean; fullImageSlides: boolean; documentImages: boolean };
+export const FEATURES_OFF: BuilderFeatures = Object.freeze({ briefEnhancer: false, fullImageSlides: false, documentImages: false });
 
 type Env = Record<string, string | undefined>;
 export const briefEnhancerEnabled = (env: Env = process.env) => env.MAKEBORNE_BRIEF_ENHANCER === "on";
 export const designCompsEnabled = (env: Env = process.env) => env.MAKEBORNE_DESIGN_COMPS === "on";
 export const fullImageSlidesEnabled = (env: Env = process.env) => env.MAKEBORNE_DECK_FULL_IMAGE === "on";
 
-/** What GET /api/build tells the studio (server side). */
-export function builderFeatures(env: Env = process.env): BuilderFeatures {
+/** The flag part of what GET /api/build tells the studio (server side); the route adds documentImages. */
+export function builderFeatures(env: Env = process.env): Omit<BuilderFeatures, "documentImages"> {
   return { briefEnhancer: briefEnhancerEnabled(env), fullImageSlides: fullImageSlidesEnabled(env) };
 }
 
@@ -27,5 +29,5 @@ export function builderFeatures(env: Env = process.env): BuilderFeatures {
 export function parseBuilderFeatures(value: unknown): BuilderFeatures {
   if (!value || typeof value !== "object") return FEATURES_OFF;
   const body = value as Partial<Record<keyof BuilderFeatures, unknown>>;
-  return { briefEnhancer: body.briefEnhancer === true, fullImageSlides: body.fullImageSlides === true };
+  return { briefEnhancer: body.briefEnhancer === true, fullImageSlides: body.fullImageSlides === true, documentImages: body.documentImages === true };
 }

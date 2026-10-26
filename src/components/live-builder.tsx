@@ -738,8 +738,10 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       setAsking({ text: brief, mode: requestMode, questions: null }); setDraft("");
       // The on-device design questions for this brief, with AI-tailored business questions merged in when available.
       void tailoredQuestions(brief, attachments).then(tailored => {
-        // The slide-style question offers full-image slides: asked only where the server offers them (MAKEBORNE_DECK_FULL_IMAGE).
-        const questions = mergedQuestions(kind, brief, tailored, { attachments }).filter(question => features.fullImageSlides || question.id !== "slides");
+        // Creation options the server cannot honour are not asked: full-image slides need MAKEBORNE_DECK_FULL_IMAGE and images;
+        // a book's image count and style need images that can be made now (features.documentImages).
+        const questions = mergedQuestions(kind, brief, tailored, { attachments }).filter(question => question.id === "slides" ? features.fullImageSlides && features.documentImages
+          : question.id === "images" || question.id === "imagestyle" ? features.documentImages : true);
         if (!questions.length) { setAsking(null); if (prepared) hold(); else proceedLatest.current(brief, requestMode, {}, brief); return; }
         setAsking(current => current && current.text === brief && !current.questions ? { ...current, questions } : current);
       });
@@ -747,7 +749,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     }
     if (prepared) { hold(); return; }
     void submitSources(text, requestMode, target ? { target } : undefined);
-  }, [asking, enhancing, features.fullImageSlides, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
+  }, [asking, enhancing, features.documentImages, features.fullImageSlides, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
   const answerQuestions = (answers: BriefAnswers | null) => {
     if (!asking) return;
     const { text, mode: requestMode, questions } = asking;

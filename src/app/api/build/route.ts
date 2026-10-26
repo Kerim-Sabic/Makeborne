@@ -83,7 +83,9 @@ export async function GET() {
   const availability = await builderAvailability({ configured: builderEnabled(), priced: () => requirePricedModel(builderModel()), capacity: () => providerCapacity("anthropic") });
   // Measured credit ranges for the composer's estimate, in credits at the live rate (no provider call).
   // Unqualified generation features stay off unless their server-side flag is "on" (lib/builder/features.ts).
-  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()), features: builderFeatures() }, { headers: { "Cache-Control": "no-store" } });
+  // Image questions for books and decks only where images can be made now: a configured model and open OpenAI spending.
+  const documentImages = availability.configured && Boolean(imageConfiguration().model) ? await providerCapacity("openai").then(capacity => capacity === "available", () => false) : false;
+  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()), features: { ...builderFeatures(), documentImages } }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {

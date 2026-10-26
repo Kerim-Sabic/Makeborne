@@ -171,14 +171,21 @@ async function main() {
       failures.push(name); console.log(`FAIL ${name}: ${message.slice(0, 4).join(" | ")}${line ? ` (line ${line})` : ""}`);
     } finally { state.hold?.release(); await context.close(); }
   }
-  const tab = (page, name) => page.getByRole("navigation", { name: "Project view" }).getByRole("button", { name, exact: true }).click();
+  // The project header (60a92f0): Preview and Code stay in the toolbar's view switch; History opens from Project actions.
+  const tab = async (page, name) => {
+    if (name !== "History") return page.getByRole("navigation", { name: "Project view" }).getByRole("button", { name, exact: true }).click();
+    await page.getByRole("button", { name: "Project actions" }).click();
+    await page.getByRole("button", { name: "Version history" }).click();
+  };
+  // The mounted preview's controls (Edit, page select) render in the editor's single toolbar, outside the preview region.
+  const previewBar = page => page.locator("[data-editor-chrome=toolbar]");
   const mainFrame = page => page.frameLocator('iframe[title="Website preview"]');
   const previewFactIs = (page, text) => page.waitForFunction(expected => document.querySelector('.version-facts li[data-fact="preview"]')?.textContent === expected, text);
   const panel = page => page.getByRole("complementary", { name: "Edit selected element" });
   /** Edit mode on, then the home page heading picked with the mouse. */
   async function pickHeading(page) {
     await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
-    await page.getByRole("region", { name: "Website preview" }).getByRole("button", { name: "Edit", exact: true }).click();
+    await previewBar(page).getByRole("button", { name: "Edit", exact: true }).click();
     await panel(page).waitFor();
     await mainFrame(page).locator("h1[data-mb-loc]").click();
     await panel(page).getByRole("textbox", { name: "Element text" }).waitFor();
@@ -263,7 +270,8 @@ async function main() {
       assert.match(await composer.inputValue(), /^Fix the build error in version 3: .*src\/App\.tsx/);
       assert.equal(await composer.evaluate(field => field === document.activeElement), true, "the composer takes focus for review");
       assert.equal(await page.getByRole("button", { name: "Send", exact: true }).isEnabled(), true, "Send is the person's choice");
-      assert.match(await page.locator(".lb-limit").innerText(), /^Up to \d+ credits for this request/);
+      // The limit sits in the collapsed Request details (197d085), so its text is read, not its rendering.
+      assert.match(await page.locator(".lb-limit").textContent(), /^Up to \d+ credits for this request/);
       await page.waitForTimeout(500);
       assert.deepEqual(state.builds, [], "Fix it sent nothing");
       assert.deepEqual(state.saves, []);
@@ -271,7 +279,8 @@ async function main() {
       await restore.click();
       await page.waitForFunction(() => window.__notices.some(note => note.startsWith("Version 2 restored into your editor.")));
       await mainFrame(page).locator("h1", { hasText: HEADLINES[1] }).waitFor();
-      await page.waitForFunction(() => document.querySelector(".editor-heading p")?.textContent.startsWith("Version 4"));
+      // The project header (60a92f0) states the saved version in its save status.
+      await page.waitForFunction(() => /Version 4 is saved/.test(document.querySelector("[data-editor-chrome=header] .ph-save-text")?.getAttribute("title") ?? ""));
       assert.equal(state.saves.length, 1);
       assert.equal(state.saves[0].expectedVersion, 3);
       assert.deepEqual(state.saves[0].content.websiteSource, state.versions[1].content.websiteSource, "version 2's source, saved as version 4");
@@ -299,7 +308,8 @@ async function main() {
     await scenario("the header says what Preview shows, from every tab: the saved version, then unsaved edits, then the new version", {}, async (page, state) => {
       await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
       await previewFactIs(page, "Preview: version 3");
-      assert.deepEqual(await page.getByRole("list", { name: "Saved, checked, live and preview versions" }).locator("li").evaluateAll(items => items.map(item => item.dataset.fact)), ["saved", "checked", "live", "preview"]);
+      // The facts sit in the header's project details popover (closed here), so they are read from the DOM, not by role.
+      assert.deepEqual(await page.locator('ul[aria-label="Saved, checked, live and preview versions"] li').evaluateAll(items => items.map(item => item.dataset.fact)), ["saved", "checked", "live", "preview"]);
       state.hold = deferred();
       await tab(page, "Code");
       assert.equal(await page.locator(".source-editor-guidance").innerText(), "Edits save as new versions after you pause. Preview rebuilds from this code in your browser, unsaved edits included; nothing is published until you publish. Use History to restore a saved version.");
@@ -342,7 +352,7 @@ async function main() {
       await pickHeading(page);
       await editHeading(page, "Stoneware, made slowly");
       await statusIs(page, "Saving your edit… · Undo");
-      await page.waitForFunction(() => document.querySelector(".lb-notice")?.textContent === "Saving your edit…");
+      await page.waitForFunction(() => document.querySelector(".lb-availability")?.textContent === "Saving your edit…");
       const composer = page.getByRole("textbox", { name: "Message the builder" }), send = page.getByRole("button", { name: "Send", exact: true });
       assert.equal(await composer.isEnabled(), true, "typing is not blocked by the autosave");
       await composer.click(); await page.keyboard.type("Make the navigation sticky.");
@@ -353,15 +363,15 @@ async function main() {
       state.hold.release();
       await statusIs(page, "Saved as version 4 · Undo");
       await page.waitForFunction(() => !document.querySelector('button[aria-label="Send"]')?.disabled);
-      assert.equal(await page.locator(".lb-notice").count(), 0, "the reason goes once saved");
+      assert.equal(await page.locator(".lb-availability").count(), 0, "the reason goes once saved");
       assert.equal(await composer.inputValue(), "Make the navigation sticky.");
       assert.deepEqual(state.builds, []);
     });
     await scenario("a picked element is named as a person would, with its file and line underneath; Ask keeps the exact request", {}, async page => {
       await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
-      await page.getByRole("region", { name: "Website preview" }).getByRole("combobox", { name: "Preview page" }).selectOption("/workshops");
+      await previewBar(page).getByRole("combobox", { name: "Preview page" }).selectOption("/workshops");
       await mainFrame(page).locator("h1", { hasText: "Explore our workshops" }).waitFor();
-      await page.getByRole("region", { name: "Website preview" }).getByRole("button", { name: "Edit", exact: true }).click();
+      await previewBar(page).getByRole("button", { name: "Edit", exact: true }).click();
       await mainFrame(page).locator("h1[data-mb-loc]", { hasText: "Explore our workshops" }).click();
       const label = panel(page).locator(".ve-label");
       await label.waitFor();
@@ -378,7 +388,7 @@ async function main() {
     });
     await scenario("keyboard: focusing an element in edit mode selects it; Escape in the panel deselects, then leaves edit mode with focus on Edit", {}, async page => {
       await mainFrame(page).locator("h1", { hasText: HEADLINES[2] }).waitFor();
-      const edit = page.getByRole("region", { name: "Website preview" }).getByRole("button", { name: "Edit", exact: true });
+      const edit = previewBar(page).getByRole("button", { name: "Edit", exact: true });
       await edit.click();
       await panel(page).waitFor();
       await mainFrame(page).locator("a[data-mb-loc]").first().waitFor();
