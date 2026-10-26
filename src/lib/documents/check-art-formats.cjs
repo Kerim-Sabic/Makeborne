@@ -195,6 +195,16 @@ const deckWith = (art = {}) => {
       art: { ...deck.art, renders: [{ slide: "cover", image: "art-cover", verified: textKey(deck.slides[0]), aspect: "9:16", page: 1, wordmark: "Alba Bakehouse", attempts: 1, outcome: "passed", problems: [] }] } };
     assert.equal(composeSlide(verified, verified.slides[0], 0, 2).composition, ART_COMPOSITION);
     assert.ok(deckHtml(verified, { "art-cover": "data:image/png;base64,AAAA" }, "print").includes('<section class="slide" aria-label="Slide 1: A second oven." style="background:#2A1D14"><img class="p" style="left:0.0000%;top:0.0000%;width:100.0000%;height:100.0000%'), "the full image fills the tall page");
+    // An editable fallback with its plate: the plate (made in the page's shape) fills the tall page; the layout sits centred.
+    const plated = { ...verified, assets: [...verified.assets, { name: "plate-numbers", id: "00000000-0000-4000-8000-000000000004", aspect: "portrait", alt: "", prompt: "" }],
+      art: { ...verified.art, renders: [...verified.art.renders, { slide: "numbers", attempts: 2, outcome: "fallback", plate: "plate-numbers", problems: [] }] } };
+    const platedHtml = deckHtml(plated, { "art-cover": "data:a", "plate-numbers": "data:p" }, "print");
+    assert.match(platedHtml, /<img class="p" style="left:0\.0000%;top:0\.0000%;width:100\.0000%;height:100\.0000%;object-fit:cover" src="data:p" alt=""><div class="sc"/);
+    const platedZip = await JSZip.loadAsync(await deckPptx(plated, { "art-cover": await canvas(864, 1536), "plate-numbers": await canvas(864, 1536) }));
+    const platedSlide = await platedZip.file("ppt/slides/slide2.xml").async("string");
+    const pics = platedSlide.split("<p:pic>").slice(1).map(pic => /name="([^"]*)"[\s\S]*?<a:off x="(\d+)" y="(\d+)"\/>\s*<a:ext cx="(\d+)" cy="(\d+)"\/>/.exec(pic)?.slice(1));
+    const platePic = pics.find(pic => pic?.[0] === "Image plate-numbers");
+    assert.ok(platePic && platePic[1] === "0" && platePic[2] === "0" && Number(platePic[4]) > 21_000_000, `the PPTX plate fills the slide (${JSON.stringify(pics)})`);
     const zip = await JSZip.loadAsync(await deckPptx(verified, { "art-cover": await canvas(864, 1536) }));
     const size = /<p:sldSz cx="(\d+)" cy="(\d+)"/.exec(await zip.file("ppt/presentation.xml").async("string"));
     assert.ok(Math.abs(Number(size[2]) / Number(size[1]) - 2276 / 1280) < 0.002, `PPTX slide is 9:16 (${size[1]} x ${size[2]})`);

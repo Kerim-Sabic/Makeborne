@@ -4,7 +4,7 @@ import { chartSvg, esc } from "./chart-svg";
 import { fontFaceCss, type FaceId, type FontSources } from "./fonts";
 import { composeSlide, H, W, type ImageTreatment, type PathSeg, type Prim, type SlideScene } from "./slide-scene";
 import { directionOf, type MotionKind } from "./directions";
-import { ART_COMPOSITION, PAGE_HEIGHT, deckAspect } from "./slide-art";
+import { ART_COMPOSITION, PAGE_HEIGHT, PLATE_COMPOSITION, deckAspect } from "./slide-art";
 
 /** The page of a deck in px: 1280 wide, as tall as its slide shape (16:9 unless a full-image deck chose another). */
 export const deckPage = (deck: Pick<Deck, "art">) => ({ width: W, height: PAGE_HEIGHT[deckAspect(deck)] });
@@ -82,10 +82,12 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
 
 export function slideHtml(deck: Deck, scene: SlideScene, images: ImageMap, label: string, present?: { index: number }) {
   const attrs = present ? ` data-slide="${present.index}"${present.index === 0 ? ' class="slide is-current"' : ' class="slide"'}` : ' class="slide"';
-  const prims = scene.prims.map((prim, order) => primHtml(prim, deck, images, present ? order : undefined)).join("");
-  // A full-image render fills the page in any shape; an editable 1280x720 layout on a taller page sits centred on its ground.
+  // A full-image render fills the page in any shape; an editable 1280x720 layout on a taller page sits centred on its
+  // ground, and its background plate (generated in the page's own shape) fills the whole page behind it.
   const page = deckPage(deck), band = page.height !== H && scene.composition !== ART_COMPOSITION;
-  const body = band ? `<div class="sc" style="top:${((page.height - H) / 2 / page.height * 100).toFixed(4)}%;height:${(H / page.height * 100).toFixed(4)}%">${prims}</div>` : prims;
+  const plate = band && scene.composition?.startsWith(`${PLATE_COMPOSITION}-`) && scene.prims[0]?.k === "image" ? scene.prims[0] : null;
+  const html = (list: Prim[], offset = 0) => list.map((prim, order) => primHtml(prim, deck, images, present ? order + offset : undefined)).join("");
+  const body = band ? `${plate ? html([plate]) : ""}<div class="sc" style="top:${((page.height - H) / 2 / page.height * 100).toFixed(4)}%;height:${(H / page.height * 100).toFixed(4)}%">${html(plate ? scene.prims.slice(1) : scene.prims, plate ? 1 : 0)}</div>` : html(scene.prims);
   return `<section${attrs} aria-label="${esc(label)}" style="background:${scene.background}">${body}</section>`;
 }
 

@@ -150,7 +150,7 @@ export function artScene<D extends DeckLike & Pick<Deck, "theme">>(deck: D, slid
   const render = deck.art?.mode === "image" ? deck.art.renders.find(entry => entry.slide === slide.id && entry.outcome === "fallback") : undefined;
   const plate = render?.plate ? deck.assets.find(asset => asset.name === render.plate) : undefined;
   if (!plate || !live) return null;
-  return plateScene(live({ ...deck, art: undefined }), plate);
+  return plateScene(live({ ...deck, art: undefined }), plate, PAGE_HEIGHT[deckAspect(deck)]);
 }
 
 export const PLATE_COMPOSITION = "plate";
@@ -159,9 +159,11 @@ export const PLATE_CONTRAST = 4.5;
 const gray = (value: number) => `#${Math.round(value).toString(16).padStart(2, "0").repeat(3)}`.toUpperCase();
 type Box = { x: number; y: number; w: number; h: number };
 /** The plate's brightest and darkest pixels under a box (the plate fills the 16:9 slide; luma and shade are 8×8 grids of it). */
-export function plateRange(plate: { luma?: number[]; shade?: number[] }, box: Box) {
+export function plateRange(plate: { luma?: number[]; shade?: number[] }, box: Box, pageHeight = H) {
+  // The plate fills the page; a 1280x720 layout on a taller page sits centred on it.
   const cell = (value: number, size: number) => Math.max(0, Math.min(7, Math.floor(value / size * 8)));
-  const u0 = cell(box.x, W), u1 = cell(box.x + box.w - 1e-6, W), v0 = cell(box.y, H), v1 = cell(box.y + box.h - 1e-6, H);
+  const top = (pageHeight - H) / 2;
+  const u0 = cell(box.x, W), u1 = cell(box.x + box.w - 1e-6, W), v0 = cell(top + box.y, pageHeight), v1 = cell(top + box.y + box.h - 1e-6, pageHeight);
   let bright = 0, dark = 255;
   for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) { bright = Math.max(bright, plate.luma?.[v * 8 + u] ?? 255); dark = Math.min(dark, plate.shade?.[v * 8 + u] ?? 0); }
   return { bright, dark };
@@ -176,11 +178,11 @@ export function plateScrim(color: string, ground: string, range: { bright: numbe
 /** The editable layout over its plate: full-canvas colour fields give way to the plate, and every text or chart that is
  * not already on an opaque panel gets a scrim of its own ground at the opacity its contrast needs (measured from the
  * plate's luma and shade grids, the same rule as text over slide images in compose-image.ts). */
-function plateScene(scene: SlideScene, plate: { name: string; luma?: number[]; shade?: number[] }): SlideScene {
+function plateScene(scene: SlideScene, plate: { name: string; luma?: number[]; shade?: number[] }, pageHeight = H): SlideScene {
   const full = (prim: Prim) => prim.k === "rect" && !prim.noFill && (prim.opacity ?? 1) >= 0.95 && prim.w * prim.h >= W * H * 0.95;
   const ground = (scene.prims.find(full) as RectPrim | undefined)?.fill ?? scene.background;
-  const panels: Box[] = [];
-  const prims: Prim[] = [{ k: "image", x: 0, y: 0, w: W, h: H, name: plate.name, alt: "", crop: "center" }];
+  const panels: Box[] = [], scrims: (Box & { alpha: number })[] = [];
+  const prims: Prim[] = [];
   for (const prim of scene.prims) {
     if (full(prim)) continue;
     // Any filled shape under a text is its designed ground (a card, a badge behind a numeral): such text is never scrimmed.
@@ -192,12 +194,31 @@ function plateScene(scene: SlideScene, plate: { name: string; luma?: number[]; s
       // Text not designed for the slide's ground (light type for a coloured shape) is left as composed.
       if (!onPanel && contrast(color, ground) < PLATE_CONTRAST) { prims.push(prim); continue; }
       const pad = 14, box = { x: Math.max(0, prim.x - pad), y: Math.max(0, prim.y - pad), w: Math.min(W, prim.w + 2 * pad), h: Math.min(H, prim.h + 2 * pad) };
-      const alpha = onPanel ? 0 : plateScrim(color, ground, plateRange(plate, box));
-      if (alpha > 0) prims.push({ k: "rect", ...box, fill: ground, opacity: alpha, radius: 6 });
+      const alpha = onPanel ? 0 : plateScrim(color, ground, plateRange(plate, box, pageHeight));
+      if (alpha > 0) scrims.push({ ...box, alpha });
     }
     prims.push(prim);
   }
-  return { ...scene, prims, composition: `${PLATE_COMPOSITION}-${scene.composition ?? "layout"}` };
+  // Scrims that touch or nearly touch become one calm panel at the strongest opacity any of its texts needs (the live
+  // Helio deck showed a stack of overlapping boxes); every panel sits under the whole layout, right above the plate.
+  const merged: (Box & { alpha: number })[] = [];
+  for (const scrim of scrims) {
+    let box = { ...scrim };
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let i = merged.length - 1; i >= 0; i--) {
+        const other = merged[i], gap = 28;
+        if (box.x - gap < other.x + other.w && other.x - gap < box.x + box.w && box.y - gap < other.y + other.h && other.y - gap < box.y + box.h) {
+          const x = Math.min(box.x, other.x), y = Math.min(box.y, other.y);
+          box = { x, y, w: Math.max(box.x + box.w, other.x + other.w) - x, h: Math.max(box.y + box.h, other.y + other.h) - y, alpha: Math.max(box.alpha, other.alpha) };
+          merged.splice(i, 1); changed = true;
+        }
+      }
+    }
+    merged.push(box);
+  }
+  const plateImage: Prim = { k: "image", x: 0, y: 0, w: W, h: H, name: plate.name, alt: "", crop: "center" };
+  return { ...scene, prims: [plateImage, ...merged.map(box => ({ k: "rect" as const, x: box.x, y: box.y, w: box.w, h: box.h, fill: ground, opacity: box.alpha, radius: 6 })), ...prims], composition: `${PLATE_COMPOSITION}-${scene.composition ?? "layout"}` };
 }
 
 /** The prompt for a text-free plate behind an editable slide: same design system and palette, the area where the live

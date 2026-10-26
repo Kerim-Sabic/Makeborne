@@ -290,7 +290,14 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.equal(scene.prims[0].name, "plate-demand");
     const scrims = scene.prims.filter(prim => prim.k === "rect");
     assert.equal(scrims.length, 1, "one scrim: behind the heading on the busy plate, none over the badge");
-    assert.ok(scrims[0].x >= 140 && scene.prims.indexOf(scrims[0]) === scene.prims.findIndex(prim => prim.k === "text" && prim.text === "Market size") - 1);
+    assert.ok(scrims[0].x >= 140 && scene.prims.indexOf(scrims[0]) === 1 && scene.prims.indexOf(scrims[0]) < scene.prims.findIndex(prim => prim.k === "text" && prim.text === "Market size"), "the scrim sits right above the plate, under the whole layout");
+    // Texts whose scrims touch share one panel (the live Helio fallback showed a stack of overlapping boxes).
+    const stacked = artScene(plateDeck, plateDeck.slides[2], () => ({ background: "#F6F3EE", issues: [], prims: [
+      { k: "text", x: 160, y: 200, w: 500, h: 60, text: "Market size", font: "heading", size: 40, weight: 600, color: "#14181F", align: "left", valign: "top", lh: 1.1 },
+      { k: "text", x: 160, y: 280, w: 700, h: 40, text: "A second line close below", font: "body", size: 22, weight: 400, color: "#14181F", align: "left", valign: "top", lh: 1.3 }] }));
+    const panels = stacked.prims.filter(prim => prim.k === "rect");
+    assert.equal(panels.length, 1, "one merged panel");
+    assert.deepEqual([panels[0].x, panels[0].y, panels[0].x + panels[0].w, panels[0].y + panels[0].h], [146, 186, 874, 334]);
     const prompt = artPrompt({ ...editor.doc }, editor.doc.slides[0]);
     assert.match(prompt, /top 7\.8% and bottom 7\.8% of the canvas are cropped away/);
     assert.match(prompt, /at least 6\.5% of its height clear above the first line/);

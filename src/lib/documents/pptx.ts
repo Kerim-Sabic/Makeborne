@@ -4,7 +4,7 @@ import JSZip from "jszip";
 import sharp from "sharp";
 import type { Deck } from "./schema";
 import { FONTS } from "./theme";
-import { ART_COMPOSITION, PAGE_HEIGHT, artAlt, deckAspect } from "./slide-art";
+import { ART_COMPOSITION, PAGE_HEIGHT, PLATE_COMPOSITION, artAlt, deckAspect } from "./slide-art";
 import { composeSlide, H, W, type ArtPrim, type ChartPrim, type ImagePrim, type PathPrim, type Prim, type TextPrim } from "./slide-scene";
 
 /** Office face for monospaced labels (the preview and PDF embed JetBrains Mono). */
@@ -152,7 +152,10 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
 ${source.notes}`);
       continue;
     }
-    for (const prim of (offset ? shiftScene(scene.prims as Prim[], offset) : scene.prims) as Prim[]) {
+    // On a taller slide the editable layout moves down onto the centred band; its plate (made in the slide's shape) fills the slide.
+    const platePrim = offset && scene.composition?.startsWith(`${PLATE_COMPOSITION}-`) && scene.prims[0]?.k === "image" ? scene.prims[0] : null;
+    const placed = offset ? [...(platePrim ? [{ ...platePrim, y: 0, h: pageHeight }] : []), ...shiftScene((platePrim ? scene.prims.slice(1) : scene.prims) as Prim[], offset)] : scene.prims;
+    for (const prim of placed as Prim[]) {
       switch (prim.k) {
         case "rect":
           slide.addShape(prim.radius ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), ...(prim.fade ? { objectName: prim.fade === "up" ? FADE : `${FADE} ${prim.fade}` } : {}),
