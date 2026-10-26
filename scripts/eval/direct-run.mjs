@@ -177,6 +177,17 @@ try {
       images.push({ name: request.name, kind: request.kind, route: request.route, transparent: prepared.transparent, width: meta.width, height: meta.height, bytes: prepared.bytes.length });
       return { id: assetId, path: `public/images/${request.name}.webp`, sha256, bytes: prepared.bytes.length, mediaType: 'image/webp', url: `/images/${request.name}.webp`, width: meta.width, height: meta.height, transparent: prepared.transparent };
     };
+    // Design comps: kept in the item folder (the app stores them as project images; this harness has no database, and
+    // without this the first quality-v14 run lost both comps it paid for: "The design comp could not be made").
+    const comps = [];
+    const storeComp = async (bytes, provenance) => {
+      const compId = randomUUID(), file = path.join(itemDir, 'comps', `${String(comps.length + 1).padStart(2, '0')}-${String(provenance.section ?? 'comp').replace(/[^a-z0-9-]/gi, '-').slice(0, 40)}-${provenance.viewport ?? ''}.webp`);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, bytes);
+      comps.push({ id: compId, file: path.basename(file), ...provenance });
+      fs.writeFileSync(path.join(itemDir, 'comps.json'), JSON.stringify(comps, null, 2));
+      return { id: compId, data: bytes };
+    };
     const stage = async (name, request, extra = {}) => {
       const remaining = operationCapMicrousd - spentMicrousd;
       const cap = Math.min(remaining, extra.capMicrousd ?? remaining);
@@ -192,7 +203,7 @@ try {
           // Like the route: the concept step on a first build (nothing written yet, no plan).
           concept: name === 'build' && !files.files.size,
           attachments: extra.attachments ?? [], emit: event => { if (event.type === 'tool_error' || event.type === 'status' || event.type === 'file') events.push({ stage: name, type: event.type, path: event.path, tool: event.tool, message: event.message?.slice?.(0, 300) }); },
-          signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage } : {}) });
+          signal: controller.signal, deadline: Date.now() + STAGE_MS, limits: extra.limits ?? (prep.design?.imagery === 'type' ? { maxImages: 0 } : undefined), ...(imagesModule ? { storeImage, storeComp } : {}) });
       } catch (caught) { error = { name: caught.name, code: caught.code ?? null, status: caught.status ?? null, message: String(caught.message).slice(0, 300) }; }
       finally { clearTimeout(timer); }
       spentMicrousd += spend.providerMicrousd;
