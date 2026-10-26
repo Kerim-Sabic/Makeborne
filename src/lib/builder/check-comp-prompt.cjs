@@ -62,9 +62,30 @@ const CONCEPT = { chosen: { name: "Friday promise" }, artSystem: { palette: "cob
     assert.equal(colourName("#1D3FA8"), "cobalt blue"); assert.equal(colourName("#F4EDE3"), "warm cream"); assert.equal(colourName("#111111"), "near-black");
   });
 
+  await check("the comp plan names the four comps by section id; the gate asks twice and names the missing ones; comps keep their ground", () => {
+    const { compPlan, compsNextStep, compsFromSource, conceptComment } = require("./concept.ts");
+    const sections = [{ id: "top", composition: "editorial-split", job: "x" }, { id: "menu", composition: "price-list", job: "x" }, { id: "book", composition: "form-panel", job: "x" }, { id: "room", composition: "full-bleed-photo", job: "x" }];
+    assert.deepEqual(compPlan(sections), ["top (desktop)", "top (mobile)", "menu (desktop)", "room (desktop)"], "forms, contact cards and quotes are not heart sections");
+    assert.match(compsNextStep(sections), /call generate_comp 4 times, for exactly these: top \(desktop\), top \(mobile\), menu \(desktop\), room \(desktop\)/);
+    const agent = fs.readFileSync(path.join(__dirname, "agent.ts"), "utf8");
+    assert.match(agent, /compsAsked < 2 && \(compsAsked === 0 \|\| compAffordable\)/, "asked up to twice while another comp is affordable");
+    assert.match(agent, /still missing: \$\{missing\.join\(", "\)\}/);
+    assert.match(agent, /ground: input\.colors\.ground\.toUpperCase\(\)/);
+    const record = { chosen: { name: "A", headline: "B c d", device: "e", archetype: "f", ground: "g", action: "h", angle: "i", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } }, runnersUp: [], why: "why",
+      comps: [{ section: "top", viewport: "desktop", asset: "00000000-0000-4000-8000-000000000001", ground: "#1D3FA8", reading: { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 50, imageSide: "right", ground: "#1D3FA8" } }] };
+    const back = compsFromSource(`${conceptComment(record)}
+export default function App() {}`);
+    assert.equal(back[0].reading.ground, "#1D3FA8"); assert.equal(back[0].ground, "#1D3FA8");
+    const prompt = compPrompt(BIKES, CONCEPT, "2560x1440");
+    assert.match(prompt, /Colours flat and at full strength exactly as given, like a printed poster/);
+    assert.match(prompt, /The headline set at poster scale in the heaviest cut of its typeface/);
+    const builder = fs.readFileSync(path.join(__dirname, "prompt.ts"), "utf8");
+    assert.match(builder, /SIGNATURE COLOUR AND SCALE/); assert.match(builder, /never a wider, lighter or different family than the comp shows/);
+  });
+
   await check("photographs wait for the comps on a first build, also while the concept is not recorded yet (live w05)", () => {
     const agent = fs.readFileSync(path.join(__dirname, "agent.ts"), "utf8");
-    assert.match(agent, /if \(compsAvailable && compsStarted < MIN_COMPS && !compsAsked\) \{/, "the comp gate does not wait for a recorded concept");
+    assert.ok(agent.includes("if (compsAvailable && compsStarted < MIN_COMPS && compsAsked < 2 && (compsAsked === 0 || compAffordable)) {"), "the comp gate does not wait for a recorded concept");
     assert.match(agent, /record the concept \(fix what its tool result asked for\), then the design comps/);
   });
 

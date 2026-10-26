@@ -160,6 +160,7 @@ export function compPrompt(input: CompInput, concept: { artSystem?: ArtSystem; c
     cropNote,
     phone,
     art ? `Art system: palette ${art.palette}. Type: ${art.type}. Imagery: ${art.imagery}. Motif: ${art.motif}.` : "",
+    "Colours flat and at full strength exactly as given, like a printed poster: no washed-out tints, no gradients, no vignette. The headline set at poster scale in the heaviest cut of its typeface, its longest line spanning most of the type field.",
     "Any other body copy appears only as quiet thin lines, never as words. Real-looking photography or a crafted drawing as the art system says; never stock-looking, no AI look (oversaturation, HDR glow, plastic skin).",
     desktop ? TAIL_SITE : TAIL_PHONE,
   ].filter(Boolean).join("\n");

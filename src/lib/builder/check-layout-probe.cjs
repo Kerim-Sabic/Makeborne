@@ -87,6 +87,18 @@ const ONE_ROW = `<style>${BASE}.marquee{background:#c6f04a;color:#1d1430;overflo
       assert.deepEqual(faithful.fidelity, []);
       assert.deepEqual((await probe(`${hero(40)}<section id="top"><h1>Small</h1></section>`, 390, [reading])).fidelity, [], "a desktop reading is measured at 1440 only");
     });
+    await check("comp fidelity: the ground behind the headline is the comp's colour field; a neutral swap is found, a faithful field passes", async () => {
+      const page = ground => `<style>${BASE}#top{position:relative;height:960px;background:${ground}}#top h1{font-size:120px;line-height:1;width:620px;margin:120px 0 0 60px;color:#fff}#top img{position:absolute;top:0;left:720px;width:720px;height:960px}</style><section id="top"><h1>Fixed by Friday.</h1><img alt="" width="720" height="960" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></section>`;
+      const reading = { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right", ground: "#1D3FA8" };
+      const swapped = await probe(page("#1B1B1F"), 1440, [reading]);
+      const ground = swapped.fidelity.find(item => item.metric === "ground");
+      assert.ok(ground, JSON.stringify(swapped.fidelity));
+      assert.deepEqual([ground.comp, ground.built], ["#1D3FA8", "#1B1B1F"]);
+      assert.match(fidelityProblem(ground), /set the ground behind the headline to the comp's #1D3FA8 as a flat, full-strength field \(it is #1B1B1F\)/);
+      assert.deepEqual((await probe(page("#2042AE"), 1440, [reading])).fidelity, [], "a near match passes");
+      assert.deepEqual((await probe(page("#1B1B1F"), 1440, [{ ...reading, imageSide: "full" }])).fidelity, [], "a full-bleed photograph's ground is not measured");
+      assert.deepEqual((await probe(page("#1B1B1F"), 1440, [{ ...reading, ground: undefined }])).fidelity, [], "a reading without a ground (older comps) is not measured");
+    });
     await check("page overflow: a page wider than the phone screen is measured with the element past the edge", async () => {
       const wide = await probe(`<style>${BASE}.giant{font-size:140px;white-space:nowrap}</style><main><p class="giant">GOOD DOG</p></main>`, 390);
       assert.ok(wide.overflow && wide.overflow.px > 1); assert.match(wide.overflow.element, /^p\.giant/);
