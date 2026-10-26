@@ -72,7 +72,7 @@ check("no outcome count, floor or AI cost per credit is typed into the pricing J
   const ui = fs.readFileSync(path.join(root, "src/components/creation-plans.tsx"), "utf8");
   assert.match(ui, /className="founding-cta" disabled=/, "the CTA class stays exactly founding-cta before disabled");
   assert.doesNotMatch(ui, /useSearchParams|priceCents:/);
-  assert.match(ui, /body: JSON\.stringify\(choice\)/, "the checkout POST sends only the pending selection, never a price");
+  assert.match(ui, /body: JSON\.stringify\(\{ \.\.\.choice, withdrawalConsent: WITHDRAWAL_CONSENT_VERSION \}\)/, "the checkout POST sends only the pending selection and the ticked consent version, never a price");
 });
 check("the pricing page carries plans first and keeps the support anchor, SUPPORT and its route", () => {
   const page = fs.readFileSync(path.join(root, "src/app/billing/page.tsx"), "utf8");
