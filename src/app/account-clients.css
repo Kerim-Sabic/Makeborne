@@ -375,7 +375,7 @@
 @media (max-width: 650px) { .ac-lead-chips { order: 5; flex-basis: 100%; margin-left: 56px; } }
 
 /* Lead profile card */
-.lp-card { background: #fff; border: 1px solid #e9e5ef; border-radius: 18px; padding: 20px 22px; margin: 0 0 18px; display: grid; gap: 14px; }
+.lp-card { background: #fff; border: 1px solid #e9e5ef; border-radius: 18px; padding: 20px 22px; margin: 0 0 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .lp-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lp-card h2 { margin: 0; font-size: 17px; font-weight: 560; letter-spacing: -.02em; }
 .lp-score { display: inline-flex; align-items: center; gap: 6px; border-radius: 20px; padding: 5px 11px; font-size: 12.5px; font-weight: 650; }
@@ -395,7 +395,7 @@
 .lp-tag button:hover { background: #e2d9f6; }
 .lp-tags form input { border: 1px dashed #d6cce6; border-radius: 20px; padding: 4px 10px; font: inherit; font-size: 12px; width: 110px; background: #fff; }
 .lp-research { border-top: 1px solid #f1edf6; padding-top: 12px; display: grid; gap: 10px; }
-.lp-research-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.lp-research-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .lp-research-head > span, .lp-insight > span { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: #4a4356; }
 .lp-facts { display: grid; gap: 6px; background: #fbfafd; border: 1px solid #efebf5; border-radius: 13px; padding: 12px 14px; }
 .lp-facts a { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; font-weight: 600; color: #5b44a0; }
@@ -409,7 +409,8 @@
 .lp-insight dt { color: #8a8199; }
 .lp-insight dd { margin: 0; color: #2f2840; overflow-wrap: anywhere; }
 .lp-hint { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: #8a8199; }
-@media (max-width: 760px) { .lp-grid { grid-template-columns: 1fr; } }
+/* Phones: one column whose width is the card's, so selects and the score chip stay inside it. */
+@media (max-width: 760px) { .lp-grid { grid-template-columns: minmax(0, 1fr); } }
 /* Rows keep the name readable: details wrap below on narrow screens instead of squeezing it. */
 .ac-row-open { flex-wrap: wrap; row-gap: 8px; }
 .ac-row-open .ac-person { flex: 1 1 200px; min-width: 160px; }
