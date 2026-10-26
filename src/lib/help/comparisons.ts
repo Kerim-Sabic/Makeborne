@@ -107,7 +107,7 @@ export const COMPARISONS: HelpArticle[] = [
         ["Export", "PDF and editable PowerPoint (native charts)", "PDF, PPTX and PNG"],
         ["Editable shapes and tables", "Edit in PowerPoint after export", "Yes"],
         ["Presentation analytics", "Not yet", "Yes"],
-        ["Credits", "Monthly credits that carry over two months; top-up packs", "Credit top-ups; bounded rollover"],
+        ["Credits", "Monthly credits that carry over two months; top-up packs planned", "Credit top-ups; bounded rollover"],
         ["Websites and typeset books (PDF)", "Yes", "—"],
         ["CRM, lead finder, personal emails", "Built in", "—"],
       ] } },

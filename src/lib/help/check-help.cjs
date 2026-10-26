@@ -114,4 +114,12 @@ check("guides match the launch flags: yearly plans exist", () => {
   assert.match(JSON.stringify(HELP_ARTICLES.find(item => item.slug === "credits-and-pricing")), /Yearly plans, when offered at checkout, cost 20% less/);
 });
 
+check("guides and demos match the launch flags: Gmail send-only, no Outlook, no sequences, no packs yet", () => {
+  const all = JSON.stringify(HELP_ARTICLES);
+  assert.doesNotMatch(all, /Connect Outlook|Gmail or Outlook|top-up packs"/, "Outlook is deferred and credit packs are planned");
+  const demos = JSON.stringify(DEMO_SCRIPTS) + fs.readFileSync(path.join(src, "components", "help-demo", "scenes.tsx"), "utf8");
+  assert.doesNotMatch(demos, /Outlook|automate follow-ups|stops by itself|Stops automatically|reply tracking on|See replies/i, "the demos must not show features that are off");
+  assert.doesNotMatch(fs.readFileSync(path.join(src, "components", "onboarding", "getting-started.tsx"), "utf8"), /Local businesses or creators/, "creator discovery is unavailable");
+});
+
 console.log(`\n${passed} help center checks passed.`);

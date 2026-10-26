@@ -70,7 +70,7 @@ export default function MailCenter({ accountId, workspaceId, canEdit, connectRes
   const canCheck = mine.some(account => account.canTrackReplies);
   return <section className="mc" aria-label="Email automation">
     <header className="mc-head">
-      <div><h2>Email</h2><p>Send reviewed emails from your own Gmail or Outlook. Mailboxes with reply tracking can also run follow-up sequences. <strong className="mc-free">Sending is free.</strong> Only AI writing uses credits.</p></div>
+      <div><h2>Email</h2><p>Send reviewed emails from your own {overview.availability.microsoft ? "Gmail or Outlook" : "Gmail"}.{overview.automation ? " Mailboxes with reply tracking can also run follow-up sequences." : ""} <strong className="mc-free">Sending is free.</strong> Only AI writing uses credits.</p></div>
       {canCheck && <button type="button" className="button secondary" disabled={running} onClick={() => void run()}><RefreshCw size={15} className={running ? "ac-spin" : undefined} />Check now</button>}
     </header>
     {(justConnected || message) && <p className="mc-message" role="status">{justConnected && !message ? connectedMessage(justConnected, overview, loadFailed) : message}</p>}
