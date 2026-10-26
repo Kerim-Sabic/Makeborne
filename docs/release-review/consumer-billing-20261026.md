@@ -1,6 +1,6 @@
 # Consumer checkout and credit packs — 26 October 2026
 
-**Not a launch approval. Sales remain closed.** Branch `qualification/consumer-billing-20261026`, based on full-version staging `9afc160`, with legal branch `c6de1f2`/`16437ab` merged at `46bf79d`. No main merge, push or application deployment in this work so far. No paid AI calls, new cloud compute, real purchases or new subscriptions. Explicitly authorized, limited production configuration/database changes are listed below; do not describe this as “production untouched.”
+**Not a launch approval. Production sales remain closed.** Branch `qualification/consumer-billing-20261026`, based on full-version staging `9afc160`, with legal branch `c6de1f2`/`16437ab` merged at `46bf79d`. Code checkpoints `6157312` and `fbec339`; two included staging previews, no main merge, push or production application deployment. Four fake-card sandbox purchases and full refunds are complete. No real-money purchase, paid AI call, VM or additional cloud spend. Explicitly authorized, limited production preparation changes are listed below; do not describe this as “production untouched.” The final qualification update below supersedes chronological pending-work notes.
 
 ## Owner decisions, including the superseding tax instruction
 
@@ -115,3 +115,45 @@ All 11 pending candidate migrations applied atomically to staging `xzwikrunwpurx
 The exact local runner now reports **223/223 harnesses**; its time-boxed repair-qualification tariff harness remains explicitly skipped and is not newly qualified. Typecheck, lint (zero errors, one pre-existing warning) and production webpack build pass. Mounted plan and pack consent journeys pass on Chromium, Firefox and WebKit, phone and desktop. These are real components with mocked HTTP, not proof of a provider purchase. A scan of the changed files against known runtime credentials and private-key headers passed.
 
 Whop support could not escalate these developer questions to a human. Its documentation confirms the metadata CTA is not a documented final-payment-button control. The official payment-quote API returned 403 because it requires `payment:charge`; the least-privilege runtime key was not expanded. No quote, payment or subscription resulted. A new Elements payment integration would require separately reviewed charging credentials, account/order binding, idempotency, webhook/recovery and payment-authentication qualification. The existing hosted checkout must not be relabelled indirectly or treated as qualified.
+
+## Final actual-service qualification — 26 October, 15:20 UTC
+
+### Candidate and staging
+
+Included Hobby Basic previews were built from `6157312` and then `fbec339`. The latter is the tested application at `https://makeborne-release-staging-euy5calhs-kerimsabic-6594s-projects.vercel.app` (deployment `dpl_CWxGbKgcB9chSmTyHNoAyyXE4qym`). The second commit aligns pack navigation with the existing exact staging-host allowance; arbitrary previews, lookalikes and production sandbox navigation remain rejected (47 navigation checks pass; typecheck and targeted lint pass). The six current sandbox offers are correctly mapped; historical mappings remain for entitlement recovery. AI, images, trusted publishing, mail automation, CRM research, account-rights and GitHub background flags remain off in this preview. This is billing qualification, not a full-feature release pass.
+
+The sandbox key was accidentally printed by a failed configuration assertion; a first replacement also appeared in an unfiltered browser diagnostic. Both were superseded under the owner's rotation approval. The final replacement was saved privately and connected only to staging. The first exposed key's authenticated same-value write returns401; final replacement private read returns200. Same13permissions and30November expiry; production keys and November probes unchanged. Sensitive assertions now use boolean guards without rendering actual/expected values. Do not carry forward the earlier blanket claim that no credential appeared in diagnostics.
+
+Sandbox tax mode now explicitly matches the approved seller-managed production mode. All four tested payments have `tax_amount:0` and full refunds have `tax_refunded_amount:0`. This does not establish consumer tax liability or qualify nonzero-tax normalization. That path still fails closed.
+
+### Four approved fake-card purchases
+
+| Purchase | Checkout | Payment | Delivery and refund |
+|---|---|---|---|
+| Create $20 monthly | `ch_v50Mn7zsTcW2s1d` | `pay_QmbZnIO5k9MOB3` | One300-credit grant; full$20refund; membership `mem_m7X3mUpooLp2Hx` canceled. |
+| $12 /100credits | `ch_yZ277wNNpJutKq5` | `pay_hoi8B40tE7H8Ht` | One100-credit grant; unused full refund removed100. |
+| $32 /300credits | `ch_Z6QcELgxluX6O7h` | `pay_X44Fi9d2Hnks7v` | One300-credit grant; after simulated usage, full refund removed299 and retained1consumed-credit exposure. |
+| $95 /1,000credits | `ch_DsgIt1i158N65ap` | `pay_mGTNGqsVyyJ4ee` | One1,000-credit grant; unused full refund removed1,000. |
+
+All used sandbox fake4242, never the saved0341 failure card. Total test-money purchases/refunds: $159/$159. Real automatic signed provider delivery produced15HTTP200 receipts. Grants are exactly three pack grants totaling1,400 and one plan grant of300, with no duplicates. Four owned server-side consent records retain version, text and acceptance time.
+
+**Refund-after-use method:** real staging reserve/settle functions charged301 simulated credits on this disposable account:300included first, then1paid-pack credit. No AI/provider call occurred. The used pack then withheld299unused credits and recorded1consumed exposure; the subscription refund recorded its300consumed-credit issue. This deliberately tests a support/provider refund override, not eligibility for an ordinary unused-credit refund. The plan issue was resolved with the owner-only no-grant resolver as a documented sandbox fixture; financial evidence and the pack exposure remain intact. Wallet and held balance finish at0/0, never negative.
+
+Active-subscription duplicate checkout returns409 `SUBSCRIPTION_ALREADY_EXISTS`; replay of the funded100-credit pack request returns409 `CREDIT_PACK_CHECKOUT_RESOLVED`. The additional300/1,000pack purchases used new request IDs successfully. No duplicate payment was deliberately submitted. **Provider paid-link reuse is not qualified:** reopening the paid100-credit checkout still offered Join. A Makeborne409 does not protect a provider URL already held by a browser or against a simultaneous provider charge. Do not enable packs until this has a proven prevention or an explicitly reviewed recovery approach.
+
+The subscription browser tab was closed while the last observed page said Processing, but webhook receipts had already arrived before closure. This run is not claimed as a strict close-before-return race proof; no new such proof was obtained here. Existing delayed-webhook/renewal evidence is unchanged, not rerun or upgraded by these four purchases.
+
+### Final payment button and support
+
+Official `@whop/checkout`0.7.0 documents `themeOptions.buttonText`. A loopback, UI-only test of the official component with a real sandbox session, then plan-only configuration, returned “This checkout is no longer available”; the same hosted checkout worked. Appending the documented serialized theme parameter to the hosted URL did not change Join. No payment was submitted from these unbound preflight configurations and no unqualified SDK integration was added to Makeborne.
+
+The owner-authorized tax/button escalation was sent to the official `support@whop.com` address, subject “Makeborne launch blockers: seller-managed tax and final payment button”, message/thread `1a178b0ff4f02664`. No secret/customer information included. This is a sent question, not a provider resolution. The later paid-link reuse finding also needs provider investigation; no separate support message for it was sent without authorization.
+
+### Cleanup, spend and final result
+
+- All four payments fully refunded; three pack memberships completed and subscription canceled. Disposable Makeborne account retired/banned, global sign-out completed and auth session count is0. Financial/audit records retained. Previously issued JWTs retain normal expiry; no claim that deleting a session instantly revokes every JWT.
+- Existing sandbox webhook disabled, original staging URL restored, event selection/secret unchanged. Temporary tunnel and loopback servers stopped; ports3183/3063 closed, public tunnel responds530. Screenshot: ignored `outputs/consumer-billing-20261026/sandbox-webhook-disabled.png`.
+- Staging advisor remains11WARN, none new. Production availability still has0offers. Production deployment, checkout activation and November probe writes: none.
+- Two included Basic staging builds; no sandbox VM, paid AI call or additional cloud charge. Scope ledger records$0additional; earlier reserved budgets were not reused.
+
+**Launch is still gated:** final-payment Join label; seller-managed tax accounting and contradictory provider metadata; paid-link reuse; durable purchase confirmation and withdrawal acknowledgement; exact production webhook/env cutover and final GO; owner-paid infrastructure requirements; actual November renewal probes. Keep unqualified features closed. Claude/legal owner: implement durable confirmations and the withdrawal request/acknowledgement journey on a separate reviewed commit, preserving statutory rights and our recorded-consent boundaries. Codex owns provider integration/requalification. No Claude acknowledgement assumed.
