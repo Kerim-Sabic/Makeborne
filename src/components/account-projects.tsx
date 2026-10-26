@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { studioHref, type AccountProjectRoute } from "@/lib/studio-navigation";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import { ArrowRight, Pencil, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { CloudArtifact, CloudWorkspace, CloudWorkspaceSnapshot } from "@/lib/cloud/contracts";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
@@ -15,6 +15,9 @@ import { readCardMeta } from "./card-preview-api";
 import { DEFAULT_LIBRARY_SCOPE, LIBRARY_SORTS, PUBLICATION_LABEL, cardFacts, cardMetaChunks, libraryListPath, libraryScopeKey, readLibraryView, writeLibraryView, type CardMetaItem, type LibraryScope, type LibrarySort, type LibraryView } from "@/lib/projects/library-card-meta";
 import { accountLibraryStatus, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { savedSourceMeta, shortDate } from "@/lib/projects/project-labels";
+import { CardActionsMenu, RenameProjectDialog, type CardAction } from "./library-card-actions";
+import { isPlaceholderTitle } from "@/lib/projects/project-title";
+import "@/app/project-rename.css";
 import { currentMatches, failedSearch, firstPage, idleTitleSearch, loadedTitleMatches, nextPage, normalizeTitleQuery, titleSearchKey, titleSearchNotice, titleSearchPath, type TitleSearch, type TitleSearchPage } from "@/lib/projects/title-search";
 
 const AccountEditor = dynamic(() => import("./cloud-studio").then(module => module.CloudEditor), { loading: () => <p role="status">Opening project…</p> });
@@ -38,6 +41,9 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selected, setSelected] = useState<CloudArtifact | null>(null);
   const [busy, setBusy] = useState(false);
+  // One rename at a time, bound to the workspace it was opened in; focus returns to the card's menu button.
+  const [renaming, setRenaming] = useState<{ artifact: CloudArtifact; workspaceId: string; trigger: HTMLButtonElement } | null>(null);
+  const [renameNotice, setRenameNotice] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   // Title search over every saved project in the workspace (server-side), bound to account + workspace + type + query.
   const [titleSearch, setTitleSearch] = useState<TitleSearch<CloudArtifact>>(idleTitleSearch);
@@ -91,7 +97,7 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
             // A client filter belongs to one workspace of one account: dropped when an account signs out or another signs in
             // (the first sign-in of this page keeps a filter restored from the URL).
             if (previous !== null && scopeRef.current.client !== "all") setScopeRef.current({ ...scopeRef.current, client: "all" });
-            setSnapshot(null); setSelected(null); setWorkspaces([]); setMessage("");
+            setSnapshot(null); setSelected(null); setWorkspaces([]); setMessage(""); setRenaming(null); setRenameNotice(null);
             setCloudAccount(next); setAccountId(next);
           }
         });
@@ -105,7 +111,7 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
     let active = true;
     setCloudAccount(accountId);
     void (async () => {
-      setSnapshot(null); setSelected(null); setWorkspaces([]); setMessage(""); setNoWorkspace(false);
+      setSnapshot(null); setSelected(null); setWorkspaces([]); setMessage(""); setNoWorkspace(false); setRenaming(null); setRenameNotice(null);
       if (!accountId) { setBusy(false); return; }
       setBusy(true);
       try {
@@ -229,6 +235,19 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
     <h2>{authReady ? "Sign in to open this project" : "Checking your account…"}</h2>
     {authReady && <><p>Account projects are available to their workspace members.</p><Link className="button primary small" href={`/login?next=${encodeURIComponent(studioHref({ tab: "projects", projectId: null, clientId: null, account: target }))}`}>Sign in</Link></>}
   </section> : null;
+  const reopenFocus = (trigger: HTMLButtonElement | undefined) => requestAnimationFrame(() => { if (trigger?.isConnected) trigger.focus(); });
+  function closeRename() { const trigger = renaming?.trigger; setRenaming(null); reopenFocus(trigger); }
+  function renamed(inWorkspace: string, next: CloudArtifact) {
+    const trigger = renaming?.trigger;
+    setRenaming(null);
+    // Applied only to the same account's same workspace still on screen (a switch has already cleared the list).
+    setSnapshot(current => current && current.workspace.id === inWorkspace ? { ...current, artifacts: current.artifacts.map(item => item.id === next.id ? next : item) } : current);
+    setTitleSearch(current => current.status === "ready" ? { ...current, items: current.items.map(item => item.id === next.id ? next : item) } : current);
+    // The card now names a newer version: its facts are read again for that version only.
+    metaRequested.current.ids.delete(next.id); setMetaAttempt(attempt => attempt + 1);
+    setRenameNotice(`Renamed to “${next.title}”. Saved as Version ${next.currentVersion}.`);
+    reopenFocus(trigger);
+  }
   // A brand-new account has nothing saved yet: let the studio's single welcome state speak instead of two empty panels.
   if (snapshot && !busy && !message && !selected && !target?.artifactId && snapshot.artifacts.length === 0 && workspaces.length <= 1 && scope.client === "all")
     return <PendingCloudWrites accountId={accountId} refresh={async () => { await load(snapshot.workspace.id); }} />;
@@ -253,6 +272,7 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
     {!busy && target?.artifactId && !selected && <button className="button secondary small" onClick={() => navigate(null)}>Back to projects</button>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { if (snapshot) await load(snapshot.workspace.id); else window.location.reload(); }} />
     {busy && <p role="status">Loading your account projects…</p>}
+    {renameNotice && !selected && <p role="status" className="account-projects-renamed">{renameNotice}</p>}
     {selected && snapshot ? <AccountEditor key={`${accountId}:${snapshot.workspace.id}:${selected.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} artifact={selected} project={snapshot.projects.find(project => project.id === selected.projectId)} role={snapshot.workspace.role}
       notify={setMessage} back={() => navigate({ workspaceId: snapshot.workspace.id, artifactId: null })} /> : <>
       {query && snapshot && <div className="account-projects-search">
@@ -262,15 +282,24 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
         {searchReady && <p role="status">{searchReady.total === 0 ? `No saved project titles in ${snapshot.workspace.name} contain “${query}”.` : `${searchReady.total} saved ${searchReady.total === 1 ? "project" : "projects"} in ${snapshot.workspace.name} with “${query}” in the title.`}</p>}
         {searchReady?.total === 0 && onClearSearch && <button type="button" className="button secondary small" onClick={onClearSearch}>Clear search</button>}
       </div>}
-      <div className={`account-project-grid${view === "list" ? " list" : ""}`}>{visible.map(artifact => { const meta = savedSourceMeta(artifact, shortDate), described = `card-preview-${artifact.id}`, facts = cardFacts(shownMeta.items, artifact); return <div className="account-project-card" key={artifact.id}>
+      <div className={`account-project-grid${view === "list" ? " list" : ""}`}>{visible.map(artifact => { const meta = savedSourceMeta(artifact, shortDate), described = `card-preview-${artifact.id}`, facts = cardFacts(shownMeta.items, artifact);
+        // Owners and editors can rename a saved project (a new version with only its title changed); reviewers get no menu.
+        const inWorkspace = snapshot!.workspace.id;
+        const actions: CardAction[] = snapshot!.workspace.role !== "reviewer" && artifact.currentVersion > 0 ? [{ id: "rename", label: isPlaceholderTitle(artifact.title) ? "Name this project…" : "Rename…", icon: <Pencil size={15} aria-hidden="true" />,
+          onSelect: (trigger: HTMLButtonElement) => { setRenameNotice(null); setRenaming({ artifact, workspaceId: inWorkspace, trigger }); } }] : [];
+        return <div className="account-project-card" key={artifact.id}>
         <LibraryCardPreview accountId={accountId} workspaceId={snapshot!.workspace.id} artifact={artifact} canCapture={snapshot!.workspace.role !== "reviewer"} descriptionId={described} />
         <button type="button" className="account-project-open" aria-describedby={described} disabled={busy} onClick={() => navigate({ workspaceId: snapshot!.workspace.id, artifactId: artifact.id })}>
           <span><strong>{artifact.title}</strong><small>{kindLabel[artifact.kind]} · <time dateTime={meta.at}>{meta.label}</time></small>
-            {facts && <small className="account-project-facts"><span className={`account-project-state ${facts.publication.state}`}>{PUBLICATION_LABEL[facts.publication.state]}</span>{facts.client && <span className="account-project-client"><span className="account-project-sep">, </span>Client: {facts.client.name}</span>}</small>}</span><ArrowRight size={16} /></button></div>; })}</div>
+            {facts && <small className="account-project-facts"><span className={`account-project-state ${facts.publication.state}`}>{PUBLICATION_LABEL[facts.publication.state]}</span>{facts.client && <span className="account-project-client"><span className="account-project-sep">, </span>Client: {facts.client.name}</span>}</small>}</span><ArrowRight size={16} /></button>
+          <CardActionsMenu label={`Actions for ${artifact.title}`} actions={actions} disabled={busy} /></div>; })}</div>
       {!busy && !query && !visible.length && (snapshot || noWorkspace) && <p>{snapshot ? "No saved projects match this view." : "Nothing is saved to your account yet. Your first project will be saved here."}</p>}
       {searchReady?.more === "error" && <p role="alert">More matches couldn’t load. Try again.</p>}
       {searchReady?.nextCursor && <button className="button secondary small" type="button" disabled={searchReady.more === "loading"} onClick={() => void moreMatches()}>{searchReady.more === "loading" ? "Loading more matches…" : "Show more matches"}</button>}
       {!query && snapshot?.pagination.artifacts.nextOffset != null && <button className="button secondary small" type="button" disabled={busy} onClick={() => void load(snapshot.workspace.id, true)}>Load more saved projects</button>}
+      {renaming && snapshot && snapshot.workspace.id === renaming.workspaceId && <RenameProjectDialog key={`${accountId}:${renaming.workspaceId}:${renaming.artifact.id}:${renaming.artifact.currentVersion}`} workspaceId={renaming.workspaceId} artifact={renaming.artifact}
+        project={snapshot.projects.find(project => project.id === renaming.artifact.projectId)} onClose={closeRename} onRenamed={next => renamed(renaming.workspaceId, next)}
+        onRefresh={() => { const trigger = renaming.trigger; setRenaming(null); void load(snapshot.workspace.id).then(() => reopenFocus(trigger)); }} />}
       {snapshot && <p className="small-note">Search looks through the titles of every saved project in this workspace, including ones not loaded yet. Briefs, notes and project content aren’t searched.</p>}
     </>}
   </section>;

@@ -8,10 +8,22 @@ import { z } from "zod";
  */
 
 export type PublicationState = "draft" | "live" | "live-behind";
-/** Publication state from the hosted-site row the Publish panel reads; no row or offline is Draft. */
-export function publicationState(currentVersion: number, site: { live: boolean; version_number: number } | null | undefined): PublicationState {
+/** Publication state from the hosted-site row the Publish panel reads; no row or offline is Draft.
+ * `renamedOnly`: every version saved after the live one only renamed the project (see `sameExceptTitle`), which is not an unpublished change. */
+export function publicationState(currentVersion: number, site: { live: boolean; version_number: number } | null | undefined, renamedOnly = false): PublicationState {
   if (!site?.live) return "draft";
-  return site.version_number >= currentVersion ? "live" : "live-behind";
+  return site.version_number >= currentVersion || renamedOnly ? "live" : "live-behind";
+}
+/** At most this many live projects per card-meta request have their rename-only versions verified; the rest keep the plain version comparison. */
+export const RENAME_VERIFY_MAX = 8;
+type SavedVersion = { content: unknown; style_snapshot: unknown; asset_manifest: unknown };
+const stable = (value: unknown): string => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
+  : value && typeof value === "object" ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(",")}}`
+  : JSON.stringify(value) ?? "null";
+/** Two saved versions that differ at most in `content.title`: same content otherwise, same style and the same assets. */
+export function sameExceptTitle(a: SavedVersion, b: SavedVersion): boolean {
+  const body = (content: unknown) => { if (!content || typeof content !== "object" || Array.isArray(content)) return stable(content); const { title: _title, ...rest } = content as Record<string, unknown>; void _title; return stable(rest); };
+  return body(a.content) === body(b.content) && stable(a.style_snapshot) === stable(b.style_snapshot) && stable(a.asset_manifest) === stable(b.asset_manifest);
 }
 export const PUBLICATION_LABEL: Record<PublicationState, string> = { draft: "Draft", live: "Live", "live-behind": "Live · newer changes not published" };
 

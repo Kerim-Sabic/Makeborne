@@ -342,7 +342,7 @@ async function main() {
       assert.equal(await facts(SITE), "Live · newer changes not published, Client: Acme Clinic");
       assert.equal(await facts(BOOK), "Draft, Client: Moss Press");
       assert.equal(await page.locator(`[data-card="${NEW}"] .account-project-facts`).count(), 0, "facts for another version than the card names are not shown");
-      assert.match(await page.locator(`[data-card="${SITE}"] button`).innerText(), /Live · newer changes not published/, "part of the card's accessible name");
+      assert.match(await page.locator(`[data-card="${SITE}"] button.account-project-open`).innerText(), /Live · newer changes not published/, "part of the card's accessible name");
       assert.deepEqual(await page.evaluate(() => window.metaCalls.map(call => [call.accountId, call.workspaceId])), [[ids.A, ids.W1]], "one read for the shown cards, scoped to account + workspace");
     });
 

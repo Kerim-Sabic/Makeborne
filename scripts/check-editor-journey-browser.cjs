@@ -130,6 +130,55 @@ async function main() {
       await stage(page).getByText(/Describe your website in the chat to start building/).waitFor();
       assert.equal(await stage(page).getByRole("region", { name: "Project layout preview" }).count(), 0);
     });
+    const NEW = "Saffron Table — family kitchen";
+    const renameDialog = page => page.getByRole("dialog", { name: "Rename project" });
+    const openDetails = async page => { await header(page).getByRole("button", { name: TITLE }).click(); const details = page.getByRole("group", { name: "Project details" }); await details.waitFor(); return details; };
+    for (const [width, height] of [[1440, 900], [390, 844]]) await scenario(`owner renames from the project details at ${width}: one version save with only the title changed`, { width, height, live: 1 }, async (page, { state, writes }) => {
+      const details = await openDetails(page);
+      await details.getByRole("button", { name: "Rename project" }).click();
+      await renameDialog(page).waitFor();
+      assert.match(await renameDialog(page).innerText(), /Saves Version 2 with the new name\. Nothing else in the project changes\..*A rename alone doesn’t count as an unpublished change\./s);
+      const field = renameDialog(page).getByRole("textbox", { name: "Project name" });
+      assert.equal(await field.inputValue(), TITLE);
+      await field.fill("   ");
+      await renameDialog(page).getByRole("button", { name: "Rename" }).click();
+      await renameDialog(page).getByText("Enter a name.").waitFor();
+      await field.fill("x".repeat(250));
+      assert.equal((await field.inputValue()).length, 200, "the field holds at most 200 characters, the saved title's limit");
+      await field.fill(NEW);
+      await renameDialog(page).getByRole("button", { name: "Rename" }).click();
+      await renameDialog(page).waitFor({ state: "detached" });
+      await header(page).getByRole("heading", { level: 1, name: NEW }).waitFor();
+      assert.deepEqual(writes, [`POST /api/cloud/workspaces/${ids.workspace}/artifacts/${ids.site}/versions`]);
+      const [body] = state.posts;
+      assert.equal(body.expectedVersion, 1);
+      assert.equal(body.changeSummary, `Renamed to “${NEW}”`);
+      assert.deepEqual({ ...body.content, title: TITLE }, contents.titleOnly(), "only content.title changed");
+      assert.equal(await header(page).locator(".ph-save").getAttribute("data-state"), "saved", "nothing left unsaved");
+    });
+    await scenario("a version saved elsewhere is not overwritten: the dialog says so and offers the latest version", { save: "conflict" }, async (page, { state }) => {
+      await (await openDetails(page)).getByRole("button", { name: "Rename project" }).click();
+      await renameDialog(page).getByRole("textbox", { name: "Project name" }).fill(NEW);
+      await renameDialog(page).getByRole("button", { name: "Rename" }).click();
+      await renameDialog(page).getByText("This project was saved again elsewhere, so it wasn’t renamed. Load the latest version and try again.").waitFor();
+      await renameDialog(page).getByRole("button", { name: "Load the latest version" }).waitFor();
+      assert.equal(state.versions.length, 1, "nothing was saved");
+      await header(page).getByRole("heading", { level: 1, name: TITLE }).waitFor();
+    });
+    await scenario("unsaved edits block renaming, with the reason", { save: "conflict" }, async page => {
+      await page.locator("[data-editor-chrome=toolbar]").getByRole("button", { name: "Content" }).click();
+      await page.locator(".account-content-block textarea").first().fill("Saffron Table, Leeds");
+      const details = await openDetails(page);
+      assert.equal(await details.getByRole("button", { name: "Rename project" }).isDisabled(), true);
+      await details.getByText("Save or resolve your current edits before renaming.").waitFor();
+    });
+    await scenario("reviewers can't rename", { role: "reviewer" }, async page => {
+      const details = await openDetails(page);
+      assert.equal(await details.getByRole("button", { name: /Rename|Name this project/ }).count(), 0);
+      await page.keyboard.press("Escape");
+      await header(page).getByRole("button", { name: "Project actions" }).click();
+      assert.equal(await page.getByRole("button", { name: /Rename|Name this project/ }).count(), 0);
+    });
   } finally { await browser.close(); server.close(); }
   console.log(`\n${results.filter(item => item.pass).length}/${results.length} editor journey scenarios passed.`);
   if (failures.length) process.exitCode = 1;

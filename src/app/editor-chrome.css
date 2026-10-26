@@ -51,6 +51,8 @@
 /* Project details popover */
 .ph-details { display: grid; gap: 6px; padding: 8px 8px 6px; color: var(--chrome-text); font-size: 13px; line-height: 1.45; }
 .ph-details p { margin: 0; }
+.ph-details-rename { display: grid; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--chrome-line); }
+.ph-details-rename .editor-menu-item { width: 100%; }
 .ph-details .ph-details-title { color: var(--chrome-ink); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .ph-details .ph-details-kind { color: var(--text-muted); }
 .ph-details .ph-details-save[data-tone=attention] { color: var(--chrome-attention); font-weight: 550; }
