@@ -24,7 +24,7 @@ const timeoutMs = Number(option("timeout", String(10 * 60 * 1000)));
 for (const engine of engines) if (!["chromium", "firefox", "webkit"].includes(engine)) throw new Error(`Unknown engine ${engine}`);
 
 const checks = readdirSync(path.join(root, "scripts"))
-  .filter(name => /^check-.*-browser\.cjs$/.test(name) || ["check-attachment-flow.cjs", "check-trusted-publication-flow.cjs"].includes(name))
+  .filter(name => /^check-.*-browser\.cjs$/.test(name) || ["check-attachment-flow.cjs", "check-trusted-publication-flow.cjs", "check-live-builder-flow.cjs", "check-plan-client-integrity.cjs", "check-publication-namespace-ui.cjs"].includes(name))
   .map(name => name.replace(/\.cjs$/, ""))
   .filter(name => !only.length || only.includes(name))
   .sort();

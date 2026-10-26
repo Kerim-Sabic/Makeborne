@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { build } from "esbuild";
-import { chromium } from "playwright";
+import { createRequire } from "node:module";
+const { browserType } = createRequire(import.meta.url)("./browser-engine.cjs");
 
 const fixture = `
 import React,{useEffect,useState} from 'react';import{createRoot}from'react-dom/client';
@@ -30,7 +31,7 @@ const server = createServer((request, response) => {
   else { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><div id="root"></div><script src="/fixture.js"></script>'); }
 });
 await new Promise(resolveListen => server.listen(0, "127.0.0.1", resolveListen));
-const browser = await chromium.launch({ headless: true });
+const browser = await browserType.launch({ headless: true });
 try {
   const page = await browser.newPage(); const errors = []; page.on("pageerror", error => errors.push(error.message));
   const base = `http://127.0.0.1:${server.address().port}`;

@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),ts=require('typescript'),assert=require('node:assert/strict'),Module=require('node:module');
 const original=Module._load;Module._load=function(n,p,m){return n==='server-only'?{}:original.call(this,n,p,m)};
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
-const {ProjectFiles}=require('../src/lib/builder/files.ts'),{build}=require('esbuild'),{chromium}=require('playwright'),{createServer}=require('node:http');
+const {ProjectFiles}=require('../src/lib/builder/files.ts'),{build}=require('esbuild'),{browserType}=require('./browser-engine.cjs'),{createServer}=require('node:http');
 const ids={account:'11111111-1111-4111-8111-111111111111',workspace:'22222222-2222-4222-8222-222222222222',artifact:'33333333-3333-4333-8333-333333333333',operation:'44444444-4444-4444-8444-444444444444',run:'55555555-5555-4555-8555-555555555555'};
 const project=new ProjectFiles();project.write('index.html','<html><head><title>Fixture</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>');project.write('src/main.tsx','import{createRoot}from"react-dom/client";createRoot(document.getElementById("root")).render(<h1>Fixture</h1>)');project.write('src/style.css','body{color:red}');
 const source=project.toSource();
@@ -22,7 +22,7 @@ async function main(){
   b.onResolve({filter:/^@\//},args=>({path:path.resolve('src',args.path.slice(2)+(args.path.endsWith('.css')?'':'.ts'))}));
  }}]});
  const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/fixture.js'?'text/javascript':'text/html');res.end(req.url==='/fixture.js'?output.outputFiles[0].contents:'<!doctype html><div id="root"></div><script src="/fixture.js"></script>')});
- await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await browserType.launch({headless:true});
  try{
   const base=`http://127.0.0.1:${server.address().port}`;
   async function scenario(mode){
