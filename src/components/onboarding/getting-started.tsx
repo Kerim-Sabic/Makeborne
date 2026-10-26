@@ -86,7 +86,7 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
         <div className="gs-paths">
           <button type="button" onClick={() => go.create("website")}><span className="gs-path-icon is-site"><Globe2 size={20} /></span><strong>Make my first website</strong><small>Describe your business and watch it build, live.</small><ArrowRight size={16} /></button>
           <button type="button" onClick={go.leads}><span className="gs-path-icon is-leads"><Sparkles size={20} /></span><strong>Find my first 10 leads</strong><small>Local businesses or creators, ranked for what you sell.</small><ArrowRight size={16} /></button>
-          <button type="button" onClick={() => go.create("book")}><span className="gs-path-icon is-book"><BookOpen size={20} /></span><strong>Write a book or deck</strong><small>A print-ready e-book or a presentation from your notes.</small><ArrowRight size={16} /></button>
+          <button type="button" onClick={() => go.create("book")}><span className="gs-path-icon is-book"><BookOpen size={20} /></span><strong>Write a book or deck</strong><small>An e-book to read on screen, or a presentation, from your notes.</small><ArrowRight size={16} /></button>
         </div>
         <button type="button" className="gs-skip" onClick={() => save({ welcomed: true })}>I’ll look around first</button>
       </div>
