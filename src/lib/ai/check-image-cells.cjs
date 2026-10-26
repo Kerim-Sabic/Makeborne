@@ -18,25 +18,34 @@ assert.deepEqual(cells.cropFor("1536x1024", 4 / 3), { left: 85, top: 0, width: 1
 assert.deepEqual(cells.cropFor("1024x1536", 9 / 16), { left: 80, top: 0, width: 864, height: 1536 });
 assert.deepEqual(cells.cropMargins("1536x1024", cells.cropFor("1536x1024", 16 / 9)), { x: 0, y: 7.8 });
 
-// Only measured cells resolve: today 2560x1440 is not measured, so 16:9 high falls back to the measured 3:2 canvas, cropped.
+// Only measured cells resolve. Measured 2026-10-26: the native document and comp sizes at high and xhigh; a cell
+// outside the tables (xhigh 1536x1024, high 1024x1024) still falls back or is refused.
 const sun = "gpt-image-2.5-sunburst";
 assert.equal(cells.cellMeasured(sun, "high", "1536x1024"), true);
-assert.equal(cells.cellMeasured(sun, "high", "2560x1440"), false, "2560x1440 high is unmeasured until the measurement run");
-assert.equal(cells.cellMeasured(sun, "xhigh", "2560x1440"), false);
+assert.equal(cells.cellMeasured(sun, "high", "2560x1440"), true);
+assert.equal(cells.cellMeasured(sun, "xhigh", "2560x1440"), true);
+assert.equal(cells.cellMeasured(sun, "xhigh", "1536x1024"), false);
+assert.equal(cells.cellMeasured(sun, "high", "1024x1024"), false);
 assert.equal(cells.cellMeasured("gpt-image-unknown", "medium", "1024x1024"), false);
 const wide = cells.resolveCell(sun, "high", ["2560x1440", "1536x1024"], 16 / 9);
-assert.equal(wide.ok, true); assert.equal(wide.size, "1536x1024"); assert.equal(wide.native, false); assert.deepEqual(wide.crop, { left: 0, top: 80, width: 1536, height: 864 });
-const best = cells.resolveCell(sun, "xhigh", ["2560x1440", "1536x1024"], 16 / 9);
-assert.equal(best.ok, false); assert.match(best.error, /no measured xhigh canvas/);
+assert.equal(wide.ok, true); assert.equal(wide.size, "2560x1440"); assert.equal(wide.native, true); assert.deepEqual(wide.crop, { left: 0, top: 0, width: 2560, height: 1440 });
+const fallback = cells.resolveCell(sun, "high", ["1024x1024", "1536x1024"], 16 / 9);
+assert.equal(fallback.size, "1536x1024"); assert.equal(fallback.native, false); assert.deepEqual(fallback.crop, { left: 0, top: 80, width: 1536, height: 864 });
+const refused = cells.resolveCell(sun, "xhigh", ["1536x1024", "1024x1024"], 16 / 9);
+assert.equal(refused.ok, false); assert.match(refused.error, /no measured xhigh canvas/);
 assert.equal(cells.resolveCell(sun, "medium", ["1024x1024"], 1).native, true);
+// Every planned cell is now measured, on both models.
+for (const cell of cells.MEASUREMENT_PLAN) for (const model of [sun, "gpt-image-2.5-flare"]) assert.ok(cells.cellMeasured(model, cell.quality, cell.size), `${model} ${cell.quality} ${cell.size}`);
+assert.equal(prices.imageOutputTokenBound(sun, "high", "2560x1440"), Math.ceil(1843 * prices.MEASURED_HEADROOM), "bound = observed x 1.5 (D8)");
 
 // prices.ts: xhigh and custom sizes are refused unless asked for AND measured.
-assert.throws(() => prices.assertSupportedImageRequest({ model: sun, quality: "xhigh", size: "1536x1024" }), error => error.code === "UNSUPPORTED_AI_CONFIG", "xhigh needs allowHigh");
-assert.throws(() => prices.assertSupportedImageRequest({ model: sun, quality: "xhigh", size: "2560x1440", allowHigh: true }), error => error.code === "UNSUPPORTED_AI_CONFIG", "unmeasured xhigh refused");
-assert.throws(() => prices.assertSupportedImageRequest({ model: sun, quality: "high", size: "2560x1440", allowHigh: true }), error => error.code === "UNSUPPORTED_AI_CONFIG", "unmeasured 2560x1440 refused");
+assert.throws(() => prices.assertSupportedImageRequest({ model: sun, quality: "xhigh", size: "2560x1440" }), error => error.code === "UNSUPPORTED_AI_CONFIG", "xhigh needs allowHigh");
+assert.doesNotThrow(() => prices.assertSupportedImageRequest({ model: sun, quality: "xhigh", size: "2560x1440", allowHigh: true }));
+assert.throws(() => prices.assertSupportedImageRequest({ model: sun, quality: "xhigh", size: "1536x1024", allowHigh: true }), error => error.code === "UNSUPPORTED_AI_CONFIG", "unmeasured xhigh refused");
+assert.throws(() => prices.assertSupportedImageRequest({ model: sun, quality: "high", size: "1024x1024", allowHigh: true }), error => error.code === "UNSUPPORTED_AI_CONFIG", "unmeasured high square refused");
 assert.throws(() => prices.assertSupportedImageRequest({ model: sun, quality: "medium", size: "auto" }), error => error.code === "UNSUPPORTED_AI_CONFIG", "auto size refused");
 assert.doesNotThrow(() => prices.assertSupportedImageRequest({ model: sun, quality: "high", size: "1536x1024", allowHigh: true }));
-assert.throws(() => prices.imageCallBoundMicrousd(sun, "xhigh", "2560x1440", "x"), prices.UnpricedModelError);
+assert.throws(() => prices.imageCallBoundMicrousd(sun, "xhigh", "1536x1024", "x"), prices.UnpricedModelError);
 
 // The plan: every wanted size at high and xhigh on sunburst, three flare parity cells; estimate within the reservation.
 assert.equal(cells.MEASUREMENT_PLAN.length, Object.keys(cells.WANTED_SIZES).length * 2 + 3);
