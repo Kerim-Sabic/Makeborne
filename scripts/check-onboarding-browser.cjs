@@ -40,7 +40,9 @@ async function bundle() {
       });
       b.onLoad({ filter: /\.css$/ }, args => { css.push(fs.readFileSync(args.path, "utf8")); return { contents: "", loader: "js" }; });
     } }] });
-  return { js: output.outputFiles[0].contents, styles: [fs.readFileSync("src/app/globals.css", "utf8"), ...new Set(css)].join("\n").replace(/@import[^;]+;/g, "") };
+  // The welcome uses mail/modal, whose .mc-modal overlay rules live in account-clients.css. AccountClients is mocked here, but the real
+  // studio imports it statically, so its stylesheet is always on the page; without it the welcome would render as an unstyled block.
+  return { js: output.outputFiles[0].contents, styles: [fs.readFileSync("src/app/globals.css", "utf8"), fs.readFileSync("src/app/account-clients.css", "utf8"), ...new Set(css)].join("\n").replace(/@import[^;]+;/g, "") };
 }
 
 async function main() {
