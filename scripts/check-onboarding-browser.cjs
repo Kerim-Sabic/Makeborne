@@ -132,6 +132,10 @@ async function main() {
       await page.goto(`${base}/?view=studio`);
       await welcome(page).waitFor({ timeout: 15000 });
       await page.getByRole("button", { name: /look around first/ }).click();
+      await pill(page).waitFor();
+      // On phones the checklist box spans the screen so its panel can; the empty strip beside the closed pill must not take taps
+      // meant for the page underneath.
+      assert.equal(await page.evaluate(() => { const ring = document.querySelector(".gs-pill").getBoundingClientRect(); const hit = document.elementFromPoint(ring.left - 60, ring.top + ring.height / 2); return hit ? (hit.closest(".gs") ? "checklist" : "page") : "none"; }), "page", "a tap beside the closed pill reaches the page");
       await pill(page).click();
       await page.locator(".gs-panel").waitFor();
       await page.getByRole("button", { name: "Toggle navigation" }).click();

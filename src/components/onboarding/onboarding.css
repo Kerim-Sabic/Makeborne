@@ -51,7 +51,9 @@
 .gs-link:hover { color: #2a2338; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 650px) {
-  .gs { right: 12px; bottom: 12px; left: 12px; justify-items: end; }
+  /* The box spans the phone so the open panel can; only the pill and the panel take taps, never the empty strip beside the pill. */
+  .gs { right: 12px; bottom: 12px; left: 12px; justify-items: end; pointer-events: none; }
+  .gs > * { pointer-events: auto; }
   .gs-panel { width: 100%; }
   .gs-paths button { padding: 12px; }
 }
