@@ -92,7 +92,7 @@ Verified absent from the candidate: d977daa, 7d13889, 0364dd4, af9bdf7, f988ed0,
 | Image editing (stage 5) | `MAKEBORNE_IMAGE_EDITING` plus `MAKEBORNE_IMAGE_EDIT_MODELS` (empty); generated edits also need `MAKEBORNE_AGENCY_TASKS` and `image_edit` in `MAKEBORNE_AGENCY_TASK_KINDS` (S3, S4) | off | **PAID LOCAL:** measured edit bounds in the qualification report. | The owner signs off the D8 extension, then a staging pass. |
 | Independent review (stage 6) | `MAKEBORNE_INDEPENDENT_REVIEW` (needs AGENCY_TASKS); `MAKEBORNE_CROSS_PROVIDER_REVIEW` | off | **PAID LOCAL:** re-run met every criterion at ef753a3 (adad1ac). Cross-provider: not covered. | A staging pass. |
 | Data reports (stage 7) | `MAKEBORNE_DATA_REPORTS` plus 20261024020000 | off | **PAID LOCAL:** qualifies at or after 31b1b3d. | A staging pass. |
-| CRM and lead research (crm-research) | `MAKEBORNE_CRM_RESEARCH` plus 20261025300000 and 20261026120000 | off; routes answer 404 | **LOCAL, no AI:** SQL 7/7 here; `check-crm-research-browser` 9/9 here. | Codex enforces do-not-contact in `mail/engine.ts` sendEmail and in sequences, reviews the trust boundary, and schedules the purge. Then the flag goes on. |
+| CRM and lead research (crm-research) | `MAKEBORNE_CRM_RESEARCH` plus 20261025300000, 20261026120000 and 20261026120100 | off; routes answer 404 | **LOCAL, no AI:** SQL 7/7 here; `check-crm-research-browser` 9/9 here. | Codex enforces do-not-contact in `mail/engine.ts` sendEmail and in sequences, reviews the trust boundary, and schedules the purge. Then the flag goes on. |
 
 ## 3. Migrations: new against main, in order, on a throwaway chain
 
@@ -107,6 +107,7 @@ Verified absent from the candidate: d977daa, 7d13889, 0364dd4, af9bdf7, f988ed0,
 7. `20261025200000_paying_workspace_publication` (Codex's; already applied on staging)
 8. `20261025300000_crm_research`
 9. `20261026120000_crm_server_writes` (S9: website checks stored by the server only; next steps only through the compare-and-set function. Applied on the isolated local stack `makeborne-journey-audit` only, after a rolled-back dry run)
+10. `20261026120100_research_daily_limits` (S12: per-person rolling 24-hour limits in SQL, 100 website checks and 30 client research runs; same local-only application)
 
 **Staging and push order.** Staging already has 20261025200000. Items 1–6 sort before it, so `supabase db push` would need `--include-all`, or Codex's `apply-staging-migrations.mjs` path. They are additive and do not touch the publication functions.
 

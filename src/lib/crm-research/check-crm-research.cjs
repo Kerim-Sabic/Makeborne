@@ -378,6 +378,27 @@ const W = randomUUID(), USER = randomUUID();
     assert.equal(denied.stopped, "PERMISSION_CHANGED"); assert.equal(denied.proposed, 0);
   });
 
+  await check("daily limit (S12): a website check takes one use after the busy checks and before any page is read; a refusal reads nothing; both routes take it", async () => {
+    const order = [];
+    const out = await server.guardedCheck(USER, "https://lana.test/", deps, async () => { order.push(hits.length); });
+    assert.equal(out.status, "checked"); assert.deepEqual(order, [0], "taken before the first request");
+    hits = [];
+    const refuse = server.siteCheckAdmission(async () => ({ data: { allowed: false, limit: 100, used: 100 }, error: null }), USER, W);
+    await assert.rejects(server.guardedCheck(USER, "https://lana.test/", deps, refuse), error => error.code === "DAILY_LIMIT" && error.status === 429 && /100 website checks/.test(error.message));
+    assert.equal(hits.length, 0, "no page read after a refusal");
+    // Busy refusals come first and use nothing; the slot is released after a refusal.
+    let taken = 0;
+    const slow = server.guardedCheck(USER, "https://lana.test/", deps, async () => { taken++; });
+    await assert.rejects(server.guardedCheck(USER, "https://mlin.test/", deps, async () => { taken++; }), error => error.code === "CHECK_BUSY");
+    await slow; assert.equal(taken, 1);
+    const calls = [];
+    await server.siteCheckAdmission(async (name, args) => { calls.push([name, args]); return { data: { allowed: true }, error: null }; }, USER, W)();
+    assert.deepEqual(calls, [["makeborne_research_daily_take", { p_actor: USER, p_workspace: W, p_kind: "site_check" }]]);
+    const app = path.join(__dirname, "../../app/api/cloud/workspaces/[workspaceId]");
+    for (const file of ["crm/route.ts", "clients/[clientId]/crm/route.ts"])
+      assert.match(fs.readFileSync(path.join(app, file), "utf8"), /guardedCheck\(user\.id, [^)]*\|\| null, undefined, siteCheckAdmission\(serviceRpc\(\), user\.id, workspaceId\)\)/, `${file} takes a daily use`);
+  });
+
   await check("small writes: suppression normalised and idempotent, dismissal ordered, next-step conflict surfaces as 409", async () => {
     const db = fakeDb();
     await server.addSuppression(db, W, USER, "email", "Owner@Lana.Test", "asked <not> to be contacted");

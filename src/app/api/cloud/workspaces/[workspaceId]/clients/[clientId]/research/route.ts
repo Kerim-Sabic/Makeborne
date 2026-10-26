@@ -14,7 +14,8 @@ import { ResearchRequestSchema } from "@/lib/research/contract";
 import { ResearchError, researchObjective, runClientResearch, type ResearchDeps } from "@/lib/research/research";
 import { SEARCH_REFUSED_REASON } from "@/lib/research/search";
 import { normalizeUrl } from "@/lib/research/site";
-import { briefStore, clientAnchors, documentReader, knowledgeReader, readBrief, requireClientResearch, researchCache } from "@/lib/research/server";
+import { briefStore, clientAnchors, documentReader, knowledgeReader, readBrief, requireClientResearch, researchCache, serviceRpc } from "@/lib/research/server";
+import { takeDailyUse } from "@/lib/research/daily-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -94,6 +95,8 @@ export async function POST(request: Request, context: Context) {
       cache: researchCache(scope), knowledge: knowledgeReader(scope, anchor?.artifactId ?? null),
       documents: documentReader(client, { workspaceId, projectId: anchor?.projectId ?? null }, body.documents, request.signal),
       briefs: briefStore(scope), assisted,
+      // Per-person daily limit across instances; a replay of the same request returns the stored brief without using one.
+      admit: () => takeDailyUse(serviceRpc(), { actorId: user.id, workspaceId, kind: "client_research" }),
     });
     const run = outcome.run;
     return cloudJson({ brief: outcome.row, operation: run?.status ? { id: run.status.operation.id, outcome: run.outcome, charged: run.charged, message: run.message } : null },

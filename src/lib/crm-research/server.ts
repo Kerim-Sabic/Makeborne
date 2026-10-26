@@ -9,6 +9,7 @@ import { normalizeTag } from "../leads";
 import { canonicalProposal, factPayload, type FactProposal } from "../knowledge/types";
 import { clientKnowledgeEnabled } from "../knowledge/server";
 import type { Rpc } from "../research/cache";
+import { takeDailyUse } from "../research/daily-limit";
 import { checkWebsite, CHECKER_VERSION, type CheckDeps, type SiteCheck } from "./site-check";
 import { proposalsFromCheck } from "./facts";
 import { duplicatePairs, matchesFor, normalizeSuppression, suppressionFor, type MatchRecord, type Suppression } from "./match";
@@ -36,16 +37,22 @@ export function requireEditor(role: string | undefined | null) {
 export const PROSPECT_CHECK_DAYS = 30;
 const DIRECTORY_LIMIT = 2000;
 
-// ---------- one check at a time per person, a few per server ----------
+// ---------- one check at a time per person, a few per server, a daily limit per person ----------
 const running = new Set<string>();
 let total = 0;
-export async function guardedCheck(userId: string, url: string | null, deps?: CheckDeps): Promise<SiteCheck> {
+/**
+ * `admit` takes one use of the person's daily limit (takeDailyUse, counted in SQL across instances). It runs after
+ * the busy checks and before anything is fetched, so a request refused as busy does not use one.
+ */
+export async function guardedCheck(userId: string, url: string | null, deps?: CheckDeps, admit?: () => Promise<void>): Promise<SiteCheck> {
   if (running.has(userId)) throw new RequestError("CHECK_BUSY", "Wait for your current website check to finish.", 409);
   if (total >= 4) throw new RequestError("CHECK_BUSY", "Several website checks are running. Try again in a moment.", 429);
   running.add(userId); total++;
-  try { return await checkWebsite(url, { deps }); }
+  try { await admit?.(); return await checkWebsite(url, { deps }); }
   finally { running.delete(userId); total--; }
 }
+/** The production daily limit for website checks (prospect checks from the Lead finder included). */
+export const siteCheckAdmission = (rpc: Rpc, actorId: string, workspaceId: string) => () => takeDailyUse(rpc, { actorId, workspaceId, kind: "site_check" });
 
 // ---------- reads ----------
 type ClientRow = { id: string; name: string; company: string | null; email: string | null; website: string | null; notes: string | null; created_at: string; updated_at: string; outreach: PipelineClient["outreach"] };

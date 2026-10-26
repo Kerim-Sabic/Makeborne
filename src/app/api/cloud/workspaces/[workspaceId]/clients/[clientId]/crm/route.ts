@@ -9,7 +9,7 @@ import { matchesFor, suppressionFor } from "@/lib/crm-research/match";
 import { DraftRefused, openingDraft } from "@/lib/crm-research/draft";
 import { proposalsFromCheck } from "@/lib/crm-research/facts";
 import type { SiteCheck } from "@/lib/crm-research/site-check";
-import { crmError, directory, guardedCheck, latestClientCheck, proposeFacts, readCheck, requireCrmResearch, requireEditor, setNextStep, storeCheck, suppressions } from "@/lib/crm-research/server";
+import { crmError, directory, guardedCheck, latestClientCheck, proposeFacts, readCheck, requireCrmResearch, requireEditor, setNextStep, siteCheckAdmission, storeCheck, suppressions } from "@/lib/crm-research/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -87,7 +87,7 @@ export async function POST(request: Request, context: Context) {
     const { client: db, user, workspace, workspaceId, clientId, row } = await load(context, true);
     requireEditor(workspace?.role);
     if (body.action === "check") {
-      const check = await guardedCheck(user.id, row.website || null);
+      const check = await guardedCheck(user.id, row.website || null, undefined, siteCheckAdmission(serviceRpc(), user.id, workspaceId));
       const id = await storeCheck(serviceRpc(), { workspaceId, userId: user.id, clientId, check });
       return cloudJson({ check: { id, ...check, attached: true } }, 201);
     }
