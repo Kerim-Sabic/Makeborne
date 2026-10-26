@@ -80,6 +80,7 @@ export async function POST(request: Request) {
     const { error: insertError } = await db.from("billing_checkouts").insert({ request_id: requestId, user_id: user.id, plan_id: planId, return_path: next, status: "pending" });
     if (insertError) {
       if (insertError.code === "PBC01") throw new RequestError("SUBSCRIPTION_ALREADY_EXISTS", "You already have a creation subscription. Contact support to change your plan; you do not need to buy another subscription.", 409);
+      if (insertError.code === "PBC03") throw new RequestError("SUBSCRIPTION_REPURCHASE_REQUIRES_SUPPORT", "Your previous subscription allowance needs a check before you subscribe again. Please contact admin@makeborne.com. No new checkout has been opened.", 409);
       if (insertError.code === "PBC02") {
         // Never a second checkout: resume the open one for the same plan (an abandoned
         // checkout must not lock the account), otherwise ask to finish it or contact support.

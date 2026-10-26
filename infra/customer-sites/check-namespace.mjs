@@ -38,6 +38,7 @@ async function mocked(env,fn,{cacheHit=false}={}) {
 const deniedPaths=['/','/robots.txt','/images/hero.webp','/assets/index-A123.js','/_mb/enquiries','/good-dog'];
 await check('configuration exact routes and distinct public database authorities',async()=>{
   const config=ts.parseConfigFileTextToJson('wrangler.jsonc',await readFile(new URL('./wrangler.jsonc',import.meta.url),'utf8')).config;
+  assert.equal(config.account_id,'edda2b12d52321e4df2012e196b33640','Never infer the deployment account from a shared Wrangler login');
   assert.deepEqual(config.env.staging.routes.map(route=>route.pattern),STAGING_SITE_LABELS.map(label=>label+'.makeborne.site/*'));
   assert.ok(config.env.staging.routes.every(route=>route.zone_name==='makeborne.site'));
   assert.deepEqual(config.env.production.routes.map(route=>route.pattern),['*.makeborne.site/*','makeborne.site/*']);
