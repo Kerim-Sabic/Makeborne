@@ -12,6 +12,7 @@ import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
 import { anchorLabel } from "@/lib/client-review/feedback";
 import { discardReviewDraft, hasReviewDraftText, readReviewDraft, reviewDraftScope, saveReviewDraft } from "@/lib/client-review/unsent-feedback";
 import { reviewDateLabel as dateLabel, reviewTimeLabel as timeLabel } from "@/lib/client-review/date-format";
+import LocalDateTime from "./local-date-time";
 import type { ActiveReview, ReviewAnchor, ReviewComment, ReviewDecision, ReviewPayload } from "@/lib/client-review/contracts";
 import { frameListenersRun, watchFrameScroll } from "@/lib/frame-events";
 import "@/app/account-preview.css";
@@ -205,7 +206,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
       <div className="cr-top-title">
         <span className="cr-shared"><BrandMark size={16} /> Shared for review</span>
         <h1>{initial.title}</h1>
-        <p><span className="cr-chip">Version {initial.version}</span><span>{initial.pinned ? "This exact version" : "Always the latest version"}</span><span aria-hidden="true">·</span><span>Link open until {dateLabel(initial.expiresAt)}</span></p>
+        <p><span className="cr-chip">Version {initial.version}</span><span>{initial.pinned ? "This exact version" : "Always the latest version"}</span><span aria-hidden="true">·</span><span>Link open until <LocalDateTime value={initial.expiresAt} /></span></p>
       </div>
       <div className="cr-top-actions">
         {decision ? <DecisionBadge decision={decision} /> : null}
