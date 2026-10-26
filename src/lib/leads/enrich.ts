@@ -1,3 +1,4 @@
+import { replaceElements } from "../html/scan";
 import { pinnedPageFetch, readPublicPage, type Fetcher, type Lookup, type PageFacts } from "../mail/research";
 
 /**
@@ -26,7 +27,8 @@ export function extractEmails(html: string, siteHost: string): string[] {
   };
   for (const match of html.matchAll(/mailto:([^"'\s>?]+)/gi)) { try { add(match[1]); } catch { /* malformed escape */ } }
   for (const match of html.matchAll(/data-cfemail=["']([0-9a-f]+)["']/gi)) add(decodeCfEmail(match[1]));
-  const text = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ");
+  // Same result as html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " "), in linear time (an unclosed <script is read once, not from every start).
+  const text = replaceElements(html, ["script", "style"], { open: "name", boundary: false });
   for (const match of text.matchAll(/[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}/g)) add(match[0]);
   const host = siteHost.replace(/^www\./, "").toLowerCase();
   const rank = (email: string) => (email.endsWith(`@${host}`) ? 0 : 2) + (/^(info|hello|contact|office|kontakt|studio|team|hi|mail)@/.test(email) ? 0 : 1);

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { googleFontFamilies, nextOpenOrClose, nextTag, stripComments, tags, tagTest } from "../html/scan";
 import { auditSite, readSiteContent, type AuditFinding } from "../leads/redesign";
 
 /**
@@ -12,6 +13,9 @@ import { auditSite, readSiteContent, type AuditFinding } from "../leads/redesign
  * - Signals the page shows to a visitor (secure connection, phone layout,
  *   enquiry form, tap-to-call, footer year, theme colour, fonts, logo) are
  *   written as one plain line, so strengths/shortcomings cite real text.
+ * - The HTML is untrusted and up to 600 KB, so it is scanned in linear time
+ *   (html/scan.ts): an unfinished tag, comment or element is never re-read
+ *   from every later start.
  */
 export type PageData = {
   title: string; description: string; siteName: string;
@@ -32,24 +36,21 @@ const hiddenAttrs = (attrs: string) => {
   const style = /\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(attrs);
   return /\shidden(?:\s|=|\/|$)/i.test(attrs) || /\saria-hidden\s*=\s*["']?true/i.test(attrs) || Boolean(style && HIDDEN_STYLE.test(style[1] ?? style[2] ?? ""));
 };
-/** Elements a visitor cannot see, removed with everything inside them (depth-matched, bounded work). */
+/** Elements a visitor cannot see, removed with everything inside them (depth-matched, linear work). */
 export function stripHidden(html: string): { html: string; removed: number } {
-  const source = html.replace(/<!--[\s\S]*?-->/g, " ");
-  const opening = /<([a-z][a-z0-9]*)\b([^>]*)>/gi;
-  let out = "", from = 0, removed = 0, match: RegExpExecArray | null;
-  while ((match = opening.exec(source)) && removed < 500) {
-    const tag = match[1].toLowerCase();
-    if (VOID.has(tag) || match[2].trimEnd().endsWith("/") || !hiddenAttrs(match[2])) continue;
+  const source = stripComments(html);
+  let out = "", from = 0, removed = 0, at = 0;
+  for (let tag = nextTag(source, at); tag && removed < 500; tag = nextTag(source, at)) {
+    at = tag.end;
+    if (VOID.has(tag.name) || tag.attrs.trimEnd().endsWith("/") || !hiddenAttrs(tag.attrs)) continue;
     // Find the matching close tag, counting nested elements of the same name.
-    const scan = new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
-    scan.lastIndex = opening.lastIndex;
-    let depth = 1, end = source.length, next: RegExpExecArray | null;
-    while (depth > 0 && (next = scan.exec(source))) {
-      depth += next[1] ? -1 : next[0].trimEnd().endsWith("/>") ? 0 : 1;
-      if (depth === 0) end = scan.lastIndex;
+    let depth = 1, end = source.length;
+    for (let next = nextOpenOrClose(source, tag.end, tag.name); next; next = nextOpenOrClose(source, next.end, tag.name)) {
+      depth += next.closing ? -1 : next.raw.trimEnd().endsWith("/>") ? 0 : 1;
+      if (depth === 0) { end = next.end; break; }
     }
-    out += `${source.slice(from, match.index)} `;
-    from = end; opening.lastIndex = end; removed++;
+    out += `${source.slice(from, tag.start)} `;
+    from = end; at = end; removed++;
   }
   return { html: out + source.slice(from), removed };
 }
@@ -70,19 +71,23 @@ function keep(values: readonly string[], counter: { injection: number }) {
 }
 
 function meta(html: string, name: string) {
-  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+  for (const tag of tags(html, ["meta"])) {
     const key = /\s(?:name|property)\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1]?.toLowerCase();
     if (key === name) return clean(/\scontent\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1] ?? "");
   }
   return "";
 }
 
+// Sticky (`y`) so tagTest can try each one at a tag start.
+const LOGO = /<img\b[^>]*(?:src|alt|class)\s*=\s*["'][^"']*logo/iy;
+const PASSWORD = /<input\b[^>]*type\s*=\s*["']?password/iy;
+
 function signalsOf(html: string, finalUrl: URL, audit: readonly AuditFinding[]) {
   const has = (id: string) => audit.some(item => item.id === id);
   const year = audit.find(item => item.id === "dated")?.detail.match(/© (\d{4})/)?.[1];
   const theme = /^#[0-9a-f]{3,8}$/i.test(meta(html, "theme-color")) ? meta(html, "theme-color") : "";
-  const fonts = [...new Set([...html.matchAll(/fonts\.googleapis\.com\/css2?\?[^"'>]*family=([^"'&>:]+)/gi)].map(match => decodeURIComponent(match[1]).replace(/\+/g, " ").trim()))].slice(0, 3);
-  const logo = /<img\b[^>]*(?:src|alt|class)\s*=\s*["'][^"']*logo/i.test(html);
+  const fonts = [...new Set(googleFontFamilies(html).map(family => decodeURIComponent(family).replace(/\+/g, " ").trim()))].slice(0, 3);
+  const logo = tagTest(html, "img", true, LOGO);
   const parts = [
     `Secure connection: ${/^https:$/.test(finalUrl.protocol) ? "yes" : "no"}`,
     `Phone layout: ${has("mobile") ? "no" : "yes"}`,
@@ -112,7 +117,7 @@ export function extractPage(rawHtml: string, finalUrl: URL, now?: Date): PageDat
   const items = keep(content.items, counter).slice(0, 30);
   const audit = auditSite({ html: rawHtml, finalUrl: finalUrl.href, content, now });
   const signals = signalsOf(rawHtml, finalUrl, audit);
-  const login = /<input\b[^>]*type\s*=\s*["']?password/i.test(html) && content.words < 250 || /\/(log-?in|sign-?in|account\/login)(\/|$)/i.test(finalUrl.pathname);
+  const login = tagTest(html, "input", true, PASSWORD) && content.words < 250 || /\/(log-?in|sign-?in|account\/login)(\/|$)/i.test(finalUrl.pathname);
   // Bot checks and consent walls have no title, description or text.
   const blocked = !title && !description && content.words < 20;
   const host = finalUrl.hostname.replace(/^www\./, "");

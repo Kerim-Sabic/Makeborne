@@ -1,3 +1,4 @@
+import { anchorsWithHref, jsonLdBlocks, replaceElements, stripTags } from "../html/scan";
 import { pinnedFetcher, type Fetcher } from "../mail/research";
 import { INACCESSIBLE_LABEL, type InaccessibleReason } from "../research/contract";
 import type { CachedPage, CacheEntry, ResearchCache } from "../research/cache";
@@ -17,6 +18,8 @@ import { scoreFindings, type CheckFinding, type CheckStrength, type Evidence } f
  * - a site we could not read gets NO score, only the reason (never a guess);
  * - what this check cannot see is always listed.
  * Speed is one download timed from our server, and is labelled that way.
+ * Page HTML is untrusted (up to 600 KB), so it is scanned in linear time
+ * (html/scan.ts) rather than with patterns that backtrack across the page.
  */
 export const CHECKER_VERSION = "crm-site-check-2026-10-25.1";
 export const CHECK_LIMITS = Object.freeze({ maxPages: 4, timeMs: 20_000, maxPageBytes: 600_000, maxBytes: 2_000_000, links: 5, linkBytes: 65_536, linkTimeMs: 8_000 });
@@ -73,8 +76,8 @@ const day = (at: string) => at.slice(0, 10);
 const plain = (value: string) => value.replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
 
 function structuredData(html: string): string | null {
-  for (const match of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]{0,60000}?)<\/script>/gi)) {
-    const type = /"@type"\s*:\s*(?:\[\s*)?"([^"]{1,60})"/.exec(match[1])?.[1];
+  for (const block of jsonLdBlocks(html, 60_000)) {
+    const type = /"@type"\s*:\s*(?:\[\s*)?"([^"]{1,60})"/.exec(block)?.[1];
     if (type && /Business|Organization|Restaurant|Store|Dentist|Clinic|Salon|Hotel|Cafe|Bakery|Gym|Shop|Agency|Practice|Office|Service|Physician|Attorney|Lodging/i.test(type)) return type;
   }
   return null;
@@ -94,7 +97,7 @@ export function linksToCheck(home: SitePage, html: string, read: ReadonlySet<str
     } catch { /* not a link */ }
   };
   for (const item of home.page.nav) consider(item.url, item.label);
-  for (const match of html.matchAll(/<a\b[^>]*\shref\s*=\s*["']([^"']{1,500})["'][^>]*>([\s\S]{0,300}?)<\/a>/gi)) consider(match[1], match[2].replace(/<[^>]+>/g, " "));
+  for (const [href, label] of anchorsWithHref(html)) consider(href, label.replace(/<[^>]+>/g, " "));
   return out;
 }
 
@@ -115,9 +118,10 @@ export function findingsFromPages(input: { home: SitePage; pages: readonly SiteP
   if (audit.has("cta")) add("cta", "No clear next step", "We found no book, call or contact button or link on the home page.", evidence({ quote: signal("Clear next step") }));
   const allPhones = input.pages.flatMap(page => page.page.phones), allEmails = input.pages.flatMap(page => page.page.emails), anyAddress = input.pages.some(page => page.page.address);
   // Only when nothing that looks like contact details appears anywhere we read (a number in plain text counts).
-  const visibleText = input.pages.map(page => `${page.page.text} ${(input.captures.get(page.finalUrl)?.html ?? "").replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ")}`).join(" ");
+  const visibleText = input.pages.map(page => `${page.page.text} ${stripTags(replaceElements(input.captures.get(page.finalUrl)?.html ?? "", ["script", "style"], { open: "name" }))}`).join(" ");
   const phoneLike = (visibleText.match(/\+?\d[\d\s().\/-]{5,}\d/g) ?? []).some(value => { const digits = value.replace(/\D/g, "").length; return digits >= 7 && digits <= 15; });
-  const emailLike = /[\w.+-]+@[\w-]+\.[a-z]{2,}/i.test(visibleText);
+  // One character before "@" is enough to test for an address (the same answer as `[\w.+-]+@`, without re-reading long words).
+  const emailLike = /[\w.+-]@[\w-]+\.[a-z]{2,}/i.test(visibleText);
   if (!allPhones.length && !allEmails.length && !anyAddress && !phoneLike && !emailLike && !/href=["']tel:|href=["']mailto:/i.test(html))
     add("no_contact", "No contact details found", `None of the ${input.pages.length} page${input.pages.length === 1 ? "" : "s"} we read shows a phone number, email address or street address.`, evidence({ measured: `${input.pages.length} page(s) read: ${input.pages.map(page => page.finalUrl).join(", ")}`.slice(0, 480) }));
   if (timing && timing.ms > SLOW_MS) add("slow", "Slow to load", `The home page took ${(timing.ms / 1000).toFixed(1)} s to download when we checked on ${day(at)} (one measurement from our server).`, evidence({ measured: `Download time ${timing.ms} ms` }));
