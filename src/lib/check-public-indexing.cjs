@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Offline check: public pages are indexable, private ones stay noindex. */
 // Public pages in the sitemap must not be sent with a noindex header, and private pages must keep one.
 // A rule for "/billing/:path*" also matches "/billing", which kept the pricing and terms pages out of search.
 const assert = require("node:assert/strict");
