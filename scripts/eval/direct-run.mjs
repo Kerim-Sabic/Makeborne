@@ -60,7 +60,9 @@ const key = /^ANTHROPIC_API_KEY\s*=\s*(.*)$/m.exec(envText)?.[1]?.trim().replace
 if (!key) throw new Error('ANTHROPIC_API_KEY missing');
 const openaiKey = values.images ? /^OPENAI_API_KEY\s*=\s*(.*)$/m.exec(envText)?.[1]?.trim().replace(/^["']|["']$/g, '') : '';
 if (values.images && !openaiKey) throw new Error('--images needs OPENAI_API_KEY in the .env.local');
-Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_CREDIT: '0.03', MAKEBORNE_BUILDER_FALLBACK_MODELS: '', OPENAI_API_KEY: openaiKey, MAKEBORNE_IMAGE_MODEL: '', MAKEBORNE_IMAGE_MODELS: values.images ?? '' });
+Object.assign(process.env, { ANTHROPIC_API_KEY: key, MAKEBORNE_AI_COST_USD_PER_CREDIT: '0.03', MAKEBORNE_BUILDER_FALLBACK_MODELS: '', OPENAI_API_KEY: openaiKey, MAKEBORNE_IMAGE_MODEL: '', MAKEBORNE_IMAGE_MODELS: values.images ?? '',
+  // The eval measures the full pipeline: design comps are off by default in the app (lib/builder/features.ts).
+  MAKEBORNE_DESIGN_COMPS: 'on' });
 delete process.env.MAKEBORNE_BUILDER_MODEL;
 
 const { runBuilder } = loadApp('src/lib/builder/agent.ts');

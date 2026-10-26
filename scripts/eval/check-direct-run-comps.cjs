@@ -4,7 +4,7 @@ const { loadApp } = require("./lib/app-modules.cjs");
 
 (async () => {
   // direct-run.mjs: images on with the text-capable 2.5 models, the 0.03 rate, no other image model.
-  Object.assign(process.env, { ANTHROPIC_API_KEY: "offline-not-sent", OPENAI_API_KEY: "offline-not-sent", MAKEBORNE_AI_COST_USD_PER_CREDIT: "0.03", MAKEBORNE_BUILDER_FALLBACK_MODELS: "", MAKEBORNE_IMAGE_MODEL: "", MAKEBORNE_IMAGE_MODELS: "gpt-image-2.5-sunburst,gpt-image-2.5-flare" });
+  Object.assign(process.env, { ANTHROPIC_API_KEY: "offline-not-sent", OPENAI_API_KEY: "offline-not-sent", MAKEBORNE_AI_COST_USD_PER_CREDIT: "0.03", MAKEBORNE_BUILDER_FALLBACK_MODELS: "", MAKEBORNE_IMAGE_MODEL: "", MAKEBORNE_IMAGE_MODELS: "gpt-image-2.5-sunburst,gpt-image-2.5-flare", MAKEBORNE_DESIGN_COMPS: "on" });
   delete process.env.MAKEBORNE_BUILDER_MODEL;
   const { runBuilder } = loadApp("src/lib/builder/agent.ts");
   const { ProjectFiles } = loadApp("src/lib/builder/files.ts");
@@ -12,6 +12,7 @@ const { loadApp } = require("./lib/app-modules.cjs");
   const { BUILDER_EFFORT } = loadApp("src/lib/builder/pricing.ts");
   const source = fs.readFileSync(path.join(__dirname, "direct-run.mjs"), "utf8");
   assert.match(source, /concept: name === 'build' && !files\.files\.size/, "direct-run asks for the concept step on the first build");
+  assert.match(source, /MAKEBORNE_DESIGN_COMPS: 'on'/, "direct-run turns the app's design-comps switch on");
   for (const effort of ["medium", "high"]) {
     const seen = [];
     const anthropic = { beta: { messages: {
