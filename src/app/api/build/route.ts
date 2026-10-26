@@ -244,7 +244,8 @@ export async function POST(request: Request) {
       // First build: the concept step (2-3 concepts scored on the rubric, the strongest built) inside this run.
       concept: Boolean(seed),
       // Rendered contrast at finish, measured in the export pipeline's Chromium on this app's origin (fail open without a browser).
-      contrastCheck: process.env.MAKEBORNE_CONTRAST_GATE === "off" ? undefined : renderedContrastCheck({ origin: new URL(request.url).origin, launch: async () => {
+      contrastCheck: process.env.MAKEBORNE_CONTRAST_GATE === "off" ? undefined : renderedContrastCheck({ origin: new URL(request.url).origin,
+        previewAccessToken: process.env.VERCEL_ENV === "preview" ? request.headers.get("x-vercel-trusted-oidc-idp-token") ?? undefined : undefined, launch: async () => {
         const [{ chromium }, { chromiumLaunchOptions }] = await Promise.all([import("playwright"), import("@/lib/server/export")]);
         return chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
       } }),

@@ -74,14 +74,25 @@ export function contrastProblems(findings: readonly ContrastFinding[]) {
  * itself, or a local static server in the eval harness); `launch` opens the
  * browser (production: the export pipeline's Chromium).
  */
-export function renderedContrastCheck(input: { origin: string; launch: () => Promise<Browser>; timeoutMs?: number }) {
+/** A preview's existing protection credential can reach only its own static runtime, never customer code or another origin. */
+export function runtimeAccessHeader(url: string, origin: string, previewAccessToken?: string): Record<string, string> {
+  const target = new URL(url);
+  return previewAccessToken && target.origin === origin && target.pathname.startsWith("/builder-runtime/")
+    ? { "x-vercel-trusted-oidc-idp-token": previewAccessToken } : {};
+}
+export function renderedContrastCheck(input: { origin: string; launch: () => Promise<Browser>; timeoutMs?: number; previewAccessToken?: string }) {
   const origin = new URL(input.origin).origin;
   return async (files: ReadonlyMap<string, string>, options: { comps?: readonly CompReading[] } = {}): Promise<readonly string[] | null> => {
     let browser: Browser | null = null;
     try {
       browser = await input.launch();
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
-      await context.route("**/*", route => (new URL(route.request().url()).origin === origin || route.request().url().startsWith("data:") || route.request().url().startsWith("blob:") ? route.continue() : route.abort("blockedbyclient")));
+      await context.route("**/*", route => {
+        const url = route.request().url();
+        if (new URL(url).origin !== origin && !url.startsWith("data:") && !url.startsWith("blob:")) return route.abort("blockedbyclient");
+        const access = runtimeAccessHeader(url, origin, input.previewAccessToken);
+        return Object.keys(access).length ? route.continue({ headers: { ...route.request().headers(), ...access } }) : route.continue();
+      });
       await context.route(`${origin}${HOST_PATH}`, route => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: "<!doctype html><html><head><meta charset=\"utf-8\"></head><body></body></html>" }));
       const page = await context.newPage();
       page.setDefaultTimeout(input.timeoutMs ?? 60_000);

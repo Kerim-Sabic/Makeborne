@@ -85,6 +85,10 @@ export default function App() {}`);
   });
 
   await check("section comps are drawn without the header and need no navigation; heavy type is the default and travels to the review", () => {
+    const { runtimeAccessHeader } = require("./contrast-gate.ts");
+    const origin = "https://preview.example.invalid", token = "fictional-test-credential";
+    assert.deepEqual(runtimeAccessHeader(origin + "/builder-runtime/contrast-probe.js", origin, token), { "x-vercel-trusted-oidc-idp-token": token });
+    for (const url of [origin + "/api/account", "https://other.example.invalid/builder-runtime/x.js", origin + "/builder-runtime/../api/account", "data:text/plain,x", "blob:https://other.example.invalid/id"]) assert.deepEqual(runtimeAccessHeader(url, origin, token), {}, url);
     const { compInputIssues, isFirstScreen, heavyType } = require("./comp-prompt.ts");
     const { compsFromSource, conceptComment } = require("./concept.ts");
     const section = { ...BIKES, section: "repairs", nav: undefined };
