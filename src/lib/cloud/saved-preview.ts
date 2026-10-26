@@ -22,6 +22,13 @@ export function savedFormat(content: ArtifactContent, version: number): SavedFor
   return !titled && (!blocks.length || titleOnly) ? "starting" : "outline";
 }
 
+/**
+ * A starting draft with any saved block (a new project keeps at least its title heading) is shown in the
+ * same layout preview a client review link and Publish use, so the editor is never the one place where
+ * saved content can't be seen. Only a draft with no blocks at all gets the empty "starts here" state.
+ */
+export const startingDraftHasContent = (content: Pick<ArtifactContent, "sections">) => content.sections.some(section => section.blocks.length > 0);
+
 /** Builder output exists: a new build edits it rather than starting over. */
 export const hasBuilderSource = (format: SavedFormat | null) => format === "document" || format === "website-source";
 

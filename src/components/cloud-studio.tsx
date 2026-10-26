@@ -34,7 +34,7 @@ import LivePreview from "./live-preview";
 import ProjectHeader, { saveStateOf } from "./project-header";
 import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
-import { choosePreview, editorEntry, hasBuilderSource, savedFormat } from "@/lib/cloud/saved-preview";
+import { choosePreview, editorEntry, hasBuilderSource, savedFormat, startingDraftHasContent } from "@/lib/cloud/saved-preview";
 import { BUILDER_OFF, BUILDER_WAITING_COPY, parseBuilderAvailability, type BuilderAvailability } from "@/lib/builder/availability";
 import "@/app/live-builder.css";
 import { captureProjectPublication, captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
@@ -1772,7 +1772,10 @@ export function CloudEditor({
             {format === "website-design" ? "This website is saved as a static design." : `This ${artifact.kind} is saved as an outline of its text.`} {editor.instruction}{" "}<button type="button" className="cloud-workbench-format-link" onClick={() => setView("edit")}>Open {editor.label}</button>
             {" "}A build in the chat saves a new {artifact.kind === "website" ? "website project" : `designed ${artifact.kind}`} as the next version; this version stays in History.
           </p>}
-          {preview === "start-draft" ? <div className="cloud-workbench-empty">
+          {preview === "start-draft" && startingDraftHasContent(content) && <p className="cloud-workbench-format cloud-workbench-start-note" role="note">
+            Nothing has been built yet. This is a layout preview of your saved content, the same view a client review link shows. {editor.instruction}{" "}<button type="button" className="cloud-workbench-format-link" onClick={() => setView("edit")}>Open {editor.label}</button>
+          </p>}
+          {preview === "start-draft" && !startingDraftHasContent(content) ? <div className="cloud-workbench-empty">
             <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
             <h3>Your {artifact.kind} starts here</h3>
             <p>{project?.brief.trim() ? "Your brief is saved. " : ""}Your editable draft will appear here. {role === "reviewer" ? "You have view access to this project." : "You can add your own content in the editor."}</p>
