@@ -75,6 +75,13 @@ export function contrastProblems(findings: readonly ContrastFinding[]) {
  * browser (production: the export pipeline's Chromium).
  */
 /** A preview's existing protection credential can reach only its own static runtime, never customer code or another origin. */
+export function previewRuntimeAccessToken(environment: string | undefined, requestToken?: string | null, configuredToken?: string): string | undefined {
+  // Vercel may consume the inbound protection header before invoking the function.
+  // An isolated preview can supply the same existing credential privately instead.
+  if (environment !== "preview") return undefined;
+  return requestToken?.trim() || configuredToken?.trim() || undefined;
+}
+
 export function runtimeAccessHeader(url: string, origin: string, previewAccessToken?: string): Record<string, string> {
   const target = new URL(url);
   return previewAccessToken && target.origin === origin && target.pathname.startsWith("/builder-runtime/")

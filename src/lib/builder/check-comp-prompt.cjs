@@ -87,8 +87,13 @@ export default function App() {}`);
   await check("section comps are drawn without the header and need no navigation; heavy type is the default and travels to the review", () => {
     const traced = require(path.resolve(__dirname, "../../../next.config.ts")).default.outputFileTracingIncludes["/api/build"];
     for (const runtime of ["./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", "./node_modules/@sparticuz/chromium/bin/**"]) assert.ok(traced.includes(runtime), `finish-time verifier traces ${runtime}`);
-    const { runtimeAccessHeader } = require("./contrast-gate.ts");
+    const { runtimeAccessHeader, previewRuntimeAccessToken } = require("./contrast-gate.ts");
     const origin = "https://preview.example.invalid", token = "fictional-test-credential";
+    assert.equal(previewRuntimeAccessToken("preview", undefined, token), token);
+    assert.equal(previewRuntimeAccessToken("preview", " ", token), token);
+    assert.equal(previewRuntimeAccessToken("preview", "request-token", token), "request-token");
+    assert.equal(previewRuntimeAccessToken("preview", undefined, " "), undefined);
+    for (const environment of ["production", "development", undefined]) assert.equal(previewRuntimeAccessToken(environment, token, token), undefined);
     assert.deepEqual(runtimeAccessHeader(origin + "/builder-runtime/contrast-probe.js", origin, token), { "x-vercel-trusted-oidc-idp-token": token });
     for (const url of [origin + "/api/account", "https://other.example.invalid/builder-runtime/x.js", origin + "/builder-runtime/../api/account", "data:text/plain,x", "blob:https://other.example.invalid/id"]) assert.deepEqual(runtimeAccessHeader(url, origin, token), {}, url);
     const { compInputIssues, isFirstScreen, heavyType } = require("./comp-prompt.ts");

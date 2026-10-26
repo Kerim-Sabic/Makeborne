@@ -12,7 +12,7 @@ import { ProjectFiles } from "@/lib/builder/files";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
 import { designSeedBlock, seedApplies } from "@/lib/builder/design-seed";
-import { renderedContrastCheck } from "@/lib/builder/contrast-gate";
+import { previewRuntimeAccessToken, renderedContrastCheck } from "@/lib/builder/contrast-gate";
 import { BuildBriefSchema, DesignAnswersSchema, briefTone, designAnswersBlock, enhancedBriefBlock, requiredSections } from "@/lib/builder/enhanced-brief";
 import { imageConfiguration } from "@/lib/builder/images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
@@ -245,7 +245,7 @@ export async function POST(request: Request) {
       concept: Boolean(seed),
       // Rendered contrast at finish, measured in the export pipeline's Chromium on this app's origin (fail open without a browser).
       contrastCheck: process.env.MAKEBORNE_CONTRAST_GATE === "off" ? undefined : renderedContrastCheck({ origin: new URL(request.url).origin,
-        previewAccessToken: process.env.VERCEL_ENV === "preview" ? request.headers.get("x-vercel-trusted-oidc-idp-token") ?? undefined : undefined, launch: async () => {
+        previewAccessToken: previewRuntimeAccessToken(process.env.VERCEL_ENV, request.headers.get("x-vercel-trusted-oidc-idp-token"), process.env.STAGING_VERCEL_OIDC_TOKEN), launch: async () => {
         const [{ chromium }, { chromiumLaunchOptions }] = await Promise.all([import("playwright"), import("@/lib/server/export")]);
         return chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
       } }),
