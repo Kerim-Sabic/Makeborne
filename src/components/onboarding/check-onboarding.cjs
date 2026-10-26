@@ -44,4 +44,14 @@ check("each step's button does the right thing and links a real guide", () => {
   assert.deepEqual(calls, ["create:website", "leads", "email", "clients", "projects", "chat"]);
 });
 
+check("the review step and its guide name the control people actually click (Client review in the project's ••• menu)", () => {
+  // The project header (60a92f0) moved review links into Project actions → Client review; "Open projects" alone lands on the library.
+  const step = checklist(fresh, false, go).find(item => item.id === "review");
+  assert.match(step.hint, /Client review/);
+  const guide = HELP_ARTICLES.find(article => article.slug === step.guide);
+  assert.match(guide.answer, /Client review/);
+  assert.ok(guide.steps.some(item => /Client review/.test(item.name + item.text)), "a step names Client review");
+  assert.doesNotMatch(`${guide.answer} ${guide.steps.map(item => item.name).join(" ")}`, /choose Share for review|^Share for review$/m, "no stale button name");
+});
+
 console.log(`\n${passed} onboarding checks passed.`);

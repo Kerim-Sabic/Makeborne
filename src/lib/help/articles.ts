@@ -186,10 +186,10 @@ const CORE_ARTICLES: HelpArticle[] = [
     title: "How to share work with a client for review and approval",
     description: "Send a review link so your client can comment and approve a website, book or presentation, with no account needed. Approval marks the project Delivered.",
     keywords: ["review", "approval", "feedback", "share", "client link", "comments", "approve", "sign off", "proof"],
-    answer: "Open the project and choose Share for review, then copy the link and send it to your client. They can view the latest version (or a specific one), leave comments and approve it or request changes, without creating an account. Approval marks the project Delivered; a change request marks it Changes requested.",
+    answer: "Open the project, choose Client review in the ••• menu at the top right, create a review link, then copy it and send it to your client. They can view the latest version (or a specific one), leave comments and approve it or request changes, without creating an account. Approval marks the project Delivered; a change request marks it Changes requested.",
     steps: [
       { name: "Open the project", text: "Go to the website, book or presentation." },
-      { name: "Share for review", text: "Choose the latest version or a specific one." },
+      { name: "Choose Client review", text: "In the project’s ••• menu at the top right. Pick the latest version or a specific one, then Create review link." },
       { name: "Copy and send the link", text: "Email or message it to your client." },
       { name: "Read feedback", text: "Comments and the client’s decision appear on the project, and you can resolve comments as you act on them." },
     ],

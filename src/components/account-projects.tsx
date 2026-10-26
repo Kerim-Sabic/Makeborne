@@ -340,7 +340,7 @@ export default function AccountProjects({ search, filter, target, navigate, onSt
           </a>
           <CardActionsMenu label={`Actions for ${artifact.title}`} actions={actions} disabled={busy} />
         </div>; })}</div></div>}
-      {!busy && !query && !visible.length && (snapshot || noWorkspace) && <p className="account-projects-empty">{snapshot ? "No saved projects match this view." : "No account workspace was found. Your device projects remain below."}</p>}
+      {!busy && !query && !visible.length && (snapshot || noWorkspace) && <p className="account-projects-empty">{snapshot ? "No saved projects match this view." : "Nothing is saved to your account yet. Your first project will be saved here."}</p>}
       {searchReady?.more === "error" && <p role="alert">More matches couldn’t load. Try again.</p>}
       {searchReady?.nextCursor && <button className="button secondary small" type="button" disabled={searchReady.more === "loading"} onClick={() => void moreMatches()}>{searchReady.more === "loading" ? "Loading more matches…" : "Show more matches"}</button>}
       {!query && snapshot?.pagination.artifacts.nextOffset != null && <button className="button secondary small" type="button" disabled={busy} onClick={() => void load(snapshot.workspace.id, true)}>Load more saved projects</button>}
