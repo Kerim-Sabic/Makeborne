@@ -13,6 +13,8 @@ const formats = require("../lib/documents/art-formats.ts");
 const { emptyDocument } = require("../lib/documents/editor.ts");
 
 const offers = formats.documentImageOffers("gpt-image-2.5-sunburst", 0.03);
+// A model with only the published sizes measured: Best has no measured canvas there.
+const partial = formats.documentImageOffers("gpt-image-2", 0.03);
 let count = 0;
 const check = (name, fn) => { fn(); count++; console.log(`PASS ${name}`); };
 
@@ -20,7 +22,9 @@ check("the controls name the shape and the quality in plain words, price each qu
   const html = renderToStaticMarkup(React.createElement(controls.default, { kind: "presentation", value: { shape: "16:9", quality: "high" }, offers, onChange: () => {} }));
   assert.match(html, /aria-label="Slide shape"/);
   for (const label of ["Widescreen 16:9", "Standard 4:3", "Square 1:1", "Vertical 9:16"]) assert.ok(html.includes(label), label);
-  assert.match(html, /<option value="best" disabled="">Best \(not available yet\)<\/option>/);
+  assert.doesNotMatch(html, /disabled=""/, "every quality is measured for the 2.5 models");
+  const limited = renderToStaticMarkup(React.createElement(controls.default, { kind: "presentation", value: { shape: "16:9", quality: "high" }, offers: partial, onChange: () => {} }));
+  assert.match(limited, /<option value="best" disabled="">Best \(not available yet\)<\/option>/);
   const high = offers.presentation["16:9"].find(offer => offer.quality === "high");
   assert.ok(html.includes(`High · ~${high.perImage.expected} cr`), "High shows its expected credits per slide");
   assert.doesNotMatch(html, /gpt|sunburst|flare|openai|model/i, "no provider or model named");
@@ -32,14 +36,15 @@ check("the controls name the shape and the quality in plain words, price each qu
 check("the credit impact is shown before generating, from the bound, and says when a quality is not available", () => {
   const high = offers.presentation["16:9"].find(offer => offer.quality === "high").perImage;
   assert.equal(controls.creditImpact("presentation", offers, { shape: "16:9", quality: "high" }), `High images: about ${high.expected} credits per generated slide (at most ${high.max} with a retry), inside this request's limit.`);
-  assert.equal(controls.creditImpact("presentation", offers, { shape: "1:1", quality: "high" }), "High is not available for this shape yet.");
+  assert.equal(controls.creditImpact("presentation", partial, { shape: "1:1", quality: "best" }), "Best is not available for this shape yet.");
   assert.equal(controls.creditImpact("presentation", null, { shape: "16:9", quality: "high" }), "");
 });
 
 check("initial choice: the saved document's, else the brief's answers, else 16:9 / 6x9 at High when it can render; an unavailable saved choice shows the next lower", () => {
   assert.deepEqual(controls.initialImageChoice("presentation", offers), { shape: "16:9", quality: "high" });
-  assert.deepEqual(controls.initialImageChoice("presentation", offers, "A deck\n\n- Slide shape: Vertical 9:16\n- Image quality: High"), { shape: "9:16", quality: "standard" }, "High 9:16 is unmeasured");
-  assert.deepEqual(controls.initialImageChoice("book", offers), { shape: "portrait", quality: "standard" });
+  assert.deepEqual(controls.initialImageChoice("presentation", offers, "A deck\n\n- Slide shape: Vertical 9:16\n- Image quality: Best"), { shape: "9:16", quality: "best" });
+  assert.deepEqual(controls.initialImageChoice("presentation", partial, "A deck\n\n- Slide shape: Vertical 9:16\n- Image quality: Best"), { shape: "9:16", quality: "high" }, "an unmeasured Best shows as High");
+  assert.deepEqual(controls.initialImageChoice("book", offers), { shape: "portrait", quality: "high" });
   const deck = emptyDocument("deck", "x", undefined, { slideMode: "image", aspect: "4:3", quality: "standard" });
   assert.deepEqual(controls.initialImageChoice("presentation", offers, "- Slide shape: Vertical 9:16", deck), { shape: "4:3", quality: "standard" }, "the saved document wins over the brief");
   assert.deepEqual(controls.initialImageChoice("presentation", null), { shape: "16:9", quality: "high" }, "before the offers load: the default");

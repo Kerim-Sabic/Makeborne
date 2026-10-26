@@ -23,6 +23,8 @@ const { imageCallBoundMicrousd } = require("../ai/prices.ts");
 let count = 0;
 async function check(name, fn) { await fn(); count++; console.log(`PASS ${name}`); }
 const SUN = "gpt-image-2.5-sunburst";
+/** A model with only the three published sizes measured: it shows the fallback canvases and the refusals. */
+const G2 = "gpt-image-2";
 const palette = { background: "#F4EDE3", surface: "#EDE3D5", ink: "#2A1D14", muted: "#6B5A4C", accent: "#B5562F", accent2: "#5E6B45", dark: "#2A1D14" };
 const THEME = { palette, fonts: "playfair", direction: "editorial", mood: "Warm, crafted", imageStyle: "Warm documentary photography at dawn, 35mm" };
 const SYSTEM = "A twelve-column grid with wide margins; an elegant high-contrast serif for headlines in sentence case, a clean sans for figures; cream grounds, terracotta only for emphasis; warm documentary photography of the bakery at dawn; a thin terracotta rule under every headline.";
@@ -109,18 +111,24 @@ const deckWith = (art = {}) => {
     assert.equal(verifiedArt({ ...passed, art: { ...passed.art, aspect: "4:3" } }, passed.slides[1]), null, "a new slide shape");
   });
 
-  await check("quality and shape: only measured cells resolve; High 16:9 uses the measured canvas cropped; Best and High square are refused until measured", () => {
-    const deck169 = formats.artCell(SUN, { kind: "deck", aspect: "16:9" }, "high");
+  await check("quality and shape: only measured cells resolve; the native sizes once measured, else a measured canvas cut to shape; unmeasured qualities refused", () => {
+    // The 2.5 models, measured 26 Oct 2026: every shape renders natively at High and Best.
+    for (const [target, size] of [[{ kind: "deck", aspect: "16:9" }, "2560x1440"], [{ kind: "deck", aspect: "4:3" }, "2048x1536"], [{ kind: "deck", aspect: "1:1" }, "1920x1920"], [{ kind: "deck", aspect: "9:16" }, "1440x2560"],
+      [{ kind: "book", shape: "portrait" }, "1536x2304"], [{ kind: "book", shape: "square", spread: true }, "2560x1280"], [{ kind: "book", shape: "landscape", spread: true }, "2880x1152"]]) {
+      for (const quality of ["high", "best"]) { const cell = formats.artCell(SUN, target, quality); assert.deepEqual([cell.ok, cell.size, cell.native], [true, size, true], `${JSON.stringify(target)} ${quality}`); }
+    }
+    // A model with only the published sizes: High is cut from a measured 3:2 canvas, Best is refused.
+    const deck169 = formats.artCell(G2, { kind: "deck", aspect: "16:9" }, "high");
     assert.deepEqual([deck169.ok, deck169.size, deck169.native], [true, "1536x1024", false]);
-    assert.equal(formats.artCell(SUN, { kind: "deck", aspect: "16:9" }, "best").ok, false, "xhigh 2560x1440 is unmeasured");
-    assert.equal(formats.artCell(SUN, { kind: "deck", aspect: "1:1" }, "high").ok, false, "high square is unmeasured");
+    assert.equal(formats.artCell(G2, { kind: "deck", aspect: "16:9" }, "best").ok, false, "no measured xhigh canvas");
     assert.equal(formats.artCell(SUN, { kind: "deck", aspect: "1:1" }, "standard").size, "1024x1024");
-    assert.deepEqual(formats.artCell(SUN, { kind: "deck", aspect: "4:3" }, "high").crop, { left: 85, top: 0, width: 1365, height: 1024 });
+    assert.deepEqual(formats.artCell(G2, { kind: "deck", aspect: "4:3" }, "high").crop, { left: 85, top: 0, width: 1365, height: 1024 });
     assert.deepEqual(formats.artCell(SUN, { kind: "deck", aspect: "9:16" }, "standard").crop, { left: 80, top: 0, width: 864, height: 1536 });
-    const lower = formats.artCellOrLower(SUN, { kind: "deck", aspect: "9:16" }, "best");
-    assert.deepEqual([lower.chosen, lower.downgraded, lower.quality], ["standard", true, "medium"]);
+    const lower = formats.artCellOrLower(G2, { kind: "deck", aspect: "9:16" }, "best");
+    assert.deepEqual([lower.chosen, lower.downgraded, lower.quality], ["high", true, "high"]);
     assert.equal(formats.defaultArtQuality(SUN, { kind: "deck", aspect: "16:9" }), "high");
-    assert.equal(formats.defaultArtQuality(SUN, { kind: "deck", aspect: "1:1" }), "standard");
+    assert.equal(formats.defaultArtQuality(SUN, { kind: "deck", aspect: "1:1" }), "high");
+    assert.equal(formats.defaultArtQuality("gpt-image-unknown", { kind: "deck", aspect: "1:1" }), "standard");
     assert.equal(formats.defaultArtQuality(null, { kind: "deck", aspect: "16:9" }), "standard");
     assert.deepEqual(formats.artCell(SUN, { kind: "book", shape: "landscape", spread: true }, "standard").crop, { left: 0, top: 205, width: 1536, height: 614 });
     assert.equal(formats.artTextModel(["gpt-image-2", "gpt-image-2.5-flare"]), "gpt-image-2.5-flare");
@@ -130,12 +138,14 @@ const deckWith = (art = {}) => {
   await check("credit impact before generating: each quality's per-image credits from the bound; unavailable qualities carry no price; the client parses only well-formed offers", () => {
     const offers = formats.documentImageOffers(SUN, 0.03);
     const wide = Object.fromEntries(offers.presentation["16:9"].map(offer => [offer.quality, offer]));
-    assert.equal(wide.best.available, false);
-    assert.equal(wide.best.perImage, undefined);
-    const bound = q => imageCallBoundMicrousd(SUN, q, "1536x1024", "x".repeat(formats.PREVIEW_PROMPT_BYTES)) / 1e6;
-    assert.equal(wide.high.perImage.max, Math.ceil(bound("high") * 2 / 0.03 - 1e-9), "most: the bound of one image and its regeneration");
-    assert.equal(wide.standard.perImage.max, Math.ceil(bound("medium") * 2 / 0.03 - 1e-9));
-    assert.ok(wide.high.perImage.expected < wide.high.perImage.max && wide.high.perImage.expected > wide.standard.perImage.expected, JSON.stringify(wide));
+    const bound = (q, size) => imageCallBoundMicrousd(SUN, q, size, "x".repeat(formats.PREVIEW_PROMPT_BYTES)) / 1e6;
+    assert.equal(wide.high.perImage.max, Math.ceil(bound("high", "2560x1440") * 2 / 0.03 - 1e-9), "most: the bound of one image and its regeneration");
+    assert.equal(wide.best.perImage.max, Math.ceil(bound("xhigh", "2560x1440") * 2 / 0.03 - 1e-9));
+    assert.equal(wide.standard.perImage.max, Math.ceil(bound("medium", "1536x1024") * 2 / 0.03 - 1e-9));
+    assert.ok(wide.high.perImage.expected < wide.high.perImage.max && wide.high.perImage.expected > wide.standard.perImage.expected && wide.best.perImage.expected > wide.high.perImage.expected, JSON.stringify(wide));
+    const partial = Object.fromEntries(formats.documentImageOffers(G2, 0.03).presentation["16:9"].map(offer => [offer.quality, offer]));
+    assert.equal(partial.best.available, false);
+    assert.equal(partial.best.perImage, undefined);
     assert.deepEqual(formats.parseDocumentImageOffers(JSON.parse(JSON.stringify(offers))), offers);
     for (const bad of [null, {}, { ...offers, presentation: { ...offers.presentation, "4:3": [] } }, { ...offers, book: { ...offers.book, square: { page: offers.book.square.page, spread: [{ quality: "high", available: true, perImage: { expected: 3, max: 1 } }, ...offers.book.square.spread.slice(1)] } } }])
       assert.equal(formats.parseDocumentImageOffers(bad), null);
@@ -144,13 +154,14 @@ const deckWith = (art = {}) => {
 
   await check("server validation: unmeasured quality or shape refused in plain words, never naming a model; kinds keep their own option", () => {
     assert.equal(formats.imageOptionsIssue("presentation", { quality: "high", aspect: "16:9" }, SUN), null);
-    assert.match(formats.imageOptionsIssue("presentation", { quality: "best" }, SUN), /^Best quality is not available for Widescreen 16:9 yet\./);
-    assert.match(formats.imageOptionsIssue("presentation", { quality: "high", aspect: "1:1" }, SUN), /High quality is not available for Square 1:1 yet/);
-    assert.match(formats.imageOptionsIssue("presentation", { quality: "high" }, SUN, { aspect: "1:1" }), /Square 1:1/, "the saved shape counts when only the quality changes");
+    assert.equal(formats.imageOptionsIssue("presentation", { quality: "best", aspect: "9:16" }, SUN), null, "measured: Best vertical renders");
+    assert.match(formats.imageOptionsIssue("presentation", { quality: "best" }, G2), /^Best quality is not available for Widescreen 16:9 yet\./);
+    assert.match(formats.imageOptionsIssue("presentation", { quality: "best", aspect: "1:1" }, G2), /Best quality is not available for Square 1:1 yet/);
+    assert.match(formats.imageOptionsIssue("presentation", { quality: "best" }, G2, { aspect: "1:1" }), /Square 1:1/, "the saved shape counts when only the quality changes");
     assert.match(formats.imageOptionsIssue("presentation", { shape: "square" }, SUN), /Page shapes apply to books/);
     assert.match(formats.imageOptionsIssue("book", { aspect: "4:3" }, SUN), /Slide shapes apply to presentations/);
     assert.match(formats.imageOptionsIssue("book", { quality: "high" }, null), /not available right now/);
-    for (const message of [formats.imageOptionsIssue("presentation", { quality: "best" }, SUN), formats.imageOptionsIssue("book", { quality: "high" }, null)]) assert.doesNotMatch(message, /gpt|openai|sunburst|flare|model/i);
+    for (const message of [formats.imageOptionsIssue("presentation", { quality: "best" }, G2), formats.imageOptionsIssue("book", { quality: "high" }, null)]) assert.doesNotMatch(message, /gpt|openai|sunburst|flare|model/i);
     const route = fs.readFileSync(require.resolve("../../app/api/build/route.ts"), "utf8");
     assert.match(route, /imageOptions: z\.object\(\{ quality: z\.enum\(ART_QUALITIES\)\.optional\(\), aspect: z\.enum\(DECK_ASPECTS\)\.optional\(\), shape: z\.enum\(BOOK_SHAPES\)\.optional\(\) \}\)\.strict\(\)\.optional\(\)/);
     assert.match(route, /IMAGE_OPTION_UNAVAILABLE/);
@@ -159,11 +170,12 @@ const deckWith = (art = {}) => {
 
   await check("new documents take the client's choices: composer options, then the questions' answers or the brief, then 16:9 / 6x9 at High where it can render", () => {
     assert.deepEqual(newDocumentFormat("presentation", "A pitch deck", {}, SUN), { aspect: "16:9", quality: "high" });
-    assert.deepEqual(newDocumentFormat("presentation", "Instagram stories for our launch", {}, SUN), { aspect: "9:16", quality: "standard" });
+    assert.deepEqual(newDocumentFormat("presentation", "Instagram stories for our launch", {}, SUN), { aspect: "9:16", quality: "high" });
     assert.deepEqual(newDocumentFormat("presentation", "A deck\n- Slide shape: Standard 4:3 (Older projectors)\n- Image quality: Standard (Good for drafts)", {}, SUN), { aspect: "4:3", quality: "standard" });
     assert.deepEqual(newDocumentFormat("presentation", "A deck", { aspect: "1:1", quality: "standard" }, SUN), { aspect: "1:1", quality: "standard" });
-    assert.deepEqual(newDocumentFormat("book", "A children's picture book about a cat\n- Page shape: Square 8.5 × 8.5 in (Picture books)", {}, SUN), { shape: "square", quality: "standard" });
-    assert.deepEqual(newDocumentFormat("book", "A field guide", {}, SUN), { shape: "portrait", quality: "standard" }, "High 6x9 pages are unmeasured: Standard");
+    assert.deepEqual(newDocumentFormat("book", "A children's picture book about a cat\n- Page shape: Square 8.5 × 8.5 in (Picture books)", {}, SUN), { shape: "square", quality: "high" });
+    assert.deepEqual(newDocumentFormat("book", "A field guide", {}, SUN), { shape: "portrait", quality: "high" });
+    assert.deepEqual(newDocumentFormat("book", "A field guide", {}, G2), { shape: "portrait", quality: "high" }, "the published portrait high size is enough for High");
     assert.equal(bookImagePlanFromBrief("A children's picture book about a lighthouse cat").placement, "picture");
     const deck = emptyDocument("deck", "x", undefined, { slideMode: "image", aspect: "9:16", quality: "high", pageNumbers: true });
     assert.deepEqual(deck.art, { mode: "image", system: "", aspect: "9:16", quality: "high", pageNumbers: true, renders: [] });
@@ -191,7 +203,7 @@ const deckWith = (art = {}) => {
     assert.ok(ys.length && Math.min(...ys) >= Math.round((2276 - 720) / 2 / 96 * 914400) - 1, `editable shapes moved down onto the centred band (${ys.join(",")})`);
   });
 
-  await check("a High 16:9 deck renders on the measured high canvas with allowHigh, reserves its bound, and records shape, page and wordmark; 9:16 falls back to Standard and says so", async () => {
+  await check("a High 16:9 deck renders natively at 2560x1440 with allowHigh, reserves its measured bound, and records shape, page and wordmark; a High 9:16 deck renders at 1440x2560", async () => {
     const editor = deckWith({ quality: "high" }), images = fakeImages();
     const transcript = slide => gateText(editor.doc, slide).map(line => line.text).join(" ");
     const anthropic = fakeAnthropic([
@@ -202,10 +214,10 @@ const deckWith = (art = {}) => {
     const gate = memoryGate(), spend = new RunSpend({ run: `art-high-${Math.random()}`, providerCapMicrousd: Math.floor(90 * 0.03 * 1e6), customerCapMicrousd: null, gate, deadline: Date.now() + 280_000 });
     const result = await run(editor, anthropic, images, undefined, { spend });
     assert.equal(result.finished, true, result.summary);
-    assert.deepEqual(images.log.bodies.map(body => [body.size, body.quality]), [["1536x1024", "high"], ["1536x1024", "high"]]);
+    assert.deepEqual(images.log.bodies.map(body => [body.size, body.quality]), [["2560x1440", "high"], ["2560x1440", "high"]]);
     const reserved = gate.log.begin.filter(call => call.provider === "openai").map(call => call.boundMicrousd).sort((a, b) => a - b);
-    assert.deepEqual(reserved, images.log.bodies.map(body => imageCallBoundMicrousd(SUN, "high", "1536x1024", body.prompt)).sort((a, b) => a - b), "each render reserved its measured high bound before the call");
-    assert.ok(images.log.bodies.every(body => body.prompt.includes(tailSlide("16:9")) && body.prompt.includes("cropped away")));
+    assert.deepEqual(reserved, images.log.bodies.map(body => imageCallBoundMicrousd(SUN, "high", "2560x1440", body.prompt)).sort((a, b) => a - b), "each render reserved its measured high bound before the call");
+    assert.ok(images.log.bodies.every(body => body.prompt.includes(tailSlide("16:9")) && !body.prompt.includes("cropped away")), "native canvas: nothing is cropped");
     const cover = editor.doc.art.renders.find(entry => entry.slide === "cover");
     assert.deepEqual([cover.outcome, cover.page, cover.wordmark, cover.aspect], ["passed", 1, "Alba Bakehouse", undefined]);
     assert.ok(verifiedArt(editor.doc, editor.doc.slides[1]));
@@ -218,8 +230,8 @@ const deckWith = (art = {}) => {
       [toolUse("finish", { summary: "Cover." })],
     ]);
     const tallResult = await run(tall, tallAnthropic, tallImages);
-    assert.deepEqual(tallImages.log.bodies.map(body => [body.size, body.quality]), [["1024x1536", "medium"]], "High 9:16 is unmeasured: Standard on the measured portrait canvas");
-    assert.match(tallResult.summary, /Rendered at Standard quality: High is not available for this slide shape yet\./);
+    assert.deepEqual(tallImages.log.bodies.map(body => [body.size, body.quality]), [["1440x2560", "high"]]);
+    assert.doesNotMatch(tallResult.summary, /not available/);
     assert.equal(tall.doc.art.renders.find(entry => entry.slide === "cover").aspect, "9:16");
     assert.match(tallAnthropic.log.streams[0].messages[0].content.at(-1).text, /Every slide is vertical 9:16 \(9:16\): compose for that shape \(a tall, phone-first page/);
   });
