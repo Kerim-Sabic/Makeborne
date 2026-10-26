@@ -8,6 +8,10 @@ import { whopGet } from "./whop";
 import { providerUsdCents } from "./topup-fulfillment";
 
 const providerPlan = z.object({ id: z.string(), company: z.object({ id: z.string() }), currency: z.literal("usd"),
+  // A USD catalogue alone does not prevent automatic foreign-currency charges.
+  // Missing-webhook recovery is USD-qualified; refuse BEFORE payment until
+  // another currency's complete lifecycle is independently qualified.
+  adaptive_pricing_enabled: z.literal(false),
   plan_type: z.literal("renewal"), billing_period: z.number(), initial_price: z.union([z.string(), z.number()]),
   renewal_price: z.union([z.string(), z.number()]), trial_period_days: z.number().nullable(),
   release_method: z.literal("buy_now"), stock: z.number().int().nonnegative().nullable(), unlimited_stock: z.boolean() });

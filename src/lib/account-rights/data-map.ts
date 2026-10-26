@@ -109,6 +109,7 @@ export const DATA_MAP: readonly DataMapEntry[] = Object.freeze([
   // Billing
   { table: "billing_memberships", export: "billing_memberships", deletion: "retain", reason: RETAIN, period: TAX },
   { table: "billing_checkouts", export: "billing_checkouts", deletion: "retain", reason: `${RETAIN} Checkout link excluded.`, period: TAX },
+  { table: "makeborne_private.checkout_consents", export: "checkout_consents", deletion: "delete", reason: "Immediate-performance request text/version and server time; exported to the account and removed by its auth-user foreign key on erasure. Existing legal holds block erasure." },
   { table: "billing_webhook_events", export: null, deletion: "system", reason: "Provider event ids (no account id); kept as delivery evidence.", period: TAX },
   { table: "makeborne_private.plan_payments", export: "plan_payments", deletion: "retain", reason: `${RETAIN} Provider evidence not exported.`, period: TAX },
   { table: "makeborne_private.plan_payment_observations", export: null, deletion: "system", reason: "Provider payment evidence keyed by payment id (no account id). May contain provider-side customer fields: lawyer to confirm minimisation.", period: TAX },

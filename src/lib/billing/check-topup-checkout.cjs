@@ -4,11 +4,13 @@ const uuid='00000000-0000-4000-8000-000000000001';
 const row={id:uuid,user_id:uuid,request_id:uuid,merchant_id:'biz_Test',plan_id:'plan_Test',whop_user_id:'user_Test',price_cents:1200,state:'awaiting_payment',checkout_url:null,checkout_request:null};
 const originalPlan={id:'plan_Test',company:{id:'biz_Test'},currency:'usd',adaptive_pricing_enabled:false,plan_type:'one_time',initial_price:12,renewal_price:0,trial_period_days:null};
 let plan=originalPlan,claimed=true,claimPurchase=row,posts=[],rpcCalls=[],savedError=false,memberships=[{whop_user_id:'user_Test'}];
+let consentRecords=[],consentFails=false;
 class RequestError extends Error{constructor(code,message,status){super(message);this.code=code;this.status=status;}}
 const config={companyId:'biz_Test',apiKey:'fake',sandbox:true,enabled:true};
 const testEnv={WHOP_API_BASE_URL:'https://sandbox-api.whop.com/api/v1',WHOP_TOPUPS_ENABLED:'true',MAKEBORNE_TOPUP_CHECKOUT_QUALIFIED:'true',MAKEBORNE_TOPUP_MIGRATIONS_VERIFIED:'true'};
 const catalogue=[{id:'boost_100',credits:100,priceCents:1200},{id:'boost_300',credits:300,priceCents:3200},{id:'boost_1000',credits:1000,priceCents:9500}];
 const mocks={'server-only':{},'@/lib/server/http':{RequestError},'./config':{billingConfig:()=>config},
+ './checkout-consent':{requireCheckoutConsent:version=>{if(version!=='withdrawal-2026-10-26')throw new RequestError('CHECKOUT_CONSENT_REQUIRED','Consent required',400)},recordCheckoutConsent:async(...args)=>{if(consentFails)throw new RequestError('CHECKOUT_CONSENT_UNSAVED','Unavailable',503);consentRecords.push(args)}},
  './access':{billingUser:async()=>({id:uuid}),verifyCreationAccess:async()=>true},
  './database':{billingDatabase:()=>({from:()=>{const q={select:()=>q,eq:()=>q,in:()=>q,gt:()=>q,limit:async()=>({data:memberships,error:null})};return q;},rpc:async(name,args)=>{rpcCalls.push({name,args});
    if(name==='makeborne_topup_catalog_available')return {data:catalogue,error:null};
@@ -60,12 +62,15 @@ function load(file){const filename=path.resolve(__dirname,file);if(cache.has(fil
  const uncertain=posts.at(-1);savedError=false;await create({...row,checkout_request:uncertain.body});
  assert.equal(JSON.stringify(posts.at(-1).body),JSON.stringify(uncertain.body));assert.equal(posts.at(-1).options.idempotencyKey,uncertain.options.idempotencyKey);
  const topups=load('topups.ts');assert.equal((await topups.creditTopupAvailability()).available,true);
- await topups.createTopupCheckout(uuid,{packId:'boost_100',requestId:uuid});
+ for(const withdrawalConsent of [undefined,'old','',false]){const before=rpcCalls.length;await assert.rejects(()=>topups.createTopupCheckout(uuid,{packId:'boost_100',requestId:uuid,withdrawalConsent}),e=>e.code==='CHECKOUT_CONSENT_REQUIRED');assert.equal(rpcCalls.length,before)}
+ await topups.createTopupCheckout(uuid,{packId:'boost_100',requestId:uuid,withdrawalConsent:'withdrawal-2026-10-26'});
+ assert.deepEqual(consentRecords.at(-1),[uuid,row.request_id,'pack']);
+ consentFails=true;{const before=posts.length;await assert.rejects(()=>topups.createTopupCheckout(uuid,{packId:'boost_100',requestId:uuid,withdrawalConsent:'withdrawal-2026-10-26'}),e=>e.code==='CHECKOUT_CONSENT_UNSAVED');assert.equal(posts.length,before)}consentFails=false;
  const prepared=rpcCalls.findLast(x=>x.name==='makeborne_prepare_topup');assert.equal(prepared.args.p_user,uuid);assert.equal(prepared.args.p_whop_user,'user_Test');
  memberships=[{whop_user_id:'user_Test'},{whop_user_id:'user_Other'}];const before=posts.length;
- await assert.rejects(()=>topups.createTopupCheckout(uuid,{packId:'boost_100',requestId:uuid}),e=>e.code==='TOPUP_IDENTITY_UNVERIFIED');assert.equal(posts.length,before);
+ await assert.rejects(()=>topups.createTopupCheckout(uuid,{packId:'boost_100',requestId:uuid,withdrawalConsent:'withdrawal-2026-10-26'}),e=>e.code==='TOPUP_IDENTITY_UNVERIFIED');assert.equal(posts.length,before);
  testEnv.MAKEBORNE_TOPUP_CHECKOUT_QUALIFIED='false';assert.equal((await topups.creditTopupAvailability()).available,false);
- await assert.rejects(()=>topups.createTopupCheckout(uuid,{packId:'boost_100',requestId:uuid}),e=>e.code==='TOPUPS_NOT_OPEN');assert.equal(posts.length,before);
+ await assert.rejects(()=>topups.createTopupCheckout(uuid,{packId:'boost_100',requestId:uuid,withdrawalConsent:'withdrawal-2026-10-26'}),e=>e.code==='TOPUPS_NOT_OPEN');assert.equal(posts.length,before);
  testEnv.MAKEBORNE_TOPUP_SANDBOX_TEST='true';assert.equal(topups.topupCheckoutOpen(),true);
  config.sandbox=false;assert.equal(topups.topupCheckoutOpen(),false,'Sandbox test flag must not activate live sales');config.sandbox=true;
  const transport=load('whop.ts');await transport.whopRequest('/checkout_configurations',{mode:'payment'},{idempotencyKey:'probe_Test'});

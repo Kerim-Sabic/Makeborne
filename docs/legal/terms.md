@@ -30,7 +30,7 @@ Keep your sign-in details secure and tell us at once about any unauthorised use.
 
 5.1 Paid plans, credits, renewal, cancellation and refunds are described in the Billing terms. In short: plans renew automatically until you cancel in your Whop account; credits are usage allowances, not money; unused plan credits stay usable for two months after their month ends; and a payment is refundable in full while none of its credits have been used.
 
-5.2 Checkout is handled by Whop, Inc. as our payment processor. We are the seller and the supplier of Makeborne. Whop may calculate, collect and remit sales tax or VAT where it supports this; prices and any tax are shown at checkout before you pay. You pay any other taxes that apply to you.
+5.2 Checkout is handled by Whop, Inc. as our payment processor. We are the seller and the supplier of Makeborne and handle applicable sales tax and VAT ourselves. Our advertised consumer prices include applicable tax. Whop does not calculate, collect or display tax for us. Whop shows any additional checkout fee before you pay; your bank may separately charge currency-conversion or foreign-transaction fees.
 
 ## 6. Consumers: your right to withdraw
 

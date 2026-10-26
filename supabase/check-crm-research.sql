@@ -123,7 +123,8 @@ begin
  assert (select count(*) from public.crm_next_steps where workspace_id=w)=0,'stranger reads nothing';
  reset role;
  assert has_function_privilege('authenticated','public.makeborne_crm_next_step_set(uuid,uuid,text,integer)','execute'),'editors still save through the RPC';
- assert (select prosecdef from pg_proc where oid='public.makeborne_crm_next_step_set(uuid,uuid,text,integer)'::regprocedure),'the RPC no longer needs table privileges';
+ assert not (select prosecdef from pg_proc where oid='public.makeborne_crm_next_step_set(uuid,uuid,text,integer)'::regprocedure),'the public RPC is an invoker wrapper';
+ assert (select prosecdef from pg_proc where oid='makeborne_rpc.makeborne_crm_next_step_set(uuid,uuid,text,integer)'::regprocedure),'the unexposed implementation supplies the table privileges';
  raise notice 'PASS crm C: next step compare-and-set is the only writer (direct insert/update/delete refused), stale writes refused with PT409, no markup, editors only, other workspaces refused';
 end $$;
 

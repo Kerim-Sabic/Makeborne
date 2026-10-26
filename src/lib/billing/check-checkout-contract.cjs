@@ -10,7 +10,9 @@ const db={rpc:async()=>({data:true}),from:table=>({insert:async()=>({error:inser
 let offerAvailable=true;
 // Exact-checkout recovery (checkout-recovery.ts): 'pending' means Whop lists no paid payment for that checkout now.
 let recovery='pending',recoveryCalls=[];
+let consentRecords=[],consentFails=false;
 const modules={
+ '@/lib/billing/checkout-consent':{requireCheckoutConsent:version=>{if(version!=='withdrawal-2026-10-26')throw new RequestError('CHECKOUT_CONSENT_REQUIRED','Consent required',400)},prepareConsentedPlanCheckout:async()=>{if(consentFails)throw new RequestError('CHECKOUT_CONSENT_UNSAVED','Unavailable',503);return{data:true,error:insertError}},recordCheckoutConsent:async(...args)=>{if(consentFails)throw new RequestError('CHECKOUT_CONSENT_UNSAVED','Unavailable',503);consentRecords.push(args)}},
  '@/lib/billing/plans':{BILLING_TERMS_VERSION:'2026-10-25-beta-v9',WITHDRAWAL_CONSENT_VERSION:'withdrawal-2026-10-26'},
  '@/lib/billing/creation-offers':{verifiedCreationOffer:async()=>offerAvailable?{planId:'plan_fixture'}:null},
  '@/lib/billing/access':{requireBillingUser:async()=>({id:'user_fixture'})},'@/lib/billing/config':{billingConfig:()=>config},'@/lib/billing/database':{billingDatabase:()=>db},
@@ -21,13 +23,14 @@ const modules={
 };
 const ctx={exports:{},Response,process:{env:{}},require:n=>modules[n]??require(n)};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(require.resolve('../../app/api/billing/checkout/route.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ctx);
-const request=(selection={planId:'plan_fixture'})=>new Request('http://localhost:3048/api/billing/checkout',{method:'POST',body:JSON.stringify({...selection,requestId:'00000000-0000-4000-8000-000000000001',next:'/studio'})});
+const request=(selection={planId:'plan_fixture'})=>new Request('http://localhost:3048/api/billing/checkout',{method:'POST',body:JSON.stringify({withdrawalConsent:'withdrawal-2026-10-26',...selection,requestId:'00000000-0000-4000-8000-000000000001',next:'/studio'})});
 (async()=>{
  assert.equal((await ctx.exports.POST(request())).status,200);assert(saved);assert.equal(payload.redirect_url,'https://sandbox.whop.com/');assert.equal(payload.metadata.makeborne_terms_version,'2026-10-25-beta-v9');
- // The ticked immediate-start request is recorded only when it names the current version.
- assert.equal(payload.metadata.makeborne_withdrawal_consent,undefined);
+ // Missing/stale consent never creates or resumes a payment link.
+ assert.equal(payload.metadata.makeborne_withdrawal_consent,'withdrawal-2026-10-26');
  assert.equal((await ctx.exports.POST(request({planId:'plan_fixture',withdrawalConsent:'withdrawal-2026-10-26'}))).status,200);assert.equal(payload.metadata.makeborne_withdrawal_consent,'withdrawal-2026-10-26');
- assert.equal((await ctx.exports.POST(request({planId:'plan_fixture',withdrawalConsent:'withdrawal-old'}))).status,200);assert.equal(payload.metadata.makeborne_withdrawal_consent,undefined);
+ for(const withdrawalConsent of [undefined,false,'','withdrawal-old']){const before=providerCalls;const reply=await ctx.exports.POST(request({planId:'plan_fixture',withdrawalConsent}));assert.equal(reply.status,400);assert.equal(providerCalls,before)}
+ consentFails=true;{const before=providerCalls;assert.equal((await ctx.exports.POST(request())).status,503);assert.equal(providerCalls,before)}consentFails=false;
  ctx.process.env.MAKEBORNE_WHOP_STAGING_SANDBOX='true';
  ctx.process.env.VERCEL_URL='makeborne-release-staging-abc123def-kerimsabic-6594s-projects.vercel.app';
  assert.equal((await ctx.exports.POST(request())).status,200);assert.equal(payload.redirect_url,'https://'+ctx.process.env.VERCEL_URL+'/billing/return?request=00000000-0000-4000-8000-000000000001');
@@ -41,6 +44,7 @@ const request=(selection={planId:'plan_fixture'})=>new Request('http://localhost
  insertError={code:'PBC02'};openRows=[{request_id:'r1',plan_id:'plan_fixture',purchase_url:'https://whop.com/checkout/ch_open',status:'ready',checkout_id:'ch_open'}];memberRows=[];
  let before=providerCalls,res=await ctx.exports.POST(request());assert.equal(res.status,200);assert.deepEqual(await res.json(),{url:'https://whop.com/checkout/ch_open',resumed:true});assert.equal(providerCalls,before);
  assert.deepEqual(recoveryCalls.at(-1),['user_fixture','r1'],'Resume first re-checks the open checkout with Whop');
+ assert.deepEqual(consentRecords.at(-1),['user_fixture','r1','plan'],'Consent binds the ACTUAL resumed order');
  // Missing/late first webhook: the unbound checkout may already be paid. Never send the buyer back to pay it again.
  for(const [outcome,code] of [['recovered','CHECKOUT_ALREADY_COMPLETED'],['review','CHECKOUT_PENDING'],['skipped','CHECKOUT_PENDING'],['throw','CHECKOUT_PENDING']]){
   recovery=outcome;res=await ctx.exports.POST(request());assert.equal(res.status,409,outcome);const body=await res.json();assert.equal(body.code,code,outcome);assert(!('url' in body),'No checkout URL when '+outcome);assert.equal(providerCalls,before,'No new checkout when '+outcome);}

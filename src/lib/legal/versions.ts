@@ -21,3 +21,4 @@ export const SIGNUP_TERMS_LINE = { before: "By creating an account you agree to 
  * and acknowledgement, Consumer Rights Directive Art. 14(3) and 16(a)). Changing it needs a new
  * WITHDRAWAL_CONSENT_VERSION in src/lib/billing/plans.ts. */
 export const WITHDRAWAL_CONSENT_TEXT = "I want my plan to start immediately. I understand that if I withdraw within 14 days, I’ll pay for the credits I’ve used, and that I lose my right to withdraw once the service has been fully provided.";
+export const PACK_WITHDRAWAL_CONSENT_TEXT = "I want my credit pack to be available immediately. I understand that if I withdraw within 14 days, I’ll pay for the credits I’ve used, and that I lose my right to withdraw once the service has been fully provided.";

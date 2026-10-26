@@ -34,14 +34,13 @@ export function usd(cents: number) {
  * claim ("Most popular" needs recorded subscription data; docs/pricing/OUTCOME_FIGURES.md). */
 export const RECOMMENDED_PLAN: PlanId = "studio";
 export const RECOMMENDED_BADGE = "Best for client work";
-/** One switch for tax and fee wording beside every price. The terms say taxes and checkout fees are
- * shown by Whop before payment, so a bare "$49 today" is not the total. After the EU/UK launch gate
- * (Whop tax-inclusive consumer prices on, no buyer checkout fee confirmed), switch to:
- * { short: "Price includes any tax that applies.", inline: ", including any tax", long: "Prices include any tax that applies." } */
+/** Matches the owner-approved Whop Inclusive setting, verified 26 October.
+ * Do not imply buyer payment/FX fees are included: Whop discloses those separately.
+ * Checkout remains gated until taxed fulfillment has real provider evidence. */
 export const TAX_NOTE = Object.freeze({
-  short: "Tax and any checkout fee shown before you pay.",
-  inline: " plus any tax or checkout fee Whop shows",
-  long: "Any tax or checkout fee is shown by Whop before you pay.",
+  short: "Price includes applicable tax. Any checkout fee is shown before you pay.",
+  inline: ", including applicable tax; any checkout fee is shown before you pay",
+  long: "Prices include applicable tax. Whop shows any additional checkout fee before you pay.",
 });
 /** Every plan includes all of this; plans differ only in monthly credits. Each item cites the code
  * path that verifies it in docs/pricing/OUTCOME_FIGURES.md. The fair-use sentence appears once. */

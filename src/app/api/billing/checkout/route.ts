@@ -6,12 +6,13 @@ import { verifiedCreationOffer } from "@/lib/billing/creation-offers";
 import { BILLING_TERMS_VERSION, WITHDRAWAL_CONSENT_VERSION } from "@/lib/billing/plans";
 import { checkoutUrl, whopRequest } from "@/lib/billing/whop";
 import { recoverCreationCheckout } from "@/lib/billing/checkout-recovery";
+import { requireCheckoutConsent, recordCheckoutConsent, prepareConsentedPlanCheckout } from "@/lib/billing/checkout-consent";
 import { authDestination } from "@/lib/supabase/auth-flow";
 import { SITE } from "@/lib/site-metadata";
 import { apiError, boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
 
-// withdrawalConsent: the version of the immediate-start request the buyer ticked (creation-plans.tsx). Optional
-// for now (Codex review): recorded in the Whop checkout metadata when it matches the current version.
+// Optional in parsing so old clients get the actionable consent error below.
+// Consent is required before any database/provider mutation or payment URL.
 const commonInput = { requestId: z.string().uuid(), next: z.string().max(2000).optional(), withdrawalConsent: z.string().max(80).optional() };
 const inputSchema = z.union([
   z.object({ ...commonInput, tier: z.enum(["create", "studio", "scale"]), interval: z.enum(["monthly", "yearly"]) }).strict(),
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
     if (!config.enabled) throw new RequestError("CREATION_PLANS_NOT_OPEN", "Creation memberships are being prepared. The coffee contribution is support only.", 503);
     const parsed = inputSchema.safeParse(await boundedJson(request, 4096));
     if (!parsed.success) throw new RequestError("PLAN_UNAVAILABLE", "Choose an available creation membership.", 400);
+    requireCheckoutConsent(parsed.data.withdrawalConsent);
     const offer = await verifiedCreationOffer(parsed.data);
     if (!offer) throw new RequestError("PLAN_UNAVAILABLE", "This plan's price and availability could not be confirmed. Please refresh and choose an available plan.", 503);
     const { planId } = offer;
@@ -79,7 +81,7 @@ export async function POST(request: Request) {
     const next = destination.startsWith("/studio") || destination === "/chat" ? destination : "/studio";
     // Reserve a durable request before contacting Whop. Concurrent/repeated
     // requests cannot create multiple checkout configurations for the same key.
-    const { error: insertError } = await db.from("billing_checkouts").insert({ request_id: requestId, user_id: user.id, plan_id: planId, return_path: next, status: "pending" });
+    const { error: insertError } = await prepareConsentedPlanCheckout(user.id, requestId, planId, next);
     if (insertError) {
       if (insertError.code === "PBC01") throw new RequestError("SUBSCRIPTION_ALREADY_EXISTS", "You already have a creation subscription. Contact support to change your plan; you do not need to buy another subscription.", 409);
       if (insertError.code === "PBC03") throw new RequestError("SUBSCRIPTION_REPURCHASE_REQUIRES_SUPPORT", "Your previous subscription allowance needs a check before you subscribe again. Please contact admin@makeborne.com. No new checkout has been opened.", 409);
@@ -89,6 +91,7 @@ export async function POST(request: Request) {
         const open = await openCheckout(db, user.id);
         if (open && open.status === "ready" && open.purchase_url && open.plan_id === planId && open.checkout_id) {
           await assertResumable(user.id, open.request_id);
+          await recordCheckoutConsent(user.id, open.request_id, "plan");
           return Response.json({ url: checkoutUrl(open.purchase_url), resumed: true }, { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
         }
         throw new RequestError("CHECKOUT_ALREADY_OPEN", open && open.status === "ready" && open.plan_id !== planId
@@ -106,6 +109,7 @@ export async function POST(request: Request) {
         if (boundError) throw new RequestError("CHECKOUT_UNAVAILABLE", "This checkout could not be confirmed. Please try again shortly.", 503);
         if (bound?.length) throw new RequestError("CHECKOUT_ALREADY_COMPLETED", "This checkout has already been used. Review your billing and contact support before starting another subscription.", 409);
         await assertResumable(user.id, requestId);
+        await recordCheckoutConsent(user.id, requestId, "plan");
         return Response.json({ url: checkoutUrl(previous.purchase_url) }, { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
       }
       throw new RequestError("CHECKOUT_PENDING", "This checkout is still being confirmed. Please wait before trying again.", 409);
@@ -113,7 +117,7 @@ export async function POST(request: Request) {
     const response = checkoutSchema.safeParse(await whopRequest("/checkout_configurations", {
       mode: "payment", plan_id: planId,
       metadata: { makeborne_request_id: requestId, makeborne_terms_version: BILLING_TERMS_VERSION,
-        ...(WITHDRAWAL_CONSENT_VERSION && parsed.data.withdrawalConsent === WITHDRAWAL_CONSENT_VERSION ? { makeborne_withdrawal_consent: WITHDRAWAL_CONSENT_VERSION } : {}) },
+        makeborne_withdrawal_consent: WITHDRAWAL_CONSENT_VERSION },
       // Production returns only to Makeborne. Staging returns only to its exact
       // reviewed deployment; a local sandbox without HTTPS stays on Whop.
       redirect_url: redirectUrl,
