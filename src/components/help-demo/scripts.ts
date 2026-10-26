@@ -134,7 +134,7 @@ export const DEMO_SCRIPTS: Record<DemoId, DemoScript> = {
     id: "review-link", title: "Share work with a client for review", address: "makeborne.com/studio",
     initial: { panel: false, copied: false, view: "studio", comment: "", posted: false, approved: false, status: "In progress" },
     steps: [
-      { caption: "Open the project and choose Share for review.", do: "click", target: "share", patch: { panel: true } },
+      { caption: "Open the project and choose Client review.", do: "click", target: "share", patch: { panel: true } },
       { caption: "Copy the link and send it. Your client doesn't need an account.", do: "click", target: "copy", patch: { copied: true } },
       { caption: "Your client comments on the work and approves it.", do: "wait", ms: 700, patch: { view: "client" } },
       { do: "type", target: "comment", field: "comment", text: "Love it! Could the logo be a little larger?" },
