@@ -6,7 +6,7 @@ Owner approval this targets (handoff, 26 Oct): "approved full version staging te
 
 ## 1. Head and what is in it
 
-Head: see the commit that adds this file (`git log -1 claude/full-version-staging`). The code head it describes is **`14979cf`** (the SQL evidence was taken at f901a59; 14979cf only changes a browser check).
+Head: see the commit that adds this file (`git log -1 claude/full-version-staging`). The code head it describes is **`7a86eb6`**. The SQL evidence was taken at f901a59; nothing after it touches `supabase/` or `.env.example` (verified with `git diff --name-only`), so it still holds.
 
 Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launch candidate 1062170 + the 3-engine browser fixes).
 
@@ -20,9 +20,15 @@ Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launc
 | f | ed6f470 | `claude/feature-flag-hardening` | **6811cb7** (from 1062170) | Security S2, S3, S4 (`MAKEBORNE_AGENCY_TASK_KINDS`), S9 (migration 20261026120000), S12 (migration 20261026120100). Clean merge. |
 | g | f901a59 | integration fix (mine) | — | Account-rights erase + research counters, LF pins. Section 3.3. |
 | h | 14979cf | test fix (mine) | — | `check-library-rename-browser` follows library-redesign's card menu (Open, then Rename; reviewers see Open only). Journey's check expected its own menu. |
-| i | (this commit) | this report, the SQL evidence JSON and `scripts/rehearse-full-version-chain.mjs` | — | |
+| i | 3f81eb4, 9afc160 | this report, the SQL evidence JSON and `scripts/rehearse-full-version-chain.mjs` | — | |
+| j | 1002761 | `feature/docs-quality` | **84208ff** | New since the candidate: b38bfc6, 4b71fa5, c939276, cf51b4f, 58a1d1f, 56596fc, 629f55a, 84208ff. Measured 2.5 image cells (×1.5 bound), image quality and slide/page shape controls, generated book pages, reference-pattern prompts, deck fixes. Section 2. |
+| k | 3f0d90d | `feature/image-led-sites` | **315e227** (exactly; its agent is still committing "website quality v2", which comes as one more small merge) | New since 9976ac7: 24e8138, 7807c71, b14078f, 463c916, 315e227. Clean merge. |
+| l | 062e834 | eval fix (mine) | — | `scripts/eval/direct-run.mjs` and `doc-run.mjs` set `MAKEBORNE_DESIGN_COMPS=on` / `MAKEBORNE_DECK_FULL_IMAGE=on` in their own process; image-led's `check-direct-run-comps.cjs` failed without it. |
+| m | 2536f83 | `claude/legal-pages` | **16437ab** (from 0877345) | `/terms`, `/privacy`, `/dpa`, `/imprint`, `/withdraw` from `docs/legal/*.md`; footer links; sign-up clickwrap; checkout withdrawal-consent checkbox. Clean merge. **The checkout change is Codex-owned and flagged for review** (section 1, below). |
+| n | 7a86eb6 | test fix (mine) | — | `check-presenter-keys-browser`'s `render-book` mock exports `bookTrim` (docs-quality's `document-preview.tsx` imports it). |
+| o | (this commit) | report update | — | |
 
-**Not merged:** `feature/docs-quality` (an agent is running paid measurement and will commit measured prices; it follows as an additional merge). GitHub two-way sync (`qualification/github-continuous-20261025`), model-routing and model-orchestrator are also not in this branch.
+**Not merged:** the next `feature/image-led-sites` head (website quality v2, still in progress). GitHub two-way sync (`qualification/github-continuous-20261025`), model-routing and model-orchestrator are also not in this branch.
 
 ### Changes to Codex-owned paths, all UI/copy
 
@@ -34,6 +40,7 @@ Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launc
 - `billing.css`, `billing/return/return.css`: `--ui-zoom` sizing (only with `MAKEBORNE_UI_SCALE=on`), darker contrast colours, 16 px search field on phones.
 - `hosting/version-facts.ts`: editor-quality's preview fact (already in the candidate).
 - `check-plans.cjs`, `check-publish-report.cjs`, `check-responsive-images.cjs`: test additions.
+- **legal-pages (needs Codex's review):** `api/billing/checkout/route.ts` accepts an optional `withdrawalConsent` string and, when it equals `WITHDRAWAL_CONSENT_VERSION` (`plans.ts`), adds `makeborne_withdrawal_consent` to the Whop checkout metadata. Optional on the server; `creation-plans.tsx` requires the unticked box before any redirect for signed-in buyers with offers. The repurchase guard, offer allowlist and navigation policy are unchanged. **Please check one thing:** a checkout resumed from a request stored before this deploy now carries extra metadata. If your resume path compares the stored request body, decide whether that difference matters.
 
 ## 2. Conflicts and how they were resolved
 
@@ -47,7 +54,15 @@ Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launc
 | c | `account-clients.css`, `expert-chat.css`, `global-command-palette.css`, `help/page.module.css` | Both sides: the candidate's `--ui-zoom` sizing with the sweep's **higher-contrast** colours. |
 | c | `onboarding/checklist.ts`, `onboarding/getting-started.tsx` | Journey round 2's AI-paused paths with the sweep's copy ("Gmail" only, no creator search). `check-help.cjs` and `check-onboarding.cjs` both pass on the result. |
 | c | `onboarding/check-onboarding.cjs` | Journey round 2's checks kept. |
-| d, e, f | — | No conflicts. |
+| d, e, f, k, m | — | No conflicts. |
+| j | `api/build/route.ts` | GET returns **both** `features.documentImages` (boolean: images can be made now; the candidate's rule) and docs-quality's top-level `documentImages` (credits per image for each quality and shape). |
+| j | `builder/docs-agent.ts` | Full-image slides still need `MAKEBORNE_DECK_FULL_IMAGE=on` (`artEnabled`), as the candidate report asked. docs-quality's generated book pages, native canvases and plate canvases kept. The system prompt keeps its cache marker. |
+| j | `builder/docs-run.ts` | New decks stay `"live"` unless the flag is on; docs-quality's shape, quality, page numbers and `bookArt` kept. |
+| j | `cloud-studio.tsx`, `live-builder.tsx` | Both: `features` and `imageOffers`/`projectBrief` are passed; the attach button keeps the ingestion accept list and gains the image controls. |
+| j | `check-availability.cjs` | Both sides' assertions. |
+| j (integration) | `live-builder.tsx`, `creation-home.tsx`, `document-image-controls.tsx` | The image quality and shape controls show **only when `features.documentImages` is true**, the same rule the candidate uses for image questions, so nobody is offered "Image quality" while images can't be made. `check-art-formats.cjs` turns `MAKEBORNE_DECK_FULL_IMAGE` on for its deck runs, as `check-slide-art.cjs` does. |
+| j, k | `src/lib/ai/prices.ts`, `check-image-cells.cjs` | No conflict. c939276 and 7807c71 have the **same patch-id**, and `MEASURED_IMAGE_OUTPUT_TOKENS` is identical on 84208ff, 315e227 and the head: one entry per model with low 2, medium 3, high 10 and xhigh 9 cells, so there are no duplicates. `MEASURED_HEADROOM = 1.5`. |
+| m | footers | Legal links (`LegalLinks`: Terms, Privacy, DPA, Legal notice) render in every public footer: home, help (and so the branded 404, which uses `HelpFooter`), billing (plus Withdraw), billing terms, the auth pages, account settings, studio and portal. The sweep's contrast values are untouched; the legal pages' own colours are #2c2833, #5d5766 and #6b6574 on white (all ≥ 4.5:1). |
 
 ## 3. Migrations
 
@@ -114,11 +129,13 @@ All local, offline, providers mocked, no secrets.
 |---|---|
 | `tsc --noEmit` | PASS |
 | `eslint .` | PASS: 0 errors, 1 pre-existing warning (`scripts/check-preview-assets-browser.cjs:72` `catImage`) |
-| `npm test` (run-checks) | **221/221**, the same 5 explicit skips as before (running server / interactive fixture / time-boxed tariff) |
-| `node scripts/prepare-builder-runtime.mjs` then `next build --webpack` | PASS (Next.js 16.4.3, 64 static pages) |
-| Chromium: `run-browser-checks.mjs --engines chromium` | **52/52** after fixes. First run 49/52: `check-library-rename-browser` (real integration mismatch, fixed in 14979cf), `check-chat-history-browser` (needs a local `work/` directory, gitignored; created, 7/7), `check-launch-pages-browser` (needs a running server; run against `next start -p 3048` of this build with a placeholder unreachable Supabase URL: 22/22 at 390 and 1440). |
-| Chromium, by hand | `check-builder-client.mjs` 8 groups PASS; `check-help-overflow.cjs` PASS |
-| **WebKit, phone-relevant** (34 checks that exercise 320–414 px or touch) | **34/34**. Engine-limited notes only (PASS*): editor-header Tab out of the popover, library Tab to card links, site verifier (Chromium-only). Includes account-rights, crm-research, lead-profile layout, onboarding, first-clients, library rename/previews, editor journey, creation plans, plan sign-up, checkout and top-up return, trust copy, live-builder flow. |
+| `npm test` (run-checks) | **224/224**, the same 5 explicit skips (running server / interactive fixture / time-boxed tariff). Includes docs-quality's `check-art-formats` 11, `check-slide-art` 22, `check-document-image-controls` 5, image-led's `check-comp-prompt` 6, `check-image-vision` 16, `check-image-cells`, and legal-pages' `check-legal-pages` 10. |
+| Eval offline check | `scripts/eval/check-direct-run-comps.cjs` PASS (medium and high are offered concept, comps and images) after 062e834 |
+| `node scripts/prepare-builder-runtime.mjs` then `next build --webpack` | PASS (Next.js 16.4.3, 68 static pages including the five legal pages) |
+| Chromium: `run-browser-checks.mjs --engines chromium` | **53/53** after fixes (now includes `check-legal-consent-browser`: clickwrap, footer links, unticked checkout consent gating the buy button, consent version sent, 390 and 1440). First run on this head 51/53: `check-presenter-keys-browser` (mock missing `bookTrim`, fixed in 7a86eb6, 9/9) and `check-launch-pages-browser`, which needs a running server: against `next start -p 3048` of this build with a placeholder unreachable Supabase URL, 22/22. `check-chat-history-browser` needs the gitignored local `work/` folder. |
+| Legal pages, by hand | `/terms`, `/privacy`, `/dpa`, `/imprint`, `/withdraw` answer 200; at 390 and 1440 each has one h1, no sideways scroll and a footer link to /terms |
+| Chromium, by hand (earlier head 14979cf) | `check-builder-client.mjs` 8 groups PASS; `check-help-overflow.cjs` PASS |
+| **WebKit, phone-relevant** (36 checks that exercise 320-414 px or touch) | **36/36**, adding `check-legal-consent-browser` and `check-presenter-keys-browser` to the earlier 34. Engine-limited notes only (PASS*): editor-header Tab out of the popover, library Tab to card links, site verifier (Chromium-only). |
 | SQL full chain | Section 3.2 |
 | Not run | Firefox (141/141 on 4974b9c before these merges), real-stack `check-account-rights-local-stack.cjs` (needs the journey-audit stack), Lighthouse/eval, anything on staging |
 
@@ -130,10 +147,10 @@ Every flag below is off by default. Unless noted, only the exact value `on` enab
 |---|---|---|---|
 | `MAKEBORNE_UI_SCALE` | off | Large-screen `--ui-zoom` above 1700 px on every page (read at render; static pages at build). | No |
 | `MAKEBORNE_BRIEF_ENHANCER` | off | POST enhance (durable actions, migration 1). | **Anthropic**, per enhance, after a credit hold |
-| `MAKEBORNE_DESIGN_COMPS` | off | Comp-first design comps before a build. | **OpenAI images** (text-capable image model) + Anthropic |
-| `MAKEBORNE_DECK_FULL_IMAGE` | off | Full-image slides and the deck style question. | **OpenAI images** |
+| `MAKEBORNE_DESIGN_COMPS` | off | Comp-first design comps before a build, at the measured native cells (desktop 2560x1440 High, phone 1152x2496 High). Photographs now wait for the comps (315e227). | **OpenAI images** (text-capable 2.5 model) + Anthropic |
+| `MAKEBORNE_DECK_FULL_IMAGE` | off | Full-image slides and the deck style question; new decks are editable text (`live`) while off. | **OpenAI images** |
 | `MAKEBORNE_CONTRAST_GATE` | **on** (`off` disables) | Rendered-contrast finish gate in builds. | No new provider (local headless render) |
-| image gate: `OPENAI_API_KEY` + `MAKEBORNE_IMAGE_MODELS` (or `MAKEBORNE_IMAGE_MODEL`) + `openai` provider limit > 0 | unset / 0 | Image-led websites, book images, image questions (`features.documentImages`). | **OpenAI images** + Anthropic vision checks |
+| image gate: `OPENAI_API_KEY` + `MAKEBORNE_IMAGE_MODELS` (or `MAKEBORNE_IMAGE_MODEL`) + `openai` provider limit > 0 | unset / 0 | Image-led websites, book images, image questions **and the image quality and shape controls** (`features.documentImages`). **Not a flag, new from docs-quality:** with a text-capable 2.5 model (sunburst or flare) in the list, new books get **generated pages** (cover and chapter openers, or picture-book spreads, with their words), checked by the page gate and typeset if they fail twice. Choose the model list accordingly. | **OpenAI images** + Anthropic vision checks |
 | `MAKEBORNE_SOURCE_INGESTION_ENABLED` (exactly `true`) | false | Word/Excel/CSV sources for builds. | Indirect: more input tokens in the build |
 | `MAKEBORNE_AGENCY_TASKS` | off | Master switch for paid agency work. **Alone it starts nothing** since S4. | No (needs a kind) |
 | `MAKEBORNE_AGENCY_TASK_KINDS` (comma list: `research`, `data_report`, `image_edit`, `independent_review`) | empty | Each listed kind makes paid model calls at once (all four are already qualified). List them one at a time. | **Yes, per kind** |
@@ -151,9 +168,9 @@ Every flag below is off by default. Unless noted, only the exact value `on` enab
 
 Unchanged and still off: `MAKEBORNE_MAIL_AUTOMATION_ENABLED`, `MAKEBORNE_MICROSOFT_MAIL_MODE`, `MAKEBORNE_AUTOTOPUP_SETUP_ENABLED`, the GitHub continuous flags (not in this branch).
 
-**Ships ON without a flag (UI only, no spend):** library grid and rename, editor-quality UI, journey rounds 1 and 2 (welcome without a workspace, AI-paused paths, content-only Preview, local-time expiry, Create/Plan names), the site sweep (pricing indexable, honest copy, 16 px phone fields, contrast, branded 404, CRM phone layout), hardening S2 (linear-time HTML scanners). Read-only `GET /api/assistants` (no hold, no provider call).
+**Ships ON without a flag (UI only, no spend):** library grid and rename, editor-quality UI, journey rounds 1 and 2 (welcome without a workspace, AI-paused paths, content-only Preview, local-time expiry, Create/Plan names), the site sweep (pricing indexable, honest copy, 16 px phone fields, contrast, branded 404, CRM phone layout), hardening S2 (linear-time HTML scanners), the legal pages, footer links, sign-up clickwrap and the checkout withdrawal-consent box (legal-pages). Read-only `GET /api/assistants` (no hold, no provider call).
 
-**Active whenever AI opens on this build:** the design rounds, image-led prompt rules, docs pipeline changes and the contrast gate. **The staging generation qualification must be redone on this build** before AI opens on it; Codex's 0.96 USD run was on 5f655a7's pipeline.
+**Active whenever AI opens on this build:** the design rounds, image-led prompt rules, docs pipeline changes (reference-pattern prompts, native image canvases, generated book pages with a text-capable model) and the contrast gate. **The staging generation qualification must be redone on this build** before AI opens on it; Codex's 0.96 USD run was on 5f655a7's pipeline.
 
 ## 6. Staging environment per area
 
@@ -162,7 +179,7 @@ Set on the **Preview (staging) environment only**. Values marked "owner" are dec
 | Area | Env / database |
 |---|---|
 | Baseline (all areas) | Everything the 0877345 staging already has. Database: apply section 3.1's 10 unapplied migrations with the apply script. Provider limits for the test day via `makeborne_private.set_live_provider_limit` (DB owner): `global` and `anthropic` enabled at **10 000 000 µ$** ($10), `openai` enabled at **3 000 000 µ$** ($3) only for the image steps, then back to disabled/0. Note the approval in each call's note. |
-| Images (websites, books, decks) | `OPENAI_API_KEY` (staging key), `MAKEBORNE_IMAGE_MODELS` = the qualified, priced model(s) in `src/lib/ai/prices.ts` (gpt-image-1 is never routed), `openai` limit > 0. **The daily image limit is the `openai` provider limit**: for staging $3; for production the owner chooses it. Optional per feature: `MAKEBORNE_DESIGN_COMPS=on`, `MAKEBORNE_DECK_FULL_IMAGE=on` (owner preferred live-text image-led slides on 22 Oct; test only if asked). |
+| Images (websites, books, decks) | `OPENAI_API_KEY` (staging key), `MAKEBORNE_IMAGE_MODELS=gpt-image-2.5-sunburst,gpt-image-2.5-flare` (the measured, text-capable models in `src/lib/ai/prices.ts`; gpt-image-1 is never routed). Comps, full-image slides and generated book pages need one of these. `openai` limit > 0. **The daily image limit is the `openai` provider limit**: for staging $3; for production the owner chooses it. Optional per feature: `MAKEBORNE_DESIGN_COMPS=on`, `MAKEBORNE_DECK_FULL_IMAGE=on` (owner preferred live-text image-led slides on 22 Oct; test only if asked). |
 | CRM research | `MAKEBORNE_CRM_RESEARCH=on`. Optional `MAKEBORNE_OVERPASS_URL`, `MAKEBORNE_NOMINATIM_URL` for lead discovery. Before production: do-not-contact enforced in the mail send path (Codex), and the purge scheduled. |
 | Agency (allowlisted kinds) | `MAKEBORNE_AGENCY_TASKS=on` and `MAKEBORNE_AGENCY_TASK_KINDS` with **one kind at a time** (`research`, then `data_report`, then `independent_review`, then `image_edit`). Plus the area flag: `MAKEBORNE_CLIENT_RESEARCH=on`, `MAKEBORNE_DATA_REPORTS=on`, `MAKEBORNE_INDEPENDENT_REVIEW=on`, `MAKEBORNE_IMAGE_EDITING=on` + `MAKEBORNE_IMAGE_EDIT_MODELS=gpt-image-2.5-sunburst` (the measured edit model). `MAKEBORNE_CLIENT_KNOWLEDGE=on` and `MAKEBORNE_SOURCE_INGESTION_ENABLED=true` are free. Keep `MAKEBORNE_CROSS_PROVIDER_REVIEW` off. |
 | Top-ups | Owner creates the three Whop **sandbox** one-time plans: boost_100 = $12, boost_300 = $32, boost_1000 = $95 (catalog `credit-packs-preview-2026-10-05`), USD, adaptive pricing **disabled** and read back. Codex inserts/enables the three `makeborne_private.topup_catalog` rows with those plan ids for the sandbox merchant. Then `WHOP_TOPUPS_ENABLED=true`, `MAKEBORNE_TOPUP_MIGRATIONS_VERIFIED=true`, `MAKEBORNE_TOPUP_CHECKOUT_QUALIFIED=true` (staging only; it is Codex's qualification decision), `MAKEBORNE_TOPUP_RECONCILE_ENABLED=true` for the cron. Uses the existing sandbox webhook (re-enable temporarily, as before). |
@@ -172,7 +189,7 @@ Set on the **Preview (staging) environment only**. Values marked "owner" are dec
 
 ## 7. Staging test plan, cheapest first
 
-Spend cap for everything below: **$10 Anthropic + $3 OpenAI**, enforced by the provider limits in section 6, not by these estimates. Estimates are from the measured local qualifications (agency-qualification-20261024, image-edit, Codex's 26 Oct staging build); none of them was measured on this exact build. Stop an area at its row's budget; if a row runs over, stop and report.
+Spend cap for everything below: **$10 Anthropic + $3 OpenAI**, enforced by the provider limits in section 6, not by these estimates. Estimates are from measured local runs: `quality-v14-20261026.md` (images at the native High cells, on docs-quality 84208ff and image-led 315e227, which this head contains), agency-qualification-20261024, image-edit, and Codex's 26 Oct staging build. **Images now render at native sizes for High and Best, so each image costs more than the earlier 1024-px cells.** Observed cost (with the bound each call reserves first): High 16:9 slide or desktop comp about $0.055 (bound $0.12); 6x9 page about $0.064 (bound $0.13); square page or 1:1 slide about $0.10 (bound $0.19); phone comp about $0.04 (bound $0.09). Best (xhigh) is about 1.8x High (16:9 about $0.10, bound $0.19). Stop an area at its row's budget; if a row runs over, stop and report.
 
 | # | Area | Steps | Expected cost | Running total (A / O) |
 |---|---|---|---|---|
@@ -185,24 +202,27 @@ Spend cap for everything below: **$10 Anthropic + $3 OpenAI**, enforced by the p
 | 6 | Generation re-qualification (text) | `anthropic` limit $10: one Medium website build on a fresh paying test account, then one book and one deck without images. | ~$1.0 site + ~$0.8 book + ~$0.6 deck ≈ **$2.4** | 2.4 / 0 |
 | 7 | Brief enhancer | `MAKEBORNE_BRIEF_ENHANCER=on`: 2 enhances, one stopped mid-way (credits 0). | ≈ **$0.3** | 2.7 / 0 |
 | 8 | Agency, one kind at a time | `research` ×3 briefs (~$0.09 each), `data_report` ×3 (~$0.035), `independent_review` ×3 on a site (~$0.06). | ≈ **$0.6** (bound ≤ $1.5) | 3.3 / 0 |
-| 9 | Images in websites | `openai` limit $3, `MAKEBORNE_IMAGE_MODELS` set: 2 image-led website builds (hero + up to 3 images, vision checks). | ≈ **$2.5** A + **$0.6** O | 5.8 / 0.6 |
-| 10 | Images in books and decks | 1 book with images, 1 deck with images (image questions now shown). Full-image slides only if the owner asks. | ≈ **$1.6** A + **$0.6** O | 7.4 / 1.2 |
-| 11 | Image edit | `image_edit` listed: 3 generated edits (~$0.02 each) + instruction steps. | ≈ **$0.1** A + **$0.1** O | 7.5 / 1.3 |
-| 12 | Design comps (optional) | `MAKEBORNE_DESIGN_COMPS=on`: 1 comp-first site. Not verified live on its branch. | ≈ **$1.5** A + **$0.8** O | 9.0 / 2.1 |
-| 13 | Custom domains | Only after the owner's Cloudflare decision: connect, verify, serve, disconnect. | $0 AI; Cloudflare outside approval | 9.0 / 2.1 |
-| — | Reserve | Retries, one uncertain Stop row counted at its bound. | ≈ $1 A / $0.9 O | ≤ 10 / ≤ 3 |
+| 9 | Images in websites | `openai` limit $3, `MAKEBORNE_IMAGE_MODELS` set: 2 image-led website builds, the second with `MAKEBORNE_DESIGN_COMPS=on` (desktop and phone comps). Measured in v14: $1.5-1.9 A and $0.15-0.16 O per site with comps. | ≈ **$3.4** A + **$0.3** O | 6.7 / 0.3 |
+| 10 | Images in books and decks | Quality and shape controls visible. 1 deck 16:9 High with `MAKEBORNE_DECK_FULL_IMAGE=on` (v14 Alba, 6 slides: $0.41 O / $0.38 A); 1 book 6x9 High with generated pages (v14 Mushrooms: $0.27 O / $0.39 A); 1 square picture book High (v14 Ollie: $0.15 O / $0.16 A). | ≈ **$1.0** A + **$0.9** O | 7.7 / 1.2 |
+| 11 | Image edit | `image_edit` listed: 3 generated edits (~$0.02 each) + instruction steps. | ≈ **$0.1** A + **$0.1** O | 7.8 / 1.3 |
+| 12 | Best quality (optional) | One 4:3 deck at Best (xhigh, 2048x1536), to see the higher bound reserve and settle. v14 Helio at High was $0.42-0.52 O / $0.37-0.42 A; Best is about 1.8x the image part. | ≈ **$0.4** A + **$0.8** O | 8.2 / 2.1 |
+| 13 | Custom domains | Only after the owner's Cloudflare decision: connect, verify, serve, disconnect. | $0 AI; Cloudflare outside approval | 8.2 / 2.1 |
+| 14 | Legal and checkout consent | `/terms`, `/privacy`, `/dpa`, `/imprint`, `/withdraw`; sign-up clickwrap; on a sandbox checkout the unticked withdrawal box blocks the redirect, and the Whop checkout metadata carries `makeborne_withdrawal_consent` (read it back; do it with row 5's purchase). | $0 AI; sandbox only | 8.2 / 2.1 |
+| — | Reserve | Retries, regenerations, one uncertain Stop row counted at its bound. | ≈ $1.8 A / $0.9 O | ≤ 10 / ≤ 3 |
 
 After the test: every flag back off, provider limits back to disabled/0, sandbox webhook disabled, temporary bypass revoked, test accounts banned, R2 test objects removed, the same cleanup list as Codex's 26 Oct handback.
 
 ## 8. Known gaps
 
-- **docs-quality is not merged.** Its measured image cells and quality/aspect controls follow as an additional merge; row 10's book/deck image costs should be re-read from its measured prices then.
+- **One more `feature/image-led-sites` merge is coming** (website quality v2, still being committed). This head has 315e227 exactly.
+- **Generated book pages have no flag of their own** (docs-quality): they run when a text-capable 2.5 model is in `MAKEBORNE_IMAGE_MODELS` and images are open. If the owner wants them switchable like full-image slides, that is a small follow-up.
+- **Legal pages:** the checkout consent change is Codex-owned and needs review (section 1). The documents' notes and decisions are in `docs/legal/REVIEW-NOTES.md` and `DECISIONS.md`; they still need the owner's company details and a lawyer's read.
+- **Website quality (v14):** comps are thin (two per site, not four), the built display type is less bold than the references, and comps can invent small facts (the build follows the brief).
 - **Not run here:** real staging, real providers, real Whop/Cloudflare, scheduled crons, Firefox (only Chromium plus a WebKit phone pass; Firefox passed 141/141 on 4974b9c before these merges).
 - **GitHub two-way sync is not in this branch**, but its migrations are on staging (section 3.1).
 - **Do-not-contact is not enforced in the mail send path** (journey audit). Required before `MAKEBORNE_CRM_RESEARCH` goes to production.
 - **S1 (live on main):** `src/lib/mail/research.ts` quadratic regexes. Codex-owned; S2 fixed the same class only in the new research code.
 - **Account rights (Codex review list in its report):** Whop membership status is read as stored; provider-side mail/GitHub token revocation not implemented; compiled R2 publication output not removed; no emails on scheduling/completion; released addresses get no tombstone; `check-asset-storage.cjs` signed-link exception needs your acceptance; the cron is not scheduled.
 - **No per-user daily AI caps** except S12's research limits; one user can use the whole provider limit (accepted limitation B12).
-- **Legal pages:** no Terms of Service or imprint, and the privacy notice names no controller (owner action before ads).
 - `check-advisor-handoff`'s old `.lb-limit` note and the other cross-browser items were resolved on 4974b9c; see `full-launch-browser-matrix-20261026.md`.
 - The editor's version facts still say "Newer saved changes aren't live yet" after a rename alone (true for the site title; journey note).
