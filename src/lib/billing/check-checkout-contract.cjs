@@ -11,7 +11,7 @@ let offerAvailable=true;
 // Exact-checkout recovery (checkout-recovery.ts): 'pending' means Whop lists no paid payment for that checkout now.
 let recovery='pending',recoveryCalls=[];
 const modules={
- '@/lib/billing/plans':{BILLING_TERMS_VERSION:'2026-10-25-beta-v9'},
+ '@/lib/billing/plans':{BILLING_TERMS_VERSION:'2026-10-25-beta-v9',WITHDRAWAL_CONSENT_VERSION:'withdrawal-2026-10-26'},
  '@/lib/billing/creation-offers':{verifiedCreationOffer:async()=>offerAvailable?{planId:'plan_fixture'}:null},
  '@/lib/billing/access':{requireBillingUser:async()=>({id:'user_fixture'})},'@/lib/billing/config':{billingConfig:()=>config},'@/lib/billing/database':{billingDatabase:()=>db},
  '@/lib/billing/checkout-recovery':{recoverCreationCheckout:async(user,request)=>{recoveryCalls.push([user,request]);if(recovery==='throw')throw Object.assign(Error('provider unavailable'),{code:'CHECKOUT_RECOVERY_UNVERIFIED'});return recovery}},
@@ -24,6 +24,10 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(require.resolve('../../app
 const request=(selection={planId:'plan_fixture'})=>new Request('http://localhost:3048/api/billing/checkout',{method:'POST',body:JSON.stringify({...selection,requestId:'00000000-0000-4000-8000-000000000001',next:'/studio'})});
 (async()=>{
  assert.equal((await ctx.exports.POST(request())).status,200);assert(saved);assert.equal(payload.redirect_url,'https://sandbox.whop.com/');assert.equal(payload.metadata.makeborne_terms_version,'2026-10-25-beta-v9');
+ // The ticked immediate-start request is recorded only when it names the current version.
+ assert.equal(payload.metadata.makeborne_withdrawal_consent,undefined);
+ assert.equal((await ctx.exports.POST(request({planId:'plan_fixture',withdrawalConsent:'withdrawal-2026-10-26'}))).status,200);assert.equal(payload.metadata.makeborne_withdrawal_consent,'withdrawal-2026-10-26');
+ assert.equal((await ctx.exports.POST(request({planId:'plan_fixture',withdrawalConsent:'withdrawal-old'}))).status,200);assert.equal(payload.metadata.makeborne_withdrawal_consent,undefined);
  ctx.process.env.MAKEBORNE_WHOP_STAGING_SANDBOX='true';
  ctx.process.env.VERCEL_URL='makeborne-release-staging-abc123def-kerimsabic-6594s-projects.vercel.app';
  assert.equal((await ctx.exports.POST(request())).status,200);assert.equal(payload.redirect_url,'https://'+ctx.process.env.VERCEL_URL+'/billing/return?request=00000000-0000-4000-8000-000000000001');
