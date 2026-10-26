@@ -207,6 +207,24 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.equal(settled.events.filter(event => event.type === "tool_error" && /Comp fidelity:/.test(event.message)).length, 2);
   });
 
+  await check("ordinary edits measure saved comp readings without regenerating references", async () => {
+    for (const findings of [[], ["Comp fidelity: the hero section is still too small"], null]) {
+      script.length = 0; seen.length = 0; imageCalls.length = 0;
+      const files = new ProjectFiles();
+      for (const tool of site("saved")) files.write(tool.input.path, tool.input.content);
+      const comment = "/*\n * Makeborne concept:\n *   Comps: hero@desktop=00000001-0000-5000-a000-000000000000[h12,i50,right,g#FAF7F0,wB,l2].\n */\n";
+      files.write("src/App.tsx", comment + files.files.get("src/App.tsx"));
+      script.push({ content: [finish("saved-finish")] });
+      let measured;
+      const { result } = await run({ limits: { maxTurns: 1 }, contrastCheck: async (_files, options) => { measured = options; return findings; } }, files);
+      assert.equal(measured.comps.length, 1);
+      assert.deepEqual([measured.comps[0].heavy, measured.comps[0].headlineLines, measured.comps[0].imageAreaPct], [true, 2, 50]);
+      assert.equal(result.compFidelity, findings === null ? "not_checked" : findings.length ? "failed" : "passed");
+      assert.equal(result.finished, findings === null || findings.length === 0);
+      assert.equal(imageCalls.length, 0, "saved-reference verification buys no new images");
+    }
+  });
+
   await check("regeneration rules: a new name, an existing generated image, never the client's own photos or logo; replaces and rejected go together", () => {
     const state = { replaceOnly: false, exists: name => ["hero", "photo-1", "brand-logo"].includes(name), replaced: new Set(), replacements: new Set() };
     assert.equal(regenerationProblem({ name: "hero-2" }, state), null, "a new image needs no replaces outside a review");

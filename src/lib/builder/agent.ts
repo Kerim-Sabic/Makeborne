@@ -480,8 +480,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             // Rendered contrast: text measured over its real background in a browser. Each failing pair blocks once.
             if (!problems.length && verdict?.status === "passed" && run.contrastCheck) {
               run.emit({ type: "status", message: "Checking text contrast…" });
-              // A review measures the build against the comp readings in the concept comment.
-              const readings = (replaceOnly ? compsFromSource(run.files.files.get("src/App.tsx")) : comps).map(comp => comp.reading).filter((reading): reading is CompReadingValues => Boolean(reading));
+              // Edits and continuations keep the saved references too; they need
+              // no new image call merely to measure an already-approved comp.
+              const readings = (comps.length ? comps : compsFromSource(run.files.files.get("src/App.tsx"))).map(comp => comp.reading).filter((reading): reading is CompReadingValues => Boolean(reading));
               const findings = await run.contrastCheck(run.files.files, readings.length ? { comps: readings } : undefined).catch(() => null);
               if (readings.length) compFidelity = findings === null ? "not_checked" : findings.some(finding => /^Comp fidelity:/.test(finding)) ? "failed" : "passed";
               // Covered text, content past the edge, page overflow and wrapped bands block every time; the rest once.
