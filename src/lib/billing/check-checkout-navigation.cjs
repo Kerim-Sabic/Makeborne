@@ -27,12 +27,13 @@ const component = fs.readFileSync(`${__dirname}/../../components/billing-topups.
 assert.match(component, /window\.location\.assign\(topupNavigationUrl\(data\?\.url, window\.location\.origin\)\)/);
 const staging = 'https://makeborne-release-staging-dbc6yifb8-kerimsabic-6594s-projects.vercel.app';
 assert.equal(creationNavigationUrl(sandbox, staging), sandbox); checks++;
-assert.throws(() => resolve(sandbox, staging), /could not be verified/); checks++;
+assert.equal(resolve(sandbox, staging), sandbox); checks++;
 for (const origin of ['https://makeborne.com', 'https://makeborne-release-staging.vercel.app',
   'https://makeborne-release-staging-abcdefghi-other-team.vercel.app',
   staging + '.evil.test', staging.replace('https:', 'http:'), staging + ':444',
   staging.replace('https://', 'https://user@'), staging.replace('dbc6yifb8', 'short')]) {
   assert.throws(() => creationNavigationUrl(sandbox, origin), /could not be verified/); checks++;
+  assert.throws(() => resolve(sandbox, origin), /could not be verified/); checks++;
 }
 assert.equal(creationNavigationUrl(live, 'https://makeborne.com'), live); checks++;
 const creation = fs.readFileSync(`${__dirname}/../../components/creation-plans.tsx`, 'utf8');
