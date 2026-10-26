@@ -6,7 +6,7 @@ Owner approval this targets (handoff, 26 Oct): "approved full version staging te
 
 ## 1. Head and what is in it
 
-Head: see the commit that adds this file (`git log -1 claude/full-version-staging`). The code head it describes is **`7a86eb6`**. The SQL evidence was taken at f901a59; nothing after it touches `supabase/` or `.env.example` (verified with `git diff --name-only`), so it still holds.
+Head: see the commit that adds this file (`git log -1 claude/full-version-staging`). The code head it describes is **`77b0752`** (adds `MAKEBORNE_BOOK_IMAGE_PAGES`). The SQL evidence was taken at f901a59; nothing after it touches `supabase/` or `.env.example` (verified with `git diff --name-only`), so it still holds.
 
 Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launch candidate 1062170 + the 3-engine browser fixes).
 
@@ -26,7 +26,8 @@ Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launc
 | l | 062e834 | eval fix (mine) | — | `scripts/eval/direct-run.mjs` and `doc-run.mjs` set `MAKEBORNE_DESIGN_COMPS=on` / `MAKEBORNE_DECK_FULL_IMAGE=on` in their own process; image-led's `check-direct-run-comps.cjs` failed without it. |
 | m | 2536f83 | `claude/legal-pages` | **16437ab** (from 0877345) | `/terms`, `/privacy`, `/dpa`, `/imprint`, `/withdraw` from `docs/legal/*.md`; footer links; sign-up clickwrap; checkout withdrawal-consent checkbox. Clean merge. **The checkout change is Codex-owned and flagged for review** (section 1, below). |
 | n | 7a86eb6 | test fix (mine) | — | `check-presenter-keys-browser`'s `render-book` mock exports `bookTrim` (docs-quality's `document-preview.tsx` imports it). |
-| o | (this commit) | report update | — | |
+| o | 8c9dbd6 | report update | — | |
+| p | 77b0752 | book pages switch (mine) | — | Generated book pages behind `MAKEBORNE_BOOK_IMAGE_PAGES` (exactly `on`, default off); offline test for both states. |
 
 **Not merged:** the next `feature/image-led-sites` head (website quality v2, still in progress). GitHub two-way sync (`qualification/github-continuous-20261025`), model-routing and model-orchestrator are also not in this branch.
 
