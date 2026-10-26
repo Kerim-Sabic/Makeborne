@@ -459,7 +459,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   return <section className="ac-workspace" aria-label="Account clients" ref={root}>
     <header className="ac-heading"><div><span className="eyebrow">YOUR CLIENT RELATIONSHIPS</span><h1>Good work starts with people.</h1><p>Keep every conversation, next step, and project together.</p></div>
       <div className="ac-heading-actions">
-        {snapshot && <button type="button" className="ac-palette-hint" onClick={() => setPalette(true)} aria-label="Find a client or action (Ctrl+K)"><Search size={14} />Find<kbd>{shortcutKey}K</kbd></button>}
+        {snapshot && <button type="button" className="ac-palette-hint" onClick={() => setPalette(true)} title="Find a client or action"><Search size={14} />Find<kbd>{shortcutKey}K</kbd></button>}
         {snapshot && canEdit && <button type="button" className="button secondary ac-find-leads" disabled={busy} onClick={() => setFinding(true)}><Sparkles size={15} />Find leads</button>}
         {snapshot && canEdit && <button className="button primary" disabled={busy || adding} onClick={() => setAdding(true)}><Plus size={16} /> Add client</button>}
       </div></header>

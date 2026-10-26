@@ -199,3 +199,6 @@
 .mk-format-indicator::after{content:"";position:absolute;left:10%;right:10%;top:1px;height:45%;border-radius:999px;background:linear-gradient(180deg,#ffffffe6,#fff0);pointer-events:none}
 .mk-format-switch:has(button:active) .mk-format-indicator{scale:.97}
 @media(prefers-reduced-transparency:reduce){.mk-format-switch{background:#f4f3f9;backdrop-filter:none;-webkit-backdrop-filter:none}}
+
+/* Keyboard and screen-magnifier users need to see where typing goes: the soft white ring alone was invisible. */
+.mk-home .mk-composer:has(textarea:focus-visible){outline:2px solid #7d6cc8;outline-offset:3px}
