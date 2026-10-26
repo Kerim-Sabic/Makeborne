@@ -299,6 +299,25 @@ const deckWith = (art = {}) => {
       assert.ok(model.log.streams.length <= 3, "completion is deferred without hidden retries");
     } finally { if (saved === undefined) delete process.env.MAKEBORNE_BOOK_IMAGE_PAGES; else process.env.MAKEBORNE_BOOK_IMAGE_PAGES = saved; }
   });
+  await check("an unavailable second image attempt stays pending, not a checked permanent fallback", async () => {
+    const saved = process.env.MAKEBORNE_BOOK_IMAGE_PAGES; process.env.MAKEBORNE_BOOK_IMAGE_PAGES = "on";
+    try {
+      const editor = pictureBook(), images = fakeImages(), generate = images.client.images.generate;
+      let calls = 0;
+      images.client.images.generate = async (...args) => { if (++calls > 2) throw new Error("Fictional image service unavailable"); return generate(...args); };
+      const words = target => pageText(editor.doc, target).map(line => line.text).join(" ");
+      const model = fakeAnthropic([
+        [toolUse("render_pages", { targets: ["cover", "afraid"] })],
+        () => [toolUse("check_page", { target: "cover", transcript: words("cover"), artifacts: [], verdict: "pass" }), toolUse("check_page", { target: "afraid", transcript: words("afraid"), artifacts: ["Wrong illustration"], verdict: "fail" })],
+        ...Array.from({ length: 3 }, () => [toolUse("finish", { summary: "Use the typeset page for now." })]),
+      ]);
+      const result = await run(editor, model, images);
+      assert.equal(result.finished, false);
+      assert.deepEqual(pendingBookPages(editor.doc), ["afraid"]);
+      assert.equal(editor.doc.art.renders.find(render => render.target === "afraid").verified, undefined);
+      assert.equal(verifiedPage(editor.doc, "cover"), "page-cover");
+    } finally { if (saved === undefined) delete process.env.MAKEBORNE_BOOK_IMAGE_PAGES; else process.env.MAKEBORNE_BOOK_IMAGE_PAGES = saved; }
+  });
   await check("generated book pages are off unless MAKEBORNE_BOOK_IMAGE_PAGES=on: a book is typeset as before (no page tools, no page prompt, no page render, new books get no art) even with images open; on, they run", async () => {
     const pagesLog = async () => {
       const editor = pictureBook(), images = fakeImages();

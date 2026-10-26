@@ -38,7 +38,7 @@ export function pagesWanted(book: Book): { target: string; kind: BookPageKind }[
 /** Budget-deferred pages remain resumable; an explicitly checked fallback is terminal. */
 export function pendingBookPages(book: Book): string[] {
   return pagesWanted(book).filter(({ target }) => !verifiedPage(book, target)
-    && !book.art?.renders.some(render => render.target === target && render.outcome === "fallback"
+    && !book.art?.renders.some(render => render.target === target && render.outcome === "fallback" && render.attempts >= 2
       && render.verified === pageTextKey(book, target) && (render.shape ?? "portrait") === bookShape(book))).map(page => page.target);
 }
 

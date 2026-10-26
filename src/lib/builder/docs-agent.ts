@@ -443,11 +443,11 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
       return [{ type: "text", text: `Generating "${target}" failed at the image service. It stays typeset unless you render it again.` }];
     }
   }
-  function pageFallback(target: string, attempts: number, problems: string[]) {
+  function pageFallback(target: string, attempts: number, problems: string[], checkedFallback = false) {
     pendingPages.delete(target);
     const book = bookDoc(), kindOfPage = book ? pageKind(book, target) : null;
     if (!book || !kindOfPage) return;
-    run.editor.recordPageRender({ target, kind: kindOfPage, attempts, outcome: "fallback", verified: pageTextKey(book, target), shape: bookShape(book), problems: problems.slice(0, 6).map(item => item.slice(0, 300)) });
+    run.editor.recordPageRender({ target, kind: kindOfPage, attempts, outcome: "fallback", ...(checkedFallback ? { verified: pageTextKey(book, target) } : {}), shape: bookShape(book), problems: problems.slice(0, 6).map(item => item.slice(0, 300)) });
     record({ target: "image", id: pageName(target), attempt: attempts, outcome: "fallback", problems });
     run.emit({ type: "document", document: run.editor.doc });
   }
@@ -482,7 +482,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
       if (!pendingPages.has(input.target)) { pageFallback(input.target, pending.attempts, problems); return { ok: true, content: [...content, { type: "text", text: "It stays typeset." }] }; }
       return { ok: true, content: [{ type: "text", text: `"${input.target}" failed (${problems.join("; ").slice(0, 400)}) and was regenerated with a corrected prompt. Check the new attempt:` }, ...content] };
     }
-    pageFallback(input.target, pending.attempts, problems);
+    pageFallback(input.target, pending.attempts, problems, true);
     return { ok: true, content: `"${input.target}" failed the gate twice (${problems.join("; ").slice(0, 400)}). It stays typeset, so the book is never wrong${input.target === "cover" || pageKind(book, input.target) === "opener" ? "; if the plan has room you may generate a text-free picture for it with generate_image (cover_image or the chapter's image) and check it" : ""}.` };
   }
 
