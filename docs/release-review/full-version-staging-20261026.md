@@ -6,7 +6,7 @@ Owner approval this targets (handoff, 26 Oct): "approved full version staging te
 
 ## 1. Head and what is in it
 
-Head: see the commit that adds this file (`git log -1 claude/full-version-staging`). The code head it describes is **`77b0752`** (adds `MAKEBORNE_BOOK_IMAGE_PAGES`). The SQL evidence was taken at f901a59; nothing after it touches `supabase/` or `.env.example` (verified with `git diff --name-only`), so it still holds.
+Head: see the commit that adds this file (`git log -1 claude/full-version-staging`). The code head it describes is **`d3571ab`** (image-led 8d90aaa and docs-quality 13d35ee merged on top of 77b0752). The SQL evidence was taken at f901a59; nothing after it touches `supabase/` or `.env.example` (verified with `git diff --name-only`), so it still holds.
 
 Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launch candidate 1062170 + the 3-engine browser fixes).
 
@@ -22,14 +22,18 @@ Base: `claude/full-launch-candidate` **4974b9c** (Codex 5f655a7 + the full launc
 | h | 14979cf | test fix (mine) | — | `check-library-rename-browser` follows library-redesign's card menu (Open, then Rename; reviewers see Open only). Journey's check expected its own menu. |
 | i | 3f81eb4, 9afc160 | this report, the SQL evidence JSON and `scripts/rehearse-full-version-chain.mjs` | — | |
 | j | 1002761 | `feature/docs-quality` | **84208ff** | New since the candidate: b38bfc6, 4b71fa5, c939276, cf51b4f, 58a1d1f, 56596fc, 629f55a, 84208ff. Measured 2.5 image cells (×1.5 bound), image quality and slide/page shape controls, generated book pages, reference-pattern prompts, deck fixes. Section 2. |
-| k | 3f0d90d | `feature/image-led-sites` | **315e227** (exactly; its agent is still committing "website quality v2", which comes as one more small merge) | New since 9976ac7: 24e8138, 7807c71, b14078f, 463c916, 315e227. Clean merge. |
+| k | 3f0d90d | `feature/image-led-sites` | **315e227** (then 8d90aaa in row q) | New since 9976ac7: 24e8138, 7807c71, b14078f, 463c916, 315e227. Clean merge. |
 | l | 062e834 | eval fix (mine) | — | `scripts/eval/direct-run.mjs` and `doc-run.mjs` set `MAKEBORNE_DESIGN_COMPS=on` / `MAKEBORNE_DECK_FULL_IMAGE=on` in their own process; image-led's `check-direct-run-comps.cjs` failed without it. |
 | m | 2536f83 | `claude/legal-pages` | **16437ab** (from 0877345) | `/terms`, `/privacy`, `/dpa`, `/imprint`, `/withdraw` from `docs/legal/*.md`; footer links; sign-up clickwrap; checkout withdrawal-consent checkbox. Clean merge. **The checkout change is Codex-owned and flagged for review** (section 1, below). |
 | n | 7a86eb6 | test fix (mine) | — | `check-presenter-keys-browser`'s `render-book` mock exports `bookTrim` (docs-quality's `document-preview.tsx` imports it). |
 | o | 8c9dbd6 | report update | — | |
 | p | 77b0752 | book pages switch (mine) | — | Generated book pages behind `MAKEBORNE_BOOK_IMAGE_PAGES` (exactly `on`, default off); offline test for both states. |
+| q | 0823f67 | `feature/image-led-sites` | **8d90aaa** (final; new f58ea4c, 8d90aaa) | Website quality v2: one confident colour field at poster scale, comps by name, measured ground, section comps without the header, heavy comp headlines stay heavy. Clean merge. Active whenever AI opens (comps still need `MAKEBORNE_DESIGN_COMPS=on`). |
+| r | d3571ab | `feature/docs-quality` | **13d35ee** | Report only (quality v14 websites v2 follow-up). Clean merge. |
 
-**Not merged:** the next `feature/image-led-sites` head (website quality v2, still in progress). GitHub two-way sync (`qualification/github-continuous-20261025`), model-routing and model-orchestrator are also not in this branch.
+After q and r: npm test 224/224, tsc PASS, eslint 0 errors, `next build --webpack` PASS (68 pages); builder checks `check-comp-prompt` 8, `check-image-vision` 16, `check-layout-probe` 9, `check-direct-run-comps` PASS, `check-builder-client` PASS, and 10/10 Chromium builder browser checks (live-builder flow, contrast gate, stop, paused, preview continuity and assets, site verifier, edit intent, composer send, enhance flow).
+
+**Not merged:** GitHub two-way sync (`qualification/github-continuous-20261025`), model-routing and model-orchestrator are also not in this branch.
 
 ### Changes to Codex-owned paths, all UI/copy
 
@@ -216,7 +220,6 @@ After the test: every flag back off, provider limits back to disabled/0, sandbox
 
 ## 8. Known gaps
 
-- **One more `feature/image-led-sites` merge is coming** (website quality v2, still being committed). This head has 315e227 exactly.
 - **Legal pages:** the checkout consent change is Codex-owned and needs review (section 1). The documents' notes and decisions are in `docs/legal/REVIEW-NOTES.md` and `DECISIONS.md`; they still need the owner's company details and a lawyer's read.
 - **Website quality (v14):** comps are thin (two per site, not four), the built display type is less bold than the references, and comps can invent small facts (the build follows the brief).
 - **Not run here:** real staging, real providers, real Whop/Cloudflare, scheduled crons, Firefox (only Chromium plus a WebKit phone pass; Firefox passed 141/141 on 4974b9c before these merges).
