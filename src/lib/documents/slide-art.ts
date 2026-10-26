@@ -337,7 +337,10 @@ export function slideCopy(deck: Pick<Deck, "theme" | "slides"> & { art?: Deck["a
   const out: string[] = [];
   const titleBlock = slide.layout === "canvas" ? slide.blocks?.find(block => block.type === "text" && (block.style === "display" || block.style === "headline")) : undefined;
   const titleText = slide.layout === "canvas" ? (titleBlock?.type === "text" ? titleBlock.text : undefined) : slide.title;
-  const accentClause = (text: string) => accent && accentInText(accent, text) ? ` with ${q(accent)} in ${swatch(palette.accent)}${style.italicAccent ? " italic" : ""}` : "";
+  // On an accent-coloured slide the accent words cannot be the accent colour (the live Helio "ask" slide set "€2M" yellow
+  // on yellow and failed twice): they take whichever of the deep and light colours reads best on that ground.
+  const accentInk = slide.tone === "accent" ? (contrast(palette.dark, palette.accent) >= contrast(palette.background, palette.accent) ? palette.dark : palette.background) : palette.accent;
+  const accentClause = (text: string) => accent && accentInText(accent, text) ? ` with ${q(accent)} in ${swatch(accentInk)}${style.italicAccent ? " italic" : slide.tone === "accent" ? " underlined with a thick rule" : ""}` : "";
   const size = ["cover", "statement", "section", "canvas", "closing"].includes(slide.layout) ? "huge" : "large";
   if (slide.eyebrow) out.push(`a small label ${q(slide.eyebrow)} above the headline`);
   if (titleText) out.push(`${article(size)} ${style.heading} headline ${quotedLines(titleText, accentLines(titleText, accent, size === "huge"))}${accentClause(titleText)}`);

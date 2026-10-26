@@ -95,6 +95,10 @@ const deckWith = (art = {}) => {
     const vertical = new DocumentEditor({ ...deck, art: { ...deck.art, aspect: "9:16" } }).doc;
     assert.ok(artPrompt(vertical, vertical.slides[0]).includes(tailSlide("vertical 9:16")));
     assert.throws(() => editor.apply("write_slide", { slide: { ...COVER, art: { ...COVER.art, accent: "bread" } } }), /art\.accent "bread" is not in the slide's text/);
+    // On an accent-coloured slide the accent words take the deep or light colour that reads on it, never the accent itself.
+    const onAccent = artPrompt(deck, { ...deck.slides[0], tone: "accent" });
+    assert.match(onAccent, /with "oven\." in warm cream #F4EDE3 italic/, "cream reads better than brown-black on terracotta");
+    assert.doesNotMatch(onAccent, /with "oven\." in terracotta/);
   });
 
   await check("the gate expects the furniture: wordmark and page number (read with or without its zero); a moved slide or a new wordmark needs a new render", () => {
