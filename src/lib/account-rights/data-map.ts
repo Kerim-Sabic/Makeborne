@@ -149,4 +149,5 @@ export const DATA_MAP: readonly DataMapEntry[] = Object.freeze([
   ...["crm_next_steps", "crm_suppressions", "crm_site_checks", "crm_duplicate_dismissals", "client_facts", "client_fact_revisions", "client_fact_evidence", "knowledge_snapshots", "client_research_pages", "client_research_briefs"]
     .map(table => ({ table, export: table, deletion: "delete" as const, reason: `${W} Created by a feature branch; exported when present.`, optional: true as const })),
   { table: "client_knowledge_state", export: null, deletion: "delete", reason: `${W} Per-client counter (feature branch).`, optional: true },
+  { table: "makeborne_private.brief_enhancements", export: null, deletion: "delete", reason: "Brief-enhancer runs (full candidate): removed with the sign-in record (cascade). Codex: add an export source if it is activated.", optional: true },
 ] satisfies DataMapEntry[]);
