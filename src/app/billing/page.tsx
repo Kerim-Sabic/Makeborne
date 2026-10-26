@@ -11,6 +11,9 @@ import { unavailableBilling } from "@/lib/billing/view";
 import { getFreeTierOffer } from "@/lib/credits/server";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
+import { launchState } from "@/lib/launch/config";
+import { salesOpenNow } from "@/lib/launch/sales-open";
+import PlansOpenLine from "@/components/launch/plans-open-line";
 import "./billing.css";
 import "./billing-topup-return.css";
 
@@ -25,7 +28,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const [refundedPeriod, summary, showAutotopup, subscriptions] = user
     ? await Promise.all([accountRefundedPeriod(user.id), loadUsageHistory(user, { usage: params.usage, usageBefore: params.usageBefore }), autotopupPanelVisible(user.id), subscriptionSummaries(user.id)])
     : [null, unavailableBilling, false, null] as const;
-  return <BillingWorkspace subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
+  // Informational launch line near the plans, shown only while plans are not on sale. It never changes what the plan buttons do.
+  const launch = launchState();
+  const launchLine = launch.enabled && launch.phase !== "after" && !(await salesOpenNow()) ? <PlansOpenLine launchAt={launch.launchAt} serverNow={launch.serverNow} dateText={launch.text} /> : null;
+  return <BillingWorkspace launchLine={launchLine} subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
 }
 
 /** The current billing period when its payment was refunded or charged back (creation paused). Unknown shows nothing. */
