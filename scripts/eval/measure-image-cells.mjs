@@ -6,8 +6,8 @@
 //   EVAL_SPEND_APPROVED=yes node scripts/eval/measure-image-cells.mjs --live --scope <scope> --approval "<owner's words>"
 //     [--only 2560x1440,1536x2304] [--env <abs path>/.env.local]
 //
-// Live: the scope must already be recorded in outputs/eval/budget/ledger.json (budget.mjs --record-scope, with the
-// owner's approval); every call reserves its worst case in that scope before it starts (re-reading the ledger under
+// Live: the scope must already be recorded in outputs/eval/budget/ledger.json (budget.mjs --record-scope <scope> --total <usd>
+// --provider-cap openai=<usd> --approval "..." --write, with the owner's approval); every call reserves its worst case in that scope before it starts (re-reading the ledger under
 // its lock) and settles at the cost the response's usage reports (unknown usage keeps the bound). One call per cell,
 // sequential, no retries. Results: outputs/eval/image-cells/<scope>/results.jsonl plus each image (webp). The key is
 // read into this process only, never printed or written; the run folder is scanned for it afterwards.
@@ -44,9 +44,9 @@ if (!values.live) { console.log('Plan only: no calls made. Pass --live with an a
 if (process.env.EVAL_SPEND_APPROVED !== 'yes' || !values.approval?.trim()) throw new Error('Refusing: EVAL_SPEND_APPROVED=yes and --approval are required');
 if (!/^[a-z0-9][a-z0-9-]{2,80}$/.test(values.scope ?? '')) throw new Error('--scope must name the recorded scope');
 const budget = await import(pathToFileURL(path.join(HERE, 'lib', 'budget.mjs')).href);
+// This branch's budget.mjs: scopeSummary throws EVAL_SCOPE_UNAPPROVED for an unrecorded scope; reserveScoped books in it.
 const scoped = budget.scopeSummary(values.scope);
-if (!scoped) throw new Error(`Scope ${values.scope} is not recorded in the ledger; record the owner's approval first (budget.mjs --record-scope).`);
-const openaiLeft = (scoped.allowance.providerCapsUsd?.openai ?? 0) - scoped.byProvider.openai;
+const openaiLeft = (scoped.providerCapsUsd?.openai ?? 0) - (scoped.byProvider?.openai ?? 0);
 if (openaiLeft + 1e-9 < estimate.boundUsd) throw new Error(`Scope ${values.scope} has $${openaiLeft.toFixed(2)} of OpenAI left; the plan reserves up to $${estimate.boundUsd.toFixed(2)}. Narrow it with --only or record a larger approval.`);
 
 const envFile = values.env?.trim() || path.join(REPO, '.env.local');
@@ -62,7 +62,7 @@ for (const cell of plan) {
   const id = `${cell.model.replace('gpt-image-2.5-', '')}-${cell.quality}-${cell.size}`;
   const boundTokens = Math.ceil(cells.UNMEASURED_CEILING_TOKENS[cell.quality] * prices.MEASURED_HEADROOM);
   const boundUsd = Math.ceil(((promptBytes + 64) * 5 + boundTokens * 30) * prices.GEO_MULTIPLIER) / 1e6;
-  const reservation = await budget.reserve({ kind: 'openai-image-cells', ref: `${values.scope}/${id}`, boundUsd, provider: 'openai', unique: true, scope: values.scope,
+  const reservation = await budget.reserveScoped({ scope: values.scope, kind: 'openai-image-cells', ref: `${values.scope}/${id}`, boundUsd, provider: 'openai', unique: true,
     note: `${values.approval.trim()} | measure ${cell.model} ${cell.quality} ${cell.size}` });
   const body = { model: cell.model, prompt: PROMPT, n: 1, size: cell.size, quality: cell.quality, output_format: 'webp', output_compression: 90 };
   fs.writeFileSync(path.join(outDir, `${id}.attempted.json`), JSON.stringify({ id, at: new Date().toISOString(), reservation, body: { ...body, prompt: `${promptBytes} bytes` } }));

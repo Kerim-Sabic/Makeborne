@@ -305,24 +305,12 @@ async function withLock(fn) {
   }
 }
 
-/** The owner-approved allowance of a scope: its capApprovals record (the last with that scope) or null. */
-export function scopeApproval(ledger, scope) {
-  const records = Array.isArray(ledger.capApprovals) ? ledger.capApprovals.filter(item => isPlainObject(item) && item.scope === scope && isPlainObject(item.allowance)) : [];
-  return records[records.length - 1] ?? null;
-}
-const scopeLedger = (ledger, scope) => ({ ...ledger, entries: ledger.entries.filter(entry => entry.scope === scope) });
-const SCOPE_NAME = /^[a-z0-9][a-z0-9-]{2,80}$/;
-
 /**
  * Reserve a call's worst-case bound. Throws CapReached when it does not fit,
  * DuplicateReservation when `unique` and the same kind+ref already has an entry.
- * With `scope`, the call books against that scope's own approved allowance (its capApprovals record:
- * allowance.totalUsd and allowance.providerCapsUsd; a provider the record does not list is refused)
- * instead of the design cap; the ledger-wide caps bind either way.
  * Returns the reservation id to settle later.
  */
-export async function reserve({ kind, ref, boundUsd, note, unique = false, provider, scope }) {
-  if (scope !== undefined && (typeof scope !== 'string' || !SCOPE_NAME.test(scope) || scope === DESIGN_SCOPE)) throw new Error(`Invalid scope ${JSON.stringify(scope)}`);
+export async function reserve({ kind, ref, boundUsd, note, unique = false, provider }) {
   if (typeof kind !== 'string' || !kind) throw new Error('A reservation needs a kind');
   const who = provider ?? providerOf({ kind });
   if (!PROVIDERS.includes(who)) throw new Error(`Unknown provider ${JSON.stringify(provider)}`);
@@ -340,22 +328,13 @@ export async function reserve({ kind, ref, boundUsd, note, unique = false, provi
     const cap = micro(capUsd());
     const committed = committedMicrousd(designLedger(ledger));
     const ledgerCommitted = committedMicrousd(ledger);
-    const approved = scope === undefined ? null : scopeApproval(ledger, scope);
-    if (scope !== undefined && !approved) throw new CapReached(`Scope ${scope} has no recorded owner approval in capApprovals; refusing ${kind} ${ref}`, { scope });
     // The ledger-wide total (all allowances) never exceeds the ledger's own approved cap.
     if (!(ledgerCommitted + bound <= micro(ledger.hardCapUsd))) {
       throw new CapReached(`Ledger-wide cap reached: $${usd(ledgerCommitted).toFixed(2)} committed across allowances + $${boundUsd.toFixed(2)} bound for ${kind} ${ref} would exceed $${ledger.hardCapUsd.toFixed(2)}`,
         { committedUsd: usd(ledgerCommitted), boundUsd, capUsd: ledger.hardCapUsd });
     }
-    if (approved) {
-      const own = committedMicrousd(scopeLedger(ledger, scope)), total = approved.allowance.totalUsd;
-      if (!(typeof total === 'number' && own + bound <= micro(total))) throw new CapReached(`Scope ${scope} cap reached: $${usd(own).toFixed(4)} committed + $${boundUsd.toFixed(4)} bound for ${kind} ${ref} would exceed $${Number(total).toFixed(2)}`, { scope, committedUsd: usd(own), boundUsd, capUsd: total });
-      const providerTotal = isPlainObject(approved.allowance.providerCapsUsd) ? approved.allowance.providerCapsUsd[who] : undefined;
-      const ownProvider = providerCommittedMicrousd(scopeLedger(ledger, scope), who);
-      if (!(typeof providerTotal === 'number' && ownProvider + bound <= micro(providerTotal))) throw new CapReached(`Scope ${scope} ${who} cap reached: $${usd(ownProvider).toFixed(4)} committed + $${boundUsd.toFixed(4)} bound would exceed $${typeof providerTotal === 'number' ? providerTotal.toFixed(2) : '0 (not in the approval)'}`, { scope, provider: who, committedUsd: usd(ownProvider), boundUsd, capUsd: providerTotal ?? 0 });
-    }
     // Written so that any NaN on either side refuses.
-    if (!approved && !(committed + bound <= cap)) {
+    if (!(committed + bound <= cap)) {
       throw new CapReached(`Spend cap reached: $${usd(committed).toFixed(2)} committed + $${boundUsd.toFixed(2)} bound for ${kind} ${ref} would exceed $${usd(cap).toFixed(2)}`,
         { committedUsd: usd(committed), boundUsd, capUsd: usd(cap) });
     }
@@ -365,7 +344,7 @@ export async function reserve({ kind, ref, boundUsd, note, unique = false, provi
         { provider: who, committedUsd: usd(providerCommittedMicrousd(ledger, who)), boundUsd, capUsd: ledgerProviderCap });
     }
     const providerCap = PROVIDER_CAPS_USD[who];
-    if (!approved && providerCap !== undefined) {
+    if (providerCap !== undefined) {
       const spent = providerCommittedMicrousd(designLedger(ledger), who);
       if (!(spent + bound <= micro(providerCap))) {
         throw new CapReached(`${who} spend cap reached: $${usd(spent).toFixed(4)} committed + $${boundUsd.toFixed(4)} bound for ${kind} ${ref} would exceed $${providerCap.toFixed(2)}`,
@@ -373,7 +352,7 @@ export async function reserve({ kind, ref, boundUsd, note, unique = false, provi
       }
     }
     const id = randomUUID();
-    ledger.entries.push({ id, kind, ref, provider: who, ...(scope !== undefined ? { scope } : {}), note: note ?? null, boundMicrousd: bound, actualMicrousd: null, status: 'reserved', reservedAt: new Date().toISOString(), settledAt: null });
+    ledger.entries.push({ id, kind, ref, provider: who, note: note ?? null, boundMicrousd: bound, actualMicrousd: null, status: 'reserved', reservedAt: new Date().toISOString(), settledAt: null });
     writeJson(ledgerFile(), ledger);
     return id;
   });
@@ -518,47 +497,6 @@ export async function raiseCap({ write = false } = {}) {
   return write ? withLock(run) : run();
 }
 
-/**
- * Record a new owner-approved allowance (a scope) in the shared ledger, in the capApprovals format the other
- * allowances use: the ledger-wide cap and each listed provider's ledger-wide cap rise by the allowance, and the
- * record carries the approval text, the scope and the allowance. The ledger is re-read under the lock and must
- * validate before and after; entries are never touched; a scope can be recorded once. Dry unless `write`.
- */
-export async function recordScope({ scope, approval, totalUsd, providerCapsUsd, write = false }) {
-  if (typeof scope !== 'string' || !SCOPE_NAME.test(scope) || scope === DESIGN_SCOPE) throw new Error(`Invalid scope ${JSON.stringify(scope)}`);
-  if (typeof approval !== 'string' || approval.trim().length < 10) throw new Error('recordScope needs the owner approval text');
-  if (!(typeof totalUsd === 'number' && Number.isFinite(totalUsd) && totalUsd > 0 && totalUsd <= 500)) throw new Error('totalUsd must be a positive amount up to $500');
-  if (!isPlainObject(providerCapsUsd) || !Object.keys(providerCapsUsd).length || Object.entries(providerCapsUsd).some(([provider, value]) => !PROVIDERS.includes(provider) || !(typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= totalUsd))) throw new Error('providerCapsUsd must give each provider a non-negative amount within the total');
-  const run = () => {
-    const file = ledgerFile();
-    const ledger = load();
-    if (scopeApproval(ledger, scope)) throw new LedgerError(`Scope ${scope} is already recorded`, 'EVAL_SCOPE_EXISTS');
-    const round = value => Math.round(value * 100) / 100;
-    const wide = ledgerApproval(ledger)?.providerCapsUsd ?? PROVIDER_CAPS_USD;
-    const wideProviderCaps = { ...wide };
-    for (const [provider, value] of Object.entries(providerCapsUsd)) if (typeof wide[provider] === 'number') wideProviderCaps[provider] = round(wide[provider] + value);
-    const record = { capUsd: round(ledger.hardCapUsd + totalUsd), previousCapUsd: ledger.hardCapUsd, providerCapsUsd: wideProviderCaps, approval: approval.trim(), scope,
-      allowance: { totalUsd: round(totalUsd), providerCapsUsd: Object.fromEntries(Object.entries(providerCapsUsd).map(([provider, value]) => [provider, round(value)])) }, recordedAt: new Date().toISOString() };
-    const before = JSON.stringify(ledger.entries);
-    const raised = { ...ledger, hardCapUsd: record.capUsd, capApprovals: [...(Array.isArray(ledger.capApprovals) ? ledger.capApprovals : []), record] };
-    const problems = validateLedger(raised);
-    if (problems.length) throw new LedgerError(`The ledger with this scope would be invalid: ${problems.join('; ')}`, 'EVAL_LEDGER_INVALID', { problems });
-    if (JSON.stringify(raised.entries) !== before) throw new Error('entries changed while recording the scope');
-    if (write) writeJson(file, raised);
-    return { written: write, file: display(file), record };
-  };
-  return write ? withLock(run) : run();
-}
-
-/** Spend of one scope against its allowance (null when the scope is not recorded). */
-export function scopeSummary(scope) {
-  const ledger = load(), approved = scopeApproval(ledger, scope);
-  if (!approved) return null;
-  const own = scopeLedger(ledger, scope);
-  return { scope, allowance: approved.allowance, committedUsd: usd(committedMicrousd(own)), byProvider: Object.fromEntries(PROVIDERS.map(provider => [provider, usd(providerCommittedMicrousd(own, provider))])),
-    calls: own.entries.length, open: own.entries.filter(entry => entry.status === 'reserved').length, unknown: own.entries.filter(entry => entry.status === 'unknown').length };
-}
-
 /** Validated copies of the ledger entries, optionally filtered by kind and ref. */
 export function ledgerEntries({ kind, ref } = {}) {
   return load().entries.filter(entry => (kind === undefined || entry.kind === kind) && (ref === undefined || entry.ref === ref)).map(entry => ({ ...entry }));
@@ -600,6 +538,127 @@ export function fits(boundUsd, provider = 'anthropic') {
   if (!(committedMicrousd(ledger) + micro(boundUsd) <= micro(ledger.hardCapUsd))) return false;
   if (providerCap !== undefined && !(providerCommittedMicrousd(designLedger(ledger), provider) + micro(boundUsd) <= micro(providerCap))) return false;
   return committedMicrousd(designLedger(ledger)) + micro(boundUsd) <= micro(capUsd());
+}
+
+// ===========================================================================
+// Scoped allowances (other owner approvals on the shared ledger)
+// ===========================================================================
+//
+// A scoped allowance is a capApprovals record carrying `scope` and `allowance` { totalUsd, providerCapsUsd }
+// that raised the ledger-wide hardCapUsd by totalUsd (e.g. scope "qualification-20261021"). Its entries carry
+// the same `scope`; they never count against the design cap and are bounded by their own allowance
+// (total and per provider; a provider the allowance does not list is refused) and by the ledger-wide caps.
+
+const SCOPE_NAME = /^[a-z0-9][a-z0-9-]{2,63}$/;
+const scopeEntries = (ledger, scope) => ledger.entries.filter(entry => entry.scope === scope);
+/** The approval record of a scoped allowance, or null. */
+export function scopeAllowance(ledger, scope) {
+  const records = Array.isArray(ledger.capApprovals) ? ledger.capApprovals.filter(item => isPlainObject(item) && item.scope === scope && isPlainObject(item.allowance)) : [];
+  const record = records.at(-1) ?? null;
+  if (!record) return null;
+  const { totalUsd, providerCapsUsd } = record.allowance;
+  if (!(typeof totalUsd === 'number' && totalUsd > 0) || !isPlainObject(providerCapsUsd) || Object.entries(providerCapsUsd).some(([provider, cap]) => !PROVIDERS.includes(provider) || !(typeof cap === 'number' && cap >= 0))) return null;
+  return record;
+}
+
+/**
+ * Records an owner-approved scoped allowance once: appends its capApprovals record and raises the ledger-wide
+ * cap by totalUsd. A ledger-wide provider cap rises by the allowance's cap for that provider (as the recorded
+ * deck and docs allowances did: OpenAI +$2 and +$1.50); providers without a ledger-wide cap stay uncapped there
+ * (an allowance limits its own providers through `allowance.providerCapsUsd`). Entries are never touched; the
+ * result must validate. Dry unless `write`.
+ */
+export async function recordScopedAllowance({ scope, approval, totalUsd, providerCapsUsd, write = false, raise = false }) {
+  if (!SCOPE_NAME.test(String(scope)) || scope === DESIGN_SCOPE) throw new Error(`Invalid scope ${JSON.stringify(scope)}`);
+  if (typeof approval !== 'string' || approval.trim().length < 10) throw new Error('A scoped allowance needs the owner approval text');
+  if (!(typeof totalUsd === 'number' && Number.isFinite(totalUsd) && totalUsd > 0)) throw new Error('totalUsd must be a positive amount');
+  if (!isPlainObject(providerCapsUsd) || !Object.keys(providerCapsUsd).length || Object.entries(providerCapsUsd).some(([provider, cap]) => !PROVIDERS.includes(provider) || !(typeof cap === 'number' && cap >= 0 && cap <= totalUsd)))
+    throw new Error('providerCapsUsd must name known providers with caps between 0 and totalUsd');
+  const run = () => {
+    const file = ledgerFile();
+    const ledger = load();
+    const existing = scopeAllowance(ledger, scope);
+    // A raise (a new owner approval for the same scope) appends a record with the new totals; the scope's latest
+    // record is its allowance, and the ledger-wide caps rise only by the difference. Nothing is ever lowered here.
+    if (existing && !raise) return { written: false, already: true, file: display(file), record: existing };
+    if (!existing && raise) throw new LedgerError(`No approved allowance for scope ${JSON.stringify(scope)} to raise`, 'EVAL_SCOPE_UNAPPROVED');
+    const previous = existing?.allowance ?? { totalUsd: 0, providerCapsUsd: {} };
+    if (raise && (totalUsd < previous.totalUsd || Object.entries(previous.providerCapsUsd).some(([provider, cap]) => !((providerCapsUsd[provider] ?? 0) >= cap))))
+      throw new Error('A raise never lowers the allowance or a provider cap');
+    const before = JSON.stringify(ledger.entries);
+    const wideCap = Math.round((ledger.hardCapUsd + totalUsd - previous.totalUsd) * 100) / 100;
+    const wideProviderCaps = Object.fromEntries(Object.entries(ledgerApproval(ledger)?.providerCapsUsd ?? PROVIDER_CAPS_USD)
+      .map(([provider, cap]) => [provider, Math.round((cap + (providerCapsUsd[provider] ?? 0) - (previous.providerCapsUsd[provider] ?? 0)) * 100) / 100]));
+    const record = { capUsd: wideCap, previousCapUsd: ledger.hardCapUsd, providerCapsUsd: wideProviderCaps, approval, scope,
+      allowance: { totalUsd, providerCapsUsd }, recordedAt: new Date().toISOString() };
+    const raised = { ...ledger, hardCapUsd: wideCap, capApprovals: [...ledger.capApprovals, record] };
+    const problems = validateLedger(raised);
+    if (problems.length) throw new LedgerError(`Ledger with the scoped allowance would be invalid: ${problems.join('; ')}`, 'EVAL_LEDGER_INVALID', { problems });
+    if (JSON.stringify(raised.entries) !== before) throw new Error('entries changed while recording the allowance');
+    if (write) writeJson(file, raised);
+    return { written: write, file: display(file), ledgerWide: { fromUsd: ledger.hardCapUsd, toUsd: wideCap }, record };
+  };
+  return write ? withLock(run) : run();
+}
+
+/** Spend of one scoped allowance: committed (settled at actuals, open/unknown at bounds) against its caps. */
+export function scopeSummary(scope, ledger = load()) {
+  const record = scopeAllowance(ledger, scope);
+  if (!record) throw new LedgerError(`No approved allowance for scope ${JSON.stringify(scope)}`, 'EVAL_SCOPE_UNAPPROVED');
+  const entries = scopeEntries(ledger, scope);
+  const committed = committedMicrousd({ entries });
+  return { scope, approval: record.approval, allowanceUsd: record.allowance.totalUsd, providerCapsUsd: record.allowance.providerCapsUsd,
+    committedUsd: usd(committed), remainingUsd: usd(Math.max(0, micro(record.allowance.totalUsd) - committed)),
+    settledUsd: usd(entries.filter(entry => entry.status === 'settled').reduce((sum, entry) => sum + entry.actualMicrousd, 0)),
+    open: entries.filter(entry => entry.status === 'reserved').length, unknown: entries.filter(entry => entry.status === 'unknown').length, calls: entries.length,
+    byProvider: Object.fromEntries(Object.keys(record.allowance.providerCapsUsd).map(provider => [provider, usd(committedMicrousd({ entries: entries.filter(entry => providerOf(entry) === provider) }))])),
+    ledgerWide: { capUsd: ledger.hardCapUsd, committedUsd: usd(committedMicrousd(ledger)) } };
+}
+
+/** True when another call of this bound still fits the scoped allowance (total and provider) and the ledger-wide caps. */
+export function fitsScoped(scope, boundUsd, provider = 'anthropic') {
+  if (typeof boundUsd !== 'number' || !Number.isFinite(boundUsd) || !(boundUsd > 0)) return false;
+  const ledger = load(), record = scopeAllowance(ledger, scope);
+  if (!record || typeof record.allowance.providerCapsUsd[provider] !== 'number') return false;
+  const entries = scopeEntries(ledger, scope), bound = micro(boundUsd);
+  const wideProviderCap = ledgerProviderCapUsd(ledger, provider);
+  return committedMicrousd(ledger) + bound <= micro(ledger.hardCapUsd)
+    && (wideProviderCap === undefined || providerCommittedMicrousd(ledger, provider) + bound <= micro(wideProviderCap))
+    && committedMicrousd({ entries }) + bound <= micro(record.allowance.totalUsd)
+    && committedMicrousd({ entries: entries.filter(entry => providerOf(entry) === provider) }) + bound <= micro(record.allowance.providerCapsUsd[provider]);
+}
+
+/** Reserves a call's worst-case bound inside a scoped allowance (and the ledger-wide caps). Returns the reservation id. */
+export async function reserveScoped({ scope, kind, ref, boundUsd, note, unique = false, provider = 'anthropic' }) {
+  if (!SCOPE_NAME.test(String(scope)) || scope === DESIGN_SCOPE) throw new Error(`Invalid scope ${JSON.stringify(scope)}`);
+  if (typeof kind !== 'string' || !kind) throw new Error('A reservation needs a kind');
+  if (!PROVIDERS.includes(provider)) throw new Error(`Unknown provider ${JSON.stringify(provider)}`);
+  if (typeof ref !== 'string') throw new Error('A reservation needs a string ref');
+  if (typeof boundUsd !== 'number' || !Number.isFinite(boundUsd) || !(boundUsd > 0)) throw new Error('A reservation needs a finite positive worst-case bound');
+  const bound = micro(boundUsd);
+  if (isTestBudget() && !TEST_KIND.test(kind)) throw new Error(`${TEST_ROOT_ENV} is set (test ledger): refusing a real "${kind}" reservation`);
+  return withLock(() => {
+    const ledger = load();
+    const record = scopeAllowance(ledger, scope);
+    if (!record) throw new LedgerError(`No approved allowance for scope ${JSON.stringify(scope)}; refusing to reserve`, 'EVAL_SCOPE_UNAPPROVED');
+    if (unique) {
+      const prior = ledger.entries.filter(entry => entry.scope === scope && entry.kind === kind && entry.ref === ref);
+      if (prior.length) throw new DuplicateReservation(`${scope} ${kind} ${ref} already has ${prior.length} ledger entr${prior.length === 1 ? 'y' : 'ies'}`, { entries: prior.map(entry => ({ id: entry.id, status: entry.status })) });
+    }
+    const entries = scopeEntries(ledger, scope);
+    if (!(committedMicrousd(ledger) + bound <= micro(ledger.hardCapUsd))) throw new CapReached(`Ledger-wide cap reached: $${usd(committedMicrousd(ledger)).toFixed(2)} + $${boundUsd.toFixed(2)} would exceed $${ledger.hardCapUsd.toFixed(2)}`, { capUsd: ledger.hardCapUsd });
+    const wideProviderCap = ledgerProviderCapUsd(ledger, provider);
+    if (wideProviderCap !== undefined && !(providerCommittedMicrousd(ledger, provider) + bound <= micro(wideProviderCap))) throw new CapReached(`${provider} ledger-wide cap reached`, { provider, capUsd: wideProviderCap });
+    if (!(committedMicrousd({ entries }) + bound <= micro(record.allowance.totalUsd))) throw new CapReached(`Scope ${scope} allowance reached: $${usd(committedMicrousd({ entries })).toFixed(4)} committed + $${boundUsd.toFixed(4)} would exceed $${record.allowance.totalUsd.toFixed(2)}`, { scope, capUsd: record.allowance.totalUsd });
+    const providerCap = record.allowance.providerCapsUsd[provider];
+    if (typeof providerCap !== 'number') throw new CapReached(`Scope ${scope} has no ${provider} allowance`, { scope, provider });
+    const spent = committedMicrousd({ entries: entries.filter(entry => providerOf(entry) === provider) });
+    if (!(spent + bound <= micro(providerCap))) throw new CapReached(`Scope ${scope} ${provider} allowance reached: $${usd(spent).toFixed(4)} + $${boundUsd.toFixed(4)} would exceed $${providerCap.toFixed(2)}`, { scope, provider, capUsd: providerCap });
+    const id = randomUUID();
+    ledger.entries.push({ id, kind, ref, provider, scope, note: note ?? null, boundMicrousd: bound, actualMicrousd: null, status: 'reserved', reservedAt: new Date().toISOString(), settledAt: null });
+    writeJson(ledgerFile(), ledger);
+    return id;
+  });
 }
 
 // ===========================================================================
@@ -748,21 +807,37 @@ export async function selfTest({ processes = 32, readers = 4, boundUsd = 1.8, lo
       fresh(); writeLedger(process.env[TEST_ROOT_ENV], [], { hardCapUsd: HARD_CAP_USD - 1 });
       check('shared ledger: a total cap below this allowance is invalid', await refuses(() => reserve({ kind: 'test', ref: 'l', boundUsd: 1 }), 'EVAL_LEDGER_INVALID'));
       fresh(); writeLedger(process.env[TEST_ROOT_ENV], []); }
-    // Scoped allowances: a recorded scope books against its own allowance and provider caps, never the design cap.
-    { fresh(); writeLedger(process.env[TEST_ROOT_ENV], []);
-      check('scope: refused before it is recorded', await refuses(() => reserve({ kind: 'test-scope', ref: 'a', boundUsd: 0.5, provider: 'openai', scope: 'test-cells' }), 'EVAL_CAP_REACHED'));
-      const dry = await recordScope({ scope: 'test-cells', approval: 'test: owner approved $3 OpenAI', totalUsd: 3, providerCapsUsd: { openai: 3 } });
-      check('scope: a dry record writes nothing', dry.written === false && !readJson(ledgerFile()).capApprovals.some(item => item.scope === 'test-cells'));
-      const recorded = await recordScope({ scope: 'test-cells', approval: 'test: owner approved $3 OpenAI', totalUsd: 3, providerCapsUsd: { openai: 3 }, write: true });
-      check('scope: recorded in capApprovals, ledger-wide caps raised by the allowance', recorded.record.capUsd === Math.round((HARD_CAP_USD + 3) * 100) / 100 && readJson(ledgerFile()).hardCapUsd === recorded.record.capUsd && recorded.record.providerCapsUsd.openai === Math.round((PROVIDER_CAPS_USD.openai + 3) * 100) / 100);
-      check('scope: recorded once', await refuses(() => recordScope({ scope: 'test-cells', approval: 'test: owner approved $3 OpenAI', totalUsd: 3, providerCapsUsd: { openai: 3 }, write: true }), 'EVAL_SCOPE_EXISTS'));
-      const first = await reserve({ kind: 'test-scope', ref: 'a', boundUsd: 2, provider: 'openai', scope: 'test-cells' });
-      check('scope: the entry carries its scope and does not count against the design cap', readJson(ledgerFile()).entries.find(item => item.id === first)?.scope === 'test-cells' && summary().committedUsd === 0 && scopeSummary('test-cells').committedUsd === 2);
-      check('scope: its own cap binds', await refuses(() => reserve({ kind: 'test-scope', ref: 'b', boundUsd: 1.5, provider: 'openai', scope: 'test-cells' }), 'EVAL_CAP_REACHED'));
-      check('scope: a provider the approval does not list is refused', await refuses(() => reserve({ kind: 'test-scope', ref: 'c', boundUsd: 0.1, provider: 'anthropic', scope: 'test-cells' }), 'EVAL_CAP_REACHED'));
-      await settle(first, { actualUsd: 0.4 });
-      check('scope: settling frees the scope', (await refuses(() => reserve({ kind: 'test-scope', ref: 'd', boundUsd: 2.5, provider: 'openai', scope: 'test-cells' }))) === false);
-      check('scope: invalid names refused', await refuses(() => reserve({ kind: 'test-scope', ref: 'e', boundUsd: 0.1, provider: 'openai', scope: 'design' })) && await refuses(() => reserve({ kind: 'test-scope', ref: 'e', boundUsd: 0.1, provider: 'openai', scope: 'Bad Scope' }))); }
+    // Scoped allowances: recorded once, raise the ledger-wide cap, bound their own entries, leave everything else alone.
+    { const root = fresh(); const designRow = entry({ kind: 'test', status: 'settled', actualMicrousd: 2_000_000, boundMicrousd: 2_000_000 });
+      writeLedger(root, [designRow]);
+      const dry = await recordScopedAllowance({ scope: 'test-scope', approval: 'test: owner approved $5 Claude', totalUsd: 5, providerCapsUsd: { anthropic: 5 } });
+      check('scoped allowance: dry run writes nothing', dry.written === false && readJson(path.join(root, 'budget', 'ledger.json')).hardCapUsd === HARD_CAP_USD);
+      const recorded = await recordScopedAllowance({ scope: 'test-scope', approval: 'test: owner approved $5 Claude', totalUsd: 5, providerCapsUsd: { anthropic: 5 }, write: true });
+      const after = readJson(path.join(root, 'budget', 'ledger.json'));
+      check('scoped allowance: raises the ledger-wide cap by its total, keeps entries and the design record, validates', recorded.written && after.hardCapUsd === HARD_CAP_USD + 5 && validateLedger(after).length === 0
+        && JSON.stringify(after.entries) === JSON.stringify([designRow]) && after.capApprovals.some(isDesignApproval));
+      check('scoped allowance: recording it twice is a no-op', (await recordScopedAllowance({ scope: 'test-scope', approval: 'test: owner approved $5 Claude', totalUsd: 5, providerCapsUsd: { anthropic: 5 }, write: true })).already === true && readJson(path.join(root, 'budget', 'ledger.json')).hardCapUsd === HARD_CAP_USD + 5);
+      const images = await recordScopedAllowance({ scope: 'test-images', approval: 'test: owner approved $1.50 Claude / $0.50 OpenAI', totalUsd: 2, providerCapsUsd: { anthropic: 1.5, openai: 0.5 }, write: true });
+      const imagesLedger = readJson(path.join(root, 'budget', 'ledger.json'));
+      check('scoped allowance: a ledger-wide provider cap rises by the allowance for that provider; others stay uncapped', images.written && imagesLedger.hardCapUsd === HARD_CAP_USD + 7
+        && imagesLedger.capApprovals.at(-1).providerCapsUsd.openai === Math.round((PROVIDER_CAPS_USD.openai + 0.5) * 100) / 100 && imagesLedger.capApprovals.at(-1).providerCapsUsd.anthropic === undefined && validateLedger(imagesLedger).length === 0);
+      const raised = await recordScopedAllowance({ scope: 'test-images', approval: 'test: owner moved $1 Claude / $0.20 OpenAI here', totalUsd: 3.2, providerCapsUsd: { anthropic: 2.5, openai: 0.7 }, write: true, raise: true });
+      const raisedLedger = readJson(path.join(root, 'budget', 'ledger.json'));
+      check('scoped allowance: a raise appends a record with the new totals; the ledger-wide caps rise by the difference only', raised.written && raisedLedger.hardCapUsd === HARD_CAP_USD + 8.2
+        && scopeAllowance(raisedLedger, 'test-images').allowance.totalUsd === 3.2 && raisedLedger.capApprovals.at(-1).providerCapsUsd.openai === Math.round((PROVIDER_CAPS_USD.openai + 0.7) * 100) / 100 && validateLedger(raisedLedger).length === 0);
+      check('scoped allowance: a raise never lowers a cap', await refuses(() => recordScopedAllowance({ scope: 'test-images', approval: 'test: lower it', totalUsd: 1, providerCapsUsd: { anthropic: 1 }, write: true, raise: true })));
+      const first = await reserveScoped({ scope: 'test-scope', kind: 'test-routing', ref: 'a', boundUsd: 3 });
+      check('scoped reserve: a call inside the allowance is booked with its scope', ledgerEntries({ kind: 'test-routing' })[0]?.scope === 'test-scope' && Math.abs(scopeSummary('test-scope').committedUsd - 3) < 1e-9);
+      check('scoped reserve: scoped rows never count against the design cap', Math.abs(summary().committedUsd - 2) < 1e-9);
+      check('scoped reserve: an open reservation counts at its bound (no second $3)', await refuses(() => reserveScoped({ scope: 'test-scope', kind: 'test-routing', ref: 'b', boundUsd: 3 }), 'EVAL_CAP_REACHED'));
+      await settle(first, { actualUsd: 1.25 });
+      check('scoped settle: the measured cost frees the rest', Math.abs(scopeSummary('test-scope').remainingUsd - 3.75) < 1e-9 && (await refuses(() => reserveScoped({ scope: 'test-scope', kind: 'test-routing', ref: 'b', boundUsd: 3.5 }))) === false);
+      check('scoped fits: agrees with reserveScoped', fitsScoped('test-scope', 0.25) === true && fitsScoped('test-scope', 0.5) === false && fitsScoped('test-scope', 0.01, 'openai') === false && fitsScoped('test-other', 0.01) === false);
+      check('scoped reserve: the allowance total binds', await refuses(() => reserveScoped({ scope: 'test-scope', kind: 'test-routing', ref: 'c', boundUsd: 0.5 }), 'EVAL_CAP_REACHED'));
+      check('scoped reserve: a provider the allowance does not list is refused', await refuses(() => reserveScoped({ scope: 'test-scope', kind: 'test-routing', ref: 'o', boundUsd: 0.01, provider: 'openai' }), 'EVAL_CAP_REACHED'));
+      check('scoped reserve: an unapproved scope is refused', await refuses(() => reserveScoped({ scope: 'test-other', kind: 'test-routing', ref: 'x', boundUsd: 0.01 }), 'EVAL_SCOPE_UNAPPROVED'));
+      check('scoped reserve: the design scope cannot be used', await refuses(() => reserveScoped({ scope: DESIGN_SCOPE, kind: 'test-routing', ref: 'x', boundUsd: 0.01 })));
+      check('scoped reserve: test ledgers book test kinds only', await refuses(() => reserveScoped({ scope: 'test-scope', kind: 'routing-runner', ref: 'x', boundUsd: 0.01 }))); }
     check('non-finite bound refused', await refuses(() => reserve({ kind: 'test', ref: 'r', boundUsd: Infinity })) && await refuses(() => reserve({ kind: 'test', ref: 'r', boundUsd: NaN })) && fits(NaN) === false);
 
     // Test mode only books test kinds; unique reservations; root must be in temp.
@@ -830,18 +905,17 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     const write = rest.includes('--write');
     raiseCap({ write }).then(result => { console.log(JSON.stringify(result, null, 2)); if (!write && !result.already) console.log('Dry run: pass --write to record the raise.'); },
       error => { console.error(error.message); process.exitCode = 1; });
-  } else if (flag === '--record-scope') {
-    // node scripts/eval/lib/budget.mjs --record-scope <scope> --total <usd> --openai <usd> [--anthropic <usd>] --approval "<owner's words>" [--write]
-    const arg = name => { const at = rest.indexOf(name); return at >= 0 ? rest[at + 1] : undefined; };
-    const providerCapsUsd = Object.fromEntries(PROVIDERS.flatMap(provider => arg(`--${provider}`) !== undefined ? [[provider, Number(arg(`--${provider}`))]] : []));
-    recordScope({ scope: rest[0], approval: arg('--approval'), totalUsd: Number(arg('--total')), providerCapsUsd, write: rest.includes('--write') })
-      .then(result => { console.log(JSON.stringify(result, null, 2)); if (!result.written) console.log('Dry run: pass --write to record the scope.'); }, error => { console.error(error.message); process.exitCode = 1; });
-  } else if (flag === '--scope-summary') {
-    try { console.log(JSON.stringify(scopeSummary(rest[0]), null, 2)); } catch (error) { console.error(error.message); process.exitCode = 1; }
   } else if (flag === '--summary') {
-    try { console.log(JSON.stringify(summary(), null, 2)); } catch (error) { console.error(error.message); process.exitCode = 1; }
+    const scope = rest.includes('--scope') ? rest[rest.indexOf('--scope') + 1] : null;
+    try { console.log(JSON.stringify(scope ? scopeSummary(scope) : summary(), null, 2)); } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } else if (flag === '--record-scope') {
+    // --record-scope <scope> --total <usd> --provider-cap <provider>=<usd> [...] --approval "<owner approval>" [--write]
+    const value = name => rest.includes(name) ? rest[rest.indexOf(name) + 1] : undefined;
+    const caps = Object.fromEntries(rest.flatMap((item, index) => item === '--provider-cap' ? [rest[index + 1].split('=')] : []).map(([provider, cap]) => [provider, Number(cap)]));
+    recordScopedAllowance({ scope: rest[0], approval: value('--approval'), totalUsd: Number(value('--total')), providerCapsUsd: caps, write: rest.includes('--write'), raise: rest.includes('--raise') })
+      .then(result => { console.log(JSON.stringify(result, null, 2)); if (!result.written && !result.already) console.log('Dry run: pass --write to record the allowance.'); }, error => { console.error(error.message); process.exitCode = 1; });
   } else {
-    console.log('Usage: node scripts/eval/lib/budget.mjs --selftest | --summary | --rebuild [--write] | --raise-cap [--write] | --record-scope <scope> --total <usd> --openai <usd> [--anthropic <usd>] --approval "..." [--write] | --scope-summary <scope>');
+    console.log('Usage: node scripts/eval/lib/budget.mjs --selftest | --summary [--scope <scope>] | --rebuild [--write] | --raise-cap [--write] | --record-scope <scope> --total <usd> --provider-cap <provider>=<usd> --approval "<text>" [--raise] [--write]');
     process.exitCode = 2;
   }
 }
