@@ -83,6 +83,26 @@ export default function App() {}`);
     assert.match(builder, /SIGNATURE COLOUR AND SCALE/); assert.match(builder, /never a wider, lighter or different family than the comp shows/);
   });
 
+  await check("section comps are drawn without the header and need no navigation; heavy type is the default and travels to the review", () => {
+    const { compInputIssues, isFirstScreen, heavyType } = require("./comp-prompt.ts");
+    const { compsFromSource, conceptComment } = require("./concept.ts");
+    const section = { ...BIKES, section: "repairs", nav: undefined };
+    assert.ok(isFirstScreen("top") && !isFirstScreen("repairs", [{ id: "top" }]));
+    assert.deepEqual(compInputIssues(section, false), [], "a section comp needs no navigation (every live run lost two calls to it)");
+    assert.match(compInputIssues(section, true).join(" "), /the desktop first screen spells out its 2-4 top navigation items/);
+    const prompt = compPrompt(section, { ...CONCEPT, sections: [{ id: "top", composition: "editorial-split", job: "x" }, { id: "repairs", composition: "price-list", job: "the prices" }] }, "2560x1440");
+    assert.match(prompt, /No header or navigation: this screen is a section further down the page\./);
+    assert.doesNotMatch(prompt, /Top navigation:/);
+    assert.ok(heavyType("elegant condensed high-contrast serif") && !heavyType("thin hairline serif"));
+    assert.doesNotMatch(compPrompt({ ...BIKES, type: "huge bold condensed sans" }, CONCEPT, "2560x1440"), /a huge huge/);
+    const record = { chosen: { name: "A", headline: "B c d", device: "e", archetype: "f", ground: "g", action: "h", angle: "i", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } }, runnersUp: [], why: "why",
+      comps: [{ section: "top", viewport: "desktop", asset: "00000000-0000-4000-8000-000000000001", ground: "#3B1830", heavy: true, reading: { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 50, imageSide: "right", ground: "#3B1830", heavy: true } }] };
+    const back = compsFromSource(`${conceptComment(record)}\nexport default function App() {}`);
+    assert.equal(back[0].reading.heavy, true); assert.equal(back[0].reading.ground, "#3B1830");
+    const agent = fs.readFileSync(path.join(__dirname, "agent.ts"), "utf8");
+    assert.ok(agent.includes("compInputIssues(input, isFirstScreen(input.section, concept.sections))"));
+  });
+
   await check("photographs wait for the comps on a first build, also while the concept is not recorded yet (live w05)", () => {
     const agent = fs.readFileSync(path.join(__dirname, "agent.ts"), "utf8");
     assert.ok(agent.includes("if (compsAvailable && compsStarted < MIN_COMPS && compsAsked < 2 && (compsAsked === 0 || compAffordable)) {"), "the comp gate does not wait for a recorded concept");

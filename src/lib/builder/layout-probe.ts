@@ -178,8 +178,8 @@ export function pageOverflow(doc: Document, view: Window, width: number): PageOv
 }
 
 /** What the builder read from a design comp (read_comp): the headline's cap height and the image's share of the frame. */
-export type CompReading = { section: string; viewport: "desktop" | "mobile"; headlineCapHeightPct: number; imageAreaPct: number; imageSide: "left" | "right" | "full" | "none"; ground?: string };
-export type CompDeviation = { section: string; viewport: "desktop" | "mobile"; metric: "headline" | "image-area" | "image-side" | "ground"; comp: number | string; built: number | string; fix: string };
+export type CompReading = { section: string; viewport: "desktop" | "mobile"; headlineCapHeightPct: number; imageAreaPct: number; imageSide: "left" | "right" | "full" | "none"; ground?: string; heavy?: boolean };
+export type CompDeviation = { section: string; viewport: "desktop" | "mobile"; metric: "headline" | "image-area" | "image-side" | "ground" | "weight"; comp: number | string; built: number | string; fix: string };
 /** How far apart two colours are (0-441, plain RGB distance): above GROUND_DISTANCE the built ground is another colour. */
 export const GROUND_DISTANCE = 90;
 const rgbOf = (value: string) => { const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/.exec(value); return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null; };
@@ -254,6 +254,13 @@ export function compFidelity(doc: Document, view: Window, width: number, reading
       if (box.top >= bottom || box.bottom <= top || style.visibility === "hidden" || style.display === "none") continue;
       const fontSize = parseFloat(style.fontSize) || 0;
       if (fontSize > size) { size = fontSize; biggest = el; }
+    }
+    // A heavy display face in the comp (bold, black, heavy) stays heavy: the live w01 v2 build set its bold comp
+    // headline in a light serif.
+    if (reading.heavy && biggest) {
+      const weight = parseInt(view.getComputedStyle(biggest).fontWeight, 10) || 400;
+      if (weight < 600) out.push({ section: id, viewport: reading.viewport, metric: "weight", comp: "bold", built: weight,
+        fix: `set the headline in a bold cut (font-weight 600 or more of a face that has it) as the comp's heavy display type (it is ${weight})` });
     }
     // The ground the headline sits on (the first opaque background behind it), against the comp's ground colour: the
     // references carry their colour as one confident field, and a build that swaps it for a neutral loses that.

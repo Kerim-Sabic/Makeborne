@@ -86,7 +86,7 @@ export type ImagePlan = z.infer<typeof ImagePlanSchema>;
 export type ArtSystem = z.infer<typeof ArtSystemSchema>;
 export type SectionPlan = z.infer<typeof SectionPlanSchema>;
 /** A design comp: a generated picture of a finished website screen, a reference for the build only (never shipped). */
-export type DesignComp = { section: string; viewport: "desktop" | "mobile"; asset: string; ground?: string; reading?: CompReadingValues & { ground?: string } };
+export type DesignComp = { section: string; viewport: "desktop" | "mobile"; asset: string; ground?: string; heavy?: boolean; reading?: CompReadingValues & { ground?: string; heavy?: boolean } };
 /** What the builder read from a comp (read_comp), measured against the built page at finish. */
 export const CompReadingSchema = z.object({
   section: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9 _-]{0,39}$/), viewport: z.enum(["desktop", "mobile"]),
@@ -96,7 +96,7 @@ export type CompReadingValues = z.infer<typeof CompReadingSchema>;
 export type ConceptRecord = { chosen: Concept; runnersUp: Concept[]; why: string; imagePlan?: ImagePlan; artSystem?: ArtSystem; sections?: SectionPlan[]; comps?: DesignComp[] };
 /** At most this many design comps per first build (the first screen, the phone first screen and the key sections). */
 export const MAX_COMPS = 6;
-const COMP_ENTRY = /([A-Za-z0-9][A-Za-z0-9 _-]{0,39})@(desktop|mobile)=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\[h([0-9.]+),i([0-9.]+),(left|right|full|none)(?:,g(#[0-9A-Fa-f]{6}))?\])?/g;
+const COMP_ENTRY = /([A-Za-z0-9][A-Za-z0-9 _-]{0,39})@(desktop|mobile)=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\[h([0-9.]+),i([0-9.]+),(left|right|full|none)(?:,g(#[0-9A-Fa-f]{6}))?(,wB)?\])?/g;
 /** The design comps recorded in the concept comment of src/App.tsx (read back by the review), at most MAX_COMPS. */
 export function compsFromSource(app: string | undefined): DesignComp[] {
   const line = /^ \* {3}Comps: (.+)$/m.exec(/^\/\*\n \* Makeborne concept:[\s\S]*?\*\//.exec(app ?? "")?.[0] ?? "")?.[1] ?? "";
@@ -104,6 +104,7 @@ export function compsFromSource(app: string | undefined): DesignComp[] {
     const comp: DesignComp = { section: match[1].trim(), viewport: match[2] as DesignComp["viewport"], asset: match[3] };
     if (match[4]) comp.reading = { section: comp.section, viewport: comp.viewport, headlineCapHeightPct: Number(match[4]), imageAreaPct: Number(match[5]), imageSide: match[6] as CompReadingValues["imageSide"], ...(match[7] ? { ground: match[7].toUpperCase() } : {}) };
     if (match[7]) comp.ground = match[7].toUpperCase();
+    if (match[8] && comp.reading) { comp.reading.heavy = true; comp.heavy = true; }
     return comp;
   });
 }
@@ -206,7 +207,7 @@ export function conceptComment(record: ConceptRecord) {
     ` *   Why: ${clean(record.why)}`,
     ...(record.artSystem ? [` *   Art system: palette ${clean(record.artSystem.palette)}; type ${clean(record.artSystem.type)}; imagery ${clean(record.artSystem.imagery)}; motif ${clean(record.artSystem.motif)}; motion ${clean(record.artSystem.motion)}.`] : []),
     ...(record.sections ? [` *   Sections: ${record.sections.map(section => `${clean(section.id)} = ${section.composition}`).join(", ")}.`] : []),
-    ...(record.comps?.length ? [` *   Comps: ${record.comps.map(comp => `${clean(comp.section)}@${comp.viewport}=${comp.asset}${comp.reading ? `[h${comp.reading.headlineCapHeightPct},i${comp.reading.imageAreaPct},${comp.reading.imageSide}${comp.reading.ground ?? comp.ground ? `,g${comp.reading.ground ?? comp.ground}` : ""}]` : ""}`).join(", ")}.`] : []),
+    ...(record.comps?.length ? [` *   Comps: ${record.comps.map(comp => `${clean(comp.section)}@${comp.viewport}=${comp.asset}${comp.reading ? `[h${comp.reading.headlineCapHeightPct},i${comp.reading.imageAreaPct},${comp.reading.imageSide}${comp.reading.ground ?? comp.ground ? `,g${comp.reading.ground ?? comp.ground}` : ""}${comp.reading.heavy ?? comp.heavy ? ",wB" : ""}]` : ""}`).join(", ")}.`] : []),
     ...record.runnersUp.map(concept => ` * Runner-up: ${line(concept)}`),
     " */",
   ].join("\n");

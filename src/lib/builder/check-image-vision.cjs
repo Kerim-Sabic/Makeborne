@@ -370,7 +370,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.ok(events.filter(event => event.type === "image_start" && event.comp).length === made.length);
       const recorded = compsFromSource(files.files.get("src/App.tsx"));
       assert.equal(recorded.length, made.length); assert.equal(recorded[0].section, "top"); assert.match(recorded[0].asset, /^c0000000-/);
-      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right", ground: "#1D3FA8" }, "the reading (with the comp's ground) travels in the concept comment to the review");
+      assert.deepEqual(recorded[0].reading, { section: "top", viewport: "desktop", headlineCapHeightPct: 9, imageAreaPct: 48, imageSide: "right", ground: "#1D3FA8", heavy: true }, "the reading (with the comp's ground and weight) travels in the concept comment to the review");
       const readResults = seen[4].messages.at(-1).content.filter(block => block.type === "tool_result");
       assert.match(readResults[0].content, /largest headline's cap height at least 85% of 9% of the frame/);
       assert.match(readResults[1].content, /There is no desktop comp for "nowhere"/);

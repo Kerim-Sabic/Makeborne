@@ -23,7 +23,7 @@ import { CONCEPT_TOOL, CompReadingSchema, MAX_COMPS, checkConcept, compPlan, com
 import { storeProjectImage } from "./images";
 import { COMP_PREVIEW_EDGE, imagePreview, type ImagePreview } from "./image-variants";
 import sharp from "sharp";
-import { COMP_INPUT_JSON, COMP_SHAPE, COMP_WORDS, CompInputSchema, compCell, compInputIssues, compPrompt, compText } from "./comp-prompt";
+import { COMP_INPUT_JSON, COMP_SHAPE, COMP_WORDS, CompInputSchema, compCell, compInputIssues, compPrompt, compText, heavyType, isFirstScreen } from "./comp-prompt";
 
 export { compPrompt } from "./comp-prompt";
 
@@ -375,7 +375,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (!concept) { fail("Record the concept, with its art system and section plan, before generating design comps."); break; }
             if (compsStarted >= MAX_COMPS) { fail(`At most ${MAX_COMPS} design comps per build. Build the other sections from the art system and the comps you have.`); break; }
             if (comps.some(comp => comp.section === input.section && comp.viewport === input.viewport)) { fail(`There is already a ${input.viewport} comp for ${input.section}.`); break; }
-            const issues = compInputIssues(input);
+            const issues = compInputIssues(input, isFirstScreen(input.section, concept.sections));
             if (issues.length) { fail(`Rewrite this comp: ${issues.join("; ")}.`); break; }
             // The reference pattern: the exact words are quoted in the paragraph and placed exactly, so the 2.5 model that
             // sets text where asked (sunburst, else flare) is preferred. The canvas is the best measured one for this model
@@ -413,7 +413,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               const preview = await imagePreview(stored.data ?? bytes, { maxEdge: COMP_PREVIEW_EDGE }).catch(() => null);
               return { stored, preview };
             }).then(({ stored, preview }) => {
-              compSlots[slot] = { section: input.section, viewport: input.viewport, asset: stored.id, ground: input.colors.ground.toUpperCase() };
+              compSlots[slot] = { section: input.section, viewport: input.viewport, asset: stored.id, ground: input.colors.ground.toUpperCase(), ...(heavyType(input.type) ? { heavy: true } : {}) };
               comps.splice(0, comps.length, ...compSlots.filter((entry): entry is DesignComp => Boolean(entry)));
               record.comps = [...comps];
               run.emit({ type: "status", message: `Design comp ready: ${input.section} (${input.viewport})` });
@@ -425,7 +425,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const input = ToolInputs.read_comp.parse(use.input);
             const comp = comps.find(entry => entry.section === input.section && entry.viewport === input.viewport);
             if (!comp || !concept) { fail(`There is no ${input.viewport} comp for "${input.section}" to read.`); break; }
-            comp.reading = { ...input, ...(comp.ground ? { ground: comp.ground } : {}) };
+            comp.reading = { ...input, ...(comp.ground ? { ground: comp.ground } : {}), ...(comp.heavy ? { heavy: true } : {}) };
             concept.comps = [...comps];
             results.push({ type: "tool_result", tool_use_id: use.id, content: `Reading recorded for ${input.section} (${input.viewport}). At finish the built section is measured against it at ${input.viewport === "desktop" ? "1440" : "390"} px: its largest headline's cap height at least 85% of ${input.headlineCapHeightPct}% of the frame, and the image covering about ${input.imageAreaPct}% of the section's first screen${input.viewport === "desktop" && input.imageSide !== "none" && input.imageSide !== "full" ? ` on the ${input.imageSide}` : ""}.` });
             break;
