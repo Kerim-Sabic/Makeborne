@@ -10,7 +10,7 @@ Owner's ask (via the coordinator): a pre-launch, site-wide quality sweep of what
 
 ## Summary
 
-- **No code blocker left on the customer path.** Thirteen small fixes are on this branch: indexing of pricing, false copy, phone zoom, contrast and focus, the 404, and the CRM layout. Each has a check; they are listed under "Fixes so far".
+- **No code blocker left on the customer path.** Eleven small fixes (plus one lint chore) are on this branch: indexing of pricing, false copy, phone zoom, contrast and focus, the 404, and the CRM layout. Each has a check; they are listed under "Fixes so far".
 - **Launch blockers are legal and operational, for the owner and a lawyer:**
   - L1: no general Terms of Service.
   - L2: no operator identity or imprint.
@@ -82,7 +82,7 @@ Path walked at 390×844 (phone, touch, 3× DPR) and 1440×900: `/` → `/billing
 | 688ecd6 | One global rule: every text field, select and text area is 16 px on touch phones (27 studio fields were 12–14 px, so iPhone zoomed on each). | site-sweep `fields.cjs` on 13 pages: 27 → 0 small fields, none smaller, 0 overflow | yes |
 | 59ae59b | "Find more like this" on a client profile is hidden while look-alike discovery is off (the finder and help already say it's unavailable). | lead profile check 6/6, tsc | yes |
 
-**Final state of this branch:** `tsc --noEmit` clean, full `eslint .` clean, `npm test` 188/188 (two new harnesses), `next build --webpack` passes, `scripts/check-launch-pages-browser.cjs` 22/22, axe zero on all 44 public routes at 390 and 1440, no cookies or third-party requests before sign-in.
+**Final state of this branch:** `tsc --noEmit` clean, full `eslint .` clean, `npm test` 188/188 (includes the new `check-public-indexing.cjs`), `next build --webpack` passes, `scripts/check-launch-pages-browser.cjs` 22/22, axe zero on all 44 public routes at 390 and 1440, no cookies or third-party requests before sign-in.
 
 ## Part 2 — Full sweep
 
@@ -323,7 +323,7 @@ Minor wording: on the recovery screen, the button for a password-reset code says
 
 ## Full candidate (`claude/full-launch-candidate`, 1062170)
 
-Every fix on this branch applies there too. The copy, CSS and header rules are the same, there is no `not-found.tsx`, and the welcome still says "Local businesses or creators". The two journey-polish cherry-picks (6df394e, 8944406, fc13533) are already in it. Differences to watch when merging:
+Every fix on this branch applies there too. The copy, CSS and header rules are the same, there is no `not-found.tsx`, and the welcome still says "Local businesses or creators". The three journey-polish cherry-picks (6df394e, 8944406, fc13533) are already in it. Differences to watch when merging:
 
 - `src/app/help/page.module.css` and `src/app/account-refresh.css` add `--ui-zoom` lines next to the changed colour lines. Small merge.
 - `src/components/onboarding/getting-started.tsx` was rewritten by journey-polish. Re-apply the creator line by hand.
