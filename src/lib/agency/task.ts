@@ -49,9 +49,12 @@ export type AgencyTaskRequest = z.infer<typeof AgencyTaskRequestSchema>;
 /**
  * Qualified model settings. A profile is usable for a kind only after a live
  * qualification run recorded its evidence; every other kind is refused: fail closed.
- * PROPOSED after the paid qualification of 24 Oct 2026 (scope agency-qualification-20261024,
- * docs/release-review/agency-qualification-20261024.md); the flags remain off and set nowhere.
- * independent_review was added after the same day's re-run with fixes; ingest stays unqualified (no route runs that kind).
+ * After the paid qualification of 24 Oct 2026 (scope agency-qualification-20261024,
+ * docs/release-review/agency-qualification-20261024.md) FOUR kinds are qualified here:
+ * research, data_report, image_edit and independent_review (independent_review after the
+ * same day's re-run with fixes; ingest stays unqualified, and no route runs that kind).
+ * So a qualified setting is NOT what keeps these kinds from making paid calls: the two
+ * server-side switches below are (enabledAgencyKinds). Turning a kind on is a cost decision.
  */
 export type QualifiedSetting = Readonly<{
   profile: string; model: string; effort: EffortLevel; intensity: "low" | "medium" | "high";
@@ -62,6 +65,23 @@ export const AGENCY_SETTINGS: readonly QualifiedSetting[] = Object.freeze([
     qualifiedKinds: Object.freeze(["research", "data_report", "image_edit", "independent_review"]) as readonly AgencyKind[],
     evidence: "Proposed after the paid qualification of 2026-10-24 (scope agency-qualification-20261024): research 12/12 briefs, 174/174 facts grounded, replay and Stop checked, identity conflicts flagged after 3a0aca8; data_report 20/20 first-turn narratives at 31b1b3d (3/20 before it); image_edit 3/3 end-to-end edits inside the measured bound; independent_review after the re-run at ef753a3 (6/6 seeded defects grounded, 6/6 acceptable fixtures clean, 6/6 re-checks resolved, 0 unavailable). Flags remain off." }),
 ]);
+
+/** The master switch: MAKEBORNE_AGENCY_TASKS=on exactly (off by default; "true"/"1" stay off). */
+export function agencyTasksEnabled(env: Record<string, string | undefined> = process.env) { return env.MAKEBORNE_AGENCY_TASKS === "on"; }
+
+/**
+ * The kinds that may start, from server-side environment only. BOTH are required:
+ * - MAKEBORNE_AGENCY_TASKS=on (the master switch), and
+ * - the kind listed in MAKEBORNE_AGENCY_TASK_KINDS, comma-separated (e.g. "research,data_report").
+ * Unset or empty means NO kind, so turning on the master switch alone starts nothing; unknown names are ignored.
+ * Each listed kind makes paid model calls (image_edit also one OpenAI edit), so list them one at a time.
+ */
+export function enabledAgencyKinds(env: Record<string, string | undefined> = process.env): ReadonlySet<AgencyKind> {
+  if (!agencyTasksEnabled(env)) return new Set();
+  const listed = new Set((env.MAKEBORNE_AGENCY_TASK_KINDS ?? "").split(",").map(item => item.trim()).filter(Boolean));
+  return new Set(AGENCY_KINDS.filter(kind => listed.has(kind)));
+}
+export function agencyKindEnabled(kind: AgencyKind, env: Record<string, string | undefined> = process.env) { return enabledAgencyKinds(env).has(kind); }
 
 /** Per-kind policy: tools a task of this kind may be granted, its credit ceiling, whether specialists may be used and
  * whether the step is given the client's approved knowledge (retrieved, bounded and snapshotted with the operation). */
@@ -93,6 +113,8 @@ export type ResolveDeps = {
   scope: (actor: string, artifactId: string, inputs: AgencyInputRef[]) => Promise<AgencyScope>;
   settings?: readonly QualifiedSetting[];
   rateMicrousd: number;
+  /** The switches read by enabledAgencyKinds (process.env in production). */
+  env?: Record<string, string | undefined>;
 };
 
 export function taskScale(objective: string, inputs: readonly unknown[]): "minor" | "standard" {
@@ -105,6 +127,8 @@ export async function resolveAgencyTask(actor: string, body: unknown, deps: Reso
   const parsed = AgencyTaskRequestSchema.safeParse(body);
   if (!parsed.success) throw refuse("AGENCY_TASK_INVALID", "This task request is incomplete or has fields it may not set.");
   const request = parsed.data;
+  // Every route checks the kind's switch first; this is the same check for any caller that does not.
+  if (!agencyKindEnabled(request.kind, deps.env ?? process.env)) throw refuse("AGENCY_KIND_OFF", "This kind of task isn't switched on.", 409);
   const policy = AGENCY_KIND_POLICY[request.kind];
   const setting = (deps.settings ?? AGENCY_SETTINGS).find(item => item.profile === request.settings);
   if (!setting || !setting.qualifiedKinds.includes(request.kind))

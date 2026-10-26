@@ -259,7 +259,7 @@ const usage = (output = 400, image = 1100, text = 300) => ({ input_tokens: image
 const okResponse = (bytes = editedPng, extra = {}) => async () => ({ data: [{ b64_json: bytes.toString("base64") }], output_format: "png", usage: usage(), ...extra });
 function deps(extra = {}) {
   const client = memberClient();
-  return { client, deps: { env: { MAKEBORNE_IMAGE_EDITING: "on", MAKEBORNE_AGENCY_TASKS: "on" }, assets: server.projectEditAssets(client, { workspaceId: W, projectId: P }), model: fakeModel(), imageClient, toUpload: async upload => upload,
+  return { client, deps: { env: { MAKEBORNE_IMAGE_EDITING: "on", MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "image_edit" }, assets: server.projectEditAssets(client, { workspaceId: W, projectId: P }), model: fakeModel(), imageClient, toUpload: async upload => upload,
     rateMicrousd: RATE, platformDeadline: Date.now() + 280000, settings: SETTINGS, table: TABLE, allowedModels: ALLOWED, pollMs: 20, heartbeatMs: 1000,
     readInput: () => async index => JSON.stringify({ input: index, note: "Image content is not included in this step." }), ...extra } };
 }
@@ -329,7 +329,10 @@ async function check(name, fn) {
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, env: {} }), "IMAGE_EDITING_UNAVAILABLE");
     // Image editing alone never starts paid agency work: the agency switch is required too (S3).
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, env: { MAKEBORNE_IMAGE_EDITING: "on" } }), "IMAGE_EDITING_UNAVAILABLE");
-    await rejects(run.estimateImageEdit(body(original), { ...d, env: { MAKEBORNE_IMAGE_EDITING: "on", MAKEBORNE_AGENCY_TASKS: "true" } }), "IMAGE_EDITING_UNAVAILABLE");
+    await rejects(run.estimateImageEdit(body(original), { ...d, env: { MAKEBORNE_IMAGE_EDITING: "on", MAKEBORNE_AGENCY_TASKS: "true", MAKEBORNE_AGENCY_TASK_KINDS: "image_edit" } }), "IMAGE_EDITING_UNAVAILABLE");
+    // The agency switch alone is not enough: image_edit must be listed (S4).
+    await rejects(run.runImageEdit(ACTOR, body(original), { ...d, env: { MAKEBORNE_IMAGE_EDITING: "on", MAKEBORNE_AGENCY_TASKS: "on" } }), "IMAGE_EDITING_UNAVAILABLE");
+    await rejects(run.runImageEdit(ACTOR, body(original), { ...d, env: { MAKEBORNE_IMAGE_EDITING: "on", MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "research, data_report" } }), "IMAGE_EDITING_UNAVAILABLE");
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, settings: [] }), "AGENCY_SETTINGS_UNQUALIFIED");
     assert.ok(task.AGENCY_SETTINGS.some(setting => setting.qualifiedKinds.includes("image_edit")), "shipped registry: image_edit proposed after the 2026-10-24 qualification (flags remain off)");
     await rejects(run.runImageEdit(ACTOR, body(original), { ...d, table: {} }), "EDIT_UNSUPPORTED");
@@ -711,7 +714,7 @@ async function check(name, fn) {
   await check("routes: a generated edit needs the agency switch, and both providers' capacity is checked before the edit (and its hold) starts", async () => {
     const dir = path.join(root, "src/app/api/cloud/workspaces/[workspaceId]/artifacts/[artifactId]/image-edits");
     const shared = fs.readFileSync(path.join(dir, "shared.ts"), "utf8");
-    assert.match(shared, /generatedEditsEnabled\(\) \{ return imageEditingEnabled\(\) && agencyTasksEnabled\(\); \}/);
+    assert.match(shared, /generatedEditsEnabled\(\) \{ return imageEditingEnabled\(\) && agencyKindEnabled\("image_edit"\); \}/);
     assert.match(shared, /requireProviderCapacity\("anthropic"\);\s*await requireProviderCapacity\("openai"\)/);
     for (const [file, call] of [["route.ts", "runImageEdit("], ["estimate/route.ts", "estimateImageEdit("]]) {
       const source = fs.readFileSync(path.join(dir, file), "utf8"), post = source.slice(source.indexOf("export async function POST"));

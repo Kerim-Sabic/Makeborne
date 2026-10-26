@@ -70,6 +70,7 @@ const { buildKnowledgeContext, citationId } = require("../knowledge/context.ts")
 const task = require("../agency/task.ts"), server = require("../builder/operation-server.ts");
 const { aiCostUsdPerCredit } = require("../builder/pricing.ts");
 const RATE = Math.round(aiCostUsdPerCredit() * 1_000_000);
+const AGENCY_ON = Object.freeze({ MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "ingest,research,image_edit,data_report,independent_review" });
 
 // ---- Local fixture web server (127.0.0.1 only). Hosts are routed by the Host header. ----
 const FOOTER = "<footer><p>© 2019 Harbour Bakery</p></footer>";
@@ -183,7 +184,7 @@ const submit = input => ({ type: "tool_use", id: `toolu_${randomUUID().slice(0, 
 const qualified = Object.freeze([Object.freeze({ profile: "standard", model: "claude-sonnet-5-5", effort: "medium", intensity: "medium", maxOutputTokens: 4000, maxTurns: 3, qualifiedKinds: Object.freeze(["research"]), evidence: "offline fixture" })]);
 async function assistedTask(actionKey, stepKey) {
   return task.resolveAgencyTask(ACTOR, { artifactId: ARTIFACT, actionKey, stepKey, kind: "research", objective: researchMod.researchObjective({ name: "Ana Marić", company: "Harbour Bakery" }, "https://harbour-bakery.test/"),
-    inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 }, { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE });
+    inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 }, { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE, env: AGENCY_ON });
 }
 
 (async () => {

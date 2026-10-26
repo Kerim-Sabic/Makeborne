@@ -142,13 +142,14 @@ const knowledgeTask = require("../knowledge/task-context.ts"), knowledgeContext 
 const { RunSpend, SpendError, memoryGate } = require("../ai/run-spend.ts");
 const { aiCostUsdPerCredit } = require("../builder/pricing.ts");
 const RATE = Math.round(aiCostUsdPerCredit() * 1_000_000);
+const AGENCY_ON = Object.freeze({ MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "ingest,research,image_edit,data_report,independent_review" });
 
 const ACTOR = randomUUID(), W = randomUUID(), P = randomUUID(), ARTIFACT = randomUUID(), SOURCE = randomUUID();
 const qualified = Object.freeze([Object.freeze({ profile: "standard", model: "claude-sonnet-5-5", effort: "medium", intensity: "medium", maxOutputTokens: 4000, maxTurns: 6,
   qualifiedKinds: Object.freeze(["research", "ingest", "image_edit", "data_report", "independent_review"]), evidence: "offline fixture" })]);
 const body = (extra = {}) => ({ artifactId: ARTIFACT, actionKey: randomUUID(), stepKey: randomUUID(), kind: "research", objective: "Summarise the approved brochure for the About page.",
   inputs: [{ kind: "source", id: SOURCE, sha256: "a".repeat(64) }], permittedTools: ["read_input"], settings: "standard", ceilingCredits: 20, expectedRevision: 3, ...extra });
-const resolve = (extra = {}, deps = {}) => task.resolveAgencyTask(ACTOR, body(extra), { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE, ...deps });
+const resolve = (extra = {}, deps = {}) => task.resolveAgencyTask(ACTOR, body(extra), { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE, env: AGENCY_ON, ...deps });
 const Result = z.object({ summary: z.string().min(1), facts: z.array(z.string()).max(10) }).strict();
 const lead = { system: "You are the lead.", result: Result, resultDescription: "Submit the summary." };
 let toolRuns = 0;
@@ -185,7 +186,7 @@ async function rejects(promise, code) { await assert.rejects(promise, error => {
   await check("envelope: browser cannot set workspace, client, project or actor; unknown fields refused", async () => {
     for (const extra of [{ workspaceId: W }, { actorId: randomUUID() }, { clientId: randomUUID() }, { projectId: P }, { model: "claude-opus-5-5" }])
       await rejects(resolve(extra), "AGENCY_TASK_INVALID");
-    await rejects(task.resolveAgencyTask("not-a-user", body(), { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE }), "AGENCY_UNAUTHENTICATED");
+    await rejects(task.resolveAgencyTask("not-a-user", body(), { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE, env: AGENCY_ON }), "AGENCY_UNAUTHENTICATED");
     assert.equal(rpcLog.length, 0, "refused before any database call");
     const resolved = await resolve();
     assert.deepEqual([resolved.actorId, resolved.workspaceId, resolved.projectId, resolved.clientId], [ACTOR, W, P, null], "scope from the authenticated actor and SQL");
@@ -197,8 +198,8 @@ async function rejects(promise, code) { await assert.rejects(promise, error => {
     assert.deepEqual(task.AGENCY_SETTINGS.flatMap(setting => setting.qualifiedKinds).sort(), ["data_report", "image_edit", "independent_review", "research"]);
     assert.ok(task.AGENCY_SETTINGS.every(setting => /agency-qualification-20261024/.test(setting.evidence)), "each qualified kind names its recorded run");
     for (const kind of ["ingest"])
-      await rejects(task.resolveAgencyTask(ACTOR, body({ kind }), { scope: server.resolveAgencyScope, rateMicrousd: RATE }), "AGENCY_SETTINGS_UNQUALIFIED");
-    await rejects(task.resolveAgencyTask(ACTOR, body(), { scope: server.resolveAgencyScope, settings: [], rateMicrousd: RATE }), "AGENCY_SETTINGS_UNQUALIFIED");
+      await rejects(task.resolveAgencyTask(ACTOR, body({ kind }), { scope: server.resolveAgencyScope, rateMicrousd: RATE, env: AGENCY_ON }), "AGENCY_SETTINGS_UNQUALIFIED");
+    await rejects(task.resolveAgencyTask(ACTOR, body(), { scope: server.resolveAgencyScope, settings: [], rateMicrousd: RATE, env: AGENCY_ON }), "AGENCY_SETTINGS_UNQUALIFIED");
     await rejects(resolve({ settings: "turbo" }), "AGENCY_SETTINGS_UNQUALIFIED");
     await rejects(resolve({}, { settings: [{ ...qualified[0], model: "mystery-model-9" }] }), "AGENCY_SETTINGS_UNQUALIFIED");
     await rejects(resolve({ kind: "data_report" }, { settings: [{ ...qualified[0], qualifiedKinds: ["research"] }] }), "AGENCY_SETTINGS_UNQUALIFIED");
@@ -629,6 +630,35 @@ async function rejects(promise, code) { await assert.rejects(promise, error => {
     assert.deepEqual(create.p_context.task.sources.references, [reference]);
     const other = task.bindTaskSources(resolved, { omitted: [], references: [{ ...reference, sha256: "c".repeat(64) }] });
     await rejects(run.runAgencyTask(other, lead, deps(scripted([]))), "OPERATION_CONFLICT");
+  });
+
+  await check("per-kind switches (S4): the master switch alone starts nothing; only listed kinds resolve, refused before any database call", async () => {
+    const kinds = env => [...task.enabledAgencyKinds(env)].sort();
+    assert.deepEqual(kinds({}), []);
+    assert.deepEqual(kinds({ MAKEBORNE_AGENCY_TASKS: "on" }), [], "default empty list means no kind");
+    assert.deepEqual(kinds({ MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "" }), []);
+    assert.deepEqual(kinds({ MAKEBORNE_AGENCY_TASKS: "true", MAKEBORNE_AGENCY_TASK_KINDS: "research" }), [], "only exactly \"on\"");
+    assert.deepEqual(kinds({ MAKEBORNE_AGENCY_TASK_KINDS: "research" }), [], "a list without the master switch starts nothing");
+    assert.deepEqual(kinds({ MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: " research , data_report,,RESEARCH,everything,* " }), ["data_report", "research"], "trimmed, exact names, unknown ignored");
+    assert.equal(task.agencyKindEnabled("image_edit", { MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "research" }), false);
+    assert.equal(run.agencyTasksEnabled({ MAKEBORNE_AGENCY_TASKS: "on" }), true, "the master switch keeps its meaning");
+    const only = kind => ({ MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: kind });
+    await rejects(resolve({}, { env: {} }), "AGENCY_KIND_OFF");
+    await rejects(resolve({}, { env: { MAKEBORNE_AGENCY_TASKS: "on" } }), "AGENCY_KIND_OFF");
+    await rejects(resolve({}, { env: only("data_report") }), "AGENCY_KIND_OFF");
+    assert.equal(rpcLog.length, 0, "refused before any database call");
+    assert.equal((await resolve({}, { env: only("research") })).kind, "research");
+    // Production default: process.env (unset in this harness) means every kind is off.
+    assert.equal(process.env.MAKEBORNE_AGENCY_TASK_KINDS, undefined);
+    await rejects(task.resolveAgencyTask(ACTOR, body(), { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE }), "AGENCY_KIND_OFF");
+    // Every route gates on its own kind, not on the master switch alone.
+    const routes = path.join(__dirname, "../../app/api/cloud/workspaces/[workspaceId]");
+    for (const [file, kind] of [["clients/[clientId]/research/route.ts", "research"], ["artifacts/[artifactId]/data-reports/route.ts", "data_report"],
+      ["artifacts/[artifactId]/independent-review/route.ts", "independent_review"], ["artifacts/[artifactId]/image-edits/shared.ts", "image_edit"]]) {
+      const source = fs.readFileSync(path.join(routes, file), "utf8");
+      assert.ok(source.includes(`agencyKindEnabled("${kind}")`), `${file} gates on ${kind}`);
+      assert.doesNotMatch(source, /agencyTasksEnabled\(/, `${file} does not use the master switch alone`);
+    }
   });
 
   finished = true; clearInterval(keepAlive);

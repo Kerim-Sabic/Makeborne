@@ -3,11 +3,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
 import { RequestError } from "@/lib/server/http";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
-import { agencyTasksEnabled } from "@/lib/agency/run";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import type { AnthropicLike } from "@/lib/ai/anthropic-call";
 import { anthropicModelPort } from "@/lib/agency/model-port";
-import { AGENCY_SETTINGS } from "@/lib/agency/task";
+import { AGENCY_SETTINGS, agencyKindEnabled } from "@/lib/agency/task";
 import type { ModelPort } from "@/lib/agency/loop";
 import { imageEditingEnabled } from "@/lib/images/edit/contract";
 import { openaiEditClient, openaiUpload, projectEditAssets } from "@/lib/images/edit/server";
@@ -20,10 +19,11 @@ export function requireImageEditing() {
 
 /**
  * A generated edit is paid agency work (one Anthropic step, then one OpenAI edit), so it also needs the
- * agency switch: MAKEBORNE_IMAGE_EDITING=on alone never starts paid work. Resize, crop and accept make no
- * provider call and need only the image-editing switch.
+ * agency switches: MAKEBORNE_AGENCY_TASKS=on and "image_edit" in MAKEBORNE_AGENCY_TASK_KINDS.
+ * MAKEBORNE_IMAGE_EDITING=on alone never starts paid work. Resize, crop and accept make no provider
+ * call and need only the image-editing switch.
  */
-export function generatedEditsEnabled() { return imageEditingEnabled() && agencyTasksEnabled(); }
+export function generatedEditsEnabled() { return imageEditingEnabled() && agencyKindEnabled("image_edit"); }
 export function requireGeneratedEdits() {
   if (!generatedEditsEnabled()) throw new RequestError("IMAGE_EDITING_UNAVAILABLE", "Image editing isn't available yet.", 404);
 }

@@ -9,8 +9,8 @@ import { canonicalSourceJson } from "../../projects/canonical-json";
 import { beginAgencyOperation, createOperationSpend, finishOperation, readOperation, resolveAgencyScope, watchOperationCancellation, type OperationRun } from "../../builder/operation-server";
 import type { OperationStatus } from "../../builder/operation-contract";
 import { readInputTool } from "../../agency/inputs";
-import { AGENCY_SETTINGS, resolveAgencyTask, taskContext, taskDigest, type AgencyTask, type QualifiedSetting, type ResolveDeps } from "../../agency/task";
-import { agencyTasksEnabled, chargeableMicrousd, runAgencyTask } from "../../agency/run";
+import { AGENCY_SETTINGS, agencyKindEnabled, resolveAgencyTask, taskContext, taskDigest, type AgencyTask, type QualifiedSetting, type ResolveDeps } from "../../agency/task";
+import { chargeableMicrousd, runAgencyTask } from "../../agency/run";
 import type { ModelPort } from "../../agency/loop";
 import {
   EDIT_LIMITS, EDIT_OPERATION_LABELS, EditCandidateSchema, EditPlanSchema, ImageEditRequestSchema, imageEditingEnabled,
@@ -93,8 +93,8 @@ type Prepared = { request: ImageEditRequest; source: VerifiedImage; references: 
 
 /** Everything checked before any operation, hold or call: flags, shape, scope of every image, bytes, mask, settings, bound and ceiling. */
 export async function prepareImageEdit(body: unknown, deps: ImageEditDeps): Promise<Prepared> {
-  // A generated edit is paid agency work: it needs the agency switch as well as the image-editing one.
-  if (!imageEditingEnabled(deps.env ?? process.env) || !agencyTasksEnabled(deps.env ?? process.env)) throw unavailable();
+  // A generated edit is paid agency work: it needs the image_edit kind switched on as well as image editing.
+  if (!imageEditingEnabled(deps.env ?? process.env) || !agencyKindEnabled("image_edit", deps.env ?? process.env)) throw unavailable();
   const parsed = ImageEditRequestSchema.safeParse(body);
   if (!parsed.success) throw refuse("EDIT_REQUEST_INVALID", parsed.error.issues.find(issue => issue.code === "custom")?.message ?? "This edit request is incomplete or has fields it may not set.");
   const request = parsed.data;
@@ -165,7 +165,7 @@ export async function runImageEdit(actor: string, body: unknown, deps: ImageEdit
     artifactId: request.artifactId, actionKey: request.actionKey, stepKey: request.stepKey, kind: "image_edit",
     objective: objectiveOf(request, prepared.maskSha256), inputs: [{ kind: "asset", ...request.asset }, ...request.references.map(item => ({ kind: "asset" as const, ...item }))],
     permittedTools: ["read_input"], settings: SETTINGS_PROFILE, ceilingCredits: request.ceilingCredits, expectedRevision: request.expectedRevision,
-  }, { scope: deps.scope ?? resolveAgencyScope, settings: deps.settings, rateMicrousd: deps.rateMicrousd });
+  }, { scope: deps.scope ?? resolveAgencyScope, settings: deps.settings, rateMicrousd: deps.rateMicrousd, env: deps.env });
   // Step 1: the instruction. Bounded turns and output, a small slice of the ceiling.
   const lead = Object.freeze({ ...task, settings: Object.freeze({ ...task.settings, maxTurns: Math.min(task.settings.maxTurns, PREPARE_STEP.maxTurns), maxOutputTokens: Math.min(task.settings.maxOutputTokens, PREPARE_STEP.maxOutputTokens) }) });
   const prepareCredits = Math.max(1, Math.ceil(prepared.estimate.prepareMicrousd / deps.rateMicrousd));
