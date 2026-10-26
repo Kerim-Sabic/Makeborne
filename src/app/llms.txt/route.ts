@@ -1,4 +1,4 @@
-import { CREATION_PLANS, PLAN_INCLUDES, PLAN_INCLUDES_FOOTNOTE, TAX_NOTE } from "@/lib/billing/plans";
+import { CREATION_PLANS, PLAN_INCLUDES, PLAN_INCLUDES_FOOTNOTE, TAX_NOTE, YEARLY_DISCOUNT_PERCENT } from "@/lib/billing/plans";
 import { IS_PREVIEW, SITE, SITE_FACTS } from "@/lib/site-metadata";
 import { HELP_ARTICLES } from "@/lib/help/articles";
 
@@ -30,7 +30,7 @@ ${SITE_FACTS.crm.map(item => `- ${item}`).join("\n")}
 ## Pricing
 ${plans}
 - Every plan includes: ${PLAN_INCLUDES.join("; ")}. ${PLAN_INCLUDES_FOOTNOTE}
-- Plans differ only in monthly credits. Prices are in US dollars. ${TAX_NOTE.long} Yearly billing isn't available yet.
+- Plans differ only in monthly credits. Prices are in US dollars. ${TAX_NOTE.long} Yearly plans, when offered at checkout, cost ${YEARLY_DISCOUNT_PERCENT}% less than twelve monthly payments and are billed once a year upfront; their credits are released monthly.
 - Credits pay for AI work (generation, personalised emails, lead finding, advisor answers). Sending email, publishing, single-profile research and the CRM itself use no credits.
 - Unused plan credits carry over for two months after their month ends. One-time credit packs are planned for members after launch.
 - Status: creation plans open at launch; checkout appears on the pricing page when it opens.

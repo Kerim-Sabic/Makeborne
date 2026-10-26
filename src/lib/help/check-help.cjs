@@ -108,4 +108,10 @@ check("current search and email availability is explicit in guides", () => {
   }
 });
 
+check("guides match the launch flags: yearly plans exist", () => {
+  const all = JSON.stringify(HELP_ARTICLES);
+  assert.doesNotMatch(all, /Yearly billing isn.t available/, "yearly plans are part of the launch catalogue");
+  assert.match(JSON.stringify(HELP_ARTICLES.find(item => item.slug === "credits-and-pricing")), /Yearly plans, when offered at checkout, cost 20% less/);
+});
+
 console.log(`\n${passed} help center checks passed.`);

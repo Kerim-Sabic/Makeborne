@@ -176,6 +176,10 @@ for (const trialCredits of [null, 50]) {
   assert.equal(/How does the free tier work\?/.test(signedOut), trialCredits === 50);
   assert.equal(/Yearly billing isn’t available yet\./.test(signedOut), trialCredits === null);
 }
+// With yearly offers configured, the FAQ must not answer "yearly billing?" with "Not at launch".
+const yearlyOpen = text(renderToStaticMarkup(React.createElement(BillingWorkspace, {summary: view.unavailableBilling, signedIn: false, plansFirst: true, hasYearly: true, trialCredits: null})));
+assert.match(yearlyOpen, /Is there a free trial\?No\. Instead,/);
+assert.doesNotMatch(yearlyOpen, /free trial or yearly billing|Yearly billing isn’t available|Not at launch\. Instead/);
 const dashboard = renderToStaticMarkup(React.createElement(BillingWorkspace, {summary: view.unavailableBilling}));
 assert.ok(position(dashboard, "credits") > 0 && position(dashboard, "credits") < position(dashboard, "plans"), "members keep the dashboard first");
 assert.doesNotMatch(dashboard, /coffee|Support us/i);
