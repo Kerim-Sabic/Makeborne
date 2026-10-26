@@ -4,7 +4,7 @@
 .login-card{max-width:450px;margin:66px auto 35px;border:1px solid #e7e7ec;box-shadow:0 16px 50px -20px #20203013;border-radius:20px;padding:38px;background:#fff}
 .login-card h1{font-family:var(--font-inter),Arial,sans-serif;font-size:31px;font-weight:500;letter-spacing:-1.3px;margin:18px 0 25px;line-height:1.15}
 .login-card .eyebrow{font-size:9px;letter-spacing:1.5px;color:#81818b}
-.login-card p{font-size:13px;line-height:1.75;color:#74747e}
+.login-card p{font-size:13px;line-height:1.75;color:#70707a}
 .login-card label{font-size:12px;font-weight:500;color:#62626d}
 .login-card input{min-height:46px;background:white;border:1px solid #dedee5;border-radius:9px;padding:11px 13px;font-size:14px;margin-top:7px;color:#25252b}
 .login-card input:focus{outline:2px solid #b1bdd7;outline-offset:2px;border-color:#9ba7bf}
@@ -22,7 +22,7 @@
 .cloud-shell .marketing-nav nav{font-size:12px;gap:22px}
 .cloud-shell .cloud-content{max-width:1180px;padding:42px 40px 70px}
 .cloud-shell .page-heading h1{font-family:var(--font-inter),Arial,sans-serif;font-weight:500;font-size:32px;letter-spacing:-1.2px}
-.cloud-shell .page-heading p{font-size:13px;color:#74747e}
+.cloud-shell .page-heading p{font-size:13px;color:#70707a}
 .cloud-shell .button{background:#fff;border-radius:8px;font-size:12px;min-height:40px}
 .cloud-shell .button.primary{background:#202024;color:#fff}
 .cloud-shell .cloud-create-form,.cloud-shell .cloud-edit-grid{border-radius:12px;border-color:#e6e6ec}
@@ -71,7 +71,7 @@
 .auth-footer{max-width:1320px;width:100%;margin:0 auto;display:flex;justify-content:space-between;gap:16px;padding:24px 0;border-top:1px solid #eeecf1;font-size:11px;color:#96909e}
 .auth-mail-icon{display:grid;place-items:center;border-radius:16px;background:#eee9fb;width:64px;height:64px;margin:0 auto 24px;color:#6b56b4}
 .auth-refined button:focus-visible,.auth-refined a:focus-visible,.auth-help summary:focus-visible{outline:2px solid #8b7bd3;outline-offset:4px}
-@media(max-width:600px){.auth-refined{padding:0 24px}.auth-header{padding:20px 0}.auth-header .wordmark{font-size:21px}.auth-back{font-size:11px}.auth-center{padding:44px 0 60px;justify-content:flex-start}.auth-refined .login-card h1{font-size:29px}.auth-footer{font-size:10px}.auth-footer span:last-child{display:none}.auth-caption{margin-top:35px}}
+@media(max-width:600px){.auth-refined{padding:0 24px}.auth-header{padding:20px 0}.auth-header .wordmark{font-size:21px}.auth-back{font-size:11px}.auth-center{padding:44px 0 60px;justify-content:flex-start}.auth-refined .login-card h1{font-size:29px}.auth-footer{font-size:10px}.auth-footer span:last-child{display:none}.auth-caption{margin-top:35px}.auth-refined .login-card input:not(.auth-otp-input){font-size:16px}}
 @media(prefers-reduced-motion:reduce){.auth-refined *{transition:none!important}}
 
 /* Email confirmation shares the app's restrained blue, lavender and white surfaces. */

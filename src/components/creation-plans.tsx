@@ -85,7 +85,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
       const next = authDestination(query.get("next") ?? tab?.next ?? "/studio");
       const requestId = tab && tab.tier === choice.tier && tab.interval === choice.interval ? tab.requestId : sharedKey ?? crypto.randomUUID();
       if (!data.offers.some((offer: Availability["offers"][number]) => offer.tier === choice.tier && offer.interval === choice.interval)) {
-        if (fromUrl && data.authenticated) setUnavailable(`${planName(choice.tier)} isn’t available right now. Pick another plan below.`);
+        if (fromUrl && data.authenticated) setUnavailable(data.offers.length ? `${planName(choice.tier)} isn’t available right now. Pick another plan below.` : `Plans aren’t open yet, so ${planName(choice.tier)} can’t be bought right now. Nothing was charged.`);
         forget(); pending.current = null; return;
       }
       setInterval(choice.interval);

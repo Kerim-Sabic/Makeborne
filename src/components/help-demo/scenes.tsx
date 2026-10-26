@@ -27,7 +27,7 @@ function Composer({ s, placeholder }: { s: DemoState; placeholder: string }) {
   const formats: [string, string, ReactNode][] = [["website", "Website", <Globe2 key="w" size={14} />], ["book", "Book", <BookOpen key="b" size={14} />], ["presentation", "Presentation", <Presentation key="p" size={14} />]];
   const files = (s.files as string[] | undefined) ?? [];
   return <div className="dm-hero">
-    <h1>What will you make next?</h1>
+    <p className="dm-title">What will you make next?</p>
     <div className="dm-switch">{formats.map(([id, label, icon]) => <span key={id} data-demo={`fmt-${id}`} className={s.format === id ? "is-on" : ""}>{icon}{label}</span>)}</div>
     <div className="dm-composer">
       <div className="dm-textarea" data-demo="brief" data-demo-aim="left">{t(s.brief) ? <>{t(s.brief)}{caret(s, "brief")}</> : <em>{placeholder}</em>}</div>
@@ -176,14 +176,14 @@ const ConnectEmail: Scene = ({ s }) => <Shell active="clients"><div className="d
   <ClientsHead s={s} />
   {s.tab !== "email" ? <div className="dm-list">{PEOPLE.map(person => <div className="dm-row" key={person.name}><span className="dm-av">{person.name[0]}</span><span className="dm-who"><b>{person.name}</b><small>{person.company}</small></span><span className="dm-stage">{person.stage}</span></div>)}</div>
   : <div className="dm-mailcenter">
-    <div className="dm-card-lg"><b>Mailboxes</b>{s.connected ? <div className="dm-mailbox"><Mail size={14} /><div><b>studio@bloomandco.ba</b><small data-demo="quota">Gmail · 0/20 sent today (warming up) · reply tracking on</small></div><Check size={14} className="dm-ok" /></div>
-      : <div className="dm-findrow"><span className="dm-primary" data-demo="connect-gmail"><AtSign size={12} />Connect Gmail</span><span className="dm-pill">Connect Outlook</span></div>}
+    <div className="dm-card-lg"><b>Mailboxes</b>{s.connected ? <div className="dm-mailbox"><Mail size={14} /><div><b>studio@bloomandco.ba</b><small data-demo="quota">Gmail · 0/20 sent today (warming up) · send only</small></div><Check size={14} className="dm-ok" /></div>
+      : <div className="dm-findrow"><span className="dm-primary" data-demo="connect-gmail"><AtSign size={12} />Connect Gmail</span></div>}
       <small className="dm-free">Sending is free. Only AI writing uses credits.</small></div>
-    <div className="dm-card-lg"><div className="dm-findrow"><b>Sequences</b><span className="dm-pill" data-demo="new-sequence"><Workflow size={12} />New sequence</span></div>
-      {s.seq ? <ol className="dm-seq"><li><b>Day 0</b>Quick idea for {"{{company}}"}</li><li><b>Day 3</b>One example of what I meant</li><li><b>Day 7</b>A useful tip either way</li><li><b>Day 14</b>I’ll stop here</li><li className="dm-stop">Stops automatically when they reply</li></ol> : <small>No sequences yet.</small>}</div>
+    <div className="dm-card-lg"><div className="dm-findrow"><b>Follow-ups</b><span className="dm-pill" data-demo="new-sequence"><Workflow size={12} />Set follow-up</span></div>
+      {s.seq ? <ol className="dm-seq"><li><b>Today</b>Bright Smile Dental: first email sent</li><li><b>Day 3</b>Follow up: one example of what I meant</li><li><b>Day 7</b>Follow up: a useful tip either way</li><li className="dm-stop">You check replies in Gmail before each one</li></ol> : <small>No follow-ups planned yet.</small>}</div>
   </div>}
   {Boolean(s.sheet) && <div className="dm-modal"><div className="dm-sheet dm-consent"><small>Your email provider</small><h3>Allow Makeborne to send email for you?</h3>
-    <ul><li><Check size={12} />Send email on your behalf</li><li><Check size={12} />See replies to the emails it sends</li></ul><div className="dm-findrow"><span className="dm-pill">Cancel</span><span className="dm-primary" data-demo="allow">Allow</span></div></div></div>}
+    <ul><li><Check size={12} />Send email on your behalf</li></ul><div className="dm-findrow"><span className="dm-pill">Cancel</span><span className="dm-primary" data-demo="allow">Allow</span></div></div></div>}
 </div></Shell>;
 
 const ADVISORS = [["mira", "Mira", "Positioning & brand"], ["nova", "Nova", "Copywriting"], ["rex", "Rex", "Sales & outreach"], ["juno", "Juno", "Offers & pricing"], ["theo", "Theo", "Growth & launches"]] as const;

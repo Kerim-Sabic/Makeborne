@@ -259,7 +259,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
           <h2>Comments <span>{discussion.length}</span></h2>
           {!comments.length && <p className="cr-empty">No comments yet. Pin one to a spot or leave a general note.</p>}
           <ol>{comments.map(comment => <li key={comment.id} className={`cr-comment cr-comment-${comment.kind}${active === comment.id ? " is-active" : ""}${comment.resolved ? " is-resolved" : ""}`}>
-            <button type="button" className="cr-comment-focus" onClick={() => focusComment(comment)} aria-label={`Show comment from ${comment.authorName}`}>
+            <button type="button" className="cr-comment-focus" onClick={() => focusComment(comment)}>
               <span className="cr-comment-head">
                 {numbered.has(comment.id) ? <span className="cr-pin-number">{numbered.get(comment.id)}</span> : comment.kind === "comment" ? <span className="cr-pin-number is-general"><MessageSquare size={11} /></span> : <span className={`cr-pin-number is-${comment.kind}`}>{comment.kind === "approved" ? <Check size={11} /> : <RotateCcw size={11} />}</span>}
                 <strong>{comment.authorName}</strong>

@@ -83,7 +83,9 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "private, no-store" },
         ],
       },
-      ...["studio", "chat", "login", "billing", "admin", "auth", "api"].map((route) => ({
+      // /billing and /billing/terms are public pricing pages listed in the sitemap, so only the
+      // checkout return page under /billing is kept out of search here.
+      ...["studio", "chat", "login", "billing/return", "admin", "auth", "api"].map((route) => ({
         source: `/${route}/:path*`,
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       })),
