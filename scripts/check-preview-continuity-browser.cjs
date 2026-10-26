@@ -115,6 +115,9 @@ async function main() {
     // The real builder restores its account transcript. Allow only this fictional GET;
     // other methods and artifact paths still fail the final network assertion.
     if (req.method === "GET" && url.pathname === chatPath) { chatReads++; return json(res, { messages: [], next: null }); }
+    // The builder asks which source files it may ingest. Answer exactly this GET as the route does with
+    // MAKEBORNE_SOURCE_INGESTION_ENABLED off (the default); a POST upload still fails the network assertion.
+    if (req.method === "GET" && url.pathname === "/api/build/sources") return json(res, { enabled: false, formats: [], inlineBytes: 3_000_000, referenceBytes: 0 });
     if (url.pathname === "/api/build/operations") { builderState.requests.push(req.method); return builderState.operation ? json(res, { operation: builderState.operation, result: builderState.result, recovery: builderState.recovery }) : json(res, { error: { message: "Not recorded" } }, 404); }
     if (url.pathname.startsWith("/api/")) { foreign.push(req.method + " " + url.pathname); json(res, { error: { message: "Not in fixture" } }, 404); return; }
     res.setHeader("content-type", "text/html");
