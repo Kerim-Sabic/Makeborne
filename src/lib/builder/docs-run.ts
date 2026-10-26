@@ -13,7 +13,7 @@ import { logAiStop } from "./website-run";
 import { aiStop } from "../ai/failure";
 import { DocumentEditor, emptyDocument } from "../documents/editor";
 import { bookImagePlanFromBrief, deckModeFromBrief } from "../documents/creation-options";
-import { fullImageSlidesEnabled } from "./features";
+import { bookImagePagesEnabled, fullImageSlidesEnabled } from "./features";
 import { artTextModel, newDocumentFormat, type ImageOptions } from "../documents/art-formats";
 import { imageConfiguration } from "./images";
 import { projectDocument, documentAssetIds } from "../documents/project";
@@ -90,7 +90,7 @@ ${input.message}`;
   const format = newDocumentFormat(artifact.kind, options, input.imageOptions, artModel);
   // A new full-image deck carries the reference's furniture: a tiny page number on every slide (and the wordmark the designer sets).
   const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId,
-    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options), shape: "shape" in format ? format.shape : undefined, quality: format.quality, bookArt: true }
+    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options), shape: "shape" in format ? format.shape : undefined, quality: format.quality, bookArt: bookImagePagesEnabled() }
       // Full-image slides stay off unless MAKEBORNE_DECK_FULL_IMAGE=on: new decks are editable text slides ("live").
       : { slideMode: fullImageSlidesEnabled() ? deckModeFromBrief(options).mode : "live", aspect: "aspect" in format ? format.aspect : undefined, quality: format.quality, pageNumbers: true }));
   // A saved document takes the composer's new choices (the route checked they can render).

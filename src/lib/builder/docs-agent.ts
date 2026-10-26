@@ -12,7 +12,7 @@ import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage
 import { routeImage } from "./image-router";
 import { ART_IMAGE_SHARE, BOOK_IMAGE_CAP, BUILDER_EFFORT, DECK_ART_IMAGE_CAP, DOCUMENT_IMAGE_CAP, aiCostUsdPerCredit, bookImageMax, deckArtImageMax, deckArtSlidesFor, documentImageMax } from "./pricing";
 import { ContextMeter, IMAGE_BLOCK_TOKEN_BOUND, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
-import { fullImageSlidesEnabled } from "./features";
+import { bookImagePagesEnabled, fullImageSlidesEnabled } from "./features";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
 import { imageCallBoundMicrousd, maxInputTokenMicrousd, maxOutputTokenMicrousd, type ImageQuality, type ImageSize } from "../ai/prices";
 import { SpendError, type RunSpend } from "../ai/run-spend";
@@ -141,7 +141,8 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   const artEnabled = fullImageSlidesEnabled();
   const artWanted = artEnabled && kind === "deck" && deck()?.art?.mode === "image";
   const bookDoc = () => run.editor.doc.kind === "book" ? run.editor.doc : null;
-  const bookArtWanted = kind === "book" && bookDoc()?.art?.mode === "image" && bookPlan(bookDoc()!).placement !== "none";
+  // Generated book pages also need MAKEBORNE_BOOK_IMAGE_PAGES=on; off, a book is typeset as before (even a saved one in image mode).
+  const bookArtWanted = bookImagePagesEnabled() && kind === "book" && bookDoc()?.art?.mode === "image" && bookPlan(bookDoc()!).placement !== "none";
   const artRoute = artWanted || bookArtWanted ? routeImage({ kind: "illustration", aspect: "landscape", text: "page text", textPlacement: "exact" }, "page", allowed) : null;
   const artModel = artRoute?.ok ? artRoute.model : null;
   // The client's slide shape and quality: the best measured canvas for them (a stored choice that cannot render falls

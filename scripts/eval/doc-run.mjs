@@ -50,7 +50,7 @@ if (!anthropicKey || !openaiKey) throw new Error('The .env.local needs ANTHROPIC
 const MODELS = ['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare'];
 Object.assign(process.env, { ANTHROPIC_API_KEY: anthropicKey, OPENAI_API_KEY: openaiKey, MAKEBORNE_AI_COST_USD_PER_CREDIT: '0.03', MAKEBORNE_BUILDER_FALLBACK_MODELS: '', MAKEBORNE_IMAGE_MODEL: '', MAKEBORNE_IMAGE_MODELS: MODELS.join(','),
   // The eval measures the full pipeline: full-image slides are off by default in the app (lib/builder/features.ts).
-  MAKEBORNE_DECK_FULL_IMAGE: 'on' });
+  MAKEBORNE_DECK_FULL_IMAGE: 'on', MAKEBORNE_BOOK_IMAGE_PAGES: 'on' });
 delete process.env.MAKEBORNE_BUILDER_MODEL;
 
 const budget = await import(pathToFileURL(path.join(HERE, 'lib', 'budget.mjs')).href);

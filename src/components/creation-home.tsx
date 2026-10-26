@@ -54,11 +54,11 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
   const [mode, setMode] = useState<"create" | "plan">("create");
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
   // Presentations and books: the slide or page shape and image quality, written into the brief as the client's answers.
-  const imageOffers = useDocumentImageOffers();
+  const { offers: imageOffers, bookPages } = useDocumentImageOffers();
   const [imageChoices, setImageChoices] = useState<{ presentation?: ImageChoice; book?: ImageChoice }>({});
   const docKind = kind === "website" ? null : kind;
   // No image controls (and no image answer lines in the brief) while images can't be made now: offers stay null then.
-  const imageChoice = docKind && imageOffers ? imageChoices[docKind] ?? initialImageChoice(docKind, imageOffers) : null;
+  const imageChoice = docKind && imageOffers && (docKind !== "book" || bookPages) ? imageChoices[docKind] ?? initialImageChoice(docKind, imageOffers) : null;
   const [brief, setBrief] = useState("");
   const [selectedStyles, setSelectedStyles] = useState<Partial<Record<Kind, Style>>>({});
   const selectedStyle = selectedStyles[kind];

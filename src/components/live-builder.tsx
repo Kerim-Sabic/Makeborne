@@ -167,7 +167,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   // until the client changes them; sent with each new request and saved on the document.
   const docKind = kind === "website" ? null : kind;
   // Shown only where images can be made now (features.documentImages: a configured model and open OpenAI spending).
-  const imageControls = Boolean(docKind) && features.documentImages && !(baseDocument?.kind === "deck" && baseDocument.art?.mode !== "image" && baseDocument.slides.length > 0);
+  // Books: the control picks the generated pages' shape and quality, so it needs MAKEBORNE_BOOK_IMAGE_PAGES too.
+  const imageControls = Boolean(docKind) && features.documentImages && (docKind !== "book" || features.bookImagePages) && !(baseDocument?.kind === "deck" && baseDocument.art?.mode !== "image" && baseDocument.slides.length > 0);
   const imageTouched = useRef(false);
   const [imageChoice, setImageChoice] = useState<ImageChoice | null>(() => docKind ? initialImageChoice(docKind, imageOffers, projectBrief, baseDocument) : null);
   useEffect(() => { if (docKind && !imageTouched.current) setImageChoice(initialImageChoice(docKind, imageOffers, projectBrief, baseDocument)); }, [docKind, imageOffers, projectBrief, baseDocument]);

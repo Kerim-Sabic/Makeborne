@@ -49,13 +49,15 @@ export function creditImpact(kind: DocumentKind, offers: DocumentImageOffers | n
  * now (features.documentImages false: no image model or OpenAI spending closed), so no image controls are shown. */
 export function useDocumentImageOffers(enabled = true) {
   const [offers, setOffers] = useState<DocumentImageOffers | null>(null);
+  const [bookPages, setBookPages] = useState(false);
   useEffect(() => {
     if (!enabled) return;
     let current = true;
-    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) setOffers(value?.features?.documentImages === true ? parseDocumentImageOffers(value?.documentImages) : null); }).catch(() => undefined);
+    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) { setOffers(value?.features?.documentImages === true ? parseDocumentImageOffers(value?.documentImages) : null); setBookPages(value?.features?.bookImagePages === true); } }).catch(() => undefined);
     return () => { current = false; };
   }, [enabled]);
-  return offers;
+  // Books show the control only with generated pages on (MAKEBORNE_BOOK_IMAGE_PAGES).
+  return { offers, bookPages };
 }
 
 export default function DocumentImageControls({ kind, value, onChange, offers, disabled = false, className = "" }: {

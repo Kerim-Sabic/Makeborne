@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Offline checks for the reference-pattern prompts, the client's image quality and shape, export page sizes and generated book pages. Providers are fakes: no network, no paid calls. */
 // Full-image slides are off by default (MAKEBORNE_DECK_FULL_IMAGE, lib/builder/features.ts); the deck runs here exercise them on.
+// Generated book pages are off by default too (MAKEBORNE_BOOK_IMAGE_PAGES); the book runs here exercise them on.
 process.env.MAKEBORNE_DECK_FULL_IMAGE = "on";
+process.env.MAKEBORNE_BOOK_IMAGE_PAGES = "on";
 const fs = require("node:fs"), ts = require("typescript"), Module = require("node:module"), assert = require("node:assert/strict");
 const load = Module._load;
 Module._load = function(name, parent, main) { return name === "server-only" ? {} : load.call(this, name, parent, main); };
@@ -280,6 +282,31 @@ const deckWith = (art = {}) => {
     assert.deepEqual(pagesWanted(plain.doc).map(page => `${page.target}:${page.kind}`), ["cover:cover", "one:opener"], "inline chapters have no generated opener");
     assert.deepEqual(pageText(plain.doc, "one").map(line => line.text), ["Chapter One", "Where to start"]);
     assert.equal(emptyDocument("book", "x", undefined, { imagePlan: { placement: "none", style: "auto" }, bookArt: true }).art, undefined, "no images: no generated pages");
+  });
+
+  await check("generated book pages are off unless MAKEBORNE_BOOK_IMAGE_PAGES=on: a book is typeset as before (no page tools, no page prompt, no page render, new books get no art) even with images open; on, they run", async () => {
+    const pagesLog = async () => {
+      const editor = pictureBook(), images = fakeImages();
+      const anthropic = fakeAnthropic([[toolUse("finish", { summary: "Typeset." })], [toolUse("finish", { summary: "Typeset." })]]);
+      await run(editor, anthropic, images, "A picture book: Captain Biscuit Keeps the Light, by Mira Holt.");
+      return { tools: anthropic.log.streams[0].toolNames, system: anthropic.log.streams[0].system[0].text, first: JSON.stringify(anthropic.log.streams[0].messages[0]), renders: images.log.bodies.length };
+    };
+    delete process.env.MAKEBORNE_BOOK_IMAGE_PAGES;
+    try {
+      const off = await pagesLog();
+      assert.ok(!off.tools.includes("render_pages") && !off.tools.includes("check_page"), "off: no page tools");
+      assert.doesNotMatch(off.system, /FULL-IMAGE PAGES/, "off: no page system prompt");
+      assert.doesNotMatch(off.first, /Full-image pages/, "off: the request says nothing about generated pages");
+      assert.equal(off.renders, 0, "off: no page render");
+      const docsRun = fs.readFileSync(require("node:path").join(__dirname, "..", "builder", "docs-run.ts"), "utf8");
+      assert.match(docsRun, /bookArt: bookImagePagesEnabled\(\)/, "off: new books are created without page art");
+      assert.equal(emptyDocument("book", "x", undefined, { imagePlan: { placement: "picture", style: "illustration" }, bookArt: false }).art, undefined, "a book made with bookArt off has no art");
+    } finally { process.env.MAKEBORNE_BOOK_IMAGE_PAGES = "on"; }
+    process.env.MAKEBORNE_BOOK_IMAGE_PAGES = "true";
+    try { assert.ok(!(await pagesLog()).tools.includes("render_pages"), "only the exact value on"); } finally { process.env.MAKEBORNE_BOOK_IMAGE_PAGES = "on"; }
+    const on = await pagesLog();
+    assert.ok(on.tools.includes("render_pages") && on.tools.includes("check_page"), "on: page tools offered");
+    assert.match(on.system, /FULL-IMAGE PAGES/, "on: page system prompt");
   });
 
   await check("book pages: the gate checks each generated page; a pass shows it whole (a spread as two facing pages), a second failure keeps it typeset", async () => {
