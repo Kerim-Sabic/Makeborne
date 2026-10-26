@@ -47,6 +47,8 @@ async function main() {
     if (pathname === "/fixture/restore") { current.restores.push(body); current.version++; return json(res, { version: current.version }); }
     if (pathname === "/api/credits") return json(res, { available: 500, unlimited: false });
     if (pathname === "/api/build/questions") return json(res, { questions: [] });
+    // Source-ingestion capabilities (agency stage 2), answered as the route does with the switch off; no file is inspected here.
+    if (pathname === "/api/build/sources") { assert.equal(req.method, "GET"); return json(res, { enabled: false, formats: [], inlineBytes: 3_000_000, referenceBytes: 0 }); }
     // Account chat history (13b1343): it loads and saves turns; it never starts, stops or charges a build.
     if (pathname === `/api/cloud/workspaces/${ids.workspace}/artifacts/${ids.artifact}/chat`) {
       assert.equal(req.headers["x-makeborne-account"], ids.actor);
