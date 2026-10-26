@@ -309,7 +309,14 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const input = ToolInputs.generate_image.parse(use.input);
             if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Use CSS, typography and inline SVG."); break; }
             // Comp-first: the photographs follow the comps they belong to (asked once; a repeat goes ahead).
-            if (compsAvailable && concept && compsStarted < MIN_COMPS && !compsAsked) { compsAsked = true; fail(`Design comps come first on this build and only ${compsStarted} ${compsStarted === 1 ? "was" : "were"} made: in one response call generate_comp for the first screen (desktop), the phone first screen (mobile) and the two heart sections the brief names, then read_comp for each, then generate the photographs each comp shows.`); break; }
+            // Also before the concept is recorded: the live quality-v14 w05 run had its concept refused, generated the photos in
+            // the same step (no concept yet, so this gate did not apply), recorded the concept later and never made a comp.
+            if (compsAvailable && compsStarted < MIN_COMPS && !compsAsked) {
+              compsAsked = true;
+              fail(concept ? `Design comps come first on this build and only ${compsStarted} ${compsStarted === 1 ? "was" : "were"} made: in one response call generate_comp for the first screen (desktop), the phone first screen (mobile) and the two heart sections the brief names, then read_comp for each, then generate the photographs each comp shows.`
+                : "On this first build the order is: record the concept (fix what its tool result asked for), then the design comps (generate_comp for the first screen, the phone first screen and the two heart sections, then read_comp for each), then the photographs each comp shows. No photograph before that.");
+              break;
+            }
             if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             if (!responsive.siteImageFits([...run.files.assets.values()])) { fail("This site already holds as many images as a published site can carry. Reuse an existing image or use CSS/SVG artwork."); break; }
             if (run.files.assets.has(`public/images/${input.name}.webp`)) { fail(`An image named ${input.name} already exists at /images/${input.name}.webp. Reuse it or choose a new name.`); break; }

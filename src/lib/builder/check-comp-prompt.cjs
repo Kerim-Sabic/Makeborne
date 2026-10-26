@@ -62,6 +62,12 @@ const CONCEPT = { chosen: { name: "Friday promise" }, artSystem: { palette: "cob
     assert.equal(colourName("#1D3FA8"), "cobalt blue"); assert.equal(colourName("#F4EDE3"), "warm cream"); assert.equal(colourName("#111111"), "near-black");
   });
 
+  await check("photographs wait for the comps on a first build, also while the concept is not recorded yet (live w05)", () => {
+    const agent = fs.readFileSync(path.join(__dirname, "agent.ts"), "utf8");
+    assert.match(agent, /if \(compsAvailable && compsStarted < MIN_COMPS && !compsAsked\) \{/, "the comp gate does not wait for a recorded concept");
+    assert.match(agent, /record the concept \(fix what its tool result asked for\), then the design comps/);
+  });
+
   await check("comp canvas and quality: native sizes first once measured, else the measured canvas cut to the shape; never an unmeasured cell", async () => {
     assert.deepEqual(COMP_CANVASES.desktop, ["2560x1440", "1536x1024"]); assert.deepEqual(COMP_CANVASES.mobile, ["1152x2496", "1024x1536"]);
     for (const size of [...COMP_CANVASES.desktop, ...COMP_CANVASES.mobile]) assert.equal(sizeIssue(size), null, size);
