@@ -3,6 +3,7 @@ import { lookup } from "node:dns/promises";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
+import { replaceElements, stripTags } from "../html/scan";
 
 /**
  * Light, safe "research" for personalised outreach: reads the public pages a
@@ -41,6 +42,9 @@ export async function publicTarget(raw: string, resolve: Lookup = host => lookup
   if (url.username || url.password) throw new Error("Links with credentials are refused.");
   if (url.port && !["80", "443"].includes(url.port)) throw new Error("Only standard web ports are allowed.");
   const host = url.hostname.replace(/^\[|\]$/g, "");
+  if (/(^|\.)(instagram\.com|cdninstagram\.com|tiktok\.com|tiktokv\.com|youtube\.com|youtu\.be|youtube-nocookie\.com|googlevideo\.com)$/i.test(host.replace(/\.$/, ""))) {
+    throw new Error("Social-platform research is disabled. Use the business's own website or add approved facts manually.");
+  }
   if (/^(localhost|.*\.local|.*\.internal|.*\.localhost)$/i.test(host)) throw new Error("Private addresses are refused.");
   const addresses = isIP(host) ? [{ address: host, family: isIP(host) }] : await resolve(host);
   if (!addresses.length || !addresses.every(item => publicAddress(item.address))) throw new Error("Private addresses are refused.");
@@ -119,7 +123,7 @@ export function extractPageFacts(html: string, url: URL): PageFacts {
   const handle = /\(@([\w.]{1,40})\)/.exec(`${title} ${description}`)?.[1] ?? /@([\w.]{2,40})/.exec(meta(html, "og:title"))?.[1]
     ?? (platformOf(url) !== "Website" ? url.pathname.split("/").filter(Boolean)[0]?.replace(/^@/, "") ?? null : null);
   // A page cut at the size limit can end inside a script: drop that tail too.
-  const text = decode(html.replace(/<(script|style|noscript|svg|template)[\s\S]*?<\/\1>/gi, " ").replace(/<(script|style)[\s\S]*$/i, " ").replace(/<[^>]+>/g, " ")).slice(0, 2500);
+  const text = decode(stripTags(replaceElements(html, ["script", "style", "noscript", "svg", "template"], { open: "name", boundary: false }))).slice(0, 2500);
   const bio = /on (?:Instagram|TikTok):\s*"([\s\S]+)"\s*$/i.exec(description)?.[1]?.trim() ?? "";
   return { url: url.toString(), platform: platformOf(url), title: title.slice(0, 200), description: description.slice(0, 600), handle,
     followers: counts("Followers"), following: counts("Following"), posts: counts("Posts"), bio: bio.slice(0, 500), text };

@@ -180,7 +180,7 @@ const publicResolve = async () => [{ address: "93.184.216.34", family: 4 }];
     assert.ok(events.some(event => event.type === "progress" && event.stage === "read" && event.done === event.total));
   });
 
-  await check("a pasted list reads profiles and websites; duplicates by handle are skipped", async () => {
+  await check("a pasted list reads business websites without fetching social profiles", async () => {
     const pages = {
       "https://www.instagram.com/studio.lena/": html('<title>Lena (@studio.lena) • Instagram photos and videos</title><meta name="description" content="48K Followers, 210 Following, 320 Posts - See Instagram photos and videos from Lena (@studio.lena)"><meta property="og:description" content="48K Followers, 210 Following, 320 Posts - Lena (@studio.lena) on Instagram: &quot;Ceramics for slow mornings. Collabs: hello@studiolena.ba&quot;">'),
       "https://www.instagram.com/known.one/": html('<title>Known (@known.one) • Instagram</title><meta name="description" content="1K Followers">'),
@@ -189,14 +189,9 @@ const publicResolve = async () => [{ address: "93.184.216.34", family: 4 }];
     const page = { fetcher: async url => pages[url] ? pages[url].clone() : html("", 404), resolve: publicResolve };
     const existing = existingIndex([{ name: "Known", email: "", website: "", outreach: { profileUrl: "https://instagram.com/known.one" } }]);
     const found = await gatherLeads({ mode: "list", items: ["@studio.lena", "@known.one", "greenbikes.ba", "nonsense entry"], offer: "", count: 40 }, () => {}, new AbortController().signal, existing, { page });
-    assert.equal(found.duplicates, 1);
-    assert.equal(found.skipped, 1, "the unusable line is counted");
-    const lena = found.leads.find(lead => lead.handle === "studio.lena");
-    assert.equal(lena.followers, "48K");
-    assert.equal(lena.email, "hello@studiolena.ba", "a business email in a creator's bio is found");
-    assert.equal(lena.emailSource, "profile");
-    assert.equal(lena.profileUrl, "https://www.instagram.com/studio.lena/");
-    assert.equal(lena.name, "@studio.lena");
+    assert.equal(found.duplicates, 0);
+    assert.equal(found.skipped, 2, "the two disabled social profiles are skipped");
+    assert.ok(found.leads.every(lead => lead.platform === "Website"));
     const bikes = found.leads.find(lead => lead.website === "https://greenbikes.ba/");
     assert.equal(bikes.name, "Green Bikes");
     assert.equal(bikes.email, "shop@greenbikes.ba");
@@ -289,10 +284,10 @@ const publicResolve = async () => [{ address: "93.184.216.34", family: 4 }];
     assert.equal(found.searched, true);
     const names = found.leads.map(lead => lead.name);
     assert.ok(names.includes("@plantpower"));
-    assert.ok(!names.includes("@bigvegan"), "2.1M is outside 1K–100K");
+    assert.ok(found.leads.every(lead => !lead.verified && lead.followers === null), "social facts are never fetched or invented");
     const hidden = found.leads.find(lead => lead.name === "@hidden.chef");
     assert.ok(hidden && !hidden.verified && hidden.profileUrl === "https://www.instagram.com/hidden.chef/", "unreadable profiles stay, marked, from what the search showed");
-    assert.equal(found.leads[0].name, "@plantpower", "verified, in-range profiles rank first");
+    assert.ok(names.includes("@plantpower"), "search identity may remain without a platform fetch");
     assert.ok(!names.includes("@made.up"), "an unverified handle that was never a search result is dropped");
     await assert.rejects(gatherLeads({ mode: "creators", niche: "vegan", platform: "Instagram", place: "", audience: "any", offer: "", count: 10 }, () => {}, new AbortController().signal, existingIndex([]), { page }), /isn't available/);
   });
@@ -320,21 +315,20 @@ const publicResolve = async () => [{ address: "93.184.216.34", family: 4 }];
     resetOverpassState();
   });
 
-  await check("TikTok profiles are verified through oEmbed; YouTube subscriber counts are read", async () => {
-    const { tiktokProfile, youtubeSubscribers } = require("./enrich.ts");
-    const oembed = async url => String(url).includes("%40real.one") ? json({ author_name: "Real One", author_url: "https://www.tiktok.com/@real.one" }) : json({ message: "Something went wrong" }, 400);
-    const real = await tiktokProfile("https://www.tiktok.com/@real.one", oembed);
-    assert.equal(real.ok, true); assert.equal(real.title, "Real One"); assert.equal(real.handle, "real.one");
-    assert.equal((await tiktokProfile("https://www.tiktok.com/@fake.one", oembed)).ok, false);
-    assert.equal((await tiktokProfile("https://www.tiktok.com/@bad handle", oembed)).ok, false, "handles are validated before any request");
-    assert.equal(youtubeSubscribers('{"simpleText":"1.2M subscribers"}'), "1.2M");
-    const { youtubeChannel } = require("./enrich.ts");
-    const page = '<html>' + "x".repeat(900_000) + '<meta property="og:title" content="Heather Fit"><meta name="description" content="Home workouts &amp; more">';
-    const channel = await youtubeChannel("https://www.youtube.com/@HeatherFit", async () => html(page));
-    assert.equal(channel.ok, true); assert.equal(channel.title, "Heather Fit"); assert.equal(channel.description, "Home workouts & more");
-    assert.equal((await youtubeChannel("https://www.youtube.com/@x", async () => html(page))).ok, false, "handles shorter than 3 are refused");
-    assert.equal((await youtubeChannel("https://www.youtube.com/@Missing1", async () => html("<html>no meta"))).ok, false);
-    assert.equal(youtubeSubscribers("<p>no count</p>"), null);
+  await check("social research is blocked before DNS and on redirects, with no platform fetch", async () => {
+    const { readPublicPage }=require("../mail/research.ts");let dns=0,requests=[];
+    const resolve=async()=>{dns++;return publicResolve();};const fetcher=async url=>{requests.push(url);return new Response(null,{status:302,headers:{location:"https://m.youtube.com/@fictional"}});};
+    for(const host of ["instagram.com","www.instagram.com","m.tiktok.com","youtube.com","youtu.be","youtube.com."])await assert.rejects(readPublicPage("https://"+host+"/fictional",{resolve,fetcher}),/disabled/);
+    assert.equal(dns,0);assert.equal(requests.length,0);
+    await assert.rejects(readPublicPage("https://business.test/",{resolve,fetcher}),/disabled/);assert.deepEqual(requests,["https://business.test/"]);
+    const safe=await readPublicPage("https://notyoutube.com/",{resolve:publicResolve,fetcher:async()=>html("<title>Own business</title>")});assert.equal(safe.title,"Own business");
+  });
+  await check("social platform enrichers make no network requests", async () => {
+    const { tiktokProfile, youtubeChannel } = require("./enrich.ts");
+    const forbidden = async () => { throw Error("Unexpected social fetch"); };
+    for (const [run,url] of [[tiktokProfile,"https://www.tiktok.com/@real.one"],[youtubeChannel,"https://www.youtube.com/@HeatherFit"]]) {
+      const result = await run(url, forbidden); assert.equal(result.ok,false); assert.match(result.reason,/disabled/);
+    }
   });
 
   await check("link in bio: written links, verified guesses only, emails from the hub or the creator's own site", async () => {

@@ -62,8 +62,6 @@ export async function readWithHtml(raw: string, deps: { fetcher?: Fetcher; resol
   const inner = deps.fetcher ?? pinnedPageFetch;
   let html: Promise<string> = Promise.resolve("");
   const capture: Fetcher = async (url, init, addresses) => {
-    // YouTube shows a consent page to cookieless visitors; this standard cookie declines optional cookies and shows the channel.
-    if (/(^|\.)youtube\.com$/i.test(new URL(url).hostname)) init = { ...init, headers: { ...(init.headers as Record<string, string>), Cookie: "SOCS=CAI; CONSENT=YES+1" } };
     const response = await inner(url, init, addresses);
     if (!response.ok || !response.body) return response;
     const [page, copy] = response.body.tee();
@@ -91,51 +89,20 @@ export type Enriched = {
   followers: string | null; posts: string | null; bio: string; emails: string[]; instagram: string; facebook: string; linkedin: string;
 };
 
-/**
- * TikTok renders profiles with JavaScript, so its public oEmbed endpoint (a fixed
- * host; the handle is validated) confirms the profile exists and gives its name.
- */
+/** TikTok network research is disabled pending a reviewed official integration. */
 export async function tiktokProfile(raw: string, fetcher: typeof fetch = fetch): Promise<Enriched> {
-  const handle = /^https:\/\/www\.tiktok\.com\/@([A-Za-z0-9_.]{2,30})$/.exec(raw)?.[1];
+  void fetcher;
+  const handle = null;
   const base: Enriched = { ok: false, reason: "Profile not found", url: raw, platform: "TikTok", title: "", description: "", handle: handle ?? null, followers: null, posts: null, bio: "", emails: [], instagram: "", facebook: "", linkedin: "" };
-  if (!handle) return base;
-  try {
-    const response = await fetcher(`https://www.tiktok.com/oembed?url=${encodeURIComponent(`https://www.tiktok.com/@${handle}`)}`, { headers: { "User-Agent": "Makeborne/1.0 (+https://makeborne.com)", Accept: "application/json" }, signal: AbortSignal.timeout(6000) });
-    if (!response.ok) { await response.body?.cancel(); return base; }
-    const data = await response.json() as { author_name?: string; author_url?: string; embed_type?: string };
-    if (!data.author_name || !String(data.author_url ?? "").toLowerCase().endsWith(`/@${handle.toLowerCase()}`)) return base;
-    return { ...base, ok: true, reason: "", title: String(data.author_name).slice(0, 200), description: `${String(data.author_name).slice(0, 120)} on TikTok` };
-  } catch { return { ...base, reason: "Profile check timed out" }; }
+  return { ...base, reason: "Social-platform research is disabled. Use the business website instead." };
 }
 
-/**
- * YouTube channel pages put their name and description ~800 KB in, past the
- * general reader's limit, so channels get their own reader: a fixed host, a
- * validated handle or channel ID, the consent cookie, and a stream cut at 2.2 MB.
- */
+/** No YouTube network access until a separate official integration is reviewed. */
 export async function youtubeChannel(raw: string, fetcher: typeof fetch = fetch): Promise<Enriched> {
-  const handle = /^https:\/\/www\.youtube\.com\/@([A-Za-z0-9_.-]{3,40})$/.exec(raw)?.[1];
-  const channel = handle ? null : /^https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{20,30})$/.exec(raw)?.[1];
+  void fetcher;
+  const handle = null;
   const base: Enriched = { ok: false, reason: "Channel not found", url: raw, platform: "YouTube", title: "", description: "", handle: handle ?? null, followers: null, posts: null, bio: "", emails: [], instagram: "", facebook: "", linkedin: "" };
-  if (!handle && !channel) return base;
-  try {
-    const response = await fetcher(handle ? `https://www.youtube.com/@${handle}` : `https://www.youtube.com/channel/${channel}`, { redirect: "error", signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; MakeborneResearch/1.0; +https://makeborne.com)", "Accept-Language": "en", Cookie: "SOCS=CAI; CONSENT=YES+1" } });
-    if (!response.ok || !response.body) { await response.body?.cancel(); return base; }
-    const reader = response.body.getReader(), decoder = new TextDecoder();
-    let html = "", size = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.length; html += decoder.decode(value, { stream: true });
-      if (/property="og:title"[^>]*>/.test(html) && /name="description"[^>]*>/.test(html)) { await reader.cancel(); break; }
-      if (size > 2_200_000) { await reader.cancel(); break; }
-    }
-    const meta = (pattern: RegExp) => (pattern.exec(html)?.[1] ?? "").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
-    const title = meta(/<meta property="og:title" content="([^"]*)"/), description = meta(/<meta name="description" content="([^"]*)"/);
-    if (!title) return { ...base, reason: "Channel page couldn't be read" };
-    return { ...base, ok: true, reason: "", title: title.slice(0, 200), description: description.slice(0, 600), bio: description.slice(0, 500), followers: youtubeSubscribers(html) };
-  } catch { return { ...base, reason: "Channel check timed out" }; }
+  return { ...base, reason: "Social-platform research is disabled. Use the business website instead." };
 }
 
 /** Subscriber count on a YouTube channel page ("1.2M subscribers"). */
