@@ -10,7 +10,7 @@ import type { BuilderEstimates, MeasuredRun } from "@/lib/builder/credit-estimat
 
 type Availability = { authenticated: boolean; existingMember: boolean; offers: { tier: PlanId; interval: BillingInterval; totalCents: number; monthlyCredits: number }[] };
 type Pending = { tier: PlanId; interval: BillingInterval; requestId: string; next: string };
-type Notice = { text: string; role: "alert" | "status"; action?: "resume" | "retry" | "studio"; tier?: PlanId };
+type Notice = { text: string; role: "alert" | "status"; action?: "resume" | "retry" | "studio" | "support"; tier?: PlanId };
 /** Same tab: the selection and its idempotency key. Another tab or device: only the key, bound to its account. */
 const STORAGE = "makeborne-creation-checkout-v1";
 const SHARED = "makeborne-creation-checkout-v2";
@@ -130,6 +130,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
     } else if (code === "CHECKOUT_PENDING") setNotice({ role: "alert", text: isResume ? stillPending : "Your last checkout is still being confirmed. Please don’t pay twice; try again in a minute, or email admin@makeborne.com if this doesn’t change." });
     else if (code === "CHECKOUT_ALREADY_COMPLETED") { forget(); pending.current = null; setResume(null); setNotice({ role: "status", action: "studio", text: "That checkout is already complete." }); }
     else if (code === "SUBSCRIPTION_ALREADY_EXISTS") setNotice({ role: "alert", text: "You already have a plan." });
+    else if (code === "SUBSCRIPTION_REPURCHASE_REQUIRES_SUPPORT") setNotice({ role: "alert", action: "support", text: "Before you subscribe again, we need to check your previous subscription allowance. Contact support to continue. No new checkout was opened." });
     else if (code === "CREATION_PLANS_NOT_OPEN") setNotice({ role: "alert", text: "Plans aren’t open yet. Nothing was charged." });
     else if (isResume && response.status === 409) setNotice({ role: "alert", text: stillPending });
     else if (response.status === 409) {
@@ -213,7 +214,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
       {loadError && <button type="button" className="billing-retry" onClick={() => { setLoadError(false); setAvailability(null); setRetry(value => value + 1); }}>Retry availability</button>}
       {member && <p>Manage or cancel your plan in your Whop account. <a href={`mailto:${SUPPORT}`}>Email support</a></p>}
     </div>
-    {notice && <div className="billing-plan-notice" role={notice.role}><p>{notice.text}</p>{notice.action === "resume" && <button type="button" className="billing-retry" disabled={busy !== null} onClick={() => void resumeLast()}>Resume that checkout</button>}{notice.action === "retry" && notice.tier && <button type="button" className="billing-retry" disabled={busy !== null} onClick={() => void purchase(notice.tier!)}>Try again</button>}{notice.action === "studio" && <Link className="billing-retry" href="/studio">Open studio</Link>}</div>}
+    {notice && <div className="billing-plan-notice" role={notice.role}><p>{notice.text}</p>{notice.action === "resume" && <button type="button" className="billing-retry" disabled={busy !== null} onClick={() => void resumeLast()}>Resume that checkout</button>}{notice.action === "retry" && notice.tier && <button type="button" className="billing-retry" disabled={busy !== null} onClick={() => void purchase(notice.tier!)}>Try again</button>}{notice.action === "studio" && <Link className="billing-retry" href="/studio">Open studio</Link>}{notice.action === "support" && <a className="billing-retry" href={`mailto:${SUPPORT}?subject=Subscription%20restart`}>Contact support</a>}</div>}
     {estimates && <div id="how-we-counted" className="billing-counted"><p>*Each line assumes a whole month’s credits go to one kind of first build. Ranges run from the most expensive to the typical first build in our {measuredRun?.label ?? "test runs"} at the default (Medium) effort without AI images:</p>
       <ul><li>{`${estimates.firstBuild.website.samples} websites (${estimates.firstBuild.website.min}–${estimates.firstBuild.website.max} credits, typically ${estimates.firstBuild.website.median});`}</li><li>{`${estimates.firstBuild.presentation.samples} presentations${measuredRun?.presentationSlides.length === estimates.firstBuild.presentation.samples ? ` of ${measuredRun.presentationSlides.join(" and ")} slides` : ""} (${estimates.firstBuild.presentation.min}–${estimates.firstBuild.presentation.max});`}</li><li>{`${estimates.firstBuild.book.samples} books${measuredRun?.bookPages.length === estimates.firstBuild.book.samples ? ` of ${measuredRun.bookPages.join(" and ")} pages` : ""} (${estimates.firstBuild.book.min}–${estimates.firstBuild.book.max}).`}</li></ul>
       <p>{fewest !== undefined && `${fewest === 2 ? "Two" : fewest} tests are too few to call typical, so treat those lines as a rough guide. `}These runs predate our latest efficiency changes, and we update the figures when we re-measure. Edits, design reviews, AI images and higher effort use more, so real projects make fewer. Every request shows its limit before it starts.</p></div>}

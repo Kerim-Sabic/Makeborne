@@ -4,6 +4,7 @@
 // Supabase stack) and is never routed. Use an explicit staging/production environment.
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
+  "account_id": "edda2b12d52321e4df2012e196b33640",
   "name": "makeborne-sites-local",
   "main": "_worker.js",
   "compatibility_date": "2026-10-05",
