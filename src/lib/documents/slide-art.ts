@@ -354,7 +354,8 @@ export function artPrompt(deck: Pick<Deck, "theme" | "slides" | "title"> & { art
   const furniture = slideFurniture(deck, slide);
   const wordmark = furniture.find(line => line.role.startsWith("wordmark")), page = furniture.find(line => line.role.startsWith("page"));
   const parts = [
-    ...(wordmark ? [`a small wordmark ${q(wordmark.text)} at the top-left`] : []),
+    // The same wordmark on every slide: one size, face and tracking (the live Alba deck varied it between serif, sans and tracked caps).
+    ...(wordmark ? [`a small wordmark ${q(wordmark.text)} at the top-left, set in the ${style.heading} at the same small size and normal letter spacing as on every slide of this deck`] : []),
     ...slideCopy(deck, slide),
     ...(page ? [`bottom-left a tiny page number ${q(page.text)}`] : []),
   ];
