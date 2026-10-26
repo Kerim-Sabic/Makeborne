@@ -62,7 +62,11 @@ const pass = name => {passed++; console.log(`PASS ${name}`);};
 
   // Source scan: every project-assets read in app code is either this helper or a
   // server-key read after a token/grant RPC; nothing mints storage URLs.
-  const allowed = new Set(["src/lib/cloud/asset-storage.ts", "src/app/api/review/[token]/assets/[assetId]/route.ts", "src/app/api/portal/sites/[artifactId]/images/[assetId]/route.ts"]);
+  const allowed = new Set(["src/lib/cloud/asset-storage.ts", "src/app/api/review/[token]/assets/[assetId]/route.ts", "src/app/api/portal/sites/[artifactId]/images/[assetId]/route.ts",
+    // Account data export: server-key read of paths returned by the owner-scoped export rows RPC.
+    "src/lib/account-rights/jobs.ts"]);
+  // The only minted URL: a 120-second link to the requester's own export part in the private account-exports bucket.
+  const allowedMinting = new Set(["src/lib/account-rights/server.ts"]);
   const offenders = [], minting = [];
   (function walk(dir) {
     for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
@@ -72,11 +76,20 @@ const pass = name => {passed++; console.log(`PASS ${name}`);};
       const rel = path.relative(root, full).split(path.sep).join("/");
       const text = fs.readFileSync(full, "utf8");
       if (/storage\s*\.\s*from\(\s*["']project-assets["']\s*\)\s*\.\s*download\(/.test(text) && !allowed.has(rel)) offenders.push(rel);
-      if (/\.(createSignedUrl|createSignedUrls|getPublicUrl)\(/.test(text)) minting.push(rel);
+      if (/\.(createSignedUrl|createSignedUrls|getPublicUrl)\(/.test(text) && !allowedMinting.has(rel)) minting.push(rel);
     }
   })(path.join(root, "src"));
   assert.deepEqual(offenders, [], `project-assets downloads outside the helper: ${offenders.join(", ")}`);
   assert.deepEqual(minting, [], `storage URL minting found: ${minting.join(", ")}`);
+  {
+    const rights = fs.readFileSync(path.join(root, "src/lib/account-rights/server.ts"), "utf8"), jobs = fs.readFileSync(path.join(root, "src/lib/account-rights/jobs.ts"), "utf8");
+    assert.equal((rights.match(/createSignedUrl\(/g) ?? []).length, 1);
+    assert.match(rights, /storage\.from\(EXPORT_BUCKET\)\.createSignedUrl\(path, EXPORT_LINK_SECONDS/);
+    assert.match(rights, /if \(!path \|\| !path\.startsWith\(`\$\{userId\}\/\$\{requestId\}\/`\)\) return null;/);
+    assert.match(jobs, /export const EXPORT_BUCKET = "account-exports";/);
+    assert.doesNotMatch(rights + jobs, /getPublicUrl|createSignedUrls|from\("project-assets"\)\.createSignedUrl/);
+    pass("account export: one owner-bound 120-second link to the private export bucket; project files are only read server-side");
+  }
   for (const rel of ["src/app/api/review/[token]/assets/[assetId]/route.ts", "src/app/api/portal/sites/[artifactId]/images/[assetId]/route.ts"]) {
     const text = fs.readFileSync(path.join(root, rel), "utf8");
     assert.ok(text.indexOf(".rpc(") > -1 && text.indexOf(".rpc(") < text.indexOf('.download('), `${rel} authorises before reading`);

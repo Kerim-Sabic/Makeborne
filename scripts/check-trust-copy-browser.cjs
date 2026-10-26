@@ -83,7 +83,7 @@ page errors: ${errors.join(" | ")}
 ${(await page.locator("body").innerText()).slice(0, 600)}`); });
       await page.getByRole("heading", { name: /Website badge/ }).waitFor();
       const sections = await page.locator(".settings-panel section h2").evaluateAll(headings => headings.map(heading => [heading.firstChild.textContent.trim(), heading.querySelector(".settings-storage")?.textContent.trim() ?? null]));
-      assert.deepEqual(sections, [["Account projects", "Saved to your account"], ["Drafts on this device", "This device"], ["Studio sounds", "This device"], ["Website badge", "Saved to your account"]]);
+      assert.deepEqual(sections, [["Account projects", "Saved to your account"], ["Drafts on this device", "This device"], ["Studio sounds", "This device"], ["Website badge", "Saved to your account"], ["Your data", "Saved to your account"]]);
       const text = await page.locator(".settings-panel").innerText();
       assert.doesNotMatch(text, /does not sync to the cloud|cloud/i);
       assert.match(text, /They are not saved to your account or other devices/);
