@@ -206,6 +206,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   useEffect(() => {
     const apply = (request: ClientsRequest | null) => {
       if (request?.action === "find-leads") { setLayout("list"); setFinderSeed(request.seed ?? null); setFinding(true); setSetupRequested(true); }
+      else if (request?.action === "add-client") { setLayout("list"); setAdding(true); setSetupRequested(true); }
       else if (request?.action === "email") { setLayout("email"); try { window.localStorage.setItem(LAYOUT_KEY, "email"); } catch { /* storage unavailable */ } }
     };
     const timer = window.setTimeout(() => apply(takeClientsAction()), 0);
@@ -418,7 +419,9 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const tabs: { id: ClientView; label: string }[] = [{ id: "outreach", label: "Outreach & activity" }, { id: "email", label: "Email" }, { id: "details", label: "Contact details" }, { id: "brand", label: "Brand & client access" }, { id: "projects", label: "Projects" }, { id: "reviews", label: "Client reviews" }];
 
   // The lead finder opens from the list header, the command palette, the checklist, or "Find more like this" on a client.
-  const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }} onAdded={(count, tag) => {
+  // While lead finding can't start, the finder offers the paths that work without AI.
+  const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }}
+    instead={canEdit ? { add: () => { setFinding(false); setFinderSeed(null); if (clientId) backToList(); chooseLayout("list"); setAdding(true); }, import: clientId ? undefined : () => { setFinding(false); setFinderSeed(null); importInput.current?.click(); } } : undefined} onAdded={(count, tag) => {
     setFinding(false); setFinderSeed(null); if (clientId) backToList(); chooseLayout("list"); if (tag) setTagFilter(tag); setRefreshKey(key => key + 1); refreshOnboarding();
     setMessage(`Added ${count} new lead${count === 1 ? "" : "s"} to your clients${tag ? `, tagged “${tag}”` : ""}. Select them and choose “Write personal emails” to reach out.`);
   }} /> : null;

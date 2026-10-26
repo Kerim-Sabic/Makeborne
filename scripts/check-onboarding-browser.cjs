@@ -46,7 +46,8 @@ async function bundle() {
 async function main() {
   const { js, styles } = await bundle();
   // What the account has on the server: no workspace at first; a test can "create" one with one project.
-  const state = { workspaces: [], artifacts: 0 }, requests = [];
+  // `ai`: what the AI helpers report (null: the endpoints answer 404, as before they existed, so nothing changes).
+  const state = { workspaces: [], artifacts: 0, ai: null }, requests = [];
   const json = (res, status, body) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
   const server = createServer((req, res) => {
     const file = req.url.split("?")[0];
@@ -54,6 +55,8 @@ async function main() {
     if (file.startsWith("/api/")) {
       requests.push(`${req.method} ${file}`);
       if (req.method === "GET" && file === "/api/workspaces") return json(res, 200, { workspaces: state.workspaces });
+      if (req.method === "GET" && file === "/api/assistants" && state.ai) return json(res, 200, { leads: state.ai, advisor: state.ai });
+      if (req.method === "GET" && file === "/api/build" && state.ai) return json(res, 200, state.ai);
       if (req.method === "GET" && file === `/api/cloud/workspaces/${workspaceId}/onboarding`)
         return json(res, 200, { progress: { artifacts: state.artifacts, clients: 0, finderLeads: 0, mailboxes: 0, sentEmails: 0, reviewLinks: 0 } });
       return json(res, 404, {});
@@ -68,7 +71,7 @@ async function main() {
     const page = await browser.newPage({ viewport }), errors = [];
     page.setDefaultTimeout(10000); page.on("pageerror", error => errors.push(error.message));
     await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/, route => route.abort());
-    state.workspaces = []; state.artifacts = 0; requests.length = 0;
+    state.workspaces = []; state.artifacts = 0; state.ai = null; requests.length = 0;
     try {
       await run(page);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "no horizontal page scroll");
@@ -140,6 +143,27 @@ async function main() {
       await page.keyboard.press("Escape");
       await pill(page).waitFor();
     }, { width: 390, height: 844 });
+    for (const [label, viewport] of [["1280", undefined], ["390", { width: 390, height: 844 }]]) await scenario(`ai-paused-welcome-and-checklist-are-honest-${label}`, async page => {
+      state.ai = { available: false, configured: true, state: "paused" };
+      await page.goto(`${base}/?view=studio`);
+      await welcome(page).waitFor({ timeout: 15000 });
+      // The welcome offers the path that works without AI and doesn't promise a live build.
+      await page.getByRole("button", { name: /Add my first clients/ }).waitFor();
+      assert.equal(await page.getByRole("button", { name: /Find my first 10 leads/ }).count(), 0, "no lead search while it can't start");
+      assert.doesNotMatch(await welcome(page).innerText(), /watch it build, live/, "no live build promised while building is paused");
+      await page.getByRole("button", { name: /look around first/ }).click();
+      // Ask an advisor waits and isn't counted; Find leads becomes Add your first clients.
+      assert.match(await pill(page).innerText(), /0\/5 done/);
+      await pill(page).click();
+      const panel = page.locator(".gs-panel");
+      await panel.getByText("Add your first clients").waitFor();
+      assert.equal(await panel.getByRole("button", { name: "Find leads" }).count(), 0);
+      const ask = panel.locator("li", { hasText: "Ask an advisor" });
+      assert.match(await ask.innerText(), /Opens when AI is switched back on/);
+      assert.equal(await ask.getByRole("button").count(), 0, "no button to a chat that can't answer");
+      assert.match(await panel.innerText(), /1 step opens when AI does/);
+      await panel.getByRole("button", { name: "Add clients" }).waitFor();
+    }, viewport);
     await scenario("phone-390", async page => {
       await page.goto(`${base}/?view=studio`);
       await welcome(page).waitFor({ timeout: 15000 });

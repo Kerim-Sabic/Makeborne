@@ -124,6 +124,38 @@ async function main() {
       await page.getByRole("heading", { name: "Add a client" }).waitFor();
       assert.deepEqual(writes, ["POST /api/workspaces"]);
     });
+    const paused = { available: false, configured: true, state: "paused" };
+    const ai = { leads: paused, advisor: paused, builder: paused };
+    for (const [label, size] of [["1280", {}], ["390", { width: 390, height: 844 }]]) await scenario(`paused-finder-says-so-before-typing-and-offers-add-or-import-${label}`, { ai, ...size }, async (page, { writes, state }) => {
+      state.workspaces = [{ id: workspaceId, name: "My workspace", role: "owner" }];
+      await page.goto(`${base}/?action=find-leads`);
+      const dialog = finder(page);
+      await dialog.waitFor({ timeout: 15000 });
+      const notice = dialog.locator(".lf-closed");
+      await notice.waitFor();
+      assert.match(await notice.innerText(), /Lead finding is paused right now, so a search can’t start and nothing is charged/);
+      assert.equal(await dialog.locator(".lf-price").filter({ hasText: /credits/ }).count(), 0, "no price for a search that can't run");
+      await dialog.getByLabel(/What kind of business/).fill("Dentists");
+      await dialog.getByRole("textbox", { name: "Where?" }).fill("Leeds");
+      assert.equal(await dialog.getByRole("button", { name: "Find leads" }).isDisabled(), true, "the search can't be submitted");
+      await notice.getByRole("button", { name: "Import CSV" }).waitFor();
+      await notice.getByRole("button", { name: "Add a client" }).click();
+      await dialog.waitFor({ state: "detached" });
+      await page.getByRole("heading", { name: "Add a client" }).waitFor();
+      assert.deepEqual(writes, [], "nothing was searched or charged");
+    });
+    await scenario("ready-finder-shows-no-notice", { ai: { leads: { available: true, configured: true, state: "ready" }, advisor: paused, builder: paused } }, async (page, { state }) => {
+      state.workspaces = [{ id: workspaceId, name: "My workspace", role: "owner" }];
+      await page.goto(`${base}/?action=find-leads`);
+      await finder(page).locator(".lf-price").filter({ hasText: /credits/ }).waitFor({ timeout: 15000 });
+      assert.equal(await finder(page).locator(".lf-closed").count(), 0);
+    });
+    await scenario("add-client-request-sets-up-the-workspace-and-opens-the-form", { ai }, async (page, { writes }) => {
+      await page.goto(`${base}/?action=add-client`);
+      await page.getByRole("heading", { name: "Add a client" }).waitFor({ timeout: 15000 });
+      await page.waitForFunction(() => document.querySelector(".ac-heading-actions .ac-find-leads"));
+      assert.deepEqual(writes, ["POST /api/workspaces"]);
+    });
   } finally { await browser.close(); server.close(); }
   console.log(`\n${passed} passed, ${failures.length} failed.`);
   if (failures.length) process.exitCode = 1;

@@ -8,6 +8,8 @@ import Modal from "../mail/modal";
 import { mailApi } from "../mail/mail-api";
 import { ONBOARDING_REFRESH_EVENT, requestClientsAction } from "./signals";
 import { checklist, type Progress } from "./checklist";
+import { useAssistantAvailability } from "../use-assistant-availability";
+import { knownClosed } from "@/lib/ai/assistant-availability";
 import "./onboarding.css";
 
 type Saved = { welcomed: boolean; hidden: boolean; celebrated: boolean };
@@ -42,6 +44,8 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
   const [advisor, setAdvisor] = useState(false);
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  // Whether lead finding, advisors and the builder can start now (null until known): AI-only paths say so instead of failing later.
+  const ai = useAssistantAvailability();
   const save = useCallback((change: Partial<Saved>) => setSaved(current => {
     const next = { ...current, ...change };
     try { localStorage.setItem(storeKey(accountId), JSON.stringify(next)); } catch { /* storage unavailable: shown again next time */ }
@@ -74,6 +78,7 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
   const go = useMemo(() => ({
     create: (kind: "website" | "book" | "presentation") => { setOpen(false); save({ welcomed: true }); onCreate(kind); },
     leads: () => { setOpen(false); save({ welcomed: true }); requestClientsAction("find-leads"); onNavigate("clients"); },
+    addClients: () => { setOpen(false); save({ welcomed: true }); requestClientsAction("add-client"); onNavigate("clients"); },
     email: () => { setOpen(false); requestClientsAction("email"); onNavigate("clients"); },
     clients: () => { setOpen(false); onNavigate("clients"); },
     projects: () => { setOpen(false); onNavigate("projects"); },
@@ -81,10 +86,13 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
   }), [onCreate, onNavigate, router, save]);
 
   if (!progress) return null;
-  const steps = checklist(progress, advisor, go);
-  const done = steps.filter(step => step.done).length;
+  const steps = checklist(progress, advisor, go, { leads: ai?.leads ?? null, advisor: ai?.advisor ?? null });
+  // A step waiting for AI isn't counted: the checklist can be completed with what works today.
+  const counted = steps.filter(step => !step.waiting), waitingSteps = steps.filter(step => step.waiting);
+  const done = counted.filter(step => step.done).length;
+  const leadsClosed = knownClosed(ai?.leads), buildClosed = knownClosed(ai?.builder);
   const fresh = (progress.artifacts ?? 0) === 0 && (progress.clients ?? 0) === 0;
-  const complete = done === steps.length;
+  const complete = done === counted.length;
   const welcome = fresh && !saved.welcomed && !hidden;
 
   return <>
@@ -95,8 +103,9 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
         <h2>Welcome to Makeborne</h2>
         <p>Create work for your business or your clients, and win new ones. Where would you like to start?</p>
         <div className="gs-paths">
-          <button type="button" onClick={() => go.create("website")}><span className="gs-path-icon is-site"><Globe2 size={20} /></span><strong>Make my first website</strong><small>Describe your business and watch it build, live.</small><ArrowRight size={16} /></button>
-          <button type="button" onClick={go.leads}><span className="gs-path-icon is-leads"><Sparkles size={20} /></span><strong>Find my first 10 leads</strong><small>Local businesses or creators, ranked for what you sell.</small><ArrowRight size={16} /></button>
+          <button type="button" onClick={() => go.create("website")}><span className="gs-path-icon is-site"><Globe2 size={20} /></span><strong>Make my first website</strong><small>{buildClosed ? "Describe your business; your draft is saved to edit now. AI building is paused for the moment." : "Describe your business and watch it build, live."}</small><ArrowRight size={16} /></button>
+          {leadsClosed ? <button type="button" onClick={go.addClients}><span className="gs-path-icon is-leads"><Sparkles size={20} /></span><strong>Add my first clients</strong><small>Add them yourself or import a CSV. Lead finding opens when AI does.</small><ArrowRight size={16} /></button>
+            : <button type="button" onClick={go.leads}><span className="gs-path-icon is-leads"><Sparkles size={20} /></span><strong>Find my first 10 leads</strong><small>Local businesses or creators, ranked for what you sell.</small><ArrowRight size={16} /></button>}
           <button type="button" onClick={() => go.create("book")}><span className="gs-path-icon is-book"><BookOpen size={20} /></span><strong>Write a book or deck</strong><small>An e-book to read on screen, or a presentation, from your notes.</small><ArrowRight size={16} /></button>
         </div>
         <button type="button" className="gs-skip" onClick={() => save({ welcomed: true })}>I’ll look around first</button>
@@ -106,15 +115,16 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
     {!hidden && !saved.hidden && !(complete && saved.celebrated) && <div className={`gs${open ? " is-open" : ""}`}>
       {open && <section className="gs-panel" aria-labelledby="gs-title">
         <header>
-          <div><h2 id="gs-title">{complete ? "You’re all set" : "Getting started"}</h2><p>{complete ? "Every first step is done. Nice work." : `${done} of ${steps.length} done · each takes a minute or two`}</p></div>
+          <div><h2 id="gs-title">{complete ? "You’re all set" : "Getting started"}</h2><p>{complete ? "Every first step is done. Nice work." : `${done} of ${counted.length} done · each takes a minute or two`}{waitingSteps.length > 0 && ` · ${waitingSteps.length === 1 ? "1 step opens" : `${waitingSteps.length} steps open`} when AI does`}</p></div>
           <button type="button" className="gs-x" aria-label="Collapse getting started" onClick={() => setOpen(false)}><ChevronDown size={18} /></button>
         </header>
-        <div className="gs-bar" aria-hidden="true"><span style={{ width: `${Math.round(done / steps.length * 100)}%` }} /></div>
-        <ol>{steps.map(step => <li key={step.id} className={step.done ? "is-done" : ""}>
+        <div className="gs-bar" aria-hidden="true"><span style={{ width: `${Math.round(done / counted.length * 100)}%` }} /></div>
+        <ol>{steps.map(step => <li key={step.id} className={step.done ? "is-done" : step.waiting ? "is-waiting" : ""}>
           <span className="gs-check" aria-hidden="true">{step.done ? <Check size={13} /> : null}</span>
-          <div><strong>{step.title}</strong><small>{step.hint} <Link href={`/help/${step.guide}`} target="_blank">How it works</Link></small></div>
-          {!step.done && <button type="button" onClick={step.run}>{step.action}</button>}
-          <span className="sr-only">{step.done ? "Done" : "Not done yet"}</span>
+          <div><strong>{step.title}</strong><small>{step.waiting ? <>{step.waiting} </> : <>{step.hint} </>}<Link href={`/help/${step.guide}`} target="_blank">How it works</Link></small></div>
+          {!step.done && !step.waiting && <button type="button" onClick={step.run}>{step.action}</button>}
+          {step.waiting && !step.done && <span className="gs-waiting">Needs AI</span>}
+          <span className="sr-only">{step.done ? "Done" : step.waiting ? "Not available yet, not counted" : "Not done yet"}</span>
         </li>)}</ol>
         <footer>
           {complete ? <button type="button" className="gs-link" onClick={() => { save({ celebrated: true }); setOpen(false); }}>Close for good</button>
@@ -123,8 +133,8 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
         </footer>
       </section>}
       <button type="button" className="gs-pill" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <svg className="gs-ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" /><circle cx="18" cy="18" r="15" className="is-fill" style={{ strokeDasharray: `${done / steps.length * 94.2} 94.2` }} /></svg>
-        <span><strong>{complete ? "All set" : "Getting started"}</strong><small>{done}/{steps.length} done</small></span>
+        <svg className="gs-ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" /><circle cx="18" cy="18" r="15" className="is-fill" style={{ strokeDasharray: `${done / counted.length * 94.2} 94.2` }} /></svg>
+        <span><strong>{complete ? "All set" : "Getting started"}</strong><small>{done}/{counted.length} done</small></span>
       </button>
     </div>}
   </>;
