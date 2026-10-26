@@ -327,6 +327,7 @@ Every fix on this branch applies there too. The copy, CSS and header rules are t
 
 - `src/app/help/page.module.css` and `src/app/account-refresh.css` add `--ui-zoom` lines next to the changed colour lines. Small merge.
 - `src/components/onboarding/getting-started.tsx` was rewritten by journey-polish. Re-apply the creator line by hand.
+- Measured with `git merge-tree`: this branch merges cleanly onto 59e5d32 and onto the current `release/minimum-launch-20261025` (0877345). Onto 1062170 it conflicts in five files: `account-clients.css`, `expert-chat.css`, `global-command-palette.css`, `help/page.module.css` and `getting-started.tsx`. These are colour lines next to merged edits; take both sides.
 - The full candidate adds flag-gated features (CRM research panel, agency tools). Their copy was not swept here, because they are off at launch. Sweep them before each flag goes on, especially CRM research, which adds client-facing "website check" text.
 
 ## How to re-run
