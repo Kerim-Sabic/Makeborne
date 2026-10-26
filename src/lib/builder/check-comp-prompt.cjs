@@ -65,13 +65,16 @@ const CONCEPT = { chosen: { name: "Friday promise" }, artSystem: { palette: "cob
   await check("comp canvas and quality: native sizes first once measured, else the measured canvas cut to the shape; never an unmeasured cell", async () => {
     assert.deepEqual(COMP_CANVASES.desktop, ["2560x1440", "1536x1024"]); assert.deepEqual(COMP_CANVASES.mobile, ["1152x2496", "1024x1536"]);
     for (const size of [...COMP_CANVASES.desktop, ...COMP_CANVASES.mobile]) assert.equal(sizeIssue(size), null, size);
-    // Today 2560x1440 high is unmeasured: desktop comps are high on 1536x1024, cut to 16:9.
+    // Measured 26 Oct 2026 (scope quality-v14-20261026): desktop comps render natively at 2560x1440 high, the phone comp at 1152x2496 high.
     const desk = compCell("gpt-image-2.5-sunburst", "desktop");
-    assert.deepEqual([desk.ok, desk.quality, desk.size, desk.native, desk.crop], [true, "high", "1536x1024", false, { left: 0, top: 80, width: 1536, height: 864 }]);
-    // No high phone canvas is measured: medium on 1024x1536, cut to 390:844.
+    assert.deepEqual([desk.ok, desk.quality, desk.size, desk.native, desk.crop], [true, "high", "2560x1440", true, { left: 0, top: 0, width: 2560, height: 1440 }]);
     const phone = compCell("gpt-image-2.5-flare", "mobile");
-    assert.deepEqual([phone.ok, phone.quality, phone.size, phone.native], [true, "medium", "1024x1536", false]);
+    assert.deepEqual([phone.ok, phone.quality, phone.size], [true, "high", "1152x2496"]);
     assert.ok(Math.abs(phone.crop.width / phone.crop.height - 390 / 844) < 0.01);
+    // A model with only the published sizes: high on the measured 3:2 / 2:3 canvases, cut to shape.
+    const fallback = compCell("gpt-image-2", "desktop"), fallbackPhone = compCell("gpt-image-2", "mobile");
+    assert.deepEqual([fallback.size, fallback.native, fallback.crop], ["1536x1024", false, { left: 0, top: 80, width: 1536, height: 864 }]);
+    assert.deepEqual([fallbackPhone.quality, fallbackPhone.size, fallbackPhone.native], ["high", "1024x1536", false]);
     assert.equal(compCell("gpt-image-unknown", "desktop").ok, false, "a model without measurements has no comp canvas");
     assert.deepEqual(COMP_FRAME, COMP_SHAPE, "the finish gate measures comps in the comps' own frame");
   });
