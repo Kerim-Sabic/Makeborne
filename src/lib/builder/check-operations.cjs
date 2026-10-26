@@ -145,6 +145,26 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
     await assert.rejects(spend.begin("openai", "image", 10000), error => error.code === "SPEND_UNAVAILABLE");
     assert.equal(spend.pendingMicrousd, 0);
   });
+  await check("expired membership lease re-verifies once and retries the same SQL ticket; revocation, cancellation and caps stay enforced", async () => {
+    const run = await fresh(); let attempts = 0, refreshed = 0;
+    handler = (name, args) => name === "makeborne_ai_operation_provider_begin" ? (++attempts === 1 ? { error: { code: "42501" } } : { data: { started: true } }) : rpc(name, args);
+    const spend = api.createOperationSpend(run, now + 2000000, async id => { assert.equal(id, actor); refreshed++; });
+    await spend.begin("openai", "image", 10000);
+    const admissions = calls.filter(c => c.name === "makeborne_ai_operation_provider_begin");
+    assert.equal(refreshed, 1); assert.equal(attempts, 2);
+    assert.deepEqual(admissions[0].args, admissions[1].args, "same call id, fence, actor, bound and provider");
+    attempts = 0;
+    const denied = api.createOperationSpend(run, now + 2000000, async () => { throw { code: "MEMBERSHIP_REQUIRED" }; });
+    await assert.rejects(denied.begin("openai", "image", 10000), e => e.code === "ACCESS_REQUIRED");
+    assert.equal(attempts, 1); assert.equal(denied.pendingMicrousd, 0);
+    for (const after of ["MB499", "MB402", "PT409", "42501"]) {
+      attempts = 0; refreshed = 0;
+      handler = () => ({ error: { code: ++attempts === 1 ? "42501" : after } });
+      const refused = api.createOperationSpend(run, now + 2000000, async () => { refreshed++; });
+      await assert.rejects(refused.begin("openai", "image", 10000), e => e.code === ({ MB499: "CANCELLED", MB402: "PROVIDER_LIMIT", PT409: "HOLD_EXPIRED", "42501": "SPEND_UNAVAILABLE" })[after]);
+      assert.equal(attempts, 2); assert.equal(refreshed, 1); assert.equal(refused.pendingMicrousd, 0);
+    }
+  });
   await check("atomic finish carries full measured cost and candidate, with no independent save or settlement", async () => {
     const run = await fresh(); const candidate = { content: {}, style: {}, assetIds: [], expectedVersion: 1, summary: "Saved" };
     const finished = await api.finishOperation(run, 45000.1, "saved", { finished: true }, candidate);

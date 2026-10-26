@@ -28,7 +28,8 @@ export async function requireBillingUser() {
 export async function verifyCreationAccess(user: User, checkoutId?: string): Promise<boolean> {
   // An operator grant unlocks the workspace, but never marks a checkout paid.
   if (checkoutId === undefined && (await getAccountPrivileges(user.id)).isAdmin) return true;
-  if (!billingConfig().enabled) return false;
+  // Closing new sales must not prevent verification of an already-paid subscription.
+  if (!billingConfig().configured || process.env.MAKEBORNE_BILLING_MIGRATIONS_VERIFIED !== "true") return false;
   const db = billingDatabase();
   let query = db.from("billing_memberships")
     .select("membership_id,checkout_id,whop_user_id,plan_id").eq("user_id", user.id).in("plan_id", billingConfig().accessPlanIds);
@@ -96,6 +97,15 @@ export async function requireCreationAccess(user?: User) {
   if (verified.is_anonymous || !verified.email || !verified.email_confirmed_at) throw new RequestError("AUTH_REQUIRED", "Confirm your account email before creating a project.", 401);
   if (!await hasCreationAccess(verified)) throw new RequestError("MEMBERSHIP_REQUIRED", "Creation access is not available for this account right now. Choose a plan to continue; support purchases do not unlock creation.", 402);
   return verified;
+}
+
+/** Renew only a fenced operation's own actor after its short database verification lease expires. */
+export async function refreshCreationAccessForActor(actor: string): Promise<void> {
+  const { data, error } = await billingDatabase().auth.admin.getUserById(actor);
+  if (error || !data.user || data.user.id !== actor) throw new RequestError("MEMBERSHIP_UNAVAILABLE", "Membership verification is temporarily unavailable.", 503);
+  const user = data.user;
+  if (user.is_anonymous || !user.email || !user.email_confirmed_at || (user.banned_until && Date.parse(user.banned_until) > Date.now())
+    || !await verifyCreationAccess(user)) throw new RequestError("MEMBERSHIP_REQUIRED", "Your membership no longer permits AI creation.", 402);
 }
 
 export async function requireCreationPage(next: string) {

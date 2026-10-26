@@ -697,6 +697,7 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
     assert.equal(aiStop(new SpendError("PROVIDER_DISABLED", "x")).code, "AI_PAUSED");
     assert.equal(aiStop(new SpendError("PROVIDER_LIMIT", "x")).code, "AI_DAILY_LIMIT");
     assert.equal(aiStop(new SpendError("SPEND_UNAVAILABLE", "x")).code, "AI_UNAVAILABLE");
+    assert.equal(aiStop(new SpendError("ACCESS_REQUIRED", "x")).code, "MEMBERSHIP_REQUIRED");
     assert.equal(aiStop(new prices.UnpricedModelError("m")).code, "AI_UNAVAILABLE");
     assert.equal(aiStop(new Error("other")), null);
     const hold = billing.hold(50);

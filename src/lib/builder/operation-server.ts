@@ -219,15 +219,29 @@ export async function beginOperation(input: {
     originalDesign: DesignAnswersSchema.safeParse((data.requestContext as { design?: unknown } | null)?.design).data } };
 }
 
-export function createOperationSpend(run: OperationRun, platformDeadline: number): RunSpend {
+export function createOperationSpend(run: OperationRun, platformDeadline: number, refreshAccess: (actor: string) => Promise<void> = async actor => {
+  const { refreshCreationAccessForActor } = await import("../billing/access");
+  await refreshCreationAccessForActor(actor);
+}): RunSpend {
   const original = databaseGate(run.actor);
   const gate: SpendGate = {
     async begin(ticket) {
-      const { data, error } = await billingDatabase().rpc("makeborne_ai_operation_provider_begin", {
+      const args = {
         p_actor: run.actor, p_run: run.id, p_fence: run.fence, p_call: ticket.id,
         p_provider: ticket.provider, p_model: ticket.model, p_bound: ticket.boundMicrousd,
-      });
+      };
+      let { data, error } = await billingDatabase().rpc("makeborne_ai_operation_provider_begin", args);
+      if (error?.code === "42501") {
+        // A cached five-minute membership lease may end during a long build. No provider
+        // call was admitted. Verify with Whop, then retry the SAME ticket once through
+        // every SQL permission, fence, hold, cancellation and spending check again.
+        try { await refreshAccess(run.actor); }
+        catch (cause) { throw new SpendError((cause as { code?: string })?.code === "MEMBERSHIP_REQUIRED" ? "ACCESS_REQUIRED" : "SPEND_UNAVAILABLE", "Creation access could not be renewed; no provider call was sent."); }
+        ({ data, error } = await billingDatabase().rpc("makeborne_ai_operation_provider_begin", args));
+      }
       if (error) {
+        // Private operator evidence, without request content, credentials or raw database messages.
+        console.error(JSON.stringify({ event: "operation_spend_begin_failed", runId: run.id, provider: ticket.provider, code: String(error.code ?? "unknown").slice(0, 16) }));
         if (error.code === "MB499") throw new SpendError("CANCELLED", "This request was stopped.");
         if (error.code === "MB402") throw new SpendError("PROVIDER_LIMIT", "Today's AI capacity has been reached.");
         if (error.code === "MB423") throw new SpendError("PROVIDER_DISABLED", "AI generation is paused right now.");

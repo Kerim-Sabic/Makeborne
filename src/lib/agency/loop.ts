@@ -34,7 +34,7 @@ export type ModelRequest = { system: string; messages: unknown[]; tools: ToolDef
 export type ModelPort = (request: ModelRequest) => Promise<ModelTurn>;
 
 export type LoopFailure = "CANCELLED" | "MAX_TURNS" | "INVALID_TOOL_ARGUMENTS" | "UNSUPPORTED_CONFIGURATION" | "PROVIDER_FAILED" | "INPUT_CHANGED"
-  | "RUN_BUDGET" | "HOLD_EXPIRED" | "OVERRUN" | "PROVIDER_LIMIT" | "PROVIDER_DISABLED" | "SPEND_UNAVAILABLE";
+  | "RUN_BUDGET" | "HOLD_EXPIRED" | "OVERRUN" | "PROVIDER_LIMIT" | "PROVIDER_DISABLED" | "SPEND_UNAVAILABLE" | "ACCESS_REQUIRED";
 /** Thrown by a tool to end the step (for example, a bound input no longer matches its digest). */
 export class TaskStop extends Error { constructor(readonly code: LoopFailure, message: string) { super(message); } }
 export type LoopOutcome<R> = { ok: true; result: R; turns: number } | { ok: false; code: LoopFailure; turns: number };

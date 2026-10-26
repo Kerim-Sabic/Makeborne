@@ -22,7 +22,7 @@ export type SpendGate = {
 
 export type SpendStop = "RUN_BUDGET" | "HOLD_EXPIRED" | "OVERRUN" | "CANCELLED";
 export class SpendError extends Error {
-  constructor(readonly code: SpendStop | "PROVIDER_LIMIT" | "PROVIDER_DISABLED" | "SPEND_UNAVAILABLE", message: string) { super(message); }
+  constructor(readonly code: SpendStop | "PROVIDER_LIMIT" | "PROVIDER_DISABLED" | "SPEND_UNAVAILABLE" | "ACCESS_REQUIRED", message: string) { super(message); }
   /** Stops that end a run gracefully (keep finished work) rather than failing it. */
   get graceful() { return this.code === "RUN_BUDGET" || this.code === "HOLD_EXPIRED"; }
 }
