@@ -54,6 +54,11 @@ async function main(){
     await r.fulfill({headers:{'Content-Type':'text/event-stream'},body:events.map(e=>'data: '+JSON.stringify(e)+'\n\n').join('')});
    });
    if(mode==='recovery')await page.addInitScript(({ids})=>{sessionStorage.setItem(`makeborne:operation:v1:${ids.account}:${ids.workspace}:${ids.artifact}:build`,JSON.stringify({actionKey:'66666666-6666-4666-8666-666666666666',id:ids.operation}));},{ids});
+   // A short first website brief gets the free on-device design questions first (184df26). Skip all starts the build with the brief
+   // exactly as written; nothing reaches /api/build before that.
+   const send=async()=>{await page.getByRole('textbox',{name:'Message the builder'}).fill('Build my bespoke site');await page.getByRole('button',{name:'Send',exact:true}).click();
+    const skip=page.getByRole('button',{name:'Skip all',exact:true});await skip.waitFor();assert.equal(requests.filter(x=>x.path==='build').length,0,'the free questions come before any build request');
+    await skip.click();};
    await page.goto(base);
    // The maximum is on screen before Send in the Request details summary (13b1343); the full limit sentence and the measured range sit behind it.
    const details=page.locator('.lb-request-details > summary');await details.getByText('Up to 50 credits',{exact:true}).waitFor();await details.click();
@@ -61,7 +66,7 @@ async function main(){
    // A first build shows the measured range, never an invented one.
    await page.getByText('In testing, a first website at Medium used 16–45 credits (20 test websites, no AI images). You pay only for what is used.',{exact:true}).waitFor();
    if(mode==='fail'){
-    await page.getByRole('textbox',{name:'Message the builder'}).fill('Build my bespoke site');await page.getByRole('button',{name:'Send',exact:true}).click();
+    await send();
     const receipt=page.getByRole('region',{name:'Request receipt'});await receipt.waitFor();
     assert.match(await receipt.innerText(),/Charged\s+0 credits/);assert.match(await receipt.innerText(),/No new version/);
     await receipt.getByText('Nothing was saved, and this request was not charged.',{exact:true}).waitFor();
@@ -73,14 +78,14 @@ async function main(){
     await page.getByRole('button',{name:'Save reviewed draft',exact:true}).click();await page.getByText('Saved the reviewed draft as a new version. No additional generation credits were used.').waitFor();
     assert.equal(requests.filter(x=>x.path==='build').length,0);assert.equal(requests.filter(x=>x.method==='POST').length,1);assert.equal(await page.evaluate(()=>window.live),null);
    }else{
-    await page.getByRole('textbox',{name:'Message the builder'}).fill('Build my bespoke site');await page.getByRole('button',{name:'Send',exact:true}).click();
+    await send();
     if(mode==='chain'){
      await page.getByText('30 / 50 credits',{exact:true}).waitFor();
      // Receipt: the three settled step charges, every file the run touched, the checks that ran.
      const receipt=page.getByRole('region',{name:'Request receipt'});await receipt.waitFor();const text=await receipt.innerText();
      assert.match(text,/Charged\s+30 credits/);assert.match(text,/Saved as version 4/);assert.match(text,/3 files/);
      assert.match(text,/Project check passed/);assert.match(text,/Design review: 1 round/);assert.match(text,/Final render: no runtime errors/);
-     assert.doesNotMatch(text,/not charged/);const builds=requests.filter(x=>x.path==='build');assert.equal(builds.length,3);assert(builds[0].data.operation.actionKey);assert.equal(builds[1].data.operation.id,ids.operation);assert.equal(builds[1].data.operation.kind,'continuation');assert.equal(builds[2].data.operation.kind,'review');assert.equal(requests.filter(x=>x.method==='PATCH').length,0);assert.equal(await page.evaluate(()=>window.captures),2,'Final repair is captured again without another model request');
+     assert.doesNotMatch(text,/not charged/);const builds=requests.filter(x=>x.path==='build');assert.equal(builds.length,3);assert.equal(builds[0].data.message,'Build my bespoke site','skipped questions add nothing to the brief');assert(builds[0].data.operation.actionKey);assert.equal(builds[1].data.operation.id,ids.operation);assert.equal(builds[1].data.operation.kind,'continuation');assert.equal(builds[2].data.operation.kind,'review');assert.equal(requests.filter(x=>x.method==='PATCH').length,0);assert.equal(await page.evaluate(()=>window.captures),2,'Final repair is captured again without another model request');
     }else{
      await page.getByRole('button',{name:'Approve allowance & continue',exact:true}).waitFor();assert.equal(requests.filter(x=>x.method==='PATCH').length,0);assert.equal(requests.filter(x=>x.path==='build').length,mode==='cap'?1:2);
      await page.getByRole('button',{name:'Approve allowance & continue',exact:true}).click();await page.waitForFunction(()=>document.querySelector('textarea')&&!document.querySelector('textarea').disabled);
