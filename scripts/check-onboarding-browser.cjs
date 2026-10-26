@@ -86,6 +86,9 @@ async function main() {
       await page.goto(`${base}/?view=studio`);
       await welcome(page).waitFor({ timeout: 15000 });
       for (const path of ["Make my first website", "Find my first 10 leads", "Write a book or deck"]) await page.getByRole("button", { name: new RegExp(path) }).waitFor();
+      // Pricing lists print-ready books under "What isn't ready yet"; the welcome must not promise them.
+      assert.match(fs.readFileSync("src/lib/billing/plans.ts", "utf8"), /Print-ready books: books export for reading on screen/);
+      assert.doesNotMatch(await welcome(page).innerText(), /print-ready/i, "no print-ready promise");
       await page.getByRole("button", { name: /look around first/ }).click();
       await welcome(page).waitFor({ state: "detached" });
       assert.match(await pill(page).innerText(), /Getting started\s+0\/6 done/);
