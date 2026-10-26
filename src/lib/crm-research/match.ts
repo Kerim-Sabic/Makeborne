@@ -60,8 +60,10 @@ export function keysOf(record: MatchRecord): Keys {
 /** Why `candidate` looks like `other` (empty when it doesn't). */
 export function matchReasons(candidate: MatchRecord, other: MatchRecord): DuplicateReason[] {
   const a = keysOf(candidate), b = keysOf(other), out: DuplicateReason[] = [];
-  if (a.domain && (a.domain === b.domain || a.domain === b.emailDomain)) out.push({ kind: "domain", text: `Same website (${a.domain})` });
-  else if (b.domain && b.domain === a.emailDomain) out.push({ kind: "domain", text: `Same website (${b.domain})` });
+  // Say which key matched: a website and an email address at that domain are not "the same website".
+  if (a.domain && a.domain === b.domain) out.push({ kind: "domain", text: `Same website (${a.domain})` });
+  else if (a.domain && a.domain === b.emailDomain) out.push({ kind: "domain", text: `Their email uses this website's domain (${a.domain})` });
+  else if (b.domain && b.domain === a.emailDomain) out.push({ kind: "domain", text: `Email at this client's website domain (${b.domain})` });
   if (a.email && a.email === b.email) out.push({ kind: "email", text: `Same email (${a.email})` });
   else if (a.emailDomain && a.emailDomain === b.emailDomain && !out.some(item => item.kind === "domain")) out.push({ kind: "email_domain", text: `Email at the same domain (${a.emailDomain})` });
   const phone = a.phones.find(item => b.phones.includes(item));
