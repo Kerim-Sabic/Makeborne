@@ -25,6 +25,7 @@ import { useCreationAccount, type CreationAccount } from "./use-creation-account
 import GettingStarted from "./onboarding/getting-started";
 import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import SiteBadgeSetting from "./site-badge-setting";
+import AccountDataRights, { AccountDeletionNotice } from "./account-data-rights";
 import StorageLabel from "./storage-label";
 import { SETTINGS_STORAGE } from "@/lib/settings-storage";
 import { createClient } from "@/lib/supabase/client";
@@ -870,6 +871,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
             tabIndex={-1}
             className={`workspace-content ${tab === "projects" ? libraryFirst ? "returning-workspace" : "fresh-workspace" : ""}`}
           >
+            {composerAccount.accountId && tab !== "settings" && <AccountDeletionNotice accountId={composerAccount.accountId} onOpenSettings={() => navigate("settings")} />}
             {tab === "projects" && (
               <>
                 {!accountRoute?.artifactId && <>
@@ -1165,6 +1167,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     </button>
                   </section>
                   <SiteBadgeSetting />
+                  <AccountDataRights accountId={composerAccount.accountId} />
                 </div>
               </>
             )}
