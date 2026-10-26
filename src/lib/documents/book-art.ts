@@ -35,6 +35,13 @@ export function pagesWanted(book: Book): { target: string; kind: BookPageKind }[
   return ["cover", ...book.chapters.map(chapter => chapter.id)].flatMap(target => { const kind = pageKind(book, target); return kind ? [{ target, kind }] : []; });
 }
 
+/** Budget-deferred pages remain resumable; an explicitly checked fallback is terminal. */
+export function pendingBookPages(book: Book): string[] {
+  return pagesWanted(book).filter(({ target }) => !verifiedPage(book, target)
+    && !book.art?.renders.some(render => render.target === target && render.outcome === "fallback"
+      && render.verified === pageTextKey(book, target) && (render.shape ?? "portrait") === bookShape(book))).map(page => page.target);
+}
+
 /** The chapter label as the opener shows it (chapterLabel without importing the renderer). */
 function label(book: Book, index: number) {
   const ordinal = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];

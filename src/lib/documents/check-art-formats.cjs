@@ -13,7 +13,7 @@ const { composeSlide } = require("./slide-scene.ts");
 const { ART_COMPOSITION, artPrompt, compareSlideText, gateText, slideFurniture, textKey, verifiedArt } = require("./slide-art.ts");
 const { colourName, displayLines, quotedLines, tailBook, tailSlide } = require("./art-direction.ts");
 const formats = require("./art-formats.ts");
-const { bookArtPrompt, pageKind, pageText, pageTextKey, pagesWanted, verifiedPage } = require("./book-art.ts");
+const { bookArtPrompt, pageKind, pageText, pageTextKey, pagesWanted, pendingBookPages, verifiedPage } = require("./book-art.ts");
 const { bookHtml, bookTrim, bookPagePx } = require("./render-book.ts");
 const { deckHtml, deckPage } = require("./render-deck.ts");
 const { deckPptx } = require("./pptx.ts");
@@ -284,6 +284,21 @@ const deckWith = (art = {}) => {
     assert.equal(emptyDocument("book", "x", undefined, { imagePlan: { placement: "none", style: "auto" }, bookArt: true }).art, undefined, "no images: no generated pages");
   });
 
+  await check("missing generated book pages stay resumable; checked fallbacks expire with their words or shape", async () => {
+    const editor = pictureBook(), wanted = pagesWanted(editor.doc);
+    assert.deepEqual(pendingBookPages(editor.doc), wanted.map(page => page.target));
+    for (const page of wanted) editor.recordPageRender({ target: page.target, kind: page.kind, outcome: "fallback", attempts: 2, problems: ["checked fallback"], verified: pageTextKey(editor.doc, page.target), shape: editor.doc.shape });
+    assert.deepEqual(pendingBookPages(editor.doc), []);
+    editor.doc.title = "A changed title"; assert.ok(pendingBookPages(editor.doc).includes("cover"));
+    editor.doc.shape = "square"; assert.equal(pendingBookPages(editor.doc).length, wanted.length);
+    const saved = process.env.MAKEBORNE_BOOK_IMAGE_PAGES; process.env.MAKEBORNE_BOOK_IMAGE_PAGES = "on";
+    try {
+      const model = fakeAnthropic(Array.from({ length: 3 }, () => [toolUse("finish", { summary: "Text ready." })]));
+      const result = await run(pictureBook(), model, fakeImages());
+      assert.equal(result.finished, false); assert.match(result.summary, /generated pages remain/);
+      assert.ok(model.log.streams.length <= 3, "completion is deferred without hidden retries");
+    } finally { if (saved === undefined) delete process.env.MAKEBORNE_BOOK_IMAGE_PAGES; else process.env.MAKEBORNE_BOOK_IMAGE_PAGES = saved; }
+  });
   await check("generated book pages are off unless MAKEBORNE_BOOK_IMAGE_PAGES=on: a book is typeset as before (no page tools, no page prompt, no page render, new books get no art) even with images open; on, they run", async () => {
     const pagesLog = async () => {
       const editor = pictureBook(), images = fakeImages();

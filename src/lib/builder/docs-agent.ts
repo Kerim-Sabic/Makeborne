@@ -22,7 +22,7 @@ import { composeSlide } from "../documents/slide-scene";
 import { ART_SAFE_MARGIN_PCT, LEGACY_CANVAS, artAlt, deckAspect, gateText, platePrompt, artPrompt, artTextIssues, artPlaceholders, compareSlideText, describeComparison, slideClaimIssues, slideNumerals, textKey, verifiedArt, type ArtCanvas } from "../documents/slide-art";
 import { ART_QUALITY_TEXT, BOOK_SHAPE_SPECS, DECK_ASPECT_SPECS, artCellOrLower, expectedRenderUsd } from "../documents/art-formats";
 import { bookImagePlanText, bookPlan, plannedBookImages } from "../documents/book-images";
-import { bookArtPrompt, bookShape, pageAlt, pageArtIssues, pageKind, pageText, pageTextKey, verifiedPage } from "../documents/book-art";
+import { bookArtPrompt, bookShape, pageAlt, pageArtIssues, pageKind, pageText, pageTextKey, pendingBookPages, verifiedPage } from "../documents/book-art";
 
 /** Events streamed to the chat. Shares the website builder's text/status/
  * usage/done/error shapes, plus live document snapshots. */
@@ -227,7 +227,8 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     : artWanted ? "Full-image slides are not available here (no text-capable image model is enabled). Design editable text slides; say so in your summary."
     : kind === "deck" && !artEnabled && deck()?.art?.mode === "image" ? "Full-image slides are not offered yet. Design editable text slides (no art fields); say so in your summary, without blaming the client's choice."
     : `Image generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${imageLimit > policy.maxImages ? `, about one per ${kind === "deck" ? "slide" : "chapter plus the cover"}` : ""})` : "unavailable — design without images"}.`;
-  const pagesLine = bookArt && imageLimit > 0 ? ` Full-image pages: on. The cover${isPicture() ? " and every chapter's spread" : " and every chapter opener"} are generated with their words by render_pages (the book's pages are ${BOOK_SHAPE_SPECS[shapeOfBook].label}).` : bookArtWanted ? " Full-image pages are not available this run: the cover and openers are typeset; say so in your summary." : "";
+  const pendingPagesAtStart = bookArt && bookDoc() ? pendingBookPages(bookDoc()!) : [];
+  const pagesLine = bookArt && imageLimit > 0 ? ` Full-image pages: on. The cover${isPicture() ? " and every chapter's spread" : " and every chapter opener"} are generated with their words by render_pages (the book's pages are ${BOOK_SHAPE_SPECS[shapeOfBook].label}). Pending targets: ${pendingPagesAtStart.join(", ") || "none"}. On continuation, render only pending targets; retain already verified pages unless the user requested changes.` : bookArtWanted ? " Full-image pages are not available this run: the cover and openers are typeset; say so in your summary." : "";
   const planLine = run.editor.doc.kind === "book" ? `\n\n${bookImagePlanText(run.editor.doc)}${imageLimit > 0 ? ` Up to ${imageLimit} image generations this run, regenerations included.` : bookPlan(run.editor.doc).placement === "none" ? "" : " Image generation is unavailable this run: design without images and say so in your summary."}${pagesLine}` : "";
   const messages: BetaMessageParam[] = [{ role: "user", content: [
     ...run.attachments,
@@ -446,7 +447,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     pendingPages.delete(target);
     const book = bookDoc(), kindOfPage = book ? pageKind(book, target) : null;
     if (!book || !kindOfPage) return;
-    run.editor.recordPageRender({ target, kind: kindOfPage, attempts, outcome: "fallback", problems: problems.slice(0, 6).map(item => item.slice(0, 300)) });
+    run.editor.recordPageRender({ target, kind: kindOfPage, attempts, outcome: "fallback", verified: pageTextKey(book, target), shape: bookShape(book), problems: problems.slice(0, 6).map(item => item.slice(0, 300)) });
     record({ target: "image", id: pageName(target), attempt: attempts, outcome: "fallback", problems });
     run.emit({ type: "document", document: run.editor.doc });
   }
@@ -725,6 +726,11 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
     finished = false;
   }
   if (art && artChoice?.downgraded) summary = `${summary}${summary ? "\n\n" : ""}Rendered at ${ART_QUALITY_TEXT[artChoice.chosen].label} quality: ${ART_QUALITY_TEXT[wantedQuality].label} is not available for this slide shape yet.`;
+  const pendingBook = bookArt && bookDoc() ? pendingBookPages(bookDoc()!) : [];
+  if (pendingBook.length) {
+    summary = `The book is saved, but ${pendingBook.length} generated page${pendingBook.length === 1 ? "" : "s"} remain (${pendingBook.join(", ")}). Continue to finish them within the approved request limit. Until then, those pages use the readable typeset fallback.${summary ? `\n\n${summary}` : ""}`;
+    finished = false;
+  }
   return { summary, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, stopped: spend.stopped, checks };
 }
 
