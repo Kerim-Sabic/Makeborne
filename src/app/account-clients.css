@@ -484,6 +484,9 @@
 .lf-progress p { margin: 0; font-size: 13px; color: #6b6378; }
 .lf-progress .button { justify-self: start; }
 .lf-error { margin: 0; color: #a83c35; font-size: 13px; }
+.lf-closed { display: grid; gap: 10px; padding: 14px 16px; border-radius: 12px; border: 1px solid #ecdcb8; background: #fffaf0; color: #5e4a1c; }
+.lf-closed p { margin: 0; font-size: 13px; line-height: 1.6; }
+.lf-closed-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .lf-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .lf-summary strong { display: block; font-size: 17px; font-weight: 600; color: #221c30; }
 .lf-summary span { font-size: 13px; color: #766f81; }

@@ -210,3 +210,48 @@ All are in the session scratchpad `journey-audit/` (not committed). The prefix m
 - `E01–E44`: CRM upgrade panels, check card, draft, facts, do-not-contact.
 - `F01–F13`: settings, account menu, billing, credit controls, sign out/in.
 - `M-*-390` and `M-*-375`: phone sweep of studio, projects, editor, clients, client, settings, billing, chat, help, styles, checklist and navigation.
+
+## Round 2: remaining Claude-owned issues (26 October 2026)
+
+Same worktree, branch and isolated stack as above; head before this round 2df6fc8. Each fix is its own commit with a check that fails before it and passes after. Screenshots before and after at 1440 and 390 are in the session scratchpad `journey-audit/round2/` (`before-*` and `after-*`, 47 files). They were taken against `next build --webpack` + `next start` of each head, browsed as `localhost`, with AI off (all provider keys blank).
+
+| Commit | Ranked issue | What changed | Regression check (failed before) |
+|---|---|---|---|
+| **7aa6b16** | 6. Unexplained "Set up client workspace" | "Find my first 10 leads" (welcome or checklist) sets up the client workspace and opens the lead finder in the same step. The empty Clients page says in one line that the workspace is set up with the first client; "Add your first client" or "Find leads" does both in one click. Visiting Clients creates nothing; an account with a workspace never gets another. | `scripts/check-first-clients-browser.cjs` (mounted AccountClients + real LeadFinder): 3/4 failed before |
+| **de81d6d** + **cb27801** | 1. AI-only steps can't be completed while AI is paused | New read-only `GET /api/assistants`: whether the lead finder and the advisors can start, with the same first gates as their paid routes (connected, priced models, provider spending open). It reserves nothing, calls no provider and doesn't read the account. Read once per page together with `GET /api/build`. **Lead finder:** a notice shows above the form before anything is typed; the search can't be submitted; there's no price line; "Add a client" and "Import CSV" are offered. **Checklist:** "Find your first 10 leads" becomes "Add your first clients" (done with the first client; guide: Import from CSV). "Ask an advisor" says "Opens when AI is switched back on", has no button and isn't counted (0/5, "1 step opens when AI does"). **Welcome:** "Add my first clients" instead of the lead search; the website path no longer promises a live build. Unknown availability changes nothing. | `check-onboarding.cjs` (4 new), `check-onboarding-browser` (2 new paused scenarios), `check-first-clients-browser` (3 new) |
+| **c6ffbb6** | 3. Empty editor Preview for content-only projects | When no build can start, a starting draft with any saved block shows the same layout preview the review page uses (`AccountPreview` with the authorized artwork scope). One note sits above it: "Nothing has been built yet. This is a layout preview of your saved content, the same view a client review link shows." Only a draft with no blocks keeps "starts here". With the builder ready, a new project still invites the first build. There's no iframe, no scripts and no new asset path; the source preview, its hydration and its sandbox are untouched. | `scripts/check-editor-journey-browser.cjs` (mounted CloudEditor + real AccountPreview): 4/6 failed before; `check-saved-preview.cjs` (new) |
+| **2a01f30** | 2. Projects can't be renamed | Rename is in the library card menu ("Rename…" / "Name this project…") and in the project details under the editor title. Same API and semantics as `feature/library-redesign`: `library-rename.ts` and `library-card-actions.tsx` are ported **byte-for-byte**, and so is the card-meta rename-only state (a600f53). A rename saves the current version again with only `content.title` changed, through the existing version route and its `expectedVersion` guard (no new route, no project PATCH). Owners and editors only; reviewers get no menu and no Rename. The name is validated (not empty, changed, 200 characters at most). A rename alone keeps the card **Live**. The editor waits until edits, saves and builds have settled, and says why. **Real app:** renaming "A website for Saffron Table, a small Lebanese family" to "Saffron Table" saved Version 2, and the card still showed **Live** (live version 1). | `src/lib/projects/check-project-rename.cjs` (5), `scripts/check-library-rename-browser.cjs` (4/5 failed before), `check-editor-journey-browser` (rename scenarios) |
+| **f38cd63** | 9. Review dates UTC vs local | The client page ("Link open until …") and the owner panel ("expires …") show the reader's own local time with the zone named, e.g. "9 Nov 2026, 01:59 CET". The server and hydration render the same moment in UTC, also named; the browser switches after the page's own unsent-feedback restores. A `useSyncExternalStore` version reset text typed before hydration, which `check-review-draft-restore-browser` caught. | `check-client-review.cjs` (new); draft-restore 4/4 |
+| **88ee9ba** | 10. Two controls named "Create" | The mode toggle is now named "Create mode" / "Plan mode" (same visible words, plus a tooltip). The submit button stays "Create this project", which the e2e funnel and generation checks use. | `check-onboarding-browser` `composer-create-controls-have-distinct-names` |
+
+**Files outside the usual Claude areas, for Codex's review:**
+- **Not touched:** billing, auth, publishing/provider code, mail (`src/components/mail/*`) and flags.
+- **New route:** `src/app/api/assistants/route.ts` only imports the finder's and chat's model constants and the existing availability helpers. The finder route (`leads/find/route.ts`) and credit charging are unchanged; the POST routes still decide every request.
+- **card-meta route:** the library-redesign rename-only hunk.
+
+**Merge notes for `feature/library-redesign`:**
+- `library-rename.ts` and `library-card-actions.tsx` are identical, so they merge cleanly.
+- `library-card-meta.ts` and the card-meta route carry the same a600f53 hunks; expect at most trivial overlaps.
+- `account-projects.tsx` will conflict, since that branch rewrote it. Take library-redesign's version; it already has rename.
+- `project-rename.css` duplicates library-redesign's menu and dialog rules. Keep one copy.
+- `check-library-previews-browser.cjs` has a one-selector change that the redesign's rewrite supersedes.
+
+**Not changed, for Codex or the owner:**
+- The advisor page itself (`/chat`) still says "isn't connected" only after Send. The checklist no longer sends people there while advisors can't answer; `useAssistantAvailability()` can give `/chat` the same up-front notice.
+- After a rename, the editor's own version facts still say "Newer saved changes aren't live yet". That is true for the site's default title, which updates on the next publish. Changing it would touch `src/lib/hosting/version-facts.ts` (publishing). The library card follows the library-redesign rule.
+- "Connect your email" still can't complete without production mail (rank 5, Codex).
+
+**Checks on the final head (cb27801):**
+- `npm test`: **188/188** harnesses (`check-project-rename` is new).
+- `tsc --noEmit`: clean.
+- Full `eslint .`: clean.
+- `next build --webpack`: exit 0, with no cloud Supabase URL in the build.
+- Browser (Chromium):
+  - New and changed: `check-first-clients-browser` 8/8, `check-onboarding-browser` 9/9, `check-editor-journey-browser` 11/11, `check-library-rename-browser` 5/5.
+  - Existing ones that mount the touched code: `check-editor-header-browser` 25/25, `check-library-previews-browser` 15/15, `check-review-draft-restore-browser` 4/4, `check-trust-copy-browser` 6/6, `check-client-review-browser` pass, `check-lead-profile-layout-browser` 6/6, `check-command-palette-browser` 5/5, `check-composer-send-browser` 2/2.
+- Real app (local): no console or page errors on the library, the rename or the anonymous review page.
+
+**Local data left by this round** (isolated stack only):
+- The owner's project is now "Saffron Table" (Version 2).
+- There is one more review link.
+- Accounts fresh3 and mobile each have an empty "My workspace", created by the add-client path.

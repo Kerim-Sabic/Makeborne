@@ -35,11 +35,14 @@ import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
 import ProjectHeader, { saveStateOf } from "./project-header";
 import { newVisualEditSession, type VisualEditSession } from "@/lib/builder/visual-edit-session";
+import ProjectRenameDialog from "./project-rename-dialog";
+import { renamedContent, renameSummary } from "@/lib/projects/library-rename";
+import { isPlaceholderTitle } from "@/lib/projects/project-title";
 import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
 import { FEATURES_OFF, parseBuilderFeatures, type BuilderFeatures } from "@/lib/builder/features";
 import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
-import { choosePreview, editorEntry, hasBuilderSource, savedFormat } from "@/lib/cloud/saved-preview";
+import { choosePreview, editorEntry, hasBuilderSource, savedFormat, startingDraftHasContent } from "@/lib/cloud/saved-preview";
 import { BUILDER_OFF, BUILDER_WAITING_COPY, parseBuilderAvailability, type BuilderAvailability } from "@/lib/builder/availability";
 import "@/app/live-builder.css";
 import { captureProjectPublication, captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
@@ -1261,6 +1264,10 @@ export function CloudEditor({
   const [visualSession, setVisualSession] = useState<VisualEditSession>(newVisualEditSession);
   // The last click-to-edit change: the edit revision it made and, once saved, the version it saved as.
   const [visualSave, setVisualSave] = useState<{ revision: number; version: number | null } | null>(null);
+  // The project's name: the library's copy until a rename here saves a new one.
+  const [renamedTitle, setRenamedTitle] = useState<string | null>(null);
+  const title = renamedTitle ?? artifact.title;
+  const [renaming, setRenaming] = useState(false);
   const load = useCallback(async () => {
     setBusy(true);
     setVisualSave(null);
@@ -1681,6 +1688,20 @@ export function CloudEditor({
       {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
     </>}
   </section>;
+  // Renaming saves the current saved version again with only its title changed (the library's rename, same route and
+  // expectedVersion guard), so it waits for on-screen edits, saves and builds to settle. Reviewers can't rename.
+  const savedVersion = versions.find(version => version.number === expectedVersion) ?? null;
+  const renameBlocked = dirty || busy || conflict || uncertainSave || recovery || lockChangePending || live ? "Save or resolve your current edits before renaming."
+    : !savedVersion ? "Renaming needs the saved version to be loaded." : null;
+  async function renameProject(name: string) {
+    if (!savedVersion || renameBlocked) throw new Error(renameBlocked ?? "Renaming needs the saved version to be loaded.");
+    const result = await api<{ artifact: CloudArtifact; version: ArtifactVersion }>(`/api/cloud/workspaces/${workspaceId}/artifacts/${artifact.id}/versions`, {
+      expectedVersion, content: renamedContent(savedVersion.content, name), style: savedVersion.style, assetIds: savedVersion.assetIds, changeSummary: renameSummary(name),
+    }, "POST");
+    setRenamedTitle(result.artifact.title); setRenaming(false);
+    await load();
+    notify(`Renamed to “${result.artifact.title}”. Saved as Version ${result.artifact.currentVersion}.`);
+  }
   const saveState = saveStateOf({ loaded: Boolean(content), reviewer: role === "reviewer", dirty, busy, paused: savePaused, uncertain: uncertainSave, conflict, recovery: Boolean(recovery) });
   const kindName = artifact.kind === "website" ? "Website" : artifact.kind === "book" ? "Book" : "Presentation";
   const kindLabel = format === "website-design" ? "Website · static design" : format === "outline" ? `${kindName} outline` : format === "starting" ? `New ${kindName.toLowerCase()}` : kindName;
@@ -1689,7 +1710,8 @@ export function CloudEditor({
     <section className="cloud-editor workspace-workbench cloud-workbench project-chrome">
       <a className="studio-skip-link" href="#editor-stage" onClick={skipTo("stage")}>Skip to the preview</a>
       <a className="studio-skip-link" href="#editor-stage" onClick={skipTo("message")}>Skip to the message box</a>
-      <ProjectHeader title={artifact.title} kindLabel={kindLabel} version={expectedVersion} save={saveState} onSave={() => void save()}
+      <ProjectHeader title={title} kindLabel={kindLabel} version={expectedVersion} save={saveState} onSave={() => void save()}
+        rename={role !== "reviewer" ? { open: () => setRenaming(true), label: isPlaceholderTitle(title) ? "Name this project" : "Rename project", blocked: content ? renameBlocked : "Opening the project…" } : undefined}
         onBack={() => { if (!dirty || window.confirm("Leave this unsaved draft? Download it first if you need to preserve changes.")) back(); }}
         details={artifact.kind === "website" ? <>
           <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} preview={previewFact} />
@@ -1705,6 +1727,8 @@ export function CloudEditor({
             {(dirty || busy || conflict || uncertainSave || !!recovery) && <p className="editor-menu-note">Downloads the saved version once saving has finished.</p>}
           </div>}
         </>} />
+      {renaming && savedVersion && <ProjectRenameDialog kind={artifact.kind} title={title} nextVersion={expectedVersion + 1} ownDocumentTitle={Boolean(savedVersion.content.document)}
+        onRename={renameProject} onClose={() => setRenaming(false)} onLoadLatest={() => { setRenaming(false); void load(); }} />}
       <div className={`workbench-layout${chatHidden ? " chat-hidden" : ""}`}>
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
@@ -1864,7 +1888,10 @@ export function CloudEditor({
             {format === "website-design" ? "This website is saved as a static design." : `This ${artifact.kind} is saved as an outline of its text.`} {editor.instruction}{" "}<button type="button" className="cloud-workbench-format-link" onClick={() => setView("edit")}>Open {editor.label}</button>
             {" "}A build in the chat saves a new {artifact.kind === "website" ? "website project" : `designed ${artifact.kind}`} as the next version; this version stays in History.
           </p>}
-          {preview === "start-draft" ? <div className="cloud-workbench-empty">
+          {preview === "start-draft" && startingDraftHasContent(content) && <p className="cloud-workbench-format cloud-workbench-start-note" role="note">
+            Nothing has been built yet. This is a layout preview of your saved content, the same view a client review link shows. {editor.instruction}{" "}<button type="button" className="cloud-workbench-format-link" onClick={() => setView("edit")}>Open {editor.label}</button>
+          </p>}
+          {preview === "start-draft" && !startingDraftHasContent(content) ? <div className="cloud-workbench-empty">
             <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
             <h3>Your {artifact.kind} starts here</h3>
             <p>{project?.brief.trim() ? "Your brief is saved. " : ""}Your editable draft will appear here. {role === "reviewer" ? "You have view access to this project." : "You can add your own content in the editor."}</p>

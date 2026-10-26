@@ -203,10 +203,14 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const [palette, setPalette] = useState(false);
   const [finding, setFinding] = useState(false);
   const [finderSeed, setFinderSeed] = useState<LeadFinderSeed | null>(null);
+  // A requested action (welcome, checklist) that needs the client workspace: a brand-new account has none yet,
+  // so it is set up as part of the same request instead of asking for a separate "Set up" click.
+  const [setupRequested, setSetupRequested] = useState(false);
   // Requests from the getting-started checklist: open the lead finder, or show Email.
   useEffect(() => {
     const apply = (request: ClientsRequest | null) => {
-      if (request?.action === "find-leads") { setLayout("list"); setFinderSeed(request.seed ?? null); setFinding(true); }
+      if (request?.action === "find-leads") { setLayout("list"); setFinderSeed(request.seed ?? null); setFinding(true); setSetupRequested(true); }
+      else if (request?.action === "add-client") { setLayout("list"); setAdding(true); setSetupRequested(true); }
       else if (request?.action === "email") { setLayout("email"); try { window.localStorage.setItem(LAYOUT_KEY, "email"); } catch { /* storage unavailable */ } }
     };
     const timer = window.setTimeout(() => apply(takeClientsAction()), 0);
@@ -308,19 +312,34 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
       setMessage(cause instanceof Error ? cause.message : "Client could not be saved.");
     } finally { writeLock.current = false; savingChanged(false); if (version === generation.current) setBusy(false); }
   }
+  /** Creates the account's first workspace (as the first project would) and opens it. True once it is shown. */
   async function createWorkspace() {
-    if (writeLock.current || workspaces.length) return;
-    if (getPendingCloudWrites(accountId).some(item => item.path === "/api/workspaces")) { setMessage("Resolve your unconfirmed workspace request below before creating another."); return; }
+    if (writeLock.current || workspaces.length) return false;
+    if (getPendingCloudWrites(accountId).some(item => item.path === "/api/workspaces")) { setMessage("Resolve your unconfirmed workspace request below before creating another."); return false; }
     writeLock.current = true; savingChanged(true); setBusy(true); setMessage("");
     const version = ++generation.current;
     try {
       const result = await api<{ workspace: CloudWorkspace }>("/api/workspaces", { name: "My workspace" });
-      if (version !== generation.current) return;
+      if (version !== generation.current) return false;
       setWorkspaces([result.workspace]);
       const data = await api<Snapshot>(`/api/cloud/workspaces/${result.workspace.id}`);
-      if (version === generation.current) { snapshotWorkspace.current = result.workspace.id; setSnapshot(data); }
-    } catch (cause) { if (version === generation.current) setMessage(cause instanceof Error ? cause.message : "Could not prepare your workspace."); }
+      if (version === generation.current) { snapshotWorkspace.current = result.workspace.id; setSnapshot(data); return true; }
+      return false;
+    } catch (cause) { if (version === generation.current) setMessage(cause instanceof Error ? cause.message : "Could not prepare your workspace."); return false; }
     finally { writeLock.current = false; savingChanged(false); setBusy(false); }
+  }
+  // Once the account is known to have no workspace, a requested action sets one up in the same step.
+  const needsWorkspace = !busy && !snapshot && !workspaces.length && !message && !requestedWorkspace;
+  useEffect(() => {
+    if (!setupRequested || !needsWorkspace) return;
+    const timer = window.setTimeout(() => { setSetupRequested(false); void createWorkspace(); }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- createWorkspace is re-created each render; the request and the loaded state decide.
+  }, [setupRequested, needsWorkspace]);
+  /** First client from an empty account: one click sets up the workspace and opens the form (or the lead finder). */
+  async function startClients(next: "add" | "find") {
+    if (!(await createWorkspace())) return;
+    if (next === "add") { chooseLayout("list"); setAdding(true); } else setFinding(true);
   }
   const canEdit = snapshot?.workspace.role !== "reviewer";
   const summary = (client: CloudClient) => client.outreachSummary ?? client.outreach;
@@ -404,7 +423,9 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const tabs: { id: ClientView; label: string }[] = [{ id: "outreach", label: "Outreach & activity" }, { id: "email", label: "Email" }, { id: "details", label: "Contact details" }, { id: "brand", label: "Brand & client access" }, { id: "projects", label: "Projects" }, { id: "reviews", label: "Client reviews" }];
 
   // The lead finder opens from the list header, the command palette, the checklist, or "Find more like this" on a client.
-  const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }} onAdded={(count, tag) => {
+  // While lead finding can't start, the finder offers the paths that work without AI.
+  const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }}
+    instead={canEdit ? { add: () => { setFinding(false); setFinderSeed(null); if (clientId) backToList(); chooseLayout("list"); setAdding(true); }, import: clientId ? undefined : () => { setFinding(false); setFinderSeed(null); importInput.current?.click(); } } : undefined} onAdded={(count, tag) => {
     setFinding(false); setFinderSeed(null); if (clientId) backToList(); chooseLayout("list"); if (tag) setTagFilter(tag); setRefreshKey(key => key + 1); refreshOnboarding();
     setMessage(`Added ${count} new lead${count === 1 ? "" : "s"} to your clients${tag ? `, tagged “${tag}”` : ""}. Select them and choose “Write personal emails” to reach out.`);
   }} /> : null;
@@ -526,7 +547,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
           </div>}
         </div>;
       })}</div>
-      {!busy && !directory.busy && !directory.error && !clients.length && !message && <div className="ac-empty"><Users size={28} /><h2>{snapshot ? (filtered ? "No clients match this view." : "A place for your next client.") : "Start your client workspace."}</h2><p>{snapshot ? (filtered ? "Adjust your filters, or add a client." : "Add a client, or import your list from a CSV file.") : "Keep client relationships and their projects saved to your account."}</p>{snapshot && filtered && <button className="button secondary" onClick={() => { setSearch(""); setStage("All stages"); setFollowUp("all"); }}>Clear filters</button>}{snapshot && !filtered && canEdit && <button className="button secondary" onClick={() => importInput.current?.click()}><Upload size={15} /> Import CSV</button>}{!snapshot && !workspaces.length && <button onClick={() => void createWorkspace()} className="button primary">Set up client workspace</button>}</div>}
+      {!busy && !directory.busy && !directory.error && !clients.length && !message && <div className="ac-empty"><Users size={28} /><h2>{snapshot ? (filtered ? "No clients match this view." : "A place for your next client.") : "A place for your first client."}</h2><p>{snapshot ? (filtered ? "Adjust your filters, or add a client." : "Add a client, or import your list from a CSV file.") : "Clients are saved to your account. Your client workspace is set up when you add the first one."}</p>{snapshot && filtered && <button className="button secondary" onClick={() => { setSearch(""); setStage("All stages"); setFollowUp("all"); }}>Clear filters</button>}{snapshot && !filtered && canEdit && <button className="button secondary" onClick={() => importInput.current?.click()}><Upload size={15} /> Import CSV</button>}{!snapshot && !workspaces.length && <div className="button-row"><button type="button" onClick={() => void startClients("add")} className="button primary"><Plus size={16} /> Add your first client</button><button type="button" onClick={() => void startClients("find")} className="button secondary"><Sparkles size={15} />Find leads</button></div>}</div>}
       {tagFilter && <p className="small-note" aria-live="polite">{tagged?.tag === tagFilter ? `${clients.length} client${clients.length === 1 ? "" : "s"} tagged “${tagFilter}”` : "Loading tagged clients…"}</p>}
       {!tagFilter && directory.data?.pagination.nextOffset != null && !directory.stale && <button className="button secondary small" disabled={directory.busy} onClick={() => void directory.more()}>Load more clients</button>}
       {!tagFilter && directory.data && <p className="small-note" aria-live="polite">{directory.stale ? "Updating…" : `Showing ${clients.length} of ${directory.data.pagination.total} matching clients · Search and filters cover the whole workspace.`}</p>}

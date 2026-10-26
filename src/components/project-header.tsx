@@ -1,6 +1,6 @@
 "use client";
 import type { ReactNode } from "react";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, Eye, Globe2, LoaderCircle, MoreHorizontal } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Eye, Globe2, LoaderCircle, MoreHorizontal, Pencil } from "lucide-react";
 import EditorMenu from "./editor-menu";
 import "@/app/editor-chrome.css";
 
@@ -48,7 +48,7 @@ function SaveStatus({ state, version, onSave }: { state: SaveState; version: num
   </div>;
 }
 
-export default function ProjectHeader({ title, kindLabel, version, save, onSave, onBack, details, publish, actions }: {
+export default function ProjectHeader({ title, kindLabel, version, save, onSave, onBack, details, publish, actions, rename }: {
   title: string;
   /** Plain kind of the open project, e.g. "Website" or "Book outline". */
   kindLabel: string;
@@ -62,6 +62,8 @@ export default function ProjectHeader({ title, kindLabel, version, save, onSave,
   publish?: { open: () => void; current: boolean; description: string };
   /** Less frequent project actions (History, Client review, downloads). */
   actions: ReactNode;
+  /** Renaming, in the project details (the title's own popover), for owners and editors; reviewers get none. `blocked`: why it can't start now (unsaved edits, a build running). */
+  rename?: { open: () => void; label: string; blocked: string | null };
 }) {
   return <header className="project-header" data-editor-chrome="header">
     <button type="button" className="ph-icon" aria-label="Back to projects" title="Back to projects" onClick={onBack}><ArrowLeft size={18} /></button>
@@ -72,6 +74,10 @@ export default function ProjectHeader({ title, kindLabel, version, save, onSave,
         {/* Websites list saved, checked and live versions in `details`; other kinds name the saved version here. */}
         <p className="ph-details-kind">{details ? kindLabel : `${kindLabel} · ${version < 1 ? "not saved yet" : `saved version ${version}`}`}</p>
         {(!details || save !== "saved") && <p className="ph-details-save" data-tone={SAVE_COPY[save].tone}>{SAVE_COPY[save].detail(version)}</p>}
+        {rename && <div className="ph-details-rename">
+          <button type="button" className="editor-menu-item" disabled={Boolean(rename.blocked)} aria-describedby={rename.blocked ? "ph-rename-blocked" : undefined} onClick={rename.open}><Pencil size={15} aria-hidden="true" />{rename.label}</button>
+          {rename.blocked && <p id="ph-rename-blocked" className="editor-menu-note">{rename.blocked}</p>}
+        </div>}
         {details}
       </div>
     </EditorMenu>

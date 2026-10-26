@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Offline saved-content compatibility checks: the editor preview follows the saved format, not the builder's availability. */
 const fs = require("node:fs"), path = require("node:path"), ts = require("typescript"), assert = require("node:assert/strict"), { randomUUID } = require("node:crypto");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
-const { savedFormat, choosePreview, hasBuilderSource, editorEntry } = require("./saved-preview.ts");
+const { savedFormat, choosePreview, hasBuilderSource, editorEntry, startingDraftHasContent } = require("./saved-preview.ts");
 const { ArtifactContentSchema } = require("../domain.ts");
 const { emptyDocument } = require("../documents/editor.ts");
 const { projectDocument } = require("../documents/project.ts");
@@ -98,6 +98,15 @@ check("new projects are starting drafts; the empty state invites a build only wh
     assert.equal(choose(content, version, states[0]), "start-draft");
   }
   assert.equal(savedFormat(created, 2), "outline", "a title heading saved again later is content");
+});
+check("a starting draft with any saved block is shown in the layout preview a review link shows; only an empty one is a blank start (journey audit C4)", () => {
+  const created = buildCreationPayload(values, style).content;
+  assert.equal(choose(created, 1, states[1]), "start-draft");
+  assert.equal(startingDraftHasContent(created), true, "the saved title heading is content the review page and Publish show");
+  assert.equal(startingDraftHasContent(fresh()), false, "no blocks: the empty start state");
+  const studio = fs.readFileSync(path.join(__dirname, "..", "..", "components", "cloud-studio.tsx"), "utf8");
+  assert.match(studio, /preview === "start-draft" && !startingDraftHasContent\(content\) \? <div className="cloud-workbench-empty">/);
+  assert.match(studio, /<AccountPreview artworkScope=\{\{ accountId, workspaceId, artifactId: artifact\.id \}\} content=\{content\} style=\{style\} dirty=\{dirty\} \/>/, "the same renderer the review page uses, with authorized artwork");
 });
 check("text supplied at creation is saved content that the first build may still start from", () => {
   const created = buildCreationPayload({ ...values, content: "Our story.\n\nOur menu." }, style).content;

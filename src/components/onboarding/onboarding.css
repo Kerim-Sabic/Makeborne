@@ -46,6 +46,9 @@
 .gs-panel li small a { color: #5e50b0; white-space: nowrap; }
 .gs-panel li > button { padding: 7px 11px; border: 0; border-radius: 10px; background: #2b2140; color: #fff; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .gs-panel li > button:hover { background: #42335f; }
+.gs-panel li.is-waiting .gs-check { border-style: dashed; }
+.gs-panel li.is-waiting strong { color: #6f6880; }
+.gs-waiting { padding: 5px 9px; border-radius: 999px; background: #f3f0f8; color: #6a6279; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .gs-panel footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1eef5; }
 .gs-link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; padding: 4px 0; font: inherit; font-size: 12.5px; color: #6f6879; cursor: pointer; text-decoration: none; }
 .gs-link:hover { color: #2a2338; }

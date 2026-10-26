@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowUpRight, AtSign, Check, Globe2, List, Loader2, Mail, MapPin, Phone, Search, Sparkles, UserPlus, Users, X } from "lucide-react";
+import { ArrowUpRight, AtSign, Check, Globe2, List, Loader2, Mail, MapPin, Phone, Search, Sparkles, Upload, UserPlus, Users, X } from "lucide-react";
 import Modal from "../mail/modal";
 import { api, CloudError } from "../cloud-api";
 import { leadApi } from "./lead-api";
+import { useAssistantAvailability } from "../use-assistant-availability";
+import { knownClosed, leadFinderClosedNotice } from "@/lib/ai/assistant-availability";
 import { emptyOutreach } from "@/lib/client-outreach";
 import { localCalendarDay } from "@/lib/client-followups";
 import { normalizeTag } from "@/lib/leads";
@@ -23,7 +25,11 @@ const tier = (score: number) => score >= 70 ? "hot" : score >= 45 ? "warm" : "co
 const platformOf = (url: string): Platform | null => /instagram\.com/i.test(url) ? "Instagram" : /tiktok\.com/i.test(url) ? "TikTok" : /youtube\.com/i.test(url) ? "YouTube" : null;
 
 /** Find new leads (local businesses, creators by niche, or a pasted list), verify and rank them, then add the chosen ones to the CRM. */
-export default function LeadFinder({ accountId, workspaceId, seed = null, onClose, onAdded }: { accountId: string; workspaceId: string; seed?: LeadSeed | null; onClose: () => void; onAdded: (count: number, tag: string) => void }) {
+export default function LeadFinder({ accountId, workspaceId, seed = null, onClose, onAdded, instead }: { accountId: string; workspaceId: string; seed?: LeadSeed | null; onClose: () => void; onAdded: (count: number, tag: string) => void;
+  /** Paths that work without AI, offered while lead finding can't start. */ instead?: { add: () => void; import?: () => void } }) {
+  // Read before anything is typed: while lead finding can't start, say so up front and offer the paths that work without AI.
+  const availability = useAssistantAvailability();
+  const closed = knownClosed(availability?.leads);
   // "More like this": an example lead to find look-alikes of (from results, or from a client's profile).
   const [like, setLike] = useState<LeadSeed | null>(seed);
   const [exclude, setExclude] = useState<string[]>([]);
@@ -54,7 +60,7 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
   const busy = Boolean(run && run.stage !== "done") || Boolean(adding);
 
   async function find() {
-    if (!ready || busy) return;
+    if (!ready || busy || closed) return;
     try { localStorage.setItem(OFFER_STORE, offer); } catch { /* storage unavailable */ }
     setError(""); setResult(null); setPicked(new Set());
     setRun({ stage: "search", status: mode === "local" ? `Searching for ${niche.trim()} in ${place.trim()}…` : mode === "creators" ? `Searching ${platform} for ${niche.trim()} creators…` : "Reading your list…", done: 0, total: 0 });
@@ -155,6 +161,9 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
       {!result && <form className="lf-form" onSubmit={event => { event.preventDefault(); void find(); }}>
         {like && <div className="lf-like"><Sparkles size={14} /><span>Finding leads like <strong>{like.name}</strong>{like.about ? <small>{like.about}</small> : null}</span>
           <button type="button" aria-label="Stop finding look-alikes" disabled={busy} onClick={() => { setLike(null); setExclude([]); }}><X size={14} /></button></div>}
+        {closed && <div className="lf-closed" role="status"><p>{leadFinderClosedNotice(availability!.leads)}</p>
+          {instead && <div className="lf-closed-actions"><button type="button" className="button primary small" onClick={instead.add}><UserPlus size={15} />Add a client</button>
+            {instead.import && <button type="button" className="button secondary small" onClick={instead.import}><Upload size={15} />Import CSV</button>}</div>}</div>}
         {previous && !run && <button type="button" className="lf-back" onClick={() => { setResult(previous); setPrevious(null); setLike(null); setExclude([]); }}>← Back to the previous results</button>}
         <div className="lf-modes" role="radiogroup" aria-label="Where to find leads">
           <button type="button" role="radio" aria-checked={mode === "local"} onClick={() => setMode("local")} disabled={busy}><MapPin size={15} />Local businesses</button>
@@ -180,8 +189,8 @@ export default function LeadFinder({ accountId, workspaceId, seed = null, onClos
         <div className="lf-foot">
           {mode !== "list" && <div className="lf-count" role="radiogroup" aria-label="How many leads">{LEAD_FINDER.counts.filter(value => mode === "local" || value < 40).map(value =>
             <button type="button" role="radio" key={value} aria-checked={size === value} disabled={busy} onClick={() => setCount(value)}>{value}</button>)}<span>leads</span></div>}
-          {!discoveryBlocked && <p className="lf-price">About <strong>{leadFinderTypicalCredits(size, mode)} credits</strong>, at most {leadFinderMaxCredits(holdSize, mode)}. Delivered leads cost 0.2 credits each, plus confirmed AI ranking. The combined total rounds up once to a whole credit. No new leads means no charge; adding them to clients is free.</p>}
-          <button type="submit" className="button primary" disabled={!ready || busy}>{busy ? <Loader2 size={16} className="ac-spin" /> : <Search size={16} />}Find leads</button>
+          {!discoveryBlocked && !closed && <p className="lf-price">About <strong>{leadFinderTypicalCredits(size, mode)} credits</strong>, at most {leadFinderMaxCredits(holdSize, mode)}. Delivered leads cost 0.2 credits each, plus confirmed AI ranking. The combined total rounds up once to a whole credit. No new leads means no charge; adding them to clients is free.</p>}
+          <button type="submit" className="button primary" disabled={!ready || busy || closed}>{busy ? <Loader2 size={16} className="ac-spin" /> : <Search size={16} />}Find leads</button>
         </div>
         {run && <Progress run={run} mode={mode} onCancel={() => { controller.current?.abort(); setRun(null); }} />}
         {error && <p className="lf-error" role="alert">{error}</p>}
