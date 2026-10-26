@@ -11,7 +11,7 @@ export function checklist(progress: Progress, advisor: boolean, go: { create: (k
     progress.clients === null ? null : { id: "leads", title: "Find your first 10 leads", hint: "Real businesses or creators, checked and ranked for what you sell.", done: (progress.finderLeads ?? 0) > 0 || progress.clients >= 10, action: "Find leads", guide: "find-new-leads", run: go.leads },
     progress.mailboxes === null ? null : { id: "email", title: "Connect your email", hint: "Send from your own Gmail or Outlook. Sending is free.", done: progress.mailboxes > 0, action: "Connect", guide: "connect-gmail-or-outlook", run: go.email },
     progress.sentEmails === null ? null : { id: "send", title: "Send your first personal email", hint: "Select leads, then choose Write personal emails.", done: progress.sentEmails > 0, action: "Write emails", guide: "send-personal-outreach-emails", run: go.clients },
-    progress.reviewLinks === null ? null : { id: "review", title: "Share work for review", hint: "A link your client can comment on and approve.", done: progress.reviewLinks > 0, action: "Open projects", guide: "share-work-for-client-review", run: go.projects },
+    progress.reviewLinks === null ? null : { id: "review", title: "Share work for review", hint: "Open a project and choose Client review in its ••• menu: your client comments and approves, no account needed.", done: progress.reviewLinks > 0, action: "Open projects", guide: "share-work-for-client-review", run: go.projects },
     { id: "advisor", title: "Ask an advisor", hint: "Pricing, positioning or sales advice in seconds.", done: advisor, action: "Ask", guide: "ask-an-ai-advisor", run: go.chat },
   ];
   return steps.filter((step): step is Step => step !== null);
