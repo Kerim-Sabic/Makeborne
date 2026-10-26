@@ -123,7 +123,11 @@ export function extractPageFacts(html: string, url: URL): PageFacts {
   const handle = /\(@([\w.]{1,40})\)/.exec(`${title} ${description}`)?.[1] ?? /@([\w.]{2,40})/.exec(meta(html, "og:title"))?.[1]
     ?? (platformOf(url) !== "Website" ? url.pathname.split("/").filter(Boolean)[0]?.replace(/^@/, "") ?? null : null);
   // A page cut at the size limit can end inside a script: drop that tail too.
-  const text = decode(stripTags(replaceElements(html, ["script", "style", "noscript", "svg", "template"], { open: "name", boundary: false }))).slice(0, 2500);
+  const withoutHidden = replaceElements(html, ["script", "style", "noscript", "svg", "template"], { open: "name", boundary: false });
+  // A bounded download can end inside a script/style. Keep the old tail-removal
+  // behavior without retrying a whole-document regex at every opening tag.
+  const unfinished = /<(?:script|style)/i.exec(withoutHidden);
+  const text = decode(stripTags(unfinished ? withoutHidden.slice(0, unfinished.index) : withoutHidden)).slice(0, 2500);
   const bio = /on (?:Instagram|TikTok):\s*"([\s\S]+)"\s*$/i.exec(description)?.[1]?.trim() ?? "";
   return { url: url.toString(), platform: platformOf(url), title: title.slice(0, 200), description: description.slice(0, 600), handle,
     followers: counts("Followers"), following: counts("Following"), posts: counts("Posts"), bio: bio.slice(0, 500), text };
