@@ -4,7 +4,7 @@ import { RequestError } from "@/lib/server/http";
 import { speaksCurrentCrmProtocol } from "@/lib/crm-protocol";
 import { serviceRpc } from "@/lib/research/server";
 import { fitScore } from "@/lib/crm-research/score";
-import { addProspect, addSuppression, crmError, dismissDuplicate, guardedCheck, overview, prospectContext, ProspectSchema, removeRow, requireCrmResearch, requireEditor, storeCheck } from "@/lib/crm-research/server";
+import { addProspect, addSuppression, crmError, dismissDuplicate, guardedCheck, overview, prospectContext, ProspectSchema, removeRow, requireCrmResearch, requireEditor, siteCheckAdmission, storeCheck } from "@/lib/crm-research/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -55,8 +55,8 @@ export async function POST(request: Request, context: Context) {
     const { client, user, workspace } = await cloudContext(workspaceId, true);
     requireEditor(workspace?.role);
     if (body.action === "check") {
-      const check = await guardedCheck(user.id, body.url || null);
-      const checkId = await storeCheck(client, { workspaceId, userId: user.id, clientId: null, check });
+      const check = await guardedCheck(user.id, body.url || null, undefined, siteCheckAdmission(serviceRpc(), user.id, workspaceId));
+      const checkId = await storeCheck(serviceRpc(), { workspaceId, userId: user.id, clientId: null, check });
       const { matches, suppressed } = await prospectContext(client, workspaceId, { name: body.name || check.host || body.url, website: check.finalUrl ?? body.url, email: body.email, phone: body.phone });
       const fit = fitScore({ check, website: body.url, email: body.email || check.contacts.find(item => item.kind === "email")?.value, phone: body.phone || check.contacts.find(item => item.kind === "phone")?.value,
         category: body.category, targets: body.targets, suppressed: Boolean(suppressed), existing: matches.some(item => item.strength === "strong") });

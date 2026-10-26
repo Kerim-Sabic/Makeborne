@@ -5,8 +5,7 @@ import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
 import type { AnthropicLike } from "@/lib/ai/anthropic-call";
 import { resolveAgencyScope } from "@/lib/builder/operation-server";
-import { agencyTasksEnabled } from "@/lib/agency/run";
-import { AgencyError, resolveAgencyTask } from "@/lib/agency/task";
+import { AgencyError, agencyKindEnabled, resolveAgencyTask } from "@/lib/agency/task";
 import { anthropicModelPort } from "@/lib/agency/model-port";
 import { inputReader } from "@/lib/agency/inputs";
 import { sourceIngestionEnabled } from "@/lib/ingest/builder-sources";
@@ -15,7 +14,8 @@ import { ResearchRequestSchema } from "@/lib/research/contract";
 import { ResearchError, researchObjective, runClientResearch, type ResearchDeps } from "@/lib/research/research";
 import { SEARCH_REFUSED_REASON } from "@/lib/research/search";
 import { normalizeUrl } from "@/lib/research/site";
-import { briefStore, clientAnchors, documentReader, knowledgeReader, readBrief, requireClientResearch, researchCache } from "@/lib/research/server";
+import { briefStore, clientAnchors, documentReader, knowledgeReader, readBrief, requireClientResearch, researchCache, serviceRpc } from "@/lib/research/server";
+import { takeDailyUse } from "@/lib/research/daily-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -26,9 +26,10 @@ let active = 0;
  * "Understand this client" (agency stage 4). Off unless MAKEBORNE_CLIENT_RESEARCH=on (404).
  * GET: what the panel needs (client, its projects, which inputs are available) or, with
  * ?brief=<id>, one stored brief. POST: research once per action key (a repeat returns the
- * stored brief). Assisted writing runs only when agency tasks are on and a setting is
- * qualified for research (none is yet), otherwise the brief is written from the sources
- * without AI. Web search is never used (see lib/research/search.ts).
+ * stored brief). Assisted (paid) writing runs only when MAKEBORNE_AGENCY_TASKS=on and "research"
+ * is listed in MAKEBORNE_AGENCY_TASK_KINDS; research IS qualified in AGENCY_SETTINGS, so those
+ * switches are what keep it off. Otherwise the brief is written from the sources without AI.
+ * Web search is never used (see lib/research/search.ts).
  */
 async function clientRow(context: Context, write: boolean) {
   const { workspaceId, clientId } = await context.params;
@@ -75,7 +76,7 @@ export async function POST(request: Request, context: Context) {
     const profile = { id: clientId, name: row.name, company: row.company ?? "", url };
 
     let assisted: ResearchDeps["assisted"] = null;
-    if (agencyTasksEnabled() && anchor) {
+    if (agencyKindEnabled("research") && anchor) {
       try {
         const task = await resolveAgencyTask(user.id, { artifactId: anchor.artifactId, actionKey: body.actionKey, stepKey: body.stepKey, kind: "research",
           objective: researchObjective(profile, url), inputs: body.documents.map(item => ({ kind: "asset", id: item.reference.assetId, sha256: item.reference.sha256 })),
@@ -86,7 +87,7 @@ export async function POST(request: Request, context: Context) {
         const anthropic = new Anthropic({ maxRetries: 0, timeout: 90_000 }) as unknown as AnthropicLike;
         assisted = { task, deps: { model: anthropicModelPort(anthropic, task.settings), readInput: inputReader(task), platformDeadline: Date.now() + (maxDuration - 15) * 1000 } };
       } catch (error) {
-        // Nothing is qualified for research yet: write the brief from the sources without AI.
+        // A setting withdrawn from research: write the brief from the sources without AI.
         if (!(error instanceof AgencyError && error.code === "AGENCY_SETTINGS_UNQUALIFIED")) throw error;
       }
     }
@@ -94,6 +95,8 @@ export async function POST(request: Request, context: Context) {
       cache: researchCache(scope), knowledge: knowledgeReader(scope, anchor?.artifactId ?? null),
       documents: documentReader(client, { workspaceId, projectId: anchor?.projectId ?? null }, body.documents, request.signal),
       briefs: briefStore(scope), assisted,
+      // Per-person daily limit across instances; a replay of the same request returns the stored brief without using one.
+      admit: () => takeDailyUse(serviceRpc(), { actorId: user.id, workspaceId, kind: "client_research" }),
     });
     const run = outcome.run;
     return cloudJson({ brief: outcome.row, operation: run?.status ? { id: run.status.operation.id, outcome: run.outcome, charged: run.charged, message: run.message } : null },

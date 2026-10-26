@@ -23,6 +23,7 @@ const { RunSpend, memoryGate } = require("../ai/run-spend.ts");
 const { aiCostUsdPerCredit } = require("../builder/pricing.ts");
 const { emptyDocument } = require("../documents/editor.ts");
 const RATE = Math.round(aiCostUsdPerCredit() * 1_000_000);
+const AGENCY_ON = Object.freeze({ MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "ingest,research,image_edit,data_report,independent_review" });
 
 const ACTOR = randomUUID(), W = randomUUID(), P = randomUUID(), ARTIFACT = randomUUID();
 fake.setup({ W, P, ACTOR });
@@ -92,7 +93,7 @@ const qualified = Object.freeze([Object.freeze({ profile: "standard", model: "cl
   qualifiedKinds: Object.freeze(["independent_review"]), evidence: "offline fixture" })]);
 const reviewTask = (extra = {}) => task.resolveAgencyTask(ACTOR, { artifactId: ARTIFACT, actionKey: randomUUID(), stepKey: randomUUID(), kind: "independent_review",
   objective: "Independent review of version 3 against the approved brief.", inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3, ...extra },
-  { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE });
+  { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE, env: AGENCY_ON });
 const runDeps = model => ({ model, tools: {}, readInput: async () => "", platformDeadline: Date.now() + 280000, pollMs: 15, heartbeatMs: 25 });
 const detFindings = request => deterministic.deterministicFindings(request.diagnostics);
 const finishCall = () => fake.rpcLog.find(entry => entry.name === "makeborne_ai_operation_finish");
@@ -301,7 +302,7 @@ const keepAlive = setInterval(() => {}, 1000);
     const request = websiteRequest({ subject: subject(2, "v2") });
     await assert.rejects(operation.runIndependentReview({ task: await reviewTask(), request, deterministic: [], deps: runDeps(scripted([])) }), /different revisions/);
     await assert.rejects(task.resolveAgencyTask(ACTOR, { artifactId: ARTIFACT, actionKey: randomUUID(), stepKey: randomUUID(), kind: "independent_review", objective: "Review", inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 },
-      { scope: server.resolveAgencyScope, settings: [], rateMicrousd: RATE }), error => error.code === "AGENCY_SETTINGS_UNQUALIFIED");
+      { scope: server.resolveAgencyScope, settings: [], rateMicrousd: RATE, env: AGENCY_ON }), error => error.code === "AGENCY_SETTINGS_UNQUALIFIED");
     assert.ok(task.AGENCY_SETTINGS.some(setting => setting.qualifiedKinds.includes("independent_review")), "proposed after the 2026-10-24 re-run (flags remain off)");
     const only = operation.deterministicOnly(websiteRequest(), detFindings(websiteRequest()), "reviewer_not_qualified");
     assert.deepEqual([only.status, only.unavailableReason, only.reviewer], ["review_unavailable", "reviewer_not_qualified", "deterministic_only"], "deterministic-only is never acceptable");

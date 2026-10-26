@@ -7,9 +7,8 @@ import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { requireProviderCapacity } from "@/lib/ai/live-run";
 import type { AnthropicLike } from "@/lib/ai/anthropic-call";
 import { resolveAgencyScope } from "@/lib/builder/operation-server";
-import { agencyTasksEnabled } from "@/lib/agency/run";
 import { clientKnowledgeEnabled, knowledgeForAgencyTask } from "@/lib/knowledge/server";
-import { AgencyError, resolveAgencyTask } from "@/lib/agency/task";
+import { AgencyError, agencyKindEnabled, resolveAgencyTask } from "@/lib/agency/task";
 import { anthropicModelPort } from "@/lib/agency/model-port";
 import { inputReader } from "@/lib/agency/inputs";
 import { documentPdf, documentPptx, loadDocumentImages } from "@/lib/documents/export-server";
@@ -89,7 +88,8 @@ export async function POST(request: Request, context: Context) {
 
     let narrative: Narrative;
     if (body.narrative === "ai") {
-      if (!agencyTasksEnabled()) throw new RequestError("WRITTEN_SUMMARY_UNAVAILABLE", "An AI-written summary isn’t available yet. Choose the summary written from the numbers.", 409);
+      // Paid: needs MAKEBORNE_AGENCY_TASKS=on and "data_report" in MAKEBORNE_AGENCY_TASK_KINDS.
+      if (!agencyKindEnabled("data_report")) throw new RequestError("WRITTEN_SUMMARY_UNAVAILABLE", "An AI-written summary isn’t available yet. Choose the summary written from the numbers.", 409);
       const rate = Math.round(aiCostUsdPerCredit() * 1_000_000);
       let task;
       try {

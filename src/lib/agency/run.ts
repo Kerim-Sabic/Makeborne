@@ -8,6 +8,7 @@ import {
 } from "../builder/operation-server";
 import type { OperationStatus } from "../builder/operation-contract";
 import { AGENCY_KIND_POLICY, AgencyError, taskContext, taskDigest, type AgencyTask } from "./task";
+export { agencyKindEnabled, agencyTasksEnabled, enabledAgencyKinds } from "./task";
 import { runTaskLoop, type AgencyTool, type LoopFailure, type LoopOutcome, type ModelPort, type ToolContext } from "./loop";
 import { runSpecialist, type SpecialistParent, type SpecialistSpec } from "./specialist";
 import type { KnowledgeContext } from "../knowledge/context";
@@ -19,10 +20,11 @@ import { KnowledgeChanged } from "../knowledge/task-context";
  * lead loop that delegates to specialists only for standard-scale work ->
  * finish once with an explicit outcome. Refresh/reconnect reads the recorded
  * state (readAgencyTask) and never launches the step again.
- * Server-side flag: MAKEBORNE_AGENCY_TASKS=on (off by default; nothing is
- * qualified yet, so resolveAgencyTask refuses every kind regardless).
+ * Server-side switches (task.ts enabledAgencyKinds): MAKEBORNE_AGENCY_TASKS=on AND the kind listed in
+ * MAKEBORNE_AGENCY_TASK_KINDS; both are off/empty by default. Four kinds ARE qualified in AGENCY_SETTINGS
+ * (research, data_report, image_edit, independent_review), so a listed kind makes paid calls at once:
+ * listing one is a cost decision. resolveAgencyTask refuses an unlisted kind (AGENCY_KIND_OFF).
  */
-export function agencyTasksEnabled(env: Record<string, string | undefined> = process.env) { return env.MAKEBORNE_AGENCY_TASKS === "on"; }
 
 /** The client's approved knowledge for one step: bounded context plus the snapshot recorded WITH this step's operation. */
 export type TaskKnowledge = Readonly<{ context: KnowledgeContext; snapshotId: string | null }>;

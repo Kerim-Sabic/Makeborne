@@ -14,9 +14,10 @@ import { REVIEW_RESULT_DESCRIPTION, REVIEWER_SYSTEM, observedReviewer, reviewerI
  * review (builder/review.ts) is untouched and still runs as before.
  *
  * Server-side flag: MAKEBORNE_INDEPENDENT_REVIEW=on (off by default). The
- * model reviewer also needs MAKEBORNE_AGENCY_TASKS=on and a qualified
- * setting for independent_review; none is qualified, so in practice only the
- * deterministic part runs and the result is review_unavailable.
+ * paid model reviewer also needs MAKEBORNE_AGENCY_TASKS=on and "independent_review"
+ * in MAKEBORNE_AGENCY_TASK_KINDS. The kind IS qualified in AGENCY_SETTINGS, so with
+ * those switches off only the deterministic part runs (review_unavailable), and
+ * listing the kind starts paid calls.
  */
 export function independentReviewEnabled(env: Record<string, string | undefined> = process.env) { return env.MAKEBORNE_INDEPENDENT_REVIEW === "on"; }
 

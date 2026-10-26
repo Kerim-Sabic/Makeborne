@@ -86,13 +86,13 @@ Verified absent from the candidate: d977daa, 7d13889, 0364dd4, af9bdf7, f988ed0,
 | Feature (branch) | Switch | Default | Qualification status (evidence) | Needed to turn it on |
 |---|---|---|---|---|
 | Source ingestion: Word, Excel, CSV, stored large files (agency stage 2) | `MAKEBORNE_SOURCE_INGESTION_ENABLED` (exactly `true`) plus migration 20261023130000 | false. Requests are handled as before. | **LOCAL:** `check-ingest-pipeline` (npm test). | A staging upload and build. Note: the migration widens the `project-assets` MIME list for docx, xlsx, csv and json **whether or not the flag is on**. The app routes still refuse those types while the flag is off. |
-| Agency tasks contract (stage 1) | `MAKEBORNE_AGENCY_TASKS` plus migration 20261023200000 | off | **LOCAL:** SQL `check-agency-operations` 10/10 here; `check-ai-operations` unchanged, 2/2. | The flag; the owner's go-ahead per stage. |
+| Agency tasks contract (stage 1) | `MAKEBORNE_AGENCY_TASKS` **and** `MAKEBORNE_AGENCY_TASK_KINDS` (comma list; empty = none) plus migration 20261023200000. Four kinds are already qualified, so each listed kind makes paid calls at once: a cost decision per kind (S4) | off / empty | **LOCAL:** SQL `check-agency-operations` 10/10 here; `check-ai-operations` unchanged, 2/2. | The flag; the owner's go-ahead per stage. |
 | Approved client knowledge (stage 3) | `MAKEBORNE_CLIENT_KNOWLEDGE` plus 20261023210000 | off | **LOCAL:** SQL 12/12 here. | Owner go-ahead and a staging pass. |
 | "Understand this client" research (stage 4) | `MAKEBORNE_CLIENT_RESEARCH` plus 20261024010000 | off | **PAID LOCAL:** `agency-qualification-20261024.md`, conflict fixtures PASS on the re-run. SQL 6/6 here. | A staging pass. Web search stays refused. |
-| Image editing (stage 5) | `MAKEBORNE_IMAGE_EDITING` plus `MAKEBORNE_IMAGE_EDIT_MODELS` (empty) | off | **PAID LOCAL:** measured edit bounds in the qualification report. | The owner signs off the D8 extension, then a staging pass. |
+| Image editing (stage 5) | `MAKEBORNE_IMAGE_EDITING` plus `MAKEBORNE_IMAGE_EDIT_MODELS` (empty); generated edits also need `MAKEBORNE_AGENCY_TASKS` and `image_edit` in `MAKEBORNE_AGENCY_TASK_KINDS` (S3, S4) | off | **PAID LOCAL:** measured edit bounds in the qualification report. | The owner signs off the D8 extension, then a staging pass. |
 | Independent review (stage 6) | `MAKEBORNE_INDEPENDENT_REVIEW` (needs AGENCY_TASKS); `MAKEBORNE_CROSS_PROVIDER_REVIEW` | off | **PAID LOCAL:** re-run met every criterion at ef753a3 (adad1ac). Cross-provider: not covered. | A staging pass. |
 | Data reports (stage 7) | `MAKEBORNE_DATA_REPORTS` plus 20261024020000 | off | **PAID LOCAL:** qualifies at or after 31b1b3d. | A staging pass. |
-| CRM and lead research (crm-research) | `MAKEBORNE_CRM_RESEARCH` plus 20261025300000 | off; routes answer 404 | **LOCAL, no AI:** SQL 7/7 here; `check-crm-research-browser` 9/9 here. | Codex enforces do-not-contact in `mail/engine.ts` sendEmail and in sequences, reviews the trust boundary, and schedules the purge. Then the flag goes on. |
+| CRM and lead research (crm-research) | `MAKEBORNE_CRM_RESEARCH` plus 20261025300000, 20261026120000 and 20261026120100 | off; routes answer 404 | **LOCAL, no AI:** SQL 7/7 here; `check-crm-research-browser` 9/9 here. | Codex enforces do-not-contact in `mail/engine.ts` sendEmail and in sequences, reviews the trust boundary, and schedules the purge. Then the flag goes on. |
 
 ## 3. Migrations: new against main, in order, on a throwaway chain
 
@@ -106,6 +106,8 @@ Verified absent from the candidate: d977daa, 7d13889, 0364dd4, af9bdf7, f988ed0,
 6. `20261024020000_data_report_files`
 7. `20261025200000_paying_workspace_publication` (Codex's; already applied on staging)
 8. `20261025300000_crm_research`
+9. `20261026120000_crm_server_writes` (S9: website checks stored by the server only; next steps only through the compare-and-set function. Applied on the isolated local stack `makeborne-journey-audit` only, after a rolled-back dry run)
+10. `20261026120100_research_daily_limits` (S12: per-person rolling 24-hour limits in SQL, 100 website checks and 30 client research runs; same local-only application)
 
 **Staging and push order.** Staging already has 20261025200000. Items 1–6 sort before it, so `supabase db push` would need `--include-all`, or Codex's `apply-staging-migrations.mjs` path. They are additive and do not touch the publication functions.
 

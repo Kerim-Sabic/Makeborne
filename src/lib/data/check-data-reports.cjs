@@ -42,6 +42,7 @@ const { emptyDocument } = require("../documents/editor.ts");
 const task = require("../agency/task.ts"), operationServer = require("../builder/operation-server.ts");
 const { aiCostUsdPerCredit } = require("../builder/pricing.ts");
 const RATE = Math.round(aiCostUsdPerCredit() * 1_000_000);
+const AGENCY_ON = Object.freeze({ MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "ingest,research,image_edit,data_report,independent_review" });
 
 let passed = 0;
 async function check(name, fn) { fake.reset(); renderCalls = 0; await fn(); passed++; console.log(`PASS ${name}`); }
@@ -446,7 +447,7 @@ const persistDeps = () => ({ renderPdf: fakeRender.documentPdf, renderPptx: fake
     const facts = prepare(SALES_CSV, "sales.csv", "sales_monthly").facts;
     const qualified = Object.freeze([Object.freeze({ profile: "standard", model: "claude-opus-5-5", effort: "medium", intensity: "medium", maxOutputTokens: 4000, maxTurns: 3, qualifiedKinds: Object.freeze(["data_report"]), evidence: "offline fixture" })]);
     const makeTask = () => task.resolveAgencyTask(OWNER, { artifactId: randomUUID(), actionKey: randomUUID(), stepKey: randomUUID(), kind: "data_report", objective: "Write the narrative for a monthly sales report.",
-      inputs: [{ kind: "asset", id: ASSET, sha256: "c".repeat(64) }], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 }, { scope: operationServer.resolveAgencyScope, settings: qualified, rateMicrousd: RATE });
+      inputs: [{ kind: "asset", id: ASSET, sha256: "c".repeat(64) }], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 }, { scope: operationServer.resolveAgencyScope, settings: qualified, rateMicrousd: RATE, env: AGENCY_ON });
     const scripted = answer => { const seen = []; const model = async requestValue => { seen.push(requestValue); const ticket = await requestValue.spend.begin("anthropic", "claude-opus-5-5", 30000); await requestValue.spend.finish(ticket, { actualMicrousd: 12000 });
       return { content: [{ type: "tool_use", id: `t${seen.length}`, name: "submit_result", input: answer }], stopReason: "tool_use" }; }; model.seen = seen; return model; };
     const deps = model => ({ model, tools: {}, readInput: async () => "", platformDeadline: Date.now() + 280000, pollMs: 15, heartbeatMs: 25 });
@@ -494,7 +495,7 @@ const persistDeps = () => ({ renderPdf: fakeRender.documentPdf, renderPptx: fake
     // qualifies data_report only as a proposal after the 2026-10-24 paid run (flags remain off).
     fake.reset();
     await rejects(() => task.resolveAgencyTask(OWNER, { artifactId: randomUUID(), actionKey: randomUUID(), stepKey: randomUUID(), kind: "data_report", objective: "x", inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 },
-      { scope: operationServer.resolveAgencyScope, settings: [], rateMicrousd: RATE }), "AGENCY_SETTINGS_UNQUALIFIED");
+      { scope: operationServer.resolveAgencyScope, settings: [], rateMicrousd: RATE, env: AGENCY_ON }), "AGENCY_SETTINGS_UNQUALIFIED");
     assert.ok(task.AGENCY_SETTINGS.some(setting => setting.qualifiedKinds.includes("data_report")), "proposed after qualification");
     assert.equal(fake.rpcLog.length, 0);
   });

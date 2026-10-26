@@ -70,6 +70,7 @@ const { buildKnowledgeContext, citationId } = require("../knowledge/context.ts")
 const task = require("../agency/task.ts"), server = require("../builder/operation-server.ts");
 const { aiCostUsdPerCredit } = require("../builder/pricing.ts");
 const RATE = Math.round(aiCostUsdPerCredit() * 1_000_000);
+const AGENCY_ON = Object.freeze({ MAKEBORNE_AGENCY_TASKS: "on", MAKEBORNE_AGENCY_TASK_KINDS: "ingest,research,image_edit,data_report,independent_review" });
 
 // ---- Local fixture web server (127.0.0.1 only). Hosts are routed by the Host header. ----
 const FOOTER = "<footer><p>© 2019 Harbour Bakery</p></footer>";
@@ -183,7 +184,7 @@ const submit = input => ({ type: "tool_use", id: `toolu_${randomUUID().slice(0, 
 const qualified = Object.freeze([Object.freeze({ profile: "standard", model: "claude-sonnet-5-5", effort: "medium", intensity: "medium", maxOutputTokens: 4000, maxTurns: 3, qualifiedKinds: Object.freeze(["research"]), evidence: "offline fixture" })]);
 async function assistedTask(actionKey, stepKey) {
   return task.resolveAgencyTask(ACTOR, { artifactId: ARTIFACT, actionKey, stepKey, kind: "research", objective: researchMod.researchObjective({ name: "Ana Marić", company: "Harbour Bakery" }, "https://harbour-bakery.test/"),
-    inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 }, { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE });
+    inputs: [], permittedTools: [], settings: "standard", ceilingCredits: 20, expectedRevision: 3 }, { scope: server.resolveAgencyScope, settings: qualified, rateMicrousd: RATE, env: AGENCY_ON });
 }
 
 (async () => {
@@ -485,6 +486,30 @@ async function assistedTask(actionKey, stepKey) {
     assert.equal(again.row.replayed, true); assert.equal(again.row.id, first.row.id); assert.equal(again.fetches, 0); assert.equal(serverHits.length, hits, "no page read on a repeat");
     await assert.rejects(researchMod.runClientResearch({ request: { ...body, notes: "different" }, client: clientProfile() }, deps()), error => error.code === "RESEARCH_KEY_REUSED");
     assert.equal(store.briefs.size, 1);
+  });
+
+  await check("daily limit (S12): one use per new request, taken before any page is read; a replay uses none; a refusal reads nothing; routes take it in SQL", async () => {
+    const { takeDailyUse, DAILY_LIMITS } = require("./daily-limit.ts");
+    const uses = [], admit = () => { uses.push(serverHits.length); return Promise.resolve(); };
+    const body = request({ actionKey: randomUUID() });
+    const before = serverHits.length;
+    await researchMod.runClientResearch({ request: body, client: clientProfile() }, deps({ admit }));
+    assert.deepEqual(uses, [before], "taken once, before any read");
+    await researchMod.runClientResearch({ request: body, client: clientProfile() }, deps({ admit }));
+    assert.equal(uses.length, 1, "a replay of the same request uses none");
+    const hits = serverHits.length;
+    const limited = () => takeDailyUse(async () => ({ data: { allowed: false, limit: 30, used: 30 }, error: null }), { actorId: ACTOR, workspaceId: W, kind: "client_research" });
+    await assert.rejects(researchMod.runClientResearch({ request: request({ actionKey: randomUUID() }), client: clientProfile() }, deps({ admit: limited })), error => error.code === "DAILY_LIMIT" && error.status === 429 && /30 client research runs/.test(error.message));
+    assert.equal(serverHits.length, hits, "refused before any page is read");
+    const calls = [];
+    await takeDailyUse(async (name, args) => { calls.push([name, args]); return { data: { allowed: true, limit: 30, used: 1 }, error: null }; }, { actorId: ACTOR, workspaceId: W, kind: "client_research" });
+    assert.deepEqual(calls, [["makeborne_research_daily_take", { p_actor: ACTOR, p_workspace: W, p_kind: "client_research" }]]);
+    await assert.rejects(takeDailyUse(async () => ({ data: null, error: { code: "PGRST202" } }), { actorId: ACTOR, workspaceId: W, kind: "site_check" }), error => error.status === 503, "fails closed");
+    const sql = fs.readFileSync(path.join(__dirname, "../../../supabase/migrations/20261026120100_research_daily_limits.sql"), "utf8");
+    assert.match(sql, new RegExp(`'site_check' then ${DAILY_LIMITS.site_check} when 'client_research' then ${DAILY_LIMITS.client_research}`), "SQL and TypeScript agree on the limits");
+    assert.match(sql, /to service_role;/); assert.ok(!/makeborne_research_daily_take[^;]*to authenticated/.test(sql));
+    const route = fs.readFileSync(path.join(__dirname, "../../app/api/cloud/workspaces/[workspaceId]/clients/[clientId]/research/route.ts"), "utf8");
+    assert.match(route, /admit: \(\) => takeDailyUse\(serviceRpc\(\), \{ actorId: user\.id, workspaceId, kind: "client_research" \}\)/);
   });
 
   await check("repeated requests (assisted): one operation run, one model call, one charge; a repeat replays the stored, grounded brief", async () => {

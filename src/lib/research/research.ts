@@ -43,6 +43,8 @@ export type ResearchDeps = Readonly<{
   briefs: BriefStore;
   /** Present only when an assisted setting is qualified for research and agency tasks are on. */
   assisted: null | Readonly<{ task: AgencyTask; deps: Omit<AgencyRunDeps, "specialists" | "tools"> }>;
+  /** Takes one use of the person's daily limit (takeDailyUse). Called once a replay is ruled out, before anything is read or fetched. */
+  admit?: () => Promise<void>;
 }>;
 export type ResearchOutcome = Readonly<{ row: StoredBriefRow; run: AgencyRunOutcome | null; fetches: number }>;
 export class ResearchError extends Error { constructor(readonly code: string, message: string, readonly status = 409) { super(message); } }
@@ -67,6 +69,7 @@ export async function runClientResearch(input: { request: ResearchRequest; clien
     if (existing.requestSha256 && existing.requestSha256 !== requestSha256) throw new ResearchError("RESEARCH_KEY_REUSED", "This research request was already used for different details. Start a new one.");
     return { row: { ...existing, replayed: true }, run: null, fetches: 0 };
   }
+  await deps.admit?.();
   const now = deps.now ?? Date.now;
   const started = now();
   let url: string;

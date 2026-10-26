@@ -15,8 +15,7 @@ import { reviewFactsAndClaims, reviewKnowledge } from "@/lib/review/knowledge";
 import { ReviewAssetMissing, projectImageResolver, reviewWebsiteHtmlWithAssets } from "@/lib/review/website-assets";
 import { reviewWebsiteHtml } from "@/lib/client-review/server";
 import { dataUrls, loadDocumentImages } from "@/lib/documents/export-server";
-import { agencyTasksEnabled } from "@/lib/agency/run";
-import { AgencyError, resolveAgencyTask } from "@/lib/agency/task";
+import { AgencyError, agencyKindEnabled, resolveAgencyTask } from "@/lib/agency/task";
 import { anthropicModelPort } from "@/lib/agency/model-port";
 import { inputReader } from "@/lib/agency/inputs";
 import { RoutePath, contentSha, type ReviewSubject } from "@/lib/review/contract";
@@ -38,8 +37,9 @@ let active = 0;
  * Independent review of the CURRENT version (agency stage 6). Behind the
  * server-side flag MAKEBORNE_INDEPENDENT_REVIEW=on (off by default); 404 when
  * off. GET ?subject=1 returns the exact revision to review; POST reviews it
- * (deterministic checks always; the fresh-context reviewer only when agency
- * tasks are enabled and a setting is qualified, which none is yet); GET
+ * (deterministic checks always; the paid fresh-context reviewer only when
+ * MAKEBORNE_AGENCY_TASKS=on and "independent_review" is listed in
+ * MAKEBORNE_AGENCY_TASK_KINDS; the kind IS qualified, so those switches keep it off); GET
  * ?operation=<id> reads a recorded review (flagged stale after any edit), and
  * &repair=1 returns repair instructions for the existing builder, refused
  * for a stale review. The existing in-build review is unchanged.
@@ -113,12 +113,12 @@ export async function POST(request: Request, context: Context) {
     const { brief, declaredRoutes } = reviewBrief({ projectId: artifact.project_id, brief: project.brief, plan: plan.success ? plan.data : null });
     const objective = `Independent review of version ${subject.version} against the approved brief.`;
 
-    // The fresh-context reviewer runs only with agency tasks on and a qualified setting (none yet). Resolving the
+    // The fresh-context reviewer runs only with its kind switched on (and a qualified setting, which it has). Resolving the
     // task first (no hold, no call) decides whether a model step follows, so the knowledge read below is either the
     // recorded one (checks only) or a planning read that the step repeats and snapshots with its operation id.
     const rate = Math.round(aiCostUsdPerCredit() * 1_000_000);
     let task = null, unqualified = false;
-    if (agencyTasksEnabled()) {
+    if (agencyKindEnabled("independent_review")) {
       try {
         task = await resolveAgencyTask(user.id, { artifactId: subject.artifactId, actionKey: body.actionKey, stepKey: body.stepKey, kind: "independent_review",
           objective, inputs: [{ kind: "artifact_version", id: version.id, version: subject.version }],

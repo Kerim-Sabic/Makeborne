@@ -91,6 +91,16 @@ function fakeDb(seed = {}) {
       tables.clients.push(record); keys.set(a.p_request_key, record);
       return { data: { record, replayed: false }, error: null };
     },
+    // The server-only save (20261026120000): author from the session, expiry set in SQL, check time bounded.
+    makeborne_crm_site_check_save(a) {
+      const at = Date.parse(a.p_check.checkedAt), now = Date.now();
+      if (!(at <= now + 300_000 && at >= now - 3_600_000)) return { data: null, error: { code: "22023" } };
+      const row = { id: randomUUID(), workspace_id: a.p_workspace, client_id: a.p_client, url: a.p_check.url, final_url: a.p_check.finalUrl, status: a.p_check.status, reason: a.p_check.reason,
+        score: a.p_check.score, result: a.p_check.result, checker_version: a.p_check.checkerVersion, checked_at: a.p_check.checkedAt, created_by: a.p_actor, created_at: new Date(now).toISOString(),
+        expires_at: a.p_client ? null : new Date(Math.min(at, now) + 30 * 86_400_000).toISOString() };
+      tables.crm_site_checks.push(row);
+      return { data: row.id, error: null };
+    },
   };
   function from(name) {
     const state = { op: "select", filters: [], values: null, limit: null, onConflict: null, ignore: false };
@@ -325,9 +335,14 @@ const W = randomUUID(), USER = randomUUID();
   await check("lead → client: duplicate and do-not-contact refusals first, idempotent create, check attached, facts PROPOSED (never approved), lead source and follow-up set", async () => {
     const db = fakeDb({ clients: [{ id: randomUUID(), workspace_id: W, name: "Mlin Bistro", website: "https://mlin.test/", email: "", notes: "", created_at: "2026-10-01T00:00:00Z", updated_at: "2026-10-01T00:00:00Z", outreach: null }] });
     const out = await run("https://lana.test/");
-    const checkId = await server.storeCheck(db, { workspaceId: W, userId: USER, clientId: null, check: out });
+    const checkId = await server.storeCheck(db.rpc, { workspaceId: W, userId: USER, clientId: null, check: out });
     const stored = db.tables.crm_site_checks[0];
     assert.ok(stored.expires_at && Date.parse(stored.expires_at) - Date.parse(out.checkedAt) <= 31 * 86_400_000, "a prospect check expires");
+    assert.ok(db.calls.includes("rpc:makeborne_crm_site_check_save") && !db.calls.includes("insert:crm_site_checks"), "stored by the server-only function, never a browser-style insert");
+    assert.equal(stored.created_by, USER);
+    // A refusal from the database becomes a plain error, never a silent success.
+    await assert.rejects(server.storeCheck(async () => ({ data: null, error: { code: "42501" } }), { workspaceId: W, userId: USER, clientId: null, check: out }), error => error.status === 403);
+    await assert.rejects(server.storeCheck(async () => ({ data: null, error: { code: "22023" } }), { workspaceId: W, userId: USER, clientId: null, check: out }), error => error.code === "CHECK_NOT_SAVED");
     const k = knowledgeRpc();
     const prospect = server.ProspectSchema.parse({ name: "Dental Studio Lana", website: "lana.test", phone: "035 555 0101", category: "Dentist", source: "Lead finder", tag: "dentists tuzla" });
     // A business already in the CRM is refused until confirmed.
@@ -355,12 +370,33 @@ const W = randomUUID(), USER = randomUUID();
     assert.equal(replay.replayed, true); assert.equal(replay.clientId, first.clientId); assert.equal(db.tables.clients.length, count); assert.equal(k.proposals.length, proposalCount);
     // Knowledge off: the client is still added, nothing is proposed.
     process.env.MAKEBORNE_CLIENT_KNOWLEDGE = "off";
-    const plain = await server.addProspect(db, { workspaceId: W, userId: USER, requestKey: randomUUID(), prospect: server.ProspectSchema.parse({ name: "Plain Bistro", website: "plain.test" }), checkId: await server.storeCheck(db, { workspaceId: W, userId: USER, clientId: null, check: await run("http://plain.test/") }), allowDuplicate: false, today: "2026-10-25", rpc: k.rpc });
+    const plain = await server.addProspect(db, { workspaceId: W, userId: USER, requestKey: randomUUID(), prospect: server.ProspectSchema.parse({ name: "Plain Bistro", website: "plain.test" }), checkId: await server.storeCheck(db.rpc, { workspaceId: W, userId: USER, clientId: null, check: await run("http://plain.test/") }), allowDuplicate: false, today: "2026-10-25", rpc: k.rpc });
     assert.equal(plain.knowledge.available, false); assert.equal(plain.knowledge.proposed, 0); assert.equal(k.proposals.length, proposalCount);
     process.env.MAKEBORNE_CLIENT_KNOWLEDGE = "on";
     // A permission change mid-way stops proposing.
     const denied = await server.proposeFacts(async () => ({ data: null, error: { code: "42501" } }), { actorId: USER, workspaceId: W, clientId: first.clientId }, facts.proposalsFromCheck(out));
     assert.equal(denied.stopped, "PERMISSION_CHANGED"); assert.equal(denied.proposed, 0);
+  });
+
+  await check("daily limit (S12): a website check takes one use after the busy checks and before any page is read; a refusal reads nothing; both routes take it", async () => {
+    const order = [];
+    const out = await server.guardedCheck(USER, "https://lana.test/", deps, async () => { order.push(hits.length); });
+    assert.equal(out.status, "checked"); assert.deepEqual(order, [0], "taken before the first request");
+    hits = [];
+    const refuse = server.siteCheckAdmission(async () => ({ data: { allowed: false, limit: 100, used: 100 }, error: null }), USER, W);
+    await assert.rejects(server.guardedCheck(USER, "https://lana.test/", deps, refuse), error => error.code === "DAILY_LIMIT" && error.status === 429 && /100 website checks/.test(error.message));
+    assert.equal(hits.length, 0, "no page read after a refusal");
+    // Busy refusals come first and use nothing; the slot is released after a refusal.
+    let taken = 0;
+    const slow = server.guardedCheck(USER, "https://lana.test/", deps, async () => { taken++; });
+    await assert.rejects(server.guardedCheck(USER, "https://mlin.test/", deps, async () => { taken++; }), error => error.code === "CHECK_BUSY");
+    await slow; assert.equal(taken, 1);
+    const calls = [];
+    await server.siteCheckAdmission(async (name, args) => { calls.push([name, args]); return { data: { allowed: true }, error: null }; }, USER, W)();
+    assert.deepEqual(calls, [["makeborne_research_daily_take", { p_actor: USER, p_workspace: W, p_kind: "site_check" }]]);
+    const app = path.join(__dirname, "../../app/api/cloud/workspaces/[workspaceId]");
+    for (const file of ["crm/route.ts", "clients/[clientId]/crm/route.ts"])
+      assert.match(fs.readFileSync(path.join(app, file), "utf8"), /guardedCheck\(user\.id, [^)]*\|\| null, undefined, siteCheckAdmission\(serviceRpc\(\), user\.id, workspaceId\)\)/, `${file} takes a daily use`);
   });
 
   await check("small writes: suppression normalised and idempotent, dismissal ordered, next-step conflict surfaces as 409", async () => {
@@ -399,6 +435,13 @@ const W = randomUUID(), USER = randomUUID();
     const sql = fs.readFileSync(path.join(__dirname, "../../../supabase/migrations/20261025300000_crm_research.sql"), "utf8");
     assert.ok(!/supabase db push/.test(sql) && /enable row level security/.test(sql));
     assert.deepEqual([...sql.matchAll(/kind in \('email','domain'\)/g)].length, 1);
+    // S9: checks are inserted only by the server; next steps change only through the compare-and-set function.
+    const writes = fs.readFileSync(path.join(__dirname, "../../../supabase/migrations/20261026120000_crm_server_writes.sql"), "utf8");
+    assert.match(writes, /revoke insert on public\.crm_site_checks from authenticated;/);
+    assert.match(writes, /revoke insert, update, delete on public\.crm_next_steps from authenticated;/);
+    assert.match(writes, /grant execute on function public\.makeborne_crm_site_check_save\(uuid, uuid, uuid, jsonb\) to service_role;/);
+    assert.ok(!/makeborne_crm_site_check_save[^;]*to authenticated/.test(writes), "the browser cannot call the save");
+    assert.ok(!/from\("crm_site_checks"\)\.insert|from\("crm_next_steps"\)\.(insert|update|upsert)/.test(lib), "no direct check insert or next-step write in the server code");
   });
 
   await check("journey audit 26 Oct: a business is never greeted by its first word, a missing sender name never reads \"I'm I.\", match reasons say which key matched, overviews name clients as the list does", async () => {

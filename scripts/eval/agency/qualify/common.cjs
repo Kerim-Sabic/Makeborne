@@ -69,7 +69,8 @@ function configure({ flags = {} } = {}) {
   Object.assign(process.env, {
     NEXT_PUBLIC_SUPABASE_URL: s.api, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: s.publishable, SUPABASE_SECRET_KEY: s.secret,
     ANTHROPIC_API_KEY: keys.ANTHROPIC_API_KEY, OPENAI_API_KEY: keys.OPENAI_API_KEY,
-    MAKEBORNE_AGENCY_TASKS: 'on', NODE_ENV: process.env.NODE_ENV || 'test',
+    // Both agency switches: the master switch and the kinds this qualification exercises (task.ts enabledAgencyKinds).
+    MAKEBORNE_AGENCY_TASKS: 'on', MAKEBORNE_AGENCY_TASK_KINDS: 'research,data_report,image_edit,independent_review', NODE_ENV: process.env.NODE_ENV || 'test',
     ...flags,
   });
   for (const name of ['MAKEBORNE_AI_COST_USD_PER_CREDIT', 'MAKEBORNE_USD_PER_CREDIT', 'MAKEBORNE_BUILDER_FALLBACK_MODELS']) delete process.env[name];
