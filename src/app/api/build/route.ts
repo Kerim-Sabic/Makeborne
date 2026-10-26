@@ -26,6 +26,7 @@ import { documentBuildResponse } from "@/lib/builder/docs-run";
 import { websiteBuildResponse } from "@/lib/builder/website-run";
 import { providerCapacity, requireProviderCapacity } from "@/lib/ai/live-run";
 import { builderAvailability } from "@/lib/builder/availability";
+import { builderFeatures } from "@/lib/builder/features";
 import { requirePricedModel } from "@/lib/ai/model-check";
 import { SitePlanSchema, StoredPlanSchema, planToBrief } from "@/lib/builder/plan";
 import { approvedMaximumIssue, approvedPlanIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
@@ -81,7 +82,8 @@ const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "fal
 export async function GET() {
   const availability = await builderAvailability({ configured: builderEnabled(), priced: () => requirePricedModel(builderModel()), capacity: () => providerCapacity("anthropic") });
   // Measured credit ranges for the composer's estimate, in credits at the live rate (no provider call).
-  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()) }, { headers: { "Cache-Control": "no-store" } });
+  // Unqualified generation features stay off unless their server-side flag is "on" (lib/builder/features.ts).
+  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()), features: builderFeatures() }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {

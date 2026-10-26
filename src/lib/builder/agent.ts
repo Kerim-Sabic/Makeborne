@@ -15,6 +15,7 @@ import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from 
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
 import { UnpricedModelError, imageCallBoundMicrousd, supportsTransparentImages } from "../ai/prices";
 import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
+import { designCompsEnabled } from "./features";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
 import { qualityProblems, type QualityInput } from "./quality-gates";
@@ -180,7 +181,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const system = [{ type: "text" as const, text: BUILDER_SYSTEM, cache_control: { type: "ephemeral" as const } }];
   // Design comps: first builds with a text-capable image model, paid from the part of the run's image third that the
   // photo allowance does not need at its worst case (comps never reduce the photographs a site may have).
-  const compsAvailable = Boolean(run.concept) && !run.limits?.replaceOnly && imageLimit > 0 && textImages;
+  // Not yet qualified for production: comp-first builds also need MAKEBORNE_DESIGN_COMPS=on (lib/builder/features.ts).
+  const compsAvailable = designCompsEnabled() && Boolean(run.concept) && !run.limits?.replaceOnly && imageLimit > 0 && textImages;
   // In call order (the jobs finish in any order); a failed comp leaves its slot empty.
   const comps: DesignComp[] = [], compSlots: (DesignComp | undefined)[] = [];
   let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = false, readingsAsked = false;

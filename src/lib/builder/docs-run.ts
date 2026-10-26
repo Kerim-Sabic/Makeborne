@@ -13,6 +13,7 @@ import { logAiStop } from "./website-run";
 import { aiStop } from "../ai/failure";
 import { DocumentEditor, emptyDocument } from "../documents/editor";
 import { bookImagePlanFromBrief, deckModeFromBrief } from "../documents/creation-options";
+import { fullImageSlidesEnabled } from "./features";
 import { projectDocument, documentAssetIds } from "../documents/project";
 import { wordCount } from "../documents/book-markup";
 import { runDocumentBuilder, type DocBuilderEvent, type DocBuilderRun } from "./docs-agent";
@@ -79,7 +80,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
   const options = `${input.project.brief}
 ${input.message}`;
   const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId,
-    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options) } : { slideMode: deckModeFromBrief(options).mode }));
+    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options) } : { slideMode: fullImageSlidesEnabled() ? deckModeFromBrief(options).mode : "live" }));
   const context = [documentContext(input, editor, fresh), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n");
   const encoder = new TextEncoder();
   const controller = new AbortController();

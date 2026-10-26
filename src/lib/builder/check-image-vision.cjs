@@ -26,6 +26,8 @@ Module._load = function(name, parent, main) {
 const imageCalls = [];
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
 
+// Comp-first builds are off by default (MAKEBORNE_DESIGN_COMPS, lib/builder/features.ts); these checks exercise them on.
+process.env.MAKEBORNE_DESIGN_COMPS = "on";
 const { runBuilder, regenerationProblem, imageReadyMessage, IMAGE_INSPECTION, compPrompt } = require("./agent.ts");
 const { designCompBlocks } = require("./design-comps.ts");
 const { ProjectFiles } = require("./files.ts");
@@ -304,6 +306,18 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     assert.equal(events.find(event => event.type === "concept").shots, 1);
     const recorded = seen[1].messages.at(-1).content.find(block => block.type === "tool_result" && /Concept recorded/.test(block.content));
     assert.match(recorded.content, /Image plan recorded \(1 image\)/);
+  });
+
+  await check("comp-first is off unless MAKEBORNE_DESIGN_COMPS=on: a first build with a text-capable model is offered neither generate_comp nor read_comp", async () => {
+    testModels = ["gpt-image-2.5-flare", "gpt-image-2"];
+    delete process.env.MAKEBORNE_DESIGN_COMPS;
+    try {
+      script.length = 0; seen.length = 0; imageCalls.length = 0;
+      script.push({ content: [...site("q"), finish("fq")] }, { content: [finish("fq2")] });
+      await run({ concept: true });
+      assert.ok(!seen[0].tools.includes("generate_comp") && !seen[0].tools.includes("read_comp"), "no comp tools while the flag is off");
+      assert.equal(imageCalls.length, 0, "no image call was made for comps");
+    } finally { process.env.MAKEBORNE_DESIGN_COMPS = "on"; testModels = ["gpt-image-2"]; }
   });
 
   await check("comp-first: design comps after the concept, shown to the builder at 1024 px, never registered as site images, recorded for the review", async () => {

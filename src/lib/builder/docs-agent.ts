@@ -12,6 +12,7 @@ import { IMAGE_SIZES, imageConfiguration, openaiImageClient, storeGeneratedImage
 import { routeImage } from "./image-router";
 import { ART_EXPECTED_RENDER_USD, ART_IMAGE_SHARE, BOOK_IMAGE_CAP, BUILDER_EFFORT, DECK_ART_IMAGE_CAP, DOCUMENT_IMAGE_CAP, aiCostUsdPerCredit, bookImageMax, deckArtImageMax, deckArtSlidesFor, documentImageMax } from "./pricing";
 import { ContextMeter, IMAGE_BLOCK_TOKEN_BOUND, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
+import { fullImageSlidesEnabled } from "./features";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
 import { imageCallBoundMicrousd, maxInputTokenMicrousd, maxOutputTokenMicrousd, type ImageQuality } from "../ai/prices";
 import { SpendError, type RunSpend } from "../ai/run-spend";
@@ -129,7 +130,9 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
   const imageModelId = allowed[0] ?? null;
   // Full-image slides need a model that renders text exactly where asked (router: sunburst first, then flare).
   const deck = () => run.editor.doc.kind === "deck" ? run.editor.doc : null;
-  const artWanted = kind === "deck" && deck()?.art?.mode === "image";
+  // Not yet qualified for production: full-image slides also need MAKEBORNE_DECK_FULL_IMAGE=on (lib/builder/features.ts).
+  const artEnabled = fullImageSlidesEnabled();
+  const artWanted = artEnabled && kind === "deck" && deck()?.art?.mode === "image";
   const artRoute = artWanted ? routeImage({ kind: "illustration", aspect: "landscape", text: "slide text", textPlacement: "exact" }, "slide", allowed) : null;
   const artModel = artRoute?.ok ? artRoute.model : null;
   const art = Boolean(artWanted && artModel);
@@ -189,6 +192,7 @@ export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilder
       ? `Full-image slides: on (each slide is one generated image including its text; model ${artModel}). Plan the deck at the length the brief needs: there is no slide limit. This request's credits cover about ${expected} renders (first attempts and regenerations); if the deck needs more, render the slides that fit and finish: the rest are saved as waiting and rendered when the client continues.${deferredAtStart.length ? ` CONTINUATION: ${(deck()?.slides.length ?? 0) - deferredAtStart.length} of ${deck()?.slides.length ?? 0} slides are done; these slides are waiting to be rendered: ${deferredAtStart.join(", ")}. Render them with render_slides (no need to rewrite them unless the request asks), check them, then finish.` : ""}`
       : "Full-image slides: the run's budget cannot pay for slide renders. Design editable text slides (no art fields, no images) and say so in your summary."
     : artWanted ? "Full-image slides are not available here (no text-capable image model is enabled). Design editable text slides; say so in your summary."
+    : kind === "deck" && !artEnabled && deck()?.art?.mode === "image" ? "Full-image slides are not offered yet. Design editable text slides (no art fields); say so in your summary, without blaming the client's choice."
     : `Image generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${imageLimit > policy.maxImages ? `, about one per ${kind === "deck" ? "slide" : "chapter plus the cover"}` : ""})` : "unavailable — design without images"}.`;
   const planLine = run.editor.doc.kind === "book" ? `\n\n${bookImagePlanText(run.editor.doc)}${imageLimit > 0 ? ` Up to ${imageLimit} image generations this run, regenerations included.` : bookPlan(run.editor.doc).placement === "none" ? "" : " Image generation is unavailable this run: design without images and say so in your summary."}` : "";
   const messages: BetaMessageParam[] = [{ role: "user", content: [

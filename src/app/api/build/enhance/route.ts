@@ -8,6 +8,7 @@ import { requirePricedModel } from "@/lib/ai/model-check";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { logAiStop } from "@/lib/builder/website-run";
 import { ENHANCER_MODEL, enhanceBrief, unusableReason } from "@/lib/builder/brief-enhancer";
+import { briefEnhancerEnabled } from "@/lib/builder/features";
 import { DesignAnswersSchema, ENHANCER_CREDITS, renderBriefAnalysis, renderEnhancedBrief, shouldEnhance } from "@/lib/builder/enhanced-brief";
 import type { EnhanceAction } from "@/lib/builder/enhance-action";
 import {
@@ -66,6 +67,9 @@ export async function POST(request: Request) {
   try {
     sameOrigin(request);
     if (!builderEnabled()) throw new RequestError("BUILDER_UNAVAILABLE", "Brief improvement isn't available in this environment.", 503);
+    // Not yet qualified for production: new improvements are refused unless MAKEBORNE_BRIEF_ENHANCER=on. Reading,
+    // Stop and release (GET, PATCH, DELETE) stay open so an action started before the flag changed still settles.
+    if (!briefEnhancerEnabled()) throw new RequestError("BRIEF_ENHANCER_OFF", "Brief improvement isn't available yet. Nothing was charged; you can build from your own words.", 503);
     const key = actionKey(request);
     const parsed = EnhanceRequest.safeParse(await boundedJson(request, 24_000));
     if (!parsed.success) throw new RequestError("INVALID_REQUEST", "Describe the website you'd like to make.", 400);

@@ -33,6 +33,7 @@ import { briefWithAnswers, designAnswers, isBriefQuestion, mergedQuestions, ques
 import EnhancedBriefCard from "./enhanced-brief-card";
 import { useBriefImprovement, type Improvement } from "./use-brief-improvement";
 import { shouldEnhance, type BuildBrief } from "@/lib/builder/enhanced-brief";
+import { FEATURES_OFF, type BuilderFeatures } from "@/lib/builder/features";
 import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendingRequest, savePendingRequest, targetIssue, targetReference, undoIssue, type EditTarget, type PendingRequest } from "@/lib/builder/edit-intent";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
@@ -116,7 +117,7 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled: locked, disabledReason, sendBlocked = null, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled: locked, disabledReason, sendBlocked = null, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null, features = FEATURES_OFF }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback or an advisor brief (with its mode and effort). Never sent automatically. */
   prefill?: { key: string; text: string; target?: EditTarget; mode?: "create" | "plan"; effort?: EffortLevel } | null;
@@ -144,6 +145,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   kind?: "website" | "book" | "presentation"; baseDocument?: DocumentSource;
   /** Measured credit ranges from GET /api/build, shown before a first build. */
   estimates?: BuilderEstimates | null;
+  /** Unqualified generation features this deployment turned on (GET /api/build); all off unless the server says so. */
+  features?: BuilderFeatures;
 }) {
   const copy = COPY[kind], website = kind === "website";
   // Every request waits while locked or blocked; only `locked` stops typing.
@@ -187,7 +190,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [asking, setAsking] = useState<{ text: string; mode: "create" | "plan"; questions: readonly BriefQuestion[] | null } | null>(null);
   const asked = useRef(false);
   /** The optional, free "Improve my brief first" step of a first website build: offered, never automatic (M08, E4). */
-  const improvement = useBriefImprovement({ accountId, workspaceId, artifactId, attachments: sources.files.length, enabled: website });
+  const improvement = useBriefImprovement({ accountId, workspaceId, artifactId, attachments: sources.files.length, enabled: website && features.briefEnhancer });
   const enhancing = improvement.item;
   /** A completed improvement the client set aside (Cancel): its receipt stays visible and is carried into the next first build's receipt. */
   const [keptImprovement, setKeptImprovement] = useState<{ brief: BuildBrief; charged: number } | null>(null);
@@ -668,13 +671,14 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     if (!website) { void startDeferred(text, requestMode); return; }
     if (requestMode !== "create") { planDesign.current = Object.keys(design).length ? design : null; void startDeferred(text, requestMode); return; }
     // A complete (detailed) brief builds directly from the client's words: no reading or rewrite is sent first.
-    if (!shouldEnhance(original)) {
+    // Prompt help is offered only where the server turned it on (MAKEBORNE_BRIEF_ENHANCER); otherwise every brief builds from the client's words.
+    if (!features.briefEnhancer || !shouldEnhance(original)) {
       void startDeferred(text, "create", { ...(Object.keys(design).length ? { design } : {}), enhanced: briefUsed("original", keptImprovement) });
       return;
     }
     // A short brief: the client chooses between building now and improving it first (free). Nothing is sent yet.
     improvement.offer(text, design, original);
-  }, [balance, briefUsed, effort, improvement, keptImprovement, restoreBrief, startDeferred, website]);
+  }, [balance, briefUsed, effort, features.briefEnhancer, improvement, keptImprovement, restoreBrief, startDeferred, website]);
   const proceedLatest = useRef(proceed);
   useEffect(() => { proceedLatest.current = proceed; }, [proceed]);
   const startingBrief = useRef(false);
@@ -734,7 +738,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       setAsking({ text: brief, mode: requestMode, questions: null }); setDraft("");
       // The on-device design questions for this brief, with AI-tailored business questions merged in when available.
       void tailoredQuestions(brief, attachments).then(tailored => {
-        const questions = mergedQuestions(kind, brief, tailored, { attachments });
+        // The slide-style question offers full-image slides: asked only where the server offers them (MAKEBORNE_DECK_FULL_IMAGE).
+        const questions = mergedQuestions(kind, brief, tailored, { attachments }).filter(question => features.fullImageSlides || question.id !== "slides");
         if (!questions.length) { setAsking(null); if (prepared) hold(); else proceedLatest.current(brief, requestMode, {}, brief); return; }
         setAsking(current => current && current.text === brief && !current.questions ? { ...current, questions } : current);
       });
@@ -742,7 +747,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     }
     if (prepared) { hold(); return; }
     void submitSources(text, requestMode, target ? { target } : undefined);
-  }, [asking, enhancing, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
+  }, [asking, enhancing, features.fullImageSlides, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
   const answerQuestions = (answers: BriefAnswers | null) => {
     if (!asking) return;
     const { text, mode: requestMode, questions } = asking;
@@ -880,9 +885,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     <div className="lb-log" id={`lb-log-${artifactId}`} ref={log} aria-live="polite">
       {empty && !asking && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {asking && <><div className="lb-turn lb-user"><p>{asking.text}</p></div>
-        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>{website && asking.mode === "create" && shouldEnhance(asking.text) ? "Skip questions" : <>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</>}</button></div>
+        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>{website && features.briefEnhancer && asking.mode === "create" && shouldEnhance(asking.text) ? "Skip questions" : <>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</>}</button></div>
           : <BriefQuestionsCard questions={asking.questions} kind={kind} planning={asking.mode === "plan"} busy={busy || preparingSources || Boolean(disabled)}
-          finalLabel={website && asking.mode === "create" && shouldEnhance(asking.text) ? "Continue" : undefined}
+          finalLabel={website && features.briefEnhancer && asking.mode === "create" && shouldEnhance(asking.text) ? "Continue" : undefined}
           limit={`Starting ${asking.mode === "plan" ? "the plan" : "the build"} uses up to ${asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits, with ${sources.files.length ? `your source files: ${sources.files.filter(file => !leftOut.has(file.id)).map(file => file.name).join(", ") || "none"}` : "no source files"}. You pay only for what is used.`}
           onStart={answers => answerQuestions(answers)} onSkip={() => answerQuestions(null)} />}</div></>}
       {!!previousTurns.length && <details className="lb-history" open><summary>Chat history</summary>

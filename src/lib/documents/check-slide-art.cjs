@@ -4,6 +4,8 @@ const load = Module._load;
 Module._load = function(name, parent, main) { return name === "server-only" ? {} : load.call(this, name, parent, main); };
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, resolveJsonModule: true } }).outputText, filename);
 const JSZip = require("jszip"), sharp = require("sharp");
+// Full-image slides are off by default (MAKEBORNE_DECK_FULL_IMAGE, lib/builder/features.ts); these checks exercise them on.
+process.env.MAKEBORNE_DECK_FULL_IMAGE = "on";
 const { DocumentEditor, emptyDocument, unescapeLiterals } = require("./editor.ts");
 const { composeSlide, H } = require("./slide-scene.ts");
 const { ART_COMPOSITION, ART_SAFE_MARGIN_PCT, artAlt, artFontsFor, artScene, plateRange, plateScrim, artPlaceholders, artPlanIssues, artPrompt, artTextIssues, compareSlideText, slideClaimIssues, slideText, textKey, verifiedArt } = require("./slide-art.ts");
@@ -80,7 +82,7 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     assert.deepEqual(emptyDocument("deck", "Pitch", undefined, { slideMode: "image" }).art, { mode: "image", system: "", renders: [] });
     assert.equal(emptyDocument("deck", "Pitch").art, undefined, "a deck without the option (saved before it) keeps editable slides");
     const runSource = fs.readFileSync(require.resolve("../builder/docs-run.ts"), "utf8");
-    assert.match(runSource, /slideMode: deckModeFromBrief\(options\)\.mode/, "new decks take their mode from the brief and answers");
+    assert.match(runSource, /slideMode: fullImageSlidesEnabled\(\) \? deckModeFromBrief\(options\)\.mode : "live"/, "new decks take their mode from the brief and answers where full-image slides are enabled, else editable text");
   });
 
   await check("full-image decks: no slide limit from the image heuristic; images may use 70% of the unchanged allowance", () => {
@@ -198,6 +200,20 @@ const imagesIn = stream => stream.messages.at(-1).content.flatMap(block => Array
     const slide3 = await zip.file("ppt/slides/slide3.xml").async("string");
     assert.ok(!/<p:pic>[\s\S]*Image art-demand/.test(slide3) && slide3.includes("Demand doubles"), "the fallback slide is native editable text");
     assert.match(slide3, /name="Image plate-demand"/, "over its plate as a picture");
+  });
+
+  await check("full-image slides are off unless MAKEBORNE_DECK_FULL_IMAGE=on: an image-mode deck gets no art tools, no art system prompt and no render", async () => {
+    delete process.env.MAKEBORNE_DECK_FULL_IMAGE;
+    try {
+      const local = new DocumentEditor(emptyDocument("deck", "Harbour Light", undefined, { slideMode: "image" }));
+      const pictures = fakeImages();
+      const fake = fakeAnthropic([[toolUse("set_theme", THEME), toolUse("write_slide", { slide: { ...SLIDES[1], art: undefined } })], [toolUse("finish", { summary: "x" })], [toolUse("finish", { summary: "x" })]]);
+      await run(local, fake, pictures);
+      assert.ok(!fake.log.streams[0].toolNames.includes("render_slides") && !fake.log.streams[0].toolNames.includes("check_slide"), "no art tools");
+      assert.doesNotMatch(fake.log.streams[0].system[0].text, /FULL-IMAGE SLIDES/);
+      assert.match(JSON.stringify(fake.log.streams[0].messages[0]), /Full-image slides are not offered yet/);
+      assert.equal(pictures.log.prompts.filter(prompt => !/background plate/.test(prompt)).length, 0, "no slide render");
+    } finally { process.env.MAKEBORNE_DECK_FULL_IMAGE = "on"; }
   });
 
   await check("render_slides refuses consecutive repeats and wordy slides before any image is paid for", async () => {

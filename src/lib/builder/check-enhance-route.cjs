@@ -59,6 +59,19 @@ async function check(name, fn) { p.behaviour = "ok"; p.during = null; context.ca
       assert.equal(p.calls, calls); assert.equal(store.action(key), undefined);
     } finally { user.available = saved; }
   });
+  await check("the enhancer flag off (the default): 503 BRIEF_ENHANCER_OFF before any claim, hold or provider call; reading and Stop stay open", async () => {
+    const before = claims(), calls = p.calls;
+    delete process.env.MAKEBORNE_BRIEF_ENHANCER;
+    try {
+      const key = randomUUID();
+      const reply = await api.post(key);
+      assert.equal(reply.status, 503); assert.equal(reply.body.error.code, "BRIEF_ENHANCER_OFF"); assert.match(reply.body.error.message, /Nothing was charged/);
+      assert.equal(claims(), before); assert.equal(p.calls, calls, "no provider call");
+      assert.notEqual((await api.get(key)).status, 503, "an existing action can still be read while the flag is off");
+      process.env.MAKEBORNE_BRIEF_ENHANCER = "true";
+      assert.equal((await api.post(randomUUID())).body.error?.code, "BRIEF_ENHANCER_OFF", "only the exact value on enables it");
+    } finally { process.env.MAKEBORNE_BRIEF_ENHANCER = "on"; }
+  });
   await check("a paused provider refuses before any claim or hold, with the server's own code", async () => {
     const { RequestError } = require("../server/http.ts");
     context.capacityError = () => new RequestError("AI_PAUSED", "AI is paused right now.", 503);

@@ -25,7 +25,9 @@ const status = (data, error = null) => async () => ({ data, error });
 // The GET body carries availability plus measured credit ranges (credits only); availability is asserted exactly, estimates by shape.
 const get = async () => {
   const response = await route.GET(); assert.equal(response.headers.get("Cache-Control"), "no-store");
-  const { estimates, ...availability } = await response.json();
+  const { estimates, features, ...availability } = await response.json();
+  // Unqualified generation features: exactly what the server's flags say, booleans only (lib/builder/features.ts).
+  assert.deepEqual(features, { briefEnhancer: process.env.MAKEBORNE_BRIEF_ENHANCER === "on", fullImageSlides: process.env.MAKEBORNE_DECK_FULL_IMAGE === "on" }, "features follow the server flags");
   assert.ok(estimates && estimates.firstBuild && estimates.reviewRound, "credit estimates accompany every answer");
   assert.ok(!/micro|usd|cost|budget/i.test(JSON.stringify(estimates)), "estimates are credit ranges, never provider amounts");
   return availability;
@@ -70,6 +72,20 @@ const get = async () => {
   await check("GET /api/build: builder off answers off without touching the database", env({ MAKEBORNE_LIVE_BUILDER_ENABLED: "false", ANTHROPIC_API_KEY: "offline-not-sent" }, async () => {
     assert.deepEqual(await get(), { available: false, configured: false, state: "off" });
     assert.equal(rpcCalls.length, 0);
+  }));
+  await check("GET /api/build: unqualified features are off unless their flag is exactly on; the browser parser never turns one on", env({ MAKEBORNE_LIVE_BUILDER_ENABLED: "false", MAKEBORNE_BRIEF_ENHANCER: undefined, MAKEBORNE_DECK_FULL_IMAGE: undefined }, async () => {
+    const { parseBuilderFeatures, builderFeatures, designCompsEnabled, FEATURES_OFF } = require("./features.ts");
+    const read = async () => (await (await route.GET()).json()).features;
+    assert.deepEqual(await read(), { briefEnhancer: false, fullImageSlides: false });
+    process.env.MAKEBORNE_BRIEF_ENHANCER = "true"; process.env.MAKEBORNE_DECK_FULL_IMAGE = "1";
+    assert.deepEqual(await read(), { briefEnhancer: false, fullImageSlides: false }, "only the exact value on");
+    process.env.MAKEBORNE_BRIEF_ENHANCER = "on"; process.env.MAKEBORNE_DECK_FULL_IMAGE = "on";
+    assert.deepEqual(await read(), { briefEnhancer: true, fullImageSlides: true });
+    delete process.env.MAKEBORNE_BRIEF_ENHANCER; delete process.env.MAKEBORNE_DECK_FULL_IMAGE;
+    assert.equal(designCompsEnabled({}), false); assert.equal(designCompsEnabled({ MAKEBORNE_DESIGN_COMPS: "on" }), true);
+    assert.deepEqual(builderFeatures({}), FEATURES_OFF);
+    for (const junk of [null, undefined, "on", 1, [], { briefEnhancer: "true", fullImageSlides: 1 }]) assert.deepEqual(parseBuilderFeatures(junk), FEATURES_OFF);
+    assert.deepEqual(parseBuilderFeatures({ briefEnhancer: true, fullImageSlides: false }), { briefEnhancer: true, fullImageSlides: false });
   }));
   await check("GET /api/build: no key answers off", env({ MAKEBORNE_LIVE_BUILDER_ENABLED: undefined, ANTHROPIC_API_KEY: undefined }, async () => {
     assert.deepEqual(await get(), { available: false, configured: false, state: "off" });
