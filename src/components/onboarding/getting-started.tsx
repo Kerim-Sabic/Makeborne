@@ -13,6 +13,8 @@ import "./onboarding.css";
 type Saved = { welcomed: boolean; hidden: boolean; celebrated: boolean };
 const storeKey = (account: string) => `makeborne.onboarding.v1:${account}`;
 const CHAT_STORE = "makeborne.advisor-chats.v2";
+/** A signed-in account with no workspace yet has nothing saved: every step is still to do. */
+const NO_WORKSPACE_YET: Progress = { artifacts: 0, clients: 0, finderLeads: 0, mailboxes: 0, sentEmails: 0, reviewLinks: 0 };
 
 function readSaved(account: string): Saved {
   try { return { welcomed: false, hidden: false, celebrated: false, ...JSON.parse(localStorage.getItem(storeKey(account)) ?? "{}") }; }
@@ -32,7 +34,7 @@ function advisorUsed(account: string) {
  * data. Dismissible; never shown to people who already use the studio.
  */
 export default function GettingStarted({ accountId, workspaceId, tab, hidden, onCreate, onNavigate }: {
-  accountId: string; workspaceId: string; tab: string; hidden: boolean;
+  accountId: string; workspaceId: string | null; tab: string; hidden: boolean;
   onCreate: (kind: "website" | "book" | "presentation") => void; onNavigate: (tab: "projects" | "clients") => void;
 }) {
   const [saved, setSaved] = useState<Saved>(() => readSaved(accountId));
@@ -48,12 +50,21 @@ export default function GettingStarted({ accountId, workspaceId, tab, hidden, on
 
   const load = useCallback(async () => {
     try {
-      const result = await mailApi<{ progress: Progress }>(accountId, `/api/cloud/workspaces/${workspaceId}/onboarding`);
+      // A brand-new account has no workspace until its first project or client creates one;
+      // look it up again on each refresh so progress appears as soon as one exists.
+      let id = workspaceId;
+      if (!id) {
+        const { workspaces } = await mailApi<{ workspaces: { id: string; role?: string }[] }>(accountId, "/api/workspaces");
+        id = (workspaces.find(item => item.role === "owner") ?? workspaces.find(item => item.role === "editor"))?.id ?? null;
+        if (!id && workspaces.length) return; // read-only access elsewhere: not a new account's checklist
+      }
+      const result = id ? await mailApi<{ progress: Progress }>(accountId, `/api/cloud/workspaces/${id}/onboarding`) : { progress: NO_WORKSPACE_YET };
       setProgress(result.progress); setAdvisor(advisorUsed(accountId));
     } catch { /* the checklist is optional: stay hidden until it can load */ }
   }, [accountId, workspaceId]);
-  // Load after mount and on every tab change; refresh when the window regains focus or the app reports progress.
-  useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load, tab]);
+  // Load after mount, on every tab change and when the checklist comes back into view (after creating or editing);
+  // refresh when the window regains focus or the app reports progress.
+  useEffect(() => { if (hidden) return; const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load, tab, hidden]);
   useEffect(() => {
     const refresh = () => void load();
     window.addEventListener("focus", refresh); window.addEventListener(ONBOARDING_REFRESH_EVENT, refresh);

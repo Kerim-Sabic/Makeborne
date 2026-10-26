@@ -1173,7 +1173,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       </div>
       {creationView}
       {/* First-run welcome and getting-started checklist (signed-in accounts only; out of the way while creating or editing). */}
-      {composerAccount.accountId && composerAccount.workspace && <GettingStarted key={composerAccount.accountId} accountId={composerAccount.accountId} workspaceId={composerAccount.workspace.id} tab={tab}
+      {/* A brand-new member has no workspace until the first project or client creates one: still welcome them. */}
+      {composerAccount.accountId && composerAccount.ready && <GettingStarted key={composerAccount.accountId} accountId={composerAccount.accountId} workspaceId={composerAccount.workspace?.id ?? null} tab={tab}
         hidden={Boolean(creating) || Boolean(project) || Boolean(accountRoute?.artifactId)}
         onCreate={kind => { setHomeHandoff(false); setCreating(kind); }} onNavigate={next => openRoute({ tab: next, projectId: null, clientId: null })} />}
       {clientModal && (
