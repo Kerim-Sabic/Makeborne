@@ -15,7 +15,7 @@
  */
 import type { Browser } from "playwright";
 import type { ContrastFinding } from "./rendered-contrast";
-import type { CompDeviation, CompReading, CoveredText, CutOff, PageOverflow, WrappedBand } from "./contrast-probe";
+import type { CompDeviation, CompReading, CoveredText, CutOff, FirstScreenMiss, PageOverflow, WrappedBand } from "./contrast-probe";
 
 const HOST_PATH = "/__makeborne-contrast-host";
 const STATE = { default: "", hover: " on hover", focus: " on keyboard focus", invalid: " in its error state" } as const;
@@ -45,6 +45,14 @@ export function overflowProblem(item: PageOverflow) {
 /** A section built further from its design comp than allowed (measured at the comp's viewport). */
 export function fidelityProblem(item: CompDeviation) {
   return `Comp fidelity: the "${item.section}" section (${item.viewport}) is off its comp: ${item.fix}, unless that breaks the 360 px, overlap or contrast rules. Then call finish again.`;
+}
+
+/** The first phone screen does not hold the h1 and the primary action (W16). Blocks a finish once. */
+export function firstScreenProblem(item: FirstScreenMiss) {
+  const what = item.missing.map(part => part === "h1"
+    ? `the h1${item.h1 ? ` ("${item.h1}")` : ""} ${item.h1Bottom !== null ? `ends at ${item.h1Bottom} px` : "is missing"}`
+    : `the primary action${item.action ? ` ("${item.action}")` : ""} ${item.actionBottom !== null ? `ends at ${item.actionBottom} px` : "is missing"}`).join(" and ");
+  return `First screen: on a ${item.width} × ${item.height} phone screen ${what}; both must be fully visible without scrolling. Tighten the phone first screen as in the phone comp: a shorter header, the hero image as a band of about a quarter of the screen (or below the action), smaller phone headline sizes (clamp), less space above the h1, and the primary action as a filled pill right under the headline or value line. Then call finish again.`;
 }
 
 /** A marquee or tag band that wraps into a second row. */
@@ -80,12 +88,12 @@ export function renderedContrastCheck(input: { origin: string; launch: () => Pro
       await page.goto(`${origin}${HOST_PATH}`, { waitUntil: "load" });
       await page.addScriptTag({ url: `${origin}/builder-runtime/contrast-probe.js` });
       const result = await page.evaluate(async record => {
-        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>, readings?: readonly CompReading[]) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[]; cutOff?: CutOff[]; wrapped?: WrappedBand[]; overflow?: PageOverflow[]; fidelity?: CompDeviation[] }> } }).__makeborneContrast;
+        const probe = (window as unknown as { __makeborneContrast?: { probeContrast: (files: Record<string, string>, readings?: readonly CompReading[]) => Promise<{ findings: ContrastFinding[]; covered?: CoveredText[]; cutOff?: CutOff[]; wrapped?: WrappedBand[]; overflow?: PageOverflow[]; fidelity?: CompDeviation[]; firstScreen?: FirstScreenMiss[] }> } }).__makeborneContrast;
         if (!probe) throw new Error("contrast probe unavailable");
         return probe.probeContrast(record.files, record.readings);
       }, { files: Object.fromEntries(files), readings: [...(options.comps ?? [])] });
       return [...(result.covered ?? []).slice(0, 4).map(coveredProblem), ...(result.cutOff ?? []).slice(0, 2).map(cutOffProblem), ...(result.wrapped ?? []).slice(0, 1).map(wrappedProblem),
-        ...(result.overflow ?? []).slice(0, 2).map(overflowProblem), ...(result.fidelity ?? []).slice(0, 3).map(fidelityProblem), ...contrastProblems(result.findings)];
+        ...(result.overflow ?? []).slice(0, 2).map(overflowProblem), ...(result.firstScreen ?? []).slice(0, 1).map(firstScreenProblem), ...(result.fidelity ?? []).slice(0, 3).map(fidelityProblem), ...contrastProblems(result.findings)];
     } catch (error) {
       console.error(JSON.stringify({ event: "builder_contrast_unverified", reason: error instanceof Error ? error.message.slice(0, 200) : "unavailable" }));
       return null;

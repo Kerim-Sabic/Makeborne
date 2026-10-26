@@ -8,6 +8,7 @@
 //
 //   EVAL_SPEND_APPROVED=yes [EVAL_ENV_LOCAL=<abs path>/.env.local] node scripts/eval/direct-run.mjs --run <runId> --approval "<who/when>"
 //     --effort medium|high --only w01,w02 [--repo <another checkout whose app code to run, e.g. an extracted base commit>]
+//     [--scope <scope>]  (book every reservation in that owner-recorded scoped allowance instead of the design cap)
 //     [--images gpt-image-2.5-flare,gpt-image-2.5-sunburst,gpt-image-2]  (image routing on: OPENAI_API_KEY from the same .env.local;
 //      a second, OpenAI ledger reservation per brief covers its images under the OpenAI sub-cap; bytes land in <item>/assets/)
 //     [--variant original|enhanced|answered]  (design round 3: "enhanced" runs the app's brief enhancer first, one capped Haiku
@@ -24,7 +25,10 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' }, variant: { type: 'string', default: 'original' } } });
+const { values } = parseArgs({ strict: true, options: { repo: { type: 'string' }, run: { type: 'string' }, approval: { type: 'string' }, effort: { type: 'string', default: 'medium' }, only: { type: 'string' }, seedless: { type: 'boolean' }, images: { type: 'string' }, variant: { type: 'string', default: 'original' }, scope: { type: 'string' } } });
+// --scope <scope>: book every reservation in an owner-recorded scoped allowance (budget.mjs --record-scope) instead of the design cap.
+const book = args => (values.scope ? budget.reserveScoped({ ...args, scope: values.scope }) : budget.reserve(args));
+const ledgerNote = () => (values.scope ? `scope ${values.scope}` : budget.CAP_APPROVAL);
 // This harness: the ledger, the run outputs and the secret scan always go through it.
 const DQ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPO = path.resolve(values.repo ?? DQ);
@@ -41,6 +45,8 @@ const { loadApp } = require(`${REPO}/scripts/eval/lib/app-modules.cjs`);
 const imp = file => import(pathToFileURL(path.join(REPO, file)).href);
 // The one ledger (and the run outputs) always go through the design-quality harness.
 const budget = await import(pathToFileURL(path.join(DQ, 'scripts/eval/lib/budget.mjs')).href);
+// A named scope must already carry the owner's recorded approval (throws EVAL_SCOPE_UNAPPROVED before any work).
+if (values.scope) budget.scopeSummary(values.scope);
 const { serve } = await imp('scripts/eval/lib/serve.mjs');
 const { captureForReview, describeCapture, saveShots } = await imp('scripts/eval/lib/capture-review.mjs');
 const { scanForSecrets } = await import(pathToFileURL(path.join(DQ, 'scripts/eval/run.mjs')).href);
@@ -113,11 +119,11 @@ try {
     if (fs.existsSync(path.join(itemDir, 'cost.json'))) { console.log(`${id}: already run, skipped`); continue; }
     fs.mkdirSync(itemDir, { recursive: true });
     const boundUsd = operationCapMicrousd / 1e6;
-    const reservation = await budget.reserve({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. ${values.effort}` });
+    const reservation = await book({ kind: 'direct-runner', ref: `${values.run}/${id}`, boundUsd, provider: 'anthropic', unique: true, note: `${ledgerNote()}. ${values.approval}. ${values.effort}` });
     // Images: the run's whole image allowance (max images x the dearest allowed medium bound) reserved under the OpenAI sub-cap.
     const imageModels = imagesModule ? imagesModule.imageConfiguration().models : [];
     const imageBoundUsd = imageModels.length ? (policy.maxWebsiteImages ?? policy.maxImages) * Math.max(...imageModels.map(model => prices.imageCallBoundMicrousd(model, 'medium', '1024x1536', 'x'.repeat(3400)))) / 1e6 : 0;
-    const imageReservation = imageBoundUsd ? await budget.reserve({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
+    const imageReservation = imageBoundUsd ? await book({ kind: 'direct-runner-images', ref: `${values.run}/${id}`, boundUsd: imageBoundUsd, provider: 'openai', unique: true, note: `${ledgerNote()}. ${values.approval}. images ${imageModels.join(',')}` }) : null;
     let openaiMicrousd = 0, openaiUncertain = false;
     const imageBytes = new Map();
     const images = [];
@@ -140,7 +146,7 @@ try {
     const helpMode = enhancing && enhancedModule.shouldEnhance(brief.brief) ? 'enhance' : 'analyze';
     if (enhancing && values.variant !== 'questions') {
       const enhancerBoundUsd = enhancedModule.ENHANCER_CREDITS * RATE;
-      const enhancerReservation = await budget.reserve({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${budget.CAP_APPROVAL}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
+      const enhancerReservation = await book({ kind: 'direct-enhancer', ref: `${values.run}/${id}`, boundUsd: enhancerBoundUsd, provider: 'anthropic', unique: true, note: `${ledgerNote()}. ${values.approval}. brief enhancer (${enhancerModule.ENHANCER_MODEL})` });
       const enhanceSpend = new RunSpend({ run: `${values.run}/${id}/enhance`, providerCapMicrousd: Math.round(enhancerBoundUsd * 1e6), customerCapMicrousd: null, gate: memoryGate(), deadline: Date.now() + 50_000 });
       let enhanced = null, enhanceError = null;
       let reply = null;
@@ -239,7 +245,7 @@ try {
       fs.writeFileSync(path.join(itemDir, 'status.json'), JSON.stringify({ ok: sourceOk && outcome === 'ok', outcome }, null, 2));
       runJson.items = runJson.items.filter(item => item.id !== id).concat({ id, kind: 'website', status: sourceOk ? 'generated' : 'failed', costUsd: uncertain ? null : actualUsd });
       save();
-      console.log(`${id}: $${actualUsd.toFixed(3)} of $${boundUsd.toFixed(2)} bound, ${stages.length} stage(s), ${outcome}; ledger ${JSON.stringify(budget.summary().byProvider)}`);
+      console.log(`${id}: $${actualUsd.toFixed(3)} of $${boundUsd.toFixed(2)} bound, ${stages.length} stage(s), ${outcome}; ledger ${JSON.stringify(values.scope ? budget.scopeSummary(values.scope).byProvider : budget.summary().byProvider)}`);
     }
   }
 } finally {

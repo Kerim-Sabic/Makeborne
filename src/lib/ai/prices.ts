@@ -113,8 +113,12 @@ export const TEXT_PRICES: Readonly<Record<string, TextPrice>> = Object.freeze(Ob
  * never request it, but bounds assume it so an account default cannot overrun. */
 export const GEO_MULTIPLIER = 1.1;
 
-export type ImageQuality = "low" | "medium" | "high";
-export type ImageSize = "1024x1024" | "1024x1536" | "1536x1024";
+/** "xhigh" exists only on the 2.5 models (image-generation guide, checked 2026-10-26); like every cell it is refused
+ * until MEASURED_IMAGE_OUTPUT_TOKENS lists it. "max" and "auto" are never requested (no bound). */
+export type ImageQuality = "low" | "medium" | "high" | "xhigh";
+/** WIDTHxHEIGHT. The 2.5 models take custom sizes within SIZE_RULES (image-cells.ts); a size is still refused until
+ * its (quality, size) cell is measured. */
+export type ImageSize = `${number}x${number}`;
 /** Output tokens per image by quality and size, from the cited guide table. */
 export type ImagePrice = { textInput: number; imageInput: number; imageOutput: number; outputTokens: Partial<Record<ImageQuality, Partial<Record<ImageSize, number>>>> };
 type OutputTokens = ImagePrice["outputTokens"];
@@ -265,8 +269,10 @@ export function assertSupportedImageRequest(request: { model: string; quality: s
   const price = imagePrice(request.model);
   if (request.background !== undefined && request.background !== "opaque" && request.background !== "transparent") throw new UnsupportedConfigurationError(`image background "${request.background}"`);
   if (request.background === "transparent" && !supportsTransparentImages(request.model)) throw new UnsupportedConfigurationError(`transparent background on "${request.model}"`);
-  // Low and medium; high only when the router asks for it (small text), never xhigh or max (no bound).
-  if (!(request.quality === "medium" || request.quality === "low" || (request.quality === "high" && request.allowHigh))) throw new UnsupportedConfigurationError(`image quality "${request.quality}"`);
+  // Low and medium; high and xhigh only when the caller asks for them (small text, a chosen document quality) and the
+  // cell is measured below; never max or auto (no bound).
+  if (!(request.quality === "medium" || request.quality === "low" || ((request.quality === "high" || request.quality === "xhigh") && request.allowHigh))) throw new UnsupportedConfigurationError(`image quality "${request.quality}"`);
+  if (!/^[1-9]\d{2,3}x[1-9]\d{2,3}$/.test(request.size)) throw new UnsupportedConfigurationError(`image size "${request.size}"`);
   if ((request.n ?? 1) !== 1) throw new UnsupportedConfigurationError("more than one image per call");
   // Image input is refused on every generation path. The only path that may send an image is the
   // separately priced and qualified edit path (image-edit-prices.ts / image-edit-call.ts).

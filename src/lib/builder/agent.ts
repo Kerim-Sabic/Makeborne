@@ -23,6 +23,10 @@ import { BLOCKING_PROBLEM } from "./contrast-gate-rules";
 import { CONCEPT_TOOL, CompReadingSchema, MAX_COMPS, checkConcept, compsFromSource, imagePlanNote, sitePlanNote, withConceptComment, type CompReadingValues, type ConceptRecord, type DesignComp } from "./concept";
 import { storeProjectImage } from "./images";
 import { COMP_PREVIEW_EDGE, imagePreview, type ImagePreview } from "./image-variants";
+import sharp from "sharp";
+import { COMP_INPUT_JSON, COMP_SHAPE, COMP_WORDS, CompInputSchema, compCell, compInputIssues, compPrompt, compText } from "./comp-prompt";
+
+export { compPrompt } from "./comp-prompt";
 
 /** Conservative streaming output rate used to size steps to the time left. */
 const OUTPUT_TOKENS_PER_SECOND = 50;
@@ -52,8 +56,7 @@ const ToolInputs = {
   edit_file: z.object({ path: z.string(), old_string: z.string(), new_string: z.string(), replace_all: z.boolean().optional() }).strict(),
   delete_file: z.object({ path: z.string() }).strict(),
   read_comp: CompReadingSchema,
-  generate_comp: z.object({ section: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9 _-]{0,39}$/, "Use the section id from the section plan."), viewport: z.enum(["desktop", "mobile"]),
-    prompt: z.string().min(40).max(3000), text: z.string().trim().min(2).max(200) }).strict(),
+  generate_comp: CompInputSchema,
   generate_image: z.object({ name, prompt: z.string().min(20).max(3000), aspect: z.enum(["landscape", "portrait", "square"]), kind: z.enum(IMAGE_KINDS).optional(),
     text: z.string().max(200).nullable().optional(), textPlacement: z.enum(["exact", "loose"]).optional(),
     replaces: name.optional(), rejected: z.string().trim().min(8).max(300).optional() }).strict()
@@ -67,8 +70,8 @@ const ToolInputs = {
 };
 
 /** The comp tool: a finished website screen as one picture (type, image, colour and space designed together). */
-const COMP_TOOL = { name: "generate_comp", description: `First build, after the concept: generate one design comp, a picture of a finished website screen in the art system, as an art director's reference you then build in code. It is never shown on the page. Use it for the first screen (desktop) and the two most important other sections, and optionally the phone first screen (viewport mobile); at most ${MAX_COMPS}, all in one step. prompt: the section's composition from the section plan, the type (face, size relative to the screen, weight, case, leading), the colour fields and their proportions, the photograph or drawing and its crop, overlaps, the motif and the empty space. text: the only words the comp shows (the section's real headline and primary action, under 200 characters); body copy appears as quiet lines.`,
-  input_schema: { type: "object" as const, properties: { section: { type: "string", description: "The section id from the section plan" }, viewport: { type: "string", enum: ["desktop", "mobile"] }, prompt: { type: "string" }, text: { type: "string", description: "The headline and action words the comp shows" } }, required: ["section", "viewport", "prompt", "text"], additionalProperties: false } };
+const COMP_TOOL = { name: "generate_comp", description: `First build, after the concept: generate one design comp, a picture of a finished website screen in the art system, as an art director's reference you then build in code. It is never shown on the page. Use it for the first screen (desktop, ${COMP_SHAPE.desktop.width} × ${COMP_SHAPE.desktop.height}), the phone first screen (viewport mobile, ${COMP_SHAPE.mobile.width} × ${COMP_SHAPE.mobile.height}: its top bar, whole headline and action pill must fit that one screen) and the key sections; at most ${MAX_COMPS}, all in one step. Write it like an art director's brief, field by field: the brand's wordmark (and its small mark), the exact hex colours from the palette (ground, text, accent), the headline typeface STYLE in words ("huge bold condensed sans", "elegant italic serif", "friendly rounded bold"), the desktop navigation items exactly as the header will say them, the action pill (exact label, filled or outlined, colour), the layout as exact percentages ("left 46%: solid cobalt #1D3FA8 type field with the headline and the pill"; "right 54%: full-bleed photograph"), every line of words in reading order with its line breaks ("Fixed by / Friday."), the accent words and how they are set ("Friday." in lime), and the photograph in specific, cinematic terms (subject, action, place, light, lens, crop). Use the site's real copy: the comp's words are the words you build. At most ${COMP_WORDS.desktop} (desktop) or ${COMP_WORDS.mobile} (phone) words besides the navigation; body copy appears as quiet lines.`,
+  input_schema: COMP_INPUT_JSON };
 
 /** The builder's reading of a comp, measured against the built page at finish. */
 const READ_COMP_TOOL = { name: "read_comp", description: "After a design comp comes back, record what it shows, read from the picture: the cap height of its largest headline as a percentage of the comp's height (a capital H; e.g. 8 for a headline whose capitals are 8% of the frame tall), the share of the frame the photograph or drawing covers (0-100), and the side it sits on. Finish measures the built section against this reading: its largest headline's cap height must be at least 85% of the comp's.",
@@ -362,8 +365,19 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (!concept) { fail("Record the concept, with its art system and section plan, before generating design comps."); break; }
             if (compsStarted >= MAX_COMPS) { fail(`At most ${MAX_COMPS} design comps per build. Build the other sections from the art system and the comps you have.`); break; }
             if (comps.some(comp => comp.section === input.section && comp.viewport === input.viewport)) { fail(`There is already a ${input.viewport} comp for ${input.section}.`); break; }
-            const route = routeImage({ kind: "illustration", aspect: input.viewport === "desktop" ? "landscape" : "portrait", text: input.text, textPlacement: "loose" }, compPrompt(input, concept), imageModels);
-            if (!route.ok) { fail(route.error); break; }
+            const issues = compInputIssues(input);
+            if (issues.length) { fail(`Rewrite this comp: ${issues.join("; ")}.`); break; }
+            // The reference pattern: the exact words are quoted in the paragraph and placed exactly, so the 2.5 model that
+            // sets text where asked (sunburst, else flare) is preferred. The canvas is the best measured one for this model
+            // and viewport (the native 2560x1440 / 1152x2496 once measured, else a measured canvas cut to the shape).
+            const task = { kind: "illustration" as const, aspect: input.viewport === "desktop" ? "landscape" as const : "portrait" as const, text: compText(input), textPlacement: "exact" as const };
+            const picked = routeImage(task, compPrompt(input, concept), imageModels);
+            if (!picked.ok) { fail(picked.error); break; }
+            const cell = compCell(picked.model, input.viewport);
+            if (!cell.ok) { fail(`Design comps are unavailable here (${cell.error}). Build from the art system and the section plan.`); break; }
+            const routed = routeImage(task, compPrompt(input, concept, cell.size), [picked.model]);
+            if (!routed.ok) { fail(routed.error); break; }
+            const route = { ...routed, size: cell.size, quality: cell.quality, allowHigh: cell.quality !== "medium", boundMicrousd: imageCallBoundMicrousd(routed.model, cell.quality, cell.size, routed.prompt) };
             // The photographs still to come, at the bound of the model the router picks for them (comps never cut photos).
             const photoBound = Math.max(...(["landscape", "portrait", "square"] as const).map(aspect => { const photo = routeImage({ kind: "photo", aspect, text: null }, "x".repeat(3400), imageModels); return photo.ok ? photo.boundMicrousd : imageBound; }));
             const photoReserve = Math.max(0, imageLimit - imagesUsed) * photoBound;
@@ -378,11 +392,14 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               break;
             }
             const slot = compsStarted++; imageReservedMicrousd += route.boundMicrousd;
-            run.emit({ type: "image_start", name: `comp-${input.section}-${input.viewport}`, prompt: input.prompt, comp: true });
+            run.emit({ type: "image_start", name: `comp-${input.section}-${input.viewport}`, prompt: compText(input), comp: true });
             const started = job, record = concept;
-            imageJobs.push(started.done.then(async bytes => {
+            imageJobs.push(started.done.then(async raw => {
               const detail = await started.detail;
-              const stored = await storeComp(bytes, { kind: "design-comp", section: input.section, viewport: input.viewport, model: route.model, prompt: route.prompt.slice(0, 2000), costMicrousd: detail.costMicrousd });
+              // A canvas that is not the comp's own shape is cut to it (the prompt kept the cut margins free of words).
+              const bytes = cell.native ? raw : await sharp(raw, { limitInputPixels: 40_000_000 }).extract(cell.crop).webp({ quality: 90 }).toBuffer().catch(() => raw);
+              const stored = await storeComp(bytes, { kind: "design-comp", section: input.section, viewport: input.viewport, model: route.model, quality: route.quality, size: route.size, crop: cell.native ? null : cell.crop,
+                prompt: route.prompt.slice(0, 2000), costMicrousd: detail.costMicrousd });
               const preview = await imagePreview(stored.data ?? bytes, { maxEdge: COMP_PREVIEW_EDGE }).catch(() => null);
               return { stored, preview };
             }).then(({ stored, preview }) => {
@@ -501,21 +518,9 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept };
 }
 
-/** The comp prompt: a finished screen of this site in its art system (the router appends the exact words). */
-export function compPrompt(input: { section: string; viewport: "desktop" | "mobile"; prompt: string }, concept: Pick<ConceptRecord, "artSystem" | "chosen">) {
-  const art = concept.artSystem;
-  const screen = input.viewport === "desktop" ? "a desktop website screen at 1440 px wide" : "a phone website screen at 390 px wide";
-  return [
-    `A design comp: ${screen}, shown flat and full-frame as a screenshot of the browser viewport (no device, no browser window, no mockup, no perspective), for the "${input.section}" section of a website whose concept is "${concept.chosen.name}". Designed by an award-winning web studio: editorial layout with a clear grid, dramatic type scale, deliberate colour fields and calm negative space.`,
-    input.prompt,
-    art ? `Art system: palette ${art.palette}. Type: ${art.type}. Imagery: ${art.imagery}. Motif: ${art.motif}.` : "",
-    "Body copy, navigation and small labels are shown only as quiet thin grey lines, never as words. Real-looking photography or a crafted drawing as the art system says; never stock-looking, no AI look (oversaturation, HDR glow, plastic skin).",
-  ].filter(Boolean).join("\n");
-}
-
 /** Tool result for a design comp: how to read it and what to build from it. */
 export function compReadyMessage(input: { section: string; viewport: string }) {
-  return `Design comp for ${input.section} (${input.viewport}), above. First record it with read_comp (section "${input.section}", viewport ${input.viewport}): the cap height of its largest headline as a percentage of the comp's height, the share of the frame its image covers and the side it sits on; finish measures your build against that reading. It is your reference only: it is never shown on the page or registered as a site image, and its lettering is never copied (spell from your own copy). Read it as an art director's comp: the grid and columns, the headline's size relative to the frame (the frame is ${input.viewport === "desktop" ? "1440" : "390"} px wide), weights and case, the colour fields and their proportions, where the image sits and how it is cropped, overlaps and the empty space. Next, generate the text-free images it shows with generate_image (same subject, crop, light and position, described from this comp; inspect them as usual), then build the section to match the comp as closely as code allows: grid, scale, type sizes and weights, colour fields, overlaps, image crops and negative space, with live HTML text and real buttons and links. Every accessibility, contrast, honesty and 360 px rule wins over the comp.`;
+  return `Design comp for ${input.section} (${input.viewport}), above. First record it with read_comp (section "${input.section}", viewport ${input.viewport}): the cap height of its largest headline as a percentage of the comp's height, the share of the frame its image covers and the side it sits on; finish measures your build against that reading. It is your reference only: it is never shown on the page or registered as a site image, and its lettering is never copied (spell from your own copy). Read it as an art director's comp: the grid and columns, the headline's size relative to the frame (the frame is ${input.viewport === "desktop" ? `${COMP_SHAPE.desktop.width} × ${COMP_SHAPE.desktop.height}` : `${COMP_SHAPE.mobile.width} × ${COMP_SHAPE.mobile.height}`} px), weights and case, the colour fields and their proportions, where the image sits and how it is cropped, overlaps and the empty space. Next, generate the text-free images it shows with generate_image (same subject, crop, light and position, described from this comp; inspect them as usual), then build the section to match the comp as closely as code allows: grid, scale, type sizes and weights, colour fields, overlaps, image crops and negative space, with live HTML text and real buttons and links. Every accessibility, contrast, honesty and 360 px rule wins over the comp.${input.viewport === "mobile" ? " On phones the h1, the value line and the primary action stay inside the first 390 × 844 screen as in the comp (finish measures it)." : ""}`;
 }
 
 /** The client's own images: their imported photos (/images/photo-N.webp, redesign-server.ts) and the brand

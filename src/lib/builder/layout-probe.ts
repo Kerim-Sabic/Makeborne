@@ -182,8 +182,49 @@ export type CompReading = { section: string; viewport: "desktop" | "mobile"; hea
 export type CompDeviation = { section: string; viewport: "desktop" | "mobile"; metric: "headline" | "image-area" | "image-side"; comp: number | string; built: number | string; fix: string };
 /** Cap height of a typical display face as a share of its font size. */
 export const CAP_HEIGHT = 0.7;
-/** The comp's frame as a viewport: a 1536×1024 desktop comp is 1440×960 px; a 1024×1536 phone comp is 390×585 px. */
-export const COMP_FRAME = { desktop: { width: 1440, height: 960 }, mobile: { width: 390, height: 585 } } as const;
+/** The comp's frame as a viewport (comp-prompt.ts COMP_SHAPE): a desktop comp is a 16:9 first screen at 1440 px,
+ * 1440×810; a phone comp is the whole first phone screen, 390×844. */
+export const COMP_FRAME = { desktop: { width: 1440, height: 810 }, mobile: { width: 390, height: 844 } } as const;
+
+export type FirstScreenMiss = { width: number; height: number; missing: ("h1" | "action")[]; h1: string | null; h1Bottom: number | null; action: string | null; actionBottom: number | null };
+/**
+ * The first phone screen at scroll 0 (W16 in the eval): the h1 and one prominent action (a filled or outlined
+ * button or link, or a native button, in main or the header; inside navigation only a filled pill counts) are fully
+ * inside the viewport. Null when both are; otherwise what is missing and where it ends. Measured in a frame exactly
+ * one screen tall.
+ */
+export function firstScreenMiss(doc: Document, view: Window, width: number, height: number): FirstScreenMiss | null {
+  const shown = (el: Element) => { const style = view.getComputedStyle(el), box = el.getBoundingClientRect(); return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0.05 && box.width > 0 && box.height > 0; };
+  const text = (el: Element) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const h1 = Array.from(doc.querySelectorAll("h1")).find(shown) ?? null;
+  // The h1's rendered lines (a headline split across columns can have a block box wider than the screen).
+  let h1Bottom: number | null = null, h1Inside = false;
+  if (h1) {
+    const range = doc.createRange(); range.selectNodeContents(h1);
+    const rects = Array.from(range.getClientRects()).filter(rect => rect.width > 0 && rect.height > 0);
+    const boxes = rects.length ? rects : [h1.getBoundingClientRect()];
+    h1Bottom = Math.round(Math.max(...boxes.map(rect => rect.bottom)));
+    h1Inside = boxes.every(rect => rect.top >= -1 && rect.bottom <= height + 1 && rect.left >= -1 && rect.right <= width + 1);
+  }
+  const transparent = (value: string) => value === "transparent" || /rgba\([^)]*,\s*0(\.0+)?\)$/.test(value);
+  let action: Element | null = null, inside: Element | null = null;
+  for (const el of Array.from(doc.querySelectorAll("a[href], button"))) {
+    if (!shown(el) || !text(el) || el.closest("[role='menu'],[role='tablist']") || ["aria-expanded", "aria-controls", "aria-haspopup", "aria-pressed"].some(name => el.hasAttribute(name))) continue;
+    const style = view.getComputedStyle(el), inNav = Boolean(el.closest("nav,[role='navigation']"));
+    const filled = !transparent(style.backgroundColor) || style.backgroundImage !== "none";
+    const outlined = parseFloat(style.borderTopWidth) >= 1 && style.borderTopStyle !== "none" && !transparent(style.borderTopColor) && parseFloat(style.borderBottomWidth) >= 1;
+    const prominent = filled || (!inNav && (outlined || el.tagName === "BUTTON"));
+    if (!prominent) continue;
+    action ??= el;
+    const box = el.getBoundingClientRect();
+    if (box.top >= -1 && box.bottom <= height + 1 && box.left >= -1 && box.right <= width + 1) { inside = el; break; }
+  }
+  const missing: FirstScreenMiss["missing"] = [];
+  if (!h1Inside) missing.push("h1");
+  if (!inside) missing.push("action");
+  if (!missing.length) return null;
+  return { width, height, missing, h1: h1 ? text(h1).slice(0, 60) : null, h1Bottom, action: action ? text(action).slice(0, 40) : null, actionBottom: action ? Math.round(action.getBoundingClientRect().bottom) : null };
+}
 /**
  * Measured fidelity of the built page to its comps, at the comp's viewport: the largest text in the section's first
  * frame (its cap height must be at least 85% of the comp's), the share of that frame images cover (at least 70% of the

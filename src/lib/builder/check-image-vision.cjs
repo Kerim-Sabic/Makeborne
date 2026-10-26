@@ -327,7 +327,12 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       const concept = (name, headline, device) => ({ name, headline, angle: `An angle for ${name}`, device, archetype: "Editorial split", ground: "a workshop green", action: "book a repair", scores: { memorable: 4, specific: 4, action: 4, buildable: 4 } });
       const input = { concepts: [concept("Truing stand", "Wheels trued while you wait", "a spoke-tension gauge"), concept("Repair ticket", "Your bike, ticketed", "a numbered repair ticket")], chosen: 0, why: "The gauge is the craft.", ...SITE_PLAN,
         imagePlan: { houseStyle: "One documentary photographer, one overcast morning, 35mm, muted greens and brass.", shots: [{ section: "top", job: "Show the craft of truing a wheel", shot: "close detail", aspect: "landscape", focal: "hands left; calm right", layout: "editorial split" }] } };
-      const comp = (id, section, viewport = "desktop") => ({ type: "tool_use", id, name: "generate_comp", input: { section, viewport, prompt: "Editorial split: a huge condensed headline on the left third, the bench photograph bleeding off the right edge, a brass rule under the headline.", text: "Wheels trued while you wait. Book a repair" } });
+      const comp = (id, section, viewport = "desktop") => ({ type: "tool_use", id, name: "generate_comp", input: { section, viewport, brand: "Spoke & Chain", mark: "a small chainring mark",
+        colors: { ground: "#1D3FA8", ink: "#FFFFFF", accent: "#C6F04A" }, type: "bold condensed sans", ...(viewport === "desktop" ? { nav: ["Repairs", "Bikes", "Workshop"] } : {}),
+        cta: { label: "Book a repair", style: "filled", color: "#C6F04A" },
+        layout: viewport === "desktop" ? [{ area: "left", pct: 46, content: "solid cobalt #1D3FA8 type field with the headline and the pill" }, { area: "right", pct: 54, content: "full-bleed photograph" }] : [{ area: "top", pct: 30, content: "photograph band under the top bar" }, { area: "bottom", pct: 70, content: "cobalt type field with the headline and the pill" }],
+        lines: [{ role: "headline", text: "Wheels trued / while you wait." }, { role: "subline", text: "Repairs and servicing in Leipzig." }], accent: { words: "while you wait.", treatment: "in lime" },
+        subject: "a crisp studio photograph of a vintage teal steel road bike on a truing stand, side view, overcast window light", prompt: "A brass spoke ruler under the headline." } });
       const stored = [];
       const storeComp = async (bytes, provenance) => { stored.push(provenance); return { id: `c0000000-0000-5000-a000-00000000000${stored.length}`, data: bytes }; };
       script.push({ content: [comp("k0", "top")] }, { content: [{ type: "tool_use", id: "c1", name: "concept", input }] },
@@ -353,7 +358,28 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.match(text.text, /rule wins over the comp/);
       assert.ok(stored.every(item => item.kind === "design-comp"));
       assert.ok(![...files.assets.keys()].some(key => /comp/.test(key)), "comps are not site images");
-      assert.ok(imageCalls.some(call => call.model === "gpt-image-2.5-flare" && /A design comp: a desktop website screen at 1440 px wide/.test(call.prompt) && /Render this text in the image, spelled exactly/.test(call.prompt)), "comps go to the text model with the exact words");
+      // The reference pattern: brand, hex colours, nav, the pill, layout percentages, quoted lines with breaks, the accent, the tail; then the router's exact-text instruction.
+      const desk = imageCalls.find(call => call.model === "gpt-image-2.5-flare" && /^The homepage of a website called "Spoke & Chain"/.test(call.prompt));
+      assert.ok(desk, "comps go to the text model in the reference pattern");
+      for (const part of [/cobalt blue background #1D3FA8/, /Top navigation: wordmark "Spoke & Chain" left with a small chainring mark; "Repairs", "Bikes", "Workshop" right of centre; a [a-z ]*lime pill "Book a repair" \(#C6F04A\) right\./, /Left 46%: solid cobalt #1D3FA8 type field/, /Right 54%: full-bleed photograph\./,
+        /a huge bold condensed sans headline on two lines "Wheels trued" \/ "while you wait\." with "while you wait\." in lime/, /The photograph: a crisp studio photograph of a vintage teal steel road bike/, /Flat, straight-on, pixel-perfect screenshot of the homepage filling the entire 16:9 image edge to edge/, /no garbled letters, no lorem ipsum\./, /Render this text in the image, spelled exactly/])
+        assert.match(desk.prompt, part);
+      // 2560x1440 high is not measured yet: the measured 1536x1024 high canvas, cut to 16:9 (the prompt keeps the cut margins clear), with allowHigh.
+      assert.equal(desk.quality, "high"); assert.equal(desk.size, "1536x1024"); assert.equal(desk.allowHigh, true);
+      assert.match(desk.prompt, /The top 7\.8% and bottom 7\.8% of the canvas are cropped away/);
+      const storedDesk = stored.find(item => item.viewport === "desktop");
+      assert.deepEqual([storedDesk.quality, storedDesk.size, storedDesk.crop], ["high", "1536x1024", { left: 0, top: 80, width: 1536, height: 864 }]);
+      const shot = made.find(block => block.content[0].source)?.content[0];
+      const dims = await sharp(Buffer.from(shot.source.data, "base64")).metadata();
+      assert.equal(Math.round(dims.width / dims.height * 100), Math.round(16 / 9 * 100), "the stored comp is 16:9");
+      // The phone comp: no high canvas is measured for phones, so medium on the measured 1024x1536 canvas, cut to the 390x844 screen, with the first-screen rule.
+      const phone = imageCalls.find(call => /^The first phone screen of the homepage/.test(call.prompt));
+      if (phone) {
+        assert.equal(phone.quality, "medium"); assert.equal(phone.size, "1024x1536");
+        assert.match(phone.prompt, /left \d+(\.\d)?% and right \d+(\.\d)?% of the canvas are cropped away/);
+        assert.match(phone.prompt, /one phone screen, 390 × 844 px: the top bar, the whole headline and the "Book a repair" pill sit fully inside it/);
+        assert.match(phone.prompt, /Flat, straight-on, pixel-perfect screenshot of the phone screen/);
+      }
       assert.ok(events.filter(event => event.type === "image_start" && event.comp).length === made.length);
       const recorded = compsFromSource(files.files.get("src/App.tsx"));
       assert.equal(recorded.length, made.length); assert.equal(recorded[0].section, "top"); assert.match(recorded[0].asset, /^c0000000-/);
@@ -379,7 +405,8 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
     script.push({ content: [...site("q"), finish("f3")] }, { content: [finish("f4")] });
     await run({ concept: true });
     assert.ok(!seen[0].tools.includes("generate_comp"));
-    assert.match(compPrompt({ section: "top", viewport: "mobile", prompt: "x".repeat(40) }, { chosen: { name: "Truing stand" }, artSystem: SITE_PLAN.artSystem }), /phone website screen at 390 px wide[\s\S]*Motif: a spoke ruler/);
+    assert.match(compPrompt({ section: "top", viewport: "mobile", brand: "Spoke & Chain", colors: { ground: "#1D3FA8", ink: "#FFFFFF", accent: "#C6F04A" }, type: "bold condensed sans", cta: { label: "Book a repair", style: "filled", color: "#C6F04A" },
+      layout: [{ area: "full", pct: 100, content: "photograph band then type" }], lines: [{ role: "headline", text: "Fixed by / Friday." }], subject: "a teal road bike" }, { chosen: { name: "Truing stand" }, artSystem: SITE_PLAN.artSystem }), /^The first phone screen of the homepage[\s\S]*Motif: a spoke ruler[\s\S]*screenshot of the phone screen/);
   });
 
   await check("comp-first: the review attaches the comps it can read (design comps of this project only) before the screenshots", async () => {
