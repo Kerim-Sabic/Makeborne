@@ -221,7 +221,9 @@ export function firstScreenMiss(doc: Document, view: Window, width: number, heig
   }
   const missing: FirstScreenMiss["missing"] = [];
   if (!h1Inside) missing.push("h1");
-  if (!inside) missing.push("action");
+  // A page with no prominent action at all is not asked for one here (the completeness gate owns must-haves); an action
+  // that exists but sits below the first screen is.
+  if (action && !inside) missing.push("action");
   if (!missing.length) return null;
   return { width, height, missing, h1: h1 ? text(h1).slice(0, 60) : null, h1Bottom, action: action ? text(action).slice(0, 40) : null, actionBottom: action ? Math.round(action.getBoundingClientRect().bottom) : null };
 }

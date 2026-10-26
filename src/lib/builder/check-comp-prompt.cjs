@@ -104,9 +104,12 @@ const CONCEPT = { chosen: { name: "Friday promise" }, artSystem: { palette: "cob
       // The comp's layout: a photograph band, then the headline and the pill, all inside the screen.
       const tight = `${BASE}<header><b>Spoke &amp; Chain</b><nav><a href="#r">Repairs</a></nav></header><main><img alt="" width="390" height="230" style="display:block;width:100%;height:230px;background:#555"><h1>Fixed by Friday.</h1><p>Repairs, servicing and second-hand bikes in Leipzig.</p><a class="pill" href="#book">Book a repair</a></main>`;
       assert.equal(await probe(tight, 390, 844), null);
-      // A plain nav link is not the primary action; a filled pill in the header is.
-      const navOnly = `${BASE}<header><b>Spoke &amp; Chain</b><nav><a href="#r">Repairs</a></nav></header><main><h1>Fixed by Friday.</h1><p>Repairs in Leipzig.</p></main>`;
+      // A plain nav link is not the primary action: with the pill far below the first screen, the action is missing there;
+      // a filled pill in the header is in it. A page with no prominent action anywhere is not asked for one by this check.
+      const navOnly = `${BASE}<header><b>Spoke &amp; Chain</b><nav><a href="#r">Repairs</a></nav></header><main><h1>Fixed by Friday.</h1><p>Repairs in Leipzig.</p><div style="height:1200px"></div><a class="pill" href="#book">Book a repair</a></main>`;
       assert.deepEqual((await probe(navOnly, 390, 844))?.missing, ["action"]);
+      const noAction = `${BASE}<header><b>Spoke &amp; Chain</b><nav><a href="#r">Repairs</a></nav></header><main><h1>Fixed by Friday.</h1><p>Repairs in Leipzig.</p></main>`;
+      assert.equal(await probe(noAction, 390, 844), null);
       const headerPill = `${BASE}<header><b>Spoke &amp; Chain</b><nav><a class="pill" href="#book">Book a repair</a></nav></header><main><h1>Fixed by Friday.</h1></main>`;
       assert.equal(await probe(headerPill, 390, 844), null);
       // 360 x 780 is measured too.
