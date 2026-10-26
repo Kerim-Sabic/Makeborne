@@ -85,6 +85,8 @@ export default function App() {}`);
   });
 
   await check("section comps are drawn without the header and need no navigation; heavy type is the default and travels to the review", () => {
+    const traced = require(path.resolve(__dirname, "../../../next.config.ts")).default.outputFileTracingIncludes["/api/build"];
+    for (const runtime of ["./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", "./node_modules/@sparticuz/chromium/bin/**"]) assert.ok(traced.includes(runtime), `finish-time verifier traces ${runtime}`);
     const { runtimeAccessHeader } = require("./contrast-gate.ts");
     const origin = "https://preview.example.invalid", token = "fictional-test-credential";
     assert.deepEqual(runtimeAccessHeader(origin + "/builder-runtime/contrast-probe.js", origin, token), { "x-vercel-trusted-oidc-idp-token": token });

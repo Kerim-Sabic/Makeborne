@@ -26,6 +26,7 @@ export const OperationResultSchema = z.object({
   runId: z.string().uuid().optional(), version: credits.optional(), summary: z.string().optional(),
   changed: z.boolean().optional(), finished: z.boolean().optional(), charged: credits,
   compFidelity: z.enum(["passed", "failed", "not_checked"]).optional(),
+  compCoverage: z.object({ measured: z.array(z.string().max(120)).max(8), notChecked: z.array(z.string().max(120)).max(12) }).optional(),
   code: z.string().optional(), message: z.string().optional(), stored: z.unknown().optional(), persisted: z.boolean().optional(),
   /** An agency task's typed data result and the project revision it was produced against. */
   data: z.unknown().optional(), basedOnVersion: credits.optional(),

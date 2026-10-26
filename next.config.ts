@@ -31,7 +31,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // Compile check at the end of a website build (src/lib/builder/compile.ts):
     // the service runs bin/esbuild with node, which loads esbuild.wasm by path.
-    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm", ...INGEST_WORKER_FILES],
+    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm", ...INGEST_WORKER_FILES,
+      // The finish-time render verifier uses the same dynamically loaded browser as PDF export.
+      "./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*"],
     "/api/build/plan": INGEST_WORKER_FILES,
     "/api/build/sources": INGEST_WORKER_FILES,
     "/api/cloud/workspaces/*/artifacts/*/sources": INGEST_WORKER_FILES,

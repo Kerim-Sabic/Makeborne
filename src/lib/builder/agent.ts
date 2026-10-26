@@ -138,7 +138,12 @@ export type BuilderRun = {
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds.
  * build: the finish-time compile verdict when the run finished, null otherwise. */
-export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null; concept?: ConceptRecord | null; compFidelity?: "passed" | "failed" | "not_checked" };
+export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null; concept?: ConceptRecord | null; compFidelity?: "passed" | "failed" | "not_checked"; compCoverage?: { measured: string[]; notChecked: string[] } };
+
+/** Preserve the approved photo plan's slots, rather than reserving unused policy maxima. */
+export function pendingPhotoSlots(limit: number, used: number, planned?: number) {
+  return Math.max(0, Math.min(limit, planned ?? limit) - used);
+}
 
 /** Agentic edit loop: Claude edits the in-memory project through tools until it
  * calls finish with a project that passes static checks and compiles, or the budget runs out. */
@@ -320,7 +325,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const textModel = imageModels.find(model => TEXT_IMAGE_MODELS.includes(model));
             const deskCell = textModel ? compCell(textModel, "desktop") : null;
             const compBound = textModel && deskCell?.ok ? imageCallBoundMicrousd(textModel, deskCell.quality, deskCell.size, "x".repeat(4000)) : Infinity;
-            const compAffordable = imageReservedMicrousd + Math.max(0, imageLimit - imagesUsed) * imageBound + compBound <= spend.allowanceMicrousd / 3;
+            const compAffordable = imageReservedMicrousd + pendingPhotoSlots(imageLimit, imagesUsed, concept?.imagePlan?.shots.length) * imageBound + compBound <= spend.allowanceMicrousd / 3;
             if (compsAvailable && compsStarted < MIN_COMPS && compsAsked < 2 && (compsAsked === 0 || compAffordable)) {
               compsAsked++;
               const made = new Set(comps.map(comp => `${comp.section} (${comp.viewport})`));
@@ -337,6 +342,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const kind = input.kind ?? "photo";
             const route = routeImage({ kind, aspect: input.aspect, text: input.text ?? null, textPlacement: input.textPlacement }, input.prompt, imageModels);
             if (!route.ok) { fail(route.error); break; }
+            if (imageReservedMicrousd + route.boundMicrousd > spend.allowanceMicrousd / 3) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             if (spend.remainingMicrousd - route.boundMicrousd < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             let job: Awaited<ReturnType<typeof startBudgetedImage>>;
             try {
@@ -395,7 +401,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             const route = { ...routed, size: cell.size, quality: cell.quality, allowHigh: cell.quality !== "medium", boundMicrousd: imageCallBoundMicrousd(routed.model, cell.quality, cell.size, routed.prompt) };
             // The photographs still to come, at the bound of the model the router picks for them (comps never cut photos).
             const photoBound = Math.max(...(["landscape", "portrait", "square"] as const).map(aspect => { const photo = routeImage({ kind: "photo", aspect, text: null }, "x".repeat(3400), imageModels); return photo.ok ? photo.boundMicrousd : imageBound; }));
-            const photoReserve = Math.max(0, imageLimit - imagesUsed) * photoBound;
+            const photoReserve = pendingPhotoSlots(imageLimit, imagesUsed, concept.imagePlan?.shots.length) * photoBound;
             if (imageReservedMicrousd + route.boundMicrousd + photoReserve > spend.allowanceMicrousd / 3 || spend.remainingMicrousd - route.boundMicrousd < spend.allowanceMicrousd * 0.1) {
               fail("No image budget is left for another design comp. Build from the art system and the comps you have."); break;
             }
@@ -532,12 +538,17 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     if (commented !== app) { run.files.write("src/App.tsx", commented); run.emit({ type: "file", path: "src/App.tsx", op: "write", content: commented }); }
   }
   const savedComps = concept?.comps ?? compsFromSource(run.files.files.get("src/App.tsx"));
-  if (savedComps.length) {
+  let compCoverage: BuilderResult["compCoverage"];
+  if (savedComps.length || (compsAvailable && concept)) {
     compFidelity ??= "not_checked";
-    if (compFidelity !== "passed") summary = `${summary}${summary ? "\n\n" : ""}Design comp comparison: ${compFidelity === "failed" ? "failed — the saved progress still differs from its design reference" : "not checked — the desktop/phone render comparison was unavailable"}.`;
+    const labels = savedComps.map(comp => `${comp.section} (${comp.viewport})`);
+    const missing = compsAvailable && concept ? compPlan(concept.sections).filter(label => !labels.includes(label)) : [];
+    compCoverage = { measured: compFidelity === "not_checked" ? [] : labels, notChecked: [...new Set([...missing, ...(compFidelity === "not_checked" ? labels : [])])] };
+    if (missing.length && compFidelity === "passed") compFidelity = "not_checked";
+    if (compFidelity !== "passed") summary = `${summary}${summary ? "\n\n" : ""}Design comp comparison: ${compFidelity === "failed" ? "failed — the saved progress still differs from its design reference" : missing.length ? `not checked for ${missing.join(", ")} — those references were not generated` : "not checked — the desktop/phone render comparison was unavailable"}.`;
     if (compFidelity === "failed") finished = false;
   }
-  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept, compFidelity };
+  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept, compFidelity, compCoverage };
 }
 
 /** Tool result for a design comp: how to read it and what to build from it. */

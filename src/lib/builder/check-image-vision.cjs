@@ -30,7 +30,7 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 
 // Comp-first builds are off by default (MAKEBORNE_DESIGN_COMPS, lib/builder/features.ts); these checks exercise them on.
 process.env.MAKEBORNE_DESIGN_COMPS = "on";
-const { runBuilder, regenerationProblem, imageReadyMessage, IMAGE_INSPECTION, compPrompt } = require("./agent.ts");
+const { runBuilder, regenerationProblem, imageReadyMessage, IMAGE_INSPECTION, compPrompt, pendingPhotoSlots } = require("./agent.ts");
 const { designCompBlocks } = require("./design-comps.ts");
 const { ProjectFiles } = require("./files.ts");
 const { checkConcept, imagePlanNote, sitePlanNote, conceptComment, compsFromSource, MAX_COMPS, CONCEPT_TOOL } = require("./concept.ts");
@@ -83,6 +83,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
 
 (async () => {
   imageBytes = await picture(1536, 1024);
+  assert.deepEqual([pendingPhotoSlots(3, 0, 1), pendingPhotoSlots(3, 1, 1), pendingPhotoSlots(3, 1), pendingPhotoSlots(3, 0, 20)], [1, 0, 2, 3], "comp reserve follows the bounded approved plan, never unused maxima");
 
   await check("the builder sees every generated image: the tool result carries a small image block and the inspection instruction", async () => {
     script.length = 0; seen.length = 0; imageCalls.length = 0;
@@ -395,7 +396,7 @@ const lastResults = () => seen.at(-1).messages.at(-1).content.filter(block => bl
       assert.equal(events.filter(event => event.type === "tool_error" && event.tool === "finish" && /Record read_comp for rates \(desktop\)/.test(event.message)).length, 2, "unread comps block every finish until read");
       // A photograph asked for before any comp is sent back once to the comps; a repeat goes ahead.
       script.length = 0; seen.length = 0; imageCalls.length = 0;
-      script.push({ content: [{ type: "tool_use", id: "c2", name: "concept", input }] }, { content: [gen("g7", { name: "hero-bench" })] }, { content: [gen("g8", { name: "hero-bench" })] }, { content: [...site("w"), finish("f9")] });
+      script.push({ content: [{ type: "tool_use", id: "c2", name: "concept", input }] }, { content: [gen("g7", { name: "hero-bench" })] }, { content: [gen("g8", { name: "hero-bench" })] }, { content: [gen("g9", { name: "hero-bench" })] }, { content: [...site("w"), finish("f9")] });
       const eager = await run({ concept: true, storeComp });
       assert.match(eager.events.find(event => event.type === "tool_error" && event.tool === "generate_image").message, /Design comps come first on this build/);
       assert.equal(imageCalls.length, 1, "the repeat is generated");

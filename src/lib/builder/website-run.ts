@@ -94,7 +94,8 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
           result = { summary: "Saved the progress made so far.", title: undefined, credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, build: null, stopped: spend.stopped };
         }
         const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped,
-          ...("compFidelity" in result && result.compFidelity ? { compFidelity: result.compFidelity } : {}) };
+          ...("compFidelity" in result && result.compFidelity ? { compFidelity: result.compFidelity } : {}),
+          ...("compCoverage" in result && result.compCoverage ? { compCoverage: result.compCoverage } : {}) };
         if (reviewing && !files.changed.size) {
           // The review found nothing to fix (or ran out of room before editing):
           // charge for the look it took, keep the current version.
