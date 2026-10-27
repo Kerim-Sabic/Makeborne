@@ -8,7 +8,7 @@ deployed, applied or sent.
 
 ## What it does
 
-- **Before 2026-10-28T18:00:00Z** (Wednesday 19:00 CET), `/` is a full-page launch screen.
+- **Before 2026-10-29T20:00:00Z** (Thursday 21:00 CET; moved from Wednesday 19:00 by the owner on 27 October), `/` is a full-page launch screen.
   - It has the wordmark, huge rolling figures (Geist), and the tagline.
   - It shows the date and the visitor's local time.
   - It has "Join the waitlist" (with a real "Join N others" line, shown only from 50 and rounded down to tens), an
@@ -21,13 +21,16 @@ deployed, applied or sent.
 - **For 48 hours after launch**, the banner says "We're live". It links to plans only while the checkout's own gate is
   open; otherwise it says "Plans opening any moment". After that, everything hides itself.
 - **The countdown is informational.** It never opens or closes sales.
-- **The hidden gallery** is reveal-only. Nothing appears on its own:
-  - With a mouse, a soft spotlight follows the cursor and uncovers an unlabelled image.
+- **The hidden sneak peek** is reveal-only. Nothing appears on its own:
+  - With a mouse, a small, faint torch (260 px) follows the cursor. One website in a browser window sits somewhere
+    off-centre behind the page; the torch uncovers whatever part of it the visitor finds.
+  - After about 7 seconds of looking, the next reveal shows a different site in a different place (a continuous
+    20-second look also moves on). The swap happens only while the torch is hidden.
   - On touch, press and hold the background, then drag. Quick swipes still scroll, and taps on the form and links
     work as usual.
-  - The images are text-free crops of the owner's v14 style stills, in `public/launch/concepts/` (12 × WebP, at most
-    110 KB each, about 1.1 MB in total). They load only once the spotlight is first used, one ahead at most, and have
-    no captions.
+  - The images are the owner's v14 website designs shown whole (navigation, headline and picture), in
+    `public/launch/concepts/` (9 × 1440 x 810 WebP, at most 170 KB each, about 0.9 MB in total). They load only once
+    the torch is first used, one ahead at most, and have no captions.
 - **Sound** is off by default, synthesised with Web Audio, so there are no audio files.
   - Once turned on, it plays a soft tick each second, a very quiet pad, and a swell at the reveal.
   - It's capped by a compressor and a fixed ceiling, and paused in hidden tabs.
@@ -41,7 +44,7 @@ deployed, applied or sent.
 
 The code defaults are production-ready:
 
-- `NEXT_PUBLIC_MAKEBORNE_LAUNCH_AT` defaults to `2026-10-28T18:00:00Z`.
+- `NEXT_PUBLIC_MAKEBORNE_LAUNCH_AT` defaults to `2026-10-29T20:00:00Z` (not set on Vercel, so the default applies).
 - `MAKEBORNE_LAUNCH_COUNTDOWN` defaults to on. Exactly `on` keeps it on; any other value (for example `off`) turns it
   off everywhere.
 - The waitlist salt uses `MAKEBORNE_WAITLIST_SALT` if it's set (at least 32 characters). Otherwise it's derived on the
@@ -67,7 +70,7 @@ the unsubscribe links already emailed stop verifying.
    - `/` shows the launch screen.
    - `/?preview=site` shows the normal home page.
    - Join with your own address, then run the count query below.
-4. **At 2026-10-28T18:00Z**, the reveal is automatic. Sales must open at the same moment (`WHOP_CREATION_ENABLED` and
+4. **At 2026-10-29T20:00Z** (Thursday 21:00 CET), the reveal is automatic. Sales must open at the same moment (`WHOP_CREATION_ENABLED` and
    the release gates; that's Codex's release). Until they do, the banner honestly says "Plans opening any moment".
 
 **If the migration isn't applied yet:**
@@ -79,13 +82,15 @@ the unsubscribe links already emailed stop verifying.
 
 ## Invites at launch (nothing is sent automatically)
 
-This repository has no transactional mail sender: account emails go through Supabase's own mailer. So
-`scripts/waitlist-invite.mjs` prepares the invite instead of sending it.
+Invites go out **from `Makeborne <admin@makeborne.com>`**, reply-to admin@makeborne.com (the owner's choice, 27 October).
+makeborne.com is a verified sending domain in Resend. This repository has no transactional mail sender: account
+emails go through Supabase's own mailer. So `scripts/waitlist-invite.mjs` prepares the invite instead of sending it,
+and nothing is sent until the owner says "send invites".
 
 ```
 node scripts/waitlist-invite.mjs                                             # dry run: count pending invites and print the email copy
 node scripts/waitlist-invite.mjs --export C:\path\outside\repo\invites.csv   # CSV + email copy; changes nothing
-# send from your mail tool (one email per address; add the List-Unsubscribe headers from the CSV)
+# send from admin@makeborne.com (one email per address; add the List-Unsubscribe headers from the CSV)
 node scripts/waitlist-invite.mjs --mark-invited C:\path\outside\repo\invites.csv --approval "<your words>"
 ```
 

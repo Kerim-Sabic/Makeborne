@@ -4,7 +4,7 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import { WAITLIST_CONSENT_VERSION, waitlistSourceFromSearch } from "@/lib/launch/waitlist-shared";
 
 type State = { status: "idle" | "sending" | "joined" | "done" | "error"; message: string };
-const DONE = "You're on the list. We'll email you at launch with your invite.";
+const DONE = "You're on the list. Your invite comes from admin@makeborne.com at launch.";
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**

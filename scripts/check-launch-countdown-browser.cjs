@@ -90,7 +90,7 @@ async function contrast(page, selectors) {
       const response = await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
       assert.equal(response.status(), 200);
       const html = await response.text();
-      assert.match(html, /<h1 class="mbl-date[^"]*"[^>]*>.*Makeborne launches .*Wednesday 28 October.*19:00 CET<\/time><\/h1>/s, "the date is in the server HTML for crawlers");
+      assert.match(html, /<h1 class="mbl-date[^"]*"[^>]*>.*Makeborne launches .*Thursday 29 October.*21:00 CET<\/time><\/h1>/s, "the date is in the server HTML for crawlers");
       assert.match(html, /<title>Makeborne — Websites, books &amp; presentations<\/title>/);
       assert.match(html, /property="og:title"/);
       assert.doesNotMatch(html, /noindex/);
@@ -105,7 +105,7 @@ async function contrast(page, selectors) {
       assert(await page.locator(".mbl-digit-in").count() >= 1, "a rolling figure is animating");
       assert(await noHorizontalScroll(page), "no horizontal scroll");
       const local = (await page.locator(".mbl-local").innerText()).trim();
-      if (colorScheme === "dark") assert.match(local, /^(14:00|2:00\s?PM) in your time$/, "New York sees its own time");
+      if (colorScheme === "dark") assert.match(local, /^(16:00|4:00\s?PM) in your time$/, "New York sees its own time");
       else assert.equal(local, "", "no conversion where the local time reads the same");
       const shift = await layoutShift(page);
       if (shift === null) console.log(`     SKIP layout-shift is a Chromium-only measurement, not available in ${engineLabel}`);
@@ -151,7 +151,7 @@ async function contrast(page, selectors) {
       await page.waitForSelector('.mbl-waitlist button[data-state="joined"]', { timeout: 3_000 });
       await shot(page, "waitlist-button-morph-phone");
       await page.locator(".mbl-waitlist-done").waitFor();
-      assert.equal(await page.locator(".mbl-waitlist-done").innerText(), "You're on the list. We'll email you at launch with your invite.");
+      assert.equal(await page.locator(".mbl-waitlist-done").innerText(), "You're on the list. Your invite comes from admin@makeborne.com at launch.");
       assert.deepEqual(sent[0], { email: "Ana.Reed@Example.com", company: "", source: "utm_source=instagram;ref=story", consent: "waitlist-2026-10-27" });
       await page.waitForTimeout(800);
       await shot(page, "waitlist-joined-phone");
@@ -267,8 +267,14 @@ async function contrast(page, selectors) {
       assert.deepEqual(loaded, [], "no image loads until the visitor reveals one");
       assert.equal(await page.locator(".mbl-spot[data-on]").count(), 0, "the default screen is clean");
       for (let step = 0; step < 30; step++) { await page.mouse.move(480 + step * 14, 320 + Math.sin(step / 3) * 90); await page.waitForTimeout(30); }
-      await page.waitForSelector(".mbl-spot[data-on] img[data-front]");
-      assert(loaded.length >= 1 && loaded.length <= 2 && loaded.every(url => url.endsWith("-art.webp")), `only the current and next image: ${loaded}`);
+      await page.waitForSelector(".mbl-spot[data-on] .mbl-site[data-front] img");
+      assert(loaded.length >= 1 && loaded.length <= 2 && loaded.every(url => url.endsWith("-site.webp")), `only the current and next image: ${loaded}`);
+      const peek = await page.evaluate(() => {
+        const spot = document.querySelector(".mbl-spot").getBoundingClientRect(), site = document.querySelector(".mbl-site[data-front]").getBoundingClientRect();
+        return { spot: spot.width, site: site.width, bar: Boolean(document.querySelector(".mbl-site[data-front] .mbl-site-bar")), view: innerWidth };
+      });
+      assert(peek.spot <= 280, `a small torch: ${peek.spot}px`);
+      assert(peek.bar && peek.site <= peek.view * 0.6, `one framed site, smaller than the page: ${JSON.stringify(peek)}`);
       await shot(page, "egg-spotlight-desktop");
       await page.waitForTimeout(1600);
       assert.equal(await page.locator(".mbl-spot[data-on]").count(), 0, "the spotlight fades once the cursor rests");
@@ -317,7 +323,7 @@ async function contrast(page, selectors) {
       await touch("touchStart", 195, 150);
       await page.waitForTimeout(450);
       for (let step = 0; step < 12; step++) { await touch("touchMove", 120 + step * 12, 200 + step * 18); await page.waitForTimeout(40); }
-      await page.waitForSelector(".mbl-spot[data-on][data-touch] img[data-front]", { timeout: 4_000 });
+      await page.waitForSelector(".mbl-spot[data-on][data-touch] .mbl-site[data-front] img", { timeout: 4_000 });
       await shot(page, "egg-touch-reveal-phone");
       await touch("touchEnd");
       await page.waitForSelector(".mbl-spot[data-touch]", { state: "detached", timeout: 3_000 }).catch(() => undefined);
@@ -402,7 +408,7 @@ async function contrast(page, selectors) {
       await page.locator(".mk-home h1#creation-heading").waitFor();
       const banner = page.locator("#mb-launch-banner");
       await banner.waitFor({ state: "visible" });
-      assert.match(await banner.innerText(), /Wed 28 Oct, 19:00 CET\s*·\s*\d+d \d+h \d+m/);
+      assert.match(await banner.innerText(), /Thu 29 Oct, 21:00 CET\s*·\s*\d+d \d+h \d+m/);
       assert.equal((await context.cookies()).find(cookie => cookie.name === "makeborne_launch_preview")?.value, "site");
       await shot(page, "preview-home-with-banner");
       await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
@@ -435,7 +441,7 @@ async function contrast(page, selectors) {
       const { context, page, hydration } = await open(browser, { viewport: PHONE });
       await page.goto(`${BASE}/help`, { waitUntil: "networkidle" });
       const banner = page.locator("#mb-launch-banner");
-      assert.match(await banner.innerText(), /Wed 28 Oct, 19:00 CET\s*·\s*\d+d \d+h \d+m/);
+      assert.match(await banner.innerText(), /Thu 29 Oct, 21:00 CET\s*·\s*\d+d \d+h \d+m/);
       assert.match(await banner.locator("[role=timer]").getAttribute("aria-label"), / left$/);
       const height = await banner.evaluate(node => node.getBoundingClientRect().height);
       assert.equal(height, 40);
@@ -485,7 +491,7 @@ async function contrast(page, selectors) {
       const { context, page, hydration } = await open(browser, { viewport: PHONE });
       await page.goto(`${BASE}/billing`, { waitUntil: "networkidle" });
       const line = page.locator(".mb-plans-line");
-      assert.match(await line.innerText(), /Plans open in \d+d \d+h \d+m\s*Wednesday 28 October, 19:00 CET/);
+      assert.match(await line.innerText(), /Plans open in \d+d \d+h \d+m\s*Thursday 29 October, 21:00 CET/);
       assert(await noHorizontalScroll(page));
       await line.scrollIntoViewIfNeeded();
       await shot(page, "billing-plans-line");
