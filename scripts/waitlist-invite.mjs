@@ -1,5 +1,7 @@
-// Launch waitlist invites. This repository has no transactional mail sender of its own (account emails go through
-// Supabase's own mailer), so this script prepares the invite rather than sending it:
+// Launch waitlist invites. They go out from admin@makeborne.com (the owner's choice, 27 October 2026; makeborne.com is a
+// verified sending domain in Resend), and only once the owner says to send them. This repository has no transactional
+// mail sender of its own (account emails go through Supabase's own mailer), so this script prepares the invite rather
+// than sending it:
 //
 //   node scripts/waitlist-invite.mjs                      dry run (default): counts pending invites, prints the email copy; writes nothing
 //   node scripts/waitlist-invite.mjs --export <file.csv>  writes each pending address with its sign-up link and signed unsubscribe links
@@ -7,7 +9,8 @@
 //   node scripts/waitlist-invite.mjs --mark-invited <file.csv> --approval "<the owner's own words>"
 //                                                         after the owner has sent the invites from their mail tool: marks exactly the
 //                                                         exported rows invited (never unsubscribed ones)
-//   --send                                                refused: there is no mail path to send through (see above)
+//   --send                                                refused: this repository has no mail path; send from admin@makeborne.com
+//                                                         with the exported file (Resend or the owner's mail tool)
 //
 // Needs NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY (service role). Unsubscribe links are signed with the same salt
 // the app uses: MAKEBORNE_WAITLIST_SALT if production sets one, otherwise the value derived from SUPABASE_SECRET_KEY.
@@ -17,6 +20,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+export const INVITE_FROM = "Makeborne <admin@makeborne.com>";
+export const INVITE_REPLY_TO = "admin@makeborne.com";
 export const INVITE_SUBJECT = "Makeborne is live. Your invite is here.";
 export function inviteText({ signupUrl, unsubscribeUrl }) {
   return `Hi,
@@ -70,7 +75,7 @@ async function rpc(name, body) {
 
 async function main() {
   if (flag("--send")) {
-    console.error("Refused: this repository has no transactional mail sender. Export a CSV with --export, send the invite from your mail tool, then run --mark-invited with --approval.");
+    console.error(`Refused: this repository has no transactional mail sender. Export a CSV with --export, send the invite from ${INVITE_FROM}, then run --mark-invited with --approval.`);
     process.exit(2);
   }
   if (flag("--mark-invited")) {
@@ -86,6 +91,8 @@ async function main() {
   if (!flag("--export") && (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY)) {
     console.log(`Dry run without database settings: nothing counted.
 
+From: ${INVITE_FROM}
+Reply-To: ${INVITE_REPLY_TO}
 Subject: ${INVITE_SUBJECT}
 
 ${inviteText({ signupUrl, unsubscribeUrl: `${site}/waitlist/unsubscribe?id=…&sig=…` })}`);
@@ -102,12 +109,12 @@ ${inviteText({ signupUrl, unsubscribeUrl: `${site}/waitlist/unsubscribe?id=…&s
     if (!secret) throw new Error("Set SUPABASE_SECRET_KEY (and MAKEBORNE_WAITLIST_SALT if production sets one) so unsubscribe links verify.");
     const lines = ["email,signup_url,unsubscribe_url,one_click_unsubscribe_url,id", ...pending.map(row => [row.email, signupUrl, unsubscribeUrl(secret, row.id), oneClickUrl(secret, row.id), row.id].map(csvCell).join(","))];
     writeFileSync(target, lines.join("\n") + "\n", { mode: 0o600 });
-    writeFileSync(target.replace(/\.csv$/i, "") + ".email.txt", `Subject: ${INVITE_SUBJECT}\n\n${inviteText({ signupUrl, unsubscribeUrl: "{unsubscribe_url}" })}`);
+    writeFileSync(target.replace(/\.csv$/i, "") + ".email.txt", `From: ${INVITE_FROM}\nReply-To: ${INVITE_REPLY_TO}\nSubject: ${INVITE_SUBJECT}\n\n${inviteText({ signupUrl, unsubscribeUrl: "{unsubscribe_url}" })}`);
     console.log(`Exported ${pending.length} row(s) to ${target} and the email copy beside it. Nothing was sent or marked.`);
     console.log("Where your mail tool allows, add the headers List-Unsubscribe: <{one_click_unsubscribe_url}> and List-Unsubscribe-Post: List-Unsubscribe=One-Click.");
     return;
   }
-  console.log(`\nDry run. Subject: ${INVITE_SUBJECT}\n\n${inviteText({ signupUrl, unsubscribeUrl: `${site}/waitlist/unsubscribe?id=…&sig=…` })}`);
+  console.log(`\nDry run. From: ${INVITE_FROM} · Subject: ${INVITE_SUBJECT}\n\n${inviteText({ signupUrl, unsubscribeUrl: `${site}/waitlist/unsubscribe?id=…&sig=…` })}`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

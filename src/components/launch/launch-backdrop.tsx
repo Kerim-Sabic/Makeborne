@@ -1,21 +1,28 @@
 "use client";
-/* eslint-disable @next/next/no-img-element -- pre-optimised decorative WebP, loaded only once the spotlight is first used; next/image would add a loader and srcset this layer doesn't want. */
-import { useEffect, useRef, useState } from "react";
-import { conceptSrc, preloadConcept, shuffledConcepts, type Concept } from "./concepts";
+/* eslint-disable @next/next/no-img-element -- pre-optimised decorative WebP, loaded only once the torch is first used; next/image would add a loader and srcset this layer doesn't want. */
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { conceptSrc, preloadConcept, shuffledConcepts, WINDOW_SPOTS, type Concept } from "./concepts";
 
 /**
  * The launch screen's background. By default it is clean: near-black, a slow dawn light and film grain, and nothing
- * ever appears on its own. Underneath is a hidden gallery, revealed only by the visitor:
- * - with a mouse, a soft spotlight follows the cursor and uncovers an image, which changes every few seconds of movement;
- * - on touch, press and hold the background, then drag: the spotlight follows the finger. A quick swipe still scrolls
+ * ever appears on its own. Underneath is a hidden sneak peek, revealed only by the visitor:
+ * - with a mouse, a small, faint torch follows the cursor. Somewhere behind the page (never centred under the clock)
+ *   sits one website in a browser window; the torch uncovers whatever part of it the visitor finds;
+ * - on touch, press and hold the background, then drag: the torch follows the finger. A quick swipe still scrolls
  *   and taps on the form and links behave normally.
- * The imagery is unlabelled and decorative. Images load only when the spotlight is first used, one ahead at most.
- * The motion is transform and opacity in one rAF loop that sleeps when idle; nothing runs in a hidden tab, during the
- * reveal or with reduced motion.
+ * After a good look, the next reveal shows a different site in a different place (a very long look moves on too), so
+ * it stays a sneak peek. The imagery is unlabelled and decorative. Images load only when the torch is first used, one
+ * ahead at most. The motion is transform and opacity in one rAF loop that sleeps when idle; nothing runs in a hidden
+ * tab, during the reveal or with reduced motion.
  */
-const SWITCH_MS = 3500;
+/** After this much looking, the next reveal moves to another site somewhere else. */
+const REST_SWITCH_MS = 7000;
+/** A continuous look this long moves on without waiting for a rest. */
+const SWITCH_MS = 20000;
 const HOLD_MS = 260;
 const HOLD_SLOP = 10;
+
+type Slot = { src: string; spot: number } | null;
 
 export default function LaunchBackdrop({ animate, active }: {
   /** Motion allowed (hydrated, no reduced motion, tab visible). */
@@ -23,20 +30,24 @@ export default function LaunchBackdrop({ animate, active }: {
   /** The countdown is showing (not revealing). */
   active: boolean;
 }) {
-  const [order, setOrder] = useState<Concept[] | null>(null);
-  const [spot, setSpot] = useState<{ a: string | null; b: string | null; front: "a" | "b"; on: boolean; touch: boolean }>({ a: null, b: null, front: "a", on: false, touch: false });
+  const [order, setOrder] = useState<{ concepts: Concept[]; start: number } | null>(null);
+  const [spot, setSpot] = useState<{ a: Slot; b: Slot; front: "a" | "b"; on: boolean; touch: boolean }>({ a: null, b: null, front: "a", on: false, touch: false });
   const spotRef = useRef<HTMLDivElement>(null), innerRef = useRef<HTMLDivElement>(null);
 
-  // A fresh order for this visit, decided in the browser after hydration.
-  useEffect(() => { const timer = setTimeout(() => setOrder(shuffledConcepts()), 0); return () => clearTimeout(timer); }, []);
+  // A fresh order and starting place for this visit, decided in the browser after hydration.
+  useEffect(() => {
+    const timer = setTimeout(() => setOrder({ concepts: shuffledConcepts(), start: Math.floor(Math.random() * WINDOW_SPOTS.length) }), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!animate || !active || !order) return;
-    let index = 0, frame = 0, last = 0, moved = 0, lastMove = 0, loading = false, ready = false, front: "a" | "b" = "a";
-    let touching = false, holdTimer: ReturnType<typeof setTimeout> | undefined, start = { x: 0, y: 0 };
+    let index = 0, frame = 0, last = 0, moved = 0, lastMove = 0, loading = false, ready = false, wasVisible = false, front: "a" | "b" = "a";
+    let touching = false, holdTimer: ReturnType<typeof setTimeout> | undefined, restTimer: ReturnType<typeof setTimeout> | undefined, start = { x: 0, y: 0 };
     const target = { x: window.innerWidth / 2, y: window.innerHeight / 2 }, current = { ...target };
-    const src = (offset: number) => conceptSrc(order[(index + offset) % order.length], "art");
-    const radius = () => (spotRef.current?.offsetWidth ?? 600) / 2;
+    const src = (offset: number) => conceptSrc(order.concepts[(index + offset) % order.concepts.length], "site");
+    const slot = (offset: number): Slot => ({ src: src(offset), spot: (order.start + index + offset) % WINDOW_SPOTS.length });
+    const radius = () => (spotRef.current?.offsetWidth ?? 260) / 2;
     const place = () => {
       const r = radius();
       spotRef.current?.style.setProperty("transform", `translate3d(${(current.x - r).toFixed(1)}px, ${(current.y - r).toFixed(1)}px, 0)`);
@@ -45,7 +56,15 @@ export default function LaunchBackdrop({ animate, active }: {
     const warm = () => {
       if (ready || loading) return;
       loading = true;
-      void preloadConcept(src(0)).then(() => { ready = true; setSpot(state => ({ ...state, a: src(0) })); void preloadConcept(src(1)); });
+      void preloadConcept(src(0)).then(() => { ready = true; setSpot(state => ({ ...state, a: slot(0) })); void preloadConcept(src(1)); });
+    };
+    // The next site goes into the hidden slot and fades in where it lives; the current one fades out where it was.
+    const advance = () => {
+      restTimer = undefined; moved = 0; index++;
+      front = front === "a" ? "b" : "a";
+      const next = slot(0);
+      setSpot(state => ({ ...state, [front]: next, front }));
+      void preloadConcept(src(1));
     };
     const step = (time: number) => {
       frame = 0;
@@ -56,15 +75,14 @@ export default function LaunchBackdrop({ animate, active }: {
       place();
       const visible = touching || time - lastMove < 900;
       if (visible && ready) {
+        clearTimeout(restTimer); restTimer = undefined;
         moved += delta;
-        if (moved > SWITCH_MS) {
-          moved = 0; index++;
-          front = front === "a" ? "b" : "a";
-          const next = src(0);
-          setSpot(state => ({ ...state, [front]: next, front }));
-          void preloadConcept(src(1));
-        }
+        if (moved > SWITCH_MS) advance();
+      } else if (wasVisible && !visible && moved > REST_SWITCH_MS) {
+        // Swap only once the torch has faded, so nothing changes in front of the visitor.
+        restTimer = setTimeout(advance, 900);
       }
+      wasVisible = visible;
       setSpot(state => state.on === visible && state.touch === touching ? state : { ...state, on: visible, touch: touching });
       if (visible || Math.abs(target.x - current.x) + Math.abs(target.y - current.y) > 0.5) frame = requestAnimationFrame(step);
       else last = 0;
@@ -109,7 +127,7 @@ export default function LaunchBackdrop({ animate, active }: {
     window.addEventListener("touchend", touchEnd, { passive: true });
     window.addEventListener("touchcancel", touchEnd, { passive: true });
     return () => {
-      clearTimeout(holdTimer); cancelAnimationFrame(frame);
+      clearTimeout(holdTimer); clearTimeout(restTimer); cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", mouse);
       window.removeEventListener("touchstart", touchStart);
       window.removeEventListener("touchmove", touchMove);
@@ -123,8 +141,15 @@ export default function LaunchBackdrop({ animate, active }: {
     <div className="mbl-glow"><span /><span /><span /></div>
     <div ref={spotRef} className="mbl-spot" data-on={spot.on && (spot.a || spot.b) ? "" : undefined} data-touch={spot.touch ? "" : undefined}>
       <div ref={innerRef} className="mbl-spot-inner">
-        {spot.a && <img src={spot.a} alt="" decoding="async" data-front={spot.front === "a" ? "" : undefined} />}
-        {spot.b && <img src={spot.b} alt="" decoding="async" data-front={spot.front === "b" ? "" : undefined} />}
+        {(["a", "b"] as const).map(key => {
+          const site = spot[key];
+          if (!site) return null;
+          const [x, y] = WINDOW_SPOTS[site.spot];
+          return <div key={key} className="mbl-site" style={{ "--x": String(x), "--y": String(y) } as CSSProperties} data-front={spot.front === key ? "" : undefined}>
+            <div className="mbl-site-bar"><i /><i /><i /><b /></div>
+            <img src={site.src} alt="" decoding="async" />
+          </div>;
+        })}
       </div>
     </div>
     <div className="mbl-grain" />

@@ -4,12 +4,12 @@ require.extensions[".ts"] = (m, f) => m._compile(ts.transpileModule(fs.readFileS
 const c = require("./countdown.ts");
 let count = 0;
 const check = (name, fn) => { fn(); count++; console.log("PASS " + name); };
-const LAUNCH = Date.parse("2026-10-28T18:00:00Z"), S = 1000, M = 60 * S, H = 60 * M, D = 24 * H;
+const LAUNCH = Date.parse("2026-10-29T20:00:00Z"), S = 1000, M = 60 * S, H = 60 * M, D = 24 * H;
 
-check("default launch is Wednesday 28 October 2026, 19:00 Sarajevo (18:00 UTC, CET after the 25 October change)", () => {
+check("default launch is Thursday 29 October 2026, 21:00 Sarajevo (20:00 UTC, CET after the 25 October change)", () => {
   assert.equal(c.parseLaunchAt(undefined), LAUNCH);
-  assert.equal(new Date(LAUNCH).getUTCDay(), 3);
-  assert.deepEqual(c.launchDateText(LAUNCH), { date: "Wednesday 28 October", time: "19:00 CET", short: "Wed 28 Oct" });
+  assert.equal(new Date(LAUNCH).getUTCDay(), 4);
+  assert.deepEqual(c.launchDateText(LAUNCH), { date: "Thursday 29 October", time: "21:00 CET", short: "Thu 29 Oct" });
   for (const bad of ["", "soon", "28/10/2026", "2026-13-45T99:00:00Z", null]) assert.equal(c.parseLaunchAt(bad), LAUNCH);
   assert.equal(c.parseLaunchAt(" 2026-11-02T09:30:00Z "), Date.parse("2026-11-02T09:30:00Z"));
 });
@@ -82,7 +82,7 @@ check("clock skew: halfway through the round trip; small differences are trusted
   assert.equal(c.clockOffset({ sentAt: client, receivedAt: client + 400, serverNow: client + 200 - 3 * D }), -3 * D); // client 3 days fast
   assert.equal(c.clockOffset({ sentAt: client, receivedAt: client - 5, serverNow: client }), 0); // clock moved backwards mid-request
   assert.equal(c.clockOffset({ sentAt: client, receivedAt: client + 10, serverNow: NaN }), 0);
-  assert.equal(c.dateHeaderTime("Wed, 28 Oct 2026 18:00:00 GMT"), LAUNCH);
+  assert.equal(c.dateHeaderTime("Thu, 29 Oct 2026 20:00:00 GMT"), LAUNCH);
   assert(Number.isNaN(c.dateHeaderTime(null)));
   assert.equal(c.PAGE_SKEW_TOLERANCE_MS, 60000);
 });
@@ -95,10 +95,10 @@ check("time zones: Sarajevo name follows DST; the visitor's own time is shown on
   assert.equal(c.zoneOffsetMinutes(LAUNCH, "Asia/Kolkata"), 330);
   assert.equal(c.localLaunchText(LAUNCH, "Europe/Sarajevo", "en-GB"), null);
   assert.equal(c.localLaunchText(LAUNCH, "Europe/Berlin", "en-GB"), null); // same offset reads the same
-  assert.equal(c.localLaunchText(LAUNCH, "Europe/London", "en-GB"), "18:00 in your time");
-  assert.equal(c.localLaunchText(LAUNCH, "America/New_York", "en-US"), "2:00 PM in your time");
-  assert.equal(c.localLaunchText(LAUNCH, "Asia/Tokyo", "en-GB"), "Thu 3:00 in your time"); // next day
-  assert.equal(c.localLaunchText(LAUNCH, "Pacific/Auckland", "en-GB"), "Thu 7:00 in your time");
+  assert.equal(c.localLaunchText(LAUNCH, "Europe/London", "en-GB"), "20:00 in your time");
+  assert.equal(c.localLaunchText(LAUNCH, "America/New_York", "en-US"), "4:00 PM in your time");
+  assert.equal(c.localLaunchText(LAUNCH, "Asia/Tokyo", "en-GB"), "Fri 5:00 in your time"); // next day
+  assert.equal(c.localLaunchText(LAUNCH, "Pacific/Auckland", "en-GB"), "Fri 9:00 in your time");
   assert.equal(c.localLaunchText(LAUNCH, "Not/AZone", "en-GB"), null);
   assert.equal(c.localLaunchText(LAUNCH, undefined), null);
 });
@@ -129,18 +129,22 @@ check("honesty: after launch the copy never claims checkout is open unless the s
   }
 });
 
-check("spotlight imagery: unlabelled, neutral descriptions, no product claims, text-free crops only, a fresh order per visit", () => {
+check("sneak-peek imagery: whole website designs, unlabelled, neutral descriptions, no product claims, off-centre windows, a fresh order per visit", () => {
   const concepts = require("../../components/launch/concepts.ts");
-  assert(concepts.CONCEPTS.length >= 10 && concepts.CONCEPTS.length <= 14);
+  assert(concepts.CONCEPTS.length >= 8 && concepts.CONCEPTS.length <= 12);
   for (const concept of concepts.CONCEPTS) {
     assert.doesNotMatch(concept.alt, /makeborne|example|output|made with|ai-generated|concept/i, concept.alt);
-    const file = path.join(__dirname, "../../../public", concepts.conceptSrc(concept, "art"));
+    assert.match(concept.alt, /website design$/, "every peek is a website");
+    const file = path.join(__dirname, "../../../public", concepts.conceptSrc(concept, "site"));
     const kb = fs.statSync(file).size / 1024;
-    assert(kb <= 112, `${file} is ${kb.toFixed(0)} KB`);
+    assert(kb <= 170, `${file} is ${kb.toFixed(0)} KB`);
   }
   const folder = path.join(__dirname, "../../../public/launch/concepts");
-  assert.deepEqual(fs.readdirSync(folder).filter(name => !name.endsWith("-art.webp")), [], "no prompts, logs, source PNGs or unused sizes");
+  assert.deepEqual(fs.readdirSync(folder).filter(name => !name.endsWith("-site.webp")), [], "no prompts, logs, source PNGs or unused sizes");
   assert.equal(fs.readdirSync(folder).length, concepts.CONCEPTS.length);
+  assert(concepts.WINDOW_SPOTS.length >= 4);
+  for (const [x, y] of concepts.WINDOW_SPOTS) assert(Math.abs(x - 0.5) >= 0.3 && x >= 0 && x <= 1 && y >= 0 && y <= 1, `window at ${x},${y} sits off-centre, on screen`);
+  for (let i = 1; i < concepts.WINDOW_SPOTS.length; i++) assert((concepts.WINDOW_SPOTS[i][0] < 0.5) !== (concepts.WINDOW_SPOTS[i - 1][0] < 0.5), "the next site is on the other side");
   let seed = 7; const random = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
   const order = concepts.shuffledConcepts(random);
   assert.deepEqual([...order].map(item => item.id).sort(), concepts.CONCEPTS.map(item => item.id).sort(), "a permutation");
