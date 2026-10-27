@@ -70,6 +70,11 @@ const valid = { email: "  Ana.Reed@Example.COM ", company: "", source: "utm_sour
     // The invite script signs links exactly as the app verifies them.
     const script = fs.readFileSync(path.join(root, "scripts/waitlist-invite.mjs"), "utf8");
     assert.match(script, /createHmac\("sha256", secret\)\.update\("makeborne-waitlist:unsubscribe:"\)\.update\(id\.toLowerCase\(\)\)/);
+    // The invite copy follows the launch truth rules and names the seller, like the site does.
+    assert.match(script, /turns one brief into/);
+    assert.doesNotMatch(script, /short brief|\bfree\b/i);
+    assert.match(script, /ZORBY&CO d\.o\.o\., Vilsonovo šetalište 10, 71000 Sarajevo, Bosnia and Herzegovina/);
+    assert.match(script, /Refused: this repository has no transactional mail sender/, "--send stays refused");
     assert.match(fs.readFileSync(path.join(__dirname, "waitlist.ts"), "utf8"), /update\(`makeborne-waitlist:\$\{purpose\}:`\)/);
   });
 
