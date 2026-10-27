@@ -1,15 +1,15 @@
-import { plansOnSale } from "@/lib/billing/plans-on-sale";
+import { salesOpenNow } from "@/lib/launch/sales-open";
 import { launchConfig } from "@/lib/launch/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Public and anonymous: the server clock (for big client skew) and whether plans are on sale right now.
-// The sales answer is the same advisory gate the plans page uses; checkout always rechecks it.
-// One database check per instance every 30 seconds, however many visitors ask.
+// The sales answer is the checkout's own gate (src/lib/launch/sales-open.ts); checkout always rechecks it.
+// Cached per instance for 30 seconds, however many visitors ask.
 let cached: { at: number; value: Promise<boolean> } | null = null;
 function salesOpen(now: number) {
-  if (!cached || now - cached.at > 30_000) cached = { at: now, value: plansOnSale().catch(() => false) };
+  if (!cached || now - cached.at > 30_000) cached = { at: now, value: salesOpenNow().catch(() => false) };
   return cached.value;
 }
 

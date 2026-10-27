@@ -117,15 +117,51 @@ check("honesty: after launch the copy never claims checkout is open unless the s
   assert.deepEqual(c.liveCopy(false), { headline: "We're live", cta: null, note: "Plans opening any moment" });
   assert.deepEqual(c.liveCopy(null), { headline: "We're live", cta: null, note: null });
   const route = fs.readFileSync(path.join(__dirname, "../../app/api/launch-status/route.ts"), "utf8");
-  assert.match(route, /plansOnSale\(\)/);
+  assert.match(route, /salesOpenNow\(\)/);
   assert.match(route, /"Cache-Control": "no-store"/);
-  const gate = fs.readFileSync(path.join(__dirname, "../billing/plans-on-sale.ts"), "utf8");
-  assert.match(gate, /makeborne_billing_creation_enabled/);
+  // The sales answer is the checkout's own gate on each branch: the env gate on main, the database plan gate in the release.
+  const gate = fs.readFileSync(path.join(__dirname, "sales-open.ts"), "utf8");
+  assert.match(gate, /billingConfig\(\)\.enabled|plansOnSale\(\)/);
   // The countdown code never touches checkout or sales switches.
-  for (const file of ["countdown.ts", "config.ts", "../../components/launch/launch-screen.tsx", "../../components/launch/launch-banner.tsx", "../../components/launch/plans-open-line.tsx", "../../components/launch/use-launch-clock.ts"]) {
+  for (const file of ["countdown.ts", "config.ts", "../../components/launch/launch-screen.tsx", "../../components/launch/launch-banner.tsx", "../../components/launch/plans-open-line.tsx", "../../components/launch/use-launch-clock.ts", "../../components/launch/roll-clock.tsx", "../../components/launch/waitlist-form.tsx"]) {
     const source = fs.readFileSync(path.join(__dirname, file), "utf8");
     assert.doesNotMatch(source, /WHOP_CREATION_ENABLED\s*=|checkout\(|\/api\/billing\/checkout/, file);
   }
+});
+
+check("spotlight imagery: unlabelled, neutral descriptions, no product claims, text-free crops only, a fresh order per visit", () => {
+  const concepts = require("../../components/launch/concepts.ts");
+  assert(concepts.CONCEPTS.length >= 10 && concepts.CONCEPTS.length <= 14);
+  for (const concept of concepts.CONCEPTS) {
+    assert.doesNotMatch(concept.alt, /makeborne|example|output|made with|ai-generated|concept/i, concept.alt);
+    const file = path.join(__dirname, "../../../public", concepts.conceptSrc(concept, "art"));
+    const kb = fs.statSync(file).size / 1024;
+    assert(kb <= 112, `${file} is ${kb.toFixed(0)} KB`);
+  }
+  const folder = path.join(__dirname, "../../../public/launch/concepts");
+  assert.deepEqual(fs.readdirSync(folder).filter(name => !name.endsWith("-art.webp")), [], "no prompts, logs, source PNGs or unused sizes");
+  assert.equal(fs.readdirSync(folder).length, concepts.CONCEPTS.length);
+  let seed = 7; const random = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const order = concepts.shuffledConcepts(random);
+  assert.deepEqual([...order].map(item => item.id).sort(), concepts.CONCEPTS.map(item => item.id).sort(), "a permutation");
+  assert.notDeepEqual(order.map(item => item.id), concepts.CONCEPTS.map(item => item.id));
+  const sources = ["launch-screen.tsx", "launch-backdrop.tsx", "sound-toggle.tsx"].map(file => fs.readFileSync(path.join(__dirname, "../../components/launch", file), "utf8")).join("\n");
+  assert.doesNotMatch(sources.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ""), /made with makeborne|ai-generated|style concepts/i, "no caption in the markup");
+});
+
+check("nothing appears on its own: no ambient drift, peek hint or secret gallery; sound is opt-in, synthesised and capped", () => {
+  const read = file => fs.readFileSync(path.join(__dirname, "../../components/launch", file), "utf8");
+  const backdrop = read("launch-backdrop.tsx"), screen = read("launch-screen.tsx"), sound = read("launch-sound.ts"), toggle = read("sound-toggle.tsx");
+  assert.doesNotMatch(backdrop + screen, /mbl-ambient|Hold to peek|useSecretWord|ConceptGallery|setInterval/);
+  assert.match(backdrop, /addEventListener\("pointermove"/);
+  assert.match(backdrop, /addEventListener\("touchmove", touchMove, \{ passive: false \}\)/, "a held drag owns its gesture");
+  assert.match(backdrop, /closest\("a,button,input,label,form"\)/, "taps on the form and links are never captured");
+  assert.match(toggle, /=== "on"/, "off unless the visitor turned it on");
+  assert.match(toggle, /addEventListener\("pointerdown", start, \{ once: true \}\)/, "a remembered choice waits for a gesture");
+  assert.match(sound, /const CEILING = 0\.22;/);
+  assert.match(sound, /createDynamicsCompressor\(\)/);
+  assert.doesNotMatch(sound, /\.mp3|\.wav|\.ogg|fetch\(/, "synthesised: no audio files");
+  assert.match(toggle, /soundPause\(hidden\)/);
 });
 
 console.log(count + " launch countdown groups passed; no clock, network or browser");

@@ -26,6 +26,7 @@ We have not appointed a data protection officer, because our core activities do 
 | Visit counts | One-way daily hash of IP and browser (no cookies) | Legitimate interest | Counts about 400 days (see below) |
 | Account emails | Email address | Contract | As account |
 | Showcasing your work | The work you choose | Consent (opt-in) | Until you withdraw consent |
+| Launch waitlist | Email, when you joined, the notice version you saw, a campaign tag if your link carried one, one-way keyed hashes of your IP address and browser (the IP itself is not stored) | Consent (you ask to join) | Deleted 90 days after launch, or sooner on request; every waitlist email has an unsubscribe link |
 
 **Service quality.** Our own servers count visits to the home, pricing, sign-in, studio, client portal and help pages, once per browser per page per day, as a one-way hash of your IP address and browser details combined with a random value for that day. Each day's random value is deleted when the first visit is counted two or more days later; after that, stored hashes can no longer be matched to you. Browsers sending Global Privacy Control or Do Not Track are not counted. Error reports are scrubbed of email addresses, IDs, long tokens, long numbers and link query strings before they are stored. This is pattern matching, so other text in an error message can remain. Visit counts and error reports are deleted after about 400 days. No third-party analytics is used.
 
