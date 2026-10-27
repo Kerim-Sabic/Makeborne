@@ -14,7 +14,7 @@ const { browserType } = require('./browser-engine.cjs');
  try{
   browser=await browserType.launch({headless:true});const page=await browser.newPage();
   await page.goto(base+'/billing');await page.getByText('Creation memberships are not available for purchase yet.').waitFor();assert.equal(await page.locator('.founding-cta:disabled').count(),3);
-  availability.offers=[{tier:'create',interval:'monthly',totalCents:2900,monthlyCredits:300},{tier:'create',interval:'yearly',totalCents:27840,monthlyCredits:300}];
+  availability.offers=[{tier:'create',interval:'monthly',totalCents:2000,monthlyCredits:300},{tier:'create',interval:'yearly',totalCents:19200,monthlyCredits:300}];
   await page.reload();await page.getByRole('button',{name:'Sign in for Create'}).waitFor();await page.getByRole('radio',{name:/Yearly/}).click();await page.getByRole('button',{name:'Sign in for Create'}).click();await page.waitForURL('**/login?**');assert.equal(requests.length,0);
   availability.authenticated=true;await page.goto(base+'/billing');await page.getByRole('button',{name:'Continue with Create'}).waitFor();assert.equal(await page.getByRole('radio',{name:/Yearly/}).getAttribute('aria-checked'),'true');await page.getByText(/Selected: Create, yearly/).waitFor();
   await page.getByRole('button',{name:'Continue with Create'}).click();await page.getByRole('alert').waitFor();await page.getByRole('button',{name:'Continue with Create'}).click();await page.waitForFunction(()=>document.querySelector('[role=alert]'));assert.equal(requests.length,2);assert.equal(requests[0].requestId,requests[1].requestId);assert.equal(requests[0].interval,'yearly');assert.equal(Object.hasOwn(requests[0],'priceCents'),false);

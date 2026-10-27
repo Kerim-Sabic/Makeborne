@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
 const { MARGIN_POLICY, creditOffers, aiMargin, maxAiCostUsdPerCredit, offersBelow } = require("./margins.ts");
 const { aiCostUsdPerCredit, DEFAULT_AI_COST_USD_PER_CREDIT, MAX_AI_COST_USD_PER_CREDIT, creditsForUsd } = require("../builder/pricing.ts");
+const { FOUNDING_DISCOUNT_PERCENT } = require("./plans.ts");
 
 let passed = 0;
 const check = (name, fn) => { fn(); passed++; };
@@ -25,7 +26,7 @@ check("internal AI cost per credit: new name, legacy fallback, safe defaults", (
 
 const live = creditOffers();
 check("catalogue covers every plan, interval, founding term and top-up", () => {
-  assert.equal(live.length, 3 * 2 * 2 + 3);
+  assert.equal(live.length, 3 * 2 * (FOUNDING_DISCOUNT_PERCENT ? 2 : 1) + 3);
   for (const offer of live) assert.ok(offer.revenueCents > 0 && offer.credits > 0, offer.id);
 });
 
@@ -36,32 +37,20 @@ check("enforced floor: every live offer keeps the minimum AI-only margin at full
   assert.ok(Math.abs(MAX_AI_COST_USD_PER_CREDIT - maxAiCostUsdPerCredit(live, MARGIN_POLICY.enforcedMinAiMargin)) < 1e-12);
 });
 
-check("live offers below the proposed floor are exactly the founding first years (decision pending)", () => {
+check("monthly plans keep the 50% target; only yearly plans sit between the floors", () => {
   const below = offersBelow(live, cost, MARGIN_POLICY.proposedMinAiMargin).map(offer => offer.id).sort();
-  assert.deepEqual(below, ["create:yearly:founding", "scale:yearly:founding", "studio:yearly:founding"]);
+  assert.deepEqual(below, ["create:yearly", "scale:yearly", "studio:yearly"]);
 });
 
-const draft = creditOffers({ foundingYearlyDiscountPercent: MARGIN_POLICY.proposedFoundingYearlyDiscountPercent });
-check("DRAFT: a 15% founding yearly discount brings every offer to the proposed 50% floor", () => {
-  const below = offersBelow(draft, cost, MARGIN_POLICY.proposedMinAiMargin);
-  assert.deepEqual(below.map(offer => offer.id), []);
-  assert.ok(maxAiCostUsdPerCredit(draft, MARGIN_POLICY.proposedMinAiMargin) >= cost);
-  // The draft changes only the founding yearly offers.
-  for (const offer of draft) {
-    const current = live.find(item => item.id === offer.id);
-    if (!offer.id.endsWith("yearly:founding")) assert.equal(offer.revenueCents, current.revenueCents, offer.id);
-    else assert.ok(offer.revenueCents > current.revenueCents, offer.id);
-  }
+check("no founding discount at launch, so first terms cost the standard price", () => {
+  assert.equal(FOUNDING_DISCOUNT_PERCENT, 0);
+  assert.equal(live.some(offer => offer.id.endsWith(":founding")), false);
 });
 
 check("top-ups never undercut plans and keep at least 60%", () => {
   for (const offer of live.filter(item => item.kind === "topup")) assert.ok(aiMargin(offer, cost) >= 0.6, offer.id);
 });
 
-console.log(`AI-only margin at full usage, $${cost}/credit internal cost (live | draft 15% founding yearly):`);
-for (const offer of live) {
-  const proposal = draft.find(item => item.id === offer.id);
-  const changed = proposal.revenueCents !== offer.revenueCents ? ` | ${pct(aiMargin(proposal, cost))}` : "";
-  console.log(`  ${offer.id.padEnd(24)} $${(offer.revenueCents / 100 / offer.credits).toFixed(4)}/credit  ${pct(aiMargin(offer, cost))}${changed}`);
-}
-console.log(`${passed} margin checks passed; enforced floor ${pct(MARGIN_POLICY.enforcedMinAiMargin)}, cost ceiling $${MAX_AI_COST_USD_PER_CREDIT.toFixed(4)}; draft floor ${pct(MARGIN_POLICY.proposedMinAiMargin)} not enforced on live prices.`);
+console.log(`AI-only margin at full usage, $${cost}/credit internal cost:`);
+for (const offer of live) console.log(`  ${offer.id.padEnd(24)} $${(offer.revenueCents / 100 / offer.credits).toFixed(4)}/credit  ${pct(aiMargin(offer, cost))}`);
+console.log(`${passed} margin checks passed; enforced floor ${pct(MARGIN_POLICY.enforcedMinAiMargin)}, cost ceiling $${MAX_AI_COST_USD_PER_CREDIT.toFixed(4)}; monthly target ${pct(MARGIN_POLICY.proposedMinAiMargin)}.`);

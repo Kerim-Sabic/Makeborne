@@ -11,6 +11,7 @@ import { unavailableBilling } from "@/lib/billing/view";
 import { getFreeTierOffer } from "@/lib/credits/server";
 import { aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
+import { CREATION_PLANS, usd } from "@/lib/billing/plans";
 import { launchState } from "@/lib/launch/config";
 import { salesOpenNow } from "@/lib/launch/sales-open";
 import PlansOpenLine from "@/components/launch/plans-open-line";
@@ -18,7 +19,8 @@ import "./billing.css";
 import "./billing-topup-return.css";
 
 // Signed-out visitors (and crawlers) see the public plans and questions; account details need sign-in.
-export const metadata: Metadata = publicPageMetadata("/billing", "Pricing: plans & credits | Makeborne", "Makeborne plans from $29 a month: monthly credits for websites, books and presentations, unlimited websites (fair use), credit packs, and a built-in client CRM.");
+const credits = (value: number) => value.toLocaleString("en-US");
+export const metadata: Metadata = publicPageMetadata("/billing", "Pricing: plans & credits", `Makeborne plans from ${usd(CREATION_PLANS[0].monthlyCents)} a month: ${credits(CREATION_PLANS[0].monthlyCredits)} to ${credits(CREATION_PLANS[CREATION_PLANS.length - 1].monthlyCredits)} monthly credits for websites, books and presentations, a built-in client CRM, and a credit limit shown before every request.`);
 export const dynamic = "force-dynamic";
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

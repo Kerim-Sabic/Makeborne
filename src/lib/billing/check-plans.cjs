@@ -6,9 +6,9 @@ require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileMo
 const catalogue = require("./plans.ts");
 const { planPrice, CREATION_PLANS } = catalogue;
 for (const [id, monthly, firstMonth, yearly, firstYear, credits] of [
-  ["create", 2900, 2030, 27840, 19488, 300],
-  ["studio", 7900, 5530, 75840, 53088, 850],
-  ["scale", 19900, 13930, 191040, 133728, 2200],
+  ["create", 2000, 2000, 19200, 19200, 300],
+  ["studio", 4900, 4900, 47040, 47040, 750],
+  ["scale", 9900, 9900, 95040, 95040, 1550],
 ]) {
   assert.equal(planPrice(id, "monthly", false).priceCents, monthly);
   assert.equal(planPrice(id, "monthly", true).priceCents, firstMonth);
@@ -18,6 +18,16 @@ for (const [id, monthly, firstMonth, yearly, firstYear, credits] of [
   assert.equal(planPrice(id, "yearly", true).monthlyCredits, credits);
 }
 assert.throws(() => planPrice("coffee", "monthly", true));
+// Every public price surface states the launch catalogue: terms, help, llms.txt and the pricing metadata.
+const credits = value => value.toLocaleString("en-US");
+const termsSource = fs.readFileSync(require.resolve("../../app/billing/terms/page.tsx"), "utf8");
+assert.ok(termsSource.includes(`Create includes ${credits(CREATION_PLANS[0].monthlyCredits)} credits, Studio ${credits(CREATION_PLANS[1].monthlyCredits)}, and Scale ${credits(CREATION_PLANS[2].monthlyCredits)} per month of access.`), "terms credits match the catalogue");
+assert.doesNotMatch(termsSource, /not on sale/, "yearly plans are part of the launch catalogue");
+const helpSource = fs.readFileSync(require.resolve("../help/articles.ts"), "utf8");
+for (const plan of CREATION_PLANS) assert.ok(helpSource.includes(`${plan.name}: US$${plan.monthlyCents / 100} per month, ${credits(plan.monthlyCredits)} credits.`), `help lists ${plan.name}`);
+for (const file of ["../../app/llms.txt/route.ts", "../../app/billing/page.tsx", "../help/articles.ts", "../../app/billing/terms/page.tsx"]) {
+  assert.doesNotMatch(fs.readFileSync(require.resolve(file), "utf8"), /\$(?:29|79|199)\b|\b850 credits|2,200|278\.40|758\.40|Extra credit packs are available/, `${file} has no retired price`);
+}
 // Purchase availability is server-controlled; initial rendering fails closed.
 const ui = fs.readFileSync(require.resolve("../../components/creation-plans.tsx"), "utf8");
 assert.ok(ui.includes('/api/billing/availability'));

@@ -319,11 +319,11 @@ const CORE_ARTICLES: HelpArticle[] = [
   {
     slug: "credits-and-pricing", category: "account", updated: UPDATED,
     title: "How credits and plans work in Makeborne",
-    description: "Plans include monthly credits for AI work. Sending email, publishing and the CRM use none. Unused credits carry over for two months.",
+    description: "Plans from US$20 a month include monthly credits for AI work. Sending email, publishing and the CRM use none. Unused credits carry over for two months.",
     keywords: ["credits", "pricing", "plans", "cost", "subscription", "billing", "top up", "credit pack", "refund", "carry over", "how much"],
-    answer: "Every plan includes monthly credits for AI work: creating and editing projects, personalised emails, lead finding and advisor answers. Sending email, publishing and the CRM itself use no credits. Automated sequence sending is disabled for the current launch. Unused plan credits carry over for two months, and one-time credit packs add more without changing your plan.",
+    answer: "Every plan includes everything; plans differ only in monthly credits for AI work: creating and editing projects, personalised emails, lead finding and advisor answers. Sending email, publishing and the CRM itself use no credits. Automated sequence sending is disabled for the current launch. Unused plan credits carry over for two months. One-time credit packs are planned for members after launch.",
     sections: [
-      { heading: "Plans", list: ["Create: US$29 per month, 300 credits.", "Studio: US$79 per month, 850 credits.", "Scale: US$199 per month, 2,200 credits.", "Yearly billing is 20% below twelve monthly payments. Prices are before tax."] },
+      { heading: "Plans", list: ["Create: US$20 per month, 300 credits.", "Studio: US$49 per month, 750 credits.", "Scale: US$99 per month, 1,550 credits.", "Prices are in US dollars. Any tax or checkout fee is shown by Whop before you pay.", "Yearly plans, when offered at checkout, cost 20% less than twelve monthly payments. They are billed once a year upfront, and their credits are released each month."] },
       { heading: "What uses credits", list: ["Creating and editing websites, books and presentations (more for larger work and higher effort).", "Advisor answers: Standard usually under one credit; Genius more.", "Personal emails: a fraction of a credit each.", "Lead finding: 0.2 credits per delivered lead plus confirmed AI ranking, with the combined total rounded up once. Creator discovery is temporarily unavailable."] },
       { heading: "What is free", list: ["Sending emails. Gmail is currently send-only; automated sequence sending is disabled for launch.", "Publishing and hosting websites (fair use).", "The CRM, client reviews and lead research of a single profile."] },
     ],
