@@ -52,6 +52,7 @@ for (const role of ["anon", "authenticated"]) {
   await fails(role, "select public.makeborne_join_launch_waitlist('x@example.com',null,'waitlist-2026-10-27',$1,null)", [hash(9)], "42501");
   await fails(role, "select * from public.makeborne_launch_waitlist_pending(10)", [], "42501");
   await fails(role, "select public.makeborne_unsubscribe_launch_waitlist(gen_random_uuid())", [], "42501");
+  await fails(role, "select public.makeborne_launch_waitlist_count()", [], "42501");
   await fails(role, "select count(*) from makeborne_private.launch_waitlist", [], "42501");
   await fails(role, "select makeborne_private.join_launch_waitlist('x@example.com',null,'waitlist-2026-10-27',$1,null)", [hash(9)], "42501");
 }
@@ -59,12 +60,13 @@ await fails("service_role", "select count(*) from makeborne_private.launch_waitl
 await fails("service_role", "insert into makeborne_private.launch_waitlist(email,consent_text_version,ip_hash) values('y@example.com','waitlist-2026-10-27',$1)", [hash(9)], "42501");
 const security = (await db.query(`select p.proname, p.prosecdef, p.proconfig from pg_proc p join pg_namespace n on n.oid=p.pronamespace
   where n.nspname='makeborne_private' and p.proname like '%launch_waitlist%' order by 1`)).rows;
-assert.equal(security.length, 4);
+assert.equal(security.length, 5);
 for (const fn of security) { assert.equal(fn.prosecdef, true, fn.proname); assert.deepEqual(fn.proconfig, ['search_path=""'], fn.proname); }
 const rls = (await db.query("select relrowsecurity from pg_class where oid='makeborne_private.launch_waitlist'::regclass")).rows[0];
 assert.equal(rls.relrowsecurity, true);
 pass("anon and authenticated can execute nothing and read nothing; even service_role has no table privileges; definer functions pin an empty search_path; RLS on");
 
+assert.equal((await as("service_role", "select public.makeborne_launch_waitlist_count() as n")).rows[0].n, 7);
 const pending = (await as("service_role", "select id, email from public.makeborne_launch_waitlist_pending(100)")).rows;
 assert.equal(pending.length, 7);
 assert.equal(pending[0].email, "ana.reed@example.com"); // oldest first
@@ -77,7 +79,8 @@ assert.equal(marked, 6, "unsubscribed row is not marked invited");
 assert.equal((await as("service_role", "select public.makeborne_mark_launch_waitlist_invited($1::uuid[]) as n", [pending.map(row => row.id)])).rows[0].n, 0, "marking twice changes nothing");
 assert.equal((await as("service_role", "select count(*)::int as n from public.makeborne_launch_waitlist_pending(100)")).rows[0].n, 0);
 await fails("service_role", "select public.makeborne_mark_launch_waitlist_invited('{}'::uuid[])", [], "22023");
-pass("invite export lists pending rows oldest first; unsubscribe is idempotent and blind; invited_at is set once and never for unsubscribed rows");
+assert.equal((await as("service_role", "select public.makeborne_launch_waitlist_count() as n")).rows[0].n, 6, "the count leaves out unsubscribed addresses");
+pass("invite export lists pending rows oldest first; unsubscribe is idempotent and blind; invited_at is set once and never for unsubscribed rows; the count excludes unsubscribed");
 
 await db.close();
 console.log(`${count} launch waitlist SQL groups passed on a disposable in-memory Postgres`);

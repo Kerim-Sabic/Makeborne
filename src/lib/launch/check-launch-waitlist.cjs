@@ -57,14 +57,23 @@ const valid = { email: "  Ana.Reed@Example.COM ", company: "", source: "utm_sour
     assert.equal(waitlist.validUnsubscribe(SECRET, id, sig.replace(/^./, c => c === "0" ? "1" : "0")), false);
     assert.equal(waitlist.validUnsubscribe(SECRET, "not-a-uuid", sig), false);
     assert.equal(waitlist.validUnsubscribe(SECRET, id, "short"), false);
-    assert.equal(waitlist.waitlistSecret({ MAKEBORNE_WAITLIST_SECRET: "short" }), null);
+    assert.equal(waitlist.waitlistSecret({ MAKEBORNE_WAITLIST_SALT: "short" }), null);
+    assert.equal(waitlist.waitlistSecret({ MAKEBORNE_WAITLIST_SALT: SECRET }), SECRET);
+    // No new production secret: derived from the existing service key with a fixed label, never the key itself.
+    const key = "sb_secret_" + "k".repeat(40), derived = waitlist.waitlistSecret({ SUPABASE_SECRET_KEY: key });
+    assert.match(derived, /^[0-9a-f]{64}$/);
+    assert.equal(derived, waitlist.waitlistSecret({ SUPABASE_SECRET_KEY: key }), "stable");
+    assert.notEqual(derived, key);
+    assert.equal(waitlist.waitlistSecret({ SUPABASE_SECRET_KEY: "not-a-service-key" }), null);
+    assert.equal(waitlist.waitlistSecret({}), null);
+    assert.match(fs.readFileSync(path.join(root, "scripts/waitlist-invite.mjs"), "utf8"), /update\("makeborne-launch-waitlist-salt-v1"\)/, "the invite script derives the same salt");
     // The invite script signs links exactly as the app verifies them.
     const script = fs.readFileSync(path.join(root, "scripts/waitlist-invite.mjs"), "utf8");
     assert.match(script, /createHmac\("sha256", secret\)\.update\("makeborne-waitlist:unsubscribe:"\)\.update\(id\.toLowerCase\(\)\)/);
     assert.match(fs.readFileSync(path.join(__dirname, "waitlist.ts"), "utf8"), /update\(`makeborne-waitlist:\$\{purpose\}:`\)/);
   });
 
-  process.env.MAKEBORNE_WAITLIST_SECRET = SECRET;
+  process.env.MAKEBORNE_WAITLIST_SALT = SECRET;
   await check("join: same-origin JSON only; the database gets a lower-cased email and hashes, never the raw IP or browser string", async () => {
     calls.length = 0;
     const response = await post(valid);
@@ -116,9 +125,18 @@ const valid = { email: "  Ana.Reed@Example.COM ", company: "", source: "utm_sour
       reply = { error: { code: "XX000", message: "boom ana.reed@example.com" } };
       assert.equal((await post(valid)).status, 503);
       reply = { error: null };
-      delete process.env.MAKEBORNE_WAITLIST_SECRET;
-      assert.equal((await post(valid)).status, 503, "no secret: closed, nothing stored");
-      process.env.MAKEBORNE_WAITLIST_SECRET = SECRET;
+      delete process.env.MAKEBORNE_WAITLIST_SALT;
+      assert.equal((await post(valid)).status, 503, "no salt and no service key: closed, nothing stored");
+      process.env.MAKEBORNE_WAITLIST_SALT = SECRET;
+      // The migration isn't applied yet (PostgREST: function not found): a friendly 503, never a 500 or a stack trace.
+      for (const code of ["PGRST202", "42883", "42P01"]) {
+        reply = { error: { code, message: "Could not find the function public.makeborne_join_launch_waitlist" } };
+        const missing = await post(valid);
+        assert.equal(missing.status, 503, code);
+        const body = await missing.json();
+        assert.deepEqual(body, { error: { code: "WAITLIST_UNAVAILABLE", message: "The waitlist isn't available right now. Try again shortly." } });
+      }
+      reply = { error: null };
     } finally { console.error = original; }
     assert(logged.length >= 1);
     for (const line of logged) assert.doesNotMatch(line, /@|203\.0\.113/);
@@ -131,9 +149,9 @@ const valid = { email: "  Ana.Reed@Example.COM ", company: "", source: "utm_sour
     assert.match(sql, /revoke all on table makeborne_private\.launch_waitlist from public, anon, authenticated, service_role;/);
     assert.doesNotMatch(sql, /create policy/);
     assert.doesNotMatch(sql, /grant [^;]* to (anon|authenticated)/);
-    assert.equal((sql.match(/security definer set search_path = ''/g) || []).length, 4);
-    assert.equal((sql.match(/security invoker set search_path = ''/g) || []).length, 4);
-    assert.equal((sql.match(/grant execute on function [^;]+ to service_role;/g) || []).length, 8);
+    assert.equal((sql.match(/security definer set search_path = ''/g) || []).length, 5);
+    assert.equal((sql.match(/security invoker set search_path = ''/g) || []).length, 5);
+    assert.equal((sql.match(/grant execute on function [^;]+ to service_role;/g) || []).length, 10);
     const body = sql.slice(sql.indexOf("create function makeborne_private.join_launch_waitlist"), sql.indexOf("create function makeborne_private.launch_waitlist_pending"));
     assert(body.indexOf("errcode = 'MB429'") < body.indexOf("insert into"), "rate limit is checked before the insert, for every address");
     assert.match(body, /interval '10 minutes'\) >= 5/);
@@ -142,9 +160,24 @@ const valid = { email: "  Ana.Reed@Example.COM ", company: "", source: "utm_sour
     assert.doesNotMatch(sql, /\bip_address\b|\binet\b/);
   });
 
+  await check("social proof is real or absent: from 50 only, rounded down to tens, cached, never blocking the page", async () => {
+    const proof = require("./waitlist-count.ts");
+    for (const [count, shown] of [[0, null], [49, null], [50, 50], [59, 50], [137, 130], [1000, 1000], [-5, null], [NaN, null], ["120", null], [null, null]]) assert.equal(proof.waitlistProof(count), shown, String(count));
+    calls.length = 0;
+    reply = { data: 4321, error: null };
+    assert.equal(await proof.waitlistProofCount(1_000_000), 4320);
+    assert.equal(await proof.waitlistProofCount(1_030_000), 4320, "served from the 60 s cache");
+    assert.equal(calls.filter(call => call.name === "makeborne_launch_waitlist_count").length, 1);
+    reply = { data: null, error: { code: "XX000" } };
+    assert.equal(await proof.waitlistProofCount(1_100_000), null, "an error shows no count");
+    reply = { error: null };
+    const page = fs.readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
+    assert.match(page, /const forcedCount = launch\.testOverrides && /, "the preview override is non-production only");
+  });
+
   await check("the consent line, the privacy notice and the form agree", () => {
     const form = fs.readFileSync(path.join(root, "src/components/launch/waitlist-form.tsx"), "utf8");
-    assert.match(form, /We&rsquo;ll only use your email to send your launch invite and launch news\. Unsubscribe any time\. See our <Link href="\/privacy">Privacy Policy<\/Link>\./);
+    assert.match(form, /We&rsquo;ll only use your email to send your launch invite and launch news\. Unsubscribe any time\. See our <Link href="\/privacy" prefetch=\{false\}>Privacy Policy<\/Link>\./);
     assert.match(shared.WAITLIST_CONSENT_TEXT, /^We'll only use your email to send your launch invite and launch news\. Unsubscribe any time\./);
     const privacy = fs.readFileSync(path.join(root, "src/app/privacy/page.tsx"), "utf8");
     assert.match(privacy, /\["Launch waitlist", "If you join the launch waitlist/);

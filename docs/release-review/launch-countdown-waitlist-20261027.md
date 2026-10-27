@@ -8,48 +8,74 @@ deployed, applied or sent.
 
 ## What it does
 
-- **Before `NEXT_PUBLIC_MAKEBORNE_LAUNCH_AT`**, `/` is a full-page launch screen. It has the wordmark, a rolling
-  countdown, the date "Wednesday 28 October · 19:00 CET" plus the visitor's local time, the tagline, "Join the
-  waitlist" and the Instagram link. There's no Sign in. Other public pages (pricing, help, privacy and the legal pages)
-  carry a slim, dismissible banner. `/billing` shows "Plans open in …".
-- **At zero**, the figures roll away to "We're live." Then the screen splits and lifts (1.4 s, ease-in-out-cubic) off
-  the real home page, with no reload. Reduced-motion visitors get a 0.6 s cross-fade instead.
-- **For 48 hours after launch**, the banner says "We're live". It links to plans only while the server says plans are
-  on sale; otherwise it says "Plans opening any moment". After that, everything hides itself.
-- **The countdown is informational.** It never opens or closes sales, and checkout keeps its own gate.
-- **Owner preview:** `/?preview=site` shows the normal home page early, remembered for 7 days in a cookie;
-  `/?preview=off` forgets it.
-- **Testing outside production:** `?countdown=at:<ISO>` forces a launch moment, and `?theme=light` shows the light
-  variant.
+- **Before 2026-10-28T18:00:00Z** (Wednesday 19:00 CET), `/` is a full-page launch screen.
+  - It has the wordmark, huge rolling figures (Geist), and the tagline.
+  - It shows the date and the visitor's local time.
+  - It has "Join the waitlist" (with a real "Join N others" line, shown only from 50 and rounded down to tens), an
+    optional Sound toggle and the Instagram link. There's no Sign in.
+  - In the final minute, the seconds take over the clock.
+  - Other public pages (pricing, help, privacy and the legal pages) carry a slim, dismissible banner. `/billing` shows
+    "Plans open in …".
+- **At zero**, the figures roll away to "We're live.", and the live home page opens through an iris from its accent
+  full stop. There's no reload. Reduced-motion visitors get a short cross-fade instead.
+- **For 48 hours after launch**, the banner says "We're live". It links to plans only while the checkout's own gate is
+  open; otherwise it says "Plans opening any moment". After that, everything hides itself.
+- **The countdown is informational.** It never opens or closes sales.
+- **The hidden gallery** is reveal-only. Nothing appears on its own:
+  - With a mouse, a soft spotlight follows the cursor and uncovers an unlabelled image.
+  - On touch, press and hold the background, then drag. Quick swipes still scroll, and taps on the form and links
+    work as usual.
+  - The images are text-free crops of the owner's v14 style stills, in `public/launch/concepts/` (12 × WebP, at most
+    110 KB each, about 1.1 MB in total). They load only once the spotlight is first used, one ahead at most, and have
+    no captions.
+- **Sound** is off by default, synthesised with Web Audio, so there are no audio files.
+  - Once turned on, it plays a soft tick each second, a very quiet pad, and a swell at the reveal.
+  - It's capped by a compressor and a fixed ceiling, and paused in hidden tabs.
+  - It's remembered on the device, but always starts from a click or key press.
+- **Previews:**
+  - `/?preview=site` shows the normal home page early. It's remembered for 7 days in a cookie; `/?preview=off`
+    forgets it.
+  - Outside production only: `?countdown=at:<ISO>`, `?theme=light` and `?waitlistCount=<n>`.
+
+## Environment: nothing new is required
+
+The code defaults are production-ready:
+
+- `NEXT_PUBLIC_MAKEBORNE_LAUNCH_AT` defaults to `2026-10-28T18:00:00Z`.
+- `MAKEBORNE_LAUNCH_COUNTDOWN` defaults to on. Exactly `on` keeps it on; any other value (for example `off`) turns it
+  off everywhere.
+- The waitlist salt uses `MAKEBORNE_WAITLIST_SALT` if it's set (at least 32 characters). Otherwise it's derived on the
+  server as `HMAC-SHA256(SUPABASE_SECRET_KEY, "makeborne-launch-waitlist-salt-v1")`. The key itself is never used
+  directly, and the salt is never logged.
+
+The waitlist reuses env that main already depends on: `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SECRET_KEY`
+(`sb_secret_…`, the same service key billing uses through `billingDatabase()`). If `SUPABASE_SECRET_KEY` is ever
+rotated, set `MAKEBORNE_WAITLIST_SALT` first. Otherwise the IP hashes reset (that only affects the 10-minute limit) and
+the unsubscribe links already emailed stop verifying.
 
 ## Production steps (in order)
 
-1. **Apply the migration to the production Supabase project.** The file is
-   `supabase/migrations/20261027090000_launch_waitlist.sql`. Apply it with the SQL editor or `supabase db push`, then
-   run the security advisors. It's additive: one private table and four functions.
+1. **Apply the migration** to the production Supabase project, then run the security advisors. The file is
+   `supabase/migrations/20261027090000_launch_waitlist.sql`. It's additive: one private table and five functions.
    - The table is `makeborne_private.launch_waitlist`. Row level security is on with no policies. No role has table
      privileges, not even service_role.
-   - The functions are SECURITY DEFINER with `search_path=''`. Each sits behind a `public.makeborne_*` security-invoker
-     wrapper, and only `service_role` can execute it.
-2. **Set the Vercel production environment variables** before the build. `NEXT_PUBLIC_` is inlined at build time.
-   ```
-   NEXT_PUBLIC_MAKEBORNE_LAUNCH_AT=2026-10-28T18:00:00Z
-   MAKEBORNE_LAUNCH_COUNTDOWN=on
-   MAKEBORNE_WAITLIST_SECRET=<generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))">
-   ```
-   - `MAKEBORNE_WAITLIST_SECRET` keys the IP and browser hashes and signs unsubscribe links. It must be at least 32
-     characters. Generate it once and store it only in Vercel and your password manager. Never commit it.
-   - Without the secret, the waitlist answers "isn't available right now" and stores nothing.
-   - The existing `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SECRET_KEY` are reused.
-3. **Merge and deploy:** merge `claude/launch-countdown-main` into `main`, and Vercel deploys.
-4. **Smoke test on production:**
-   - `GET /api/launch-status` returns `enabled: true`.
+   - The functions are SECURITY DEFINER with an empty `search_path`. Each sits behind a `public.makeborne_*`
+     security-invoker wrapper, and only `service_role` can execute it.
+2. **Merge** `claude/launch-countdown-main` into `main`. Vercel deploys it.
+3. **Smoke test on production:**
+   - `GET /api/launch-status` returns `enabled: true` and `salesOpen` as expected.
    - `/` shows the launch screen.
    - `/?preview=site` shows the normal home page.
-   - Join with your own address, and check that it says "You're on the list…".
-   - Run the count query below.
-5. **At 2026-10-28T18:00Z**, the reveal is automatic. Sales must open at the same moment (`WHOP_CREATION_ENABLED` and
+   - Join with your own address, then run the count query below.
+4. **At 2026-10-28T18:00Z**, the reveal is automatic. Sales must open at the same moment (`WHOP_CREATION_ENABLED` and
    the release gates; that's Codex's release). Until they do, the banner honestly says "Plans opening any moment".
+
+**If the migration isn't applied yet:**
+
+- `POST /api/waitlist` answers 503 with `{"error":{"code":"WAITLIST_UNAVAILABLE","message":"The waitlist isn't available right now. Try again shortly."}}`.
+  It logs only the database error code, never the address, and never returns a 500 or a stack trace.
+- The "Join N others" line simply stays hidden.
+- Unsubscribe links land on "Something went wrong".
 
 ## Invites at launch (nothing is sent automatically)
 
@@ -57,14 +83,14 @@ This repository has no transactional mail sender: account emails go through Supa
 `scripts/waitlist-invite.mjs` prepares the invite instead of sending it.
 
 ```
-node scripts/waitlist-invite.mjs                                  # dry run: count pending invites and print the email copy
+node scripts/waitlist-invite.mjs                                             # dry run: count pending invites and print the email copy
 node scripts/waitlist-invite.mjs --export C:\path\outside\repo\invites.csv   # CSV + email copy; changes nothing
-# send from your mail tool (one email per address; add List-Unsubscribe headers from the CSV)
+# send from your mail tool (one email per address; add the List-Unsubscribe headers from the CSV)
 node scripts/waitlist-invite.mjs --mark-invited C:\path\outside\repo\invites.csv --approval "<your words>"
 ```
 
-- **Environment for the script:** `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SECRET_KEY` and `MAKEBORNE_WAITLIST_SECRET`
-  (the production value, so unsubscribe links verify).
+- **Environment for the script:** `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SECRET_KEY`, plus
+  `MAKEBORNE_WAITLIST_SALT` if production sets one.
 - **`--send` is refused** on purpose.
 
 **Email copy** (subject: "Makeborne is live. Your invite is here."):
@@ -108,8 +134,8 @@ The privacy notice says waitlist entries are deleted 90 days after launch, or so
 - **Countdown:** set `MAKEBORNE_LAUNCH_COUNTDOWN=off`. Dynamic pages (`/`, `/billing`) follow it on the next request.
   Pages prerendered at build (help, privacy, billing terms) keep the banner until the next deploy. The banner also
   hides itself 48 hours after launch.
-- **Waitlist:** remove `MAKEBORNE_WAITLIST_SECRET` to close the form without a deploy; stored rows are kept. The
-  migration can stay: it's private and unused without the route.
+- **Waitlist:** the route is closed only if no salt can be formed. To pause it, revert the route or leave the migration
+  unapplied; both answer with the friendly 503.
 
 ## Abuse and privacy notes
 
@@ -121,13 +147,11 @@ The privacy notice says waitlist entries are deleted 90 days after launch, or so
 - **Single opt-in:** nobody is emailed on sign-up, and the one invite carries an unsubscribe link. Unsubscribing uses
   a confirmation page, so link scanners can't unsubscribe anyone, plus an RFC 8058 one-click endpoint.
 
-## Checks run
+## Checks
 
-- **Offline:** `src/lib/launch/check-launch-countdown.cjs` covers the time math, DST, zones, skew and the 48 h window.
-  `src/lib/launch/check-launch-waitlist.cjs` covers validation, honeypot, idempotency, rate-limit mapping, hashing,
-  signatures, the migration boundary and the consent/privacy text. Both run in `npm test`.
+- **Offline:** `src/lib/launch/check-launch-countdown.cjs` and `src/lib/launch/check-launch-waitlist.cjs`. Both run in
+  `npm test`.
 - **SQL:** `scripts/check-launch-waitlist-sql.mjs` applies the migration to a disposable in-memory Postgres (PGlite)
-  and checks joins, idempotency, the rate limit, permissions, invites and unsubscribes. Docker wasn't responding here.
-  Run it with `MAKEBORNE_PGLITE=<path to @electric-sql/pglite>`.
-- **Browser:** `scripts/check-launch-countdown-browser.cjs` runs in Chromium and WebKit, at 390 and 1440 px, against
-  `next start`.
+  and checks it there. Run it with `MAKEBORNE_PGLITE=<path to @electric-sql/pglite>`.
+- **Browser:** `scripts/check-launch-countdown-browser.cjs [shots] [--engine webkit|firefox]` runs against
+  `next start` on localhost:3246 (3245 on the release branch).

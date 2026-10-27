@@ -9,7 +9,8 @@
 //                                                         exported rows invited (never unsubscribed ones)
 //   --send                                                refused: there is no mail path to send through (see above)
 //
-// Needs NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY (service role) and MAKEBORNE_WAITLIST_SECRET (for unsubscribe links).
+// Needs NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY (service role). Unsubscribe links are signed with the same salt
+// the app uses: MAKEBORNE_WAITLIST_SALT if production sets one, otherwise the value derived from SUPABASE_SECRET_KEY.
 // MAKEBORNE_SITE_URL defaults to https://makeborne.com. Nothing here prints secrets; addresses go only into the CSV.
 import { createHmac } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -51,6 +52,12 @@ function signedQuery(secret, id) {
 const unsubscribeUrl = (secret, id) => `${site}/waitlist/unsubscribe?${signedQuery(secret, id)}`;
 /** RFC 8058 one-click target for the List-Unsubscribe header (POST only). */
 const oneClickUrl = (secret, id) => `${site}/api/waitlist/unsubscribe?${signedQuery(secret, id)}`;
+/** Exactly the app's rule (src/lib/launch/waitlist.ts): an explicit salt, or an HMAC of the service key with a fixed label. */
+function waitlistSalt(env = process.env) {
+  if (env.MAKEBORNE_WAITLIST_SALT && env.MAKEBORNE_WAITLIST_SALT.length >= 32) return env.MAKEBORNE_WAITLIST_SALT;
+  const key = env.SUPABASE_SECRET_KEY;
+  return key?.startsWith("sb_secret_") ? createHmac("sha256", key).update("makeborne-launch-waitlist-salt-v1").digest("hex") : null;
+}
 const csvCell = text => /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 
 async function rpc(name, body) {
@@ -91,8 +98,8 @@ ${inviteText({ signupUrl, unsubscribeUrl: `${site}/waitlist/unsubscribe?id=…&s
     if (!file) throw new Error("--export needs a file path.");
     const target = path.resolve(file);
     if (target.startsWith(repo + path.sep)) throw new Error("Write the export outside the repository; it contains personal data.");
-    const secret = process.env.MAKEBORNE_WAITLIST_SECRET;
-    if (!secret || secret.length < 32) throw new Error("Set MAKEBORNE_WAITLIST_SECRET (the production value) so unsubscribe links verify.");
+    const secret = waitlistSalt();
+    if (!secret) throw new Error("Set SUPABASE_SECRET_KEY (and MAKEBORNE_WAITLIST_SALT if production sets one) so unsubscribe links verify.");
     const lines = ["email,signup_url,unsubscribe_url,one_click_unsubscribe_url,id", ...pending.map(row => [row.email, signupUrl, unsubscribeUrl(secret, row.id), oneClickUrl(secret, row.id), row.id].map(csvCell).join(","))];
     writeFileSync(target, lines.join("\n") + "\n", { mode: 0o600 });
     writeFileSync(target.replace(/\.csv$/i, "") + ".email.txt", `Subject: ${INVITE_SUBJECT}\n\n${inviteText({ signupUrl, unsubscribeUrl: "{unsubscribe_url}" })}`);

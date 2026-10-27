@@ -1,168 +1,238 @@
-/* Full-page launch screen on `/` before launch: editorial and quiet. Monochrome with one accent (Makeborne coral),
-   hairline rules, large light tabular figures, small-caps labels, everything on an 8px grid. Dark is the launch look;
-   `?theme=light` shows the light variant. Everything that moves is transform or opacity (compositor only), and the
-   figure slots have fixed sizes, so nothing reflows as time passes. */
+/* Full-page launch screen on `/` before launch. Near-black with a dim dawn light in the home page's own colours
+   (blue, coral, peach) rising from below, one coral accent (Makeborne's mark), film grain, huge Geist figures and a
+   glass waitlist. A hidden gallery under the background is revealed only by the visitor's cursor or finger.
+   Everything that moves is transform or opacity (plus a brief weight settle on a rolling figure); figure slots have
+   fixed sizes, so nothing reflows as time passes. `?theme=light` shows the light variant. */
 .mbl{
-  --bg:#0b0b0c;--fg:#f2f1ed;--fg-2:#c4c1ba;--muted:#918e87;--rule:rgba(242,241,237,.1);--rule-strong:rgba(242,241,237,.2);
-  --accent:#f76f53;--field:rgba(242,241,237,.04);--button:#f2f1ed;--button-ink:#0b0b0c;--glow:rgba(247,111,83,.11);--cool:rgba(122,140,255,.07);
+  --bg:#07070a;--fg:#f5f5f7;--fg-2:#d2d2da;--muted:#9a9aa6;--line:rgba(255,255,255,.08);
+  --accent:#ff8466;--accent-2:#ffb59a;--accent-ink:#1a0d08;--dawn-blue:rgba(126,168,250,.26);--dawn-coral:rgba(243,165,138,.2);--dawn-peach:rgba(249,219,186,.12);
+  --glass:rgba(255,255,255,.045);--glass-border:rgba(255,255,255,.1);--glass-shadow:0 24px 48px -28px rgba(0,0,0,.8);
+  --button:#f5f5f7;--button-ink:#0b0b0f;--grain:.065;--ambient:.07;--dot:rgba(255,255,255,.35);--track:rgba(255,255,255,.1);
   --ease-out:cubic-bezier(.16,1,.3,1);--ease-in-out:cubic-bezier(.65,0,.35,1);
   --spring:linear(0, .042, .143, .275, .415, .55, .672, .775, .858, .922, .969, 1.001, 1.022, 1.033, 1.038, 1.038, 1.035, 1.03, 1.025, 1.02, 1.015, 1.01, 1.007, 1.004, 1.002, 1, .999, .999, .999, .999, .999, .999, 1);
-  --gutter:56px;--figure:clamp(64px,11.6vw,176px);
+  --gutter:56px;--figure:clamp(64px,13.5vw,200px);--display:var(--font-launch),var(--font-inter),Arial,sans-serif;
   position:fixed;inset:0;z-index:1000;overflow:hidden auto;overscroll-behavior:contain;background:var(--bg);color:var(--fg);
-  font-family:var(--font-inter),Arial,sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 1,"cv11" 1;color-scheme:dark}
-.mbl[data-theme="light"]{--bg:#f5f4f0;--fg:#121211;--fg-2:#3b3935;--muted:#67645e;--rule:rgba(18,18,17,.1);--rule-strong:rgba(18,18,17,.22);
-  --accent:#d1482a;--field:#fff;--button:#121211;--button-ink:#f5f4f0;--glow:rgba(247,111,83,.12);--cool:rgba(122,140,255,.08);color-scheme:light}
-.mbl[data-stage="opening"]{background:transparent;pointer-events:none;overflow:hidden}
+  font-family:var(--display);-webkit-font-smoothing:antialiased;color-scheme:dark;
+  -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.mbl[data-theme="light"]{--bg:#f4f4f6;--fg:#0b0b0f;--fg-2:#33333c;--muted:#62626c;--line:rgba(11,11,15,.08);
+  --accent:#d9532f;--accent-2:#e8805f;--accent-ink:#fff;--dawn-blue:rgba(126,168,250,.3);--dawn-coral:rgba(243,165,138,.26);--dawn-peach:rgba(249,219,186,.3);--glass:rgba(255,255,255,.62);--glass-border:rgba(11,11,15,.08);--glass-shadow:0 24px 48px -30px rgba(40,30,120,.35);
+  --button:#0b0b0f;--button-ink:#f5f5f7;--grain:.04;--ambient:.08;--dot:rgba(11,11,15,.3);--track:rgba(11,11,15,.12);color-scheme:light}
+.mbl[data-stage="opening"]{pointer-events:none;overflow:hidden}
 .mbl-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.mbl a:focus-visible,.mbl button:focus-visible,.mbl input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.mbl a:focus-visible,.mbl button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
-/* Two halves of the screen; at the reveal they part (split lift) over the page underneath. */
-.mbl-panel{position:fixed;left:0;right:0;height:calc(50% + 1px);overflow:hidden;background:var(--bg);will-change:transform;
-  transition:transform 1.4s var(--ease-in-out) .32s}
-.mbl-panel-top{top:0}.mbl-panel-bottom{bottom:0}
-.mbl-tone{position:absolute;left:0;right:0;height:calc(200% - 2px);pointer-events:none;
-  background:radial-gradient(56% 46% at 86% 0%,var(--glow),transparent 72%),radial-gradient(48% 42% at 0% 100%,var(--cool),transparent 72%)}
-.mbl-panel-top .mbl-tone{top:0}.mbl-panel-bottom .mbl-tone{bottom:0}
-.mbl-tone::after{content:"";position:absolute;inset:0;opacity:.055;mix-blend-mode:overlay;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
-.mbl-seam{position:fixed;left:0;right:0;top:50%;height:1px;opacity:0;transform:scaleX(0);pointer-events:none;z-index:1;background:var(--accent)}
+/* The reveal: the live home page opens through an iris from the accent full stop (the page sits above this screen). */
+.mbl-underneath[data-stage="opening"]{position:relative;z-index:1001;clip-path:circle(0 at var(--rx,50%) var(--ry,50%));animation:mbl-iris 1.05s cubic-bezier(.76,0,.24,1) forwards}
 
-.mbl-content{position:relative;z-index:2;min-height:100%;display:grid;grid-template-rows:auto 1fr auto;max-width:1440px;margin:0 auto;padding:0 var(--gutter);
-  transition:opacity .32s ease}
-.mbl-header,.mbl-foot{display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:72px}
-.mbl-header{border-bottom:1px solid var(--rule)}
-.mbl-foot{border-top:1px solid var(--rule);color:var(--muted);font-size:12px;letter-spacing:.01em}
+/* Background: the light, the easter-egg layers and grain. It stays during the reveal, so the bloom grows out of the light. */
+.mbl-backdrop{position:fixed;inset:0;z-index:1;overflow:hidden;pointer-events:none;transition:opacity .4s ease}
+.mbl-glow{position:absolute;inset:0}
+.mbl-glow>span{position:absolute;border-radius:50%;will-change:transform}
+.mbl-glow>span:nth-child(1){left:-18%;bottom:-46%;width:78%;height:92%;background:radial-gradient(closest-side,var(--dawn-blue),transparent);animation:mbl-dawn-a 24s ease-in-out infinite alternate}
+.mbl-glow>span:nth-child(2){right:-16%;bottom:-48%;width:72%;height:90%;background:radial-gradient(closest-side,var(--dawn-coral),transparent);animation:mbl-dawn-b 28s ease-in-out infinite alternate}
+.mbl-glow>span:nth-child(3){left:24%;bottom:-40%;width:52%;height:70%;background:radial-gradient(closest-side,var(--dawn-peach),transparent);animation:mbl-dawn-c 20s ease-in-out infinite alternate}
+.mbl-grain{position:absolute;inset:-50%;opacity:var(--grain);mix-blend-mode:overlay;animation:mbl-grain 1.2s steps(6) infinite;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.mbl[data-paused] *,.mbl[data-paused] *::before,.mbl[data-paused] *::after{animation-play-state:paused!important}
+
+/* The reveal-only easter egg: a soft spotlight onto a hidden image, under the cursor or a held-and-dragged finger. */
+.mbl-spot{position:absolute;left:0;top:0;width:600px;height:600px;border-radius:50%;overflow:hidden;opacity:0;transition:opacity .7s ease;will-change:transform,opacity;
+  -webkit-mask-image:radial-gradient(closest-side,#000 30%,transparent 100%);mask-image:radial-gradient(closest-side,#000 30%,transparent 100%)}
+.mbl-spot[data-on]{opacity:.9}
+.mbl-spot[data-touch]{width:340px;height:340px}
+.mbl-spot-inner{position:absolute;left:0;top:0;width:100vw;height:100vh;will-change:transform}
+.mbl-spot-inner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .9s ease}
+.mbl-spot-inner img[data-front]{opacity:1}
+.mbl-spot-inner::after{content:"";position:absolute;inset:0;background:rgba(6,6,8,.4)}
+
+.mbl-content{position:relative;z-index:2;min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr auto;max-width:1440px;margin:0 auto;padding:0 var(--gutter);transition:opacity .32s ease;user-select:none;-webkit-user-select:none}
+.mbl-content input{user-select:text;-webkit-user-select:text}
+.mbl-header,.mbl-foot{display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:80px}
 .mbl-wordmark{display:inline-flex;align-items:center;gap:8px;color:var(--fg);font-size:19px;font-weight:600;letter-spacing:-.6px;line-height:1}
-.mbl-meta{display:flex;align-items:center;gap:16px;margin:0;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase}
-.mbl-meta-rule{width:40px;height:1px;background:var(--rule-strong)}
-.mbl-meta time{color:var(--fg-2)}
+.mbl-header-actions{display:flex;align-items:center;gap:8px}
+.mbl-sound{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;border:1px solid var(--glass-border);border-radius:999px;background:var(--glass);
+  color:var(--fg-2);font:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:color .2s ease,border-color .2s ease,background-color .2s ease}
+.mbl-sound:hover{color:var(--fg);border-color:color-mix(in srgb,var(--fg) 24%,transparent)}
+.mbl-sound[aria-pressed="true"]{color:var(--fg);border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.mbl-header .mbl-follow{min-height:40px;padding:0 14px;border:1px solid var(--glass-border);border-radius:999px;background:var(--glass);color:var(--fg)}
+.mbl-header .mbl-follow:hover{border-color:color-mix(in srgb,var(--fg) 24%,transparent)}
+.mbl-follow-text{white-space:nowrap}
+.mbl-foot-link{display:inline-flex;align-items:center;min-height:44px;color:var(--fg-2)}
+.mbl-foot-link:hover{color:var(--fg)}
+.mbl-foot{color:var(--fg-2);font-size:13px}
+.mbl-foot>span{transition:opacity .4s ease}
 
-.mbl-main{display:flex;flex-direction:column;justify-content:center;padding:64px 0}
-.mbl-eyebrow{display:inline-flex;align-items:center;gap:12px;margin:0 0 40px;color:var(--fg-2);font-size:11px;font-weight:500;letter-spacing:.16em;text-transform:uppercase}
-.mbl-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:mbl-breathe 2.8s ease-in-out infinite}
+.mbl-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 0}
+.mbl-eyebrow{display:inline-flex;align-items:center;gap:8px;margin:0 0 40px;padding:6px 14px 6px 10px;border:1px solid var(--glass-border);border-radius:999px;background:var(--glass);
+  color:var(--fg-2);font-size:13px;font-weight:500;letter-spacing:-.005em}
+.mbl-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px 1px var(--accent);animation:mbl-breathe 2.6s ease-in-out infinite}
 
-/* The clock: four ruled columns, small-caps labels, large light tabular figures. */
-.mbl-stage{display:grid}
+/* The clock: one row of huge, light, tabular figures with quiet separators. */
+.mbl-stage{position:relative;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;width:100%}
 .mbl-stage>*{grid-area:1/1}
-.mbl-clock-units{display:grid;grid-template-columns:repeat(var(--units,4),minmax(0,1fr));column-gap:24px}
-.mbl-clock-units[data-units="3"]{--units:3}
-.mbl-unit{display:flex;flex-direction:column;gap:24px;padding-top:16px;border-top:1px solid var(--rule-strong);min-width:0}
-.mbl-unit-label{display:flex;gap:16px;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;line-height:16px}
-.mbl-unit-index{color:var(--fg-2);font-variant-numeric:tabular-nums}
-.mbl-figures{display:flex;font-size:var(--figure);font-weight:300;letter-spacing:-.06em;line-height:1;color:var(--fg)}
-.mbl-digit{position:relative;display:inline-block;height:1em;overflow:hidden}
+.mbl-clock-units{position:relative;display:flex;align-items:flex-start;justify-content:center}
+.mbl-unit{position:relative;display:flex;flex-direction:column;align-items:center;gap:16px}
+.mbl-sep{position:relative;width:.3em;height:1em;font-size:var(--figure)}
+.mbl-sep>span{position:absolute;left:50%;width:9px;height:9px;margin-left:-4.5px;border-radius:50%;background:var(--dot)}
+.mbl-sep>span:first-child{top:36%}.mbl-sep>span:last-child{top:62%}
+.mbl-figures,.mbl-final-figures{display:flex;font-family:var(--display);font-weight:300;line-height:1;color:var(--fg);font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.mbl-figures{font-size:var(--figure)}
+/* Labels never size their column (contain:inline-size), so the font swap can't nudge the row. */
+.mbl-unit-label{align-self:stretch;contain:inline-size;color:var(--muted);font-size:12px;font-weight:500;letter-spacing:.16em;line-height:16px;text-align:center;text-transform:uppercase;white-space:nowrap}
+.mbl-progress{position:absolute;left:0;right:0;bottom:-28px;height:1px;overflow:hidden;background:var(--track)}
+.mbl-progress>span{position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--accent) 30%,var(--accent-2));transform-origin:0 50%;transition:transform 1s linear;will-change:transform}
+/* Fixed slots: tabular figures in every engine (WebKit ignores Inter's tnum here), so a change never moves a neighbour.
+   The tight tracking (about -0.04em) comes from overlapping the slots' empty side bearings. */
+.mbl-digit{position:relative;display:inline-block;width:.6em;height:1em;overflow:hidden;clip-path:inset(.06em 0 .08em);text-align:center;letter-spacing:0}
+.mbl-digit+.mbl-digit{margin-left:-.045em}
 .mbl-digit>span{display:block;height:1em;line-height:1}
-.mbl-digit-in{animation:mbl-roll-in .9s cubic-bezier(.2,.9,.3,1.04) both,mbl-fade-in .32s ease-out both;animation-timing-function:var(--spring),ease-out;animation-delay:calc(var(--order) * 45ms)}
-.mbl-digit-out{position:absolute;left:0;top:0;animation:mbl-roll-out .9s cubic-bezier(.2,.9,.3,1.04) both,mbl-fade-out .45s ease-in both;animation-timing-function:var(--spring),ease-in;animation-delay:calc(var(--order) * 45ms)}
+/* Each change: a full-height spring roll inside a slot clipped to the figure band, with a brief motion blur. */
+.mbl-digit-in{animation:mbl-roll-in .42s cubic-bezier(.2,.9,.3,1.04) both,mbl-blur-in .24s ease-out both;animation-timing-function:var(--spring),ease-out;animation-delay:calc(var(--order) * 35ms)}
+.mbl-digit-out{position:absolute;left:0;right:0;top:0;animation:mbl-roll-out .42s cubic-bezier(.2,.9,.3,1.04) both,mbl-blur-out .24s ease-in both;animation-timing-function:var(--spring),ease-in;animation-delay:calc(var(--order) * 35ms)}
+
+/* The final minute: the seconds alone, larger, with a soft pulse each second. */
+.mbl[data-final] .mbl-clock{opacity:0;transform:translate3d(0,-12px,0) scale(.98);transition:opacity .3s ease,transform .5s var(--ease-out)}
+.mbl-final{position:absolute;left:50%;top:50%;display:flex;flex-direction:column;align-items:center;gap:12px;transform:translate(-50%,-50%);animation:mbl-final-in .9s var(--ease-out) .28s both}
+.mbl-final-figures{position:relative;isolation:isolate;font-size:calc(var(--figure) * 1.25)}
+.mbl-final .mbl-unit-label{color:var(--fg-2)}
+.mbl-final-pulse{position:absolute;z-index:-1;left:50%;top:50%;width:2.2em;height:2.2em;margin:-1.1em 0 0 -1.1em;border-radius:50%;background:radial-gradient(closest-side,rgba(255,132,102,.22),transparent);pointer-events:none;animation:mbl-pulse 1s var(--ease-out) both}
 
 /* "We're live." takes the clock's place in the same grid cell, rising on the same spring. */
-.mbl-live-word{align-self:end;margin:0;overflow:hidden;color:var(--fg);font-size:var(--figure);font-weight:300;letter-spacing:-.06em;line-height:1.04;pointer-events:none}
+/* Never sizes the stage (contain:inline-size), so neither the hidden word nor the font swap can move the clock. */
+.mbl-live-word{justify-self:stretch;contain:inline-size;text-align:center;white-space:nowrap;margin:0;overflow:hidden;color:var(--fg);font-family:var(--display);font-size:calc(var(--figure) * .86);font-weight:300;letter-spacing:-.045em;line-height:1.08;pointer-events:none}
 .mbl-live-word>span{display:inline-block;transform:translate3d(0,105%,0)}
 .mbl-accent{color:var(--accent)}
 
-.mbl-details{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);column-gap:48px;align-items:end;margin-top:64px;padding-top:32px;border-top:1px solid var(--rule)}
-.mbl-details>.mbl-in:last-child{grid-column:2;grid-row:1/span 3;align-self:end}
-.mbl-date{margin:0;color:var(--fg);font-size:clamp(24px,2.3vw,32px);font-weight:400;letter-spacing:-.025em;line-height:40px}
-.mbl-date-lead{display:block;margin-bottom:8px;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.16em;line-height:16px;text-transform:uppercase}
-.mbl-date-sep{color:var(--muted)}
-.mbl-local{min-height:24px;margin:8px 0 0;color:var(--muted);font-size:14px;line-height:24px}
-.mbl-tagline{max-width:34ch;margin:24px 0 0;color:var(--fg-2);font-family:var(--font-serif),Georgia,serif;font-size:20px;font-style:italic;font-weight:400;line-height:32px;letter-spacing:-.01em;text-wrap:balance}
+.mbl-details{display:flex;flex-direction:column;align-items:center;width:100%;margin-top:48px}
+.mbl-date{margin:0;color:var(--muted);font-size:15px;font-weight:450;letter-spacing:-.005em;line-height:24px}
+.mbl-date-lead,.mbl-date-sep{color:inherit}
+.mbl-local{min-height:20px;margin:0;color:var(--muted);font-size:13px;line-height:20px}
+/* Visually the tagline leads (the h1 with the date stays first in the document for search and screen readers). */
+/* Always two balanced lines, in the web font and its fallback alike, so the swap never changes the height. */
+.mbl-tagline{order:-1;max-width:min(100%,720px);margin:0 0 16px;color:var(--fg);font-size:clamp(22px,2.1vw,30px);font-weight:500;line-height:1.3;letter-spacing:-.022em;text-wrap:balance}
 
-/* Waitlist: one field, one button, hairline frame. */
-.mbl-waitlist{width:100%;max-width:480px;justify-self:end}
-.mbl-waitlist-row{display:flex;align-items:center;gap:8px;height:56px;padding:4px 4px 4px 20px;border:1px solid var(--rule-strong);border-radius:12px;background:var(--field);transition:border-color .2s ease}
-.mbl-waitlist-row:focus-within{border-color:var(--fg-2)}
-.mbl-waitlist-row[data-state="error"]{border-color:var(--accent)}
-.mbl-waitlist input{flex:1;min-width:0;height:100%;padding:0;border:0;outline:0;background:transparent;color:var(--fg);font:inherit;font-size:15px;letter-spacing:-.005em}
+/* Waitlist: a glass panel, one field, one button, a crisp focus ring. */
+/* A fixed-width slot, so the web font's swap never changes the column's width or the lines' wrapping. */
+.mbl-waitlist-slot{width:min(100%,640px)}
+.mbl-waitlist{width:100%;margin-top:32px}
+.mbl-waitlist-row,.mbl-waitlist-done{max-width:480px;margin-inline:auto}
+.mbl-waitlist-row{display:flex;align-items:center;gap:8px;height:60px;padding:6px 6px 6px 20px;border:1px solid var(--glass-border);border-radius:16px;background:var(--glass);
+  -webkit-backdrop-filter:blur(20px) saturate(140%);backdrop-filter:blur(20px) saturate(140%);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),var(--glass-shadow);transition:border-color .2s ease,box-shadow .2s ease}
+.mbl-waitlist-row:focus-within{border-color:color-mix(in srgb,var(--accent) 75%,transparent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 24%,transparent),inset 0 1px 0 rgba(255,255,255,.06),var(--glass-shadow)}
+.mbl-waitlist-row[data-state="error"]{border-color:#ff7a7a}
+.mbl-waitlist input{flex:1;width:0;min-width:0;height:100%;padding:0;margin-right:4px;border:0;outline:0;background:transparent;color:var(--fg);font:inherit;font-size:16px;letter-spacing:-.01em}
 .mbl-waitlist input::placeholder{color:var(--muted);opacity:1}
 .mbl-waitlist input:focus-visible{outline:0}
-.mbl-waitlist button{display:inline-flex;align-items:center;gap:8px;flex:0 0 auto;height:46px;padding:0 18px;border:0;border-radius:8px;background:var(--button);color:var(--button-ink);
-  font:inherit;font-size:14px;font-weight:500;letter-spacing:-.01em;cursor:pointer;transition:opacity .2s ease}
-.mbl-waitlist button:hover{opacity:.88}
-.mbl-waitlist button:disabled{opacity:.6;cursor:progress}
+.mbl-waitlist button{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;height:48px;padding:0 18px;border:0;border-radius:11px;overflow:hidden;
+  background:var(--button);color:var(--button-ink);font:inherit;font-size:15px;font-weight:600;letter-spacing:-.015em;cursor:pointer;
+  transition:opacity .2s ease,transform .18s var(--ease-out),background-color .35s ease,color .35s ease}
+.mbl-waitlist button:hover{opacity:.92}
+.mbl-waitlist button:active:not(:disabled){transform:scale(.97)}
+.mbl-waitlist button:disabled{opacity:.75;cursor:progress}
+.mbl-button-label{display:inline-flex;align-items:center;gap:8px;transition:opacity .2s ease,transform .4s var(--ease-out)}
 .mbl-arrow{display:inline-block;transition:transform .35s var(--ease-out)}
 .mbl-waitlist button:hover .mbl-arrow{transform:translate3d(3px,0,0)}
+.mbl-button-check{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transform:scale(.5);transition:opacity .2s ease .1s,transform .6s var(--spring) .1s}
+.mbl-check-path{stroke-dasharray:16;stroke-dashoffset:16}
+.mbl-waitlist button[data-state="joined"]{opacity:1;background:var(--accent);color:var(--accent-ink);cursor:default}
+.mbl-waitlist button[data-state="joined"] .mbl-button-label{opacity:0;transform:translate3d(0,-10px,0)}
+.mbl-waitlist button[data-state="joined"] .mbl-button-check{opacity:1;transform:none}
+.mbl-waitlist button[data-state="joined"] .mbl-check-path{animation:mbl-draw .45s ease-out .18s forwards}
 .mbl-hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
-.mbl-waitlist-message{min-height:24px;margin:8px 0 0;color:var(--fg);font-size:13px;line-height:24px}
-.mbl-waitlist-message:not(:empty)::before{content:"";display:inline-block;width:6px;height:6px;margin-right:8px;border-radius:50%;background:var(--accent);vertical-align:2px}
-.mbl-consent{margin:0;color:var(--muted);font-size:12px;line-height:20px}
-.mbl-consent a{color:var(--fg-2);text-decoration:underline;text-decoration-color:var(--rule-strong);text-underline-offset:3px}
+.mbl-proof{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 12px;color:var(--fg-2);font-size:13px;line-height:20px}
+.mbl-proof-mark{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.mbl-waitlist-message{min-height:20px;margin:8px 0 0;color:var(--fg);font-size:13px;line-height:20px}
+.mbl-consent{max-width:560px;margin:4px auto 0;text-wrap:balance;color:var(--muted);font-size:12px;line-height:20px}
+.mbl-consent a{color:var(--fg-2);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--fg-2) 40%,transparent);text-underline-offset:3px}
 .mbl-consent a:hover{text-decoration-color:var(--fg-2)}
-.mbl-waitlist.is-done{display:flex;align-items:center;min-height:56px;padding:0 20px;border:1px solid var(--rule-strong);border-radius:12px;animation:mbl-in .7s var(--ease-out) both}
-.mbl-waitlist-done{display:flex;align-items:center;gap:12px;margin:0;color:var(--fg);font-size:14px;line-height:24px}
+.mbl-waitlist-done{display:flex;align-items:center;justify-content:center;gap:12px;min-height:60px;margin:0;padding:8px 20px;border:1px solid var(--glass-border);border-radius:16px;background:var(--glass);
+  -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);color:var(--fg);font-size:14px;line-height:20px;text-align:left;animation:mbl-in .6s var(--ease-out) both}
 .mbl-check{display:grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff}
 
 .mbl-follow{display:inline-flex;align-items:center;gap:8px;min-height:44px;color:var(--fg-2);font-size:13px;transition:color .2s ease}
 .mbl-follow:hover{color:var(--fg)}
 
-/* Load: a gentle staggered rise (CSS only, so it runs before the page hydrates). */
-.mbl-in{animation:mbl-in .9s var(--ease-out) both;animation-delay:calc(var(--i,0) * 70ms + 60ms)}
+/* Load: a confident staggered rise (CSS only, so it runs before the page hydrates). */
+.mbl-in{animation:mbl-in 1s var(--ease-out) both;animation-delay:calc(var(--i,0) * 70ms + 60ms)}
 
 /* Zero → "We're live." → the split lift. */
-.mbl[data-stage="zero"] .mbl-dot{animation:none;transform:scale(1.4)}
+.mbl[data-stage="zero"] .mbl-dot{animation:none;transform:scale(1.5)}
 .mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-digit>span:first-child{animation:mbl-roll-away .6s cubic-bezier(.55,0,.75,.25) both;animation-delay:calc(var(--order) * 35ms)}
 .mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-digit-out{display:none}
-.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-unit-label{opacity:0;transition:opacity .4s ease}
-.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-unit{border-top-color:transparent;transition:border-color .5s ease}
-.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-live-word>span{animation:mbl-rise 1s var(--ease-out) .32s both;animation-timing-function:var(--spring)}
-.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-live-word>span+span{animation-delay:.42s}
-.mbl[data-stage="opening"] .mbl-content{opacity:0}
-.mbl[data-stage="opening"] .mbl-panel-top{transform:translate3d(0,-101%,0)}
-.mbl[data-stage="opening"] .mbl-panel-bottom{transform:translate3d(0,101%,0)}
-.mbl[data-stage="opening"] .mbl-seam{animation:mbl-seam .9s var(--ease-in-out) forwards}
-.mbl-underneath:is([data-stage="live"]){transform:scale(.985);transform-origin:50% 40%}
-.mbl-underneath[data-stage="opening"]{animation:mbl-settle 1.6s var(--ease-in-out) .3s both;transform-origin:50% 40%}
-
-@keyframes mbl-in{from{opacity:0;transform:translate3d(0,12px,0)}to{opacity:1;transform:none}}
+.mbl:is([data-stage="live"],[data-stage="opening"]) :is(.mbl-unit-label,.mbl-sep,.mbl-progress){opacity:0;transition:opacity .4s ease}
+.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-live-word>span{animation:mbl-rise 1s var(--ease-out) .52s both;animation-timing-function:var(--spring)}
+.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-live-word>span+span{animation-delay:.64s}
+.mbl[data-stage="opening"] .mbl-content{opacity:.35;transition:opacity .6s ease}
+.mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-waitlist{opacity:0;transform:translate3d(0,8px,0);transition:opacity .4s ease,transform .5s var(--ease-out)}
+@keyframes mbl-in{from{opacity:0;transform:translate3d(0,16px,0)}to{opacity:1;transform:none}}
+@keyframes mbl-final-in{from{opacity:0;transform:translate3d(-50%,calc(-50% + 16px),0) scale(.96)}to{opacity:1;transform:translate(-50%,-50%)}}
 @keyframes mbl-roll-in{from{transform:translate3d(0,-100%,0)}to{transform:none}}
 @keyframes mbl-fade-in{from{opacity:0}to{opacity:1}}
 @keyframes mbl-roll-out{from{transform:none}to{transform:translate3d(0,100%,0)}}
 @keyframes mbl-fade-out{from{opacity:1}to{opacity:0}}
+@keyframes mbl-blur-in{from{filter:blur(2px)}to{filter:blur(0)}}
+@keyframes mbl-blur-out{from{filter:blur(0)}to{filter:blur(2px)}}
 @keyframes mbl-roll-away{from{transform:none;opacity:1}to{transform:translate3d(0,-100%,0);opacity:0}}
 @keyframes mbl-rise{from{transform:translate3d(0,105%,0)}to{transform:none}}
-@keyframes mbl-breathe{0%,100%{opacity:1}50%{opacity:.35}}
-@keyframes mbl-seam{0%{opacity:1;transform:scaleX(0)}40%{opacity:1;transform:scaleX(1)}100%{opacity:0;transform:scaleX(1)}}
-@keyframes mbl-settle{from{transform:scale(.985)}to{transform:none}}
+@keyframes mbl-breathe{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes mbl-dawn-a{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(8%,-6%,0) scale(1.12)}}
+@keyframes mbl-dawn-b{from{transform:translate3d(0,0,0) scale(1.05)}to{transform:translate3d(-7%,-4%,0) scale(.95)}}
+@keyframes mbl-dawn-c{from{transform:translate3d(-4%,2%,0) scale(.95);opacity:.8}to{transform:translate3d(5%,-5%,0) scale(1.1);opacity:1}}
+@keyframes mbl-iris{from{clip-path:circle(0 at var(--rx,50%) var(--ry,50%))}to{clip-path:circle(150vmax at var(--rx,50%) var(--ry,50%))}}
+@keyframes mbl-grain{0%{transform:translate3d(0,0,0)}20%{transform:translate3d(-4%,3%,0)}40%{transform:translate3d(3%,-2%,0)}60%{transform:translate3d(-2%,-4%,0)}80%{transform:translate3d(4%,2%,0)}100%{transform:translate3d(0,0,0)}}
+@keyframes mbl-pulse{from{opacity:1;transform:scale(.8)}to{opacity:0;transform:scale(1.25)}}
+@keyframes mbl-draw{to{stroke-dashoffset:0}}
 
-@media(max-width:900px){
-  .mbl{--gutter:32px}
-  .mbl-details{grid-template-columns:1fr;row-gap:0}
-  .mbl-details>.mbl-in:last-child{grid-column:1;grid-row:auto;margin-top:32px}
-  .mbl-waitlist{justify-self:stretch;max-width:none}
-}
+
+@media(max-width:900px){.mbl{--gutter:32px}}
 @media(max-width:640px){
-  .mbl{--gutter:24px;--figure:clamp(48px,15.4vw,72px)}
+  .mbl{--gutter:24px;--figure:clamp(44px,13.6vw,72px)}
   .mbl-header,.mbl-foot{min-height:64px}
-  .mbl-meta>span:first-child,.mbl-meta-rule{display:none}
-  .mbl-main{padding:40px 0}
-  .mbl-eyebrow{margin-bottom:32px}
-  .mbl-clock-units{column-gap:12px}
-  .mbl-unit{gap:16px;padding-top:12px}
+  .mbl-header .mbl-follow,.mbl-sound{min-height:36px;padding:0 12px;font-size:12px}
+  .mbl-date-lead{display:block}
+  .mbl-progress{bottom:-20px}
+  .mbl-main{padding:24px 0}
+  .mbl-eyebrow{margin-bottom:32px;font-size:12px}
+  .mbl-unit{gap:12px}
   .mbl-unit-label{font-size:10px;letter-spacing:.12em}
-  .mbl-unit-index{display:none}
-  .mbl-details{margin-top:40px;padding-top:24px}
-  .mbl-date{font-size:24px;line-height:32px}
-  .mbl-date-sep{display:block;height:0;overflow:hidden}
-  .mbl-tagline{font-size:18px;line-height:28px;margin-top:16px}
-  .mbl-waitlist input{font-size:16px}
+  .mbl-details{margin-top:48px}
+  .mbl-sep>span{width:6px;height:6px;margin-left:-3px}
+  .mbl-tagline{font-size:18px;line-height:26px;max-width:22em}
+  .mbl-waitlist{margin-top:24px}
   .mbl-waitlist-row{padding-left:16px}
-  .mbl-waitlist button{padding:0 14px}
+  .mbl-waitlist button{padding:0 14px;font-size:14px}
+  .mbl-foot{font-size:12px}
+}
+/* Small phones: the Follow link becomes an icon-only circle (its name stays for screen readers). */
+@media(max-width:400px){
+  .mbl-header .mbl-follow{width:40px;min-height:40px;padding:0;justify-content:center}
+  .mbl-follow-text{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+  .mbl-sound{min-height:40px}
+}
+/* Phones: a 2 x 2 clock with much larger figures instead of one tiny row. */
+@media(max-width:480px){
+  .mbl{--figure:clamp(64px,22vw,100px)}
+  .mbl-clock-units{display:grid;grid-template-columns:repeat(2,auto);gap:24px 28px;justify-content:center}
+  .mbl-sep{display:none}
+  .mbl-live-word{font-size:min(calc(var(--figure) * .86),14vw)}
+  .mbl-eyebrow{margin-bottom:28px}
+  .mbl-details{margin-top:40px}
 }
 @media(max-width:360px){
-  .mbl-waitlist-row{flex-direction:column;align-items:stretch;height:auto;padding:4px;gap:4px}
-  .mbl-waitlist input{flex:none;width:100%;height:48px;padding:0 16px}
-  .mbl-waitlist button{justify-content:center;height:48px}
+  .mbl-waitlist-row{flex-direction:column;align-items:stretch;height:auto;padding:6px;gap:6px}
+  .mbl-waitlist input{flex:none;width:100%;height:48px;padding:0 14px}
+  .mbl-waitlist button{justify-content:center}
 }
 
-/* Reduced motion: no intro, no rolling; at zero the screen simply cross-fades to the page. */
+/* Reduced motion: no intro, rolling, drift or spotlight; at zero the screen simply cross-fades. */
 @media(prefers-reduced-motion:reduce){
-  .mbl-in,.mbl-dot,.mbl-digit-in,.mbl-digit-out,.mbl-waitlist.is-done{animation:none!important}
-  .mbl-panel,.mbl-content{transition:none}
+  .mbl-in,.mbl-dot,.mbl-digit-in,.mbl-digit-out,.mbl-waitlist-done,.mbl-glow>span,.mbl-grain,.mbl-final,.mbl-final-pulse,.mbl-check-path{animation:none!important}
+  .mbl-spot{display:none}
+  .mbl-check-path{stroke-dashoffset:0}
+  .mbl-content,.mbl-button-check,.mbl-button-label,.mbl-waitlist button{transition:none}
   .mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-digit>span:first-child{animation:none;opacity:0}
   .mbl:is([data-stage="live"],[data-stage="opening"]) .mbl-live-word>span{animation:none;transform:none}
   .mbl[data-stage="opening"]{opacity:0;transition:opacity .6s ease}
-  .mbl[data-stage="opening"] .mbl-panel{transform:none}
   .mbl[data-stage="opening"] .mbl-content{opacity:1}
-  .mbl-seam{display:none}
-  .mbl-underneath[data-stage]{animation:none;transform:none}
+  .mbl-underneath[data-stage="opening"]{animation:none;clip-path:none}
 }

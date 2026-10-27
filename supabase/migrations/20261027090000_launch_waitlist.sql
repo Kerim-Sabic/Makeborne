@@ -1,5 +1,5 @@
 -- Launch waitlist: addresses people leave on the launch screen, used only for one launch invite and launch news.
--- Additive. The table lives in the non-exposed makeborne_private schema with row level security on and no policies,
+-- Additive (one table, five functions). The table lives in the non-exposed makeborne_private schema with row level security on and no policies,
 -- and no role but the owner has table privileges. service_role reaches it only through SECURITY DEFINER functions
 -- with an empty search_path, behind public security-invoker wrappers (the 20261017 rpc_definer_boundary pattern),
 -- and none of them is executable by anon or authenticated.
@@ -79,6 +79,12 @@ begin
   return v_count;
 end $$;
 
+-- Social proof on the launch screen: how many people are on the list (not unsubscribed). A number only, never rows.
+create function makeborne_private.launch_waitlist_count()
+returns integer language sql stable security definer set search_path = '' as $$
+  select count(*)::integer from makeborne_private.launch_waitlist w where w.unsubscribed_at is null
+$$;
+
 -- Unsubscribe from a signed link (the app verifies the signature). Same answer whether or not the id exists.
 create function makeborne_private.unsubscribe_launch_waitlist(p_id uuid)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -92,10 +98,12 @@ revoke all on function makeborne_private.join_launch_waitlist(text, text, text, 
 revoke all on function makeborne_private.launch_waitlist_pending(integer) from public, anon, authenticated, service_role;
 revoke all on function makeborne_private.mark_launch_waitlist_invited(uuid[]) from public, anon, authenticated, service_role;
 revoke all on function makeborne_private.unsubscribe_launch_waitlist(uuid) from public, anon, authenticated, service_role;
+revoke all on function makeborne_private.launch_waitlist_count() from public, anon, authenticated, service_role;
 grant execute on function makeborne_private.join_launch_waitlist(text, text, text, text, text) to service_role;
 grant execute on function makeborne_private.launch_waitlist_pending(integer) to service_role;
 grant execute on function makeborne_private.mark_launch_waitlist_invited(uuid[]) to service_role;
 grant execute on function makeborne_private.unsubscribe_launch_waitlist(uuid) to service_role;
+grant execute on function makeborne_private.launch_waitlist_count() to service_role;
 
 -- API-visible wrappers: security invoker, service_role only.
 create function public.makeborne_join_launch_waitlist(p_email text, p_source text, p_consent text, p_ip_hash text, p_user_agent_hash text)
@@ -110,6 +118,10 @@ create function public.makeborne_mark_launch_waitlist_invited(p_ids uuid[])
 returns integer language sql volatile security invoker set search_path = '' as $$
   select makeborne_private.mark_launch_waitlist_invited(p_ids)
 $$;
+create function public.makeborne_launch_waitlist_count()
+returns integer language sql stable security invoker set search_path = '' as $$
+  select makeborne_private.launch_waitlist_count()
+$$;
 create function public.makeborne_unsubscribe_launch_waitlist(p_id uuid)
 returns jsonb language sql volatile security invoker set search_path = '' as $$
   select makeborne_private.unsubscribe_launch_waitlist(p_id)
@@ -118,9 +130,11 @@ revoke all on function public.makeborne_join_launch_waitlist(text, text, text, t
 revoke all on function public.makeborne_launch_waitlist_pending(integer) from public, anon, authenticated;
 revoke all on function public.makeborne_mark_launch_waitlist_invited(uuid[]) from public, anon, authenticated;
 revoke all on function public.makeborne_unsubscribe_launch_waitlist(uuid) from public, anon, authenticated;
+revoke all on function public.makeborne_launch_waitlist_count() from public, anon, authenticated;
 grant execute on function public.makeborne_join_launch_waitlist(text, text, text, text, text) to service_role;
 grant execute on function public.makeborne_launch_waitlist_pending(integer) to service_role;
 grant execute on function public.makeborne_mark_launch_waitlist_invited(uuid[]) to service_role;
 grant execute on function public.makeborne_unsubscribe_launch_waitlist(uuid) to service_role;
+grant execute on function public.makeborne_launch_waitlist_count() to service_role;
 
 commit;

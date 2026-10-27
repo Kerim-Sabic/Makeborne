@@ -9,6 +9,7 @@ import { billingUser } from "@/lib/billing/access";
 import { accountsEnabled } from "@/lib/supabase/auth-server";
 import { getFreeTierOffer } from "@/lib/credits/server";
 import { launchState, PREVIEW_COOKIE } from "@/lib/launch/config";
+import { waitlistProof, waitlistProofCount } from "@/lib/launch/waitlist-count";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const preview = params.preview === "site" ? "site" : params.preview === "off" ? "off" : null;
   const bypass = preview === "site" || (preview !== "off" && jar.get(PREVIEW_COOKIE)?.value === "site");
   const countdown = launch.enabled && launch.phase === "before" && !bypass;
+  // "Join N others": the real, cached count (only from 50, rounded down). Outside production `?waitlistCount=` previews it.
+  const forcedCount = launch.testOverrides && typeof params.waitlistCount === "string" ? waitlistProof(Number(params.waitlistCount)) : undefined;
+  const waitlistCount = countdown ? forcedCount !== undefined ? forcedCount : await waitlistProofCount() : null;
 
   return <>
     <script
@@ -37,7 +41,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
     />
     {preview && <PreviewCookie mode={preview} />}
     {countdown
-      ? <LaunchScreen launchAt={launch.launchAt} serverNow={launch.serverNow} text={launch.text} tagline={TAGLINE} home={home} testMode={launch.forced} theme={params.theme === "light" ? "light" : "dark"} />
+      ? <LaunchScreen launchAt={launch.launchAt} serverNow={launch.serverNow} text={launch.text} tagline={TAGLINE} home={home} testMode={launch.forced} theme={params.theme === "light" ? "light" : "dark"} waitlistCount={waitlistCount} />
       : <CreationHome {...home} />}
   </>;
 }
