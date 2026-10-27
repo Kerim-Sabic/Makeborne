@@ -56,7 +56,7 @@ the unsubscribe links already emailed stop verifying.
 ## Production steps (in order)
 
 1. **Apply the migration** to the production Supabase project, then run the security advisors. The file is
-   `supabase/migrations/20261027090000_launch_waitlist.sql`. It's additive: one private table and five functions.
+   `supabase/migrations/20261027020420_launch_waitlist.sql`. It's additive: one private table and five functions.
    - The table is `makeborne_private.launch_waitlist`. Row level security is on with no policies. No role has table
      privileges, not even service_role.
    - The functions are SECURITY DEFINER with an empty `search_path`. Each sits behind a `public.makeborne_*`
@@ -155,3 +155,12 @@ The privacy notice says waitlist entries are deleted 90 days after launch, or so
   and checks it there. Run it with `MAKEBORNE_PGLITE=<path to @electric-sql/pglite>`.
 - **Browser:** `scripts/check-launch-countdown-browser.cjs [shots] [--engine webkit|firefox]` runs against
   `next start` on localhost:3246 (3245 on the release branch).
+
+## Production apply, 27 October 2026
+Applied to production project rklojnmmsmhwnkbzuidp through the Supabase migration API on the owner's explicit approval ("yes, apply the waitlist migration to production and merge PR 19"). The recorded version is **20261027020420**, so the repository file was renamed to match.
+Readback after the apply:
+- count = 0;
+- anon has no table SELECT and no EXECUTE on join;
+- authenticated has no EXECUTE on pending;
+- service_role has EXECUTE on join;
+- the security advisor shows only the expected INFO "RLS enabled, no policy" for the new table, and no new WARN.

@@ -143,7 +143,7 @@ const valid = { email: "  Ana.Reed@Example.COM ", company: "", source: "utm_sour
   });
 
   await check("migration boundary: private table, RLS on, no grants, definer functions with empty search_path, limit before insert", () => {
-    const sql = fs.readFileSync(path.join(root, "supabase/migrations/20261027090000_launch_waitlist.sql"), "utf8");
+    const sql = fs.readFileSync(path.join(root, "supabase/migrations/20261027020420_launch_waitlist.sql"), "utf8");
     assert.match(sql, /create table makeborne_private\.launch_waitlist/);
     assert.match(sql, /alter table makeborne_private\.launch_waitlist enable row level security;/);
     assert.match(sql, /revoke all on table makeborne_private\.launch_waitlist from public, anon, authenticated, service_role;/);
