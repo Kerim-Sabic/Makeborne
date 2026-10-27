@@ -6,7 +6,7 @@ export const PREVIEW_COOKIE = "makeborne_launch_preview";
 
 /**
  * Launch countdown settings, read on the server at request time.
- * - NEXT_PUBLIC_MAKEBORNE_LAUNCH_AT: ISO UTC instant (default 2026-10-28T18:00:00Z).
+ * - NEXT_PUBLIC_MAKEBORNE_LAUNCH_AT: ISO UTC instant (default 2026-10-29T20:00:00Z).
  * - MAKEBORNE_LAUNCH_COUNTDOWN: exactly "on" shows it; unset defaults to on in this branch; anything else hides it.
  * Informational only: sales still follow WHOP_CREATION_ENABLED and the database plan gate.
  */
