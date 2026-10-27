@@ -1,4 +1,4 @@
-// Applies supabase/migrations/20261027090000_launch_waitlist.sql to a fresh, in-memory Postgres (PGlite, WebAssembly; no
+// Applies supabase/migrations/20261027020420_launch_waitlist.sql to a fresh, in-memory Postgres (PGlite, WebAssembly; no
 // Docker, network or real database) with Supabase's roles stubbed, then checks behaviour and the permission boundary.
 // Run: MAKEBORNE_PGLITE=<path to an installed @electric-sql/pglite package> node scripts/check-launch-waitlist-sql.mjs
 import assert from "node:assert/strict";
@@ -10,7 +10,7 @@ const modulePath = process.env.MAKEBORNE_PGLITE;
 if (!modulePath) { console.log("SKIP set MAKEBORNE_PGLITE to an installed @electric-sql/pglite package to run the SQL check"); process.exit(0); }
 const { PGlite } = await import(pathToFileURL(path.join(modulePath, "dist", "index.js")).href);
 const db = new PGlite();
-const migration = readFileSync(new URL("../supabase/migrations/20261027090000_launch_waitlist.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261027020420_launch_waitlist.sql", import.meta.url), "utf8");
 let count = 0;
 const pass = name => { count++; console.log(`PASS ${name}`); };
 const hash = n => n.toString(16).padStart(64, "0");
