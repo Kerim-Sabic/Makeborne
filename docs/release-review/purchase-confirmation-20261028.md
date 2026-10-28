@@ -97,4 +97,9 @@ Nothing asks for a reason. A notice never refunds or revokes anything by itself:
   - `check-access-foundation.cjs`;
   - `check-account-rights.cjs`: the data map and export sources cover the three new tables;
   - `check-legal-pages.cjs`: the form has "Withdraw from contract here" and "Confirm withdrawal", and the page has no mailto-only path.
-- Full `npm test`, `tsc`, eslint and `next build --webpack`: see the handoff entry for results.
+- Results on this branch:
+  - `npm test`: **228/228** harnesses (the usual 5 skipped).
+  - `tsc --noEmit`: pass. eslint on every changed file: 0 problems.
+  - `next build --webpack`: pass (`/withdraw` and `/api/legal/withdraw` are dynamic).
+  - Migration plus `supabase/check-purchase-confirmations.sql` on Postgres 16 (PGlite) with stubs of the existing tables: both suites PASS and roll back.
+  - New mounted browser check `scripts/check-withdraw-browser.cjs` (Chromium, 390 and 1440 px): PASS. It covers the two-step notice, the exact statement, the stored reference and time, the honest 429 path, the retrievable confirmation text and no sideways scroll. Screenshots are in `purchase-confirmation-20261028/`.
