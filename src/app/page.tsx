@@ -9,6 +9,7 @@ import { billingUser } from "@/lib/billing/access";
 import { accountsEnabled } from "@/lib/supabase/auth-server";
 import { getFreeTierOffer } from "@/lib/credits/server";
 import { launchState, PREVIEW_COOKIE } from "@/lib/launch/config";
+import { salesOpenNow } from "@/lib/launch/sales-open";
 import { waitlistProof, waitlistProofCount } from "@/lib/launch/waitlist-count";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const launch = launchState(params.countdown);
   const preview = params.preview === "site" ? "site" : params.preview === "off" ? "off" : null;
   const bypass = preview === "site" || (preview !== "off" && jar.get(PREVIEW_COOKIE)?.value === "site");
-  const countdown = launch.enabled && launch.phase === "before" && !bypass;
+  // Past launch time with plans still closed (a late cut-over), the screen stays up saying the doors open in a moment.
+  const salesOpen = launch.enabled && launch.hold && launch.phase === "live" && !bypass ? await salesOpenNow() : null;
+  const countdown = launch.enabled && !bypass && (launch.phase === "before" || salesOpen === false);
   // "Join N others": the real, cached count (only from 50, rounded down). Outside production `?waitlistCount=` previews it.
   const forcedCount = launch.testOverrides && typeof params.waitlistCount === "string" ? waitlistProof(Number(params.waitlistCount)) : undefined;
   const waitlistCount = countdown ? forcedCount !== undefined ? forcedCount : await waitlistProofCount() : null;
@@ -41,7 +44,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
     />
     {preview && <PreviewCookie mode={preview} />}
     {countdown
-      ? <LaunchScreen launchAt={launch.launchAt} serverNow={launch.serverNow} text={launch.text} tagline={TAGLINE} home={home} testMode={launch.forced} theme={params.theme === "light" ? "light" : "dark"} waitlistCount={waitlistCount} />
+      ? <LaunchScreen launchAt={launch.launchAt} serverNow={launch.serverNow} text={launch.text} tagline={TAGLINE} home={home} testMode={launch.forced} theme={params.theme === "light" ? "light" : "dark"} waitlistCount={waitlistCount} hold={launch.hold} salesOpenAtRender={salesOpen} />
       : <CreationHome {...home} />}
   </>;
 }

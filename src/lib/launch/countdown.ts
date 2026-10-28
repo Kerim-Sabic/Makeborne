@@ -28,6 +28,19 @@ export function countdownEnabled(value: string | undefined | null, fallback = "o
   return (value ?? fallback) === "on";
 }
 
+/** Past launch time the screen holds until plans are on sale; only the exact value "off" lets it open regardless. */
+export function holdUntilSales(value: string | undefined | null): boolean {
+  return value !== "off";
+}
+
+/** Whether the launch screen may open onto the live site: always without the hold, otherwise only once sales are known open. */
+export function revealReady(hold: boolean, salesOpen: boolean | null): boolean {
+  return !hold || salesOpen === true;
+}
+
+/** Spoken while launch time has passed and the doors are not open yet. */
+export const HOLD_ANNOUNCEMENT = "Makeborne opens in a moment.";
+
 export function launchPhase(now: number, launchAt: number): LaunchPhase {
   if (now < launchAt) return "before";
   return now < launchAt + LIVE_WINDOW_MS ? "live" : "after";
