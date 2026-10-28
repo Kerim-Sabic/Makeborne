@@ -29,7 +29,7 @@ export type HelpArticle = {
 };
 
 export const HELP_CATEGORIES: { id: HelpCategory; label: string; blurb: string }[] = [
-  { id: "create", label: "Create", blurb: "Websites, books and presentations from a short brief." },
+  { id: "create", label: "Create", blurb: "Websites, books and presentations from one brief." },
   { id: "clients", label: "Clients & outreach", blurb: "Your CRM, new leads, personal emails and follow-ups." },
   { id: "grow", label: "Grow your business", blurb: "Win clients: prospecting, outreach, follow-ups, pricing and approvals." },
   { id: "compare", label: "Comparisons", blurb: "How Makeborne compares with other AI builders, checked against their official docs." },
@@ -48,7 +48,7 @@ const CORE_ARTICLES: HelpArticle[] = [
     answer: "Choose Website, describe your business, who it is for and what visitors should do, then press Create. Makeborne plans the pages, writes the copy and designs each section while you watch a live preview. When it is done, ask for changes in plain words, then publish it to a Makeborne web address.",
     steps: [
       { name: "Choose Website", text: "On the home page or in the studio, pick Website in the format switch." },
-      { name: "Write a short brief", text: "Say what the business does, who it serves, the pages you need and the one action visitors should take, such as booking or ordering." },
+      { name: "Write your brief", text: "Say what the business does, who it serves, the pages you need and the one action visitors should take, such as booking or ordering." },
       { name: "Pick a style and effort (optional)", text: "Choose a visual style from the gallery, and an effort level from Light to Ultra. Higher effort gives more planning and review." },
       { name: "Press Create", text: "Makeborne plans the pages and builds them. The preview fills in section by section." },
       { name: "Edit by asking", text: "Type a change such as “make the hero warmer and add opening hours” and it is applied to the live preview." },

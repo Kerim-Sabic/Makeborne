@@ -122,7 +122,7 @@ export const COMPARISONS: HelpArticle[] = [
     title: "Makeborne vs Framer: which should you use?",
     description: "Framer documents editor seats with free viewers and hosting with analytics; Makeborne generates sites from a brief and adds books, decks and a client CRM.",
     keywords: ["makeborne vs framer", "framer vs makeborne", "framer alternative", "framer comparison", "framer for agencies"],
-    answer: "Framer suits teams who design websites themselves in an editor: its pricing documents paid editor seats, free viewers, and hosting with analytics on plan-based limits. Makeborne starts from a short brief and builds the site for you, publishes it with unlimited sites (fair use), and also makes books and presentations and runs your client pipeline, outreach and approvals.",
+    answer: "Framer suits teams who design websites themselves in an editor: its pricing documents paid editor seats, free viewers, and hosting with analytics on plan-based limits. Makeborne starts from one brief and builds the site for you, publishes it with unlimited sites (fair use), and also makes books and presentations and runs your client pipeline, outreach and approvals.",
     sections: [
       { heading: "Side by side", table: { caption: `From official documentation, checked ${CHECKED}. — = not covered in the pages we checked.`, columns: ["", "Makeborne", "Framer"], rows: [
         ["How sites are made", "Generated from a brief, edited by asking", "—"],

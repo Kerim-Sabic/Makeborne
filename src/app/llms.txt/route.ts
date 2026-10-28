@@ -36,7 +36,7 @@ ${plans}
 - Status: creation plans open at launch; checkout appears on the pricing page when it opens.
 
 ## Key pages
-- [Home](${SITE.url}/): start a website, book or presentation from a short brief.
+- [Home](${SITE.url}/): start a website, book or presentation from one brief.
 - [Pricing](${SITE.url}/billing): plans, credits and common questions.
 - [Help center](${SITE.url}/help): step-by-step guides with short demos.
 - [Privacy](${SITE.url}/privacy): how account information, project content and published websites are handled.

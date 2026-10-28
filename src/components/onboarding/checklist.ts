@@ -17,7 +17,7 @@ export function checklist(progress: Progress, advisor: boolean, go: { create: (k
   ai: AiSteps = { leads: null, advisor: null }): Step[] {
   const leadsClosed = knownClosed(ai.leads), advisorClosed = knownClosed(ai.advisor);
   const steps: (Step | null)[] = [
-    progress.artifacts === null ? null : { id: "create", title: "Create your first project", hint: "A website, book or presentation from a short brief.", done: progress.artifacts > 0, action: "Create a website", guide: "create-a-website-with-ai", run: () => go.create("website") },
+    progress.artifacts === null ? null : { id: "create", title: "Create your first project", hint: "A website, book or presentation from one brief.", done: progress.artifacts > 0, action: "Create a website", guide: "create-a-website-with-ai", run: () => go.create("website") },
     progress.clients === null ? null : leadsClosed
       ? { id: "leads", title: "Add your first clients", hint: "Lead finding needs AI, which isn’t available right now. Add clients yourself or import your list from a CSV file.", done: (progress.finderLeads ?? 0) > 0 || progress.clients > 0, action: "Add clients", guide: "import-clients-from-csv", run: go.addClients }
       : { id: "leads", title: "Find your first 10 leads", hint: "Real businesses or creators, checked and ranked for what you sell.", done: (progress.finderLeads ?? 0) > 0 || progress.clients >= 10, action: "Find leads", guide: "find-new-leads", run: go.leads },

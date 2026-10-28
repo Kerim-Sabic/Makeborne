@@ -6,7 +6,7 @@ export type DemoId = typeof DEMO_IDS[number];
 /** Every demo, in plain data: what the cursor does and what each moment explains. */
 export const DEMO_SCRIPTS: Record<DemoId, DemoScript> = {
   "create-website": {
-    id: "create-website", title: "Create a website from a short brief", address: "makeborne.com",
+    id: "create-website", title: "Create a website from one brief", address: "makeborne.com",
     initial: { format: "website", brief: "", effort: "medium", effortOpen: false, view: "compose", build: 0, edit: "", edited: false },
     steps: [
       { caption: "Choose what to make: a website.", do: "click", target: "fmt-website" },

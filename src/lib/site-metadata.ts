@@ -63,7 +63,7 @@ export function publicPageMetadata(path: PublicPath, input: string, description:
 
 /** What Makeborne is, in plain words: used by structured data and the AI-facing overview (/llms.txt). Keep it true to what ships. */
 export const SITE_FACTS = {
-  summary: "Makeborne is an AI studio that turns a short brief into a real website, a designed book, or a presentation, and keeps client work, outreach and follow-ups in one built-in CRM.",
+  summary: "Makeborne is an AI studio that turns one brief into a real website, a designed book, or a presentation, and keeps client work, outreach and follow-ups in one built-in CRM.",
   audience: "Freelancers, studios, agencies and small businesses who create for themselves or for clients.",
   makes: [
     "Websites: generated as editable React projects, previewed live, published on Makeborne hosting (unlimited websites, fair use).",
