@@ -1,0 +1,23 @@
+{
+  "productionTouched": false,
+  "network": "none",
+  "unapprovedActivationRefused": true,
+  "disposableApprovedFixturePassed": true,
+  "limits": [
+    {
+      "scope": "global",
+      "enabled": true,
+      "limit": 10000000
+    },
+    {
+      "scope": "anthropic",
+      "enabled": true,
+      "limit": 10000000
+    },
+    {
+      "scope": "openai",
+      "enabled": false,
+      "limit": 0
+    }
+  ]
+}

@@ -104,5 +104,6 @@
     "STAGING_VERCEL_OIDC_TOKEN"
   ],
   "productionTouched": false,
-  "paidCalls": 0
+  "paidCalls": 0,
+  "productionAppliedVersionsSha256": "71ae36f6f9f78b0eeefbe6546fcc2bbd9e0477ab9b4d7da603394bafeb00ccee"
 }

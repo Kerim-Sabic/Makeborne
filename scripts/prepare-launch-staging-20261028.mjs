@@ -14,8 +14,9 @@ const EXPECTED = [
   '20261028213151_transactional_mail_delivery_fencing.sql',
 ];
 const argv = process.argv.slice(2);
-assert(argv.length === 0 || argv[0] === '--apply', 'Dry-run or --apply with the exact reviewed files only');
+assert(argv.length === 0 || argv[0] === '--apply' || (argv.length === 1 && argv[0] === '--verify'), 'Dry-run, --verify or --apply with the exact reviewed files only');
 const apply = argv[0] === '--apply';
+const verify = argv[0] === '--verify';
 if (apply) assert.deepEqual(argv.slice(1), EXPECTED);
 const token = fs.readFileSync(path.join(os.homedir(), '.supabase/access-token'), 'utf8').trim();
 assert(token && !token.includes('[SENSITIVE]'), 'Local management session required');
@@ -73,22 +74,26 @@ for (const row of applied) {
   covered.add(row.version);
 }
 const pending = [...committed.entries()].filter(([version]) => !covered.has(version)).map(([, x]) => ({ file: x.file, sha256: sha(x.bytes) }));
-assert.deepEqual(pending.map(x => x.file), EXPECTED, 'Pending migrations differ from this reviewed release');
-const before = await api('advisors/security');
-fs.writeFileSync(`${out}/staging-security-before.private.json`, JSON.stringify(before));
+assert.deepEqual(pending.map(x => x.file), verify || pending.length === 0 ? [] : EXPECTED, 'Pending migrations differ from this reviewed release');
+if (apply) assert.deepEqual(pending.map(x => x.file), EXPECTED, 'Already applied; use --verify without reapplying');
+const before = verify ? JSON.parse(fs.readFileSync(`${out}/staging-security-before.private.json`, 'utf8')) : await api('advisors/security');
+if (!verify) fs.writeFileSync(`${out}/staging-security-before.private.json`, JSON.stringify(before));
 const lints = before.lints ?? [];
 assert.equal(lints.filter(x => x.level === 'ERROR').length, 0, 'Existing staging security error: stop');
 const report = { target: STAGING, head, productionTouched: false, dryRun: !apply,
   verifiedApplied: applied.length, historicalBytePair: normalized, pending, applied: [],
   before: { warnings: lints.filter(x => x.level === 'WARN').length, errors: 0 } };
-fs.writeFileSync(`${out}/staging-preparation.json`, JSON.stringify(report, null, 2));
+const reportPath = `${out}/${verify ? 'staging-verification' : 'staging-preparation'}.json`;
+fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report));
-if (apply) {
+if (apply || verify) {
   assert.equal(report.before.warnings, 11, 'Staging baseline changed: review before applying');
   const overlay = JSON.parse(fs.readFileSync(`${out}/staging-overlay-rehearsal.json`, 'utf8'));
   assert(overlay.passed && overlay.changedInputs.length === 0, 'Staging overlay rehearsal required');
+  assert(overlay.consumedInputs.every(x => sha(fs.readFileSync(x.file)) === x.sha256), 'Rehearsed SQL input changed; repeat qualification');
   for (const entry of pending) {
     const sql = committed.get(entry.file.slice(0, 14)).bytes.toString('utf8');
+    assert.equal(fs.readFileSync(`supabase/migrations/${entry.file}`, 'utf8').replace(/\r\n/g, '\n'), sql.replace(/\r\n/g, '\n'), 'Working SQL differs from the committed candidate');
     assert(/\bbegin;/.test(sql) && /\bcommit;\s*$/i.test(sql), 'Expected explicit migration transaction');
     // Record history before COMMIT in the SAME transaction. A failed SQL or tracker
     // write cannot leave the schema applied without its immutable hash.
@@ -96,7 +101,7 @@ if (apply) {
       `insert into makeborne_release_test.applied(version,sha256) values ('${entry.file.slice(0, 14)}','${entry.sha256}');\ncommit;`);
     await query(tracked, false);
     report.applied.push(entry);
-    fs.writeFileSync(`${out}/staging-preparation.json`, JSON.stringify(report, null, 2));
+    fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
     console.log(`Applied to staging: ${entry.file}`);
   }
   const after = await api('advisors/security');
@@ -104,9 +109,27 @@ if (apply) {
   const identity = x => JSON.stringify([x.name, x.level, x.metadata ?? null, x.detail ?? null]);
   const previous = new Set(lints.map(identity));
   const newLints = (after.lints ?? []).filter(x => !previous.has(identity(x)));
+  const privateTables = ['launch_waitlist', 'purchase_confirmations', 'transactional_mail', 'withdrawal_requests'];
+  // INFO about deny-all RLS on an unexposed service-RPC-only table is expected,
+  // not a reason to add an unsafe browser policy. Verify that boundary directly.
+  const permittedInfo = x => x.level === 'INFO' && x.name === 'rls_enabled_no_policy'
+    && x.metadata?.schema === 'makeborne_private' && privateTables.includes(x.metadata?.name);
+  const actionable = newLints.filter(x => !permittedInfo(x));
+  const privileges = await query(`select c.relname,c.relrowsecurity,
+    has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE') as anon_access,
+    has_table_privilege('authenticated',c.oid,'SELECT,INSERT,UPDATE,DELETE') as authenticated_access,
+    has_table_privilege('service_role',c.oid,'SELECT,INSERT,UPDATE,DELETE') as service_table_access
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='makeborne_private' and c.relname in ('launch_waitlist','purchase_confirmations','transactional_mail','withdrawal_requests') order by c.relname`);
+  assert.equal(privileges.length, 4);
+  assert(privileges.every(x => x.relrowsecurity && !x.anon_access && !x.authenticated_access && !x.service_table_access), 'Private mail table ACL boundary failed');
+  const rest = await api('postgrest');
+  assert(!String(rest.db_schema).split(',').some(x => ['makeborne_private','makeborne_rpc'].includes(x.trim())), 'Private RPC/data schema exposed');
   report.after = { warnings: (after.lints ?? []).filter(x => x.level === 'WARN').length,
-    errors: (after.lints ?? []).filter(x => x.level === 'ERROR').length, newFindings: newLints.length };
-  fs.writeFileSync(`${out}/staging-preparation.json`, JSON.stringify(report, null, 2));
-  assert.equal(newLints.length, 0, 'New staging security finding: stop');
+    errors: (after.lints ?? []).filter(x => x.level === 'ERROR').length,
+    newActionableFindings: actionable.length, expectedPrivateTableInfo: newLints.filter(permittedInfo).length,
+    privateTableAclVerified: true, privateSchemasNotExposed: true };
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+  assert.equal(actionable.length, 0, 'New staging security finding: stop');
   console.log(JSON.stringify({ after: report.after, productionTouched: false }));
 }
