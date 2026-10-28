@@ -38,6 +38,7 @@ begin
   conf := public.makeborne_record_purchase_confirmation('pay_First1', 'Studio plan', 'monthly', 750, 'Subject', 'Ref pay_First1. "' || consent || '"');
   again := public.makeborne_record_purchase_confirmation('pay_First1', 'Studio plan', 'monthly', 750, 'Changed subject', 'Other pay_First1 ' || consent);
   assert conf = again, 'Replays return the first record';
+  assert (select count(*) from makeborne_private.transactional_mail) = 1, 'A replay (the webhook after a reconcile, or the reverse) adds no outbox row';
   assert (select count(*) from makeborne_private.purchase_confirmations where payment_id = 'pay_First1') = 1;
   assert (select subject from makeborne_private.purchase_confirmations where id = conf) = 'Subject', 'The first text stays';
   assert (select amount_cents = 4900 and consent_text = consent and consent_version = 'consent-v1' and terms_version = 'terms-v1' from makeborne_private.purchase_confirmations where id = conf);

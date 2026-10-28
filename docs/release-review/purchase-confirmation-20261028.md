@@ -50,12 +50,30 @@ Nothing asks for a reason. A notice never refunds or revokes anything by itself:
 - `makeborne_account_purchase_records(p_user)` serves the billing page and the withdrawal form; `makeborne_admin_legal_requests(p_actor)` is checked through `require_admin`.
 - The account export extension adds `purchase_confirmations` and `withdrawal_requests`. Every other source still goes to the previous function, unchanged. `public.makeborne_account_export_rows` is replaced in place as an invoker wrapper.
 
-## Where it hooks in
+## Where it hooks in: at the moment of fulfilment, on every path
 
-- `src/lib/billing/webhook.ts`: after `deliverTopupPayment` succeeds, and after the plan payment and observation are recorded, the webhook calls `confirmAfterFulfillment(paymentId)`. That call never throws and never changes the webhook's response.
-- `src/app/api/cron/billing-reconcile/route.ts`: the daily run adds `runConfirmationSweep()`, which writes confirmations that are still due and then drains the outbox. The response gains a `confirmations` field; the credit job's status is unchanged.
-- `POST /api/legal/withdraw`: same-origin check, bounded JSON and a strict schema. It drains up to three acknowledgements right away.
+The confirmation is recorded and queued **inside the two functions that every fulfilment path already goes through**. Every way a payment is fulfilled gets it at that moment, not at the next daily run: the webhook, the credit-pack reconcile cron, the billing reconcile cron and checkout recovery.
+
+- **Packs:** `deliverTopupPayment` in `src/lib/billing/topup-delivery.ts`. This one function is called by the webhook and by `/api/cron/topup-reconcile`. Right after the ledger reports the order `funded`, it calls `confirmAfterFulfillment(paymentId)`.
+- **Plans:** `reconcilePlanPayment` in `src/lib/billing/plan-payments.ts`. It is called by the webhook, by `/api/cron/billing-reconcile` and by checkout recovery. Right after a paid payment is recorded, and before the caller's plan observation grants credits, it calls `confirmAfterFulfillment(payment.id)`. Only a membership's first funded payment qualifies.
+- **`confirmAfterFulfillment` behaviour:**
+  - it records the confirmation and its outbox row, then sends at once (up to 3 due rows);
+  - it is idempotent per payment;
+  - it never throws, so it cannot fail, delay-fail or repeat a delivery;
+  - it does nothing until `MAKEBORNE_PURCHASE_CONFIRMATIONS_SINCE` is set.
+- `src/lib/billing/webhook.ts` is unchanged from d5b3ecb. `POST /api/billing/webhook` only adds `after(() => sendDueMail(5))`, which retries due mail after the response.
+
+**When unsent mail is retried.** Vercel Hobby only allows daily crons, so a failed send is retried by every one of these:
+- every webhook response, through `after()`;
+- every withdrawal notice;
+- `/api/cron/transactional-mail`, a new authorized cron route for a 5-minute scheduler (Vercel Pro, or a reviewed external scheduler). It is not added to `vercel.json`, which on Hobby would make it daily anyway;
+- the daily `billing-reconcile` sweep.
+
+**Other routes:**
+- `POST /api/legal/withdraw`: same-origin check, bounded JSON and a strict schema. It sends the acknowledgement right away.
 - `src/lib/mail/transactional.ts`: about 40 lines that call Resend's `POST /emails` with an `Idempotency-Key` header and plain text, from `Makeborne <admin@makeborne.com>` with reply-to admin@. Results carry error codes only, never the key.
+
+**Remaining gap, for Codex.** `src/lib/billing/access.ts` can grant plan credits from a membership observation on sign-in when no payment has been reconciled yet (for example, a delayed webhook). That path has no payment evidence, so the confirmation follows a moment later, when the payment is recorded by the webhook, recovery or reconcile.
 
 ## Environment and flags (all off by default)
 
@@ -69,7 +87,7 @@ Nothing asks for a reason. A notice never refunds or revokes anything by itself:
 
 1. **Migration:** apply `20261028100000` to staging with your apply script. Then run `supabase/check-purchase-confirmations.sql`, which ends in a rollback, and compare the security advisors: no new findings are expected, because every definer function is in unexposed `makeborne_rpc` with `search_path=''`.
    - **Locally the SQL passed on Postgres 16 (PGlite)**, against stubs of `auth.users`, the billing and pack tables, `checkout_consents` and `require_admin`. That is not the real chain. Re-run it after the real one.
-2. **Fulfilment points:** confirm that the two `confirmAfterFulfillment` calls sit after every completed plan or pack delivery path you rely on, including `deliverTopupPayment` called from `topup-reconcile`. That cron path is covered by the daily sweep, not by an immediate call.
+2. **Fulfilment points:** check that `deliverTopupPayment` and `reconcilePlanPayment` remain the only pack and plan fulfilment paths (the hooks live there). Check whether the access-check grant without payment evidence (`access.ts`) needs a confirmation trigger too.
 3. **Staging journey with sandbox keys,** with `SINCE` set and mail on, using a send-only staging Resend key to a test inbox:
    - buy a plan and a pack and check one confirmation each;
    - replay the webhook and check there is still one;
@@ -92,14 +110,14 @@ Nothing asks for a reason. A notice never refunds or revokes anything by itself:
   - `src/lib/billing/check-purchase-confirmations.cjs` (7);
   - `src/lib/mail/check-transactional-mail.cjs`;
   - `supabase/check-purchase-confirmations.sql` (needs a database).
+- `src/lib/billing/check-confirmation-at-fulfilment.cjs`: real reconcile job, delivery, webhook, confirmation and mailer, with an in-memory model of the SQL. A reconcile-fulfilled pack gets exactly one confirmation and one outbox message, sent at once; a later webhook replay and a second reconcile add nothing.
 - Updated:
-  - `check-webhook-delivery.cjs`: a confirmation runs only after a completed delivery;
-  - `check-access-foundation.cjs`;
+  - `check-topup-delivery.cjs`, `check-plan-payments.cjs`, `check-checkout-recovery.cjs`: the hook runs only after a funded or paid fulfilment, never for refused, refunded or unrecorded payments;
   - `check-account-rights.cjs`: the data map and export sources cover the three new tables;
   - `check-legal-pages.cjs`: the form has "Withdraw from contract here" and "Confirm withdrawal", and the page has no mailto-only path.
 - Results on this branch:
-  - `npm test`: **228/228** harnesses (the usual 5 skipped).
+  - `npm test`: **229/229** harnesses (the usual 5 skipped).
   - `tsc --noEmit`: pass. eslint on every changed file: 0 problems.
-  - `next build --webpack`: pass (`/withdraw` and `/api/legal/withdraw` are dynamic).
+  - `next build --webpack`: pass (`/withdraw`, `/api/legal/withdraw` and `/api/cron/transactional-mail` are dynamic).
   - Migration plus `supabase/check-purchase-confirmations.sql` on Postgres 16 (PGlite) with stubs of the existing tables: both suites PASS and roll back.
   - New mounted browser check `scripts/check-withdraw-browser.cjs` (Chromium, 390 and 1440 px): PASS. It covers the two-step notice, the exact statement, the stored reference and time, the honest 429 path, the retrievable confirmation text and no sideways scroll. Screenshots are in `purchase-confirmation-20261028/`.

@@ -1,6 +1,6 @@
 import { billingUser } from "@/lib/billing/access";
 import { billingDatabase } from "@/lib/billing/database";
-import { defaultConfirmationDeps, defaultPlanLabel, drainTransactionalMail } from "@/lib/billing/purchase-confirmations";
+import { defaultPlanLabel, sendDueMail } from "@/lib/billing/purchase-confirmations";
 import { accountPurchaseRecords, submitWithdrawal, withdrawalInput } from "@/lib/legal/withdrawal";
 import { apiError, boundedJson, RequestError, sameOrigin } from "@/lib/server/http";
 
@@ -22,12 +22,7 @@ export async function POST(request: Request) {
     const payments = account ? (await accountPurchaseRecords(rpc, account.id))?.payments ?? [] : [];
     const result = await submitWithdrawal(rpc, account, parsed.data, payments, defaultPlanLabel);
     // Best effort: the acknowledgement goes now when mail is on; otherwise the outbox keeps it.
-    if (result.acknowledgement === "queued") await sendQueued();
+    if (result.acknowledgement === "queued") await sendDueMail(3);
     return Response.json(result, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) { return apiError(error); }
-}
-
-/** The notice is already saved; a mail problem must never turn this response into an error. */
-async function sendQueued() {
-  try { await drainTransactionalMail(defaultConfirmationDeps(), { limit: 3 }); } catch { /* retried by the daily sweep */ }
 }

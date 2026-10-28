@@ -103,8 +103,9 @@ export async function drainTransactionalMail(deps: ConfirmationDeps, options: { 
 
 /** After a payment is fulfilled: confirm it and try to send. Never throws, never blocks the caller's result. */
 export async function confirmAfterFulfillment(paymentId: string | null, deps?: ConfirmationDeps) {
-  if (!paymentId || (!deps && !confirmationsSince())) return;
+  if (!paymentId) return;
   try {
+    if (!deps && !confirmationsSince()) return;
     const resolved = deps ?? defaultConfirmationDeps();
     if (!resolved.since) return;
     const made = await ensurePurchaseConfirmations(resolved, { paymentId, limit: 1 });
@@ -114,12 +115,19 @@ export async function confirmAfterFulfillment(paymentId: string | null, deps?: C
   }
 }
 
-/** Daily sweep (billing reconcile cron): confirmations first, then the whole due outbox. */
-export async function runConfirmationSweep(deps?: ConfirmationDeps) {
+/** Retries due outbox rows from frequent requests (every webhook response, withdrawal notices, the
+ * mail cron). A new confirmation is already sent right after it is queued; this catches failures. */
+export async function sendDueMail(limit = 5) {
+  if (!transactionalMailEnabled()) return;
+  try { await drainTransactionalMail(defaultConfirmationDeps(), { limit }); } catch { /* the next trigger retries */ }
+}
+
+/** Daily sweep (billing reconcile cron) and the frequent mail cron: confirmations first, then the due outbox. */
+export async function runConfirmationSweep(deps?: ConfirmationDeps, limits: { confirmations?: number; mail?: number } = {}) {
   try {
     const resolved = deps ?? defaultConfirmationDeps();
-    const confirmations = await ensurePurchaseConfirmations(resolved, { limit: 200 });
-    const mail = await drainTransactionalMail(resolved, { limit: 100 });
+    const confirmations = await ensurePurchaseConfirmations(resolved, { limit: limits.confirmations ?? 200 });
+    const mail = await drainTransactionalMail(resolved, { limit: limits.mail ?? 100 });
     return { confirmations, mail };
   } catch (error) {
     return { error: (error as { code?: string }).code ?? "SWEEP_FAILED" };

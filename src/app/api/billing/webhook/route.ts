@@ -1,5 +1,7 @@
+import { after } from "next/server";
 import { apiError, RequestError } from "@/lib/server/http";
 import { reconcileWhopEvent, verifyWhopEvent } from "@/lib/billing/webhook";
+import { sendDueMail } from "@/lib/billing/purchase-confirmations";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -21,6 +23,8 @@ export async function POST(request: Request) {
     } finally { reader.releaseLock(); }
     const event = verifyWhopEvent(Buffer.concat(chunks).toString("utf8"), request.headers);
     await reconcileWhopEvent(event);
+    // Retry due confirmation/acknowledgement mail after responding; never delays or fails the delivery.
+    after(() => sendDueMail(5));
     return Response.json({ received: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return apiError(error); }
 }
