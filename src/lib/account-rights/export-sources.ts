@@ -65,6 +65,8 @@ export const EXPORT_SOURCES: readonly ExportSource[] = Object.freeze([
   { source: "billing_memberships", group: "billing", page: 200 },
   { source: "billing_checkouts", group: "billing", page: 200 },
   { source: "checkout_consents", group: "billing", page: 200 },
+  { source: "purchase_confirmations", group: "billing", page: 200 },
+  { source: "withdrawal_requests", group: "billing", page: 200 },
   { source: "plan_payments", group: "billing", page: 200, csv: ["payment_id", "membership_id", "plan_id", "billing_reason", "currency", "principal_cents", "refunded_cents", "dispute", "state", "paid_at", "period_start", "period_end"] },
   { source: "plan_periods", group: "billing", page: 500 },
   { source: "membership_revocations", group: "billing", page: 200 },

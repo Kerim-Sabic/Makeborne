@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
 class RequestError extends Error {constructor(code,message,status){super(message);this.code=code;this.status=status}}
 let checkout=null,recorded=false,grantFails=false,reads=0,receipts=0,topupCalls=0,topupFails=false,draftBound=true,draftLookupFails=false,paymentStatus='refunded';
-const observations=[],order=[],paymentReads=[];let paymentFails=false,paymentMembership='mem_fixture';
+const observations=[],order=[],paymentReads=[],confirmed=[];let paymentFails=false,paymentMembership='mem_fixture';
 const membership={id:'mem_fixture',company:{id:'biz_fixture'},plan:{id:'plan_fixture'},user:{id:'user_fixture'},checkout_configuration_id:'ch_fixture',status:'active',renewal_period_start:new Date().toISOString(),renewal_period_end:new Date(Date.now()+86400000).toISOString()};
 const db={from(table){const q={select(){return q},eq(){return q},async maybeSingle(){return {error:table==='billing_memberships'&&draftLookupFails?{code:'temporary'}:null,data:table==='billing_webhook_events'?(recorded?{id:'event'}:null):table==='billing_checkouts'?checkout:draftBound?{membership_id:membership.id}:null}}};return q},async rpc(){receipts++;recorded=true;return {error:null}}};
 const modules={
@@ -11,6 +11,7 @@ const modules={
  './topup-delivery':{topupEventPaymentId:e=>e.data.id==='pay_pack'?'pay_pack':null,deliverTopupPayment:async()=>{topupCalls++;if(topupFails)throw new RequestError('TOPUP_BINDING_PENDING','Retry',503);return true}},
  './whop':{retrieveMembership:async()=>{reads++;return membership},activeMembership:m=>m.status==='active',retrievePaymentMembership:async()=>membership.id},
  '@/lib/credits/server':{recordPlanObservation:async(user,observation)=>{if(grantFails)throw new Error('transient SQL error');observations.push({user,...observation});order.push('observation')}},
+ './purchase-confirmations':{confirmAfterFulfillment:async id=>{confirmed.push(id)}},
  './plan-payments':{
   eventPaymentId:e=>e.type.startsWith('payment.')?(e.data.id??null):(e.data.payment?.id??null),
   retrieveVerifiedPlanPayment:async id=>{paymentReads.push(id);return {id,membershipId:paymentMembership,status:paymentStatus}},
@@ -39,6 +40,7 @@ const event={id:'event',type:'payment.succeeded',account_id:'biz_fixture',data:{
  assert.equal(reads,5,'Failed top-up must retry instead of acknowledging or falling through');
  await assert.rejects(reconcile({...pack,account_id:'biz_other'}),e=>e.code==='WRONG_MERCHANT');
  assert.equal(topupCalls,2,'Merchant must be checked before top-up provider access');
+ assert.deepEqual(confirmed.filter(id=>id==='pay_pack'),['pay_pack'],'A delivered pack is confirmed once; a failed delivery is not');
  // Refund events: the verified payment is reconciled before the membership observation.
  // Whop keeps a refunded membership active, so the payment decides the period.
  membership.status='active';order.length=0;
@@ -49,6 +51,7 @@ const event={id:'event',type:'payment.succeeded',account_id:'biz_fixture',data:{
  order.length=0;paymentFails=true;
  await assert.rejects(reconcile(refund),e=>e.code==='PLAN_PAYMENT_STORAGE_UNAVAILABLE'&&e.status===503);
  assert.deepEqual(order,[],'A failed payment reconcile must not record an active observation');
+ assert.equal(confirmed.filter(id=>id==='pay_sub').length,1,'Confirmation runs only after a completed delivery');
  paymentFails=false;paymentMembership='mem_other';order.length=0;
  await reconcile({...refund,id:'refund-other'});
  assert.deepEqual(order,['observation'],'A payment of another membership is not applied to this one');
@@ -73,5 +76,6 @@ const event={id:'event',type:'payment.succeeded',account_id:'biz_fixture',data:{
  recorded=false;membership.status='active';paymentStatus='paid';order.length=0;
  await reconcile({...failed,id:'retry-paid',type:'payment.succeeded'});
  assert.deepEqual(order,['payment:account_fixture:mem_fixture:pay_failed','observation']);assert.equal(observations.at(-1).paid,true);
- console.log('PASS webhook delivery: missing checkout retries; plan mismatch refuses; receipt survives grant failure; duplicate heals only grant; delayed success reads current cancellation; wrong merchant denied; refund reconciled before observation and retried on failure');
+ assert.equal(confirmed.at(-1),'pay_failed','The funded payment is offered for confirmation after its observation');
+ console.log('PASS webhook delivery: confirmation only after completed delivery; missing checkout retries; plan mismatch refuses; receipt survives grant failure; duplicate heals only grant; delayed success reads current cancellation; wrong merchant denied; refund reconciled before observation and retried on failure');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -160,7 +160,7 @@ function loadWorkspace() {
   const stub = () => null;
   const modules = {
     "next/link": { default: ({ children, ...props }) => React.createElement("a", props, children) },
-    "./billing-controls": { default: stub }, "./billing-subscriptions": { default: stub }, "./brand-mark": { default: stub }, "./billing-plans": { default: stub }, "./billing-topup-return": { default: stub }, "./billing-autotopup": { default: stub },
+    "./billing-controls": { default: stub }, "./billing-subscriptions": { default: stub }, "./billing-confirmations": { default: stub }, "./brand-mark": { default: stub }, "./billing-plans": { default: stub }, "./billing-topup-return": { default: stub }, "./billing-autotopup": { default: stub },
     "./billing-credit-costs": { default: stub }, "./credit-balance": { default: stub, creditExpiryLabel: () => "" },
     "./billing-amount": require("../../components/billing-amount.ts"), "@/lib/billing/view": view, "@/lib/billing/usage-history": usage, "@/components/legal/legal-links": { default: stub },
   };

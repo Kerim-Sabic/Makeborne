@@ -9,6 +9,7 @@ import { creditRuleFor } from "./plan-credits";
 import { recordPlanObservation } from "@/lib/credits/server";
 import { deliverTopupPayment, topupEventPaymentId } from "./topup-delivery";
 import { eventPaymentId, reconcilePlanPayment, retrieveVerifiedPlanPayment } from "./plan-payments";
+import { confirmAfterFulfillment } from "./purchase-confirmations";
 
 const eventSchema = z.object({ id: z.string().min(1).max(200), type: z.string().min(1).max(100), account_id: z.string().optional(), company_id: z.string().optional(), data: z.record(z.string(), z.unknown()) });
 
@@ -55,7 +56,7 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
   // resolving a membership, using freshly retrieved provider evidence only.
   if (process.env.MAKEBORNE_TOPUP_MIGRATIONS_VERIFIED === "true") {
     const paymentId = topupEventPaymentId(event);
-    if (paymentId && await deliverTopupPayment(paymentId)) return;
+    if (paymentId && await deliverTopupPayment(paymentId)) { await confirmAfterFulfillment(paymentId); return; }
   }
   const db = billingDatabase();
   const { data: existing, error: eventError } = await db.from("billing_webhook_events").select("id").eq("id", event.id).maybeSingle();
@@ -126,4 +127,6 @@ export async function reconcileWhopEvent(event: z.infer<typeof eventSchema>) {
   // repeats only these idempotent calls.
   await recordPlanObservation(checkout.user_id, { membershipId: membership.id, planId: membership.plan.id, status: membership.status,
     paid: active, periodStart: membership.renewal_period_start ?? null, periodEnd: membership.renewal_period_end, source: "webhook" });
+  // Durable purchase confirmation, only after the payment is recorded; it never fails the delivery.
+  await confirmAfterFulfillment(paymentId);
 }

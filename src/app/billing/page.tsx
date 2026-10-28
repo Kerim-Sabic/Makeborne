@@ -17,6 +17,7 @@ import { CREATION_PLANS, TAX_NOTE, matchPlanTier, pricePerCreditCents, usd } fro
 import { configuredCreationOffers } from "@/lib/billing/creation-offers";
 import { topupCheckoutOpen } from "@/lib/billing/topups";
 import { authDestination } from "@/lib/supabase/auth-flow";
+import { accountPurchaseRecords } from "@/lib/legal/withdrawal";
 import "./billing.css";
 import "./billing-topup-return.css";
 
@@ -32,9 +33,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const [params, accountPrivileges, freeTier, user] = await Promise.all([searchParams, getAccountPrivileges(), getFreeTierOffer(), billingUser()]);
   // Itemized usage for one UTC month (?usage=YYYY-MM), one page at a time (?usageBefore=cursor),
   // read as the signed-in user's own session. The live balance also loads client-side from /api/credits.
-  const [refundedPeriod, summary, showAutotopup, subscriptions] = user
-    ? await Promise.all([accountRefundedPeriod(user.id), loadUsageHistory(user, { usage: params.usage, usageBefore: params.usageBefore }), autotopupPanelVisible(user.id), subscriptionSummaries(user.id)])
-    : [null, unavailableBilling, false, null] as const;
+  const [refundedPeriod, summary, showAutotopup, subscriptions, purchaseRecords] = user
+    ? await Promise.all([accountRefundedPeriod(user.id), loadUsageHistory(user, { usage: params.usage, usageBefore: params.usageBefore }), autotopupPanelVisible(user.id), subscriptionSummaries(user.id), loadPurchaseRecords(user.id)])
+    : [null, unavailableBilling, false, null, null] as const;
   const unlimited = accountPrivileges.unlimitedCredits === true;
   const live = Array.isArray(subscriptions) ? subscriptions.find(item => LIVE.includes(item.status)) ?? null : null;
   // Plans before the account for anyone without a plan; members keep the dashboard first.
@@ -43,7 +44,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const savedBrief = typeof params.next === "string" && /[?&](draft|claim)=/.test(authDestination(params.next));
   const offers = (() => { try { return configuredCreationOffers(); } catch { return []; } })();
   const topupsOpen = (() => { try { return topupCheckoutOpen(); } catch { return false; } })();
-  return <BillingWorkspace plansFirst={plansFirst} savedBrief={savedBrief} planChips={PLAN_CHIPS} pricePerCredit={{ min: Math.min(...PER_CREDIT), max: Math.max(...PER_CREDIT) }} plansOpen={await plansOpen(offers)} mediumCeilingCredits={BUILDER_EFFORT[DEFAULT_EFFORT].ceilingCredits} measuredRun={MEASURED_RUN} currentTier={currentTier} topupsOpen={topupsOpen} hasYearly={offers.some(offer => offer.interval === "yearly")} accountId={user?.id ?? null} taxNote={TAX_NOTE.long} subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
+  return <BillingWorkspace purchaseRecords={purchaseRecords} plansFirst={plansFirst} savedBrief={savedBrief} planChips={PLAN_CHIPS} pricePerCredit={{ min: Math.min(...PER_CREDIT), max: Math.max(...PER_CREDIT) }} plansOpen={await plansOpen(offers)} mediumCeilingCredits={BUILDER_EFFORT[DEFAULT_EFFORT].ceilingCredits} measuredRun={MEASURED_RUN} currentTier={currentTier} topupsOpen={topupsOpen} hasYearly={offers.some(offer => offer.interval === "yearly")} accountId={user?.id ?? null} taxNote={TAX_NOTE.long} subscriptions={subscriptions} topupOrderId={typeof params.topup === "string" ? params.topup : params.topup ? "" : undefined} signedIn={user !== null} accountPrivileges={accountPrivileges} trialCredits={freeTier.enabled ? freeTier.trialCredits : null} membershipRequired={params.required === "membership"} refundedPeriod={refundedPeriod} autotopupSetup={showAutotopup} costs={builderEstimates(aiCostUsdPerCredit())} summary={summary} />;
 }
 
 /** False before launch: no configured plan passes the database plan gate. Advisory only; checkout rechecks. */
@@ -63,4 +64,9 @@ async function accountRefundedPeriod(userId: string): Promise<{ periodEnd: strin
     const value = data as { periodEnd?: unknown; reason?: unknown };
     return typeof value.periodEnd === "string" && typeof value.reason === "string" ? { periodEnd: value.periodEnd, reason: value.reason } : null;
   } catch { return null; }
+}
+
+/** Purchase confirmations and withdrawal notices; unavailable storage shows nothing (never an error page). */
+async function loadPurchaseRecords(userId: string) {
+  try { const db = billingDatabase(); return await accountPurchaseRecords((name, args) => db.rpc(name, args), userId); } catch { return null; }
 }

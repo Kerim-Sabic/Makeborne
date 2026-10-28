@@ -10,7 +10,9 @@ import BillingTopupReturn from "./billing-topup-return";
 import BillingAutotopup from "./billing-autotopup";
 import BillingControls from "./billing-controls";
 import BillingSubscriptions from "./billing-subscriptions";
+import BillingConfirmations from "./billing-confirmations";
 import type { SubscriptionSummary } from "@/lib/billing/subscription-summary";
+import type { PurchaseRecords } from "@/lib/legal/withdrawal";
 import CreditBalance, { creditExpiryLabel, type CreditBalanceData } from "./credit-balance";
 import { formatBillingCredits } from "./billing-amount";
 import BillingCreditCosts from "./billing-credit-costs";
@@ -28,7 +30,7 @@ export type PlanChip = { id: string; name: string; price: string };
 const LIVE = ["active", "canceling", "past_due"];
 const utcDate = (value: string) => new Date(value).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" });
 
-export default function BillingWorkspace({ summary: input, membershipRequired = false, refundedPeriod = null, autotopupSetup = false, accountPrivileges, trialCredits = null, signedIn = true, subscriptions = null, topupOrderId, costs = null, plansFirst = false, savedBrief = false, planChips = null, pricePerCredit = null, plansOpen = null, mediumCeilingCredits = null, measuredRun = null, currentTier = null, topupsOpen = false, hasYearly = false, accountId = null, taxNote = null }: { summary: BillingViewModel; /** Measured builder costs, in credits at the live rate. */ costs?: BuilderEstimates | null; membershipRequired?: boolean; /** Current billing period whose payment was refunded or charged back. */ refundedPeriod?: { periodEnd: string; reason: string } | null; /** Automatic top-up setup (qualification flag only; never charges). */ autotopupSetup?: boolean; accountPrivileges?: { isAdmin: boolean; unlimitedCredits: boolean }; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null; /** Signed-out visitors see plans first and a header sign-in link instead of an empty balance. */ signedIn?: boolean; subscriptions?: SubscriptionSummary[] | null; topupOrderId?: string; /** Plans before the account (signed out, plan-less, or sent here to get a plan). Off keeps the dashboard order. */ plansFirst?: boolean; /** The return link carries a saved brief (draft= or claim=). */ savedBrief?: boolean; planChips?: PlanChip[] | null; /** Customer price per plan credit, in cents. */ pricePerCredit?: { min: number; max: number } | null; /** False before launch (no plan on sale); null when unknown. */ plansOpen?: boolean | null; mediumCeilingCredits?: number | null; measuredRun?: MeasuredRun | null; currentTier?: PlanId | null; topupsOpen?: boolean; hasYearly?: boolean; accountId?: string | null; /** TAX_NOTE.long, from the catalogue. */ taxNote?: string | null }) {
+export default function BillingWorkspace({ summary: input, membershipRequired = false, refundedPeriod = null, autotopupSetup = false, accountPrivileges, trialCredits = null, signedIn = true, subscriptions = null, purchaseRecords = null, topupOrderId, costs = null, plansFirst = false, savedBrief = false, planChips = null, pricePerCredit = null, plansOpen = null, mediumCeilingCredits = null, measuredRun = null, currentTier = null, topupsOpen = false, hasYearly = false, accountId = null, taxNote = null }: { summary: BillingViewModel; /** Measured builder costs, in credits at the live rate. */ costs?: BuilderEstimates | null; membershipRequired?: boolean; /** Current billing period whose payment was refunded or charged back. */ refundedPeriod?: { periodEnd: string; reason: string } | null; /** Automatic top-up setup (qualification flag only; never charges). */ autotopupSetup?: boolean; accountPrivileges?: { isAdmin: boolean; unlimitedCredits: boolean }; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null; /** Signed-out visitors see plans first and a header sign-in link instead of an empty balance. */ signedIn?: boolean; subscriptions?: SubscriptionSummary[] | null; /** Stored purchase confirmations and withdrawal notices (signed-in only). */ purchaseRecords?: PurchaseRecords | null; topupOrderId?: string; /** Plans before the account (signed out, plan-less, or sent here to get a plan). Off keeps the dashboard order. */ plansFirst?: boolean; /** The return link carries a saved brief (draft= or claim=). */ savedBrief?: boolean; planChips?: PlanChip[] | null; /** Customer price per plan credit, in cents. */ pricePerCredit?: { min: number; max: number } | null; /** False before launch (no plan on sale); null when unknown. */ plansOpen?: boolean | null; mediumCeilingCredits?: number | null; measuredRun?: MeasuredRun | null; currentTier?: PlanId | null; topupsOpen?: boolean; hasYearly?: boolean; accountId?: string | null; /** TAX_NOTE.long, from the catalogue. */ taxNote?: string | null }) {
   const summary = readBillingView(input);
   const unlimitedCredits = accountPrivileges?.unlimitedCredits === true;
   const [category, setCategory] = useState<(typeof categories)[number]>("All activity");
@@ -90,6 +92,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
   const subscriptionHistory = Boolean(subscriptions?.length);
   const memberAccount = <>
     <BillingSubscriptions items={subscriptions} />
+    <BillingConfirmations records={purchaseRecords} />
     {!unlimitedCredits && <BillingControls />}
     {autotopupSetup && !unlimitedCredits && <BillingAutotopup />}
   </>;
@@ -126,6 +129,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
         </div>
       </section>
           {subscriptionHistory && <BillingSubscriptions items={subscriptions} />}
+          <BillingConfirmations records={purchaseRecords} />
         </section>}
       </> : <>
       <section id="credits" className="billing-credit-section" aria-labelledby="credits-heading">

@@ -4,7 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-react";
 import BrandMark from "@/components/brand-mark";
 import { getAccountPrivileges } from "@/lib/account/privileges";
-import { adminCustomer, adminCustomerPayments, adminCustomers, adminHealth, adminOverview, CUSTOMER_FILTERS, type CustomerFilter } from "@/lib/admin/console";
+import { adminCustomer, adminCustomerPayments, adminCustomers, adminHealth, adminLegalRequests, adminOverview, CUSTOMER_FILTERS, type CustomerFilter } from "@/lib/admin/console";
+import { transactionalMailEnabled } from "@/lib/mail/transactional";
 import { billingUser } from "@/lib/billing/access";
 import { getCapabilities } from "@/lib/capabilities/server";
 import { compilerSelfTest } from "@/lib/builder/compile";
@@ -13,6 +14,7 @@ import { CreditsTab, SubscriptionsTab } from "./money";
 import OverviewTab, { overviewAlerts } from "./overview";
 import SystemTab from "./system";
 import HealthTab from "./health";
+import RequestsTab from "./requests";
 import { exactTime, requestTime } from "./format";
 import "./admin.css";
 
@@ -25,6 +27,7 @@ const TABS = [
   { id: "subscriptions", label: "Subscriptions" },
   { id: "credits", label: "Credits & AI" },
   { id: "health", label: "Health" },
+  { id: "requests", label: "Withdrawals & email" },
   { id: "system", label: "System" },
 ] as const;
 type TabId = typeof TABS[number]["id"];
@@ -45,12 +48,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   type Loaded =
     | { kind: "system"; compiler: Awaited<ReturnType<typeof compilerSelfTest>> }
     | { kind: "health"; data: Awaited<ReturnType<typeof adminHealth>> }
+    | { kind: "requests"; data: Awaited<ReturnType<typeof adminLegalRequests>> }
     | { kind: "customers"; page: Awaited<ReturnType<typeof adminCustomers>>; detail: Awaited<ReturnType<typeof adminCustomer>>; payments: Awaited<ReturnType<typeof adminCustomerPayments>> }
     | { kind: "overview"; data: Awaited<ReturnType<typeof adminOverview>> }
     | { kind: "error" };
   let loaded: Loaded;
   try {
     if (tab === "system") loaded = { kind: "system", compiler: await compilerSelfTest() };
+    else if (tab === "requests") loaded = { kind: "requests", data: await adminLegalRequests(user.id) };
     else if (tab === "health") loaded = { kind: "health", data: await adminHealth(user.id, [7, 30, 90].includes(Number(one(params.days))) ? Number(one(params.days)) : 7) };
     else if (tab === "customers") {
       // Payment records come from a later migration; their absence must not hide the customer.
@@ -62,9 +67,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     loaded = { kind: "error" };
   }
   const alertCount = loaded.kind === "overview" ? overviewAlerts(loaded.data).length : 0;
-  const generatedAt = loaded.kind === "overview" || loaded.kind === "health" ? loaded.data.generatedAt : null;
+  const generatedAt = loaded.kind === "overview" || loaded.kind === "health" || loaded.kind === "requests" ? loaded.data.generatedAt : null;
   const content = loaded.kind === "system" ? <SystemTab operations={getCapabilities({ administrator: true }).operations} compiler={loaded.compiler} />
     : loaded.kind === "health" ? <HealthTab data={loaded.data} now={now} />
+    : loaded.kind === "requests" ? <RequestsTab data={loaded.data} mailOn={transactionalMailEnabled()} />
     : loaded.kind === "customers" ? <CustomersTab page={loaded.page} detail={loaded.detail} payments={loaded.payments} state={state} now={now} />
     : loaded.kind === "overview" ? (tab === "overview" ? <OverviewTab data={loaded.data} now={now} /> : tab === "subscriptions" ? <SubscriptionsTab data={loaded.data} now={now} /> : <CreditsTab data={loaded.data} />)
     : <section className="mbo-panel mbo-error" role="alert"><AlertTriangle size={18} aria-hidden="true" /><div><h2>Admin data could not be loaded</h2><p>The database did not answer, or this deployment has not been migrated yet (<code>20261013100000_admin_console.sql</code>). Nothing was changed. Try again in a moment.</p></div></section>;

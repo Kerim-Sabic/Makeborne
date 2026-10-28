@@ -92,7 +92,11 @@ check("checkout asks for the unticked immediate-start request before Whop and re
   assert.equal(WITHDRAWAL_CONSENT_VERSION, `withdrawal-${LEGAL_VERSION}`);
   const quoted = lines.replace(/’/g, "'");
   assert.ok(quoted.includes(`> ${WITHDRAWAL_CONSENT_TEXT.replace(/’/g, "'")}`), "the documented consent text matches the app");
-  assert.match(read("src/app/withdraw/page.tsx"), /Withdraw from contract here/);
+  // Art. 11a: "Withdraw from contract here" opens the notice; "Confirm withdrawal" sends it (no mailto-only step).
+  assert.match(read("src/app/withdraw/page.tsx"), /<WithdrawForm /);
+  const form = read("src/components/legal/withdraw-form.tsx");
+  assert.match(form, /Withdraw from contract here/); assert.match(form, /Confirm withdrawal/); assert.match(form, /\/api\/legal\/withdraw/);
+  assert.doesNotMatch(read("src/app/withdraw/page.tsx"), /mailto:/);
 });
 
 check("the Markdown subset parses tables, lists, bold and safe links only", () => {

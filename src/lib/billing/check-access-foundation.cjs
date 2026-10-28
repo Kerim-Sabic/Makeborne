@@ -7,7 +7,7 @@ const { Webhook } = require("standardwebhooks");
 class RequestError extends Error { constructor(code, message, status) { super(message); this.code = code; this.status = status; } }
 function load(file, env, modules = {}) {
   const output = ts.transpileModule(fs.readFileSync(require.resolve(file), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const context = { exports: {}, process: { env }, Buffer, Date, URL, require: name => name === "server-only" ? {} : modules[name] ?? (name === "./topup-delivery" || name === "./plan-payments" ? {} : require(name)) };
+  const context = { exports: {}, process: { env }, Buffer, Date, URL, require: name => name === "server-only" ? {} : modules[name] ?? (name === "./topup-delivery" || name === "./plan-payments" ? {} : name === "./purchase-confirmations" ? { confirmAfterFulfillment: async () => {} } : require(name)) };
   vm.runInNewContext(output, context);
   return context.exports;
 }

@@ -390,3 +390,6 @@
 @media(max-width:600px){.billing-shell{padding:0 16px 22px}}
 @media(forced-colors:active){.founding-cta,.billing-resume-cta,.billing-retry,.billing-agency-button{border:1px solid ButtonText}.billing-plan-featured{outline:2px solid Highlight}}
 @media(prefers-reduced-transparency:reduce){.billing-shell{background:#fff}}
+.billing-confirmation{padding:12px 0;border-bottom:1px solid #eee9f2}.billing-confirmation summary{cursor:pointer;font-weight:550;overflow-wrap:anywhere}
+.billing-confirmation-text{margin:12px 0 0;padding:14px;max-height:420px;overflow:auto;border-radius:10px;background:#f7f5fa;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.billing-withdrawals{margin:6px 0 12px;padding-left:20px;overflow-wrap:anywhere}
