@@ -43,7 +43,7 @@ const { browserType } = require('./browser-engine.cjs');
   // Another tab or device: the URL alone restores the choice (storage empty); monthly-only shows no interval switch.
   availability={authenticated:true,existingMember:false,offers:[studio]};
   const other=await fresh();await other.goto(base+'/billing?plan=studio&interval=monthly&next=%2Fstudio%3Fdraft%3D11111111-1111-4111-8111-111111111111#plans');await other.getByRole('heading',{name:'Ready to finish: Studio, $49 a month, 750 credits every month.'}).waitFor();
-  const panel=await other.locator('.billing-resume').innerText();assert.match(panel,/\$49 today plus any tax or checkout fee Whop shows, then \$49 a month until you cancel/);assert.match(panel,/statutory rights, including any EU or UK right to withdraw, still apply/);
+  const panel=await other.locator('.billing-resume').innerText();assert.match(panel,/\$49 today, including applicable tax; any checkout fee is shown before you pay, then \$49 a month until you cancel/);assert.match(panel,/statutory rights, including any EU or UK right to withdraw, still apply/);
   assert.equal(await other.getByRole('radiogroup').count(),0);assert.equal(await other.evaluate(()=>document.activeElement?.textContent),'Continue to secure checkout');
   replies.push(ok);const before=requests.length;await tick(other).then(()=>other.getByRole('button',{name:'Continue to secure checkout'}).click());await other.waitForURL('https://whop.com/checkout/ch_fixture');assert.equal(requests[before].tier,'studio');assert.equal(requests[before].next,'/studio?draft=11111111-1111-4111-8111-111111111111');
   // localStorage only lends an owner-bound key: same owner reuses it, another account's key is discarded, and alone it selects nothing.
