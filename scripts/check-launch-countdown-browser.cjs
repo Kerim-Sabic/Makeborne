@@ -90,7 +90,7 @@ async function contrast(page, selectors) {
       const response = await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
       assert.equal(response.status(), 200);
       const html = await response.text();
-      assert.match(html, /<h1 class="mbl-date[^"]*"[^>]*>.*Makeborne launches .*Thursday 29 October.*21:00 CET<\/time><\/h1>/s, "the date is in the server HTML for crawlers");
+      assert.match(html, /<h1 class="mbl-date[^"]*"[^>]*>.*Makeborne launches .*Thursday 29 October.*01:30 CET<\/time><\/h1>/s, "the date is in the server HTML for crawlers");
       assert.match(html, /<title>Makeborne — Websites, books &amp; presentations<\/title>/);
       assert.match(html, /property="og:title"/);
       assert.doesNotMatch(html, /noindex/);
@@ -439,7 +439,7 @@ async function contrast(page, selectors) {
       await page.locator(".mk-home h1#creation-heading").waitFor();
       const banner = page.locator("#mb-launch-banner");
       await banner.waitFor({ state: "visible" });
-      assert.match(await banner.innerText(), /Thu 29 Oct, 21:00 CET\s*·\s*\d+d \d+h \d+m/);
+      assert.match(await banner.innerText(), /Thu 29 Oct, 01:30 CET\s*·\s*\d+d \d+h \d+m/);
       assert.equal((await context.cookies()).find(cookie => cookie.name === "makeborne_launch_preview")?.value, "site");
       await shot(page, "preview-home-with-banner");
       await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
@@ -472,7 +472,7 @@ async function contrast(page, selectors) {
       const { context, page, hydration } = await open(browser, { viewport: PHONE });
       await page.goto(`${BASE}/help`, { waitUntil: "networkidle" });
       const banner = page.locator("#mb-launch-banner");
-      assert.match(await banner.innerText(), /Thu 29 Oct, 21:00 CET\s*·\s*\d+d \d+h \d+m/);
+      assert.match(await banner.innerText(), /Thu 29 Oct, 01:30 CET\s*·\s*\d+d \d+h \d+m/);
       assert.match(await banner.locator("[role=timer]").getAttribute("aria-label"), / left$/);
       const height = await banner.evaluate(node => node.getBoundingClientRect().height);
       assert.equal(height, 40);
@@ -522,7 +522,7 @@ async function contrast(page, selectors) {
       const { context, page, hydration } = await open(browser, { viewport: PHONE });
       await page.goto(`${BASE}/billing`, { waitUntil: "networkidle" });
       const line = page.locator(".mb-plans-line");
-      assert.match(await line.innerText(), /Plans open in \d+d \d+h \d+m\s*Thursday 29 October, 21:00 CET/);
+      assert.match(await line.innerText(), /Plans open in \d+d \d+h \d+m\s*Thursday 29 October, 01:30 CET/);
       assert(await noHorizontalScroll(page));
       await line.scrollIntoViewIfNeeded();
       await shot(page, "billing-plans-line");
