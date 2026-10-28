@@ -354,11 +354,17 @@ async function contrast(page, selectors) {
     }
     pass("reduced motion: no intro, rolling, breathing or spotlight; minute-only updates");
 
-    // 3. The reveal with a mocked clock crossing zero, then the real home page is visible and interactive.
+    // 3. The reveal with a mocked clock crossing zero. Plans are still closed at zero, so the screen holds ("opens in a
+    // moment"); once the status says they are on sale it opens onto the real, interactive home page.
     for (const reducedMotion of ["no-preference", "reduce"]) {
       const start = Date.now(), launch = Math.ceil((start + 30 * 60_000) / 1000) * 1000; // half an hour away on the server
       const record = video && reducedMotion === "no-preference" && shots ? path.join(shots, "video-tmp") : null;
       const { context, page, hydration } = await open(browser, { reducedMotion, clock: start, record });
+      let onSale = false;
+      await page.route("**/api/launch-status", async route => {
+        const real = await (await route.fetch()).json();
+        await route.fulfill({ json: { ...real, salesOpen: onSale }, headers: { "Cache-Control": "no-store" } });
+      });
       await page.goto(`${BASE}/?countdown=at:${iso(launch)}`, { waitUntil: "networkidle" });
       assert.equal(await page.locator(".mbl").getAttribute("data-stage"), "count");
       assert.equal(await page.locator(".mk-home").count(), 0);
@@ -367,6 +373,15 @@ async function contrast(page, selectors) {
       await page.waitForTimeout(400);
       assert.match(await page.locator(".mbl-clock").getAttribute("aria-label"), /^Less than a minute left$/);
       if (reducedMotion === "no-preference") await shot(page, "reveal-0-five-seconds");
+      await page.waitForSelector('.mbl[data-stage="hold"]', { timeout: 12_000 });
+      await page.waitForTimeout(400);
+      assert.equal(await page.locator(".mbl-eyebrow").innerText(), "Opening now");
+      assert.equal(await page.locator(".mbl h1").innerText(), "Makeborne opens in a moment");
+      assert.equal(await page.locator(".mbl-sr[aria-live=polite]").innerText(), "Makeborne opens in a moment.");
+      assert.equal(await page.locator(".mk-home").count(), 0, "nothing opens while plans are closed");
+      if (reducedMotion === "no-preference") await shot(page, "reveal-0b-holding");
+      onSale = true;
+      await page.clock.fastForward(11_000);
       await page.waitForSelector('.mbl[data-stage="zero"], .mbl[data-stage="live"]', { timeout: 12_000 });
       await page.waitForSelector('.mbl[data-stage="live"]', { timeout: 4_000 });
       await page.waitForTimeout(reducedMotion === "reduce" ? 300 : 1300);
@@ -383,11 +398,13 @@ async function contrast(page, selectors) {
       await page.locator(".mk-format-switch button", { hasText: "Book" }).click();
       assert.equal(await page.locator(".mk-format-switch button", { hasText: "Book" }).getAttribute("aria-pressed"), "true");
       assert.equal(await page.evaluate(() => document.documentElement.style.overflow), "", "page scrolling restored");
-      // The slim banner now says "We're live", and, with plans still closed on this server, never claims checkout is open.
+      // The slim banner now says "We're live" and, on its next once-a-minute status check, links to the plans now on sale.
       const banner = page.locator("#mb-launch-banner");
       await banner.waitFor({ state: "visible" });
-      assert.match(await banner.innerText(), /We're live\s*·\s*Plans opening any moment/);
-      assert.equal(await banner.locator("a", { hasText: "See plans" }).count(), 0);
+      assert.match(await banner.innerText(), /We're live/);
+      await page.clock.fastForward(61_000);
+      await page.waitForFunction(() => /See plans/.test(document.querySelector("#mb-launch-banner")?.textContent ?? ""), null, { timeout: 5_000 });
+      assert.match(await banner.innerText(), /We're live/);
       if (reducedMotion === "no-preference") await shot(page, "reveal-3-home-live");
       assert(await noHorizontalScroll(page));
       assert.deepEqual(hydration(), []);
@@ -398,7 +415,21 @@ async function contrast(page, selectors) {
         fs.rmSync(record, { recursive: true, force: true });
       }
     }
-    pass("mocked clock crosses zero: the figures roll to \"We're live.\", an iris opens from the accent full stop onto the interactive home page (a cross-fade for reduced motion); banner says opening any moment");
+    pass("mocked clock crosses zero: with plans closed the screen holds (\"opens in a moment\"); once they are on sale the figures roll to \"We're live.\" and an iris opens onto the interactive home page (a cross-fade for reduced motion)");
+
+    // 3b. Loaded after launch time while plans are still closed on this server: the screen is up, holding, from the first paint.
+    {
+      const { context, page, hydration } = await open(browser);
+      await page.goto(`${BASE}/?countdown=at:${iso(Date.now() - 90_000)}`, { waitUntil: "networkidle" });
+      assert.equal(await page.locator(".mbl").getAttribute("data-stage"), "hold");
+      assert.equal(await page.locator(".mbl h1").innerText(), "Makeborne opens in a moment");
+      assert.equal(await page.locator(".mk-home").count(), 0);
+      assert.equal(await page.locator(".mbl-waitlist-slot form").count(), 1, "the waitlist stays open while holding");
+      assert(await noHorizontalScroll(page));
+      assert.deepEqual(hydration(), []);
+      await context.close();
+    }
+    pass("after launch time with plans closed, the server keeps the screen up in its holding state; the waitlist stays open");
 
     // 4. Owner preview bypass, remembered in a cookie, and undone.
     {

@@ -45,13 +45,14 @@ export function useReducedMotion() {
  * or a throttled timer is right again on the next tick, and wakes immediately when the tab becomes visible.
  * `initialNow` (the server's time at render) makes the first browser render identical to the server's HTML.
  */
-export function useLaunchClock({ launchAt, initialNow = null, unit, watchSales = false, trustClient = false }: {
+export function useLaunchClock({ launchAt, initialNow = null, unit, watchSales = false, salesEvery = 60_000, trustClient = false }: {
   launchAt: number;
   initialNow?: number | null;
   /** Tick interval for a given corrected time: every second, or every minute. */
   unit: (now: number) => 1000 | 60000;
-  /** Poll the sales state once a minute while live and plans are not yet on sale. */
+  /** Poll the sales state while live and plans are not yet on sale: once a minute unless `salesEvery` says otherwise. */
   watchSales?: boolean;
+  salesEvery?: number;
   /** Test mode (a forced launch moment outside production): keep the browser's own, possibly mocked, clock. */
   trustClient?: boolean;
 }) {
@@ -98,11 +99,11 @@ export function useLaunchClock({ launchAt, initialNow = null, unit, watchSales =
   const phase = now === null ? null : launchPhase(now, launchAt);
   useEffect(() => {
     if (!watchSales || phase !== "live" || salesOpen === true) return;
-    const timer = setInterval(() => { void fetchLaunchStatus(true).then(status => { if (status.salesOpen !== null) setSalesOpen(status.salesOpen); }); }, 60_000);
+    const timer = setInterval(() => { void fetchLaunchStatus(true).then(status => { if (status.salesOpen !== null) setSalesOpen(status.salesOpen); }); }, salesEvery);
     // Crossing zero while the page is open: ask once straight away (shared with the mount request when recent).
     void fetchLaunchStatus().then(status => { if (status.salesOpen !== null) setSalesOpen(status.salesOpen); });
     return () => clearInterval(timer);
-  }, [watchSales, phase, salesOpen]);
+  }, [watchSales, salesEvery, phase, salesOpen]);
 
   return { now, phase, salesOpen, reduced };
 }

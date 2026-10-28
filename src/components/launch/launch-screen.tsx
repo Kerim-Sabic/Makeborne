@@ -8,11 +8,11 @@ import { launchFont } from "./launch-font";
 import SoundToggle, { useLaunchSound } from "./sound-toggle";
 import WaitlistForm from "./waitlist-form";
 import { useClientValue, useLaunchClock } from "./use-launch-clock";
-import { announcement, localLaunchText, remaining, remainingLabel } from "@/lib/launch/countdown";
+import { announcement, HOLD_ANNOUNCEMENT, localLaunchText, remaining, remainingLabel, revealReady } from "@/lib/launch/countdown";
 import "./launch-screen.css";
 
 type HomeProps = { initialEmail: string | null; accountsEnabled: boolean; trialCredits?: number | null };
-type Stage = "count" | "zero" | "live" | "opening" | "done";
+type Stage = "count" | "hold" | "zero" | "live" | "opening" | "done";
 const loadHome = () => import("@/components/creation-home").then(module => module.default as ComponentType<HomeProps>);
 
 /** How long each reveal step holds, in milliseconds. The iris itself is about 1 s (reduced motion: one short cross-fade). */
@@ -24,8 +24,9 @@ const stagger = (index: number) => ({ "--i": index }) as CSSProperties;
  * the figures roll away to "We're live.", then the accent full stop opens as an iris onto the live home page
  * underneath (a hard-edged circle, about 1 s), and the dawn-coloured light of the countdown meets the home page's own.
  * The home page's code loads only near zero (or at the reveal), never during the countdown itself.
+ * With `hold`, the reveal waits past zero until plans are on sale; meanwhile the screen says Makeborne opens in a moment.
  */
-export default function LaunchScreen({ launchAt, serverNow, text, tagline, home, testMode = false, theme = "dark", waitlistCount = null }: {
+export default function LaunchScreen({ launchAt, serverNow, text, tagline, home, testMode = false, theme = "dark", waitlistCount = null, hold = false, salesOpenAtRender = null }: {
   launchAt: number;
   serverNow: number;
   text: { date: string; time: string; short: string };
@@ -37,8 +38,12 @@ export default function LaunchScreen({ launchAt, serverNow, text, tagline, home,
   theme?: "dark" | "light";
   /** The real waitlist size, rounded down to tens; null hides the line (unknown, or fewer than 50). */
   waitlistCount?: number | null;
+  /** Hold the reveal past zero until plans are on sale (MAKEBORNE_LAUNCH_HOLD). */
+  hold?: boolean;
+  /** The server's sales state when it rendered after launch time; null before launch. */
+  salesOpenAtRender?: boolean | null;
 }) {
-  const { now, reduced } = useLaunchClock({ launchAt, initialNow: serverNow, unit: corrected => window.matchMedia("(prefers-reduced-motion: reduce)").matches && launchAt - corrected > 60_000 ? 60000 : 1000, trustClient: testMode });
+  const { now, reduced, salesOpen } = useLaunchClock({ launchAt, initialNow: serverNow, unit: corrected => window.matchMedia("(prefers-reduced-motion: reduce)").matches && launchAt - corrected > 60_000 ? 60000 : 1000, watchSales: hold, salesEvery: 10_000, trustClient: testMode });
   const left = remaining(now ?? serverNow, launchAt);
   const [stageState, setStage] = useState<Stage>("count");
   const [Home, setHome] = useState<ComponentType<HomeProps> | null>(null);
@@ -58,12 +63,13 @@ export default function LaunchScreen({ launchAt, serverNow, text, tagline, home,
     loading.current = loadHome().then(component => setHome(() => component)).catch(() => { loading.current = null; });
   }, [preload]);
 
-  // Reaching zero starts the reveal; every later step is timed below.
-  const stage: Stage = stageState === "count" && live ? "zero" : stageState;
+  // Reaching zero starts the reveal; every later step is timed below. With the hold, zero waits for plans to be on sale.
+  const ready = revealReady(hold, salesOpen ?? salesOpenAtRender);
+  const stage: Stage = stageState === "count" && live ? (ready ? "zero" : "hold") : stageState;
   const homeRef = useRef(Home);
   useEffect(() => { homeRef.current = Home; }, [Home]);
   useEffect(() => {
-    if (stage === "count" || stage === "done") return;
+    if (stage === "count" || stage === "hold" || stage === "done") return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     if (stage === "zero") timer = setTimeout(() => setStage("live"), timing.zero);
     else if (stage === "opening") timer = setTimeout(() => setStage("done"), timing.opening);
@@ -92,12 +98,13 @@ export default function LaunchScreen({ launchAt, serverNow, text, tagline, home,
     };
   }, [stage]);
 
-  const underneath = Home && stage !== "count" && stage !== "zero";
-  const counting = stage === "count" || stage === "zero";
+  const underneath = Home && stage !== "count" && stage !== "hold" && stage !== "zero";
+  const counting = stage === "count" || stage === "hold" || stage === "zero";
+  const holding = stage === "hold";
   const animate = hydrated && !reduced;
   // The final minute: the seconds take the stage and breathe once a second, through zero until "We're live." takes over.
   // Reduced motion keeps the calm minute-by-minute clock instead.
-  const final = animate && stage !== "done" && left.totalSeconds <= 60;
+  const final = animate && stage !== "done" && !holding && left.totalSeconds <= 60;
   // Optional sound (off by default, started only by the visitor): a soft tick each second and a swell at the reveal.
   const sound = useLaunchSound({ seconds: left.totalSeconds, stage, soft: reduced, hidden });
   // The iris opens from the accent full stop of "We're live.", wherever it sits on this screen.
@@ -128,7 +135,7 @@ export default function LaunchScreen({ launchAt, serverNow, text, tagline, home,
           </div>
         </header>
         <main className="mbl-main">
-          <p className="mbl-eyebrow mbl-in" style={stagger(1)}><span className="mbl-dot" aria-hidden="true" />{final && counting ? "The final minute" : counting ? "Launching soon" : "Now open"}</p>
+          <p className="mbl-eyebrow mbl-in" style={stagger(1)}><span className="mbl-dot" aria-hidden="true" />{holding ? "Opening now" : final && counting ? "The final minute" : counting ? "Launching soon" : "Now open"}</p>
           <div className="mbl-stage">
             <div className="mbl-clock" role="timer" aria-label={remainingLabel(left)}>
               <RollClock left={left} animate={animate} showSeconds={!reduced} />
@@ -137,14 +144,16 @@ export default function LaunchScreen({ launchAt, serverNow, text, tagline, home,
             <p className="mbl-live-word" aria-hidden={counting}><span>We&rsquo;re live</span><span ref={accent} className="mbl-accent">.</span></p>
           </div>
           <div className="mbl-details">
-            <h1 className="mbl-date mbl-in" style={stagger(7)}>{counting
+            <h1 className="mbl-date mbl-in" style={stagger(7)}>{holding
+              ? <><span className="mbl-date-lead">Makeborne opens </span>in a moment</>
+              : counting
               ? <><span className="mbl-date-lead">Makeborne launches </span><time dateTime={new Date(launchAt).toISOString()}>{text.date}<span className="mbl-date-sep"> · </span>{text.time}</time></>
               : <><span className="mbl-date-lead">Makeborne is live </span><time dateTime={new Date(launchAt).toISOString()}>since {text.time}</time></>}</h1>
-            <p className="mbl-local mbl-in" style={stagger(8)}>{local ?? " "}</p>
+            <p className="mbl-local mbl-in" style={stagger(8)}>{holding ? " " : local ?? " "}</p>
             <p className="mbl-tagline mbl-in" style={stagger(9)}>{tagline}</p>
             <div className="mbl-waitlist-slot mbl-in" style={stagger(10)}><WaitlistForm count={waitlistCount} /></div>
           </div>
-          <p className="mbl-sr" aria-live="polite">{hydrated ? announcement(left) : ""}</p>
+          <p className="mbl-sr" aria-live="polite">{hydrated ? holding ? HOLD_ANNOUNCEMENT : announcement(left) : ""}</p>
         </main>
         <footer className="mbl-foot mbl-in" style={stagger(11)}>
           <span>© 2026 Makeborne</span>

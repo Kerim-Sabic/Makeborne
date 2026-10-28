@@ -21,6 +21,18 @@ check('only the exact value "on" shows the countdown; unset uses the branch defa
   assert.equal(c.countdownEnabled(undefined, "off"), false);
 });
 
+check('past launch time the screen holds until plans are on sale; only "off" opens regardless', () => {
+  assert.equal(c.holdUntilSales(undefined), true);
+  for (const value of ["on", "", "OFF", "false", " off"]) assert.equal(c.holdUntilSales(value), true, value);
+  assert.equal(c.holdUntilSales("off"), false);
+  assert.equal(c.revealReady(true, true), true);
+  for (const unknown of [false, null]) assert.equal(c.revealReady(true, unknown), false, String(unknown));
+  for (const any of [true, false, null]) assert.equal(c.revealReady(false, any), true, String(any));
+  assert.equal(c.HOLD_ANNOUNCEMENT, "Makeborne opens in a moment.");
+  const page = fs.readFileSync(path.join(__dirname, "../../app/page.tsx"), "utf8");
+  assert.match(page, /launch\.phase === "before" \|\| salesOpen === false/, "a late cut-over keeps the screen up on the server too");
+});
+
 check("before, at and after the launch instant, with a 48-hour live window", () => {
   assert.equal(c.launchPhase(LAUNCH - 1, LAUNCH), "before");
   assert.equal(c.launchPhase(LAUNCH, LAUNCH), "live");
