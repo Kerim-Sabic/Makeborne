@@ -1,0 +1,108 @@
+{
+  "preparedAt": "2026-10-28T21:52:33.047Z",
+  "codeHead": "52d1ce900a975c8418f61ff0b4bb895c7fabde73",
+  "productionBase": "09e394f1c2bd52524f50c8a82d435e77a5d60fff",
+  "productionProject": {
+    "name": "makeborne",
+    "vercelProject": "prj_UzMAuCP7X4yeBP6FrUFCDlJ5GWHh",
+    "team": "team_viiayqU1BnwJBdEqgHdgmtnA",
+    "supabase": "rklojnmmsmhwnkbzuidp"
+  },
+  "stagingProject": {
+    "vercelProject": "prj_c9h8fuyEmVAT8F3NHFMvzFR1BnLc",
+    "supabase": "xzwikrunwpurxnxgkznh"
+  },
+  "productionApplied": 109,
+  "productionPending": [
+    {
+      "file": "20261022100000_brief_enhancement_actions.sql",
+      "sha256": "75dca905bfcd06eab46e65a12ea249413d746b7e45019003dd82c1859c92663f"
+    },
+    {
+      "file": "20261023130000_project_source_uploads.sql",
+      "sha256": "9dd7356f20863424c9b258c739a1d66b143b8a38d26a0ff684d33f3036fb7fe6"
+    },
+    {
+      "file": "20261023200000_agency_operation_contract.sql",
+      "sha256": "cdd35bb4e328ece84849786d1d5ade540e086f23aefb7b324c32c6a54274a2c4"
+    },
+    {
+      "file": "20261023210000_client_knowledge.sql",
+      "sha256": "6b0b3bffac403cc7131a5d52366fb8837160fd9f0dd147054254ad185b9742df"
+    },
+    {
+      "file": "20261024010000_client_research.sql",
+      "sha256": "dca6b9a5c7ec8e3c8308867445a91a74016bd4f5aadf9507f4187d0c50758052"
+    },
+    {
+      "file": "20261024020000_data_report_files.sql",
+      "sha256": "2c44771f523614a68e4b6914991b43ae8969d482e061c49fc5ac6ea0b2570401"
+    },
+    {
+      "file": "20261025200000_paying_workspace_publication.sql",
+      "sha256": "aaa816b87e2f1cc46be99fd5538270fda6912ffad9e6a39eb9c782d938d4af5a"
+    },
+    {
+      "file": "20261025300000_crm_research.sql",
+      "sha256": "72779dc062a254515f104fe213ab6fcf85c115314afd4316599a458efe9906ff"
+    },
+    {
+      "file": "20261026013451_prevent_unsupported_creation_repurchase.sql",
+      "sha256": "3eea04af7aae57298a94ed3d322cc5309c0cb1d1c4dd4167b6016f9400ead0f1"
+    },
+    {
+      "file": "20261026100000_account_data_rights.sql",
+      "sha256": "6a8eab98884b7ab8fa4c39dbf0ba24215e8c3bca1f31f0e119f24a2b6903fa00"
+    },
+    {
+      "file": "20261026120000_crm_server_writes.sql",
+      "sha256": "40599228e22edfbf539679f1b8bbac9901b3aa5e04699ae34f58504b493bfa1e"
+    },
+    {
+      "file": "20261026120100_research_daily_limits.sql",
+      "sha256": "12b6001d51dc9c0ab96d22bd471be1554acc5bad23fd55df007f3ca711403ec7"
+    },
+    {
+      "file": "20261026125554_billing_checkout_consent.sql",
+      "sha256": "2131c2174a803c1c889c25d3ac9133703cf5c3b507ef52c1bc6d98e242c50baa"
+    },
+    {
+      "file": "20261026135550_crm_next_step_rpc_boundary.sql",
+      "sha256": "5e988c90f532a632532dc9a573f46c18a3f2148f9a99205dd2cea029b4d6d7df"
+    },
+    {
+      "file": "20261028100000_purchase_confirmations.sql",
+      "sha256": "fc2388611f192e335e80439def9807cf8dfc19705592a5f4e6e1782ce9e2afc0"
+    },
+    {
+      "file": "20261028213151_transactional_mail_delivery_fencing.sql",
+      "sha256": "343b61225df53fb18c0215bdcef1cb438ec3e4a99d75e2614e9a7b87a533f95d"
+    }
+  ],
+  "settingsToPrepareNotApply": {
+    "WHOP_COMPANY_ID": "biz_CV9cZg1zFX3h7f",
+    "WHOP_CREATION_ENABLED": false,
+    "WHOP_TOPUPS_ENABLED": false,
+    "MAKEBORNE_SUPPORT_CHECKOUT_ENABLED": false,
+    "MAKEBORNE_TRANSACTIONAL_MAIL_ENABLED": false,
+    "MAKEBORNE_PURCHASE_CONFIRMATIONS_SINCE": "Choose the actual approved activation instant after all gates; never backfill old buyers by guessed date",
+    "RESEND_API_KEY": "Required: sending-only key, set privately",
+    "CRON_SECRET": "Retain existing qualified secret; never replace with masked env pull",
+    "providerLimits": {
+      "globalDailyUsd": 10,
+      "anthropicDailyUsd": 10,
+      "openaiEnabled": false,
+      "activateOnlyAfterFinalGo": true
+    }
+  },
+  "forbiddenProductionSettings": [
+    "WHOP_API_BASE_URL",
+    "MAKEBORNE_WHOP_SANDBOX",
+    "MAKEBORNE_WHOP_STAGING_SANDBOX",
+    "WHOP_SANDBOX_COMPANY_ID",
+    "MAKEBORNE_TOPUP_SANDBOX_TEST",
+    "STAGING_VERCEL_OIDC_TOKEN"
+  ],
+  "productionTouched": false,
+  "paidCalls": 0
+}
