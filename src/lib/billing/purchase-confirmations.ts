@@ -28,6 +28,7 @@ export type ConfirmationDeps = {
   mailEnabled: boolean;
   send: (mail: TransactionalMail) => Promise<SendResult>;
   log?: (event: Record<string, unknown>) => void;
+  now?: () => number;
 };
 
 /** A valid ISO instant, or null (feature off). */
@@ -78,7 +79,13 @@ export async function ensurePurchaseConfirmations(deps: ConfirmationDeps, option
   return { ...stats, enabled: true };
 }
 
-type Claimed = { id: string; recipient: string; subject: string; body: string; idempotency_key: string; attempts: number };
+type Claimed = { id: string; recipient: string; subject: string; body: string; idempotency_key: string; attempts: number; lease_until: string; first_attempt_at: string };
+
+export function mailClaimUsable(row: Pick<Claimed, "attempts" | "lease_until" | "first_attempt_at">, now = Date.now()) {
+  return Number.isInteger(row.attempts) && row.attempts >= 1 && row.attempts <= 12
+    && Date.parse(row.lease_until) > now + 10_000
+    && Date.parse(row.first_attempt_at) + 23 * 60 * 60_000 > now + 10_000;
+}
 
 /** Sends due outbox rows. Disabled mail claims nothing, so rows stay pending for later. */
 export async function drainTransactionalMail(deps: ConfirmationDeps, options: { limit?: number } = {}) {
@@ -88,15 +95,20 @@ export async function drainTransactionalMail(deps: ConfirmationDeps, options: { 
   if (error || !Array.isArray(data)) { deps.log?.({ job: "transactional_mail", status: "claim_unavailable", code: error?.code ?? "invalid" }); return { ...stats, failed: 1, enabled: true }; }
   for (const row of data as Claimed[]) {
     stats.claimed++;
+    if (!mailClaimUsable(row, deps.now?.() ?? Date.now())) {
+      stats.failed++;
+      deps.log?.({ job: "transactional_mail", status: "claim_expired" });
+      continue;
+    }
     let result: SendResult;
     try { result = await deps.send({ to: row.recipient, subject: row.subject, text: row.body, idempotencyKey: row.idempotency_key }); }
     catch { result = { ok: false, code: "MAIL_EXCEPTION", retry: true }; }
     const reported = await deps.rpc("makeborne_transactional_mail_result", result.ok
-      ? { p_id: row.id, p_sent: true, p_provider_id: result.id, p_error: null, p_final: false }
-      : { p_id: row.id, p_sent: false, p_provider_id: null, p_error: result.code, p_final: !result.retry });
-    if (result.ok) stats.sent++; else stats.failed++;
+      ? { p_id: row.id, p_sent: true, p_provider_id: result.id, p_error: null, p_final: false, p_attempt: row.attempts }
+      : { p_id: row.id, p_sent: false, p_provider_id: null, p_error: result.code, p_final: !result.retry, p_attempt: row.attempts });
+    if (result.ok && !reported.error && reported.data === "sent") stats.sent++; else stats.failed++;
     // An unrecorded result leaves the lease to expire; the idempotency key stops a duplicate send on the next claim.
-    if (reported.error) deps.log?.({ job: "transactional_mail", status: "result_unrecorded", code: reported.error.code ?? "error" });
+    if (reported.error || reported.data === "unchanged") deps.log?.({ job: "transactional_mail", status: "result_unrecorded", code: reported.error?.code ?? "CLAIM_LOST" });
   }
   return { ...stats, enabled: true };
 }

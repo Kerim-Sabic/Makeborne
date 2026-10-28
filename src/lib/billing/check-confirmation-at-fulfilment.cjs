@@ -40,7 +40,7 @@ const rpc = async (name, args) => {
     case "makeborne_transactional_mail_claim": {
       const due = store.mail.filter(m => m.status === "pending").slice(0, args.p_limit);
       for (const m of due) { m.status = "sending"; m.attempts++; }
-      return { data: due.map(m => ({ id: m.id, recipient: m.recipient, subject: m.subject, body: m.body, idempotency_key: m.key, attempts: m.attempts })), error: null };
+      return { data: due.map(m => ({ id: m.id, recipient: m.recipient, subject: m.subject, body: m.body, idempotency_key: m.key, attempts: m.attempts, lease_until: new Date(Date.now()+120000).toISOString(), first_attempt_at: new Date().toISOString() })), error: null };
     }
     case "makeborne_transactional_mail_result": {
       const m = store.mail.find(x => x.id === args.p_id); m.status = args.p_sent ? "sent" : "pending"; return { data: m.status, error: null };

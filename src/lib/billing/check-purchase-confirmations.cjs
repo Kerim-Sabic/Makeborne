@@ -82,7 +82,7 @@ const check = async (name, fn) => { await fn(); passed++; console.log(`PASS ${na
       { id: "m1", recipient: "a@b.example", subject: "S1", body: "B1", idempotency_key: "purchase-confirmation:pay_Plan1", attempts: 1 },
       { id: "m2", recipient: "c@d.example", subject: "S2", body: "B2", idempotency_key: "withdrawal-ack:w1", attempts: 1 },
       { id: "m3", recipient: "e@f.example", subject: "S3", body: "B3", idempotency_key: "withdrawal-ack:w2", attempts: 3 },
-      { id: "m4", recipient: "g@h.example", subject: "S4", body: "B4", idempotency_key: "withdrawal-ack:w3", attempts: 1 }];
+      { id: "m4", recipient: "g@h.example", subject: "S4", body: "B4", idempotency_key: "withdrawal-ack:w3", attempts: 1 }].map(row => ({ ...row, lease_until: new Date(Date.now() + 120000).toISOString(), first_attempt_at: new Date().toISOString() }));
     const db = fakeDb({ claimed });
     const sent = [];
     const send = async mail => {
@@ -95,12 +95,24 @@ const check = async (name, fn) => { await fn(); passed++; console.log(`PASS ${na
     const result = await mod.drainTransactionalMail(deps(db, { mailEnabled: true, send }));
     assert.equal(result.claimed, 4); assert.equal(result.sent, 1); assert.equal(result.failed, 3);
     assert.deepEqual(sent.map(m => m.idempotencyKey), claimed.map(c => c.idempotency_key));
-    assert.deepEqual({ ...db.results[0] }, { p_id: "m1", p_sent: true, p_provider_id: "email_1", p_error: null, p_final: false });
-    assert.deepEqual({ ...db.results[1] }, { p_id: "m2", p_sent: false, p_provider_id: null, p_error: "MAIL_RATE_LIMITED", p_final: false });
-    assert.deepEqual({ ...db.results[2] }, { p_id: "m3", p_sent: false, p_provider_id: null, p_error: "MAIL_HTTP_422", p_final: true });
+    assert.deepEqual({ ...db.results[0] }, { p_id: "m1", p_sent: true, p_provider_id: "email_1", p_error: null, p_final: false, p_attempt: 1 });
+    assert.deepEqual({ ...db.results[1] }, { p_id: "m2", p_sent: false, p_provider_id: null, p_error: "MAIL_RATE_LIMITED", p_final: false, p_attempt: 1 });
+    assert.deepEqual({ ...db.results[2] }, { p_id: "m3", p_sent: false, p_provider_id: null, p_error: "MAIL_HTTP_422", p_final: true, p_attempt: 3 });
     assert.equal(db.results[3].p_error, "MAIL_EXCEPTION");
     const unrecorded = await mod.drainTransactionalMail(deps(fakeDb({ claimed: claimed.slice(0, 1), resultError: true }), { mailEnabled: true, send: async () => ({ ok: true, id: "x" }) }));
-    assert.equal(unrecorded.sent, 1, "an unrecorded result is logged; the lease and idempotency key stop a duplicate");
+    assert.equal(unrecorded.sent, 0, "an unrecorded provider result is not falsely counted as durable delivery");
+    assert.equal(unrecorded.failed, 1);
+  });
+
+  await check("expired and malformed claims cannot contact the mail provider", async () => {
+    const now = Date.now(), valid = { attempts: 1, lease_until: new Date(now + 120000).toISOString(), first_attempt_at: new Date(now).toISOString() };
+    assert.equal(mod.mailClaimUsable(valid, now), true);
+    for (const change of [{ attempts: 0 }, { attempts: 13 }, { lease_until: new Date(now + 5000).toISOString() }, { first_attempt_at: new Date(now - 23 * 3600000).toISOString() }, { lease_until: "bad" }]) {
+      const row = { id: "stale", ...valid, ...change };
+      const db = fakeDb({ claimed: [row] }); let sent = 0;
+      const result = await mod.drainTransactionalMail(deps(db, { mailEnabled: true, now: () => now, send: async () => { sent++; return { ok: true, id: "not-used" }; } }));
+      assert.equal(sent, 0); assert.equal(result.sent, 0); assert.equal(result.failed, 1);
+    }
   });
 
   await check("after fulfilment: confirms just that payment, sends only when a record was made, and never throws", async () => {

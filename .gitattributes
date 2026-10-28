@@ -35,3 +35,7 @@ supabase/migrations/20261025300000_crm_research.sql text eol=lf
 supabase/migrations/20261026100000_account_data_rights.sql text eol=lf
 supabase/migrations/20261026120000_crm_server_writes.sql text eol=lf
 supabase/migrations/20261026120100_research_daily_limits.sql text eol=lf
+
+# Launch mail delivery fence: preserve reviewed canonical SQL bytes.
+supabase/migrations/20261028213151_transactional_mail_delivery_fencing.sql text eol=lf
+supabase/check-transactional-mail-fencing.sql text eol=lf

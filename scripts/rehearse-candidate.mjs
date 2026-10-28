@@ -61,25 +61,25 @@ const inputs = ["docs/release-review/staging-platform-schema.sql", "docs/release
 
 const FINGERPRINT = `select md5(string_agg(x, E'\\n' order by x)) from (
   select 'f:'||n.nspname||'.'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||')'||md5(pg_get_functiondef(p.oid))||coalesce(p.proacl::text,'') x
-    from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','makeborne_private','makeborne_hosting') and p.prokind in ('f','p')
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc') and p.prokind in ('f','p')
   union all select 'c:'||table_schema||'.'||table_name||'.'||column_name||':'||data_type||':'||is_nullable||':'||coalesce(column_default,'')
-    from information_schema.columns where table_schema in ('public','makeborne_private','makeborne_hosting')
+    from information_schema.columns where table_schema in ('public','makeborne_private','makeborne_hosting','makeborne_rpc')
   union all select 'k:'||n.nspname||'.'||c.relname||'.'||k.conname||md5(pg_get_constraintdef(k.oid))
-    from pg_constraint k join pg_class c on c.oid=k.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting')
+    from pg_constraint k join pg_class c on c.oid=k.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc')
   union all select 't:'||n.nspname||'.'||c.relname||'.'||t.tgname||md5(pg_get_triggerdef(t.oid))
-    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where not t.tgisinternal and n.nspname in ('public','makeborne_private','makeborne_hosting')
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where not t.tgisinternal and n.nspname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc')
   union all select 'p:'||schemaname||'.'||tablename||'.'||policyname||md5(coalesce(qual,'')||'|'||coalesce(with_check,''))
-    from pg_policies where schemaname in ('public','makeborne_private','makeborne_hosting','storage')
+    from pg_policies where schemaname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc','storage')
   union all select 'g:'||n.nspname||'.'||c.relname||':'||coalesce(c.relacl::text,'')
-    from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting') and c.relkind in ('r','v','S')
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc') and c.relkind in ('r','v','S')
   union all select 'rls:'||n.nspname||'.'||c.relname||':'||c.relrowsecurity||':'||c.relforcerowsecurity
-    from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting') and c.relkind='r'
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc') and c.relkind='r'
   union all select 'idx:'||n.nspname||'.'||c.relname||':'||pg_get_indexdef(c.oid)
-    from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting') and c.relkind='i'
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc') and c.relkind='i'
   union all select 'trg:'||n.nspname||'.'||c.relname||':'||t.tgname||':'||t.tgenabled::text||':'||pg_get_triggerdef(t.oid)
-    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting') and not t.tgisinternal
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc') and not t.tgisinternal
   union all select 'gcol:'||n.nspname||'.'||c.relname||'.'||a.attname||':'||coalesce(a.attacl::text,'')
-    from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting') and a.attnum>0 and not a.attisdropped
+    from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','makeborne_private','makeborne_hosting','makeborne_rpc') and a.attnum>0 and not a.attisdropped
 ) s;`;
 const DATA = `select json_build_object('users',(select count(*) from auth.users),'clients',(select count(*) from public.clients),
   'clientStage',(select outreach->>'stage' from public.clients limit 1),'versions',(select count(*) from public.artifact_versions),
@@ -181,6 +181,8 @@ try {
   checks.mailBoundaries = check(full, "supabase/check-crm-mail-boundaries.sql");
   checks.billingLifecycle = check(full, "supabase/check-billing-lifecycle.sql");
   checks.mailGrantedScopes = check(full, "supabase/check-mail-granted-scopes.sql");
+  checks.purchaseConfirmations = check(full, "supabase/check-purchase-confirmations.sql");
+  checks.mailFencing = check(full, "supabase/check-transactional-mail-fencing.sql");
   // The migration owner deliberately cannot SET the isolated worker role.
   // Only this disposable fixture administrator switches roles for the negative
   // privilege test; every migration still executes as postgres, like production.
@@ -205,7 +207,7 @@ const fault = `${prefix}_fault_${stamp}`;
 try {
   evidence.scenarios.fault = { container: fault, build: build(fault) };
   pause(fault);
-  const targets = new Set(["20261012120000_credit_lots_expiry.sql", "20261013240000_crm_email_automation.sql", "20261013250000_crm_lead_profile.sql", "20261013260000_crm_mail_security_boundaries.sql", "20261013270000_mail_granted_scopes.sql", "20261013280000_billing_lifecycle_boundaries.sql", "20261014011643_publication_worker_function_boundary.sql"]);
+  const targets = new Set(["20261012120000_credit_lots_expiry.sql", "20261013240000_crm_email_automation.sql", "20261013250000_crm_lead_profile.sql", "20261013260000_crm_mail_security_boundaries.sql", "20261013270000_mail_granted_scopes.sql", "20261013280000_billing_lifecycle_boundaries.sql", "20261014011643_publication_worker_function_boundary.sql", "20261028100000_purchase_confirmations.sql", "20261028213151_transactional_mail_delivery_fencing.sql"]);
   const failures = [];
   for (const file of migrations) {
     if (targets.has(file)) {

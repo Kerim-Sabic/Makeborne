@@ -4,21 +4,31 @@ begin;
 do $$
 declare
   u uuid := gen_random_uuid(); other uuid := gen_random_uuid(); req uuid := gen_random_uuid(); pack_req uuid := gen_random_uuid(); old_req uuid := gen_random_uuid();
-  conf uuid; again uuid; c jsonb; mail jsonb; outcome text; w jsonb; order_id uuid := gen_random_uuid();
+  conf uuid; again uuid; c jsonb; mail jsonb; outcome text; w jsonb; order_id uuid := gen_random_uuid(); lot bigint;
   consent text := 'I want my plan to start immediately. Exact displayed text.';
 begin
   insert into auth.users(id, email, email_confirmed_at) values (u, 'Buyer@Example.invalid', now()), (other, 'other@example.invalid', now());
-  insert into public.billing_checkouts(request_id, user_id, plan_id, checkout_id, return_path, status) values
-    (req, u, 'plan_confirm', 'ch_Confirm1', '/studio', 'ready'), (old_req, u, 'plan_confirm', 'ch_Old1', '/studio', 'ready');
+  -- Model the actual purchase order; a second unresolved checkout is correctly
+  -- rejected by the full chain's anti-double-payment trigger.
+  insert into public.billing_checkouts(request_id, user_id, plan_id, checkout_id, return_path, status)
+    values (old_req, u, 'plan_confirm', 'ch_Old1', '/studio', 'ready');
+  insert into public.billing_memberships(membership_id, user_id, checkout_id, whop_user_id, plan_id, status)
+    values ('mem_Old1', u, 'ch_Old1', 'user_Fixture1', 'plan_confirm', 'canceled');
+  insert into public.billing_checkouts(request_id, user_id, plan_id, checkout_id, return_path, status)
+    values (req, u, 'plan_confirm', 'ch_Confirm1', '/studio', 'ready');
   insert into makeborne_private.checkout_consents(user_id, request_id, kind, version, terms_version, consent_text) values (u, req, 'plan', 'consent-v1', 'terms-v1', consent);
   insert into public.billing_memberships(membership_id, user_id, checkout_id, whop_user_id, plan_id, status) values
-    ('mem_Confirm1', u, 'ch_Confirm1', 'user_Fixture1', 'plan_confirm', 'active'), ('mem_Old1', u, 'ch_Old1', 'user_Fixture1', 'plan_confirm', 'active');
+    ('mem_Confirm1', u, 'ch_Confirm1', 'user_Fixture1', 'plan_confirm', 'active');
   insert into makeborne_private.plan_payments(payment_id, user_id, membership_id, plan_id, billing_reason, currency, principal_cents, refunded_cents, dispute, paid_at, state, evidence, observed_at) values
     ('pay_First1', u, 'mem_Confirm1', 'plan_confirm', 'subscription_create', 'usd', 4900, 0, 'none', '2026-10-29T20:04:00Z', 'funded', '{}', now()),
     ('pay_Renew1', u, 'mem_Confirm1', 'plan_confirm', 'subscription_cycle', 'usd', 4900, 0, 'none', '2026-11-29T20:04:00Z', 'funded', '{}', now()),
     ('pay_Before1', u, 'mem_Old1', 'plan_confirm', 'subscription_create', 'usd', 2900, 0, 'none', '2026-10-01T10:00:00Z', 'funded', '{}', now());
-  insert into makeborne_private.topup_orders(id, user_id, request_id, pack_id, catalog_version, credits, price_cents, merchant_id, plan_id, whop_user_id, checkout_id, payment_id, state, granted, evidence, observed_at)
-    values (order_id, u, pack_req, 'boost_300', 'v1', 300, 3200, 'biz_Fixture1', 'plan_pack', 'user_Fixture1', 'ch_Pack1', 'pay_Pack1', 'funded', true, '{"principalCents":"3200"}', '2026-10-30T09:00:00Z');
+  insert into makeborne_private.topup_catalog(version, pack_id, credits, price_cents)
+    values ('confirmation-fixture-v1', 'boost_300', 300, 3200);
+  insert into makeborne_private.credit_lots(user_id, source, reference, amount)
+    values (u, 'topup', 'confirmation-fixture', 300) returning id into lot;
+  insert into makeborne_private.topup_orders(id, user_id, request_id, pack_id, catalog_version, credits, price_cents, merchant_id, plan_id, whop_user_id, checkout_id, payment_id, state, granted, lot_id, evidence, observed_at)
+    values (order_id, u, pack_req, 'boost_300', 'confirmation-fixture-v1', 300, 3200, 'biz_Fixture1', 'plan_pack', 'user_Fixture1', 'ch_Pack1', 'pay_Pack1', 'funded', true, lot, '{"principalCents":"3200"}', '2026-10-30T09:00:00Z');
 
   c := public.makeborne_purchase_confirmation_candidates(null);
   assert jsonb_array_length(c) = 0, 'No start time: nothing is due';
@@ -58,12 +68,12 @@ begin
   mail := public.makeborne_transactional_mail_claim(10, 60);
   assert jsonb_array_length(mail) = 2;
   assert jsonb_array_length(public.makeborne_transactional_mail_claim(10, 60)) = 0, 'A lease hides claimed rows';
-  outcome := public.makeborne_transactional_mail_result((mail->0->>'id')::uuid, false, null, 'MAIL_RATE_LIMITED');
+  outcome := public.makeborne_transactional_mail_result((mail->0->>'id')::uuid, false, null, 'MAIL_RATE_LIMITED', false, (mail->0->>'attempts')::int);
   assert outcome = 'pending';
   assert (select next_attempt_at > clock_timestamp() and attempts = 1 and lease_until is null from makeborne_private.transactional_mail where id = (mail->0->>'id')::uuid), 'Backoff before the next attempt';
-  outcome := public.makeborne_transactional_mail_result((mail->1->>'id')::uuid, true, 'email_123', null);
+  outcome := public.makeborne_transactional_mail_result((mail->1->>'id')::uuid, true, 'email_123', null, false, (mail->1->>'attempts')::int);
   assert outcome = 'sent';
-  assert public.makeborne_transactional_mail_result((mail->1->>'id')::uuid, true, 'email_123', null) = 'unchanged', 'A sent row is final';
+  assert public.makeborne_transactional_mail_result((mail->1->>'id')::uuid, true, 'email_123', null, false, (mail->1->>'attempts')::int) = 'unchanged', 'A sent row is final';
   begin
     update makeborne_private.transactional_mail set status = 'pending', sent_at = null where id = (mail->1->>'id')::uuid;
     raise exception 'Expected sent mail to stay sent';
@@ -71,7 +81,7 @@ begin
   update makeborne_private.transactional_mail set next_attempt_at = clock_timestamp() - interval '1 second' where id = (mail->0->>'id')::uuid;
   mail := public.makeborne_transactional_mail_claim(10, 60);
   assert jsonb_array_length(mail) = 1 and (mail->0->>'attempts')::int = 2;
-  assert public.makeborne_transactional_mail_result((mail->0->>'id')::uuid, false, null, 'MAIL_HTTP_422', true) = 'failed', 'A permanent refusal stops retries';
+  assert public.makeborne_transactional_mail_result((mail->0->>'id')::uuid, false, null, 'MAIL_HTTP_422', true, (mail->0->>'attempts')::int) = 'failed', 'A permanent refusal stops retries';
 
   -- Withdrawal notices.
   w := public.makeborne_record_withdrawal_request(u, null, 'Ana', null, 'pay_First1', 'I hereby give notice that I withdraw from my contract for Studio.', null,
