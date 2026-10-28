@@ -105,7 +105,7 @@ async function contrast(page, selectors) {
       assert(await page.locator(".mbl-digit-in").count() >= 1, "a rolling figure is animating");
       assert(await noHorizontalScroll(page), "no horizontal scroll");
       const local = (await page.locator(".mbl-local").innerText()).trim();
-      if (colorScheme === "dark") assert.match(local, /^(16:00|4:00\s?PM) in your time$/, "New York sees its own time");
+      if (colorScheme === "dark") assert.match(local, /^Wed (20:30|8:30\s?PM) in your time$/, "New York sees its own time (the evening before)");
       else assert.equal(local, "", "no conversion where the local time reads the same");
       const shift = await layoutShift(page);
       if (shift === null) console.log(`     SKIP layout-shift is a Chromium-only measurement, not available in ${engineLabel}`);
@@ -439,7 +439,7 @@ async function contrast(page, selectors) {
       await page.locator(".mk-home h1#creation-heading").waitFor();
       const banner = page.locator("#mb-launch-banner");
       await banner.waitFor({ state: "visible" });
-      assert.match(await banner.innerText(), /Thu 29 Oct, 01:30 CET\s*·\s*\d+d \d+h \d+m/);
+      assert.match(await banner.innerText(), /Thu 29 Oct, 01:30 CET\s*·\s*(?:\d+d \d+h \d+m|\d+h \d+m|\d+m \d+s)/);
       assert.equal((await context.cookies()).find(cookie => cookie.name === "makeborne_launch_preview")?.value, "site");
       await shot(page, "preview-home-with-banner");
       await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
@@ -472,7 +472,7 @@ async function contrast(page, selectors) {
       const { context, page, hydration } = await open(browser, { viewport: PHONE });
       await page.goto(`${BASE}/help`, { waitUntil: "networkidle" });
       const banner = page.locator("#mb-launch-banner");
-      assert.match(await banner.innerText(), /Thu 29 Oct, 01:30 CET\s*·\s*\d+d \d+h \d+m/);
+      assert.match(await banner.innerText(), /Thu 29 Oct, 01:30 CET\s*·\s*(?:\d+d \d+h \d+m|\d+h \d+m|\d+m \d+s)/);
       assert.match(await banner.locator("[role=timer]").getAttribute("aria-label"), / left$/);
       const height = await banner.evaluate(node => node.getBoundingClientRect().height);
       assert.equal(height, 40);
@@ -522,7 +522,7 @@ async function contrast(page, selectors) {
       const { context, page, hydration } = await open(browser, { viewport: PHONE });
       await page.goto(`${BASE}/billing`, { waitUntil: "networkidle" });
       const line = page.locator(".mb-plans-line");
-      assert.match(await line.innerText(), /Plans open in \d+d \d+h \d+m\s*Thursday 29 October, 01:30 CET/);
+      assert.match(await line.innerText(), /Plans open in (?:\d+d \d+h \d+m|\d+h \d+m|\d+m \d+s)\s*Thursday 29 October, 01:30 CET/);
       assert(await noHorizontalScroll(page));
       await line.scrollIntoViewIfNeeded();
       await shot(page, "billing-plans-line");
