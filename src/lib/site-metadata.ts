@@ -50,13 +50,13 @@ export function publicPageMetadata(path: PublicPath, input: string, description:
       description,
       url: path,
       locale: "en_US",
-      images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: SITE.title }],
+      images: [{ url: "/og/makeborne-share.jpg", width: 1200, height: 630, type: "image/jpeg", alt: SITE.title }],
     },
     twitter: {
       card: "summary_large_image",
       title: social,
       description,
-      images: [{ url: "/opengraph-image", alt: SITE.title }],
+      images: [{ url: "/og/makeborne-share.jpg", alt: SITE.title }],
     },
   };
 }
