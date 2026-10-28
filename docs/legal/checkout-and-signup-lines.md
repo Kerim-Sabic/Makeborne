@@ -35,11 +35,11 @@ The request to `/api/billing/checkout` carries `withdrawalConsent: "withdrawal-2
 
 ## Confirmation on a durable medium (CRD Art. 8(7))
 
-Whop's receipt names Makeborne as supplier but is not Makeborne's confirmation. Before EU/UK consumer sales, Makeborne must send its own email after a verified purchase containing: plan, price, renewal, the Terms and Billing terms versions (or links to stored copies), the immediate-start request and acknowledgement above, the withdrawal information and the model form. Codex follow-up (Resend template plus webhook hook).
+Whop's receipt names Makeborne as supplier but is not Makeborne's confirmation, so Makeborne sends its own (migration `20261028100000_purchase_confirmations.sql`, text in `src/lib/legal/purchase-confirmation.ts`). After a plan's first funded payment or a funded credit pack, one immutable record per payment stores and emails: what was bought, the amount paid and payment reference, renewal (plans), the immediate-start request word for word with its version and time (copied from `checkout_consents`), the withdrawal information and the model form, the Terms and Billing terms versions with links, the statutory-rights line and the seller. The database refuses a text that does not quote the payment reference and the accepted request. The same text is shown under Billing › Purchase confirmations and included in the account export. Off until `MAKEBORNE_PURCHASE_CONFIRMATIONS_SINCE` is set; mail goes out only with `MAKEBORNE_TRANSACTIONAL_MAIL_ENABLED=true` and `RESEND_API_KEY`.
 
 ## Withdrawal function (CRD Art. 11a, applies from 19 June 2026)
 
-`/withdraw` gives a "Withdraw from contract here" button for the 14-day period. Today it opens a prefilled email; a confirmation step plus an automatic acknowledgement on a durable medium is a Codex follow-up.
+`/withdraw` gives a "Withdraw from contract here" button that opens the notice (signed in: choose the purchase; signed out: the account's email and, optionally, the Whop payment reference) and a "Confirm withdrawal" button. The notice is stored with server time and a reference (`WD-…`), shown back in full on screen, and acknowledged by email with its content, date and time. The automatic acknowledgement goes to the account's own address, or to a typed address only when it matches the account that owns the referenced payment; every other notice is still stored and answered by support. A notice never refunds or revokes anything by itself: support refunds through the existing workflow within 14 days.
 
 ## Footer links
 

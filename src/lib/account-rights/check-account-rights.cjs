@@ -20,7 +20,9 @@ const migrationSql = fs.readdirSync(migrationsDir).filter(f => f.endsWith(".sql"
 const rightsSql = read("supabase/migrations/20261026100000_account_data_rights.sql");
 const tables = new Set([...migrationSql.matchAll(/create table (?:if not exists )?([a-z_."]+)/gi)].map(m => m[1].replace(/"/g, "").replace(/^public\./, "")));
 const consentSql = read("supabase/migrations/20261026125554_billing_checkout_consent.sql");
-const exportRowsSql = rightsSql.slice(rightsSql.indexOf("create function public.makeborne_account_export_rows"), rightsSql.indexOf("-- 6. Grants")) + consentSql.slice(consentSql.indexOf("-- Account export extension"));
+const purchaseSql = read("supabase/migrations/20261028100000_purchase_confirmations.sql");
+const exportRowsSql = rightsSql.slice(rightsSql.indexOf("create function public.makeborne_account_export_rows"), rightsSql.indexOf("-- 6. Grants")) + consentSql.slice(consentSql.indexOf("-- Account export extension"))
+  + purchaseSql.slice(purchaseSql.indexOf("-- 7. Account export"), purchaseSql.indexOf("-- 8. Public"));
 
 check("every table created by a migration has an export and deletion decision", () => {
   const mapped = new Map(DATA_MAP.map(entry => [entry.table, entry]));
