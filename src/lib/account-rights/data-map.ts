@@ -147,6 +147,8 @@ export const DATA_MAP: readonly DataMapEntry[] = Object.freeze([
   { table: "makeborne_private.account_rights_events", export: null, deletion: "system", reason: "Operational log: request ids, event names and codes, no personal data.", period: "Owner decision (proposed 3 years)" },
   { table: "makeborne_private.retained_account_records", export: null, deletion: "system", reason: "The retained, pseudonymized records themselves; purged after retain_until.", period: TAX },
   { table: "makeborne_private.account_legal_holds", export: null, deletion: "system", reason: "Operator-only holds; an open hold blocks deletion." },
+  // Launch waitlist (20261027020420)
+  { table: "makeborne_private.launch_waitlist", export: null, deletion: "system", reason: "Keyed by email, never by account, so it is not part of an account export or deletion. Removed on an emailed request; every row is deleted 90 days after launch (privacy policy, section 2).", period: "90 days after launch" },
   // Feature-branch tables (exported when present; deleted with the workspace)
   ...["crm_next_steps", "crm_suppressions", "crm_site_checks", "crm_duplicate_dismissals", "client_facts", "client_fact_revisions", "client_fact_evidence", "knowledge_snapshots", "client_research_pages", "client_research_briefs"]
     .map(table => ({ table, export: table, deletion: "delete" as const, reason: `${W} Created by a feature branch; exported when present.`, optional: true as const })),
