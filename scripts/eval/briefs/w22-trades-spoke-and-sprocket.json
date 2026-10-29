@@ -1,0 +1,24 @@
+{
+  "id": "w22-trades-spoke-and-sprocket",
+  "order": 26,
+  "format": "website",
+  "direction": "trades",
+  "title": "Spoke & Sprocket",
+  "shared": true,
+  "brief": "Spoke & Sprocket is our bike repair workshop and refurbished bike shop in Utrecht, run by me (Joris) and my sister Femke. We fix city bikes, cargo bikes and e-bikes (all brands for the bike part; we can't service e-bike motors, only the bike around them). We also sell refurbished second-hand city bikes, every one checked, with a three-month workshop guarantee. Opening hours: Tuesday to Friday 9:00 to 18:00, Saturday 10:00 to 16:00, closed Sunday and Monday. Repairs are walk-in for flat tyres; everything else needs a booking. Please show our repair prices as placeholders, we're changing them. The bikes for sale change every week, so show a few example listings that are clearly marked as examples, not real stock. The repair booking form isn't connected yet, so it can't say the booking is confirmed. Email werkplaats@spokeandsprocket.example. Address to confirm. Write it in English, with a short Dutch line on the home page. No fake reviews, no star ratings and no \"best in Utrecht\".",
+  "source": {
+    "type": "persona",
+    "path": "held out: written on 22 October 2026 for the Lovable comparison, after every tuning round; never used to tune Makeborne",
+    "adaptation": "Owner voice for a small repair workshop that also sells stock. Business and people are fictional. The Netherlands has no reserved fictional phone range, so contact is email only and the address stays a placeholder."
+  },
+  "persona": null,
+  "mustHave": [
+    "repairs for city, cargo and e-bikes, with the e-bike motor limit stated",
+    "hours Tuesday to Friday 9:00 to 18:00 and Saturday 10:00 to 16:00, closed Sunday and Monday",
+    "repair prices as marked placeholders; example bikes marked as examples, not stock",
+    "walk-in flat tyres, booking for the rest; booking form does not confirm a booking",
+    "the three-month workshop guarantee on refurbished bikes",
+    "a short Dutch line on the home page; email as a mailto: link"
+  ],
+  "notes": "Held out from tuning (22 October 2026). Built once on each tool for the comparison."
+}

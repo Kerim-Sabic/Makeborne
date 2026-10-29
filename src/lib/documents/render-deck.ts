@@ -4,6 +4,12 @@ import { chartSvg, esc } from "./chart-svg";
 import { fontFaceCss, type FaceId, type FontSources } from "./fonts";
 import { composeSlide, H, W, type ImageTreatment, type PathSeg, type Prim, type SlideScene } from "./slide-scene";
 import { directionOf, type MotionKind } from "./directions";
+import { ART_COMPOSITION, PAGE_HEIGHT, PLATE_COMPOSITION, deckAspect } from "./slide-art";
+
+/** The page of a deck in px: 1280 wide, as tall as its slide shape (16:9 unless a full-image deck chose another). */
+export const deckPage = (deck: Pick<Deck, "art">) => ({ width: W, height: PAGE_HEIGHT[deckAspect(deck)] });
+/** CSS ratio of a page ("16/9" for the classic slide, so 16:9 decks render exactly as before). */
+const ratioOf = (page: { width: number; height: number }, sep = "/") => page.height === H ? `16${sep}9` : `${page.width}${sep}${page.height}`;
 
 export type ImageMap = Record<string, string | undefined>;
 export type DeckMode = "preview" | "print" | "present";
@@ -35,8 +41,8 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
   const kind = order === undefined ? "" : prim.k === "text" ? (prim.role === "title" ? " m-title" : " m-text") : prim.k === "line" ? " m-line" : prim.k === "art" ? " m-art" : prim.k === "image" ? " m-img" : prim.k === "chart" ? " m-chart" : " m-shape";
   switch (prim.k) {
     case "rect": {
-      const background = prim.noFill ? "transparent" : prim.fade === "up"
-        ? `linear-gradient(to top,${rgba(prim.fill, prim.opacity ?? 1)} 0%,${rgba(prim.fill, (prim.opacity ?? 1) * 0.75)} 45%,${rgba(prim.fill, 0)} 100%)`
+      const background = prim.noFill ? "transparent" : prim.fade
+        ? `linear-gradient(to ${prim.fade === "up" ? "top" : prim.fade},${rgba(prim.fill, prim.opacity ?? 1)} 0%,${rgba(prim.fill, (prim.opacity ?? 1) * 0.75)} 45%,${rgba(prim.fill, 0)} 100%)`
         : rgba(prim.fill, prim.opacity ?? 1);
       return `<div class="p${kind}" style="${box(prim)};background:${background}${prim.radius ? `;border-radius:${cq(prim.radius)}` : ""}${prim.stroke ? `;border:${cq(prim.strokeWidth ?? 1)} solid ${prim.stroke}` : ""}${motion}"></div>`;
     }
@@ -57,7 +63,7 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
         : `<div class="p ph${kind}" style="${box(prim)}${shape}${motion}"><span>${esc(prim.alt || prim.name)}</span></div>`;
     }
     case "chart":
-      return `<div class="p${kind}" style="${box(prim)}${motion}">${chartSvg(prim.chart, prim.w, prim.h, prim.colors, { heading: fonts.heading, body: prim.style?.mono ? MONO_STACK : fonts.body }, prim.style)}</div>`;
+      return `<div class="p${kind}" style="${box(prim)}${motion}">${chartSvg(prim.chart, prim.w, prim.h, prim.colors, { heading: fonts.heading, body: prim.style?.mono ? MONO_STACK : fonts.body, headingWeight: fonts.headingWeight }, prim.style)}</div>`;
     case "text": {
       const family = prim.font === "heading" ? "var(--heading)" : prim.font === "mono" ? "var(--mono)" : "var(--body)";
       const style = [box(prim), `font-family:${family}`, `font-size:${cq(prim.size)}`, `line-height:${prim.lh}`,
@@ -65,14 +71,24 @@ function primHtml(prim: Prim, deck: Deck, images: ImageMap, order?: number) {
         prim.tracking !== undefined ? `letter-spacing:${prim.tracking}em` : prim.font === "heading" ? `letter-spacing:${fonts.headingTracking}` : "",
         prim.font === "heading" && fonts.headingStretch ? `font-stretch:${fonts.headingStretch}` : "",
         prim.upper ? "text-transform:uppercase" : "", prim.italic ? "font-style:italic" : ""].filter(Boolean).join(";");
-      return `<div class="p t${prim.role === "title" ? " title" : ""}${kind}" style="${style}${motion}">${esc(prim.text)}</div>`;
+      // A list: one item per line, each with its hanging marker (the PPTX writes the same items as bulleted paragraphs).
+      const list = prim.list, items = list ? prim.text.split("\n") : [];
+      const marker = list ? (list.marker === "dash" ? `top:${cq(prim.size * 0.72 - 1.5)};width:${cq(16)};height:${cq(3)}` : `top:${cq(prim.size * 0.5)};width:${cq(8)};height:${cq(8)}`) : "";
+      const body = list ? items.map((item, i) => `<span class="li" role="listitem" style="display:block;position:relative;padding-left:${cq(list.indent)}${i < items.length - 1 ? `;margin-bottom:${cq(list.gap)}` : ""}"><i aria-hidden="true" style="position:absolute;left:0;${marker};background:${list.color}"></i>${esc(item)}</span>`).join("") : esc(prim.text);
+      return `<div class="p t${prim.role === "title" ? " title" : ""}${kind}"${prim.structural ? ' data-mb-structural="true"' : ""}${list ? ' role="list"' : ""} style="${style}${motion}">${body}</div>`;
     }
   }
 }
 
 export function slideHtml(deck: Deck, scene: SlideScene, images: ImageMap, label: string, present?: { index: number }) {
   const attrs = present ? ` data-slide="${present.index}"${present.index === 0 ? ' class="slide is-current"' : ' class="slide"'}` : ' class="slide"';
-  return `<section${attrs} aria-label="${esc(label)}" style="background:${scene.background}">${scene.prims.map((prim, order) => primHtml(prim, deck, images, present ? order : undefined)).join("")}</section>`;
+  // A full-image render fills the page in any shape; an editable 1280x720 layout on a taller page sits centred on its
+  // ground, and its background plate (generated in the page's own shape) fills the whole page behind it.
+  const page = deckPage(deck), band = page.height !== H && scene.composition !== ART_COMPOSITION;
+  const plate = band && scene.composition?.startsWith(`${PLATE_COMPOSITION}-`) && scene.prims[0]?.k === "image" ? scene.prims[0] : null;
+  const html = (list: Prim[], offset = 0) => list.map((prim, order) => primHtml(prim, deck, images, present ? order + offset : undefined)).join("");
+  const body = band ? `${plate ? html([plate]) : ""}<div class="sc" style="top:${((page.height - H) / 2 / page.height * 100).toFixed(4)}%;height:${(H / page.height * 100).toFixed(4)}%">${html(plate ? scene.prims.slice(1) : scene.prims, plate ? 1 : 0)}</div>` : html(scene.prims);
+  return `<section${attrs} aria-label="${esc(label)}" style="background:${scene.background}">${body}</section>`;
 }
 
 /** Per-direction choreography for the presenter view. Everything is CSS; the
@@ -94,12 +110,12 @@ const MOTION: Record<MotionKind, { slide: string; title: string; text: string; s
   snap: { slide: ".28s|4%|1", title: "mb-snap .45s cubic-bezier(.2,1.3,.4,1) both", text: "mb-snap .4s cubic-bezier(.2,1.3,.4,1) both", shape: "mb-grow .45s cubic-bezier(.2,1,.3,1) both", line: "mb-draw .35s steps(6,end) both",
     keys: "@keyframes mb-snap{from{opacity:0;transform:translateX(-3cqw)}to{opacity:1;transform:none}}@keyframes mb-grow{from{opacity:0;transform:scaleY(.2)}to{opacity:1;transform:none}}" },
 };
-function presentCss(motion: MotionKind) {
+function presentCss(motion: MotionKind, page: { width: number; height: number } = { width: W, height: H }) {
   const m = MOTION[motion], [duration, drift, scale] = m.slide.split("|");
   const stagger = motion === "fade" ? 70 : motion === "snap" ? 28 : 45;
   return `html,body{height:100%;overflow:hidden;background:#0B0B0C}
 .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
-.deck{position:relative;width:min(100vw,calc(100vh * 16 / 9));aspect-ratio:16/9}
+.deck{position:relative;width:min(100vw,calc(100vh * ${ratioOf(page, " / ")}));aspect-ratio:${ratioOf(page)}}
 .deck .slide{position:absolute;inset:0;opacity:0;visibility:hidden;transform:translateX(${drift}) scale(${scale});transition:opacity ${duration} ease,transform ${duration} cubic-bezier(.2,.7,.2,1),visibility 0s linear ${duration}}
 .deck .slide.is-past{transform:translateX(-${drift}) scale(${scale})}
 .deck .slide.is-current{opacity:1;visibility:visible;transform:none;transition:opacity ${duration} ease,transform ${duration} cubic-bezier(.2,.7,.2,1),visibility 0s}
@@ -120,7 +136,7 @@ function presentCss(motion: MotionKind) {
  * `limit` renders only the first slides (e.g. a library card's opening slide)
  * while every slide is still composed in the context of the whole deck. */
 export function deckHtml(deck: Deck, images: ImageMap, mode: DeckMode = "preview", fonts?: FontSources, limit?: number) {
-  const pairing = FONTS[deck.theme.fonts], dir = directionOf(deck.theme);
+  const pairing = FONTS[deck.theme.fonts], dir = directionOf(deck.theme), page = deckPage(deck);
   const total = deck.slides.length;
   const treatments = new Map<string, ImageTreatment>();
   const slides = deck.slides.slice(0, limit ?? total).map((slide, index) => {
@@ -133,16 +149,16 @@ export function deckHtml(deck: Deck, images: ImageMap, mode: DeckMode = "preview
   const filters = treatments.size ? `<svg width="0" height="0" style="position:absolute" aria-hidden="true">${[...treatments].map(([id, t]) => `<filter id="${id}" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="${treatmentMatrix(t)}"/></filter>`).join("")}</svg>` : "";
   const empty = !total ? `<div class="empty">Slides appear here as they are written.</div>` : "";
   const css = `${fontFaceCss(deckFaces(deck), fonts)}*{box-sizing:border-box}html,body{margin:0}body{--heading:${pairing.heading};--body:${pairing.body};--mono:${MONO_STACK};font-family:var(--body);-webkit-font-smoothing:antialiased;font-kerning:normal;font-optical-sizing:auto}
-.slide{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;container-type:inline-size}
-.p{position:absolute;margin:0}.t{display:flex;flex-direction:column;white-space:pre-wrap;overflow-wrap:break-word}.t.title{text-wrap:balance}
+.slide{position:relative;width:100%;aspect-ratio:${ratioOf(page)};overflow:hidden;container-type:inline-size}${page.height === H ? "" : ".sc{position:absolute;left:0;width:100%;container-type:inline-size}"}
+.p{position:absolute;margin:0}.t{display:flex;flex-direction:column;white-space:pre-wrap;overflow-wrap:break-word}
 .ph{display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,rgba(127,127,127,.12) 0 12px,rgba(127,127,127,.04) 12px 24px);color:rgba(90,90,90,.9);font:600 1.1cqw/1.3 var(--body);text-align:center;padding:2cqw}
 ${mode === "print"
-    ? `@page{size:${W}px ${H}px;margin:0}body{width:${W}px}.slide{width:${W}px;height:${H}px;break-after:page}.slide:last-child{break-after:auto}`
-    : mode === "present" ? presentCss(dir.motion)
+    ? `@page{size:${page.width}px ${page.height}px;margin:0}body{width:${page.width}px}.slide{width:${page.width}px;height:${page.height}px;break-after:page}.slide:last-child{break-after:auto}`
+    : mode === "present" ? presentCss(dir.motion, page)
     : `body{background:#E9E8E4;padding:28px 24px 64px}.frame{max-width:1120px;margin:0 auto 34px}.frame .slide{border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,.08),0 12px 32px rgba(20,20,30,.12)}
 figcaption{font:12px/1.4 system-ui,sans-serif;color:#6B6B6B;margin:0 0 8px;letter-spacing:.04em;text-transform:uppercase}figcaption b{color:#222;margin-right:6px}
 details{font:13px/1.5 system-ui,sans-serif;color:#444;margin-top:8px}summary{cursor:pointer;color:#666}details p{margin:6px 0 0;white-space:pre-wrap;max-width:80ch}
-.empty{max-width:1120px;margin:0 auto;aspect-ratio:16/9;border:2px dashed #C9C7C1;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#77756F;font:15px system-ui,sans-serif}`}`;
+.empty{max-width:1120px;margin:0 auto;aspect-ratio:${ratioOf(page)};border:2px dashed #C9C7C1;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#77756F;font:15px system-ui,sans-serif}`}`;
   const body = mode === "present" ? `<main class="stage"><div class="deck dir-${dir.id}">${slides}</div></main>` : `${slides}${empty}`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(deck.title)}</title><style>${css}</style></head><body>${filters}${body}</body></html>`;
 }

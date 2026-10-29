@@ -23,6 +23,9 @@ async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}
 const concept = (name, headline, device, scores) => ({ name, headline, angle: `An angle for ${name}`, device, archetype: "Poster", ground: "a saturated harbour blue", action: "the booking button sits under the headline", scores });
 const tide = concept("Tide table", "Open when the tide is in", "a tide-table strip whose rows are the opening hours", { memorable: 5, specific: 5, action: 4, buildable: 5 });
 const docket = concept("Fish docket", "Today's catch, stamped", "a stamped market docket listing the day's fish", { memorable: 4, specific: 4, action: 4, buildable: 4 });
+// The art system and section plan every first build records with its concept.
+const SITE_PLAN = { artSystem: { palette: "harbour blue ground, sand surface, ink from wet slate", type: "Bricolage Grotesque condensed caps for display, Inter text", imagery: "one documentary photographer, morning harbour light", motif: "a tide-table rule under every heading", motion: "rises and one wipe" },
+  sections: [{ id: "top", composition: "full-bleed-photo", job: "the harbour at opening time" }, { id: "hours", composition: "giant-numeral", job: "opening hours as the tide table" }, { id: "menu", composition: "price-list", job: "the day's menu" }, { id: "visit", composition: "contact-card", job: "address and booking" }] };
 const generic = concept("Calm hero", "Fresh food by the sea", "a full-width photo of plates", { memorable: 2, specific: 2, action: 3, buildable: 5 });
 
 (async () => {
@@ -82,10 +85,10 @@ const generic = concept("Calm hero", "Fresh food by the sea", "a full-width phot
 
   await check("builder loop: a first build offers the tool, records the concept, builds it and writes the comment into App.tsx", async () => {
     script.length = 0;
-    script.push({ content: [{ type: "tool_use", id: "c1", name: "concept", input: { concepts: [tide, docket, generic], chosen: 0, why: "The hours become the idea." } }, ...site("s")] }, { content: [finish("f1")] });
+    script.push({ content: [{ type: "tool_use", id: "c1", name: "concept", input: { concepts: [tide, docket, generic], chosen: 0, why: "The hours become the idea.", ...SITE_PLAN } }, ...site("s")] }, { content: [finish("f1")] });
     const { files, events, result } = await run({ concept: true });
     assert.ok(result.finished); assert.equal(result.concept.chosen.name, "Tide table");
-    assert.deepEqual(events.find(event => event.type === "concept"), { type: "concept", chosen: "Tide table", runnersUp: ["Fish docket", "Calm hero"], why: "The hours become the idea." });
+    assert.deepEqual(events.find(event => event.type === "concept"), { type: "concept", chosen: "Tide table", runnersUp: ["Fish docket", "Calm hero"], why: "The hours become the idea.", compositions: ["full-bleed-photo", "giant-numeral", "price-list", "contact-card"] });
     assert.match(files.files.get("src/App.tsx"), /^\/\*\n \* Makeborne concept: Tide table/);
   });
 

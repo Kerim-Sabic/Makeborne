@@ -4,6 +4,7 @@ import { RequestError } from "@/lib/server/http";
 import { billingConfig } from "./config";
 import { billingDatabase } from "./database";
 import { whopGet, whopTime, type WhopMembership } from "./whop";
+import { confirmAfterFulfillment } from "./purchase-confirmations";
 
 /**
  * Subscription payment evidence. Whop keeps a membership "active" after its
@@ -124,6 +125,10 @@ export async function reconcilePlanPayment(userId: string, membership: Pick<Whop
     ? { p_period_start: membership.renewal_period_start, p_period_end: membership.renewal_period_end } : { p_period_start: null, p_period_end: null };
   const { data, error } = await billingDatabase().rpc("makeborne_reconcile_plan_payment", { p_user: userId, p_membership: membership.id, p_payment: payment, ...hints });
   if (error) throw new RequestError("PLAN_PAYMENT_STORAGE_UNAVAILABLE", "The subscription payment could not be reconciled. Retry this delivery.", 503);
+  // Durable purchase confirmation as soon as a paid payment is recorded, before the caller's plan
+  // observation grants credits. Only a membership's first funded payment qualifies (renewals continue
+  // the contract); idempotent per payment and it never throws.
+  if (payment.status === "paid") await confirmAfterFulfillment(payment.id);
   return data as PlanPaymentOutcome;
 }
 

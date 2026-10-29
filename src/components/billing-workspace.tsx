@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import { ArrowUpRight, Bookmark, CircleHelp, CreditCard, Layers3, ReceiptText, Search, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import BrandMark from "./brand-mark";
 import BillingPlans from "./billing-plans";
@@ -9,7 +10,9 @@ import BillingTopupReturn from "./billing-topup-return";
 import BillingAutotopup from "./billing-autotopup";
 import BillingControls from "./billing-controls";
 import BillingSubscriptions from "./billing-subscriptions";
+import BillingConfirmations from "./billing-confirmations";
 import type { SubscriptionSummary } from "@/lib/billing/subscription-summary";
+import type { PurchaseRecords } from "@/lib/legal/withdrawal";
 import CreditBalance, { creditExpiryLabel, type CreditBalanceData } from "./credit-balance";
 import { formatBillingCredits } from "./billing-amount";
 import BillingCreditCosts from "./billing-credit-costs";
@@ -27,7 +30,7 @@ export type PlanChip = { id: string; name: string; price: string };
 const LIVE = ["active", "canceling", "past_due"];
 const utcDate = (value: string) => new Date(value).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" });
 
-export default function BillingWorkspace({ summary: input, membershipRequired = false, refundedPeriod = null, autotopupSetup = false, accountPrivileges, trialCredits = null, signedIn = true, subscriptions = null, topupOrderId, costs = null, plansFirst = false, savedBrief = false, planChips = null, pricePerCredit = null, plansOpen = null, mediumCeilingCredits = null, measuredRun = null, currentTier = null, topupsOpen = false, hasYearly = false, accountId = null, taxNote = null }: { summary: BillingViewModel; /** Measured builder costs, in credits at the live rate. */ costs?: BuilderEstimates | null; membershipRequired?: boolean; /** Current billing period whose payment was refunded or charged back. */ refundedPeriod?: { periodEnd: string; reason: string } | null; /** Automatic top-up setup (qualification flag only; never charges). */ autotopupSetup?: boolean; accountPrivileges?: { isAdmin: boolean; unlimitedCredits: boolean }; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null; /** Signed-out visitors see plans first and a header sign-in link instead of an empty balance. */ signedIn?: boolean; subscriptions?: SubscriptionSummary[] | null; topupOrderId?: string; /** Plans before the account (signed out, plan-less, or sent here to get a plan). Off keeps the dashboard order. */ plansFirst?: boolean; /** The return link carries a saved brief (draft= or claim=). */ savedBrief?: boolean; planChips?: PlanChip[] | null; /** Customer price per plan credit, in cents. */ pricePerCredit?: { min: number; max: number } | null; /** False before launch (no plan on sale); null when unknown. */ plansOpen?: boolean | null; mediumCeilingCredits?: number | null; measuredRun?: MeasuredRun | null; currentTier?: PlanId | null; topupsOpen?: boolean; hasYearly?: boolean; accountId?: string | null; /** TAX_NOTE.long, from the catalogue. */ taxNote?: string | null }) {
+export default function BillingWorkspace({ launchLine = null, summary: input, membershipRequired = false, refundedPeriod = null, autotopupSetup = false, accountPrivileges, trialCredits = null, signedIn = true, subscriptions = null, purchaseRecords = null, topupOrderId, costs = null, plansFirst = false, savedBrief = false, planChips = null, pricePerCredit = null, plansOpen = null, mediumCeilingCredits = null, measuredRun = null, currentTier = null, topupsOpen = false, hasYearly = false, accountId = null, taxNote = null }: { /** Informational launch countdown line near the plans (server-gated). */ launchLine?: ReactNode; summary: BillingViewModel; /** Measured builder costs, in credits at the live rate. */ costs?: BuilderEstimates | null; membershipRequired?: boolean; /** Current billing period whose payment was refunded or charged back. */ refundedPeriod?: { periodEnd: string; reason: string } | null; /** Automatic top-up setup (qualification flag only; never charges). */ autotopupSetup?: boolean; accountPrivileges?: { isAdmin: boolean; unlimitedCredits: boolean }; /** Live free-tier trial size; null when the free tier is off. */ trialCredits?: number | null; /** Signed-out visitors see plans first and a header sign-in link instead of an empty balance. */ signedIn?: boolean; subscriptions?: SubscriptionSummary[] | null; /** Stored purchase confirmations and withdrawal notices (signed-in only). */ purchaseRecords?: PurchaseRecords | null; topupOrderId?: string; /** Plans before the account (signed out, plan-less, or sent here to get a plan). Off keeps the dashboard order. */ plansFirst?: boolean; /** The return link carries a saved brief (draft= or claim=). */ savedBrief?: boolean; planChips?: PlanChip[] | null; /** Customer price per plan credit, in cents. */ pricePerCredit?: { min: number; max: number } | null; /** False before launch (no plan on sale); null when unknown. */ plansOpen?: boolean | null; mediumCeilingCredits?: number | null; measuredRun?: MeasuredRun | null; currentTier?: PlanId | null; topupsOpen?: boolean; hasYearly?: boolean; accountId?: string | null; /** TAX_NOTE.long, from the catalogue. */ taxNote?: string | null }) {
   const summary = readBillingView(input);
   const unlimitedCredits = accountPrivileges?.unlimitedCredits === true;
   const [category, setCategory] = useState<(typeof categories)[number]>("All activity");
@@ -83,12 +86,13 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
     {!unlimitedCredits && <details id="faq-cancel"><summary>How do I cancel, and can I get a refund?</summary><p>Cancel any time in your Whop account before your next renewal; your plan stays active until the end of the period you paid for, and cancelling doesn&rsquo;t request a refund by itself. Any payment whose credits are all unused can be refunded in full: email admin@makeborne.com with your Whop payment reference. A refund ends that period&rsquo;s access. Beyond your statutory rights, including any EU or UK right to withdraw, there are no partial refunds once a payment&rsquo;s credits are used.</p></details>}
     <details id="faq-payment"><summary>Who handles payment and tax?</summary><p>Whop runs our secure checkout and sends your receipts. Prices are in US dollars.{taxNote ? ` ${taxNote}` : ""} You see your total in Whop checkout before you pay.</p></details>
     {!unlimitedCredits && (trialCredits ? <details id="faq-trial"><summary>How does the free tier work?</summary><p>Confirm your email to start free with {trialCredits} one-time trial credits. Credits are held while work runs, and only what is used is charged. Creation plans add monthly credits.</p></details>
-      : <details id="faq-trial"><summary>Is there a free trial or yearly billing?</summary><p>Not at launch. Instead, every request shows its credit limit before it starts, errors and unsaved work aren&rsquo;t charged, and a payment is refundable while none of its credits are used.{hasYearly ? "" : " Yearly billing isn’t available yet."}</p></details>)}
+      : <details id="faq-trial"><summary>{hasYearly ? "Is there a free trial?" : "Is there a free trial or yearly billing?"}</summary><p>{hasYearly ? "No." : "Not at launch."} Instead, every request shows its credit limit before it starts, errors and unsaved work aren&rsquo;t charged, and a payment is refundable while none of its credits are used.{hasYearly ? "" : " Yearly billing isn’t available yet."}</p></details>)}
   </section>;
   const costTable = <details className="billing-costs-details"><summary>Credit limits for every effort level</summary><p className="billing-costs-caption">Higher effort can plan and review more, so its limits are higher. Nothing above Medium has been measured yet.</p><BillingCreditCosts estimates={costs} /></details>;
   const subscriptionHistory = Boolean(subscriptions?.length);
   const memberAccount = <>
     <BillingSubscriptions items={subscriptions} />
+    <BillingConfirmations records={purchaseRecords} />
     {!unlimitedCredits && <BillingControls />}
     {autotopupSetup && !unlimitedCredits && <BillingAutotopup />}
   </>;
@@ -100,6 +104,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
       {notice}
       <div className={`billing-hero${!plansFirst && signedIn ? " billing-hero-member" : ""}`}><span className="billing-eyebrow">PRICING</span><h1>{signedIn && plansFirst ? "Choose a plan to start creating." : signedIn ? "Your plan & credits." : "Pick how much you make each month."}</h1>
         <p>{!plansFirst && signedIn ? "Your balance, usage and receipts come first. Plans and questions follow below." : `Every plan includes websites, books, presentations and the client CRM. Plans differ only in monthly credits${fromPrice ? `, from ${fromPrice} a month` : ""}, and every request shows its credit limit before it starts.`}</p>
+        {launchLine}
         {buying && planChips?.length ? <nav className="billing-plan-chips" aria-label="Jump to a plan">{planChips.map(chip => <a key={chip.id} href={`#plan-${chip.id}`}>{chip.name} {chip.price}</a>)}</nav> : null}
       </div>
       {!plansFirst && signedIn && <nav className="billing-section-nav" aria-label="Billing sections"><a href="#credits">Your credits</a><a href="#activity">Usage</a><a href="#receipts">Subscription &amp; receipts</a><a href="#plans">Plans</a>{!unlimitedCredits && isMember && <a href="#topups">Credit packs</a>}<a href="#billing-questions">Questions</a></nav>}
@@ -125,6 +130,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
         </div>
       </section>
           {subscriptionHistory && <BillingSubscriptions items={subscriptions} />}
+          <BillingConfirmations records={purchaseRecords} />
         </section>}
       </> : <>
       <section id="credits" className="billing-credit-section" aria-labelledby="credits-heading">
@@ -148,7 +154,7 @@ export default function BillingWorkspace({ summary: input, membershipRequired = 
         {questions}
         {costTable}
       </>}
-      <footer id="support" className="billing-footer"><span>© 2026 Makeborne</span><Link href="/billing/terms">Subscription, credit and refund terms</Link><Link href="/privacy">Privacy</Link><Link href="/help">Help</Link><span>Billing support: <a href="mailto:admin@makeborne.com">admin@makeborne.com</a></span></footer>
+      <footer id="support" className="billing-footer"><span>© 2026 Makeborne</span><Link href="/billing/terms">Subscription, credit and refund terms</Link><LegalLinks /><Link href="/withdraw">Withdraw</Link><Link href="/help">Help</Link><span>Billing support: <a href="mailto:admin@makeborne.com">admin@makeborne.com</a></span></footer>
     </main>
   </div>;
 }

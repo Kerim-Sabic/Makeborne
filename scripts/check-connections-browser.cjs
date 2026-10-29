@@ -95,6 +95,13 @@ async function main() {
     await page.route("**/api/cloud/workspaces/w1/artifacts/a1/github", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ link: null }) }));
     await page.goto(`${url}/?view=github`);
     await page.getByRole("button", { name: "Disconnect GitHub" }).waitFor();
+    // Reviewed export, not background sync: the action is a push the owner starts, and the panel says nothing updates on its own.
+    const panel = await page.locator(".website-publish").innerText();
+    assert.ok(await page.getByRole("button", { name: "Push version 3 to GitHub" }).count(), "the action is a manual push of one saved version");
+    assert.match(panel, /It only happens when you push a version here: saving doesn’t update GitHub\./);
+    assert.match(panel, /changes made in GitHub aren’t imported/);
+    assert.doesNotMatch(panel, /\bsync/i, "no wording implies continuous synchronization");
+    pass("GitHub panel: a manual one-way push; says saving doesn't update GitHub and nothing is imported; never says sync");
     answer = false;
     await page.getByRole("button", { name: "Disconnect GitHub" }).click();
     assert.match(dialogs.at(-1), /^Disconnect GitHub from your Makeborne account\? Makeborne deletes its stored GitHub access, so none of your projects can push until you connect again\./);

@@ -12,4 +12,5 @@ export const SETTINGS_STORAGE = Object.freeze({
   deviceWorkspace: "device",
   studioSounds: "device",
   websiteBadge: "account",
+  yourData: "account",
 } satisfies Record<string, SettingStorage>);

@@ -3,13 +3,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, Globe, Presentation } from "lucide-react";
-import { CREATION_PLANS, RECOMMENDED_BADGE, RECOMMENDED_PLAN, TAX_NOTE, YEARLY_DISCOUNT_PERCENT, creditMultiple, mediumFloor, planOutcomes, planPrice, usd, type BillingInterval, type PlanId, type PlanOutcome } from "@/lib/billing/plans";
+import { CREATION_PLANS, RECOMMENDED_BADGE, RECOMMENDED_PLAN, TAX_NOTE, WITHDRAWAL_CONSENT_VERSION, YEARLY_DISCOUNT_PERCENT, creditMultiple, mediumFloor, planOutcomes, planPrice, usd, type BillingInterval, type PlanId, type PlanOutcome } from "@/lib/billing/plans";
 import { authDestination } from "@/lib/supabase/auth-flow";
+import { WITHDRAWAL_CONSENT_TEXT } from "@/lib/legal/versions";
+import { creationNavigationUrl } from "@/lib/billing/checkout-navigation";
 import type { BuilderEstimates, MeasuredRun } from "@/lib/builder/credit-estimate";
 
 type Availability = { authenticated: boolean; existingMember: boolean; offers: { tier: PlanId; interval: BillingInterval; totalCents: number; monthlyCredits: number }[] };
 type Pending = { tier: PlanId; interval: BillingInterval; requestId: string; next: string };
-type Notice = { text: string; role: "alert" | "status"; action?: "resume" | "retry" | "studio"; tier?: PlanId };
+type Notice = { text: string; role: "alert" | "status"; action?: "resume" | "retry" | "studio" | "support"; tier?: PlanId };
 /** Same tab: the selection and its idempotency key. Another tab or device: only the key, bound to its account. */
 const STORAGE = "makeborne-creation-checkout-v1";
 const SHARED = "makeborne-creation-checkout-v2";
@@ -42,6 +44,8 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
   const [resume, setResume] = useState<{ tier: PlanId; interval: BillingInterval } | null>(null);
   const [unavailable, setUnavailable] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  /** EU/UK immediate-start request and acknowledgement: unticked, required before any redirect to Whop. */
+  const [consented, setConsented] = useState(false);
   const opening = useRef(false);
   const pending = useRef<Pending | null>(null);
   const lastSent = useRef<Pending | null>(null);
@@ -84,7 +88,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
       const next = authDestination(query.get("next") ?? tab?.next ?? "/studio");
       const requestId = tab && tab.tier === choice.tier && tab.interval === choice.interval ? tab.requestId : sharedKey ?? crypto.randomUUID();
       if (!data.offers.some((offer: Availability["offers"][number]) => offer.tier === choice.tier && offer.interval === choice.interval)) {
-        if (fromUrl && data.authenticated) setUnavailable(`${planName(choice.tier)} isn’t available right now. Pick another plan below.`);
+        if (fromUrl && data.authenticated) setUnavailable(data.offers.length ? `${planName(choice.tier)} isn’t available right now. Pick another plan below.` : `Plans aren’t open yet, so ${planName(choice.tier)} can’t be bought right now. Nothing was charged.`);
         forget(); pending.current = null; return;
       }
       setInterval(choice.interval);
@@ -113,14 +117,11 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
     const previous = lastSent.current;
     lastSent.current = choice;
     write("session", LAST_SENT, choice);
-    const response = await fetch("/api/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(choice) });
+    const response = await fetch("/api/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...choice, withdrawalConsent: WITHDRAWAL_CONSENT_VERSION }) });
     if (response.status === 401) { login(choice); return; }
     const data = await response.json().catch(() => null);
     if (response.ok) {
-      const url = new URL(data?.url);
-      const localSandbox = ["localhost", "127.0.0.1"].includes(window.location.hostname) && url.origin === "https://sandbox.whop.com";
-      if ((!localSandbox && url.origin !== "https://whop.com") || url.username || url.password || !/^\/checkout\/ch_[A-Za-z0-9]+\/?$/.test(url.pathname)) throw new Error("unverified");
-      window.location.assign(url.href);
+      window.location.assign(creationNavigationUrl(data?.url, window.location.origin));
       return;
     }
     const code = typeof data?.error?.code === "string" ? data.error.code : "";
@@ -129,9 +130,10 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
       if (isResume) setNotice({ role: "alert", text: stillPending });
       else if (previous && !resumed.current) { lastSent.current = previous; write("session", LAST_SENT, previous); setNotice({ role: "alert", action: "resume", text: `You already started a checkout for ${planName(previous.tier)}, ${previous.interval}. You can finish it now, or email admin@makeborne.com to switch plans.` }); }
       else setNotice({ role: "alert", text: "You already have a checkout in progress. Finish it in the Whop page you opened, or email admin@makeborne.com to switch plans." });
-    } else if (code === "CHECKOUT_PENDING") setNotice({ role: "alert", text: isResume ? stillPending : "Your last checkout is still being prepared. Please don’t pay twice; try again in a minute." });
+    } else if (code === "CHECKOUT_PENDING") setNotice({ role: "alert", text: isResume ? stillPending : "Your last checkout is still being confirmed. Please don’t pay twice; try again in a minute, or email admin@makeborne.com if this doesn’t change." });
     else if (code === "CHECKOUT_ALREADY_COMPLETED") { forget(); pending.current = null; setResume(null); setNotice({ role: "status", action: "studio", text: "That checkout is already complete." }); }
     else if (code === "SUBSCRIPTION_ALREADY_EXISTS") setNotice({ role: "alert", text: "You already have a plan." });
+    else if (code === "SUBSCRIPTION_REPURCHASE_REQUIRES_SUPPORT") setNotice({ role: "alert", action: "support", text: "Before you subscribe again, we need to check your previous subscription allowance. Contact support to continue. No new checkout was opened." });
     else if (code === "CREATION_PLANS_NOT_OPEN") setNotice({ role: "alert", text: "Plans aren’t open yet. Nothing was charged." });
     else if (isResume && response.status === 409) setNotice({ role: "alert", text: stillPending });
     else if (response.status === 409) {
@@ -140,8 +142,10 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
       setNotice({ role: "alert", action: "retry", tier: choice.tier, text: "Checkout couldn’t open. Nothing was charged. Please try again." });
     } else setNotice({ role: "alert", text: "Checkout couldn’t open. Nothing was charged. Try again or email admin@makeborne.com." });
   }
+  const consentMissing = () => { if (!availability?.authenticated || consented) return false; setNotice({ role: "alert", text: "Tick the box about starting your plan now to continue to checkout." }); return true; };
   async function purchase(tier: PlanId) {
     if (opening.current || availability?.existingMember || !offered(tier)) return;
+    if (consentMissing()) return;
     opening.current = true; setBusy(tier); setNotice(null);
     try {
       const next = pending.current?.next ?? authDestination(new URLSearchParams(window.location.search).get("next"));
@@ -155,6 +159,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
   async function resumeLast() {
     const choice = lastSent.current;
     if (opening.current || !choice || resumed.current) return;
+    if (consentMissing()) return;
     resumed.current = true; opening.current = true; setBusy("resume"); setNotice(null);
     try { await send(choice, true); }
     catch { setNotice({ role: "alert", text: "Checkout couldn’t open. Nothing was charged. Try again or email admin@makeborne.com." }); }
@@ -170,6 +175,10 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
   const hasYearly = Boolean(availability?.offers.some(offer => offer.interval === "yearly"));
   const prelaunch = loaded && !member && availability.offers.length === 0;
   const resumePrice = resume ? planPrice(resume.tier, resume.interval, false) : null;
+  const needsConsent = Boolean(availability?.authenticated) && !member && Boolean(availability?.offers.length);
+  const consentBox = <label className="billing-consent"><input type="checkbox" checked={consented} disabled={busy !== null} onChange={event => { setConsented(event.target.checked); setNotice(null); }} aria-describedby="withdrawal-note" />
+    <span>{WITHDRAWAL_CONSENT_TEXT}<span id="withdrawal-note" className="billing-consent-note">By continuing you agree to the <Link href="/terms">Terms</Link> and the <Link href="/billing/terms">Subscription, credit and refund terms</Link>. EU and UK consumers can withdraw within 14 days (<Link href="/withdraw">how</Link>).</span></span></label>;
+  const gated = needsConsent && !consented ? true : undefined;
   const period = (value: BillingInterval) => value === "yearly" ? "year" : "month";
   const until = (tier: PlanId, value: BillingInterval) => { const price = usd(planPrice(tier, value, false).standardCents); return `${price} today, then ${price} a ${period(value)} until you cancel.`; };
   const switchHref = (target: string) => `mailto:${SUPPORT}?subject=${encodeURIComponent(`Plan change: ${currentTier ? planName(currentTier) : "my plan"} to ${target}`)}`;
@@ -180,7 +189,8 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
     {resume && resumePrice && loaded && !member && <div className="billing-resume" role="region" aria-labelledby="resume-heading">
       <h3 id="resume-heading">Ready to finish: {planName(resume.tier)}, {usd(resumePrice.standardCents)} a {period(resume.interval)}, {resumePrice.monthlyCredits.toLocaleString("en-US")} credits every month.</h3>
       <p>{usd(resumePrice.standardCents)} today{TAX_NOTE.inline}, then {usd(resumePrice.standardCents)} a {period(resume.interval)} until you cancel in your Whop account. A payment is refundable in full while none of its credits are used. Your statutory rights, including any EU or UK right to withdraw, still apply.</p>
-      <div className="billing-resume-actions"><button ref={resumeButton} type="button" className="billing-resume-cta" disabled={busy !== null} aria-busy={busy === resume.tier} onClick={() => void purchase(resume.tier)}>{busy === resume.tier ? "Opening secure checkout…" : "Continue to secure checkout"}</button><button type="button" className="billing-text-button" disabled={busy !== null} onClick={chooseAgain}>Choose a different plan</button></div>
+      {needsConsent && consentBox}
+      <div className="billing-resume-actions"><button ref={resumeButton} type="button" className="billing-resume-cta" disabled={busy !== null} aria-disabled={gated} aria-busy={busy === resume.tier} onClick={() => void purchase(resume.tier)}>{busy === resume.tier ? "Opening secure checkout…" : "Continue to secure checkout"}</button><button type="button" className="billing-text-button" disabled={busy !== null} onClick={chooseAgain}>Choose a different plan</button></div>
       <small>Payment is handled by Whop. After payment we take you to the studio, or back to your saved brief.</small>
     </div>}
     {hasYearly && <div className="plans-interval" role="radiogroup" aria-label="Billing interval">
@@ -188,6 +198,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
         {value === "monthly" ? "Monthly" : <>Yearly <span className="plans-save">Save {YEARLY_DISCOUNT_PERCENT}%</span></>}
       </button>)}
     </div>}
+    {needsConsent && !(resume && resumePrice) && consentBox}
     <div className="billing-plans" ref={cards} tabIndex={-1} role="group" aria-label="Plans">{CREATION_PLANS.map((plan, index) => {
       const price = planPrice(plan.id, interval, false);
       const perMonth = price.standardCents / price.months;
@@ -207,7 +218,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
         {floor !== null && <p className="billing-plan-floor">{`At least ${floor} requests at the default effort${index === 0 ? `, each capped at ${mediumCeilingCredits} credits` : ""}, unless you approve going past a limit.`}</p>}
         {member && currentTier && currentTier !== plan.id
           ? <a className="founding-cta" href={switchHref(plan.name)} aria-describedby="creation-availability">Ask to switch</a>
-          : <button type="button" className="founding-cta" disabled={busy !== null || member || !available} aria-busy={!loaded && !loadError ? true : undefined} onClick={() => void purchase(plan.id)} aria-describedby={`creation-availability plan-terms-${plan.id}`}>{label}</button>}
+          : <button type="button" className="founding-cta" disabled={busy !== null || member || !available} aria-disabled={available ? gated : undefined} aria-busy={!loaded && !loadError ? true : undefined} onClick={() => void purchase(plan.id)} aria-describedby={`creation-availability plan-terms-${plan.id}`}>{label}</button>}
         {!member && <p className="billing-plan-terms" id={`plan-terms-${plan.id}`}>{until(plan.id, interval)} {TAX_NOTE.short}</p>}
       </article>;
     })}</div>
@@ -215,7 +226,7 @@ export default function CreationPlans({ estimates = null, mediumCeilingCredits =
       {loadError && <button type="button" className="billing-retry" onClick={() => { setLoadError(false); setAvailability(null); setRetry(value => value + 1); }}>Retry availability</button>}
       {member && <p>Manage or cancel your plan in your Whop account. <a href={`mailto:${SUPPORT}`}>Email support</a></p>}
     </div>
-    {notice && <div className="billing-plan-notice" role={notice.role}><p>{notice.text}</p>{notice.action === "resume" && <button type="button" className="billing-retry" disabled={busy !== null} onClick={() => void resumeLast()}>Resume that checkout</button>}{notice.action === "retry" && notice.tier && <button type="button" className="billing-retry" disabled={busy !== null} onClick={() => void purchase(notice.tier!)}>Try again</button>}{notice.action === "studio" && <Link className="billing-retry" href="/studio">Open studio</Link>}</div>}
+    {notice && <div className="billing-plan-notice" role={notice.role}><p>{notice.text}</p>{notice.action === "resume" && <button type="button" className="billing-retry" disabled={busy !== null} onClick={() => void resumeLast()}>Resume that checkout</button>}{notice.action === "retry" && notice.tier && <button type="button" className="billing-retry" disabled={busy !== null} onClick={() => void purchase(notice.tier!)}>Try again</button>}{notice.action === "studio" && <Link className="billing-retry" href="/studio">Open studio</Link>}{notice.action === "support" && <a className="billing-retry" href={`mailto:${SUPPORT}?subject=Subscription%20restart`}>Contact support</a>}</div>}
     {estimates && <div id="how-we-counted" className="billing-counted"><p>*Each line assumes a whole month’s credits go to one kind of first build. Ranges run from the most expensive to the typical first build in our {measuredRun?.label ?? "test runs"} at the default (Medium) effort without AI images:</p>
       <ul><li>{`${estimates.firstBuild.website.samples} websites (${estimates.firstBuild.website.min}–${estimates.firstBuild.website.max} credits, typically ${estimates.firstBuild.website.median});`}</li><li>{`${estimates.firstBuild.presentation.samples} presentations${measuredRun?.presentationSlides.length === estimates.firstBuild.presentation.samples ? ` of ${measuredRun.presentationSlides.join(" and ")} slides` : ""} (${estimates.firstBuild.presentation.min}–${estimates.firstBuild.presentation.max});`}</li><li>{`${estimates.firstBuild.book.samples} books${measuredRun?.bookPages.length === estimates.firstBuild.book.samples ? ` of ${measuredRun.bookPages.join(" and ")} pages` : ""} (${estimates.firstBuild.book.min}–${estimates.firstBuild.book.max}).`}</li></ul>
       <p>{fewest !== undefined && `${fewest === 2 ? "Two" : fewest} tests are too few to call typical, so treat those lines as a rough guide. `}These runs predate our latest efficiency changes, and we update the figures when we re-measure. Edits, design reviews, AI images and higher effort use more, so real projects make fewer. Every request shows its limit before it starts.</p></div>}

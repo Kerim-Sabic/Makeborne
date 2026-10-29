@@ -1,0 +1,17 @@
+{
+  "engine": "28.3.2",
+  "databases": [
+    {
+      "name": "supabase_db_makeborne-journey-audit",
+      "running": true,
+      "readiness": "passed",
+      "query": "passed"
+    },
+    {
+      "name": "makeborne-apps-pg",
+      "running": true,
+      "readiness": "passed",
+      "query": "passed"
+    }
+  ]
+}

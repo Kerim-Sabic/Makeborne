@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Local mounted React fixture with mocked HTTP only. */
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), http = require("node:http");
-const { chromium } = require("playwright");
+const { browserType } = require("./browser-engine.cjs");
 const out = path.resolve("work/plan-client-integrity");
 const plan = title => ({ kind: "new_site", title, summary: "A clear site", goal: "Enquiries", audience: "Visitors", positioning: "Thoughtful",
   pages: [{ name: "Home", path: "/", purpose: "Explain", sections: [{ name: "Hero", purpose: "Introduce", content: "Hello" }] }],
@@ -35,7 +35,7 @@ function App(){const [scope,setScope]=useState({accountId:"account-a",workspaceI
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await browserType.launch({ headless: true });
     const fresh = async (initial = view("Initial", 4)) => {
       const page = await browser.newPage(); await page.clock.install();
       await page.goto(`http://127.0.0.1:${server.address().port}`); await page.waitForFunction(() => window.requests.length === 1);

@@ -47,6 +47,14 @@ async function main() {
     if (pathname === "/fixture/restore") { current.restores.push(body); current.version++; return json(res, { version: current.version }); }
     if (pathname === "/api/credits") return json(res, { available: 500, unlimited: false });
     if (pathname === "/api/build/questions") return json(res, { questions: [] });
+    // Source-ingestion capabilities (agency stage 2), answered as the route does with the switch off; no file is inspected here.
+    if (pathname === "/api/build/sources") { assert.equal(req.method, "GET"); return json(res, { enabled: false, formats: [], inlineBytes: 3_000_000, referenceBytes: 0 }); }
+    // Account chat history (13b1343): it loads and saves turns; it never starts, stops or charges a build.
+    if (pathname === `/api/cloud/workspaces/${ids.workspace}/artifacts/${ids.artifact}/chat`) {
+      assert.equal(req.headers["x-makeborne-account"], ids.actor);
+      if (req.method === "GET") return json(res, { messages: [], next: null });
+      assert.equal(req.method, "POST"); return json(res, { saved: (body?.messages ?? []).map(message => message.id) });
+    }
     if (pathname === "/api/build/plan") {
       if (req.method === "GET") return json(res, current.plan ? { stored: current.plan } : { stored: null });
       current.planSaves.push(body);
@@ -103,6 +111,8 @@ async function main() {
       await page.getByText("Saved as version 3, from version 2.").waitFor();
       assert.deepEqual(current.builds.map(build => build.expectedVersion), [1, 2], "the resend is an explicit new request on the current version");
       assert.deepEqual(current.builds.map(build => build.approvedMaximum), [20, 20], "each new request names the maximum shown in the composer");
+      // The brand note lives in the composer's Request details (13b1343); it is one click away, not on screen by default.
+      await page.locator(".lb-request-details > summary").click();
       await page.getByText("Brand kit: Fictional Co · used for this request").waitFor();
       const receipt = page.getByRole("region", { name: "Request receipt" }).last();
       assert.match(await receipt.innerText(), /Sources sent\s+None/, "the receipt names the sources sent (none here)");

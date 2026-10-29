@@ -52,7 +52,7 @@ check("only approved, verified entitlements and true promises are listed", () =>
   assert.equal(plans.RECOMMENDED_BADGE, "Best for client work");
   assert.doesNotMatch(JSON.stringify(plans), /Most popular/);
   for (const plan of plans.CREATION_PLANS) assert.equal(Object.hasOwn(plan, "features"), false, "no per-card bullets that imply tier exclusives");
-  assert.deepEqual(plans.TAX_NOTE, { short: "Tax and any checkout fee shown before you pay.", inline: " plus any tax or checkout fee Whop shows", long: "Any tax or checkout fee is shown by Whop before you pay." });
+  assert.deepEqual(plans.TAX_NOTE, { short: "Price includes applicable tax. Any checkout fee is shown before you pay.", inline: ", including applicable tax; any checkout fee is shown before you pay", long: "Prices include applicable tax. Whop shows any additional checkout fee before you pay." });
 });
 check("no outcome count, floor or AI cost per credit is typed into the pricing JSX", () => {
   const banned = [/\d+\s*[–-]\s*\d+\s*(first builds|\(\d+ tests?\))/, /\bat least \d+ requests?\b/i, /\$0\.0\d/, /cost per credit/i, /\b\d+(\.\d+)?\s*¢/];
@@ -72,7 +72,7 @@ check("no outcome count, floor or AI cost per credit is typed into the pricing J
   const ui = fs.readFileSync(path.join(root, "src/components/creation-plans.tsx"), "utf8");
   assert.match(ui, /className="founding-cta" disabled=/, "the CTA class stays exactly founding-cta before disabled");
   assert.doesNotMatch(ui, /useSearchParams|priceCents:/);
-  assert.match(ui, /body: JSON\.stringify\(choice\)/, "the checkout POST sends only the pending selection, never a price");
+  assert.match(ui, /body: JSON\.stringify\(\{ \.\.\.choice, withdrawalConsent: WITHDRAWAL_CONSENT_VERSION \}\)/, "the checkout POST sends only the pending selection and the ticked consent version, never a price");
 });
 check("the pricing page carries plans first and keeps the support anchor, SUPPORT and its route", () => {
   const page = fs.readFileSync(path.join(root, "src/app/billing/page.tsx"), "utf8");

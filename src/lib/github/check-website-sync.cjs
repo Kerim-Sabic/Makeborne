@@ -345,7 +345,7 @@ const fileText = (github, commitSha, filePath) => github.blobs.get(treeOf(github
     const scratch = mockGitHub();
     const created = await pushWebsiteSnapshot(scratch.client, {repository, artifactId, version: 4, html, recordedCommitSha: null});
     assert.deepEqual(scratch.sequence(), [`GET /git/ref/heads/${branch}`, "POST /git/trees", "POST /git/commits", "POST /git/refs"]);
-    assert.deepEqual(scratch.calls[1].body.tree, [{path: "index.html", mode: "100644", type: "blob", content: html}, {path: "README.md", mode: "100644", type: "blob", content: "# Website exported from Makeborne\n\nPublished version 4. Open index.html or deploy this branch as a static site.\n\nThis branch is managed by Makeborne. Copy it to another branch before editing externally. Sync is one-way; external edits are not imported. No backend, credentials, or private project sources are included.\n"}]);
+    assert.deepEqual(scratch.calls[1].body.tree, [{path: "index.html", mode: "100644", type: "blob", content: html}, {path: "README.md", mode: "100644", type: "blob", content: "# Website exported from Makeborne\n\nPublished version 4. Open index.html or deploy this branch as a static site.\n\nThis branch is managed by Makeborne. Copy it to another branch before editing externally. This export is one-way and manual: Makeborne only writes here when someone pushes a version, and external edits are not imported. No backend, credentials, or private project sources are included.\n"}]);
     assert.equal(scratch.calls[2].body.message, `Makeborne website ${artifactId} version 4\n\nSnapshot: ${createHash("sha256").update(html).digest("hex")}`);
     assert.deepEqual(scratch.calls[2].body.parents, []);
     scratch.reset();
@@ -355,7 +355,7 @@ const fileText = (github, commitSha, filePath) => github.blobs.get(treeOf(github
     const next = await pushWebsiteSnapshot(scratch.client, {repository, artifactId, version: 5, html: `${html}\n`, recordedCommitSha: created.commitSha});
     assert.deepEqual(scratch.sequence(), [`GET /git/ref/heads/${branch}`, "GET /git/commits/<sha>", "POST /git/trees", "POST /git/commits", `PATCH /git/refs/heads/${branch}`]);
     scratch.external("Edit");
-    await assert.rejects(pushWebsiteSnapshot(scratch.client, {repository, artifactId, version: 6, html, recordedCommitSha: next.commitSha}), error => error.code === "BRANCH_CHANGED" && error.message === "This GitHub branch has external changes. Your code was not overwritten. Review the branch in GitHub before syncing.");
+    await assert.rejects(pushWebsiteSnapshot(scratch.client, {repository, artifactId, version: 6, html, recordedCommitSha: next.commitSha}), error => error.code === "BRANCH_CHANGED" && error.message === "This GitHub branch has external changes. Your code was not overwritten. Review the branch in GitHub before pushing again.");
     const missing = mockGitHub();
     await rejects(pushWebsiteSnapshot(missing.client, {repository, artifactId, version: 6, html, recordedCommitSha: next.commitSha}), "BRANCH_MISSING");
   });

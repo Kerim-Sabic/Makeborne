@@ -12,7 +12,7 @@ export const SITE = {
 export const IS_PREVIEW = process.env.VERCEL_ENV === "preview";
 
 /** Only public, useful pages belong here. Never add customer projects or account URLs. */
-export const PUBLIC_PATHS = ["/", "/help", "/billing", "/billing/terms", "/privacy"] as const;
+export const PUBLIC_PATHS = ["/", "/help", "/billing", "/billing/terms", "/privacy", "/terms", "/dpa", "/imprint", "/withdraw"] as const;
 
 export const PUBLIC_ROBOTS: Metadata["robots"] = {
   index: !IS_PREVIEW,
@@ -50,20 +50,20 @@ export function publicPageMetadata(path: PublicPath, input: string, description:
       description,
       url: path,
       locale: "en_US",
-      images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: SITE.title }],
+      images: [{ url: "/og/makeborne-share.jpg", width: 1200, height: 630, type: "image/jpeg", alt: SITE.title }],
     },
     twitter: {
       card: "summary_large_image",
       title: social,
       description,
-      images: [{ url: "/opengraph-image", alt: SITE.title }],
+      images: [{ url: "/og/makeborne-share.jpg", alt: SITE.title }],
     },
   };
 }
 
 /** What Makeborne is, in plain words: used by structured data and the AI-facing overview (/llms.txt). Keep it true to what ships. */
 export const SITE_FACTS = {
-  summary: "Makeborne is an AI studio that turns a short brief into a real website, a designed book, or a presentation, and keeps client work, outreach and follow-ups in one built-in CRM.",
+  summary: "Makeborne is an AI studio that turns one brief into a real website, a designed book, or a presentation, and keeps client work, outreach and follow-ups in one built-in CRM.",
   audience: "Freelancers, studios, agencies and small businesses who create for themselves or for clients.",
   makes: [
     "Websites: generated as editable React projects, previewed live, published on Makeborne hosting (unlimited websites, fair use).",

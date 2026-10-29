@@ -127,7 +127,9 @@ export function websiteBuildResponse(input: WebsiteBuildInput): Response {
         }
         logRouteOnce();
         const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped, usage: spend.usageByModel(),
-          ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
+          ...(routeRecord ? { route: routeDetail(routeRecord) } : {}),
+          ...("compFidelity" in result && result.compFidelity ? { compFidelity: result.compFidelity } : {}),
+          ...("compCoverage" in result && result.compCoverage ? { compCoverage: result.compCoverage } : {}) };
         if (reviewing && !files.changed.size) {
           // The review found nothing to fix (or ran out of room before editing):
           // charge for the look it took, keep the current version.

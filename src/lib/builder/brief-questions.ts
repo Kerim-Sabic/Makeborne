@@ -4,6 +4,8 @@
  * answer it. Runs on the device: no model call, no cost. Answers are appended
  * to the brief in plain words so the planner and builder use them. */
 
+import { bookImagePlanFromBrief, BOOK_IMAGES_TOPIC, BOOK_IMAGE_OPTIONS, BOOK_IMAGE_STYLE_OPTIONS, BOOK_IMAGE_STYLE_TOPIC, SLIDE_STYLE_OPTIONS, SLIDE_STYLE_TOPIC } from "../documents/creation-options";
+
 export type BriefKind = "website" | "presentation" | "book";
 export type BriefOption = { value: string; label: string; hint?: string; swatch?: readonly string[] };
 export type BriefQuestion = {
@@ -72,6 +74,28 @@ const VIBE_ANSWERED = /\b(look|feel|vibe|style|aesthetic|modern|minimal\w*|bold|
 /** Kinds of business whose visitors need prices, hours or a quick call: sections and quick actions matter most. */
 const LOCAL = /\b(restaurant|caf[eé]|coffee|bakery|bakehouse|bistro|bar|pub|deli|pizza|dentist|dental|clinic|doctor|physio\w*|vet|salon|barber|spa|gym|yoga|pilates|studio|plumb\w*|electric\w*|roof\w*|garage|mechanic|builder|cleaner|cleaning|locksmith|florist|shop|store|hotel|b&b|guesthouse|venue|nursery|school|tutor\w*|therap\w*|massage)\b/;
 
+/** Document creation options (creation-options.ts reads the answers back): how a deck's slides are made, and how a
+ * book is illustrated. They are asked whenever the brief leaves them open, besides the brief's own questions. */
+export const SLIDE_STYLE_QUESTION: BriefQuestion = {
+  id: "slides", topic: SLIDE_STYLE_TOPIC, custom: "e.g. Editable, I will change the text myself",
+  question: "How should the slides be made?", why: "Full-image slides are each designed as one picture with the text in it; editable slides keep every word editable in PowerPoint.",
+  options: SLIDE_STYLE_OPTIONS,
+};
+export const BOOK_IMAGES_QUESTION: BriefQuestion = {
+  id: "images", topic: BOOK_IMAGES_TOPIC, custom: "e.g. One picture every 10 pages",
+  question: "How many pictures should the book have?", why: "Sets where images go: none, the cover, chapter openers, or figures through the text.",
+  options: BOOK_IMAGE_OPTIONS,
+};
+export const BOOK_IMAGE_STYLE_QUESTION: BriefQuestion = {
+  id: "imagestyle", topic: BOOK_IMAGE_STYLE_TOPIC, custom: "e.g. Botanical watercolour",
+  question: "What kind of pictures?", why: "Every image in the book is made in this one style, so they read as a set.",
+  options: BOOK_IMAGE_STYLE_OPTIONS,
+};
+/** Briefs that already settle the slide style or the book's images in their own words. */
+const SLIDE_STYLE_ANSWERED = /\b(editable (text|slides?|deck|presentation|powerpoint|pptx)|(native(ly)?|fully) editable|editable in (powerpoint|keynote|google slides)|full[- ]image|image[- ]only)\b/;
+const BOOK_IMAGES_ANSWERED = /\bno (images|pictures|illustrations|photos)\b(?!\s+of\b)|\bcover only\b|\bevery \d{1,2} pages\b|\brichly illustrated\b|\b(one|an image|a picture) per spread\b|\b(images|pictures|illustrations) (in|on) every chapter\b/;
+const BOOK_IMAGE_STYLE_ANSWERED = /\b(photo\w*|watercolou?r|gouache|ink drawings?|linocut|woodcut|pencil|charcoal|line drawings?|illustrated in|illustration style|risograph|collage)\b/;
+
 const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp; rank?: (text: string) => number }[]> = {
   website: [
     { answered: VIBE_ANSWERED, rank: () => 10, question: VIBE },
@@ -133,6 +157,8 @@ const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp; rank?
         ] } },
   ],
   presentation: [
+    // Creation option: offered after the brief's own questions whenever the brief leaves it open (withCreationOptions).
+    { answered: SLIDE_STYLE_ANSWERED, question: SLIDE_STYLE_QUESTION },
     { answered: /\b(pitch\w*|investor\w*|fundrais\w*|seed|series [ab]|proposal\w*|sales|webinar|talk|keynote|conference|training|workshop|onboarding|report\w*|update|quarterly|board|strategy|launch\w*|lesson|lecture|class|course)\b/,
       question: { id: "purpose", topic: "Purpose of the deck", custom: "e.g. Win a city council grant",
         question: "What is this presentation for?", why: "The story structure is different for each one.",
@@ -159,6 +185,8 @@ const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp; rank?
         ] } },
   ],
   book: [
+    { answered: BOOK_IMAGES_ANSWERED, question: BOOK_IMAGES_QUESTION },
+    { answered: BOOK_IMAGE_STYLE_ANSWERED, question: BOOK_IMAGE_STYLE_QUESTION },
     { answered: /\b(guide\w*|how[- ]to|handbook|playbook|workbook|memoir|stor(y|ies)|novel|biograph\w*|report|white ?paper|e-?book|lead magnet|course|manual|cookbook|recipes?)\b/,
       question: { id: "type", topic: "Kind of book", custom: "e.g. A field guide to urban birds",
         question: "What kind of book is it?", why: "A practical guide, a story and a report are written and designed very differently.",
@@ -219,11 +247,25 @@ export function briefQuestions(kind: BriefKind, brief: string, context: { attach
   const text = normalise(brief);
   const answered = answeredQuestionIds(kind, brief, context);
   const open = BANK[kind].map((item, index) => ({ item, index, rank: item.rank?.(text) ?? -index }))
-    .filter(({ item }) => !answered.has(item.question.id))
+    .filter(({ item }) => !answered.has(item.question.id) && !CREATION_IDS.has(item.question.id))
     .sort((a, b) => b.rank - a.rank || a.index - b.index)
     .map(({ item }) => item.question);
-  return open.slice(0, questionLimit(kind, brief));
+  return withCreationOptions(kind, open.slice(0, questionLimit(kind, brief)), answered, brief);
 }
+
+/** Creation options: asked on top of the brief's own questions whenever the brief leaves them open. */
+const CREATION_IDS = new Set(["slides", "images", "imagestyle"]);
+/** Document creation options the brief leaves open, on top of its own questions and never duplicated: a deck's slide
+ * style last (one tap; the default is full-image); a book's image plan first and its image style last. */
+function withCreationOptions(kind: BriefKind, questions: BriefQuestion[], answered: Set<string>, brief: string): BriefQuestion[] {
+  const own = questions.filter(question => !CREATION_IDS.has(question.id));
+  const open = (id: string) => !answered.has(id);
+  if (kind === "presentation") return [...own, ...(open("slides") ? [SLIDE_STYLE_QUESTION] : [])];
+  if (kind === "book") return [...(open("images") ? [BOOK_IMAGES_QUESTION] : []), ...own, ...(open("imagestyle") && bookImagePlanFromBrief(brief).placement !== "none" ? [BOOK_IMAGE_STYLE_QUESTION] : [])];
+  return questions;
+}
+/** Questions that ask about what a creation option already covers (an AI-tailored question about pictures in a book or editable slides). */
+const OPTION_TOPIC: Partial<Record<BriefKind, RegExp>> = { book: /\b(images?|pictures?|illustrat\w*|photo\w*)\b/i, presentation: /\b(editable|image slides?|full[- ]image)\b/i };
 
 /** A standard question by id (a tailored "style" question on a website is the vibe question). */
 export function standardQuestion(kind: BriefKind, id: string): BriefQuestion | undefined {
@@ -241,7 +283,14 @@ const DESIGN_TOPIC = /\b(look|feel|vibe|style|colou?rs?|palette|font|dark|light|
  */
 export function mergedQuestions(kind: BriefKind, brief: string, tailored: readonly BriefQuestion[] | null, context: { attachments?: number } = {}): BriefQuestion[] {
   const standard = briefQuestions(kind, brief, context);
-  if (kind !== "website") return tailored ? [...tailored] : standard;
+  if (kind !== "website") {
+    if (!tailored) return standard;
+    const answered = answeredQuestionIds(kind, brief, context), topic = OPTION_TOPIC[kind];
+    // The tailored set, minus anything a creation option already asks, with the creation options added.
+    const options = standard.filter(question => CREATION_IDS.has(question.id));
+    const own = tailored.filter(question => !CREATION_IDS.has(question.id) && !(topic && options.length && topic.test(`${question.question} ${question.topic}`)));
+    return withCreationOptions(kind, own, answered, brief);
+  }
   const ids = new Set(standard.map(question => question.id));
   const specific = (tailored ?? []).filter(question => !ids.has(question.id) && !standardQuestion(kind, question.id) && !DESIGN_TOPIC.test(`${question.question} ${question.topic}`)).slice(0, 2);
   return [...standard.slice(0, 3), ...specific, ...standard.slice(3)].slice(0, questionLimit(kind, brief));
@@ -254,7 +303,7 @@ export function isBriefQuestion(value: unknown): value is BriefQuestion {
   const item = value as Record<string, unknown>;
   return shortText(item.id, 32) && shortText(item.question, 140) && shortText(item.why, 160) && shortText(item.topic, 60) && shortText(item.custom, 80)
     && (item.multi === undefined || typeof item.multi === "boolean") && (item.color === undefined || typeof item.color === "boolean")
-    && Array.isArray(item.options) && item.options.length <= (item.multi ? 8 : 6) && item.options.every(option => {
+    && Array.isArray(item.options) && item.options.length <= (item.multi ? 8 : 7) && item.options.every(option => {
       const record = option as Record<string, unknown>;
       return !!option && typeof option === "object" && shortText(record.value, 20) && shortText(record.label, 60)
         && (record.hint === undefined || shortText(record.hint, 80))

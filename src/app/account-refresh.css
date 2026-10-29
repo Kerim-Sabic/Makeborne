@@ -1,10 +1,10 @@
-.login-page,.cloud-shell{--canvas:#fafafa;--ink:#202024;--muted:#707078;--line:#e7e7ec;--blue:#202024;--blue-hover:#3c3c43;font-family:var(--font-inter),Arial,sans-serif;color:#202024;background:#fafafa;min-height:100vh}
+.login-page,.cloud-shell{--canvas:#fafafa;--ink:#202024;--muted:#707078;--line:#e7e7ec;--blue:#202024;--blue-hover:#3c3c43;font-family:var(--font-inter),Arial,sans-serif;color:#202024;background:#fafafa;min-height:calc(100vh / var(--ui-zoom, 1))}
 .login-page{max-width:none;padding:30px 40px;background:radial-gradient(ellipse at 80% 90%,#f5e8e2 0%,transparent 43%),radial-gradient(ellipse at 15% 90%,#edf0fc 0%,transparent 45%),#fafafa}
 .login-page>.wordmark{font-size:24px;letter-spacing:-1px;font-weight:650;max-width:1300px;margin:auto}
 .login-card{max-width:450px;margin:66px auto 35px;border:1px solid #e7e7ec;box-shadow:0 16px 50px -20px #20203013;border-radius:20px;padding:38px;background:#fff}
 .login-card h1{font-family:var(--font-inter),Arial,sans-serif;font-size:31px;font-weight:500;letter-spacing:-1.3px;margin:18px 0 25px;line-height:1.15}
 .login-card .eyebrow{font-size:9px;letter-spacing:1.5px;color:#81818b}
-.login-card p{font-size:13px;line-height:1.75;color:#74747e}
+.login-card p{font-size:13px;line-height:1.75;color:#70707a}
 .login-card label{font-size:12px;font-weight:500;color:#62626d}
 .login-card input{min-height:46px;background:white;border:1px solid #dedee5;border-radius:9px;padding:11px 13px;font-size:14px;margin-top:7px;color:#25252b}
 .login-card input:focus{outline:2px solid #b1bdd7;outline-offset:2px;border-color:#9ba7bf}
@@ -22,7 +22,7 @@
 .cloud-shell .marketing-nav nav{font-size:12px;gap:22px}
 .cloud-shell .cloud-content{max-width:1180px;padding:42px 40px 70px}
 .cloud-shell .page-heading h1{font-family:var(--font-inter),Arial,sans-serif;font-weight:500;font-size:32px;letter-spacing:-1.2px}
-.cloud-shell .page-heading p{font-size:13px;color:#74747e}
+.cloud-shell .page-heading p{font-size:13px;color:#70707a}
 .cloud-shell .button{background:#fff;border-radius:8px;font-size:12px;min-height:40px}
 .cloud-shell .button.primary{background:#202024;color:#fff}
 .cloud-shell .cloud-create-form,.cloud-shell .cloud-edit-grid{border-radius:12px;border-color:#e6e6ec}
@@ -37,7 +37,7 @@
 @media(prefers-reduced-transparency:reduce){.login-card{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}}
 
 /* A quiet, focused account entrance shared by sign-in, sign-up and recovery. */
-.auth-refined{display:flex;flex-direction:column;min-height:100svh;padding:0 48px;background:radial-gradient(ellipse at 50% 0%,#f0edff80,transparent 45%),#fcfcfd;color:#24232b}
+.auth-refined{display:flex;flex-direction:column;min-height:calc(100svh / var(--ui-zoom, 1));padding:0 48px;background:radial-gradient(ellipse at 50% 0%,#f0edff80,transparent 45%),#fcfcfd;color:#24232b}
 .auth-header{display:flex;align-items:center;justify-content:space-between;gap:20px;width:100%;max-width:1320px;margin:0 auto;padding:30px 0}
 .auth-header .wordmark{display:inline-flex;align-items:center;gap:9px;font-size:23px;font-weight:650;letter-spacing:-1px}
 .auth-back{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#6d6b79;min-height:44px}
@@ -71,7 +71,7 @@
 .auth-footer{max-width:1320px;width:100%;margin:0 auto;display:flex;justify-content:space-between;gap:16px;padding:24px 0;border-top:1px solid #eeecf1;font-size:11px;color:#96909e}
 .auth-mail-icon{display:grid;place-items:center;border-radius:16px;background:#eee9fb;width:64px;height:64px;margin:0 auto 24px;color:#6b56b4}
 .auth-refined button:focus-visible,.auth-refined a:focus-visible,.auth-help summary:focus-visible{outline:2px solid #8b7bd3;outline-offset:4px}
-@media(max-width:600px){.auth-refined{padding:0 24px}.auth-header{padding:20px 0}.auth-header .wordmark{font-size:21px}.auth-back{font-size:11px}.auth-center{padding:44px 0 60px;justify-content:flex-start}.auth-refined .login-card h1{font-size:29px}.auth-footer{font-size:10px}.auth-footer span:last-child{display:none}.auth-caption{margin-top:35px}}
+@media(max-width:600px){.auth-refined{padding:0 24px}.auth-header{padding:20px 0}.auth-header .wordmark{font-size:21px}.auth-back{font-size:11px}.auth-center{padding:44px 0 60px;justify-content:flex-start}.auth-refined .login-card h1{font-size:29px}.auth-footer{font-size:10px}.auth-footer span:last-child{display:none}.auth-caption{margin-top:35px}.auth-refined .login-card input:not(.auth-otp-input){font-size:16px}}
 @media(prefers-reduced-motion:reduce){.auth-refined *{transition:none!important}}
 
 /* Email confirmation shares the app's restrained blue, lavender and white surfaces. */
@@ -117,3 +117,16 @@
 @media(prefers-reduced-transparency:reduce){.auth-refined .login-card.auth-verification-card{background:#fff}}
 @media(forced-colors:active){.auth-refined .login-card.auth-verification-card,.auth-email-address,.auth-google{border:1px solid CanvasText}.auth-refined .login-card .button.primary{background:ButtonFace;color:ButtonText;border-color:ButtonText}.auth-verification-card .auth-mail-icon{background:Canvas;color:CanvasText;border-color:CanvasText}}
 .auth-plan-strip{width:100%;margin:0 0 16px;padding:12px 14px;border:1px solid #e3dcea;border-radius:12px;background:#f7f4fc;color:#4d3e5c;font-size:14px;line-height:1.55;text-align:left}
+/* Legal links and consent lines (docs/legal). */
+.auth-footer{flex-wrap:wrap;justify-content:flex-start;column-gap:18px;color:#6b6574}
+.auth-footer>span:first-child{margin-right:auto}
+.auth-footer a{color:#5d5766}
+.auth-legal-line{margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#5d5766;text-align:center}
+.auth-legal-line a,.billing-consent a{color:#4f46b8;text-decoration:underline;text-underline-offset:2px}
+.settings-legal{display:flex;flex-wrap:wrap;gap:8px 18px;margin:22px 0 0;font-size:13px;color:#5d5766}
+.settings-legal a{color:#4f46b8;text-decoration:underline;text-underline-offset:2px}
+.billing-consent{display:flex;gap:10px;align-items:flex-start;max-width:760px;margin:0 auto 18px;padding:14px 16px;border:1px solid #e2deea;border-radius:12px;background:#fff;font-size:13.5px;line-height:1.55;color:#2c2833;text-align:left}
+.billing-consent input{flex:none;width:20px;height:20px;margin:1px 0 0;accent-color:#4f46b8}
+.billing-consent-note{display:block;margin-top:6px;color:#5d5766;font-size:12.5px}
+.portal-foot a+a{margin-left:12px}
+.founding-cta[aria-disabled="true"],.billing-resume-cta[aria-disabled="true"]{opacity:.55;cursor:not-allowed}

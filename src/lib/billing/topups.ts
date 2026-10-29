@@ -5,6 +5,7 @@ import { CREDIT_TOPUP_CATALOG_VERSION, CREDIT_TOPUP_PACKS } from "./topups-catal
 import { billingConfig } from "./config";
 import { billingDatabase } from "./database";
 import { checkoutForTopup } from "./topup-checkout";
+import { requireCheckoutConsent, recordCheckoutConsent } from "./checkout-consent";
 import { RequestError } from "@/lib/server/http";
 import type { z } from "zod";
 import type { CreditTopupInputSchema } from "./topups-contracts";
@@ -40,6 +41,7 @@ export async function creditTopupAvailability(): Promise<CreditTopupAvailability
 
 /** Caller authenticates and requires a paid creation membership before invoking. */
 export async function createTopupCheckout(userId: string, input: z.infer<typeof CreditTopupInputSchema>) {
+  requireCheckoutConsent(input.withdrawalConsent);
   if (!topupCheckoutOpen() || !await catalogVerified()) throw new RequestError("TOPUPS_NOT_OPEN", CREDIT_TOPUPS_NOT_OPEN, 503);
   const db = billingDatabase(), now = new Date().toISOString();
   const { data: memberships, error } = await db.from("billing_memberships").select("whop_user_id")
@@ -49,5 +51,7 @@ export async function createTopupCheckout(userId: string, input: z.infer<typeof 
   const { data: purchase, error: preparationError } = await db.rpc("makeborne_prepare_topup", { p_user: userId, p_request: input.requestId,
     p_pack: input.packId, p_version: CREDIT_TOPUP_CATALOG_VERSION, p_whop_user: [...identities][0] });
   if (preparationError || !purchase || purchase.user_id !== userId) throw new RequestError("TOPUP_PREPARATION_FAILED", "Your credit pack checkout needs confirmation. Please try again or contact support.", 409);
+  // The prepare RPC may resume an older order. Bind its actual frozen request.
+  await recordCheckoutConsent(userId, purchase.request_id, "pack");
   return checkoutForTopup(purchase);
 }

@@ -119,7 +119,7 @@ export const GROWTH_GUIDES: HelpArticle[] = [
     title: "How to build a website for a local business",
     description: "What a local business website needs (hours, location, booking, reviews, mobile speed) and how to build and publish one in an afternoon.",
     keywords: ["local business website", "small business website", "restaurant website", "salon website", "clinic website", "website for my shop", "local seo", "website for my salon", "website for my restaurant", "salon", "restaurant", "dentist", "local", "my shop"],
-    answer: "A local business site has one job: turn a visitor into a booking, call or visit. Put opening hours, location and the main action (book, order, call) at the top, then services with prices, real reviews and photos. Describe all of that in a short brief, create it in Makeborne, check it on your phone, and publish it to a web address you can share.",
+    answer: "A local business site has one job: turn a visitor into a booking, call or visit. Put opening hours, location and the main action (book, order, call) at the top, then services with prices, real reviews and photos. Describe all of that in one brief, create it in Makeborne, check it on your phone, and publish it to a web address you can share.",
     steps: [
       { name: "Gather the essentials", text: "Name, address, hours, phone, services and prices, three real reviews, and your best photos." },
       { name: "Decide the main action", text: "Book online, order, call or visit. Put it in the brief." },

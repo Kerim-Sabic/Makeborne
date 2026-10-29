@@ -23,6 +23,8 @@ import { brandSwatches as kitSwatches, parseBrandKit } from "@/lib/brand/kit";
 import { brandRequest } from "./brand-kit-api";
 import AccountPreview from "./account-preview";
 import AccountArtworkUpload from "./account-artwork-upload";
+import ImageEditAction from "./image-edit-panel";
+import DataReportAction from "./data-report-panel";
 import BuildConversation from "./build-conversation";
 import LiveBuilder, { type LiveUpdate } from "./live-builder";
 import { useProjectAdvisorHandoff } from "./advisor-handoff";
@@ -31,12 +33,17 @@ import type { EditTarget } from "@/lib/builder/edit-intent";
 import type { EffortLevel } from "@/lib/routing/effort";
 import DocumentPreview from "./document-preview";
 import LivePreview from "./live-preview";
+import ProjectHeader, { saveStateOf } from "./project-header";
 import { newVisualEditSession, type VisualEditSession } from "@/lib/builder/visual-edit-session";
-import WorkbenchMore from "./workbench-more";
+import ProjectRenameDialog from "./project-rename-dialog";
+import { renamedContent, renameSummary } from "@/lib/projects/library-rename";
+import { isPlaceholderTitle } from "@/lib/projects/project-title";
 import { parseBuilderEstimates, type BuilderEstimates } from "@/lib/builder/credit-estimate";
+import { FEATURES_OFF, parseBuilderFeatures, type BuilderFeatures } from "@/lib/builder/features";
+import { parseDocumentImageOffers, type DocumentImageOffers } from "@/lib/documents/art-formats";
 import { previewFileRevision } from "@/lib/builder/preview-revision";
 import { readGenerationReference, saveGenerationReference } from "@/lib/generation/browser-request";
-import { choosePreview, editorEntry, hasBuilderSource, savedFormat } from "@/lib/cloud/saved-preview";
+import { choosePreview, editorEntry, hasBuilderSource, savedFormat, startingDraftHasContent } from "@/lib/cloud/saved-preview";
 import { BUILDER_OFF, BUILDER_WAITING_COPY, parseBuilderAvailability, type BuilderAvailability } from "@/lib/builder/availability";
 import "@/app/live-builder.css";
 import { captureProjectPublication, captureProjectSnapshot } from "@/lib/builder/publish-snapshot";
@@ -51,12 +58,11 @@ import { moveAccountBlock, removeAccountBlock, restoreAccountBlock, type Removed
 import { accountStyleFromStudio } from "@/lib/cloud/editor-bridge";
 import { canAutosave, settleAccountSave } from "@/lib/cloud/autosave";
 import { api, CloudError, setCloudAccount } from "./cloud-api";
-import { useLiveVersion } from "./use-live-version";
+import { useLivePublication } from "./use-live-version";
 import { useCheckRecord } from "./use-check-record";
 import VersionFactsBar from "./version-facts";
 import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useState, useRef } from "react";
 import {
-  ArrowLeft,
   ArrowUp,
   ArrowDown,
   Trash2,
@@ -64,6 +70,7 @@ import {
   ArrowRight,
   Cloud,
   FileText,
+  ExternalLink,
   Globe2,
   Eye,
   History,
@@ -74,7 +81,6 @@ import {
   FolderOpen,
   LogOut,
   Plus,
-  Save,
   Users,
   MessageSquareText,
   GitCompareArrows,
@@ -1158,7 +1164,10 @@ export function CloudEditor({
   const [view, setView] = useState<"preview" | "edit" | "history" | "publish" | "review">("preview");
   // Which saved version is public (websites only; audit M07): read on open, on each view change and after publishing.
   const [liveRefresh, setLiveRefresh] = useState(0);
-  const liveVersion = useLiveVersion(accountId, workspaceId, artifact.id, artifact.kind === "website", `${view}:${liveRefresh}`);
+  const livePublication = useLivePublication(accountId, workspaceId, artifact.id, artifact.kind === "website", `${view}:${liveRefresh}`);
+  const liveVersion = livePublication.version;
+  // The one preview toolbar above the canvas: the mounted preview renders its size, page and output controls into it.
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null);
   // The latest explicit check of a saved version in this tab, for the header and History.
   const checkRecord = useCheckRecord({ accountId, workspaceId, artifactId: artifact.id });
   // The project's brand colours (the client's kit, or the workspace's own for projects without a client) for click-to-edit.
@@ -1185,12 +1194,14 @@ export function CloudEditor({
   const [generatedVersionId,setGeneratedVersionId]=useState<string|null>(null);
   const [builder, setBuilder] = useState<BuilderAvailability>(BUILDER_OFF);
   const [builderEstimates, setBuilderEstimates] = useState<BuilderEstimates | null>(null);
+  const [builderFeatures, setBuilderFeatures] = useState<BuilderFeatures>(FEATURES_OFF);
+  const [documentImages, setDocumentImages] = useState<DocumentImageOffers | null>(null);
   const [live, setLive] = useState<LiveUpdate | null>(null);
   const [autoStart, setAutoStart] = useState<string | null>(null);
   const [autoStartMode, setAutoStartMode] = useState<"create" | "plan">("create");
   useEffect(() => {
     let current = true;
-    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) { setBuilder(parseBuilderAvailability(value)); setBuilderEstimates(parseBuilderEstimates(value?.estimates)); } }).catch(() => undefined);
+    fetch("/api/build", { cache: "no-store" }).then(response => response.json()).then(value => { if (current) { setBuilder(parseBuilderAvailability(value)); setBuilderEstimates(parseBuilderEstimates(value?.estimates)); setBuilderFeatures(parseBuilderFeatures(value?.features)); setDocumentImages(parseDocumentImageOffers(value?.documentImages)); } }).catch(() => undefined);
     return () => { current = false; };
   }, [artifact.kind]);
   const recoveryKey = `makeborne.cloud-draft.${accountId}.${workspaceId}.${artifact.id}`;
@@ -1255,6 +1266,10 @@ export function CloudEditor({
   const [visualSession, setVisualSession] = useState<VisualEditSession>(newVisualEditSession);
   // The last click-to-edit change: the edit revision it made and, once saved, the version it saved as.
   const [visualSave, setVisualSave] = useState<{ revision: number; version: number | null } | null>(null);
+  // The project's name: the library's copy until a rename here saves a new one.
+  const [renamedTitle, setRenamedTitle] = useState<string | null>(null);
+  const title = renamedTitle ?? artifact.title;
+  const [renaming, setRenaming] = useState(false);
   const load = useCallback(async () => {
     setBusy(true);
     setVisualSave(null);
@@ -1675,43 +1690,47 @@ export function CloudEditor({
       {(dirty || busy || savePaused || uncertainSave || conflict || !!recovery) && <p className="small-note">Finish saving or resolve your current draft before restoring.</p>}
     </>}
   </section>;
+  // Renaming saves the current saved version again with only its title changed (the library's rename, same route and
+  // expectedVersion guard), so it waits for on-screen edits, saves and builds to settle. Reviewers can't rename.
+  const savedVersion = versions.find(version => version.number === expectedVersion) ?? null;
+  const renameBlocked = dirty || busy || conflict || uncertainSave || recovery || lockChangePending || live ? "Save or resolve your current edits before renaming."
+    : !savedVersion ? "Renaming needs the saved version to be loaded." : null;
+  async function renameProject(name: string) {
+    if (!savedVersion || renameBlocked) throw new Error(renameBlocked ?? "Renaming needs the saved version to be loaded.");
+    const result = await api<{ artifact: CloudArtifact; version: ArtifactVersion }>(`/api/cloud/workspaces/${workspaceId}/artifacts/${artifact.id}/versions`, {
+      expectedVersion, content: renamedContent(savedVersion.content, name), style: savedVersion.style, assetIds: savedVersion.assetIds, changeSummary: renameSummary(name),
+    }, "POST");
+    setRenamedTitle(result.artifact.title); setRenaming(false);
+    await load();
+    notify(`Renamed to “${result.artifact.title}”. Saved as Version ${result.artifact.currentVersion}.`);
+  }
+  const saveState = saveStateOf({ loaded: Boolean(content), reviewer: role === "reviewer", dirty, busy, paused: savePaused, uncertain: uncertainSave, conflict, recovery: Boolean(recovery) });
+  const kindName = artifact.kind === "website" ? "Website" : artifact.kind === "book" ? "Book" : "Presentation";
+  const kindLabel = format === "website-design" ? "Website · static design" : format === "outline" ? `${kindName} outline` : format === "starting" ? `New ${kindName.toLowerCase()}` : kindName;
+  const secondaryView = view === "history" ? { label: "Version history", icon: History } : view === "review" ? { label: "Client review", icon: MessageSquareText } : view === "publish" ? { label: "Publish", icon: Globe2 } : null;
   return (
-    <section className="cloud-editor workspace-workbench cloud-workbench">
+    <section className="cloud-editor workspace-workbench cloud-workbench project-chrome">
       <a className="studio-skip-link" href="#editor-stage" onClick={skipTo("stage")}>Skip to the preview</a>
       <a className="studio-skip-link" href="#editor-stage" onClick={skipTo("message")}>Skip to the message box</a>
-      <div className="editor-heading cloud-workbench-heading">
-        <button
-          className="icon-button"
-          aria-label="Back to projects"
-          onClick={() => {
-            if (
-              !dirty ||
-              window.confirm(
-                "Leave this unsaved draft? Download it first if you need to preserve changes.",
-              )
-            )
-              back();
-          }}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <div>
-          <h1>{artifact.title}</h1>
-          <p>
-            Version {expectedVersion} ·{" "}
-            {savePaused || conflict || uncertainSave ? "Saving paused — review required" : busy && dirty ? "Saving…" : dirty ? "Waiting to save…" : "Saved"}
-          </p>
-          {artifact.kind === "website" && <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} preview={previewFact} />}
-        </div>
-        <button
-          className={dirty || savePaused || uncertainSave ? "button primary" : "button secondary"}
-          disabled={busy || !content || conflict || role === "reviewer"}
-          onClick={save}
-        >
-          <Save size={16} />
-          {!content ? "Loading…" : busy ? "Saving…" : savePaused ? "Retry save" : "Save now"}
-        </button>
-      </div>
+      <ProjectHeader title={title} kindLabel={kindLabel} version={expectedVersion} save={saveState} onSave={() => void save()}
+        rename={role !== "reviewer" ? { open: () => setRenaming(true), label: isPlaceholderTitle(title) ? "Name this project" : "Rename project", blocked: content ? renameBlocked : "Opening the project…" } : undefined}
+        onBack={() => { if (!dirty || window.confirm("Leave this unsaved draft? Download it first if you need to preserve changes.")) back(); }}
+        details={artifact.kind === "website" ? <>
+          <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} preview={previewFact} />
+          {livePublication.address && <a className="ph-details-link" href={livePublication.address} target="_blank" rel="noopener noreferrer">{livePublication.address.replace(/^https?:\/\//, "")}<ExternalLink size={13} aria-hidden="true" /><span className="chrome-sr"> (live site, opens in a new tab)</span></a>}
+        </> : undefined}
+        publish={content?.websiteSource && role === "owner" ? { open: () => setView("publish"), current: view === "publish",
+          description: "Review the saved version and choose whether to publish it. Nothing goes live until you confirm." } : undefined}
+        actions={<>
+          <button type="button" className="editor-menu-item" aria-current={view === "history" || undefined} onClick={() => setView("history")}><History size={15} aria-hidden="true" />Version history</button>
+          <button type="button" className="editor-menu-item" aria-current={view === "review" || undefined} onClick={() => setView("review")}><MessageSquareText size={15} aria-hidden="true" />Client review</button>
+          {(content?.website || content?.websiteSource) && role !== "reviewer" && <div className="editor-menu-item-wrap" data-keep-open>
+            <WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} />
+            {(dirty || busy || conflict || uncertainSave || !!recovery) && <p className="editor-menu-note">Downloads the saved version once saving has finished.</p>}
+          </div>}
+        </>} />
+      {renaming && savedVersion && <ProjectRenameDialog kind={artifact.kind} title={title} nextVersion={expectedVersion + 1} ownDocumentTitle={Boolean(savedVersion.content.document)}
+        onRename={renameProject} onClose={() => setRenaming(false)} onLoadLatest={() => { setRenaming(false); void load(); }} />}
       <div className={`workbench-layout${chatHidden ? " chat-hidden" : ""}`}>
         {useLiveBuilder ? <LiveBuilder key={`${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion}
           history={versions.filter(version => version.number > 1).sort((a, b) => a.number - b.number).slice(-12).map(version => ({ number: version.number, summary: version.changeSummary }))}
@@ -1720,24 +1739,22 @@ export function CloudEditor({
           defaultEffort={project?.effort} disabled={!content || !builder.available || savePaused || conflict || uncertainSave || !!recovery} disabledReason={savePaused || conflict || uncertainSave || recovery ? "Save or resolve the current draft before building." : builderWaiting}
           sendBlocked={dirty ? "Saving your edit…" : busy ? "Loading saved versions…" : null} autoStart={autoStart} autoStartMode={autoStartMode} prefill={builderPrefill}
           provenance={advisorBrief.provenance} onProvenance={advisorBrief.update}
-          kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates}
+          kind={artifact.kind} baseDocument={content?.document} estimates={builderEstimates} features={builderFeatures} imageOffers={documentImages} projectBrief={project?.brief ?? ""}
           onLive={setLive} onSaved={async () => { setAutoStart(null); await load(); setView("preview"); }}
           brandKit={brandKitName} onUndo={undoBuilderChange} undoBlocked={dirty || busy || conflict || uncertainSave || recovery ? "Save or resolve the current draft before undoing." : null} />
         : <BuildConversation projectKey={`${accountId}:${workspaceId}:${artifact.id}`} brief={project?.brief ?? ""} kind={artifact.kind} effort={project?.effort} readonly={role === "reviewer"} prefill={builderPrefill} onOpenEditor={() => setView("edit")} onOpenHistory={() => setView("history")} />}
         <div className="workbench-stage cloud-workbench-stage" id="editor-stage" tabIndex={-1}>
-          <nav className="workbench-toolbar cloud-workbench-tabs" aria-label="Project view">
-            <div>
+          <div className="workbench-toolbar project-toolbar" data-editor-chrome="toolbar">
+            <nav className="editor-view-switch" aria-label="Project view">
               <button ref={chatToggle} type="button" className="workbench-chat-hide" aria-pressed={chatHidden} aria-keyshortcuts="Control+Period Meta+Period"
                 title={`${chatHidden ? "Show" : "Hide"} the conversation (Ctrl+.)`} onClick={toggleChat}>{chatHidden ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}<span className="workbench-tab-label">{chatHidden ? "Show chat" : "Hide chat"}</span></button>
-              {/* Under 960px the labels collapse to icons (still the accessible name); see cloud-workbench.css. */}
               <button type="button" aria-pressed={view === "preview"} title="Preview" onClick={() => setView("preview")}><Eye size={15} /><span className="workbench-tab-label">Preview</span></button>
               <button type="button" aria-pressed={view === "edit"} title={editor.label} onClick={() => setView("edit")}><PencilLine size={15} /><span className="workbench-tab-label">{editor.label}</span></button>
-              <button type="button" aria-pressed={view === "history"} title="History" onClick={() => setView("history")}><History size={15} /><span className="workbench-tab-label">History</span></button>
-              {content?.websiteSource && role === "owner" && <button type="button" aria-pressed={view === "publish"} title="Publish" onClick={() => setView("publish")}><Globe2 size={15} /><span className="workbench-tab-label">Publish</span></button>}
-              <button type="button" aria-pressed={view === "review"} title="Client review" onClick={() => setView("review")}><MessageSquareText size={15} /><span className="workbench-tab-label">Client review</span></button>
-            </div>
-            {(content?.website || content?.websiteSource) && role !== "reviewer" ? <WorkbenchMore><WebsiteSourceDownload key={`source:${accountId}:${workspaceId}:${artifact.id}`} accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} version={expectedVersion} disabled={dirty || busy || conflict || uncertainSave || !!recovery} /></WorkbenchMore> : <span>{artifact.kind === "presentation" ? "Presentation" : artifact.kind === "book" ? "Book" : "Website"}</span>}
-          </nav>
+              {/* History, Client review and Publish open from the header; while one is open it is named here, so the place is never a mystery. */}
+              {secondaryView && <span className="editor-view-current" aria-current="page"><secondaryView.icon size={15} aria-hidden="true" />{secondaryView.label}</span>}
+            </nav>
+            <div className="project-toolbar-slot" ref={setToolbarSlot} />
+          </div>
           <div className="cloud-workbench-content">
       {uncertainSave && (
         <div className="cloud-conflict" role="alert">
@@ -1833,14 +1850,16 @@ export function CloudEditor({
           canStart={!dirty && !conflict && !uncertainSave && !recovery && !busy}
           onOutputVersionChange={setGeneratedVersionId}
           onOpenLatest={() => { if (!dirty || window.confirm("Load the latest saved version and replace this on-screen draft?")) void load(); }} />}
+        {(artifact.kind === "book" || artifact.kind === "presentation") && role !== "reviewer" && !live && <DataReportAction accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id}
+          expectedVersion={expectedVersion} disabled={dirty || busy || uncertainSave || conflict || !!recovery || lockChangePending} onGenerated={() => void load()} />}
         {view === "preview" && previewDocument && <DocumentPreview key={`${accountId}:${workspaceId}:${artifact.id}`} document={previewDocument} focus={useLiveBuilder ? live?.focus : undefined}
-          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={useLiveBuilder && Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} />}
+          scope={{ accountId, workspaceId, artifactId: artifact.id }} building={useLiveBuilder && Boolean(live?.building)} savedVersion={expectedVersion} canExport={!!content.document && !dirty && !live} toolbar={toolbarSlot} />}
         {view === "preview" && preview === "start-builder" && liveDocument && <div className="lp-empty dp-empty">Describe your {artifact.kind} in the chat to start. {artifact.kind === "book" ? "Pages" : "Slides"} will appear here live as they are written.</div>}
         {view === "preview" && !liveDocument && (preview === "live" || preview === "website-source") && <LivePreview
           files={live?.files ?? sourceFiles}
           assets={live?.assets ?? previewAssets(content.websiteSource)}
           scope={{ accountId, workspaceId, artifactId: artifact.id }} building={Boolean(live?.building)}
-          routes={!live ? content.websiteSource?.routes : undefined} syncUrl subject={previewSubject} onBuilt={setPreviewBuild}
+          routes={!live ? content.websiteSource?.routes : undefined} syncUrl toolbar={toolbarSlot} subject={previewSubject} onBuilt={setPreviewBuild}
           // Fix it only drafts the request in the composer; Send (with its maximum shown) is still the person's choice.
           onFixError={useLiveBuilder && builder.available ? problem => setBuilderPrefill({ key: crypto.randomUUID(), text: fixErrorRequest(problem, previewSubject) }) : undefined}
           recover={previousVersion ? { label: `Restore version ${previousVersion.number}`, effect: restoreEffect(previousVersion.number, expectedVersion, true),
@@ -1871,7 +1890,10 @@ export function CloudEditor({
             {format === "website-design" ? "This website is saved as a static design." : `This ${artifact.kind} is saved as an outline of its text.`} {editor.instruction}{" "}<button type="button" className="cloud-workbench-format-link" onClick={() => setView("edit")}>Open {editor.label}</button>
             {" "}A build in the chat saves a new {artifact.kind === "website" ? "website project" : `designed ${artifact.kind}`} as the next version; this version stays in History.
           </p>}
-          {preview === "start-draft" ? <div className="cloud-workbench-empty">
+          {preview === "start-draft" && startingDraftHasContent(content) && <p className="cloud-workbench-format cloud-workbench-start-note" role="note">
+            Nothing has been built yet. This is a layout preview of your saved content, the same view a client review link shows. {editor.instruction}{" "}<button type="button" className="cloud-workbench-format-link" onClick={() => setView("edit")}>Open {editor.label}</button>
+          </p>}
+          {preview === "start-draft" && !startingDraftHasContent(content) ? <div className="cloud-workbench-empty">
             <span className="cloud-workbench-empty-icon"><PreviewIcon size={30} strokeWidth={1.3} /></span>
             <h3>Your {artifact.kind} starts here</h3>
             <p>{project?.brief.trim() ? "Your brief is saved. " : ""}Your editable draft will appear here. {role === "reviewer" ? "You have view access to this project." : "You can add your own content in the editor."}</p>
@@ -1931,6 +1953,9 @@ export function CloudEditor({
                       maxLength={50000}
                       onChange={(e) => editBlock(s.id, b.id, e.target.value)}
                     />
+                    {b.assetId && role !== "reviewer" && !content.document && <ImageEditAction accountId={accountId} workspaceId={workspaceId} artifactId={artifact.id} assetId={b.assetId}
+                      defaultUse={{ kind: "block", sectionId: s.id, blockId: b.id }} expectedVersion={expectedVersion}
+                      disabled={dirty || busy || b.locked || uncertainSave || conflict || !!recovery || lockChangePending} onAccepted={() => void load()} />}
                   </div>
                 ))}
                 {s.slideDesign&&<p className="small-note">Custom slide composition. Editing text preserves its placement; new content needs a canvas element.</p>}

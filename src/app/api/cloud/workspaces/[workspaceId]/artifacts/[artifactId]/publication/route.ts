@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { cloudBody, cloudContext, cloudError, cloudJson, databaseError, requestKey, validId } from "@/lib/cloud/server";
 import { billingDatabase } from "@/lib/billing/database";
-import { requireCreationAccess } from "@/lib/billing/access";
 import { ArtifactContentSchema } from "@/lib/domain";
 import { RequestError } from "@/lib/server/http";
 import { renderAssetPreview, MAX_PREVIEW_SOURCE_BYTES } from "@/lib/cloud/image-preview";
@@ -9,7 +8,7 @@ import { downloadProjectAsset } from "@/lib/cloud/asset-storage";
 import { renderHostedSite } from "@/lib/hosting/render";
 import { HOSTING, siteAddress, validSiteSlug, type HostedSite } from "@/lib/hosting/config";
 import { PromotePublicationSchema } from "@/lib/projects/publication-contract";
-import { promotePublicationPreparation, trustedPublicationAvailable } from "@/lib/projects/publication-server";
+import { promotePublicationPreparation, publicationDatabaseError, requirePublishingAccess, trustedPublicationAvailable } from "@/lib/projects/publication-server";
 import { assertPublicationAddress, publicationAddressPolicy } from "@/lib/hosting/namespace-server";
 
 export const runtime = "nodejs";
@@ -59,7 +58,7 @@ export async function POST(request: Request, context: Context) {
     let html = "";
     if (body.live) {
       assertPublicationAddress(workspaceId, body.slug);
-      await requireCreationAccess(user);
+      await requirePublishingAccess(user);
       const { data: artifact, error: aError } = await client.from("artifacts").select("project_id,kind,current_version").eq("workspace_id",workspaceId).eq("id",artifactId).maybeSingle();
       databaseError(aError);
       if (!artifact || artifact.kind !== "website") throw new RequestError("NOT_FOUND", "Choose a saved website.", 404);
@@ -102,7 +101,7 @@ export async function POST(request: Request, context: Context) {
     });
     if(error?.code === "23505") throw new RequestError("ADDRESS_TAKEN","That address is already reserved. Choose another.",409);
     if(error?.code === "MB429") throw new RequestError("PUBLISHING_LIMIT","A fair-use publishing limit was reached (50 new websites a day, or 10 addresses for one website). Try again tomorrow, or reuse an earlier address for this website.",429);
-    databaseError(error);
+    publicationDatabaseError(error, "promote");
     return respond(data as SiteRow, workspaceId);
   } catch(error) { return cloudError(error); }
 }
@@ -119,6 +118,8 @@ export async function PATCH(request: Request, context: Context) {
     if (body.interactive && !HOSTING.interactiveAllowed)
       throw new RequestError("JAVASCRIPT_UNAVAILABLE", "Interactive websites need their own domain, which isn't enabled yet. Your site stays published as a static page.", 409);
     if (body.interactive) {
+      // Turning customer JavaScript on changes what is served: it needs plan access.
+      await requirePublishingAccess(user);
       const { data: site, error } = await client.from("hosted_sites").select("slug,entry_script").eq("workspace_id", workspaceId).eq("artifact_id", artifactId).maybeSingle();
       databaseError(error);
       if (site) assertPublicationAddress(workspaceId, site.slug);

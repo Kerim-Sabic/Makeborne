@@ -258,11 +258,33 @@ function whopWith(fetchImpl) { return load("./whop.ts", env, { "@/lib/server/htt
     h.deps.recoverCheckouts = async () => { calls++; assert.equal(h.calls.rpc[0], "makeborne_billing_job_begin"); return { processed: 2, recovered: 1, failed: 1, backlog: true }; };
     const result = await job.runPlanCreditReconcileJob(h.deps);
     assert.equal(calls, 1); assert.equal(result.status, "partial");
-    assert.equal(result.stats.checkoutRecoveries, 1); assert.equal(result.stats.checkoutRecoveryFailures, 1); assert.equal(result.stats.backlog, true);
+    assert.equal(result.stats.checkoutRecoveries, 1); assert.equal(result.stats.checkoutRecoveryFailures, 1); assert.equal(result.stats.backlog, false); assert.equal(result.stats.checkoutRecoveryBacklog, true);
     assert.equal(h.calls.finish.p_stats.checkoutRecoveryFailures, 1);
     h = harness({ due: [] }); h.deps.recoverCheckouts = async () => { throw new Error("Discovery storage unavailable"); };
     const failed = await job.runPlanCreditReconcileJob(h.deps);
     assert.equal(failed.status, "failed"); assert.equal(h.calls.finish.p_status, "failed");
+  });
+  await check("unpaid checkout lookahead is informational; genuine financial backlog and discovery failures remain partial", async () => {
+    const h = harness({ due: [due("mem_ok")], memberships: { mem_ok: membership("mem_ok") } });
+    h.deps.recoverCheckouts = async () => ({ processed: 10, recovered: 0, failed: 0, backlog: true });
+    let result = await job.runPlanCreditReconcileJob(h.deps);
+    assert.equal(result.status, "succeeded", "More than ten unpaid checkout attempts cannot permanently postpone lastSuccessAt");
+    assert.equal(result.stats.checkoutRecoveryBacklog, true);
+    assert.equal(result.stats.backlog, false);
+    assert.equal(h.calls.finish.p_status, "succeeded");
+    assert.equal(h.calls.finish.p_stats.checkoutRecoveryBacklog, true, "Persist informational lookahead");
+    for (const backlog of [false, true]) {
+      h.deps.recoverCheckouts = async () => ({ processed: 10, recovered: 0, failed: 1, backlog });
+      result = await job.runPlanCreditReconcileJob(h.deps);
+      assert.equal(result.status, "partial", "A thrown recovery or review result must remain unhealthy");
+      assert.equal(result.stats.checkoutRecoveryFailures, 1);
+    }
+    const capped = harness({ due: [due("mem_a"), due("mem_b")], memberships: { mem_a: membership("mem_a") } });
+    capped.deps.recoverCheckouts = async () => ({ processed: 10, recovered: 0, failed: 0, backlog: true });
+    result = await job.runPlanCreditReconcileJob(capped.deps, { maxMemberships: 1 });
+    assert.equal(result.status, "partial"); assert.equal(result.stats.backlog, true);
+    const cron = JSON.parse(fs.readFileSync("vercel.json", "utf8"));
+    assert.deepEqual(cron.crons, [{ path: "/api/cron/billing-reconcile", schedule: "17 3 * * *" }]);
   });
   console.log(`${passed} reconciliation job checks passed (retry/backoff, sandbox base, payment pagination, cron auth, overlap, binding, failures, budget, heartbeat, expiry, checkout discovery). Whop and the database are mocked.`);
 })().catch(error => { console.error(error); process.exit(1); });

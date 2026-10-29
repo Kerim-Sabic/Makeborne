@@ -10,7 +10,7 @@ const { build } = require("esbuild"), { browserType, engineLabel, collectPageErr
 const ids = { account: "11111111-1111-4111-8111-111111111111", workspace: "22222222-2222-4222-8222-222222222222", artifact: "33333333-3333-4333-8333-333333333333", operation: "44444444-4444-4444-8444-444444444444" };
 const fixture = `import React from "react"; import { createRoot } from "react-dom/client"; import LiveBuilder from "./src/components/live-builder";
 const ids = ${JSON.stringify(ids)};
-createRoot(document.getElementById("root")).render(<LiveBuilder accountId={ids.account} workspaceId={ids.workspace} artifactId={ids.artifact} version={1} history={[]} baseFiles={{}} baseAssets={[]} defaultEffort="light" autoStart={null} autoStartMode="create" kind="website" onLive={() => {}} onSaved={() => {}} />);`;
+createRoot(document.getElementById("root")).render(<LiveBuilder accountId={ids.account} workspaceId={ids.workspace} artifactId={ids.artifact} version={1} history={[]} baseFiles={{}} baseAssets={[]} defaultEffort="light" autoStart={null} autoStartMode="create" kind="website" features={{ briefEnhancer: !location.search.includes("enhancer=off"), fullImageSlides: false, documentImages: false }} onLive={() => {}} onSaved={() => {}} />);`;
 const mocks = {
   "use-plan-mode": `import { useMemo } from "react"; export function usePlanMode() { return useMemo(() => ({ active: null, restored: null, operation: null, checking: false, recoveryNotice: "", ready: true, hasPrevious: false, recoverablePlan: null, edit: () => {}, markBuilt: () => {}, refreshOperation: async () => null, recoverPlan: async () => null, run: async () => { throw new Error("No planning in this fixture"); } }), []); }`,
   "plan-card": `export default function PlanCard() { return null; }`,
@@ -53,7 +53,7 @@ async function bundle() {
 }
 
 /** One page with every API routed; `enhance(request)` answers /api/build/enhance (POST/GET/DELETE/PATCH). */
-async function openBuilder(browser, origin, enhance) {
+async function openBuilder(browser, origin, enhance, query = "") {
   const context = await browser.newContext({ viewport: { width: 1100, height: 900 } }), page = await context.newPage(), errors = [], log = { enhance: [], builds: [] };
   collectPageErrors(page, errors);
   await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
@@ -73,7 +73,7 @@ async function openBuilder(browser, origin, enhance) {
     log.enhance.push({ method, key });
     try { await enhance({ route, method, key, log }); } catch { /* the page went away (reload) while this reply was pending */ }
   });
-  await page.goto(origin);
+  await page.goto(origin + query);
   return { context, page, errors, log };
 }
 async function send(page, text) {
@@ -96,6 +96,19 @@ async function main() {
   const browser = await browserType.launch({ headless: true });
   let passed = 0; const pass = name => { passed++; console.log(`PASS ${name}`); };
   try {
+    { // The enhancer flag off (the server default, MAKEBORNE_BRIEF_ENHANCER): a short brief is never offered prompt help and builds from its own words.
+      const { context, page, errors, log } = await openBuilder(browser, origin, async ({ route }) => route.fulfill({ status: 500, json: { error: { code: "UNEXPECTED", message: "unexpected" } } }), "?enhancer=off");
+      await send(page, SHORT);
+      await page.getByRole("button", { name: "Skip all" }).click();
+      await page.locator(".lb-receipt").waitFor();
+      assert.equal(log.enhance.length, 0, "no /api/build/enhance request while the feature is off");
+      assert.equal(await page.locator(".eb").count(), 0, "no brief card");
+      assert.equal(log.builds.length, 1); assert.equal(log.builds[0].brief, undefined, "the build carries the client's own words only");
+      assert.match(await receiptText(page), /Brief\s*Your own words/);
+      assert.deepEqual(errors, []);
+      pass("enhancer off (server default): a short brief builds from its own words; no improve offer, no enhance request, no card");
+      await context.close();
+    }
     { // A complete prompt builds directly: no reading, no improvement call, no card.
       const { context, page, errors, log } = await openBuilder(browser, origin, async ({ route }) => route.fulfill({ status: 500, json: { error: { code: "UNEXPECTED", message: "unexpected" } } }));
       await send(page, COMPLETE);

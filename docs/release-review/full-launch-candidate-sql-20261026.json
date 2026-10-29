@@ -1,0 +1,1663 @@
+{
+  "startedAt": "2026-10-26T00:00:20.594Z",
+  "productionTouched": false,
+  "stagingTouched": false,
+  "providerCalls": 0,
+  "image": "public.ecr.aws/supabase/postgres:17.11.0.002",
+  "candidateMigrations": 96,
+  "added": [
+    "20261022100000",
+    "20261023130000",
+    "20261023200000",
+    "20261023210000",
+    "20261024010000",
+    "20261024020000",
+    "20261025300000"
+  ],
+  "outOfOrder": [
+    "20261005113330_founder_waitlist.sql"
+  ],
+  "scenarios": {
+    "base": {
+      "container": "makeborne_candidate_fulllaunch_base_20261026000020",
+      "build": {
+        "platformErrorsExpected": 2
+      },
+      "applied": [
+        "20261005113330_founder_waitlist.sql",
+        "20261008130542_canonical_website_source_revisions.sql",
+        "20261008133918_durable_generation_job_leases.sql",
+        "20261008135727_generation_outcome_settlement.sql",
+        "20261008141212_generation_execution_caps.sql",
+        "20261008143555_generation_worker_lifecycle.sql",
+        "20261008151657_generation_approved_input_authority.sql",
+        "20261008154453_generation_atomic_worker_result.sql",
+        "20261008155402_generation_worker_result_readback.sql",
+        "20261008161434_project_build_handoff.sql",
+        "20261008163228_generation_submission_boundary.sql",
+        "20261008170101_generation_preparation_boundary.sql",
+        "20261008171229_generation_request_recovery.sql",
+        "20261008181217_generation_preview_read_authority.sql",
+        "20261008181817_workspace_membership_policy_deduplication.sql",
+        "20261008182736_private_preview_sessions.sql",
+        "20261008190859_saved_website_preview_discovery.sql",
+        "20261008200855_operator_website_qualification_proposal.sql",
+        "20261008210222_operator_website_repair_review.sql",
+        "20261009005809_saved_native_slide_designs.sql",
+        "20261009014243_saved_presentation_preparation.sql",
+        "20261009015516_native_presentation_progress.sql",
+        "20261009021050_operator_native_composition_qualification.sql",
+        "20261011090000_credit_wallets_free_tier.sql",
+        "20261011120000_artifact_plans.sql",
+        "20261011130000_client_review_links.sql",
+        "20261011140000_hosted_site_bundles.sql",
+        "20261011160000_credit_reservation_expiry.sql",
+        "20261011170000_free_tier_off_by_default.sql",
+        "20261011180000_crm_sales_delivery_split.sql",
+        "20261011190000_crm_transition.sql",
+        "20261011200000_crm_write_freeze.sql",
+        "20261012090000_plan_credit_allocations.sql",
+        "20261012100000_plan_entitlement_history.sql",
+        "20261012110000_plan_evidence_and_jobs.sql",
+        "20261012120000_credit_lots_expiry.sql",
+        "20261012130000_credit_lock_clock.sql",
+        "20261012140000_live_ai_spend.sql",
+        "20261012150000_shared_provider_limits.sql",
+        "20261012160000_portable_site_html.sql",
+        "20261012170000_preserve_isolated_sites.sql",
+        "20261012175901_prevent_duplicate_creation_checkouts.sql",
+        "20261012184407_hosted_site_enquiries.sql",
+        "20261012210033_hosted_site_address_changes.sql",
+        "20261013090000_hosting_review_fixes.sql",
+        "20261013100000_admin_console.sql",
+        "20261013110000_durable_topup_fulfillment.sql",
+        "20261013120000_unlimited_sites.sql",
+        "20261013130000_plan_credit_rollover.sql",
+        "20261013140000_site_badge_setting.sql",
+        "20261013150000_cumulative_ai_operations.sql",
+        "20261013160000_client_review_view_integrity.sql",
+        "20261013170000_client_review_document_assets.sql",
+        "20261013180000_trusted_publication_preparations.sql",
+        "20261013190000_publication_worker_authority.sql",
+        "20261013200000_staging_site_address_namespace.sql",
+        "20261013210000_publication_sandbox_journal.sql",
+        "20261013220000_publication_worker_attestation.sql",
+        "20261013230000_read_topup_order_status.sql",
+        "20261013240000_crm_email_automation.sql",
+        "20261013250000_crm_lead_profile.sql",
+        "20261013260000_crm_mail_security_boundaries.sql",
+        "20261013270000_mail_granted_scopes.sql",
+        "20261013280000_billing_lifecycle_boundaries.sql",
+        "20261014011643_publication_worker_function_boundary.sql",
+        "20261014150000_github_connection_refresh.sql",
+        "20261014160000_custom_domains.sql",
+        "20261014170000_site_analytics.sql",
+        "20261014180000_site_sitemap.sql",
+        "20261014190000_brand_kits.sql",
+        "20261015100000_review_link_views.sql",
+        "20261016090000_client_portal.sql",
+        "20261017080000_rpc_definer_boundary.sql",
+        "20261019090000_app_observability.sql",
+        "20261019134828_trusted_publication_production_profile.sql",
+        "20261020090000_payment_funding_and_refunds.sql",
+        "20261020100000_credit_autotopup_authorization.sql",
+        "20261020110000_usage_history_read.sql",
+        "20261020120000_artifact_title_search.sql",
+        "20261020144714_artifact_title_search_acl.sql",
+        "20261020174011_ai_operation_cancellation.sql",
+        "20261020183417_ai_operation_cancel_compatibility.sql",
+        "20261020203000_scope_revocation_boundaries.sql",
+        "20261020210000_artifact_card_previews.sql",
+        "20261020231225_billing_ux_details_and_limits.sql",
+        "20261021125359_checkout_payment_recovery.sql",
+        "20261021133151_billing_financial_reconcile_freshness.sql",
+        "20261023000417_account_chat_history.sql",
+        "20261025200000_paying_workspace_publication.sql"
+      ],
+      "fingerprint": "979ed24522439f8f5592d01b0f9ffe34",
+      "checks": {
+        "check-account-chat-history.sql": {
+          "ok": true,
+          "passes": 3
+        },
+        "check-account-privileges.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-admin-console.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-agency-operations-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-agency-operations.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  function public.makeborne_agency_task_scope(uuid, uuid, jsonb) does not exist"
+        },
+        "check-ai-operation-cancellation.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-ai-operations.sql": {
+          "ok": true,
+          "passes": 2
+        },
+        "check-app-observability.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-artifact-card-previews.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-artifact-title-search.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-billing-lifecycle-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  password or GSSAPI delegated credentials required"
+        },
+        "check-billing-lifecycle.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-billing-ux.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-brand-kits.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-brief-enhancements.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  function public.makeborne_brief_enhance_claim(uuid, uuid, uuid, uuid, text, unknown, integer, integer) does not exist"
+        },
+        "check-browser-acl.sql": {
+          "ok": false,
+          "passes": 2,
+          "error": "ERROR:  SECURITY DEFINER without an empty search_path: public.rls_auto_enable"
+        },
+        "check-budget-reservations.sql": {
+          "ok": true,
+          "passes": 27
+        },
+        "check-checkout-recovery.sql": {
+          "ok": true,
+          "passes": 2
+        },
+        "check-client-directory.sql": {
+          "ok": true,
+          "passes": 11
+        },
+        "check-client-knowledge.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  new row for relation \"ai_operations\" violates check constraint \"ai_operations_kind_check\""
+        },
+        "check-client-outreach.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-client-portal.sql": {
+          "ok": true,
+          "passes": 12
+        },
+        "check-client-projects.sql": {
+          "ok": true,
+          "passes": 9
+        },
+        "check-client-research.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  new row for relation \"ai_operations\" violates check constraint \"ai_operations_kind_check\""
+        },
+        "check-client-review-document-assets.sql": {
+          "ok": true,
+          "passes": 2
+        },
+        "check-client-review-links.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-credit-autotopup.sql": {
+          "ok": false,
+          "passes": 1,
+          "error": "ERROR:  daily limit"
+        },
+        "check-credit-lots-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-credit-lots-expiry.sql": {
+          "ok": true,
+          "passes": 10
+        },
+        "check-credit-wallets-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-credit-wallets.sql": {
+          "ok": true,
+          "passes": 11
+        },
+        "check-crm-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  Refusing to run: use a disposable database with no clients, no CRM audit rows and an unfrozen expand state (see docs/CRM_STAGE_TRANSITION.md, \"Concurrency check\")."
+        },
+        "check-crm-lead-profile.sql": {
+          "ok": true,
+          "passes": 3
+        },
+        "check-crm-mail-boundaries.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-crm-mail-security.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-crm-mail-upgrade.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  update or delete on table \"mail_sequences\" violates foreign key constraint \"mail_enrollments_sequence_workspace_fk\" on table \"mail_enrollments\""
+        },
+        "check-crm-research.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  relation \"public.crm_site_checks\" does not exist"
+        },
+        "check-crm-sales-delivery.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-custom-domains.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-durable-jobs.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-financial-reconcile-freshness.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-generation-authority.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-generation-caps.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-generation-dispatch.sql": {
+          "ok": true,
+          "passes": 22
+        },
+        "check-generation-result.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-generation-settlement.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-github-connection-refresh.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-hosting-modes.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-live-ai-spend-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-live-ai-spend.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-local-pilot-lock.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  Local pilot budget is not locked"
+        },
+        "check-locked-content.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-mail-granted-scopes-upgrade.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  syntax error at or near \"__MAIL_SCOPE_MIGRATION__\""
+        },
+        "check-mail-granted-scopes.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-paying-workspace-publication.sql": {
+          "ok": true,
+          "passes": 17
+        },
+        "check-plan-approval-idempotency.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-plan-credit-allocations.sql": {
+          "ok": true,
+          "passes": 13
+        },
+        "check-plan-credit-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-plan-credit-rollover.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-plan-payment-refunds.sql": {
+          "ok": true,
+          "passes": 12
+        },
+        "check-proposal-storage.sql": {
+          "ok": true,
+          "passes": 11
+        },
+        "check-publication-controller-boundary.sql": {
+          "ok": false,
+          "passes": 1,
+          "error": "ERROR:  permission denied to set role \"makeborne_publication_worker\""
+        },
+        "check-publication-production-profile.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-publication-sandbox-journal.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-publication-worker-authority.sql": {
+          "ok": true,
+          "passes": 2
+        },
+        "check-review-link-views.sql": {
+          "ok": true,
+          "passes": 10
+        },
+        "check-scope-matrix.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  insert or update on table \"objects\" violates foreign key constraint \"objects_bucketId_fkey\""
+        },
+        "check-site-address-changes.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-site-address-namespace.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-site-analytics.sql": {
+          "ok": true,
+          "passes": 10
+        },
+        "check-site-badge-setting.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-site-enquiries.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-site-sitemap.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-topup-fulfillment.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  Refusing top-up fixtures outside the named disposable database"
+        },
+        "check-topup-status.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  Refusing status fixtures outside the named disposable database"
+        },
+        "check-trusted-publication.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-unified-creation.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-unlimited-sites.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-usage-history-scale.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  DISPOSABLE_DATABASE_REQUIRED"
+        },
+        "check-usage-history-v2-scale.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  DISPOSABLE_DATABASE_REQUIRED"
+        },
+        "check-usage-history.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-usage-payment-history.sql": {
+          "ok": true,
+          "passes": 1
+        }
+      },
+      "removed": true
+    },
+    "full": {
+      "container": "makeborne_candidate_fulllaunch_full_20261026000020",
+      "build": {
+        "platformErrorsExpected": 2
+      },
+      "applied": [
+        "20261005113330_founder_waitlist.sql",
+        "20261008130542_canonical_website_source_revisions.sql",
+        "20261008133918_durable_generation_job_leases.sql",
+        "20261008135727_generation_outcome_settlement.sql",
+        "20261008141212_generation_execution_caps.sql",
+        "20261008143555_generation_worker_lifecycle.sql",
+        "20261008151657_generation_approved_input_authority.sql",
+        "20261008154453_generation_atomic_worker_result.sql",
+        "20261008155402_generation_worker_result_readback.sql",
+        "20261008161434_project_build_handoff.sql",
+        "20261008163228_generation_submission_boundary.sql",
+        "20261008170101_generation_preparation_boundary.sql",
+        "20261008171229_generation_request_recovery.sql",
+        "20261008181217_generation_preview_read_authority.sql",
+        "20261008181817_workspace_membership_policy_deduplication.sql",
+        "20261008182736_private_preview_sessions.sql",
+        "20261008190859_saved_website_preview_discovery.sql",
+        "20261008200855_operator_website_qualification_proposal.sql",
+        "20261008210222_operator_website_repair_review.sql",
+        "20261009005809_saved_native_slide_designs.sql",
+        "20261009014243_saved_presentation_preparation.sql",
+        "20261009015516_native_presentation_progress.sql",
+        "20261009021050_operator_native_composition_qualification.sql",
+        "20261011090000_credit_wallets_free_tier.sql",
+        "20261011120000_artifact_plans.sql",
+        "20261011130000_client_review_links.sql",
+        "20261011140000_hosted_site_bundles.sql",
+        "20261011160000_credit_reservation_expiry.sql",
+        "20261011170000_free_tier_off_by_default.sql",
+        "20261011180000_crm_sales_delivery_split.sql",
+        "20261011190000_crm_transition.sql",
+        "20261011200000_crm_write_freeze.sql",
+        "20261012090000_plan_credit_allocations.sql",
+        "20261012100000_plan_entitlement_history.sql",
+        "20261012110000_plan_evidence_and_jobs.sql",
+        "20261012120000_credit_lots_expiry.sql",
+        "20261012130000_credit_lock_clock.sql",
+        "20261012140000_live_ai_spend.sql",
+        "20261012150000_shared_provider_limits.sql",
+        "20261012160000_portable_site_html.sql",
+        "20261012170000_preserve_isolated_sites.sql",
+        "20261012175901_prevent_duplicate_creation_checkouts.sql",
+        "20261012184407_hosted_site_enquiries.sql",
+        "20261012210033_hosted_site_address_changes.sql",
+        "20261013090000_hosting_review_fixes.sql",
+        "20261013100000_admin_console.sql",
+        "20261013110000_durable_topup_fulfillment.sql",
+        "20261013120000_unlimited_sites.sql",
+        "20261013130000_plan_credit_rollover.sql",
+        "20261013140000_site_badge_setting.sql",
+        "20261013150000_cumulative_ai_operations.sql",
+        "20261013160000_client_review_view_integrity.sql",
+        "20261013170000_client_review_document_assets.sql",
+        "20261013180000_trusted_publication_preparations.sql",
+        "20261013190000_publication_worker_authority.sql",
+        "20261013200000_staging_site_address_namespace.sql",
+        "20261013210000_publication_sandbox_journal.sql",
+        "20261013220000_publication_worker_attestation.sql",
+        "20261013230000_read_topup_order_status.sql",
+        "20261013240000_crm_email_automation.sql",
+        "20261013250000_crm_lead_profile.sql",
+        "20261013260000_crm_mail_security_boundaries.sql",
+        "20261013270000_mail_granted_scopes.sql",
+        "20261013280000_billing_lifecycle_boundaries.sql",
+        "20261014011643_publication_worker_function_boundary.sql",
+        "20261014150000_github_connection_refresh.sql",
+        "20261014160000_custom_domains.sql",
+        "20261014170000_site_analytics.sql",
+        "20261014180000_site_sitemap.sql",
+        "20261014190000_brand_kits.sql",
+        "20261015100000_review_link_views.sql",
+        "20261016090000_client_portal.sql",
+        "20261017080000_rpc_definer_boundary.sql",
+        "20261019090000_app_observability.sql",
+        "20261019134828_trusted_publication_production_profile.sql",
+        "20261020090000_payment_funding_and_refunds.sql",
+        "20261020100000_credit_autotopup_authorization.sql",
+        "20261020110000_usage_history_read.sql",
+        "20261020120000_artifact_title_search.sql",
+        "20261020144714_artifact_title_search_acl.sql",
+        "20261020174011_ai_operation_cancellation.sql",
+        "20261020183417_ai_operation_cancel_compatibility.sql",
+        "20261020203000_scope_revocation_boundaries.sql",
+        "20261020210000_artifact_card_previews.sql",
+        "20261020231225_billing_ux_details_and_limits.sql",
+        "20261021125359_checkout_payment_recovery.sql",
+        "20261021133151_billing_financial_reconcile_freshness.sql",
+        "20261022100000_brief_enhancement_actions.sql",
+        "20261023000417_account_chat_history.sql",
+        "20261023130000_project_source_uploads.sql",
+        "20261023200000_agency_operation_contract.sql",
+        "20261023210000_client_knowledge.sql",
+        "20261024010000_client_research.sql",
+        "20261024020000_data_report_files.sql",
+        "20261025200000_paying_workspace_publication.sql",
+        "20261025300000_crm_research.sql"
+      ],
+      "fingerprint": "7bc87bf2d77c3bb5ce84441eafe1a076",
+      "checks": {
+        "check-account-chat-history.sql": {
+          "ok": true,
+          "passes": 3
+        },
+        "check-account-privileges.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-admin-console.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-agency-operations-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-agency-operations.sql": {
+          "ok": true,
+          "passes": 10
+        },
+        "check-ai-operation-cancellation.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-ai-operations.sql": {
+          "ok": true,
+          "passes": 2
+        },
+        "check-app-observability.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-artifact-card-previews.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-artifact-title-search.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-billing-lifecycle-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  password or GSSAPI delegated credentials required"
+        },
+        "check-billing-lifecycle.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-billing-ux.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-brand-kits.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-brief-enhancements.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-browser-acl.sql": {
+          "ok": false,
+          "passes": 2,
+          "error": "ERROR:  SECURITY DEFINER without an empty search_path: public.rls_auto_enable"
+        },
+        "check-budget-reservations.sql": {
+          "ok": true,
+          "passes": 27
+        },
+        "check-checkout-recovery.sql": {
+          "ok": true,
+          "passes": 2
+        },
+        "check-client-directory.sql": {
+          "ok": true,
+          "passes": 11
+        },
+        "check-client-knowledge.sql": {
+          "ok": true,
+          "passes": 12
+        },
+        "check-client-outreach.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-client-portal.sql": {
+          "ok": true,
+          "passes": 12
+        },
+        "check-client-projects.sql": {
+          "ok": true,
+          "passes": 9
+        },
+        "check-client-research.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-client-review-document-assets.sql": {
+          "ok": true,
+          "passes": 2
+        },
+        "check-client-review-links.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-credit-autotopup.sql": {
+          "ok": false,
+          "passes": 1,
+          "error": "ERROR:  daily limit"
+        },
+        "check-credit-lots-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-credit-lots-expiry.sql": {
+          "ok": true,
+          "passes": 10
+        },
+        "check-credit-wallets-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-credit-wallets.sql": {
+          "ok": true,
+          "passes": 11
+        },
+        "check-crm-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  Refusing to run: use a disposable database with no clients, no CRM audit rows and an unfrozen expand state (see docs/CRM_STAGE_TRANSITION.md, \"Concurrency check\")."
+        },
+        "check-crm-lead-profile.sql": {
+          "ok": true,
+          "passes": 3
+        },
+        "check-crm-mail-boundaries.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-crm-mail-security.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-crm-mail-upgrade.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  update or delete on table \"mail_sequences\" violates foreign key constraint \"mail_enrollments_sequence_workspace_fk\" on table \"mail_enrollments\""
+        },
+        "check-crm-research.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-crm-sales-delivery.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-custom-domains.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-durable-jobs.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-financial-reconcile-freshness.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-generation-authority.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-generation-caps.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-generation-dispatch.sql": {
+          "ok": true,
+          "passes": 22
+        },
+        "check-generation-result.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-generation-settlement.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-github-connection-refresh.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-hosting-modes.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-live-ai-spend-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-live-ai-spend.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-local-pilot-lock.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  Local pilot budget is not locked"
+        },
+        "check-locked-content.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-mail-granted-scopes-upgrade.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  syntax error at or near \"__MAIL_SCOPE_MIGRATION__\""
+        },
+        "check-mail-granted-scopes.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-paying-workspace-publication.sql": {
+          "ok": true,
+          "passes": 17
+        },
+        "check-plan-approval-idempotency.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-plan-credit-allocations.sql": {
+          "ok": true,
+          "passes": 13
+        },
+        "check-plan-credit-concurrency.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  could not establish connection"
+        },
+        "check-plan-credit-rollover.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-plan-payment-refunds.sql": {
+          "ok": true,
+          "passes": 12
+        },
+        "check-proposal-storage.sql": {
+          "ok": true,
+          "passes": 11
+        },
+        "check-publication-controller-boundary.sql": {
+          "ok": false,
+          "passes": 1,
+          "error": "ERROR:  permission denied to set role \"makeborne_publication_worker\""
+        },
+        "check-publication-production-profile.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-publication-sandbox-journal.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-publication-worker-authority.sql": {
+          "ok": true,
+          "passes": 2
+        },
+        "check-review-link-views.sql": {
+          "ok": true,
+          "passes": 10
+        },
+        "check-scope-matrix.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  insert or update on table \"objects\" violates foreign key constraint \"objects_bucketId_fkey\""
+        },
+        "check-site-address-changes.sql": {
+          "ok": true,
+          "passes": 4
+        },
+        "check-site-address-namespace.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-site-analytics.sql": {
+          "ok": true,
+          "passes": 10
+        },
+        "check-site-badge-setting.sql": {
+          "ok": true,
+          "passes": 6
+        },
+        "check-site-enquiries.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-site-sitemap.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-topup-fulfillment.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  Refusing top-up fixtures outside the named disposable database"
+        },
+        "check-topup-status.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  Refusing status fixtures outside the named disposable database"
+        },
+        "check-trusted-publication.sql": {
+          "ok": true,
+          "passes": 8
+        },
+        "check-unified-creation.sql": {
+          "ok": true,
+          "passes": 1
+        },
+        "check-unlimited-sites.sql": {
+          "ok": true,
+          "passes": 7
+        },
+        "check-usage-history-scale.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  DISPOSABLE_DATABASE_REQUIRED"
+        },
+        "check-usage-history-v2-scale.sql": {
+          "ok": false,
+          "passes": 0,
+          "error": "ERROR:  DISPOSABLE_DATABASE_REQUIRED"
+        },
+        "check-usage-history.sql": {
+          "ok": true,
+          "passes": 5
+        },
+        "check-usage-payment-history.sql": {
+          "ok": true,
+          "passes": 1
+        }
+      },
+      "removed": true
+    }
+  },
+  "finishedAt": "2026-10-26T00:04:09.005Z",
+  "inputs": [
+    {
+      "file": "supabase/migrations/20261005113330_founder_waitlist.sql",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "supabase/migrations/20261008130542_canonical_website_source_revisions.sql",
+      "sha256": "014288d8e4fb6129e3ae0784177b00c3df5b32403a35fd9b9bffcacd70a484ea"
+    },
+    {
+      "file": "supabase/migrations/20261008133918_durable_generation_job_leases.sql",
+      "sha256": "83588361b8cd57a43be0057acaf93d6e970e30208acc6c5f980eead4ea135c3b"
+    },
+    {
+      "file": "supabase/migrations/20261008135727_generation_outcome_settlement.sql",
+      "sha256": "9ad9ee291111a8549e3628e6946b864105e418aedccf12dcedefcd87394f2abb"
+    },
+    {
+      "file": "supabase/migrations/20261008141212_generation_execution_caps.sql",
+      "sha256": "fd316f183ff8e2d166fbe366a1441833b23c68b8efb79dd0769023f3d586e9a3"
+    },
+    {
+      "file": "supabase/migrations/20261008143555_generation_worker_lifecycle.sql",
+      "sha256": "5a68119cc130486990026052bf82391f3028d4c6db8272233cb66eb9912c1c6b"
+    },
+    {
+      "file": "supabase/migrations/20261008151657_generation_approved_input_authority.sql",
+      "sha256": "694264ca14e62d4bf67d809439a1463523d630a770c18cfd5db47140e0f53c3b"
+    },
+    {
+      "file": "supabase/migrations/20261008154453_generation_atomic_worker_result.sql",
+      "sha256": "99c6d39747b908d9fff49fd70e24fb4f1da9836767bad0d99254b4a9bc12dde5"
+    },
+    {
+      "file": "supabase/migrations/20261008155402_generation_worker_result_readback.sql",
+      "sha256": "922c6cd02ff44238c5c855e638705e86b2ef945021efd2756b0b475cb738c46b"
+    },
+    {
+      "file": "supabase/migrations/20261008161434_project_build_handoff.sql",
+      "sha256": "22237aa9bf466b765d023b5f8c9d28ce0a10eb07627da9a9c4c85f50f7eed20c"
+    },
+    {
+      "file": "supabase/migrations/20261008163228_generation_submission_boundary.sql",
+      "sha256": "a2a32b199162646b2c7a45b30e94e7a4e31a7744efb157463650017ccd867d60"
+    },
+    {
+      "file": "supabase/migrations/20261008170101_generation_preparation_boundary.sql",
+      "sha256": "ab096b196e5d1b721fdd3734a4870297c3afcf4341464177b65f510de92843ea"
+    },
+    {
+      "file": "supabase/migrations/20261008171229_generation_request_recovery.sql",
+      "sha256": "edef799310f21613bc50af82797d693b400eaeeb50413d18bfb02e7330f0f0ba"
+    },
+    {
+      "file": "supabase/migrations/20261008181217_generation_preview_read_authority.sql",
+      "sha256": "9b62b08302950da969dd64f7d6620f898d19c79454e0c18f48697576ca69991a"
+    },
+    {
+      "file": "supabase/migrations/20261008181817_workspace_membership_policy_deduplication.sql",
+      "sha256": "8f48a7116dce2d7fea577ae7e6b20062f7e04aeb02748a39a7c6706d9222d8c5"
+    },
+    {
+      "file": "supabase/migrations/20261008182736_private_preview_sessions.sql",
+      "sha256": "e38ebfa0c837674755c0b3f8de133454fecc186d6c2b66a9a40d80cc44a12dba"
+    },
+    {
+      "file": "supabase/migrations/20261008190859_saved_website_preview_discovery.sql",
+      "sha256": "cab0599542825541551e3f177f90da046ebaf44f9c10e2f925f2256bd1d71fc7"
+    },
+    {
+      "file": "supabase/migrations/20261008200855_operator_website_qualification_proposal.sql",
+      "sha256": "c00382d3fa7aabcf9ebcec7931db0045cf57d5300fb3c056bb55be0208d48114"
+    },
+    {
+      "file": "supabase/migrations/20261008210222_operator_website_repair_review.sql",
+      "sha256": "66c47473adb89b8a6a31f695caf0a1fc026a17fd509e5d5f67048941f4a06445"
+    },
+    {
+      "file": "supabase/migrations/20261009005809_saved_native_slide_designs.sql",
+      "sha256": "3357b324f9dc3c9d148a22ebfdae250d6f7b914f181f6fb2b9ce32bb3c907c92"
+    },
+    {
+      "file": "supabase/migrations/20261009014243_saved_presentation_preparation.sql",
+      "sha256": "39d1cca7c8716e679f2756aace97a4825d2bb2eead65d6ce35ba45fa975d7f08"
+    },
+    {
+      "file": "supabase/migrations/20261009015516_native_presentation_progress.sql",
+      "sha256": "f53cca9ff0e77e74c5d02b6e07af4c95db495071ac837e7ae0f41c9339072372"
+    },
+    {
+      "file": "supabase/migrations/20261009021050_operator_native_composition_qualification.sql",
+      "sha256": "40e353860f013144e6b3e799daeb5f76977de187ab812732aa0901a3cb5651f6"
+    },
+    {
+      "file": "supabase/migrations/20261011090000_credit_wallets_free_tier.sql",
+      "sha256": "4203a33c5e6361b0c21bf0f9a0b3373b78a677d9159f17e39e5ce1dca32d21a2"
+    },
+    {
+      "file": "supabase/migrations/20261011120000_artifact_plans.sql",
+      "sha256": "bb6423cdb3c07acc0ad3bbc20a108e455b15a952937c02c589909b46469fb19d"
+    },
+    {
+      "file": "supabase/migrations/20261011130000_client_review_links.sql",
+      "sha256": "2b7cbf794a90e7a501b0026805b158478c964cad1c43dab03991df8762188e4d"
+    },
+    {
+      "file": "supabase/migrations/20261011140000_hosted_site_bundles.sql",
+      "sha256": "2a789e5ee4fa7ad4ead3ca4330f37a8b9898857eca14202285500d81e3b131d1"
+    },
+    {
+      "file": "supabase/migrations/20261011160000_credit_reservation_expiry.sql",
+      "sha256": "543235fa3edc9bf6b17c4c890565375e2d0f94c7c4705421ae8dbfa8056b53ec"
+    },
+    {
+      "file": "supabase/migrations/20261011170000_free_tier_off_by_default.sql",
+      "sha256": "944cab982852082c213a0516e54d2939f0dc41fa17c4501791afdb0fe1dcdde1"
+    },
+    {
+      "file": "supabase/migrations/20261011180000_crm_sales_delivery_split.sql",
+      "sha256": "3cf8121d1147657d2d3a744de01fc7a89f58a01994304132d2de99b1beeefdb6"
+    },
+    {
+      "file": "supabase/migrations/20261011190000_crm_transition.sql",
+      "sha256": "e5449341d303b2687bd2645c4a68dd445b867ff76847ead2843b7a37d82dcd69"
+    },
+    {
+      "file": "supabase/migrations/20261011200000_crm_write_freeze.sql",
+      "sha256": "7a90f0e642744afcf476f420cf361ba455e660e7759e4628998a9e2f484ca31f"
+    },
+    {
+      "file": "supabase/migrations/20261012090000_plan_credit_allocations.sql",
+      "sha256": "155fb96c43e574423ae0f40839f01b5c1d795e676999e186a7afc268e04e9405"
+    },
+    {
+      "file": "supabase/migrations/20261012100000_plan_entitlement_history.sql",
+      "sha256": "06289c1214f453e3280bf30db77e5b1a8e8d72d7f14a334822fff3180d44cfd7"
+    },
+    {
+      "file": "supabase/migrations/20261012110000_plan_evidence_and_jobs.sql",
+      "sha256": "da715d08e3d46fcecae1ce74e6dad7f4e5f14174180dc8b5bb509e09efda16bd"
+    },
+    {
+      "file": "supabase/migrations/20261012120000_credit_lots_expiry.sql",
+      "sha256": "0ddd06e7b8b6ea1fddaa578e5cd5677b93a0b4d97e51162f0caf3341e9926d06"
+    },
+    {
+      "file": "supabase/migrations/20261012130000_credit_lock_clock.sql",
+      "sha256": "d16367b7d810570ad99d495aa707e58699d3158193d767578d3ffa229f0c16d3"
+    },
+    {
+      "file": "supabase/migrations/20261012140000_live_ai_spend.sql",
+      "sha256": "3eb95b4b3797926c446fed5d7e7c1ce9bf966cb4c33a18d0bce16d374ed48523"
+    },
+    {
+      "file": "supabase/migrations/20261012150000_shared_provider_limits.sql",
+      "sha256": "0cc4fd384af034dddeb26e419f8a0ff5764eac3e380e521d11b779206e10923f"
+    },
+    {
+      "file": "supabase/migrations/20261012160000_portable_site_html.sql",
+      "sha256": "786d9f60d785c7b1d00c82e6466fc2c6be7382d95e15b7fb922078e1040b7a10"
+    },
+    {
+      "file": "supabase/migrations/20261012170000_preserve_isolated_sites.sql",
+      "sha256": "126b6f9b173d235e23607e571e476dd2201de1cf8e5f477cb9148b43ee8a4c32"
+    },
+    {
+      "file": "supabase/migrations/20261012175901_prevent_duplicate_creation_checkouts.sql",
+      "sha256": "704c31a3e8d3d662de1c3b94e64c8db09f151a50b91908dd7d13c31dd40a99c3"
+    },
+    {
+      "file": "supabase/migrations/20261012184407_hosted_site_enquiries.sql",
+      "sha256": "fc80ef91c492ce74b457150ed264ab8b6dd5148d7cfb4109388f92a2ebed0de9"
+    },
+    {
+      "file": "supabase/migrations/20261012210033_hosted_site_address_changes.sql",
+      "sha256": "a301a2c6fffca07ea6897828da6077c0338b45111dec2756555d3243cbd5eb6c"
+    },
+    {
+      "file": "supabase/migrations/20261013090000_hosting_review_fixes.sql",
+      "sha256": "d80b59a5f6470ead6eb2e7622d9ecd781df272f064de2d194f4fa87861b51230"
+    },
+    {
+      "file": "supabase/migrations/20261013100000_admin_console.sql",
+      "sha256": "c131ceb76fdefeb7ce800f621d8d43368ec930c5c0d099cabb4c869445e6b547"
+    },
+    {
+      "file": "supabase/migrations/20261013110000_durable_topup_fulfillment.sql",
+      "sha256": "a2a7ecd63b9bf8b37ac7055cf0eb2558c01313f9a31deacc3ba4bf235474b9f1"
+    },
+    {
+      "file": "supabase/migrations/20261013120000_unlimited_sites.sql",
+      "sha256": "73d61e48358fa7e4b9c5285dd55d0331f4d69a6a7d226a85449789d3e01ed65b"
+    },
+    {
+      "file": "supabase/migrations/20261013130000_plan_credit_rollover.sql",
+      "sha256": "b19f7f08ce49acb5fb98f287175a3796ad64a2e77661d06292201d10d33aadcd"
+    },
+    {
+      "file": "supabase/migrations/20261013140000_site_badge_setting.sql",
+      "sha256": "ca147ffd270918da29fae6ce3083324288eb6f66dbe42c541f91c87dd5997871"
+    },
+    {
+      "file": "supabase/migrations/20261013150000_cumulative_ai_operations.sql",
+      "sha256": "3d08dd668b5cec9ec72ac2f7f6cddb698a27cd79957afd730e8e5d3e9f236e95"
+    },
+    {
+      "file": "supabase/migrations/20261013160000_client_review_view_integrity.sql",
+      "sha256": "251f9175ab359e091103c8bfed637e91131eee5d6f20929fe768475b73cdeaa4"
+    },
+    {
+      "file": "supabase/migrations/20261013170000_client_review_document_assets.sql",
+      "sha256": "c017fcd4adf4cae2a8e5da84e76bbd10c4c93930d1265dfb8c48e8d319c5efbf"
+    },
+    {
+      "file": "supabase/migrations/20261013180000_trusted_publication_preparations.sql",
+      "sha256": "f0b2767f7f65928bc15a18baad03683583df6e9873f45e51b248021a7164c3c9"
+    },
+    {
+      "file": "supabase/migrations/20261013190000_publication_worker_authority.sql",
+      "sha256": "d05a1cb3313c156bc645d584997e7d2f196349ba02885394e49397e522f83461"
+    },
+    {
+      "file": "supabase/migrations/20261013200000_staging_site_address_namespace.sql",
+      "sha256": "e6aa3a8779c169bdfbd0cfe28ab1fd0a56d255252ad1e023410f50806fa9c1f3"
+    },
+    {
+      "file": "supabase/migrations/20261013210000_publication_sandbox_journal.sql",
+      "sha256": "808c6d306e48f6850ed736d2cfd368690b95467ce4c034925aee7343545afc8c"
+    },
+    {
+      "file": "supabase/migrations/20261013220000_publication_worker_attestation.sql",
+      "sha256": "8420fb178d817e21c678e3cf9ccd752db1b02403334b582e247fae4af04ae441"
+    },
+    {
+      "file": "supabase/migrations/20261013230000_read_topup_order_status.sql",
+      "sha256": "11b22f823a40ca381bc3fc0072469e2a946a25823be6c551f2614fb29765edb8"
+    },
+    {
+      "file": "supabase/migrations/20261013240000_crm_email_automation.sql",
+      "sha256": "ebc0ffee246a476d593fb5063e421aceb354f8b2d1f0759a78d032039fa55663"
+    },
+    {
+      "file": "supabase/migrations/20261013250000_crm_lead_profile.sql",
+      "sha256": "2a978161b1e541367a999b19da68b26b9b9d9c6243d98a591c2bdd01f8379fd6"
+    },
+    {
+      "file": "supabase/migrations/20261013260000_crm_mail_security_boundaries.sql",
+      "sha256": "ad40b7296495225e9cc8f0d34fabfb3ca7905066667e57dedb59ecda01e4c7b9"
+    },
+    {
+      "file": "supabase/migrations/20261013270000_mail_granted_scopes.sql",
+      "sha256": "873d7f5aabcf665d1cb7e8c5779d07c93b1d00927478eac8bbf4c1c052ad89b7"
+    },
+    {
+      "file": "supabase/migrations/20261013280000_billing_lifecycle_boundaries.sql",
+      "sha256": "2153aa84628f53109643ac60fa571592b6b4b7b50259c20c9cfe21021218cef8"
+    },
+    {
+      "file": "supabase/migrations/20261014011643_publication_worker_function_boundary.sql",
+      "sha256": "2da2959a247de60a9b1322e28da6a9c3434129071aaddc2faa27990c32de7ac6"
+    },
+    {
+      "file": "supabase/migrations/20261014150000_github_connection_refresh.sql",
+      "sha256": "bcc233b2347d9b1f287911a5a832c6e4ea667437b447f12d15f91f141f07cbca"
+    },
+    {
+      "file": "supabase/migrations/20261014160000_custom_domains.sql",
+      "sha256": "fd077d043b5dfb9d60dd69b5380a5530a8839b2b34ded824ceab4d49450b6f6c"
+    },
+    {
+      "file": "supabase/migrations/20261014170000_site_analytics.sql",
+      "sha256": "f44e9625932e981737ef71d6068b18db0b7b66d8ee0c7169a2f57b7add2eaa10"
+    },
+    {
+      "file": "supabase/migrations/20261014180000_site_sitemap.sql",
+      "sha256": "8119f3a057ed434073e772b38fee9ef9f31702d560c1cddfcbe7ea07e37f63ff"
+    },
+    {
+      "file": "supabase/migrations/20261014190000_brand_kits.sql",
+      "sha256": "85d8b8e966861fed910947f179cdaef187657864375e5990d104dd3fa9c269a5"
+    },
+    {
+      "file": "supabase/migrations/20261015100000_review_link_views.sql",
+      "sha256": "dafd80bb0e35688fccd3828fb88e07e3a3ec6195355d0b8001204f413769ad58"
+    },
+    {
+      "file": "supabase/migrations/20261016090000_client_portal.sql",
+      "sha256": "1c28732cf9b3e2aab81a0e74fd73f99584a1e0f520cd05670ef6814338e8b129"
+    },
+    {
+      "file": "supabase/migrations/20261017080000_rpc_definer_boundary.sql",
+      "sha256": "cddd8290447c81feb1f08b3efe658153539e0aef566b412b76d14a2607fcddda"
+    },
+    {
+      "file": "supabase/migrations/20261019090000_app_observability.sql",
+      "sha256": "fd619c1c990c069fbf03776c7136b240e87b8682f8f741aefe8df2d75e4b7c52"
+    },
+    {
+      "file": "supabase/migrations/20261019134828_trusted_publication_production_profile.sql",
+      "sha256": "c28e4d356327a3740578d5c2288991964b28cb46fa607277c35413deed396ff5"
+    },
+    {
+      "file": "supabase/migrations/20261020090000_payment_funding_and_refunds.sql",
+      "sha256": "a4196916826f5c55f257c7909dbf19c867305344af88135d9496b6bacfea03c9"
+    },
+    {
+      "file": "supabase/migrations/20261020100000_credit_autotopup_authorization.sql",
+      "sha256": "563e75796f9dea1f32cf5116319fe7e8868240027e02c9ee3e8d52a8274ccd84"
+    },
+    {
+      "file": "supabase/migrations/20261020110000_usage_history_read.sql",
+      "sha256": "d80b0f6453c0f8952f6a80ea34868594b410ff16c70f2ef0c65325edeb0908ac"
+    },
+    {
+      "file": "supabase/migrations/20261020120000_artifact_title_search.sql",
+      "sha256": "702a0aa2fe84c40ca2f2b248a74399ecaee987c8cb1c316dbd8113dae0663c8c"
+    },
+    {
+      "file": "supabase/migrations/20261020144714_artifact_title_search_acl.sql",
+      "sha256": "ae64759d0619b898da485f858b2cbd6f4b170d8664fffa0704a054f1203ff876"
+    },
+    {
+      "file": "supabase/migrations/20261020174011_ai_operation_cancellation.sql",
+      "sha256": "4d18b6d64f47cac558f4216f198b31e4b599d0616f0a0c7465183db3d4298344"
+    },
+    {
+      "file": "supabase/migrations/20261020183417_ai_operation_cancel_compatibility.sql",
+      "sha256": "49648213a2c0c143e8c8371b4220fdcd4a7220f278cde278f99f4d9015d83e07"
+    },
+    {
+      "file": "supabase/migrations/20261020203000_scope_revocation_boundaries.sql",
+      "sha256": "884df0c23a157daa0b46e9a0e8f3fb03abeb3e438aa8b3167802b2a5d8d5a7c3"
+    },
+    {
+      "file": "supabase/migrations/20261020210000_artifact_card_previews.sql",
+      "sha256": "aa2efce837b702f6d87bbe879f79be155197a853072ba5926f445d6783c8cca6"
+    },
+    {
+      "file": "supabase/migrations/20261020231225_billing_ux_details_and_limits.sql",
+      "sha256": "8bdaa393391c56d1d28dfbc46a7fc782d5ad8a099e36fee8f7f6844dc45ad45b"
+    },
+    {
+      "file": "supabase/migrations/20261021125359_checkout_payment_recovery.sql",
+      "sha256": "cb048fb30957ceb52d64badedd37d12702477a99c5ea9544d619be9977ac3130"
+    },
+    {
+      "file": "supabase/migrations/20261021133151_billing_financial_reconcile_freshness.sql",
+      "sha256": "5045b832f0fa763c94cfc581175aa41b002fb38f0c8350f5da18f9b763728ee6"
+    },
+    {
+      "file": "supabase/migrations/20261022100000_brief_enhancement_actions.sql",
+      "sha256": "75dca905bfcd06eab46e65a12ea249413d746b7e45019003dd82c1859c92663f"
+    },
+    {
+      "file": "supabase/migrations/20261023000417_account_chat_history.sql",
+      "sha256": "e606d0b2e90d92a23cfc7be50b92b23865235af3b2317812aad95e423bb10f46"
+    },
+    {
+      "file": "supabase/migrations/20261023130000_project_source_uploads.sql",
+      "sha256": "a1345134ae595c841b58b17ccd070cc1856e93f45e3835ff195fab5d2a58f312"
+    },
+    {
+      "file": "supabase/migrations/20261023200000_agency_operation_contract.sql",
+      "sha256": "1ac82994bebef755fe9835075f7c4ecad5147a1664d5c813018ef61326799696"
+    },
+    {
+      "file": "supabase/migrations/20261023210000_client_knowledge.sql",
+      "sha256": "e432635a47a14428d0fbe48240b85b55a9f3c2087f5ee646d73cefa4da026e85"
+    },
+    {
+      "file": "supabase/migrations/20261024010000_client_research.sql",
+      "sha256": "ec878500be3e7bbcfb432842be492118406c89fdab6d1e26bb3bd9aac0e24e33"
+    },
+    {
+      "file": "supabase/migrations/20261024020000_data_report_files.sql",
+      "sha256": "b65c9fac40aa5851a9014b05a325252e76bcdc06e986ae1b5f7572e49022d66d"
+    },
+    {
+      "file": "supabase/migrations/20261025200000_paying_workspace_publication.sql",
+      "sha256": "aaa816b87e2f1cc46be99fd5538270fda6912ffad9e6a39eb9c782d938d4af5a"
+    },
+    {
+      "file": "supabase/migrations/20261025300000_crm_research.sql",
+      "sha256": "1eff2e9ee476f61459638a90590b199e659dd03d93412bbcea9be1843059097e"
+    },
+    {
+      "file": "docs/release-review/staging-platform-schema.sql",
+      "sha256": "3117e0a6af040e6f7eb1826397a00c62c0c63c113d3906d9b299a31c37b93d90"
+    },
+    {
+      "file": "docs/release-review/production-schema.sql",
+      "sha256": "83eb0a51417f1b4e3b54fb5275b81c4f680f735f9523319571f0211745b92ff5"
+    },
+    {
+      "file": "docs/release-review/production-baseline.json",
+      "sha256": "13d192a4986a3ff17d5a10b71f687278f87fa0ebd4be044e3e4fcc9b0bab023a"
+    },
+    {
+      "file": "supabase/release-review/populated-baseline-fixture.sql",
+      "sha256": "2443039c4400b7f4d950bb629c74659fcf4fee2560b2546e46f7b8b0c9e6224f"
+    },
+    {
+      "file": "supabase/post-deploy/pause_legacy_pilot.sql",
+      "sha256": "915bdae8f4c35a2194ad15b4ba936055d6adbd043780bea9bde2102afc1b474f"
+    },
+    {
+      "file": "supabase/check-account-chat-history.sql",
+      "sha256": "38557c5be7bbbf7919493237ecbc9fb4b800d296ee8c10740f5282f984d4109b"
+    },
+    {
+      "file": "supabase/check-account-privileges.sql",
+      "sha256": "c67de70b6012704b7fc5a592a80dcf3ce32a2c94e3acbcd7183809d86ccf54f7"
+    },
+    {
+      "file": "supabase/check-admin-console.sql",
+      "sha256": "caaec8bb09d42baeea1bdeac1e80509c6187173d824ed6a52f11a2987930e401"
+    },
+    {
+      "file": "supabase/check-agency-operations-concurrency.sql",
+      "sha256": "304b0e7138f2561c73ba20670b9df22fa3f9ea645fb363e6a2f77a0dbd92fabb"
+    },
+    {
+      "file": "supabase/check-agency-operations.sql",
+      "sha256": "6592f23065b69af542a045d54f23e6964a9fdee4fbbb22e617041e9c62427292"
+    },
+    {
+      "file": "supabase/check-ai-operation-cancellation.sql",
+      "sha256": "9315bbdbd9fc92aba21ad7b13444578d8c27994fd627309f4d8a9d25aadea908"
+    },
+    {
+      "file": "supabase/check-ai-operations.sql",
+      "sha256": "af67078d7d74b535e0c2b19ccb627e3d871973fce5b0b7d14a30cb062e170762"
+    },
+    {
+      "file": "supabase/check-app-observability.sql",
+      "sha256": "d46321348e9b3f98a7eaf31a81d38c29583995259a34272c1ed822bb5e95e62a"
+    },
+    {
+      "file": "supabase/check-artifact-card-previews.sql",
+      "sha256": "165b467b5bd0c565b357231ff3fbae2dec683720f43df4d460907a92fd1b2457"
+    },
+    {
+      "file": "supabase/check-artifact-title-search.sql",
+      "sha256": "bc95dcb14bcf72d73bb8f45c2172050fdc74d21262b451c989d6f2c61c220dec"
+    },
+    {
+      "file": "supabase/check-billing-lifecycle-concurrency.sql",
+      "sha256": "332f19982b09ef459eb9931023be4f9cc16bbb7244d4b9eda17dc29aebcc4e5d"
+    },
+    {
+      "file": "supabase/check-billing-lifecycle.sql",
+      "sha256": "9d5ef67d006e8391b2cdde54f9a38bb1a9554041d785947fb441adb49b9a89e9"
+    },
+    {
+      "file": "supabase/check-billing-ux.sql",
+      "sha256": "6a4a58a22753608c306e8b5977234856209c81577b64c3664abcdfe32015bf68"
+    },
+    {
+      "file": "supabase/check-brand-kits.sql",
+      "sha256": "fe82418bec4c4d31ae6c83ff6dcd6b6be0f2039391994e1b0d5aa0974e4ce51f"
+    },
+    {
+      "file": "supabase/check-brief-enhancements.sql",
+      "sha256": "ec6d4cb67be65214713df77346d9817d2d95853c97ef1fe43b1b2dec524acc78"
+    },
+    {
+      "file": "supabase/check-browser-acl.sql",
+      "sha256": "cb101a838aec48763d7f2990b6f6f2217d458aa95f0ac88c3ba3ed579f53d565"
+    },
+    {
+      "file": "supabase/check-budget-reservations.sql",
+      "sha256": "43a2849fb516b76ac16153e7fc3f4fefab0c70b6365bba5c4de931544479880c"
+    },
+    {
+      "file": "supabase/check-checkout-recovery.sql",
+      "sha256": "e3202e850d9c10386d30942e6e3b18404fdc10f9f638674480023661123014fe"
+    },
+    {
+      "file": "supabase/check-client-directory.sql",
+      "sha256": "b30a16ad9c5f9f9403cc85aafa1be6e0edd2dcb2f352911e1897096285b72541"
+    },
+    {
+      "file": "supabase/check-client-knowledge.sql",
+      "sha256": "c132fd6292201eb830f10e0ca26e63fa8b92fb70ae4820d048d22c780553c562"
+    },
+    {
+      "file": "supabase/check-client-outreach.sql",
+      "sha256": "2a799e435880ac744606ec189457db0d6fc264103ee0b7348e432a5955d4e0a4"
+    },
+    {
+      "file": "supabase/check-client-portal.sql",
+      "sha256": "a0521a176dffa2e3da843a4356ff04d15ac103d598ada91117f8b695dad75b40"
+    },
+    {
+      "file": "supabase/check-client-projects.sql",
+      "sha256": "72498bb0ffbc76e83c266a57c9e5340dec7435772fea7cf4c1bf1ae595865e3f"
+    },
+    {
+      "file": "supabase/check-client-research.sql",
+      "sha256": "678deceddd70df8128e0538259989bb2bb09dc31c784f2adb05273094cfac36c"
+    },
+    {
+      "file": "supabase/check-client-review-document-assets.sql",
+      "sha256": "b0cf90151bd4cac163f99d4f350ed6ed0596346edae6c5a27a12cc5088e9f370"
+    },
+    {
+      "file": "supabase/check-client-review-links.sql",
+      "sha256": "4ea423d4269bfa55df247190ca954a62263a22535641071c2d27b7e1c21fea43"
+    },
+    {
+      "file": "supabase/check-credit-autotopup.sql",
+      "sha256": "3d411c9555f9e1fe94cc64ad4bf6f5394426f9444f4facc2aabefaeb8408818c"
+    },
+    {
+      "file": "supabase/check-credit-lots-concurrency.sql",
+      "sha256": "4f3b0734d808d52c7dd43390bbf3a30eb24eab6b7648a24189ca5f4d02e1bb93"
+    },
+    {
+      "file": "supabase/check-credit-lots-expiry.sql",
+      "sha256": "c9b007e2bc3e46f2a43bc9a532ef7f98bc0ccb32f459018f13b18bc9044652db"
+    },
+    {
+      "file": "supabase/check-credit-wallets-concurrency.sql",
+      "sha256": "35ee94476bc824b3a6f851e02c190120e340cde8b7b5c3a1e49f5d0fd2b22c2f"
+    },
+    {
+      "file": "supabase/check-credit-wallets.sql",
+      "sha256": "eee8fb26a7ddef318e41e11380526f78ff0cb05ef4ee192c386aba6dce89c5e3"
+    },
+    {
+      "file": "supabase/check-crm-concurrency.sql",
+      "sha256": "d4406fe9f91b7341cab8c54bbc3645c3eb6b19fe3ec0d30250f9cdad5cea1646"
+    },
+    {
+      "file": "supabase/check-crm-lead-profile.sql",
+      "sha256": "6c1dd16be2bb7be08e7fceaa6c95089e5d9e86e18481ec3497e1ee2544479540"
+    },
+    {
+      "file": "supabase/check-crm-mail-boundaries.sql",
+      "sha256": "d4bda06aa8504d8ceff67c782af717a1ce59820c9390f7067d7973facda8a393"
+    },
+    {
+      "file": "supabase/check-crm-mail-security.sql",
+      "sha256": "1a12916a638f07c9863b5c0bc37f5f4b33d145a02358448aed8f5097ca9fc783"
+    },
+    {
+      "file": "supabase/check-crm-mail-upgrade.sql",
+      "sha256": "77c364461a22dc5b073ac61615d1212d63978e92ae3f134758692c7e2e373608"
+    },
+    {
+      "file": "supabase/check-crm-research.sql",
+      "sha256": "72466af01209d9dbe1bda7d846461857ab5cd782514966fec0035b5faf6cbe95"
+    },
+    {
+      "file": "supabase/check-crm-sales-delivery.sql",
+      "sha256": "c398d91f28cd48f3dc55f6d55dc9b583430d10b40f1a75209812c01b179d2d6a"
+    },
+    {
+      "file": "supabase/check-custom-domains.sql",
+      "sha256": "4de84781176ca1680ae0c233155ce85ac4ce1bd406df1a9fbd90e9fbe6d4709c"
+    },
+    {
+      "file": "supabase/check-durable-jobs.sql",
+      "sha256": "fff79708e9329bd4d46e41844188052a44250139dbb0e97c2ba1051dfa9a0125"
+    },
+    {
+      "file": "supabase/check-financial-reconcile-freshness.sql",
+      "sha256": "2c9eabfbc5cc062b586dc2f49511afd248f9cab9a07a7f6f4f9ab00e9239cff9"
+    },
+    {
+      "file": "supabase/check-generation-authority.sql",
+      "sha256": "3859bd1afddd4703263bb72a17b5d8834d7b1c6345c892e98a47df7b475c5755"
+    },
+    {
+      "file": "supabase/check-generation-caps.sql",
+      "sha256": "5f8e825220fc933d4e73191b683f710610280ac9c7c21de1e00b17e86d432100"
+    },
+    {
+      "file": "supabase/check-generation-dispatch.sql",
+      "sha256": "3a9e8e4f19a09196f12926b02b316acd0474378b122abce2ad9429ea4ad9c824"
+    },
+    {
+      "file": "supabase/check-generation-result.sql",
+      "sha256": "682ea10dc29a7b188d3a63941887cc6c6b7d8f230d5b00dbfd7245218f724191"
+    },
+    {
+      "file": "supabase/check-generation-settlement.sql",
+      "sha256": "a3c0a37cd12a2e4cd6863aecda1900a1cf680855ef0201c2a8289f3a35ae7167"
+    },
+    {
+      "file": "supabase/check-github-connection-refresh.sql",
+      "sha256": "47e48fbaf8f13e707b684f988b9b6bc1e3ca10ddfb901cc3ed5d4718ea127968"
+    },
+    {
+      "file": "supabase/check-hosting-modes.sql",
+      "sha256": "0f904f75a341f63cba4069d1f086abe0c980043db23828677a6519a6d6d0a9a7"
+    },
+    {
+      "file": "supabase/check-live-ai-spend-concurrency.sql",
+      "sha256": "38e466fbfa69b629f273e108cf01253b445dba31837abc15c5a738e673d27423"
+    },
+    {
+      "file": "supabase/check-live-ai-spend.sql",
+      "sha256": "1f9e704f366d820c0821e933a3131fa2c3aec1c7dfd8bd63d99f1eb71269d422"
+    },
+    {
+      "file": "supabase/check-local-pilot-lock.sql",
+      "sha256": "67590b8e4ae9b52280a8590571b3d243695d8287343a630ebe5ea8eecb0315f6"
+    },
+    {
+      "file": "supabase/check-locked-content.sql",
+      "sha256": "d6e5fed64420b0678f42ae63dfbb87d00b011e637cb85dc30e1e884d760b09b4"
+    },
+    {
+      "file": "supabase/check-mail-granted-scopes-upgrade.sql",
+      "sha256": "0e258f5146338fe7f9fb1a7179e2599225b7433c2b8bb2445f9509f9dd8dcba7"
+    },
+    {
+      "file": "supabase/check-mail-granted-scopes.sql",
+      "sha256": "5e3cbcbda29d085159f1ec99408dd2c2267a03e95c3d8f2d9b08dc47192dea34"
+    },
+    {
+      "file": "supabase/check-paying-workspace-publication.sql",
+      "sha256": "4a51ab6d4f2a2d0657a2243b14d9245b85be9d013f868bab451de85d2015da1a"
+    },
+    {
+      "file": "supabase/check-plan-approval-idempotency.sql",
+      "sha256": "8902c484309b0ecf22e0c83351d533eb52048ab28e5cafa834baf169d3351f2b"
+    },
+    {
+      "file": "supabase/check-plan-credit-allocations.sql",
+      "sha256": "ea67376a95db3584ba634b048694b4f31d4732f0f5bf908b949e83b8fbb1491e"
+    },
+    {
+      "file": "supabase/check-plan-credit-concurrency.sql",
+      "sha256": "1ac3d141948a24d6d5ec8626aa25d7004a858325f2c6917aef7cc128077de955"
+    },
+    {
+      "file": "supabase/check-plan-credit-rollover.sql",
+      "sha256": "6ebd63cea99dfca3a9ca52dc9b55b472c11a2bdef93a3b59f81e5eca72df0375"
+    },
+    {
+      "file": "supabase/check-plan-payment-refunds.sql",
+      "sha256": "5aebffdc01f52196ee35b60b07621d86f15732e98d55ed82c98fd6ea24687c41"
+    },
+    {
+      "file": "supabase/check-proposal-storage.sql",
+      "sha256": "1d4f91e1cec9d7f231e3cb3f2a98dd8562c7ac4777b8fa44cf993af1a517fea8"
+    },
+    {
+      "file": "supabase/check-publication-controller-boundary.sql",
+      "sha256": "8acf877ccb3ff5c176f435df54ff3383b2c899b555dfbdce1d76894879abd061"
+    },
+    {
+      "file": "supabase/check-publication-production-profile.sql",
+      "sha256": "1e3ac34c4101cf049752654002787002c8b3fe44378f315f2342327a911f9b11"
+    },
+    {
+      "file": "supabase/check-publication-sandbox-journal.sql",
+      "sha256": "e8ab566c16d33789e75b8294303abcfab14d0ecff26f9a252c8216a0a0990d7c"
+    },
+    {
+      "file": "supabase/check-publication-worker-authority.sql",
+      "sha256": "a6abc5f9e98f4e3c4e026949d094288b92f25de4ec92d5c7919643e803ae31fa"
+    },
+    {
+      "file": "supabase/check-review-link-views.sql",
+      "sha256": "94b170831e76e297e178c2a180530ac173ed745d035b6922df91ae31aa161051"
+    },
+    {
+      "file": "supabase/check-scope-matrix.sql",
+      "sha256": "ba57b10be84caf133364f59fdd43eb6408715c986c418b054acb898f038931ba"
+    },
+    {
+      "file": "supabase/check-site-address-changes.sql",
+      "sha256": "1467bfd32ad4d64f1b912af62eeeb494dd8eb0c30f9ae1e835dc808a4b6be8d3"
+    },
+    {
+      "file": "supabase/check-site-address-namespace.sql",
+      "sha256": "f9cb9fdf4eef155e76de96f5e366e427f3369f7d6388f47cde7f56800614287e"
+    },
+    {
+      "file": "supabase/check-site-analytics.sql",
+      "sha256": "1b2ed9a494d94227a661f19d27ba5a1576884cb17c263b12d4a6cdb835da7cf3"
+    },
+    {
+      "file": "supabase/check-site-badge-setting.sql",
+      "sha256": "4c330baabbc7f57bfcad5441c19a03e9d2921ce23d6405e83285e092dc8fbd31"
+    },
+    {
+      "file": "supabase/check-site-enquiries.sql",
+      "sha256": "3ab9f8ffad2c60d46806c760df51f1f5f073e5e0b5010818c552fd688311445a"
+    },
+    {
+      "file": "supabase/check-site-sitemap.sql",
+      "sha256": "fe610f83ab4083a5efb9cc69c85817be319346c5d431ce6af116ad6b86dce0a2"
+    },
+    {
+      "file": "supabase/check-topup-fulfillment.sql",
+      "sha256": "c158db6b73d4cb5af9f04fff1beae66bec2af6f4911cbeba9a2fc718dc210f03"
+    },
+    {
+      "file": "supabase/check-topup-status.sql",
+      "sha256": "bfee6c495fa7c2515c8d8aeae9cc13ed4c6afedd0353b781f98d0a5c79d1ba5b"
+    },
+    {
+      "file": "supabase/check-trusted-publication.sql",
+      "sha256": "ed25de7d82134d2a98fc2ce94f7e182d0a7a6a9ea872d7eb11a0672802a2a00a"
+    },
+    {
+      "file": "supabase/check-unified-creation.sql",
+      "sha256": "9b0e4a5d3d77e4384efd6ba9e384d617c611df9079681470415c64d537af0c4e"
+    },
+    {
+      "file": "supabase/check-unlimited-sites.sql",
+      "sha256": "96e052114f54e257bd532f1d50b173ba17bfe015d2759b6cb807f5f748e89835"
+    },
+    {
+      "file": "supabase/check-usage-history-scale.sql",
+      "sha256": "901949ac7ff6c31f941dd02628f979afa9ec944ce597373554cb991cab1cd4df"
+    },
+    {
+      "file": "supabase/check-usage-history-v2-scale.sql",
+      "sha256": "52c4cf26b82b88f1e9b489605b7f319a4a506c0a5c5f2d61de5c6c182c303f7f"
+    },
+    {
+      "file": "supabase/check-usage-history.sql",
+      "sha256": "a6b454dfa36dc52cd5b26775297b2b82738355750cbc29ab712897c3e82ae80a"
+    },
+    {
+      "file": "supabase/check-usage-payment-history.sql",
+      "sha256": "5a3bd1a3638ef86085366c2aa485f06a70ab5da07830793e12d3811c0780c9e8"
+    }
+  ]
+}

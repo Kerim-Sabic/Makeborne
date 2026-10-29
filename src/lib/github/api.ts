@@ -24,7 +24,7 @@ export function githubClient(token: string, fetchImpl: GitHubFetch = fetch): Git
       const limited = status === 429 || (status === 403 && (response.headers.get("x-ratelimit-remaining") === "0" || response.headers.has("retry-after")));
       if (status === 401) throw new GitHubRequestError("GITHUB_RECONNECT", "Your GitHub connection expired or was revoked. Reconnect GitHub to continue.", 401, status);
       if (limited) throw new GitHubRequestError("GITHUB_RATE_LIMITED", "GitHub is limiting requests right now. Wait a minute, then try again. Your saved website is unchanged.", 429, status);
-      throw new GitHubRequestError("GITHUB_REQUEST_FAILED", status === 403 ? "Reconnect GitHub and check the selected repository permissions." : status === 409 || status === 422 ? "The repository changed. Refresh its status before syncing again." : "GitHub could not finish this request. Your saved website is unchanged.", 409, status);
+      throw new GitHubRequestError("GITHUB_REQUEST_FAILED", status === 403 ? "Reconnect GitHub and check the selected repository permissions." : status === 409 || status === 422 ? "The repository changed. Refresh its status before pushing again." : "GitHub could not finish this request. Your saved website is unchanged.", 409, status);
     }
     return response.status === 204 ? null : await response.json() as T;
   };

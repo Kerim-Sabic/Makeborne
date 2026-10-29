@@ -2,10 +2,10 @@
 
 /**
  * One-shot requests from the getting-started checklist to the Clients page
- * ("open the lead finder", "show Email"). Kept in session storage too, so the
+ * ("open the lead finder", "add a client", "show Email"). Kept in session storage too, so the
  * request survives the Clients page mounting after the click.
  */
-export type ClientsAction = "find-leads" | "email";
+export type ClientsAction = "find-leads" | "add-client" | "email";
 const KEY = "makeborne.clients-action";
 export const CLIENTS_ACTION_EVENT = "makeborne:clients-action";
 /** Fired by the Clients page when something that moves the checklist happens (clients added, email sent). */
@@ -26,7 +26,7 @@ export function takeClientsAction(): ClientsRequest | null {
     const raw = sessionStorage.getItem(KEY);
     sessionStorage.removeItem(KEY);
     const value = raw ? JSON.parse(raw) as ClientsRequest : null;
-    return value && (value.action === "find-leads" || value.action === "email") ? value : null;
+    return value && (value.action === "find-leads" || value.action === "add-client" || value.action === "email") ? value : null;
   } catch { return null; }
 }
 

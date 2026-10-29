@@ -32,7 +32,7 @@ export type SpendGate = {
 
 export type SpendStop = "RUN_BUDGET" | "HOLD_EXPIRED" | "OVERRUN" | "CANCELLED";
 export class SpendError extends Error {
-  constructor(readonly code: SpendStop | "PROVIDER_LIMIT" | "PROVIDER_DISABLED" | "SPEND_UNAVAILABLE", message: string) { super(message); }
+  constructor(readonly code: SpendStop | "PROVIDER_LIMIT" | "PROVIDER_DISABLED" | "SPEND_UNAVAILABLE" | "ACCESS_REQUIRED", message: string) { super(message); }
   /** Stops that end a run gracefully (keep finished work) rather than failing it. */
   get graceful() { return this.code === "RUN_BUDGET" || this.code === "HOLD_EXPIRED"; }
 }
@@ -103,6 +103,8 @@ export class RunSpend {
   cancel() { this.stopped = "CANCELLED"; }
   /** A call produced more than its bound allowed (e.g. image output tokens): no further calls in this run. */
   markOverrun() { if (this.stopped !== "CANCELLED") this.stopped = "OVERRUN"; }
+  /** A durably renewed lease (operation heartbeat) may move the deadline later, never earlier. */
+  extendDeadline(epochMs: number) { if (Number.isFinite(epochMs) && epochMs > this.options.deadline) this.options.deadline = epochMs; }
 
   /** boundMicrousd is reserved against the run's allowance. worstCaseMicrousd (default: the bound) is what the call can
    * cost if the provider drops the cache the bound counted on; it is what the database gate reserves and polices. */

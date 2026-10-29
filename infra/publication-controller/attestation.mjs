@@ -21,6 +21,8 @@ export function validateLoginAttestation(value,config,stream){
 export function validateNamespaceAttestation(value,config){
  if(config.namespace==='staging'){
   if(!value||Object.keys(value).length!==3||value.contractVersion!=='publication-controller-v1'||value.namespace!=='staging'||value.qaWorkspaceId!==config.qaWorkspaceId)invalid();
+ }else if(config.namespace==='production'&&config.workspaceScope==='entitled'){
+  if(!value||Object.keys(value).length!==3||value.contractVersion!=='publication-controller-v3'||value.namespace!=='production'||value.workspaceScope!=='entitled')invalid();
  }else if(config.namespace==='production'){
   if(!value||Object.keys(value).length!==3||value.contractVersion!=='publication-controller-v2'||value.namespace!=='production'
    ||!Array.isArray(value.workspaceAllowlist)||JSON.stringify(value.workspaceAllowlist)!==JSON.stringify(config.workspaceAllowlist))invalid();

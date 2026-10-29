@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
+import { LEGAL_VERSION, SIGNUP_TERMS_LINE } from "@/lib/legal/versions";
 import BrandMark from "./brand-mark";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -121,7 +123,8 @@ export default function AccountForm() {
         const { data, error } = await client.auth.signUp({
           email: address,
           password,
-          options: { emailRedirectTo: redirectUrl() },
+          // The accepted Terms version and time, beside the clickwrap line under "Create account".
+          options: { emailRedirectTo: redirectUrl(), data: { terms_version: LEGAL_VERSION, terms_accepted_at: new Date().toISOString() } },
         });
         if (error) throw error;
         setPassword("");
@@ -281,6 +284,8 @@ export default function AccountForm() {
             </div>}
             <button className="button primary" disabled={busy || (mode === "recovery" && retryIn > 0)} type="submit">{busy ? <><LoaderCircle className="auth-spinner" size={16} />Please wait…</> : <>{mode === "signup" ? "Create account" : mode === "recovery" ? retryIn > 0 ? `Try again in ${retryIn}s` : "Send reset link" : "Sign in"}<ArrowRight size={16} /></>}</button>
           </form>
+          {mode === "signup" && <TermsLine />}
+          {mode === "login" && (google || github) && <p className="auth-legal-line">New here? Continuing with Google or GitHub creates an account. <TermsLine inline /></p>}
           <div className="auth-mode-switch">{mode === "recovery" ? <button disabled={busy} onClick={() => changeMode("login")}><ArrowLeft size={14} />Back to sign in</button> : <><span>{mode === "signup" ? "Already have an account?" : "New to Makeborne?"}</span><button disabled={busy} onClick={() => changeMode(mode === "signup" ? "login" : "signup")}>{mode === "signup" ? "Sign in" : "Create an account"}</button></>}</div>
           {mode === "login" && <details className="auth-help"><summary>Waiting for a confirmation email?</summary><p>Enter your email above, then request a new link.</p><button type="button" className="text-link" disabled={busy || !email.trim() || retryIn > 0} onClick={() => void resend("signup")}>{retryIn > 0 ? `Resend in ${retryIn}s` : "Resend confirmation email"}</button></details>}
         </>}
@@ -288,6 +293,12 @@ export default function AccountForm() {
       </section>
       {!verification && <p className="auth-caption">A little space for your next big thing.</p>}
     </div>
-    <footer className="auth-footer"><span>© 2026 Makeborne</span><Link href="/privacy">Privacy</Link></footer>
+    <footer className="auth-footer"><span>© 2026 Makeborne</span><LegalLinks /></footer>
   </main>;
+}
+
+/** Clickwrap: links, never a pre-ticked box. The version is stored with email sign-up (LEGAL_VERSION). */
+function TermsLine({ inline = false }: { inline?: boolean }) {
+  const text = <>{SIGNUP_TERMS_LINE.before}<Link href="/terms">{SIGNUP_TERMS_LINE.terms}</Link>{SIGNUP_TERMS_LINE.middle}<Link href="/privacy">{SIGNUP_TERMS_LINE.privacy}</Link>{SIGNUP_TERMS_LINE.after}</>;
+  return inline ? <span>{text}</span> : <p className="auth-legal-line" id="signup-terms">{text}</p>;
 }

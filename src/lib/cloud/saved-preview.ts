@@ -22,6 +22,13 @@ export function savedFormat(content: ArtifactContent, version: number): SavedFor
   return !titled && (!blocks.length || titleOnly) ? "starting" : "outline";
 }
 
+/**
+ * A starting draft with any saved block (a new project keeps at least its title heading) is shown in the
+ * same layout preview a client review link and Publish use, so the editor is never the one place where
+ * saved content can't be seen. Only a draft with no blocks at all gets the empty "starts here" state.
+ */
+export const startingDraftHasContent = (content: Pick<ArtifactContent, "sections">) => content.sections.some(section => section.blocks.length > 0);
+
 /** Builder output exists: a new build edits it rather than starting over. */
 export const hasBuilderSource = (format: SavedFormat | null) => format === "document" || format === "website-source";
 
@@ -58,11 +65,11 @@ export function choosePreview(input: {
  * The editor tab for a saved version and what the format notice may promise
  * about it. The toolbar label and the notice both come from here, so the notice
  * never names a control that isn't on screen. Websites with HTML/CSS or a source
- * project open in "Code"; outlines and documents open in "Edit". Reviewers can
+ * project open in "Code"; outlines and documents open in "Content". Reviewers can
  * read and download but not change content.
  */
 export function editorEntry(content: Pick<ArtifactContent, "kind" | "website" | "websiteSource">, reviewer: boolean) {
-  const label = content.kind === "website" && (content.website || content.websiteSource) ? "Code" as const : "Edit" as const;
+  const label = content.kind === "website" && (content.website || content.websiteSource) ? "Code" as const : "Content" as const;
   const action = reviewer ? "read it" : "read and edit it as it is";
   // Source projects download from the More menu; static designs and outlines from the editor tab itself.
   const download = content.websiteSource ? "" : reviewer ? ", and download a copy there" : ", and download a copy of the draft there";

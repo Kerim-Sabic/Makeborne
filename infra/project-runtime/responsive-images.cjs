@@ -21,6 +21,9 @@ const RESPONSIVE_SIZES = "100vw";
 /** Published sites accept at most 40 images and 6 MB in total (site-policy.js);
  * copies stop well before either so publishing never fails because of them. */
 const VARIANT_LIMITS = Object.freeze({images: 36, bytes: 4_000_000});
+/** A new original must leave the site publishable: one more file within the 40,
+ * and room in the 6 MB for that image (up to ~700 KB) plus the site's own code. */
+const SITE_IMAGE_LIMITS = Object.freeze({images: 40, bytes: 4_800_000});
 
 const VARIANT_PATH = /^public\/images\/_r\/([a-f0-9]{16})-([1-9][0-9]{0,4})x([1-9][0-9]{0,4})\/([1-9][0-9]{0,4})\.webp$/;
 const ORIGINAL_PATH = /^public\/images\/(?!_r\/)(?:[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}\/){0,6}[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}\.(?:webp|png|jpe?g)$/i;
@@ -88,6 +91,13 @@ function variantsFit(assets, added) {
   return count <= VARIANT_LIMITS.images && bytes <= VARIANT_LIMITS.bytes;
 }
 
+/** Whether one more generated original still fits the published site's image limits. */
+function siteImageFits(assets) {
+  const images = (assets ?? []).filter(asset => typeof asset?.path === "string" && asset.path.startsWith("public/"));
+  const bytes = images.reduce((total, asset) => total + (asset.bytes ?? 0), 0);
+  return images.length + 1 <= SITE_IMAGE_LIMITS.images && bytes <= SITE_IMAGE_LIMITS.bytes;
+}
+
 /**
  * Source of a module that replaces `react/jsx-runtime` for project code. It
  * forwards to `runtimeSpecifier` and gives every <img> of a manifest original
@@ -118,4 +128,4 @@ export function jsxs(type, props, key) { return runtime.jsxs(type, patch(type, p
 `;
 }
 
-module.exports = {RESPONSIVE_WIDTHS, RESPONSIVE_SIZES, VARIANT_LIMITS, variantWidths, variantPath, isVariantPath, isOriginalPath, responsiveManifest, pruneVariants, variantsFit, jsxRuntimeModule};
+module.exports = {RESPONSIVE_WIDTHS, RESPONSIVE_SIZES, VARIANT_LIMITS, SITE_IMAGE_LIMITS, siteImageFits, variantWidths, variantPath, isVariantPath, isOriginalPath, responsiveManifest, pruneVariants, variantsFit, jsxRuntimeModule};

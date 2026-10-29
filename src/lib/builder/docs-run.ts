@@ -14,6 +14,10 @@ import { routeDetail, type AttemptRole, type ModelRoute, type RouteRecord } from
 import { routedDocumentStage } from "./document-stage";
 import { aiStop } from "../ai/failure";
 import { DocumentEditor, emptyDocument } from "../documents/editor";
+import { bookImagePlanFromBrief, deckModeFromBrief } from "../documents/creation-options";
+import { bookImagePagesEnabled, fullImageSlidesEnabled } from "./features";
+import { artTextModel, newDocumentFormat, type ImageOptions } from "../documents/art-formats";
+import { imageConfiguration } from "./images";
 import { projectDocument, documentAssetIds } from "../documents/project";
 import { wordCount } from "../documents/book-markup";
 import { runDocumentBuilder, type DocBuilderEvent, type DocBuilderRun } from "./docs-agent";
@@ -43,7 +47,13 @@ export type DocumentBuildInput = {
   storeImage?: DocBuilderRun["storeImage"];
   /** The stage's model route (../ai/model-routing.ts). Absent: the builder model, one attempt, as before. */
   route?: ModelRoute;
+  /** The client's image quality and shape from the composer (validated by the route); applied to the document. */
+  imageOptions?: ImageOptions;
+  /** Image models (tests); production reads the allowlist. */
+  imageModels?: string[];
+  continuation?: boolean;
 };
+
 
 /** Model-facing context: brief, style, history, and the current document. */
 export function documentContext(input: Pick<DocumentBuildInput, "artifact" | "project" | "current" | "versions" | "brand">, editor: DocumentEditor, fresh: boolean) {
@@ -79,7 +89,22 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
   let routeRecord: RouteRecord | null = null, routeLogged = false;
   const logRouteOnce = () => { if (!routeLogged) { routeLogged = true; logRoute(hold.reference, "document", routeRecord); } };
   const fresh = !current.content.document;
-  const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId));
+  // A new deck is full-image unless the client chose (or asked for) editable text slides; a new book follows the
+  // image plan from its questions or brief (creation-options.ts). Saved documents keep what they have.
+  const options = `${input.project.brief}
+${input.message}`;
+  const artModel = artTextModel(input.imageModels ?? imageConfiguration().models);
+  const format = newDocumentFormat(artifact.kind, options, input.imageOptions, artModel);
+  // A new full-image deck carries the reference's furniture: a tiny page number on every slide (and the wordmark the designer sets).
+  const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId,
+    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options), shape: "shape" in format ? format.shape : undefined, quality: format.quality, bookArt: bookImagePagesEnabled() }
+      // Full-image slides stay off unless MAKEBORNE_DECK_FULL_IMAGE=on: new decks are editable text slides ("live").
+      : { slideMode: fullImageSlidesEnabled() ? deckModeFromBrief(options).mode : "live", aspect: "aspect" in format ? format.aspect : undefined, quality: format.quality, pageNumbers: true }));
+  // A saved document takes the composer's new choices (the route checked they can render).
+  if (current.content.document && input.imageOptions) {
+    if (editor.doc.kind === "deck") editor.setDeckFormat({ aspect: input.imageOptions.aspect, quality: input.imageOptions.quality });
+    else editor.setBookFormat({ shape: input.imageOptions.shape, quality: input.imageOptions.quality });
+  }
   const context = [documentContext(input, editor, fresh), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n");
   const encoder = new TextEncoder();
   const controller = new AbortController();
@@ -102,7 +127,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         const attempt = (plan: { role: AttemptRole; model?: string; deadline: number; repairNotes: string[] }) => runDocumentBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, editor, effort: input.effort,
           spend, request: plan.role === "repair" ? `${input.message}\n\nRepair: the previous attempt stopped before the document was complete and checked. Continue from the current document, complete what is missing, then call finish.${plan.repairNotes.length ? `\n- ${plan.repairNotes.join("\n- ")}` : ""}` : input.message,
           context: plan.role === "repair" ? [documentContext(input, editor, false), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n") : context,
-          attachments: input.attachments, emit, signal: controller.signal, deadline: plan.deadline,
+          attachments: input.attachments, emit, signal: controller.signal, deadline: plan.deadline, continuation: input.continuation,
           anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, ...(plan.model ? { model: plan.model } : {}) });
         try {
           if (!input.route) result = await attempt({ role: "initial", deadline: stageDeadline, repairNotes: [] });
@@ -119,6 +144,12 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         logRouteOnce();
         const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped, usage: spend.usageByModel(),
           ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
+        if (result.requiresApproval) {
+          if (input.operation) emit(operationTerminal(await finishOperation(input.operation, 0, "failed", { ...detail, code: "OPERATION_BUDGET_REACHED", message: result.summary,
+            version: artifact.current_version, changed: false, finished: false })));
+          else { await releaseRun(hold, 0, "insufficient_art_allowance", detail); emit({ type: "error", code: "OPERATION_BUDGET_REACHED", message: result.summary }); }
+          return;
+        }
         if (!editor.changed) {
           if (input.operation) {
             // Nothing usable saved: never charged (provider cost absorbed). A finished no-change request stays chargeable.

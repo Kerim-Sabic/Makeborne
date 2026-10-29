@@ -6,6 +6,7 @@ import { billingDatabase } from "./database";
 import { whopGet } from "./whop";
 import { CreditTopupPurchaseSchema } from "./topups-contracts";
 import { normalizeWhopTopupPayment } from "./topup-fulfillment";
+import { confirmAfterFulfillment } from "./purchase-confirmations";
 
 const referenceSchema = z.object({
   id: z.string().regex(/^pay_[A-Za-z0-9]+$/),
@@ -53,14 +54,19 @@ export async function deliverTopupPayment(paymentId: string): Promise<boolean> {
     if (lookup.knownPack) throw new RequestError("TOPUP_BINDING_PENDING", "Credit purchase binding is awaiting verification. Retry delivery.", 503);
     return false;
   }
+  let funded = false;
   try {
     const purchase = storedTopupPurchase(lookup.purchase);
     const payment = normalizeWhopTopupPayment(purchase, raw);
     const { data: result, error } = await db.rpc("makeborne_reconcile_topup", { p_user: purchase.userId, p_order: purchase.id, p_payment: payment });
     if (error || !result || !["updated", "duplicate", "stale", "ignored_attempt"].includes(result.outcome)) throw new Error("Unconfirmed ledger result");
-    return true;
+    funded = result.state === "funded";
   } catch {
     // No provider payload or purchaser information is exposed in an API error.
     throw new RequestError("TOPUP_DELIVERY_UNVERIFIED", "Credit delivery requires verification. Retry delivery or contact support.", 503);
   }
+  // Durable purchase confirmation at the moment of fulfilment, on every delivery path (webhook and
+  // reconcile). Idempotent per payment; it never throws, so it cannot fail or repeat a delivery.
+  if (funded) await confirmAfterFulfillment(paymentId);
+  return true;
 }

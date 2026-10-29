@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { BuilderAttachmentsSchema, builderAttachmentBlocks, MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
+import { MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
+import { BuilderSourcesSchema, OmittedSourcesSchema } from "@/lib/ingest/request";
+import { prepareBuilderSources } from "@/lib/ingest/builder-sources";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
 import { mapProject, mapVersion } from "@/lib/cloud/mappers";
@@ -10,26 +12,30 @@ import { ProjectFiles } from "@/lib/builder/files";
 import { builderModel } from "@/lib/builder/agent";
 import { styleDirection } from "@/lib/builder/prompt";
 import { designSeedBlock, seedApplies } from "@/lib/builder/design-seed";
-import { renderedContrastCheck } from "@/lib/builder/contrast-gate";
+import { previewRuntimeAccessToken, renderedContrastCheck } from "@/lib/builder/contrast-gate";
 import { BuildBriefSchema, DesignAnswersSchema, briefTone, designAnswersBlock, enhancedBriefBlock, requiredSections } from "@/lib/builder/enhanced-brief";
 import { imageConfiguration } from "@/lib/builder/images";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
-import { REVIEW_MAX_TURNS, reviewCreditCeiling } from "@/lib/builder/review-policy";
+import { REVIEW_MAX_TURNS, reviewCreditCeiling, reviewImageLimit } from "@/lib/builder/review-policy";
 import { snapshotAnchor, snapshotVersion } from "@/lib/builder/site-snapshot";
+import { designCompBlocks } from "@/lib/builder/design-comps";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
 import { OperationError, beginOperation, brandKitFingerprint, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
 import { documentBuildResponse } from "@/lib/builder/docs-run";
 import { websiteBuildResponse } from "@/lib/builder/website-run";
 import { providerCapacity, requireProviderCapacity } from "@/lib/ai/live-run";
 import { builderAvailability } from "@/lib/builder/availability";
+import { builderFeatures } from "@/lib/builder/features";
 import { requirePricedModel } from "@/lib/ai/model-check";
 import { routeIssue, routeModels, routeStage, type RouteInput } from "@/lib/ai/model-routing";
 import { buildTaskContract } from "@/lib/builder/task-contract";
 import { SitePlanSchema, StoredPlanSchema, planToBrief } from "@/lib/builder/plan";
 import { approvedMaximumIssue, approvedPlanIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { websiteBrandBlock } from "@/lib/brand/kit";
+import { ART_QUALITIES, BOOK_SHAPES, DECK_ASPECTS } from "@/lib/documents/schema";
+import { artTextModel, documentImageOffers, imageOptionsIssue } from "@/lib/documents/art-formats";
 import { ensureBrandLogo, projectBrandKit } from "@/lib/brand/server";
 import { importTheirPhotos, photosContext } from "@/lib/leads/redesign-server";
 import { CONTENT_CONTRACT } from "@/lib/builder/content-prompt";
@@ -46,7 +52,10 @@ const BuildRequest = z.object({
   expectedVersion: z.number().int().nonnegative(),
   message: z.string().trim().min(1).max(8000),
   effort: EffortLevelSchema.default("medium"),
-  attachments: BuilderAttachmentsSchema.default([]),
+  attachments: BuilderSourcesSchema.default([]),
+  /** Attached files the user explicitly chose to continue without (named to the model; never automatic).
+   * Optional rather than defaulted so requests without it keep their exact input hash. */
+  omittedSources: OmittedSourcesSchema.optional(),
   /** An approved Plan mode plan the build must follow. */
   plan: SitePlanSchema.optional(),
   /** The saved plan revision the customer approved; required with `plan`. */
@@ -63,6 +72,9 @@ const BuildRequest = z.object({
   brief: BuildBriefSchema.optional(),
   /** The client's one-click design answers (theme, vibe, imagery, action, sections, colour). */
   design: DesignAnswersSchema.optional(),
+  /** Presentations and books: the client's image quality and slide or page shape (composer controls). Checked against
+   * the measured image cells below; applied to the document by the run. */
+  imageOptions: z.object({ quality: z.enum(ART_QUALITIES).optional(), aspect: z.enum(DECK_ASPECTS).optional(), shape: z.enum(BOOK_SHAPES).optional() }).strict().optional(),
 }).strict().refine(body => body.mode === "review" ? Boolean(body.review) && !body.attachments.length && !body.plan : !body.review)
   .refine(body => body.planRevision === undefined || Boolean(body.plan))
   // Provenance belongs to the request that starts an operation, never to an automatic stage or review.
@@ -78,7 +90,12 @@ const builderEnabled = () => process.env.MAKEBORNE_LIVE_BUILDER_ENABLED !== "fal
 export async function GET() {
   const availability = await builderAvailability({ configured: builderEnabled(), priced: () => requirePricedModel(builderModel()), capacity: () => providerCapacity("anthropic") });
   // Measured credit ranges for the composer's estimate, in credits at the live rate (no provider call).
-  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()) }, { headers: { "Cache-Control": "no-store" } });
+  // Unqualified generation features stay off unless their server-side flag is "on" (lib/builder/features.ts).
+  // Image questions and controls for books and decks only where images can be made now: a configured model and open OpenAI spending.
+  const imagesNow = availability.configured && Boolean(imageConfiguration().model) ? await providerCapacity("openai").then(capacity => capacity === "available", () => false) : false;
+  // Image quality and shape for presentations and books: what each costs per image, before anything is generated.
+  const documentImages = documentImageOffers(artTextModel(imageConfiguration().models), aiCostUsdPerCredit());
+  return Response.json({ ...availability, estimates: builderEstimates(aiCostUsdPerCredit()), features: { ...builderFeatures(), documentImages: imagesNow }, documentImages }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -112,6 +129,14 @@ export async function POST(request: Request) {
       ?? (artifact.current_version === 0 ? blankVersion(artifact.id, artifact.kind, artifact.title, user.id) : undefined);
     if (!current) throw new RequestError("NOT_FOUND", "The current revision is unavailable.", 404);
     if (reviewing && !current.content.websiteSource?.files.length) throw new RequestError("NOTHING_TO_REVIEW", "Build the website before reviewing its design.", 409);
+    // Image quality and shape: documents only, and only a choice a measured image size can render (refused before any hold).
+    if (body.imageOptions) {
+      if (artifact.kind === "website") throw new RequestError("INVALID_BUILD", "Image quality and shape apply to presentations and books.", 400);
+      const saved = current.content.document;
+      const issue = imageOptionsIssue(artifact.kind as "presentation" | "book", body.imageOptions, artTextModel(imageConfiguration().models),
+        saved?.kind === "deck" ? { aspect: saved.art?.aspect } : saved?.kind === "book" ? { shape: saved.shape } : {});
+      if (issue) throw new RequestError("IMAGE_OPTION_UNAVAILABLE", issue, 409);
+    }
 
     const policy = BUILDER_EFFORT[body.effort];
     // A review round is a focused pass with its own, smaller ceiling.
@@ -143,6 +168,10 @@ export async function POST(request: Request) {
       const issue = approvedPlanIssue(stored.success ? stored.data : null, { plan: body.plan, revision: body.planRevision });
       if (issue) throw new RequestError("PLAN_REVISION_CONFLICT", issue, 409);
     }
+    // Source files are read (Office/CSV extraction in an isolated worker, stored references
+    // verified) before admission: an unreadable file stops here, before any hold exists.
+    const prepared = reviewing ? null : await prepareBuilderSources(body.attachments, body.omittedSources ?? [],
+      { client, scope: { workspaceId: body.workspaceId, projectId: artifact.project_id }, signal: request.signal });
     // The brand kit is resolved before admission and fingerprinted into the request, so a
     // kit edited mid-request cannot silently change a started operation.
     const brand = await projectBrandKit(client, body.workspaceId, project);
@@ -150,7 +179,9 @@ export async function POST(request: Request) {
     // SQL binds the stage to its original authorization and creates its hold atomically.
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
       expectedVersion: body.expectedVersion, effort: body.effort, kind: reviewing ? "review" : "build", ceiling,
-      envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) } }).catch(error => {
+      envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) },
+      // "Continue without it" choices and ingestion references are recorded with the operation; continuations must match.
+      sources: prepared ? { omitted: body.omittedSources ?? [], references: prepared.references } : null }).catch(error => {
       // SQL refuses a stale base version without saying so; name the versions instead.
       if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
         throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);
@@ -206,7 +237,13 @@ export async function POST(request: Request) {
         ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: ${[...files.assets.values()].map(asset => `/${asset.path.slice(7)}`).join(", ") || "none"}`
         : "<current_files>(empty — build the complete website from scratch)</current_files>",
     ].filter(Boolean).join("\n");
-    const attachments: BetaContentBlockParam[] = reviewing ? reviewAttachments(reviewing) : builderAttachmentBlocks(body.attachments);
+    // A review also sees the design comps the first build was made from (the fidelity check), before the screenshots.
+    const attachments: BetaContentBlockParam[] = reviewing
+      ? [...await designCompBlocks(client, scope, files.files.get("src/App.tsx")), ...reviewAttachments(reviewing)]
+      : prepared!.blocks;
+    // A review may regenerate one generated image that reads as AI-made or cannot be cropped right; never on a type-only design.
+    const generatedImages = [...files.assets.keys()].filter(path => /^public\/images\/(?!_r\/)/.test(path) && !/^public\/images\/(?:photo-[0-9]+|brand-logo)\.webp$/.test(path)).length;
+    const reviewImages = reviewing ? reviewImageLimit({ imagery: operation.originalDesign?.imagery, siteImages: generatedImages }) : 0;
 
     // Provider dollars: the effort ceiling, independent of the customer's credits (admins included).
     const spend = createOperationSpend(operation, Date.now() + (maxDuration - 20) * 1000);
@@ -224,18 +261,19 @@ export async function POST(request: Request) {
     // Books and presentations: structured document builder (same credits, versions and SSE contract).
     if (artifact.kind === "book" || artifact.kind === "presentation") {
       const response = documentBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, project, current, versions, brand,
-        message: body.message, effort: body.effort, attachments, maxDuration, route });
+        message: body.message, effort: body.effort, attachments, continuation: Boolean(envelope && "id" in envelope && envelope.kind === "continuation"), ...(body.imageOptions ? { imageOptions: body.imageOptions } : {}), maxDuration, route });
       reserved = null;
       return response;
     }
 
     const response = websiteBuildResponse({ client, hold, spend, operation, route, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
       message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, snapshot, attachments,
-      limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: 0 } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
+      limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: reviewImages, replaceOnly: true } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
       // First build: the concept step (2-3 concepts scored on the rubric, the strongest built) inside this run.
       concept: Boolean(seed),
       // Rendered contrast at finish, measured in the export pipeline's Chromium on this app's origin (fail open without a browser).
-      contrastCheck: process.env.MAKEBORNE_CONTRAST_GATE === "off" ? undefined : renderedContrastCheck({ origin: new URL(request.url).origin, launch: async () => {
+      contrastCheck: process.env.MAKEBORNE_CONTRAST_GATE === "off" ? undefined : renderedContrastCheck({ origin: new URL(request.url).origin,
+        previewAccessToken: previewRuntimeAccessToken(process.env.VERCEL_ENV, request.headers.get("x-vercel-trusted-oidc-idp-token"), process.env.STAGING_VERCEL_OIDC_TOKEN), launch: async () => {
         const [{ chromium }, { chromiumLaunchOptions }] = await Promise.all([import("playwright"), import("@/lib/server/export")]);
         return chromium.launch({ headless: true, ...(await chromiumLaunchOptions()) });
       } }),

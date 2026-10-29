@@ -5,6 +5,7 @@ import { mailVariables, renderTemplate, SequenceStepsSchema } from "./compose";
 import { mailCapabilities, MANUAL_MAIL_NOTICE, openSecret, providerConfig, sealSecret, type MailProvider } from "./config";
 import { MailAuthError, MailRejectedError, MailUncertainError, providerClient, type Fetch, type ProviderClient, type SentMessage } from "./providers";
 import { dailyQuota, dueAfter, sendAllowed, utcDayStart } from "./throttle";
+import { contactBlocked } from "./suppression";
 
 export type MailAccountRow = { id: string; workspace_id: string; user_id: string; provider: MailProvider; granted_scopes?: string[]; email: string; display_name: string; status: string;
   daily_limit: number; warmup_started_at: string; last_sent_at: string | null; last_synced_at: string | null };
@@ -85,6 +86,10 @@ export async function sendEmail(deps: EngineDeps, request: SendRequest): Promise
   if (!mailCapabilities(account).canSend) return { status: "auth", error: "Reconnect this mailbox to confirm its sending permission." };
   if (request.automated && !mailCapabilities(account).canAutomate) return { status: "failed", error: MANUAL_MAIL_NOTICE };
   if (!client.email) return { status: "failed", error: `${client.name} has no email address.` };
+  if (client.workspace_id !== account.workspace_id) return { status: "failed", error: "The recipient belongs to a different workspace." };
+  try {
+    if (await contactBlocked(deps.db, account.workspace_id, client)) return { status: "failed", error: "This recipient is on your do-not-contact list. Nothing was sent." };
+  } catch { return { status: "failed", error: "Could not check the do-not-contact list. Nothing was sent." }; }
   const allowed = sendAllowed({ sentToday: await sentToday(deps, account), quota: dailyQuota(new Date(account.warmup_started_at), account.daily_limit, now),
     lastSentAt: account.last_sent_at ? new Date(account.last_sent_at) : null, now, automated: request.automated });
   if (!allowed.ok) return { status: "skipped", reason: allowed.reason };
@@ -99,6 +104,7 @@ export async function sendEmail(deps: EngineDeps, request: SendRequest): Promise
     const token = await accessToken(deps, account);
     if (!mailCapabilities(account).canSend) throw new MailAuthError("Reconnect this mailbox to confirm its sending permission.");
     if (request.automated && !mailCapabilities(account).canAutomate) throw new MailRejectedError(MANUAL_MAIL_NOTICE);
+    if (await contactBlocked(deps.db, account.workspace_id, client)) throw new MailRejectedError("This recipient is on your do-not-contact list. Nothing was sent.");
     sent = await providerFor(deps, account).send(token, { from: account.email, fromName: account.display_name, to: client.email, toName: client.name,
       subject: request.subject, text: request.text, replyTo: request.replyTo ?? null });
     failure((await deps.db.from("mail_messages").update({ status: "sent", provider_message_id: sent.providerMessageId, thread_id: sent.threadId, rfc_message_id: sent.rfcMessageId, sent_at: now.toISOString() }).eq("id", messageId)).error);
@@ -146,6 +152,11 @@ export async function processDueEnrollments(deps: EngineDeps, options: { limit?:
       deps.db.from("mail_accounts").select("*").eq("id", enrollment.account_id).maybeSingle(),
     ]);
     if (!sequence || !client || !account) { await set({ status: "stopped", last_error: "The sequence, client or mailbox was removed." }); summary.stopped++; continue; }
+    try {
+      if (await contactBlocked(deps.db, enrollment.workspace_id, client as ClientRow)) {
+        await set({ status: "stopped", last_error: "Recipient is on the do-not-contact list." }); summary.stopped++; continue;
+      }
+    } catch { await set({ status: "paused", last_error: "Could not check the do-not-contact list. Nothing was sent." }); summary.paused++; continue; }
     if (!mailCapabilities(account as MailAccountRow).canAutomate) { await set({ status: "paused", last_error: MANUAL_MAIL_NOTICE }); blockedAccounts.add(account.id); summary.paused++; continue; }
     const steps = SequenceStepsSchema.safeParse(sequence.steps);
     if (!steps.success || sequence.archived) { await set({ status: "stopped", last_error: "The sequence was archived or is invalid." }); summary.stopped++; continue; }

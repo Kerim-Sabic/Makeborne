@@ -8,6 +8,10 @@ import { whopGet } from "./whop";
 import { providerUsdCents } from "./topup-fulfillment";
 
 const providerPlan = z.object({ id: z.string(), company: z.object({ id: z.string() }), currency: z.literal("usd"),
+  // A USD catalogue alone does not prevent automatic foreign-currency charges.
+  // Missing-webhook recovery is USD-qualified; refuse BEFORE payment until
+  // another currency's complete lifecycle is independently qualified.
+  adaptive_pricing_enabled: z.literal(false),
   plan_type: z.literal("renewal"), billing_period: z.number(), initial_price: z.union([z.string(), z.number()]),
   renewal_price: z.union([z.string(), z.number()]), trial_period_days: z.number().nullable(),
   release_method: z.literal("buy_now"), stock: z.number().int().nonnegative().nullable(), unlimited_stock: z.boolean() });
@@ -17,7 +21,17 @@ export function configuredCreationOffers() {
   const config = billingConfig();
   if (!config.enabled || config.planConfigIssues.length) return [];
   const { rules } = parsePlanCreditRules(CREATION_CATALOG, process.env.WHOP_PLAN_CREDIT_MAP ?? "", [SUPPORT.planId]);
-  const offers = [...rules.values()].filter(rule => config.accessPlanIds.includes(rule.planId));
+  let offers = [...rules.values()].filter(rule => config.accessPlanIds.includes(rule.planId));
+  // Entitlement mappings also include retired plans whose subscriptions still
+  // renew. An explicit checkout list must not remove those historical rules.
+  const checkoutSelection = process.env.WHOP_CREATION_CHECKOUT_PLAN_IDS;
+  if (checkoutSelection !== undefined) {
+    const ids = checkoutSelection.split(",").map(value => value.trim());
+    const allowed = new Set(ids);
+    if (!ids.length || allowed.size !== ids.length || ids.some(id =>
+      !/^plan_[A-Za-z0-9]+$/.test(id) || !offers.some(offer => offer.planId === id))) return [];
+    offers = offers.filter(offer => allowed.has(offer.planId));
+  }
   return offers.filter(rule => offers.filter(other => other.tier === rule.tier && other.interval === rule.interval).length === 1);
 }
 

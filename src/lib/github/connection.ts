@@ -18,7 +18,7 @@ const REVOKED_GRANT_ERRORS = new Set(["bad_refresh_token", "invalid_grant", "exp
 const COLUMNS = "user_id,github_user_id,login,token_ciphertext,expires_at,refresh_ciphertext,refresh_expires_at";
 
 export function reconnectError() {
-  return new RequestError("GITHUB_RECONNECT", "Your GitHub connection has ended. Reconnect GitHub to keep syncing.", 401);
+  return new RequestError("GITHUB_RECONNECT", "Your GitHub connection has ended. Reconnect GitHub to push again.", 401);
 }
 function renewalUnavailable() {
   return new RequestError("GITHUB_RENEWAL_FAILED", "GitHub could not renew your connection right now. Try again in a minute. Your saved website is unchanged.", 503);

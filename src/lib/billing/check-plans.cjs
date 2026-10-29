@@ -44,7 +44,7 @@ function loadComponent(name, modules) {
   return context.exports.default;
 }
 const link = {default: ({children, ...props}) => React.createElement("a", props, children)};
-const CreationPlans = loadComponent("creation-plans", {"next/link": link, "next/navigation": {useRouter: () => ({push() {}})}, "@/lib/billing/plans": catalogue, "@/lib/supabase/auth-flow": require("../supabase/auth-flow.ts")});
+const CreationPlans = loadComponent("creation-plans", {"next/link": link, "next/navigation": {useRouter: () => ({push() {}})}, "@/lib/billing/plans": catalogue, "@/lib/supabase/auth-flow": require("../supabase/auth-flow.ts"), "@/lib/billing/checkout-navigation": require("./checkout-navigation.ts"), "@/lib/legal/versions": require("../legal/versions.ts")});
 const text = html => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
 const estimates = require("../builder/credit-estimate.ts");
 const pricing = renderToStaticMarkup(React.createElement(CreationPlans));
@@ -61,9 +61,9 @@ for (const line of ["Websites: 6–9 first builds", "Websites: 16–23 first bui
   "or presentations: 33–37 (2 tests)", "or books: 21–25 (2 tests)", "or presentations: 83–93 (2 tests)", "or books: 53–62 (2 tests)", "or presentations: 172–193 (2 tests)", "or books: 110–129 (2 tests)",
   "At least 6 requests at the default effort, each capped at 50 credits, unless you approve going past a limit.", "At least 15 requests at the default effort, unless you approve going past a limit.", "At least 31 requests at the default effort, unless you approve going past a limit.",
   "Best for client work", "750 credits every month · 2.5× Create", "1,550 credits every month · over 5× Create",
-  "$20 today, then $20 a month until you cancel. Tax and any checkout fee shown before you pay.", "$49 today, then $49 a month until you cancel.", "$99 today, then $99 a month until you cancel.",
+  "$20 today, then $20 a month until you cancel. Price includes applicable tax. Any checkout fee is shown before you pay.", "$49 today, then $49 a month until you cancel.", "$99 today, then $99 a month until you cancel.",
   "18 October 2026 test runs", "20 websites (16–45 credits, typically 32);", "2 presentations of 8 and 10 slides (7–9);", "2 books of 13 and 38 pages (9–14).", "These runs predate our latest efficiency changes",
-  "Plans renew automatically at the same price until you cancel in your Whop account", "Any tax or checkout fee is shown by Whop before you pay."]) assert.ok(measuredText.includes(line), line);
+  "Plans renew automatically at the same price until you cancel in your Whop account", "Prices include applicable tax. Whop shows any additional checkout fee before you pay."]) assert.ok(measuredText.includes(line), line);
 assert.equal((measuredText.match(/until you cancel\./g) || []).length, 3, "renewal terms sit under every CTA");
 assert.match(measured, /aria-describedby="creation-availability plan-terms-studio"/);
 for (const id of ["plan-create", "plan-studio", "plan-scale", "how-we-counted"]) assert.match(measured, new RegExp(`id="${id}"`), id);
@@ -99,12 +99,14 @@ assert.doesNotMatch(costs, /failed runs are free/i);
 const withoutMeasurements = renderToStaticMarkup(React.createElement(BillingCreditCosts, {estimates: null}));
 assert.doesNotMatch(withoutMeasurements, /test websites/);
 const BillingWorkspace = loadComponent("billing-workspace", {
+  "@/components/legal/legal-links": {default: () => null},
   "next/link": link,
   "./billing-credit-costs": {default: BillingCreditCosts},
   "./brand-mark": {default: () => null},
   "./billing-plans": {default: CreationPlans},
   "./billing-controls": {default: () => null},
   "./billing-subscriptions": {default: () => null},
+  "./billing-confirmations": {default: () => null},
   // The live return component is exercised separately in the browser harness.
   "./billing-topup-return": {default: ({orderId}) => React.createElement("div", {"data-topup-order": orderId})},
   // Automatic top-up setup renders only behind its qualification flag (check-autotopup.cjs).
@@ -171,11 +173,15 @@ for (const trialCredits of [null, 50]) {
   assert.match(signedOut, /<footer id="support"/);
   assert.match(text(signedOut), /On a plan, a credit costs between 6\.4¢ and 6\.7¢\./);
   assert.match(text(signedOut), /a first website used 16–45 credits \(typically 32, 20 tests\), a first presentation 7–9 and a first book 9–14 \(2 tests each\)\./);
-  assert.match(text(signedOut), /Any tax or checkout fee is shown by Whop before you pay\. You see your total/);
+  assert.match(text(signedOut), /Prices include applicable tax\. Whop shows any additional checkout fee before you pay\. You see your total/);
   assert.equal(/Trial credits do not expire/.test(signedOut), trialCredits === 50, "trial wording follows the free-tier switch");
   assert.equal(/How does the free tier work\?/.test(signedOut), trialCredits === 50);
   assert.equal(/Yearly billing isn’t available yet\./.test(signedOut), trialCredits === null);
 }
+// With yearly offers configured, the FAQ must not answer "yearly billing?" with "Not at launch".
+const yearlyOpen = text(renderToStaticMarkup(React.createElement(BillingWorkspace, {summary: view.unavailableBilling, signedIn: false, plansFirst: true, hasYearly: true, trialCredits: null})));
+assert.match(yearlyOpen, /Is there a free trial\?No\. Instead,/);
+assert.doesNotMatch(yearlyOpen, /free trial or yearly billing|Yearly billing isn’t available|Not at launch\. Instead/);
 const dashboard = renderToStaticMarkup(React.createElement(BillingWorkspace, {summary: view.unavailableBilling}));
 assert.ok(position(dashboard, "credits") > 0 && position(dashboard, "credits") < position(dashboard, "plans"), "members keep the dashboard first");
 assert.doesNotMatch(dashboard, /coffee|Support us/i);

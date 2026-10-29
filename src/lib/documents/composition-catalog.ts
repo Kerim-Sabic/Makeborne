@@ -4,7 +4,7 @@
  * Kept free of renderer imports so the schema can validate variants. */
 export const COMPOSITIONS = {
   cover: ["cover-poster", "cover-split", "cover-centered", "cover-masthead", "cover-modules", "cover-glow", "cover-boxed", "cover-arch", "cover-image"],
-  closing: ["closing-ask", "closing-field", "closing-centered", "closing-split", "closing-boxed"],
+  closing: ["closing-ask", "closing-field", "closing-centered", "closing-split", "closing-boxed", "closing-next"],
   section: ["section-numeral", "section-field", "section-split", "section-centered", "section-index"],
   statement: ["statement-hero", "statement-hanging", "statement-centered", "statement-field", "statement-split"],
   points: ["points-columns", "points-rows", "points-cards", "points-feature", "points-grid"],
@@ -41,6 +41,7 @@ export const COMPOSITION_NOTES: Record<CompositionId, string> = {
   "closing-centered": "centred quiet close",
   "closing-split": "colour column with the eyebrow, ask beside it",
   "closing-boxed": "heavy-ruled box around the ask",
+  "closing-next": "the ask beside numbered next steps (needs points: who does what, by when) and the contact line",
   "section-numeral": "giant section numeral with the title",
   "section-field": "full colour field divider",
   "section-split": "colour column with the numeral, title beside it",

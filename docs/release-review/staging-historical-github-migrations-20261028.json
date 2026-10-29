@@ -1,0 +1,50 @@
+[
+  {
+    "version": "20261022193315",
+    "sha256": "0804732d084b884548c4ae5974c9bc9bc107505382434d88fbb986dde7322319",
+    "sourceCommit": "95d2d9b0fc264e32db0376235b14864be227fe9d",
+    "file": "supabase/migrations/20261022193315_github_reviewed_import.sql",
+    "canonicalSha": "0804732d084b884548c4ae5974c9bc9bc107505382434d88fbb986dde7322319",
+    "matches": true
+  },
+  {
+    "version": "20261023191334",
+    "sha256": "be8f2fb232d1ae4030016436af499cee7d9f05576f3c14aa311fa9bdb472c177",
+    "sourceCommit": "bbe493923e4b37c578116cf8d102a4f3ed9b6b11",
+    "file": "supabase/migrations/20261023191334_github_branch_binding.sql",
+    "canonicalSha": "d2bafc62fab122c3ec82d6ba8c524db870c3433ea631293e102564bbfa8eeba0",
+    "matches": true
+  },
+  {
+    "version": "20261025100000",
+    "sha256": "4b7445a943109d954238184cb3b35996c80f8e35af913ed1423c1f7f1ece09c5",
+    "sourceCommit": "c26cecbea0cb6ae8c2afa42dfcb7bc58e1298269",
+    "file": "supabase/migrations/20261025100000_github_continuous_sync.sql",
+    "canonicalSha": "f1565bb4d31361ceaa51c4878d9d0be1d5a83417de270a95d22da9d3a1590217",
+    "matches": true
+  },
+  {
+    "version": "20261026015749",
+    "sha256": "ef74fe7ef839f81dcc5568049d2b2f9e440daf11a020c24679381aa237c6de62",
+    "sourceCommit": "322fa9ec3e9b4e26574c92c6056e5fa696504aaf",
+    "file": "supabase/migrations/20261026015749_github_sync_job_boundaries.sql",
+    "canonicalSha": "ef74fe7ef839f81dcc5568049d2b2f9e440daf11a020c24679381aa237c6de62",
+    "matches": true
+  },
+  {
+    "version": "20261026110734",
+    "sha256": "ecb70507ad33e8cda7dd64bbbfb9e64510b68b1d4b0aaf70c9d79c4874f644d4",
+    "sourceCommit": "cbbf74d2cc50eb23bb33aac0cb1a857f335eccb7",
+    "file": "supabase/migrations/20261026110734_github_sync_background_entitlement.sql",
+    "canonicalSha": "ecb70507ad33e8cda7dd64bbbfb9e64510b68b1d4b0aaf70c9d79c4874f644d4",
+    "matches": true
+  },
+  {
+    "version": "20261026111931",
+    "sha256": "e06099996c7e7c6d66581b0cea244ff433e85efeb36c2a491ad26b1b5c3d5c7a",
+    "sourceCommit": "9485d7f379fb90380eb6876bdfd1edcbbdd8c596",
+    "file": "supabase/migrations/20261026111931_github_sync_enable_verification.sql",
+    "canonicalSha": "e06099996c7e7c6d66581b0cea244ff433e85efeb36c2a491ad26b1b5c3d5c7a",
+    "matches": true
+  }
+]

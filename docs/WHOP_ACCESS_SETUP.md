@@ -1,5 +1,13 @@
 # Whop payment and creation access
 
+## Owner decision — 26 October 2026: seller-managed tax
+
+Production Whop **Tax collection = I handle tax myself**, saved after the owner accepted Whop's three opt-out acknowledgements. Whop will not calculate, collect **or display** tax for Makeborne. This supersedes earlier recommendations to use Whop Collects and Remits. The Inclusive preference remains stored but does not provide a tax calculation in this mode. Consumer catalogue prices remain the owner-approved gross prices; `TAX_NOTE` includes applicable tax and separately discloses any checkout fee.
+
+Makeborne/the seller must arrange tax registration, jurisdiction/rate determination, invoices, records and remittance before opening the affected consumer markets. No Makeborne tax engine has been implemented or qualified by this configuration change. Do not claim all worldwide tax compliance or infer a zero tax liability from `tax_amount: 0` in a Whop payment. Processor and sanctions restrictions still apply even without merchant country-block rules.
+
+The credit-pack adapter currently rejects non-zero Whop tax/refund-tax amounts. That conservative guard remains in place until a real pinned-version fixture proves the allocation; seller-managed tax does not justify guessing or silently treating a gross payment as pre-tax revenue. Opening packs still requires the owner-approved staging journeys and separate production GO. Report: `docs/release-review/consumer-billing-20261026.md`.
+
 ## What works without payment API secrets
 
 **Pricing page (24 Oct 2026).** The $1 coffee support card, its nav item and FAQs are no longer on `/billing`; the `SUPPORT` constant, this route and the terms paragraph stay. The route remains live from old links until `MAKEBORNE_SUPPORT_CHECKOUT_ENABLED=false` is set (recommended owner decision). Signed-out plan CTAs send visitors to `/login?mode=signup&next=/billing?plan=…&interval=…#plans`; `authDestination` keeps only `plan ∈ {create, studio, scale}` and `interval ∈ {monthly, yearly}`. Price wording beside every CTA comes from `TAX_NOTE` (`src/lib/billing/plans.ts`), which mentions tax **and** checkout fees until the owner confirms buyers pay no Whop fee.
@@ -31,6 +39,7 @@ Never add a public prefix to these variables:
 | `WHOP_API_KEY` | Company-scoped API credential |
 | `WHOP_COMPANY_ID` | `biz_CV9cZg1zFX3h7f` |
 | `WHOP_ACCESS_PLAN_IDS` | Comma-separated creation plan IDs; coffee is rejected |
+| `WHOP_CREATION_CHECKOUT_PLAN_IDS` | Optional exact list for new checkout; retain historical access/credit mappings separately. Empty, duplicate, malformed or unknown IDs close checkout. Omit only where each tier/cadence has one access mapping. |
 | `WHOP_WEBHOOK_SECRET` | Endpoint's literal `ws_...` signing secret |
 | `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key for authoritative billing records |
 | `MAKEBORNE_BILLING_MIGRATIONS_VERIFIED` | Set true only after applying and verifying the billing migration |

@@ -6,6 +6,7 @@ import { ArrowUpRight, Check, Coins, LoaderCircle, Plus } from "lucide-react";
 import { CREDIT_TOPUP_PACKS, formatCreditTopupPrice, type CreditTopupAvailability } from "@/lib/billing/topups-catalog";
 import { topupNavigationUrl } from "@/lib/billing/checkout-navigation";
 import { CREATION_PLANS, TAX_NOTE, type PlanId } from "@/lib/billing/plans";
+import { WITHDRAWAL_CONSENT_VERSION, PACK_WITHDRAWAL_CONSENT_TEXT } from "@/lib/legal/versions";
 
 const money = formatCreditTopupPrice;
 /** Plan against plan-plus-pack, computed from both catalogues: topping up every month costs more than the next plan. */
@@ -20,6 +21,7 @@ export default function BillingTopups({ currentTier = null }: { currentTier?: Pl
   const [retry, setRetry] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [consented, setConsented] = useState(false);
   const opening = useRef(false);
   const request = useRef<{ packId: string; requestId: string } | null>(null);
   const pack = CREDIT_TOPUP_PACKS.find(item => item.id === selectedId) ?? CREDIT_TOPUP_PACKS[0];
@@ -43,6 +45,7 @@ export default function BillingTopups({ currentTier = null }: { currentTier?: Pl
 
   async function continueToCheckout() {
     if (opening.current || !availability?.available) return;
+    if (!consented) { setError("Please read and tick the immediate-start request before continuing."); return; }
     if (!availability.authenticated) {
       router.push(`/login?next=${encodeURIComponent("/billing#topups")}`);
       return;
@@ -58,7 +61,7 @@ export default function BillingTopups({ currentTier = null }: { currentTier?: Pl
       // Reuse this request after an uncertain response. A retry is not a new purchase.
       if (!request.current || request.current.packId !== pack.id) request.current = { packId: pack.id, requestId: crypto.randomUUID() };
       const response = await fetch("/api/billing/topups", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request.current),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...request.current, withdrawalConsent: WITHDRAWAL_CONSENT_VERSION }),
       });
       if (response.status === 401) { router.push(`/login?next=${encodeURIComponent("/billing#topups")}`); return; }
       if (response.status === 402) { router.push("/billing?required=membership#plans"); return; }
@@ -99,6 +102,7 @@ export default function BillingTopups({ currentTier = null }: { currentTier?: Pl
       <div className="billing-topup-summary">
         <span className="billing-topup-total-label">One-time total</span>
         <div className="billing-topup-total" aria-live="polite" aria-atomic="true"><strong>{money(pack.priceCents)}</strong><span>for {pack.credits.toLocaleString("en-US")} extra credits</span></div>
+        {availability?.available && <label className="billing-consent"><input type="checkbox" checked={consented} onChange={event => setConsented(event.target.checked)} disabled={busy} /><span>{PACK_WITHDRAWAL_CONSENT_TEXT} <a href="/terms">Terms</a> · <a href="/withdraw">Withdrawal information</a></span></label>}
         <button className="billing-topup-button" type="button" disabled={busy || !availability?.available} onClick={() => void continueToCheckout()} aria-describedby="topup-availability">
           {busy ? <><LoaderCircle size={15} className="billing-loading" />Continuing…</> : availability?.available ? <>Continue with {pack.credits.toLocaleString("en-US")} credits<ArrowUpRight size={14} /></> : <>Credit packs coming soon</>}
         </button>

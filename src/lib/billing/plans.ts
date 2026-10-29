@@ -3,7 +3,10 @@ import type { BuilderEstimates } from "../builder/credit-estimate";
 /** Public prices in integer USD cents. Provider IDs and credentials stay server-side.
  * Set on 23 Oct 2026 at or below the main competitors' plans; the comparison is in
  * docs/market/teardown-2026-10-23/deep/pricing-economics.md. */
-export const BILLING_TERMS_VERSION = "2026-10-23-standard-v8";
+export const BILLING_TERMS_VERSION = "2026-10-25-beta-v9";
+/** Version of the EU/UK immediate-start request and withdrawal acknowledgement ticked before checkout
+ * (WITHDRAWAL_CONSENT_TEXT in src/lib/legal/versions.ts). Change both together. */
+export const WITHDRAWAL_CONSENT_VERSION = "withdrawal-2026-10-26";
 export const CREATION_PLANS = [
   { id: "create", name: "Create", monthlyCents: 2000, monthlyCredits: 300, sites: "unlimited", description: "For your own projects, one at a time." },
   { id: "studio", name: "Studio", monthlyCents: 4900, monthlyCredits: 750, sites: "unlimited", description: "For freelancers delivering client work every month." },
@@ -31,14 +34,13 @@ export function usd(cents: number) {
  * claim ("Most popular" needs recorded subscription data; docs/pricing/OUTCOME_FIGURES.md). */
 export const RECOMMENDED_PLAN: PlanId = "studio";
 export const RECOMMENDED_BADGE = "Best for client work";
-/** One switch for tax and fee wording beside every price. The terms say taxes and checkout fees are
- * shown by Whop before payment, so a bare "$49 today" is not the total. After the EU/UK launch gate
- * (Whop tax-inclusive consumer prices on, no buyer checkout fee confirmed), switch to:
- * { short: "Price includes any tax that applies.", inline: ", including any tax", long: "Prices include any tax that applies." } */
+/** Matches the owner-approved Whop Inclusive setting, verified 26 October.
+ * Do not imply buyer payment/FX fees are included: Whop discloses those separately.
+ * Checkout remains gated until taxed fulfillment has real provider evidence. */
 export const TAX_NOTE = Object.freeze({
-  short: "Tax and any checkout fee shown before you pay.",
-  inline: " plus any tax or checkout fee Whop shows",
-  long: "Any tax or checkout fee is shown by Whop before you pay.",
+  short: "Price includes applicable tax. Any checkout fee is shown before you pay.",
+  inline: ", including applicable tax; any checkout fee is shown before you pay",
+  long: "Prices include applicable tax. Whop shows any additional checkout fee before you pay.",
 });
 /** Every plan includes all of this; plans differ only in monthly credits. Each item cites the code
  * path that verifies it in docs/pricing/OUTCOME_FIGURES.md. The fair-use sentence appears once. */
