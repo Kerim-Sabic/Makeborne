@@ -14,7 +14,13 @@ const headers = { "Cache-Control": "no-store" };
 async function handle(request: Request) {
   if (!authorizedCron(request)) return Response.json({ error: { code: "UNAUTHORIZED", message: "Not authorized." } }, { status: 401, headers });
   const result = await runConfirmationSweep(undefined, { confirmations: 50, mail: 50 });
-  return Response.json(result, { status: "error" in result ? 503 : 200, headers });
+  if ("error" in result) return Response.json({ ...result, status: "failed" }, { status: 503, headers });
+  // Fulfilment remains independent of email, but an operator's mail monitor must
+  // see provider refusals, failed records and unmapped paid plans as failures.
+  const failed = result.confirmations.failed > 0 || result.confirmations.skipped > 0 || result.mail.failed > 0;
+  const enabled = result.mail.enabled;
+  const status = failed ? "failed" : enabled ? "healthy" : "disabled";
+  return Response.json({ ...result, status }, { status: failed || !enabled ? 503 : 200, headers });
 }
 
 export const GET = handle;
