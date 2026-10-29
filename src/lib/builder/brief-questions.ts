@@ -4,6 +4,8 @@
  * answer it. Runs on the device: no model call, no cost. Answers are appended
  * to the brief in plain words so the planner and builder use them. */
 
+import { bookImagePlanFromBrief, BOOK_IMAGES_TOPIC, BOOK_IMAGE_OPTIONS, BOOK_IMAGE_STYLE_OPTIONS, BOOK_IMAGE_STYLE_TOPIC, SLIDE_STYLE_OPTIONS, SLIDE_STYLE_TOPIC } from "../documents/creation-options";
+
 export type BriefKind = "website" | "presentation" | "book";
 export type BriefOption = { value: string; label: string; hint?: string; swatch?: readonly string[] };
 export type BriefQuestion = {
@@ -14,9 +16,29 @@ export type BriefQuestion = {
   topic: string;
   /** Shown under the question, e.g. a reminder to attach a logo. */
   note?: string;
+  /** Several options may be chosen (chips toggle; no auto-advance). */
+  multi?: boolean;
+  /** Offers a colour picker next to the options. */
+  color?: boolean;
 };
-export type BriefAnswer = { option?: string; custom?: string };
+export type BriefAnswer = { option?: string; options?: readonly string[]; custom?: string; color?: string };
 export type BriefAnswers = Record<string, BriefAnswer>;
+
+/** The design decisions a website answer sets, in a fixed vocabulary the design seed and the brief
+ * enhancer read deterministically (dark/light sets the ground, vibe the tone and type, imagery the
+ * image plan and routing). Only chosen answers appear: a skipped question leaves its field out. */
+export type DesignAnswers = {
+  theme?: "light" | "dark";
+  vibe?: "calm" | "bold" | "warm" | "technical";
+  imagery?: "photo" | "illustration" | "type";
+  goal?: "call" | "book" | "buy" | "visit" | "enquire" | "signup";
+  sections?: ("prices" | "hours" | "gallery" | "team" | "testimonials" | "faq" | "contact")[];
+  colour?: string;
+  logoColours?: boolean;
+};
+export const DESIGN_SECTION_LABELS: Record<NonNullable<DesignAnswers["sections"]>[number], string> = {
+  prices: "Prices or menu", hours: "Opening hours", gallery: "Gallery", team: "Team", testimonials: "Testimonials", faq: "FAQ", contact: "Contact form",
+};
 
 const STYLE: BriefQuestion = {
   id: "style", topic: "Look and feel", custom: "Describe it, e.g. like a Japanese tea house",
@@ -35,17 +57,88 @@ const STYLE: BriefQuestion = {
 /** Words that show the brief already sets a look. */
 const STYLE_ANSWERED = /\b(look|feel|vibe|style|aesthetic|palette|colou?rs?|modern|minimal\w*|bold|playful|luxur\w*|premium|elegant|warm|dark|clean|retro|vintage|brutal\w*|editorial|calm|rustic|futuris\w*|corporate|organic|handmade|neon|pastel|monochrome|classic|brand(ed|ing)?)\b|#[0-9a-f]{3,6}\b/;
 
-const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp }[]> = {
+/** Website look and feel: four vibes with swatches (sets the tone and type pairing). */
+const VIBE: BriefQuestion = {
+  id: "vibe", topic: "Look and feel", custom: "Describe it, e.g. like a Japanese tea house",
+  question: "What should it feel like?",
+  why: "The look is the biggest single decision. Pick one and we'll design everything around it.",
+  options: [
+    { value: "calm", label: "Calm and premium", hint: "Generous space, refined type, quiet palette", swatch: ["#1f2a2e", "#c8b99a", "#f6f4ef"] },
+    { value: "bold", label: "Bold and playful", hint: "Big type, confident colour, energy", swatch: ["#ffcf3f", "#3b5bff", "#ff5a1f"] },
+    { value: "warm", label: "Warm and crafted", hint: "Earthy colours, texture, characterful type", swatch: ["#7a3b22", "#e9dcc6", "#2f3a2c"] },
+    { value: "technical", label: "Clean and technical", hint: "Precise grid, one accent, crisp type", swatch: ["#ffffff", "#111111", "#2f6bff"] },
+  ],
+};
+/** Words that set the website's vibe (light or dark alone is the theme question, not the vibe). */
+const VIBE_ANSWERED = /\b(look|feel|vibe|style|aesthetic|modern|minimal\w*|bold|playful|luxur\w*|premium|elegant|warm|clean|retro|vintage|brutal\w*|editorial|calm|rustic|futuris\w*|corporate|organic|handmade|neon|pastel|monochrome|classic|technical|crafted|friendly|serious|fun)\b/;
+/** Kinds of business whose visitors need prices, hours or a quick call: sections and quick actions matter most. */
+const LOCAL = /\b(restaurant|caf[eé]|coffee|bakery|bakehouse|bistro|bar|pub|deli|pizza|dentist|dental|clinic|doctor|physio\w*|vet|salon|barber|spa|gym|yoga|pilates|studio|plumb\w*|electric\w*|roof\w*|garage|mechanic|builder|cleaner|cleaning|locksmith|florist|shop|store|hotel|b&b|guesthouse|venue|nursery|school|tutor\w*|therap\w*|massage)\b/;
+
+/** Document creation options (creation-options.ts reads the answers back): how a deck's slides are made, and how a
+ * book is illustrated. They are asked whenever the brief leaves them open, besides the brief's own questions. */
+export const SLIDE_STYLE_QUESTION: BriefQuestion = {
+  id: "slides", topic: SLIDE_STYLE_TOPIC, custom: "e.g. Editable, I will change the text myself",
+  question: "How should the slides be made?", why: "Full-image slides are each designed as one picture with the text in it; editable slides keep every word editable in PowerPoint.",
+  options: SLIDE_STYLE_OPTIONS,
+};
+export const BOOK_IMAGES_QUESTION: BriefQuestion = {
+  id: "images", topic: BOOK_IMAGES_TOPIC, custom: "e.g. One picture every 10 pages",
+  question: "How many pictures should the book have?", why: "Sets where images go: none, the cover, chapter openers, or figures through the text.",
+  options: BOOK_IMAGE_OPTIONS,
+};
+export const BOOK_IMAGE_STYLE_QUESTION: BriefQuestion = {
+  id: "imagestyle", topic: BOOK_IMAGE_STYLE_TOPIC, custom: "e.g. Botanical watercolour",
+  question: "What kind of pictures?", why: "Every image in the book is made in this one style, so they read as a set.",
+  options: BOOK_IMAGE_STYLE_OPTIONS,
+};
+/** Briefs that already settle the slide style or the book's images in their own words. */
+const SLIDE_STYLE_ANSWERED = /\b(editable (text|slides?|deck|presentation|powerpoint|pptx)|(native(ly)?|fully) editable|editable in (powerpoint|keynote|google slides)|full[- ]image|image[- ]only)\b/;
+const BOOK_IMAGES_ANSWERED = /\bno (images|pictures|illustrations|photos)\b(?!\s+of\b)|\bcover only\b|\bevery \d{1,2} pages\b|\brichly illustrated\b|\b(one|an image|a picture) per spread\b|\b(images|pictures|illustrations) (in|on) every chapter\b/;
+const BOOK_IMAGE_STYLE_ANSWERED = /\b(photo\w*|watercolou?r|gouache|ink drawings?|linocut|woodcut|pencil|charcoal|line drawings?|illustrated in|illustration style|risograph|collage)\b/;
+
+const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp; rank?: (text: string) => number }[]> = {
   website: [
-    { answered: /\b(book(ing)?s?|reserv\w*|order\w*|buy\w*|shop\w*|sell\w*|store|call\w*|phone|contact\w*|enquir\w*|inquir\w*|quote\w*|sign[- ]?up|subscri\w*|join\w*|wait[- ]?list|download\w*|donat\w*|appointment\w*|register\w*|apply|hire|portfolio)\b/,
+    { answered: VIBE_ANSWERED, rank: () => 10, question: VIBE },
+    { answered: /\b(book(ing)?s?|reserv\w*|order\w*|buy\w*|shop online|sell\w*|call\w*|phone|contact\w*|enquir\w*|inquir\w*|quote\w*|sign[- ]?up|subscri\w*|join\w*|wait[- ]?list|download\w*|donat\w*|appointment\w*|register\w*|apply|hire|visit us|drop in|walk[- ]in)\b/,
+      rank: () => 9,
       question: { id: "goal", topic: "Main thing visitors should do", custom: "e.g. Ask for a free site visit",
         question: "What should visitors do first?", why: "Every page is built to lead to this one action.",
         options: [
-          { value: "book", label: "Book or reserve" }, { value: "contact", label: "Call or send a message" },
-          { value: "buy", label: "Buy or order online" }, { value: "quote", label: "Request a quote" },
-          { value: "visit", label: "Visit in person" }, { value: "signup", label: "Sign up or join a waitlist" },
+          { value: "call", label: "Call" }, { value: "book", label: "Book" }, { value: "buy", label: "Buy" },
+          { value: "visit", label: "Visit" }, { value: "enquire", label: "Send an enquiry" }, { value: "signup", label: "Sign up" },
         ] } },
-    { answered: STYLE_ANSWERED, question: STYLE },
+    { answered: /\b(sections?|menu|prices?|pricing|price list|opening hours|hours|gallery|team|testimonials?|reviews|faqs?|contact form)\b[\s\S]*\b(sections?|menu|prices?|pricing|opening hours|hours|gallery|team|testimonials?|reviews|faqs?|contact form)\b[\s\S]*\b(sections?|menu|prices?|pricing|opening hours|hours|gallery|team|testimonials?|reviews|faqs?|contact form)\b/,
+      rank: text => LOCAL.test(text) ? 8 : 5,
+      question: { id: "sections", topic: "Must-have sections", custom: "e.g. A page for each treatment", multi: true,
+        question: "Which sections must it have?", why: "Choose all that apply. Each one gets a real section, with clear placeholders for facts you haven't given yet.",
+        options: (Object.entries(DESIGN_SECTION_LABELS) as [string, string][]).map(([value, label]) => ({ value, label })) } },
+    { answered: /\b(photo\w*|pictures?|images?|imagery|illustrat\w*|drawings?|artwork|typograph\w*|type[- ]only|no images)\b/,
+      rank: text => LOCAL.test(text) ? 7 : 6,
+      question: { id: "imagery", topic: "Imagery", custom: "e.g. Hand-drawn maps of our routes",
+        question: "Photos, illustration or mostly type?", why: "Sets the image plan: real-looking photographs, one illustration style, or bold typography.",
+        options: [
+          { value: "photo", label: "Photos", hint: "Photographs of the specific subject; your own can replace them later" },
+          { value: "illustration", label: "Illustration", hint: "One drawn style across the whole site" },
+          { value: "type", label: "Mostly type", hint: "Typography, colour and simple shapes" },
+          { value: "auto", label: "You choose" },
+        ] } },
+    { answered: /\b(dark|light|night|black background|white background|pale|bright)\b/,
+      rank: text => /\b(bar|club|night\w*|venue|gig|festival|cocktail|tattoo|gaming|cinema)\b/.test(text) ? 8 : 6,
+      question: { id: "theme", topic: "Light or dark", custom: "e.g. Dark like a jazz bar",
+        question: "Light or dark?", why: "Sets the ground every page is built on.",
+        options: [
+          { value: "light", label: "Light", hint: "A light ground with dark text", swatch: ["#f7f5f0", "#1b1d1f", "#2f6bff"] },
+          { value: "dark", label: "Dark", hint: "A deep ground with light text", swatch: ["#111418", "#e9e6df", "#d4a24a"] },
+          { value: "auto", label: "Let Makeborne choose" },
+        ] } },
+    { answered: /\b(logo|brand(ing)? (colou?rs?|guide\w*|kit|book)|our colou?rs?|colou?r palette|fonts? we use)\b|#[0-9a-f]{3,6}\b/,
+      rank: () => 5,
+      question: { id: "colour", topic: "Brand colour", custom: "e.g. Navy and gold", color: true,
+        question: "Any colours to use?", why: "We'll build the palette around your colour instead of inventing one.",
+        note: "To use your logo, attach it with the paperclip before you start.",
+        options: [
+          { value: "logo", label: "Use my logo's colours" }, { value: "auto", label: "Choose for me" },
+        ] } },
     { answered: /\b(for (local|small|busy|young|new|famil\w+|parents|students|professionals|business\w*|compan\w+|clients|customers|investors|developers|teams|people|women|men|kids|pet \w+|dog \w+|homeowners|tourists|patients)|audience|customers|clients|b2b|b2c|locals|tourists|patients|members|homeowners)\b/,
       question: { id: "audience", topic: "Main audience", custom: "e.g. Busy parents within 5 km",
         question: "Who is it mainly for?", why: "Words, images and layout change a lot between audiences.",
@@ -53,8 +146,8 @@ const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp }[]> =
           { value: "local", label: "Local customers nearby" }, { value: "online", label: "Customers anywhere online" },
           { value: "business", label: "Other businesses" }, { value: "premium", label: "High-end clients" },
           { value: "investors", label: "Investors or partners" },
-        ] } },
-    { answered: /\b(one[- ]page|single[- ]page|landing|pages?|blog|sections?|multi[- ]page)\b/,
+        ] }, rank: () => 4 },
+    { answered: /\b(one[- ]page|single[- ]page|landing|pages?|blog|multi[- ]page)\b/, rank: () => 3,
       question: { id: "scope", topic: "Size of the site", custom: "List the pages you need",
         question: "How big should the site be?", why: "So we plan the right pages from the start.",
         options: [
@@ -62,16 +155,10 @@ const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp }[]> =
           { value: "few", label: "A few pages", hint: "Home, about, services, contact" },
           { value: "full", label: "A full site", hint: "Several sections plus news or a blog" },
         ] } },
-    { answered: /\b(logo|brand(ing)? (colou?rs?|guide\w*|kit|book)|our colou?rs?|fonts? we use)\b|#[0-9a-f]{3,6}\b/,
-      question: { id: "brand", topic: "Brand assets", custom: "e.g. Navy and gold, our logo is a fox",
-        question: "Do you already have a logo or brand colours?", why: "We'll match them exactly instead of inventing a new identity.",
-        note: "To use your logo or brand guide, attach it with the paperclip before you start.",
-        options: [
-          { value: "attached", label: "Yes, I've attached them" }, { value: "describe", label: "Yes, I'll describe them" },
-          { value: "new", label: "No, create an identity for me" },
-        ] } },
   ],
   presentation: [
+    // Creation option: offered after the brief's own questions whenever the brief leaves it open (withCreationOptions).
+    { answered: SLIDE_STYLE_ANSWERED, question: SLIDE_STYLE_QUESTION },
     { answered: /\b(pitch\w*|investor\w*|fundrais\w*|seed|series [ab]|proposal\w*|sales|webinar|talk|keynote|conference|training|workshop|onboarding|report\w*|update|quarterly|board|strategy|launch\w*|lesson|lecture|class|course)\b/,
       question: { id: "purpose", topic: "Purpose of the deck", custom: "e.g. Win a city council grant",
         question: "What is this presentation for?", why: "The story structure is different for each one.",
@@ -98,6 +185,8 @@ const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp }[]> =
         ] } },
   ],
   book: [
+    { answered: BOOK_IMAGES_ANSWERED, question: BOOK_IMAGES_QUESTION },
+    { answered: BOOK_IMAGE_STYLE_ANSWERED, question: BOOK_IMAGE_STYLE_QUESTION },
     { answered: /\b(guide\w*|how[- ]to|handbook|playbook|workbook|memoir|stor(y|ies)|novel|biograph\w*|report|white ?paper|e-?book|lead magnet|course|manual|cookbook|recipes?)\b/,
       question: { id: "type", topic: "Kind of book", custom: "e.g. A field guide to urban birds",
         question: "What kind of book is it?", why: "A practical guide, a story and a report are written and designed very differently.",
@@ -131,21 +220,80 @@ const BANK: Record<BriefKind, { question: BriefQuestion; answered: RegExp }[]> =
 };
 
 /** Ids of the standard questions this brief already answers (a tailored question with one of these ids is not asked again). */
+/** Brand or colour questions an attached file (logo, brand guide) already answers. */
+const ATTACHMENT_ANSWERS = new Set(["brand", "colour"]);
+const normalise = (brief: string) => brief.toLowerCase().replace(/\s+/g, " ");
+
 export function answeredQuestionIds(kind: BriefKind, brief: string, context: { attachments?: number } = {}): Set<string> {
-  const text = brief.toLowerCase().replace(/\s+/g, " ");
-  return new Set(BANK[kind].filter(item => item.answered.test(text) || (item.question.id === "brand" && (context.attachments ?? 0) > 0)).map(item => item.question.id));
+  const text = normalise(brief);
+  const ids = new Set(BANK[kind].filter(item => item.answered.test(text) || (ATTACHMENT_ANSWERS.has(item.question.id) && (context.attachments ?? 0) > 0)).map(item => item.question.id));
+  // An AI-tailored "style" question is the website vibe question.
+  if (kind === "website" && ids.has("vibe")) ids.add("style");
+  // ...and a tailored "brand" question is the colour question (a logo or colours already given).
+  if (kind === "website" && ids.has("colour")) ids.add("brand");
+  return ids;
 }
 
-/** Questions the brief leaves open, most important first. A detailed brief gets fewer. */
+/** How many questions a brief of this length gets: short, vague briefs benefit most. */
+export function questionLimit(kind: BriefKind, brief: string) {
+  const words = normalise(brief).trim() ? normalise(brief).trim().split(" ").length : 0;
+  if (kind !== "website") return words > 150 ? 2 : words > 60 ? 3 : 4;
+  // A detailed website brief (over 150 words) goes straight to building from its own words.
+  return words > 150 ? 0 : words > 60 ? 2 : words > 20 ? 4 : 5;
+}
+
+/** Questions the brief leaves open, the ones that most change the design for this brief first. A detailed brief gets fewer. */
 export function briefQuestions(kind: BriefKind, brief: string, context: { attachments?: number } = {}): BriefQuestion[] {
-  const text = brief.toLowerCase().replace(/\s+/g, " ");
-  const words = text.trim() ? text.trim().split(" ").length : 0;
-  const open = BANK[kind]
-    .filter(item => !item.answered.test(text))
-    .filter(item => !(item.question.id === "brand" && (context.attachments ?? 0) > 0))
-    .map(item => item.question);
-  const limit = words > 150 ? 2 : words > 60 ? 3 : 4;
-  return open.slice(0, limit);
+  const text = normalise(brief);
+  const answered = answeredQuestionIds(kind, brief, context);
+  const open = BANK[kind].map((item, index) => ({ item, index, rank: item.rank?.(text) ?? -index }))
+    .filter(({ item }) => !answered.has(item.question.id) && !CREATION_IDS.has(item.question.id))
+    .sort((a, b) => b.rank - a.rank || a.index - b.index)
+    .map(({ item }) => item.question);
+  return withCreationOptions(kind, open.slice(0, questionLimit(kind, brief)), answered, brief);
+}
+
+/** Creation options: asked on top of the brief's own questions whenever the brief leaves them open. */
+const CREATION_IDS = new Set(["slides", "images", "imagestyle"]);
+/** Document creation options the brief leaves open, on top of its own questions and never duplicated: a deck's slide
+ * style last (one tap; the default is full-image); a book's image plan first and its image style last. */
+function withCreationOptions(kind: BriefKind, questions: BriefQuestion[], answered: Set<string>, brief: string): BriefQuestion[] {
+  const own = questions.filter(question => !CREATION_IDS.has(question.id));
+  const open = (id: string) => !answered.has(id);
+  if (kind === "presentation") return [...own, ...(open("slides") ? [SLIDE_STYLE_QUESTION] : [])];
+  if (kind === "book") return [...(open("images") ? [BOOK_IMAGES_QUESTION] : []), ...own, ...(open("imagestyle") && bookImagePlanFromBrief(brief).placement !== "none" ? [BOOK_IMAGE_STYLE_QUESTION] : [])];
+  return questions;
+}
+/** Questions that ask about what a creation option already covers (an AI-tailored question about pictures in a book or editable slides). */
+const OPTION_TOPIC: Partial<Record<BriefKind, RegExp>> = { book: /\b(images?|pictures?|illustrat\w*|photo\w*)\b/i, presentation: /\b(editable|image slides?|full[- ]image)\b/i };
+
+/** A standard question by id (a tailored "style" question on a website is the vibe question). */
+export function standardQuestion(kind: BriefKind, id: string): BriefQuestion | undefined {
+  const wanted = kind === "website" && id === "style" ? "vibe" : id;
+  return BANK[kind].find(item => item.question.id === wanted)?.question;
+}
+
+/** Tailored questions that ask about a design decision the standard questions already cover. */
+const DESIGN_TOPIC = /\b(look|feel|vibe|style|colou?rs?|palette|font|dark|light|photo\w*|imag\w*|illustrat\w*|logo|brand)\b/i;
+/**
+ * The questions shown before a first website build: the standard design questions for this brief
+ * (ranked by how much each changes the design) with the AI-tailored, business-specific ones
+ * interleaved after the top three, never more than the brief's limit (5 for a short website brief).
+ * Other kinds keep the tailored set when there is one.
+ */
+export function mergedQuestions(kind: BriefKind, brief: string, tailored: readonly BriefQuestion[] | null, context: { attachments?: number } = {}): BriefQuestion[] {
+  const standard = briefQuestions(kind, brief, context);
+  if (kind !== "website") {
+    if (!tailored) return standard;
+    const answered = answeredQuestionIds(kind, brief, context), topic = OPTION_TOPIC[kind];
+    // The tailored set, minus anything a creation option already asks, with the creation options added.
+    const options = standard.filter(question => CREATION_IDS.has(question.id));
+    const own = tailored.filter(question => !CREATION_IDS.has(question.id) && !(topic && options.length && topic.test(`${question.question} ${question.topic}`)));
+    return withCreationOptions(kind, own, answered, brief);
+  }
+  const ids = new Set(standard.map(question => question.id));
+  const specific = (tailored ?? []).filter(question => !ids.has(question.id) && !standardQuestion(kind, question.id) && !DESIGN_TOPIC.test(`${question.question} ${question.topic}`)).slice(0, 2);
+  return [...standard.slice(0, 3), ...specific, ...standard.slice(3)].slice(0, questionLimit(kind, brief));
 }
 
 const shortText = (value: unknown, max: number): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= max;
@@ -154,7 +302,8 @@ export function isBriefQuestion(value: unknown): value is BriefQuestion {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
   return shortText(item.id, 32) && shortText(item.question, 140) && shortText(item.why, 160) && shortText(item.topic, 60) && shortText(item.custom, 80)
-    && Array.isArray(item.options) && item.options.length <= 6 && item.options.every(option => {
+    && (item.multi === undefined || typeof item.multi === "boolean") && (item.color === undefined || typeof item.color === "boolean")
+    && Array.isArray(item.options) && item.options.length <= (item.multi ? 8 : 7) && item.options.every(option => {
       const record = option as Record<string, unknown>;
       return !!option && typeof option === "object" && shortText(record.value, 20) && shortText(record.label, 60)
         && (record.hint === undefined || shortText(record.hint, 80))
@@ -168,8 +317,53 @@ export function briefWithAnswers(brief: string, questions: readonly BriefQuestio
     const answer = answers[question.id];
     const custom = answer?.custom?.trim().replace(/\s+/g, " ").slice(0, 300);
     if (custom) return [`- ${question.topic}: ${custom}`];
+    const color = question.color && answer?.color && HEX.test(answer.color) ? answer.color.toLowerCase() : null;
+    if (color) return [`- ${question.topic}: ${color}`];
+    if (question.multi) {
+      const chosen = question.options.filter(item => answer?.options?.includes(item.value));
+      return chosen.length ? [`- ${question.topic}: ${chosen.map(item => item.label).join(", ")}`] : [];
+    }
     const option = question.options.find(item => item.value === answer?.option);
     return option ? [`- ${question.topic}: ${option.label}${option.hint ? ` (${option.hint})` : ""}`] : [];
   });
   return lines.length ? `${brief.trim()}\n\nThe client's answers to Makeborne's questions (follow them):\n${lines.join("\n")}` : brief.trim();
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const pickOne = <T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined => allowed.find(item => item === value);
+/**
+ * The design decisions in the chosen answers (website questions only). Deterministic: the same answers
+ * always give the same fields; "Let Makeborne choose", "You choose", a free-text answer and a skipped
+ * question all leave the field out (the free text still reaches the brief in the client's words).
+ */
+export function designAnswers(questions: readonly BriefQuestion[], answers: BriefAnswers): DesignAnswers {
+  const asked = new Set(questions.map(question => question.id));
+  const answer = (id: string) => asked.has(id) && !answers[id]?.custom?.trim() ? answers[id] : undefined;
+  const out: DesignAnswers = {};
+  const theme = pickOne(answer("theme")?.option, ["light", "dark"] as const); if (theme) out.theme = theme;
+  const vibe = pickOne(answer("vibe")?.option, ["calm", "bold", "warm", "technical"] as const); if (vibe) out.vibe = vibe;
+  const imagery = pickOne(answer("imagery")?.option, ["photo", "illustration", "type"] as const); if (imagery) out.imagery = imagery;
+  const goal = pickOne(answer("goal")?.option, ["call", "book", "buy", "visit", "enquire", "signup"] as const); if (goal) out.goal = goal;
+  const sections = (answer("sections")?.options ?? []).filter((value): value is NonNullable<DesignAnswers["sections"]>[number] => value in DESIGN_SECTION_LABELS);
+  if (sections.length) out.sections = [...new Set(sections)];
+  const colour = answer("colour");
+  if (colour?.color && HEX.test(colour.color)) out.colour = colour.color.toLowerCase();
+  else if (colour?.option === "logo") out.logoColours = true;
+  return out;
+}
+
+/** Plain words for the answers a build used (shown with the enhanced brief and the receipt). */
+export function designAnswerLabels(design: DesignAnswers): string[] {
+  const vibes = { calm: "Calm and premium", bold: "Bold and playful", warm: "Warm and crafted", technical: "Clean and technical" } as const;
+  const imagery = { photo: "Photos", illustration: "Illustration", type: "Mostly type" } as const;
+  const goals = { call: "Call", book: "Book", buy: "Buy", visit: "Visit", enquire: "Send an enquiry", signup: "Sign up" } as const;
+  return [
+    design.theme && `Theme: ${design.theme === "dark" ? "Dark" : "Light"}`,
+    design.vibe && `Feel: ${vibes[design.vibe]}`,
+    design.imagery && `Imagery: ${imagery[design.imagery]}`,
+    design.goal && `Main action: ${goals[design.goal]}`,
+    design.sections?.length && `Sections: ${design.sections.map(id => DESIGN_SECTION_LABELS[id]).join(", ")}`,
+    design.colour && `Colour: ${design.colour}`,
+    design.logoColours && "Colours: from your logo",
+  ].filter((line): line is string => Boolean(line));
 }

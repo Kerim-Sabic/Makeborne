@@ -251,7 +251,11 @@ export function resolveAssets(sourceInput, itemDir) {
     const file = candidates.find(candidate => existsSync(candidate) && statSync(candidate).isFile());
     const bytes = file ? readFileSync(file) : null;
     const intact = bytes && (!/^[a-f0-9]{64}$/.test(asset.sha256 ?? '') || createHash('sha256').update(bytes).digest('hex') === asset.sha256);
-    if (intact) found.push({ path: asset.path, url: assetUrl(asset), file, bytes, mediaType: asset.mediaType ?? 'application/octet-stream' });
+    // App-route exports fetch artwork through the asset route's export variant, which re-encodes it (same picture,
+    // other bytes). EVAL_ACCEPT_REENCODED_ASSETS=1 uses those files instead of counting them missing; the item's
+    // assets are then listed as re-encoded (weight may read higher than the stored original).
+    const reencoded = !intact && bytes && process.env.EVAL_ACCEPT_REENCODED_ASSETS === '1';
+    if (intact || reencoded) found.push({ path: asset.path, url: assetUrl(asset), file, bytes, mediaType: asset.mediaType ?? 'application/octet-stream', ...(reencoded ? { reencoded: true } : {}) });
     else missingAssets.push(asset.path);
   }
   return { found, missingAssets };

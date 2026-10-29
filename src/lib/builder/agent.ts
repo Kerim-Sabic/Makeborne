@@ -15,9 +15,18 @@ import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from 
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
 import { UnpricedModelError, imageCallBoundMicrousd, supportsTransparentImages } from "../ai/prices";
 import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
+import { designCompsEnabled } from "./features";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
-import { qualityProblems } from "./quality-gates";
+import { qualityProblems, type QualityInput } from "./quality-gates";
+import { BLOCKING_PROBLEM } from "./contrast-gate-rules";
+import { CONCEPT_TOOL, CompReadingSchema, MAX_COMPS, checkConcept, compPlan, compsFromSource, compsNextStep, imagePlanNote, sitePlanNote, withConceptComment, type CompReadingValues, type ConceptRecord, type DesignComp } from "./concept";
+import { storeProjectImage } from "./images";
+import { COMP_PREVIEW_EDGE, imagePreview, type ImagePreview } from "./image-variants";
+import sharp from "sharp";
+import { COMP_INPUT_JSON, COMP_SHAPE, COMP_WORDS, CompInputSchema, compCell, compInputIssues, compPrompt, compText, heavyType, isFirstScreen, splitLines } from "./comp-prompt";
+
+export { compPrompt } from "./comp-prompt";
 
 /** Conservative streaming output rate used to size steps to the time left. */
 const OUTPUT_TOKENS_PER_SECOND = 50;
@@ -33,10 +42,11 @@ export type BuilderEvent =
   | { type: "file_start"; path: string; op: "write" | "edit" | "delete" }
   | { type: "file"; path: string; op: "write" | "edit"; content: string }
   | { type: "delete"; path: string }
-  | { type: "image_start"; name: string; prompt: string }
+  | { type: "image_start"; name: string; prompt: string; replaces?: string; rejected?: string; comp?: boolean }
   | { type: "image"; path: string; url: string; assetId: string; model?: string; quality?: string; size?: string; reason?: string; costMicrousd?: number | null }
   | { type: "tool_error"; tool: string; message: string }
   | { type: "usage"; credits: number }
+  | { type: "concept"; chosen: string; runnersUp: string[]; why: string; shots?: number; compositions?: string[] }
   | { type: "done"; version: number; summary: string; charged: number; changed?: boolean; finished?: boolean; build?: "passed" | "unverified" | null }
   | { type: "error"; code: string; message: string; retryable?: boolean };
 
@@ -45,8 +55,12 @@ const ToolInputs = {
   write_file: z.object({ path: z.string(), content: z.string() }).strict(),
   edit_file: z.object({ path: z.string(), old_string: z.string(), new_string: z.string(), replace_all: z.boolean().optional() }).strict(),
   delete_file: z.object({ path: z.string() }).strict(),
+  read_comp: CompReadingSchema,
+  generate_comp: CompInputSchema,
   generate_image: z.object({ name, prompt: z.string().min(20).max(3000), aspect: z.enum(["landscape", "portrait", "square"]), kind: z.enum(IMAGE_KINDS).optional(),
-    text: z.string().max(200).nullable().optional(), textPlacement: z.enum(["exact", "loose"]).optional() }).strict(),
+    text: z.string().max(200).nullable().optional(), textPlacement: z.enum(["exact", "loose"]).optional(),
+    replaces: name.optional(), rejected: z.string().trim().min(8).max(300).optional() }).strict()
+    .refine(input => Boolean(input.replaces) === Boolean(input.rejected), "replaces and rejected go together: the image being regenerated and what is wrong with it."),
   finish: z.object({
     summary: z.string().min(1).max(2000),
     title: z.string().min(1).max(200).optional(),
@@ -55,8 +69,19 @@ const ToolInputs = {
   }).strict(),
 };
 
-function tools(images: boolean, cutouts = false, textImages = false): BetaToolUnion[] {
+/** The comp tool: a finished website screen as one picture (type, image, colour and space designed together). */
+const COMP_TOOL = { name: "generate_comp", description: `First build, after the concept: generate one design comp, a picture of a finished website screen in the art system, as an art director's reference you then build in code. It is never shown on the page. Use it for the first screen (desktop, ${COMP_SHAPE.desktop.width} × ${COMP_SHAPE.desktop.height}), the phone first screen (viewport mobile, ${COMP_SHAPE.mobile.width} × ${COMP_SHAPE.mobile.height}: its top bar, whole headline and action pill must fit that one screen) and the key sections; at most ${MAX_COMPS}, all in one step. Write it like an art director's brief, field by field: the brand's wordmark (and its small mark), the exact hex colours from the palette (ground, text, accent), the headline typeface STYLE in words ("huge bold condensed sans", "elegant italic serif", "friendly rounded bold"), the desktop navigation items exactly as the header will say them, the action pill (exact label, filled or outlined, colour), the layout as exact percentages ("left 46%: solid cobalt #1D3FA8 type field with the headline and the pill"; "right 54%: full-bleed photograph"), every line of words in reading order with its line breaks ("Fixed by / Friday."), the accent words and how they are set ("Friday." in lime), and the photograph in specific, cinematic terms (subject, action, place, light, lens, crop). Use the site's real copy: the comp's words are the words you build. At most ${COMP_WORDS.desktop} (desktop) or ${COMP_WORDS.mobile} (phone) words besides the navigation; body copy appears as quiet lines.`,
+  input_schema: COMP_INPUT_JSON };
+
+/** The builder's reading of a comp, measured against the built page at finish. */
+const READ_COMP_TOOL = { name: "read_comp", description: "After a design comp comes back, record what it shows, read from the picture: the cap height of its largest headline as a percentage of the comp's height (a capital H; e.g. 8 for a headline whose capitals are 8% of the frame tall), the share of the frame the photograph or drawing covers (0-100), and the side it sits on. Finish measures the built section against this reading: its largest headline's cap height must be at least 85% of the comp's.",
+  input_schema: { type: "object" as const, properties: { section: { type: "string" }, viewport: { type: "string", enum: ["desktop", "mobile"] }, headlineCapHeightPct: { type: "number" }, imageAreaPct: { type: "number" }, imageSide: { type: "string", enum: ["left", "right", "full", "none"] } },
+    required: ["section", "viewport", "headlineCapHeightPct", "imageAreaPct", "imageSide"], additionalProperties: false } };
+
+function tools(images: boolean, cutouts = false, textImages = false, concept = false, comps = false): BetaToolUnion[] {
   const list: BetaToolUnion[] = [
+    ...(concept ? [CONCEPT_TOOL as unknown as BetaToolUnion] : []),
+    ...(comps ? [COMP_TOOL as unknown as BetaToolUnion, READ_COMP_TOOL as unknown as BetaToolUnion] : []),
     { name: "write_file", description: "Create a new file or replace an entire file in the project.", eager_input_streaming: true,
       input_schema: { type: "object", properties: { path: { type: "string", description: "Relative path, e.g. src/components/Hero.tsx" }, content: { type: "string", description: "Complete file content" } }, required: ["path", "content"], additionalProperties: false } },
     { name: "edit_file", description: "Replace an exact string in an existing file. old_string must match the current file exactly (including whitespace) and be unique unless replace_all is true.", eager_input_streaming: true,
@@ -70,8 +95,9 @@ function tools(images: boolean, cutouts = false, textImages = false): BetaToolUn
         design: { type: "object", properties: { positioning: { type: "string" }, composition: { type: "string" }, typography: { type: "string" }, palette: { type: "string" }, imagery: { type: "string" }, motion: { type: "string" } }, required: ["positioning", "composition", "typography", "palette", "imagery", "motion"], additionalProperties: false },
       }, required: ["summary", "title"], additionalProperties: false } },
   ];
-  if (images) list.splice(3, 0, { name: "generate_image", description: `Generate one original, art-directed image for the website and register it in the project. Returns the URL and pixel size to use in code (e.g. /images/hero-portrait.webp, width 1536, height 1024). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood, then the house style. Never request text, logos or watermarks in images. kind: photo (default), illustration, texture, icon, or cutout: one subject on a transparent background, trimmed to the subject, for layering over colour fields, shapes or other images${cutouts ? "" : " (cut-outs are unavailable with the configured image models)"}. text: null for no words in the image (the default, and the right choice when the words can be HTML over the image); otherwise the exact short words the image itself must show (a sign, label or poster lettering), with textPlacement "exact" when they must sit precisely where the prompt says${textImages ? "" : " (text in images is unavailable with the configured image models: use HTML text)"}. The platform picks the image model and quality per image.`,
-    input_schema: { type: "object", properties: { name: { type: "string", description: "kebab-case file name without extension" }, prompt: { type: "string" }, aspect: { type: "string", enum: ["landscape", "portrait", "square"] }, kind: { type: "string", enum: [...IMAGE_KINDS] }, text: { type: ["string", "null"], description: "Exact words to render in the image, or null" }, textPlacement: { type: "string", enum: ["exact", "loose"] } }, required: ["name", "prompt", "aspect"], additionalProperties: false } });
+  if (images) list.splice(3, 0, { name: "generate_image", description: `Generate one original, art-directed image for the website and register it in the project. Returns the URL and pixel size to use in code (e.g. /images/hero-portrait.webp, width 1536, height 1024). Write a precise visual prompt: subject, composition, lighting or medium, palette, mood, then the house style. Never request text, logos or watermarks in images. kind: photo (default), illustration, texture, icon, or cutout: one subject on a transparent background, trimmed to the subject, for layering over colour fields, shapes or other images${cutouts ? "" : " (cut-outs are unavailable with the configured image models)"}. text: null for no words in the image (the default, and the right choice when the words can be HTML over the image); otherwise the exact short words the image itself must show (a sign, label or poster lettering), with textPlacement "exact" when they must sit precisely where the prompt says${textImages ? "" : " (text in images is unavailable with the configured image models: use HTML text)"}. The platform picks the image model and quality per image. The result shows you the image itself: inspect it before using it. To regenerate an image you reject (once per slot, counted against the allowance), give a new name, replaces (the rejected image's name) and rejected (what is wrong), then point the slot at the new image; the rejected image leaves the project once nothing uses it.`,
+    input_schema: { type: "object", properties: { name: { type: "string", description: "kebab-case file name without extension" }, prompt: { type: "string" }, aspect: { type: "string", enum: ["landscape", "portrait", "square"] }, kind: { type: "string", enum: [...IMAGE_KINDS] }, text: { type: ["string", "null"], description: "Exact words to render in the image, or null" }, textPlacement: { type: "string", enum: ["exact", "loose"] },
+      replaces: { type: "string", description: "Only when regenerating: the name of the generated image this one replaces" }, rejected: { type: "string", description: "Only with replaces: what is wrong with the replaced image (the artefact, the AI look, the wrong subject or the style break)" } }, required: ["name", "prompt", "aspect"], additionalProperties: false } });
   return list;
 }
 
@@ -89,21 +115,35 @@ export type BuilderRun = {
   signal: AbortSignal;
   /** Epoch ms by which the run must have stopped (platform time limit). */
   deadline: number;
-  /** Tighter limits for focused passes such as the design review. */
-  limits?: { maxTurns?: number; maxImages?: number };
+  /** Tighter limits for focused passes such as the design review. replaceOnly: images may only
+   * regenerate an existing image (the review pass), never add a new one. */
+  limits?: { maxTurns?: number; maxImages?: number; replaceOnly?: boolean };
+  /** Completeness: sections the approved brief lists (by anchor) and the client's must-haves; checked at finish. */
+  required?: QualityInput["required"];
+  /** First build of a website: record 2-3 concepts with the concept tool and build the strongest. */
+  concept?: boolean;
+  /** Rendered contrast at finish (text over its real background): failing pairs, or null when no browser is available. */
+  contrastCheck?: (files: ReadonlyMap<string, string>, options?: { comps?: readonly CompReadingValues[] }) => Promise<readonly string[] | null>;
   /** No step starts with less time than this left (default 45 s; tests use less). */
   stepGuardMs?: number;
   /** Injected providers (tests). Production uses the SDKs with retries disabled. */
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: (request: GeneratedImageRequest, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
+  /** Stores a design comp as a registered (never published) asset; tests inject one. */
+  storeComp?: (bytes: Buffer, provenance: Record<string, unknown>) => Promise<{ id: string; data?: Buffer }>;
   /** Compile check at finish (tests inject one); production bundles with esbuild. */
   compile?: (files: ReadonlyMap<string, string>) => Promise<CompileVerdict>;
 };
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds.
  * build: the finish-time compile verdict when the run finished, null otherwise. */
-export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null };
+export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null; concept?: ConceptRecord | null; compFidelity?: "passed" | "failed" | "not_checked"; compCoverage?: { measured: string[]; notChecked: string[] } };
+
+/** Preserve the approved photo plan's slots, rather than reserving unused policy maxima. */
+export function pendingPhotoSlots(limit: number, used: number, planned?: number) {
+  return Math.max(0, Math.min(limit, planned ?? limit) - used);
+}
 
 /** Agentic edit loop: Claude edits the in-memory project through tools until it
  * calls finish with a project that passes static checks and compiles, or the budget runs out. */
@@ -116,12 +156,17 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const spend = run.spend;
   // The configured image model, or null when images are off (see imageConfiguration).
   // The routable image models (ordered allowlist), or none when images are off (see imageConfiguration).
-  const imageModels = policy.maxImages > 0 ? imageConfiguration().models ?? [] : [];
+  // Websites have their own image allowance; a run's limits (0 on review passes, type-only designs) still win.
+  const maxImages = run.limits?.maxImages ?? policy.maxWebsiteImages;
+  const imageModels = maxImages > 0 ? imageConfiguration().models ?? [] : [];
   const imageModelId = imageModels[0] ?? null;
   // One image's worst case; images may use at most a third of the run's allowance.
   // Sizing the run's image allowance: the dearest allowed model at medium portrait with a full prompt.
   const imageBound = imageModels.length ? Math.max(...imageModels.map(model => imageCallBoundMicrousd(model, "medium", IMAGE_SIZES.portrait, "x".repeat(3400)))) : Infinity;
-  const imageLimit = imageModelId ? Math.min(policy.maxImages, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
+  // A run whose remaining budget cannot pay for one image (a late continuation of a long build) is not offered the tool:
+  // a refused image call there cost the stage its only affordable step (round 3E w05 ended BUILD_INCOMPLETE that way).
+  const imageAffordable = spend.remainingMicrousd - imageBound >= spend.allowanceMicrousd * 0.1;
+  const imageLimit = imageModelId && imageAffordable ? Math.min(maxImages, Math.floor(spend.allowanceMicrousd / imageBound / 3)) : 0;
   const imageClient = imageModelId && imageLimit > 0 ? run.imageClient ?? openaiImageClient() : null;
   // Website images also get responsive copies (srcset) while they fit the site's image budget.
   const storeImage = run.storeImage ?? ((request: GeneratedImageRequest, bytes: Buffer) => storeGeneratedImage(run.client, run.scope, request, bytes,
@@ -129,17 +174,40 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const cutouts = imageModels.some(supportsTransparentImages);
   const textImages = imageModels.some(model => TEXT_IMAGE_MODELS.includes(model));
   let imagesUsed = 0, summary = "", title: string | undefined, finished = false, malformedTurns = 0;
+  let compFidelity: BuilderResult["compFidelity"];
+  let concept: ConceptRecord | null = null;
+  // Regeneration: each slot is regenerated at most once. Names replaced (or being replaced), and the replacements.
+  const replacedNames = new Set<string>(), replacementNames = new Set<string>();
+  // Completed regenerations: rejected name -> its replacement. The rejected image stays registered while any file
+  // still references it (a run can end before the code is updated), so a regeneration never leaves a broken image.
+  const replacedBy = new Map<string, string>();
+  const replaceOnly = Boolean(run.limits?.replaceOnly);
   // Quality gates block a finish once per distinct problem; a repeat is accepted, so a false positive can never strand the work.
   const qualityReported = new Set<string>();
   let build: BuilderResult["build"] = null;
-  const system = [{ type: "text" as const, text: BUILDER_SYSTEM }];
-  const toolList = tools(imageLimit > 0, cutouts, textImages);
+  // The system prompt carries its own cache marker, so every run (builds, edits,
+  // reviews, every user) reuses it; the automatic breakpoint caches the conversation.
+  const system = [{ type: "text" as const, text: BUILDER_SYSTEM, cache_control: { type: "ephemeral" as const } }];
+  // Design comps: first builds with a text-capable image model, paid from the part of the run's image third that the
+  // photo allowance does not need at its worst case (comps never reduce the photographs a site may have).
+  // Not yet qualified for production: comp-first builds also need MAKEBORNE_DESIGN_COMPS=on (lib/builder/features.ts).
+  const compsAvailable = designCompsEnabled() && Boolean(run.concept) && !run.limits?.replaceOnly && imageLimit > 0 && textImages;
+  // In call order (the jobs finish in any order); a failed comp leaves its slot empty.
+  const comps: DesignComp[] = [], compSlots: (DesignComp | undefined)[] = [];
+  let compsStarted = 0, imageReservedMicrousd = 0, compsAsked = 0;
+  // The project as it was the last time the rendered layout check found no blocking defect, and the defects of the
+  // latest check: a run that ends with a defect it could not fix restores that version instead of saving the defect.
+  let cleanFiles: Map<string, string> | null = null, layoutDefects: string[] = [];
+  const storeComp = run.storeComp ?? ((bytes: Buffer, provenance: Record<string, unknown>) => storeProjectImage(run.client, run.scope, bytes, provenance));
+  const toolList = tools(imageLimit > 0, cutouts, textImages, Boolean(run.concept), compsAvailable);
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: toolList, messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
 
   const messages: BetaMessageParam[] = [{ role: "user", content: [
     ...run.attachments,
-    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? `available (up to ${imageLimit} images this run${cutouts ? ", transparent cut-outs included" : "; transparent cut-outs unavailable"})` : "unavailable — use typography, CSS and inline SVG"}.\n\n<request>\n${run.request}\n</request>` },
+    { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? (replaceOnly
+      ? `available only to regenerate ${imageLimit === 1 ? "one existing image" : `up to ${imageLimit} existing images`} that crop and placement cannot fix (pass replaces and rejected); it comes back to you as a picture to inspect`
+      : `available (up to ${imageLimit} images this run${cutouts ? ", transparent cut-outs included" : "; transparent cut-outs unavailable"}); each image comes back to you as a picture: inspect it before you place it (see IMAGERY)`) : "unavailable — use typography, CSS and inline SVG"}.\n\n<request>\n${run.request}\n</request>` },
   ] }];
 
   for (let turn = 0; turn < policy.maxTurns && !finished; turn++) {
@@ -250,11 +318,31 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
           case "generate_image": {
             const input = ToolInputs.generate_image.parse(use.input);
             if (!imageClient || !imageModelId) { fail("Image generation is unavailable. Use CSS, typography and inline SVG."); break; }
+            // Comp-first: the photographs follow the comps they belong to (asked once; a repeat goes ahead).
+            // Also before the concept is recorded: the live quality-v14 w05 run had its concept refused, generated the photos in
+            // the same step (no concept yet, so this gate did not apply), recorded the concept later and never made a comp.
+            // Asked up to twice while the comp budget still affords another comp (the live quality-v14 sites stopped at two).
+            const textModel = imageModels.find(model => TEXT_IMAGE_MODELS.includes(model));
+            const deskCell = textModel ? compCell(textModel, "desktop") : null;
+            const compBound = textModel && deskCell?.ok ? imageCallBoundMicrousd(textModel, deskCell.quality, deskCell.size, "x".repeat(4000)) : Infinity;
+            const compAffordable = imageReservedMicrousd + pendingPhotoSlots(imageLimit, imagesUsed, concept?.imagePlan?.shots.length) * imageBound + compBound <= spend.allowanceMicrousd / 3;
+            if (compsAvailable && compsStarted < MIN_COMPS && compsAsked < 2 && (compsAsked === 0 || compAffordable)) {
+              compsAsked++;
+              const made = new Set(comps.map(comp => `${comp.section} (${comp.viewport})`));
+              const missing = compPlan(concept?.sections).filter(entry => !made.has(entry));
+              fail(concept ? `Design comps come first on this build and only ${compsStarted} ${compsStarted === 1 ? "was" : "were"} made${missing.length ? `; still missing: ${missing.join(", ")}` : ""}. In one response call generate_comp for ${missing.length ? "those" : "the first screen (desktop), the phone first screen (mobile) and the two heart sections"}, then read_comp for each, then generate the photographs each comp shows.`
+                : "On this first build the order is: record the concept (fix what its tool result asked for), then the design comps (generate_comp for the first screen, the phone first screen and the two heart sections, then read_comp for each), then the photographs each comp shows. No photograph before that.");
+              break;
+            }
             if (imagesUsed >= imageLimit || spend.remainingMicrousd - imageBound < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
+            if (!responsive.siteImageFits([...run.files.assets.values()])) { fail("This site already holds as many images as a published site can carry. Reuse an existing image or use CSS/SVG artwork."); break; }
             if (run.files.assets.has(`public/images/${input.name}.webp`)) { fail(`An image named ${input.name} already exists at /images/${input.name}.webp. Reuse it or choose a new name.`); break; }
+            const rejection = regenerationProblem(input, { replaceOnly, exists: other => run.files.assets.has(`public/images/${other}.webp`), replaced: replacedNames, replacements: replacementNames });
+            if (rejection) { fail(rejection); break; }
             const kind = input.kind ?? "photo";
             const route = routeImage({ kind, aspect: input.aspect, text: input.text ?? null, textPlacement: input.textPlacement }, input.prompt, imageModels);
             if (!route.ok) { fail(route.error); break; }
+            if (imageReservedMicrousd + route.boundMicrousd > spend.allowanceMicrousd / 3) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             if (spend.remainingMicrousd - route.boundMicrousd < spend.allowanceMicrousd * 0.1) { fail("Image budget for this run is used up. Reuse existing images or use CSS/SVG artwork."); break; }
             let job: Awaited<ReturnType<typeof startBudgetedImage>>;
             try {
@@ -266,29 +354,120 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               break;
             }
             imagesUsed++;
-            run.emit({ type: "image_start", name: input.name, prompt: input.prompt });
+            imageReservedMicrousd += route.boundMicrousd;
+            if (input.replaces) { replacedNames.add(input.replaces); replacementNames.add(input.name); }
+            run.emit({ type: "image_start", name: input.name, prompt: input.prompt, ...(input.replaces ? { replaces: input.replaces, rejected: input.rejected } : {}) });
             const started = job;
             imageJobs.push(started.done.then(async bytes => {
               const detail = await started.detail;
               const record = { model: route.model, quality: route.quality, size: route.size, reason: route.reason, text: input.text ?? null, costMicrousd: detail.costMicrousd, outputTokens: detail.outputTokens, overrun: detail.overrun };
               const asset = await storeImage({ name: input.name, prompt: route.prompt, model: route.model, kind, transparent: route.background === "transparent", route: record }, bytes);
-              return { asset, record };
-            }).then(({ asset, record }) => {
+              // What the builder sees: a small preview of the stored image (best effort; text only without it).
+              const preview = await imagePreview(asset.data ?? bytes).catch(() => null);
+              return { asset, record, preview };
+            }).then(({ asset, record, preview }) => {
+              if (input.replaces) replacedBy.set(input.replaces, input.name);
               run.files.addAsset({ id: asset.id, path: asset.path, sha256: asset.sha256, bytes: asset.bytes, mediaType: asset.mediaType });
               // Parallel jobs checked the budget before storing; re-check against what is registered now.
-              if (asset.variants?.length && responsive.variantsFit([...run.files.assets.values()], asset.variants)) for (const variant of asset.variants) run.files.addAsset(variant);
+              const copies = Boolean(asset.variants?.length && responsive.variantsFit([...run.files.assets.values()], asset.variants));
+              if (copies) for (const variant of asset.variants ?? []) run.files.addAsset(variant);
               run.emit({ type: "image", path: asset.path, url: asset.url, assetId: asset.id, model: record.model, quality: record.quality, size: record.size, reason: record.reason, costMicrousd: record.costMicrousd });
-              results.push({ type: "tool_result", tool_use_id: use.id, content: imageReadyMessage(asset, input.aspect, kind) });
-            }, () => fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).")));
+              results.push({ type: "tool_result", tool_use_id: use.id, content: imageResultContent(imageReadyMessage({ ...asset, copies }, input.aspect, kind, { name: input.name, replaces: input.replaces, preview: Boolean(preview) }), preview) });
+            }, () => {
+              // A failed regeneration keeps the original in place, so the slot may be tried again.
+              if (input.replaces) { replacedNames.delete(input.replaces); replacementNames.delete(input.name); }
+              fail("Image generation failed. Continue without this image (use CSS/SVG artwork instead).");
+            }));
+            break;
+          }
+          case "generate_comp": {
+            const input = ToolInputs.generate_comp.parse(use.input);
+            if (!compsAvailable || !imageClient) { fail("Design comps are only for a first build with a text-capable image model. Build from the art system and the section plan."); break; }
+            if (!concept) { fail("Record the concept, with its art system and section plan, before generating design comps."); break; }
+            if (compsStarted >= MAX_COMPS) { fail(`At most ${MAX_COMPS} design comps per build. Build the other sections from the art system and the comps you have.`); break; }
+            if (comps.some(comp => comp.section === input.section && comp.viewport === input.viewport)) { fail(`There is already a ${input.viewport} comp for ${input.section}.`); break; }
+            const issues = compInputIssues(input, isFirstScreen(input.section, concept.sections));
+            if (issues.length) { fail(`Rewrite this comp: ${issues.join("; ")}.`); break; }
+            // The reference pattern: the exact words are quoted in the paragraph and placed exactly, so the 2.5 model that
+            // sets text where asked (sunburst, else flare) is preferred. The canvas is the best measured one for this model
+            // and viewport (the native 2560x1440 / 1152x2496 once measured, else a measured canvas cut to the shape).
+            const task = { kind: "illustration" as const, aspect: input.viewport === "desktop" ? "landscape" as const : "portrait" as const, text: compText(input), textPlacement: "exact" as const };
+            const picked = routeImage(task, compPrompt(input, concept), imageModels);
+            if (!picked.ok) { fail(picked.error); break; }
+            const cell = compCell(picked.model, input.viewport);
+            if (!cell.ok) { fail(`Design comps are unavailable here (${cell.error}). Build from the art system and the section plan.`); break; }
+            const routed = routeImage(task, compPrompt(input, concept, cell.size), [picked.model]);
+            if (!routed.ok) { fail(routed.error); break; }
+            const route = { ...routed, size: cell.size, quality: cell.quality, allowHigh: cell.quality !== "medium", boundMicrousd: imageCallBoundMicrousd(routed.model, cell.quality, cell.size, routed.prompt) };
+            // The photographs still to come, at the bound of the model the router picks for them (comps never cut photos).
+            const photoBound = Math.max(...(["landscape", "portrait", "square"] as const).map(aspect => { const photo = routeImage({ kind: "photo", aspect, text: null }, "x".repeat(3400), imageModels); return photo.ok ? photo.boundMicrousd : imageBound; }));
+            const photoReserve = pendingPhotoSlots(imageLimit, imagesUsed, concept.imagePlan?.shots.length) * photoBound;
+            if (imageReservedMicrousd + route.boundMicrousd + photoReserve > spend.allowanceMicrousd / 3 || spend.remainingMicrousd - route.boundMicrousd < spend.allowanceMicrousd * 0.1) {
+              fail("No image budget is left for another design comp. Build from the art system and the comps you have."); break;
+            }
+            let job: Awaited<ReturnType<typeof startBudgetedImage>>;
+            try {
+              job = await startBudgetedImage({ client: imageClient, spend, model: route.model, prompt: route.prompt, size: route.size, quality: route.quality, signal: run.signal, allowHigh: route.allowHigh });
+            } catch (error) {
+              fail(error instanceof SpendError && !error.graceful ? `${error.message} Build without this comp.` : "No image budget is left for another design comp. Build from the art system and the comps you have.");
+              break;
+            }
+            const slot = compsStarted++; imageReservedMicrousd += route.boundMicrousd;
+            run.emit({ type: "image_start", name: `comp-${input.section}-${input.viewport}`, prompt: compText(input), comp: true });
+            const started = job, record = concept;
+            imageJobs.push(started.done.then(async raw => {
+              const detail = await started.detail;
+              // A canvas that is not the comp's own shape is cut to it (the prompt kept the cut margins free of words).
+              const bytes = cell.native ? raw : await sharp(raw, { limitInputPixels: 40_000_000 }).extract(cell.crop).webp({ quality: 90 }).toBuffer().catch(() => raw);
+              const stored = await storeComp(bytes, { kind: "design-comp", section: input.section, viewport: input.viewport, model: route.model, quality: route.quality, size: route.size, crop: cell.native ? null : cell.crop,
+                prompt: route.prompt.slice(0, 2000), costMicrousd: detail.costMicrousd });
+              const preview = await imagePreview(stored.data ?? bytes, { maxEdge: COMP_PREVIEW_EDGE }).catch(() => null);
+              return { stored, preview };
+            }).then(({ stored, preview }) => {
+              compSlots[slot] = { section: input.section, viewport: input.viewport, asset: stored.id, ground: input.colors.ground.toUpperCase(), headlineLines: splitLines(input.lines.find(line => line.role === "headline")!.text).length, ...(heavyType(input.type) ? { heavy: true } : {}) };
+              comps.splice(0, comps.length, ...compSlots.filter((entry): entry is DesignComp => Boolean(entry)));
+              record.comps = [...comps];
+              run.emit({ type: "status", message: `Design comp ready: ${input.section} (${input.viewport})` });
+              results.push({ type: "tool_result", tool_use_id: use.id, content: imageResultContent(compReadyMessage(input), preview) });
+            }, () => fail("The design comp could not be made. Build this section from the art system and the section plan.")));
+            break;
+          }
+          case "read_comp": {
+            const input = ToolInputs.read_comp.parse(use.input);
+            const comp = comps.find(entry => entry.section === input.section && entry.viewport === input.viewport);
+            if (!comp || !concept) { fail(`There is no ${input.viewport} comp for "${input.section}" to read.`); break; }
+            comp.reading = { ...input, ...(comp.ground ? { ground: comp.ground } : {}), ...(comp.headlineLines ? { headlineLines: comp.headlineLines } : {}), ...(comp.heavy ? { heavy: true } : {}) };
+            concept.comps = [...comps];
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Reading recorded for ${input.section} (${input.viewport}). At finish the built section is measured against it at ${input.viewport === "desktop" ? "1440" : "390"} px: its largest headline's cap height at least 85% of ${input.headlineCapHeightPct}% of the frame, and the image covering about ${input.imageAreaPct}% of the section's first screen${input.viewport === "desktop" && input.imageSide !== "none" && input.imageSide !== "full" ? ` on the ${input.imageSide}` : ""}.` });
+            break;
+          }
+          case "concept": {
+            if (!run.concept) { fail("The concept step is only for a first build; continue with the current design."); break; }
+            const checked = checkConcept(use.input, { images: replaceOnly ? 0 : imageLimit, sitePlan: true });
+            if (!checked.ok) { fail(checked.problem); break; }
+            concept = checked.record;
+            run.emit({ type: "concept", chosen: concept.chosen.name, runnersUp: concept.runnersUp.map(item => item.name), why: concept.why, ...(concept.imagePlan ? { shots: concept.imagePlan.shots.length } : {}), ...(concept.sections ? { compositions: concept.sections.map(section => section.composition) } : {}) });
+            results.push({ type: "tool_result", tool_use_id: use.id, content: `Concept recorded. Build only "${concept.chosen.name}": ${concept.chosen.headline} — signature device: ${concept.chosen.device}. Put the device on the first screen and carry it through the sections; it must serve the primary action (${concept.chosen.action}). ${sitePlanNote(concept)}${concept.imagePlan ? ` ${imagePlanNote(concept.imagePlan, { comps: compsAvailable, sections: concept.sections })}` : ""}${compsAvailable && !concept.imagePlan ? ` ${compsNextStep(concept.sections)}` : ""}` });
             break;
           }
           case "finish": {
             const input = ToolInputs.finish.parse(use.input);
             const problems = run.files.problems();
+            // A first build records its concepts before it can finish (once: a repeat is accepted).
+            const noConcept = "Before finishing a first build, call the concept tool once with 2-3 genuinely distinct concepts, scored on the rubric, and keep building the strongest.";
+            if (run.concept && !concept && !qualityReported.has(noConcept)) { qualityReported.add(noConcept); problems.push(noConcept); }
+            // Every comp is read before finish, so the build can be measured against it (asked once).
+            const unread = comps.filter(comp => !comp.reading);
+            if (unread.length) { problems.push(`Record read_comp for ${unread.map(comp => `${comp.section} (${comp.viewport})`).join(", ")}: the headline cap height and image share you read from each comp; finish then measures the built sections against them.`); }
+            // A rejected image still in use: its slot should show the regenerated one (once: a repeat is accepted).
+            for (const [rejected, replacement] of replacedBy) {
+              const stale = `The page still shows /images/${rejected}.webp, which you rejected and regenerated as /images/${replacement}.webp: point that slot at the new src with its width and height.`;
+              if (imageInUse(run.files.files, rejected) && !qualityReported.has(stale)) { qualityReported.add(stale); problems.push(stale); }
+            }
             if (input.routes?.length) run.files.routes = input.routes.some(route => route.path === "/") ? input.routes : [{ path: "/", title: "Home" }, ...input.routes];
             if (input.design) run.files.design = input.design;
-            if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes })) {
-              if (!qualityReported.has(problem)) { qualityReported.add(problem); problems.push(problem); }
+            if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes, required: run.required })) {
+              if (BLOCKING_PROBLEM.test(problem) || !qualityReported.has(problem)) { qualityReported.add(problem); problems.push(problem); }
             }
             if (!problems.length) { try { run.files.toSource(); } catch (error) { problems.push((error as Error).message); } }
             // A saved version must build: compile once the static checks pass.
@@ -297,6 +476,24 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               run.emit({ type: "status", message: "Checking that the website builds…" });
               verdict = await (run.compile ?? compileVerdict)(run.files.files);
               if (verdict.status === "failed") problems.push(...verdict.problems);
+            }
+            // Rendered contrast: text measured over its real background in a browser. Each failing pair blocks once.
+            if (!problems.length && verdict?.status === "passed" && run.contrastCheck) {
+              run.emit({ type: "status", message: "Checking text contrast…" });
+              // Edits and continuations keep the saved references too; they need
+              // no new image call merely to measure an already-approved comp.
+              const readings = (comps.length ? comps : compsFromSource(run.files.files.get("src/App.tsx"))).map(comp => comp.reading).filter((reading): reading is CompReadingValues => Boolean(reading));
+              const findings = await run.contrastCheck(run.files.files, readings.length ? { comps: readings } : undefined).catch(() => null);
+              if (readings.length) compFidelity = findings === null ? "not_checked" : findings.some(finding => /^Comp fidelity:/.test(finding)) ? "failed" : "passed";
+              // Covered text, content past the edge, page overflow and wrapped bands block every time; the rest once.
+              const blocking = (findings ?? []).filter(finding => BLOCKING_PROBLEM.test(finding));
+              if (findings) { layoutDefects = blocking; if (!blocking.length) cleanFiles = new Map(run.files.files); }
+              // A once-only problem is the same problem when only its measured numbers moved (a fidelity reading
+              // re-measured after a partial fix blocked w01 three times in round G2 and cost the build its finish).
+              for (const finding of findings ?? []) {
+                const key = BLOCKING_PROBLEM.test(finding) ? null : finding.replace(/[0-9]+(?:\.[0-9]+)?/g, "#");
+                if (key === null || !qualityReported.has(key)) { if (key) qualityReported.add(key); problems.push(finding); }
+              }
             }
             if (problems.length) { fail(`Not finished yet. Fix these problems, then call finish again:\n- ${problems.join("\n- ")}`); break; }
             // An unavailable compiler is not the model's to fix: keep the work and report it as unverified.
@@ -318,20 +515,106 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     if (finished) break;
     messages.push({ role: "user", content: results });
     if (spend.stopped || spend.remainingMicrousd <= 0) break;
+    // A first build that has scaffolding and styles but still no page cannot be saved at all if the
+    // step ends now (an eval brief lost a whole stage this way): the page itself comes next.
+    if (turn >= 1 && run.files.files.size > 0 && !run.files.files.has("src/App.tsx") && /from\s+["']\.\/App["']/.test(run.files.files.get("src/main.tsx") ?? "")) {
+      messages.push({ role: "system", content: "src/App.tsx does not exist yet, so nothing can be saved. Write src/App.tsx next (the complete page with every section and real copy, in one file if need be) before any other file or refinement." });
+    }
     if (spend.remainingMicrousd < spend.allowanceMicrousd * 0.25 || turn === policy.maxTurns - 2 || Date.now() > deadline - 120_000) {
       messages.push({ role: "system", content: "Budget or time is nearly used up. Finish the most important remaining work in this step and call finish now." });
     }
   }
-  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped };
+  if (!finished && layoutDefects.length && cleanFiles) {
+    const clean = cleanFiles;
+    for (const path of [...run.files.files.keys()]) if (!clean.has(path)) { run.files.remove(path); run.emit({ type: "delete", path }); }
+    for (const [path, content] of clean) if (run.files.files.get(path) !== content) { run.files.write(path, content); run.emit({ type: "file", path, op: "write", content }); }
+    run.emit({ type: "status", message: "Restored the last version without layout defects." });
+  }
+  // Rejected images leave the project (with their responsive copies) once no file references them.
+  for (const rejected of replacedBy.keys()) if (!imageInUse(run.files.files, rejected)) run.files.removeAsset(`public/images/${rejected}.webp`);
+  // The chosen concept and its runners-up stay in the source (also for a continuation, which reads the files).
+  const app = run.files.files.get("src/App.tsx");
+  if (concept && app !== undefined) {
+    const commented = withConceptComment(app, concept);
+    if (commented !== app) { run.files.write("src/App.tsx", commented); run.emit({ type: "file", path: "src/App.tsx", op: "write", content: commented }); }
+  }
+  const savedComps = concept?.comps ?? compsFromSource(run.files.files.get("src/App.tsx"));
+  let compCoverage: BuilderResult["compCoverage"];
+  if (savedComps.length || (compsAvailable && concept)) {
+    compFidelity ??= "not_checked";
+    const labels = savedComps.map(comp => `${comp.section} (${comp.viewport})`);
+    const missing = compsAvailable && concept ? compPlan(concept.sections).filter(label => !labels.includes(label)) : [];
+    compCoverage = { measured: compFidelity === "not_checked" ? [] : labels, notChecked: [...new Set([...missing, ...(compFidelity === "not_checked" ? labels : [])])] };
+    if (missing.length && compFidelity === "passed") compFidelity = "not_checked";
+    // The model writes its notes before finish measures the render. Always add
+    // the server's final verdict so earlier estimates cannot hide a real pass.
+    summary = `${summary}${summary ? "\n\n" : ""}Design comp comparison: ${compFidelity === "passed" ? `passed — measured ${compCoverage.measured.join(", ")}; this final measurement supersedes any earlier estimates in the builder notes` : compFidelity === "failed" ? "failed — the saved progress still differs from its design reference" : missing.length ? `not checked for ${missing.join(", ")} — those references were not generated` : "not checked — the desktop/phone render comparison was unavailable"}.`;
+    if (compFidelity === "failed") finished = false;
+  }
+  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept, compFidelity, compCoverage };
 }
 
-/** Tool result for a stored image: the URL, its real pixel size (for width/height, so nothing shifts) and, for cut-outs, whether the alpha survived. */
-export function imageReadyMessage(asset: { url: string; width?: number; height?: number; transparent?: boolean }, aspect: string, kind: string) {
+/** Tool result for a design comp: how to read it and what to build from it. */
+export function compReadyMessage(input: { section: string; viewport: string }) {
+  return `Design comp for ${input.section} (${input.viewport}), above. First record it with read_comp (section "${input.section}", viewport ${input.viewport}): the cap height of its largest headline as a percentage of the comp's height, the share of the frame its image covers and the side it sits on; finish measures your build against that reading. It is your reference only: it is never shown on the page or registered as a site image, and its lettering is never copied (spell from your own copy). Read it as an art director's comp: the grid and columns, the headline's size relative to the frame (the frame is ${input.viewport === "desktop" ? `${COMP_SHAPE.desktop.width} × ${COMP_SHAPE.desktop.height}` : `${COMP_SHAPE.mobile.width} × ${COMP_SHAPE.mobile.height}`} px), weights and case, the colour fields and their proportions, where the image sits and how it is cropped, overlaps and the empty space. Next, generate the text-free images it shows with generate_image (same subject, crop, light and position, described from this comp; inspect them as usual), then build the section to match the comp as closely as code allows: grid, scale, type sizes and weights, colour fields, overlaps, image crops and negative space, with live HTML text and real buttons and links. Every accessibility, contrast, honesty and 360 px rule wins over the comp.${input.viewport === "mobile" ? " On phones the h1, the value line and the primary action stay inside the first 390 × 844 screen as in the comp (finish measures it)." : ""}`;
+}
+
+/** The client's own images: their imported photos (/images/photo-N.webp, redesign-server.ts) and the brand
+ * logo (/images/brand-logo.webp, brand/kit.ts). Generated images never replace them. */
+const CLIENT_IMAGE_NAME = /^(?:photo-[0-9]+|brand-logo)$/;
+
+/** Comps asked for before the first photograph: the first screen, the phone first screen and two heart sections. */
+const MIN_COMPS = 4;
+
+/** Why a generate_image call may not regenerate (or, in a replace-only pass, add) an image, or null.
+ * Each slot is regenerated at most once: a replacement cannot itself be replaced, nor a slot twice. */
+export function regenerationProblem(input: { name: string; replaces?: string },
+  state: { replaceOnly: boolean; exists: (name: string) => boolean; replaced: ReadonlySet<string>; replacements: ReadonlySet<string> }): string | null {
+  if (!input.replaces) return state.replaceOnly
+    ? "In this pass generate_image only regenerates an existing image that crop and placement cannot fix (AI artefacts, the wrong subject): pass replaces (its name) and rejected (what is wrong). Otherwise fix the image with CSS (object-position, aspect, placement) or reuse an existing one."
+    : null;
+  if (input.replaces === input.name) return `Give the regenerated image a new name (for example ${input.replaces}-2) and update its src, width and height in the code.`;
+  if (state.replacements.has(input.replaces)) return `${input.replaces} is already a regenerated image: each slot is regenerated at most once. Use it with a crop or object-position that keeps the flaw out of frame, swap it for another generated image, or use CSS/SVG artwork in that slot.`;
+  if (state.replaced.has(input.replaces)) return `${input.replaces} has already been regenerated once. Use its replacement.`;
+  if (CLIENT_IMAGE_NAME.test(input.replaces)) return `${input.replaces} is the client's own image (their photo or logo): it is never replaced by a generated one. Fix its crop or placement with CSS instead.`;
+  if (!state.exists(input.replaces)) return `There is no generated image named ${input.replaces} to replace. Use the name of an existing image (without /images/ or .webp).`;
+  return null;
+}
+
+/** Whether any project file references the generated image /images/<name>.webp. */
+export function imageInUse(files: ReadonlyMap<string, string>, name: string) {
+  const url = `/images/${name}.webp`;
+  for (const content of files.values()) if (content.includes(url)) return true;
+  return false;
+}
+
+/** The inspection the builder does on every generated image it sees, before using it. */
+export const IMAGE_INSPECTION = "Inspect it at full attention before you use it. Reject it when it shows AI artefacts (malformed hands, fingers, faces or teeth; gibberish lettering, fake signage or labels; warped straight lines, impossible geometry or joins; duplicated, fused or melted objects), the AI look (oversaturated colour, plastic skin, HDR glow or a golden glow over everything, showroom perfection: a room or object that looks like a 3D architectural or catalogue render, spotless, evenly lit and colour-matched to the palette; a centred symmetrical subject), the wrong subject for the brief, or a break with the set: a medium, rendering, grade or light that differs from the images already made (a glossy 3D render beside illustrations, a studio shot beside documentary photographs), or a material that reads false (plastic clay, wax food, rubbery skin).";
+
+/** Tool result for a stored image: the URL, its real pixel size (for width/height, so nothing shifts), for cut-outs
+ * whether the alpha survived, when responsive copies were stored that the platform adds the srcset and the
+ * code only sets sizes for the slot (without it every copy is chosen for a full-width slot), and, with a preview,
+ * the inspection and art direction the builder does before placing it. */
+export function imageReadyMessage(asset: { url: string; width?: number; height?: number; transparent?: boolean; copies?: boolean }, aspect: string, kind: string,
+  seen: { name?: string; replaces?: string; preview?: boolean } = {}) {
   const size = asset.width && asset.height ? ` width="${asset.width}" height="${asset.height}"` : "";
   const note = kind === "cutout"
     ? (asset.transparent ? " Transparent cut-out trimmed to the subject: layer it over a colour field, shape or image; do not put it in a boxed card." : " The image came back opaque: frame it like a photo on a matching background.")
     : "";
-  return `Image ready. Use src="${asset.url}"${size} (${kind}, ${aspect}).${note}`;
+  const copies = asset.copies ? " Smaller copies are added as its srcset automatically (no srcSet in code): set sizes for its slot, e.g. sizes=\"(min-width: 900px) 50vw, 100vw\" for a half-width image." : "";
+  const ready = `Image ready. Use src="${asset.url}"${size} (${kind}, ${aspect}).${note}${copies}`;
+  if (!seen.preview) return ready;
+  const shown = ` The picture above is this image as generated (a small preview${kind === "cutout" && asset.transparent ? ", transparent areas shown as grey" : ""}).`;
+  const verdict = seen.replaces
+    ? ` This regenerates ${seen.replaces}: point its slot at this src, width and height now (the rejected image leaves the project once nothing uses it). It cannot be regenerated again: if it still shows a flaw, crop it out of frame with the slot's aspect and object-position, or use CSS/SVG artwork in that slot.`
+    : ` If you reject it, call generate_image once more for this slot with a new name, replaces="${seen.name ?? "this-image"}", rejected (what is wrong) and a prompt that fixes the cause (it counts against the allowance; a slot is regenerated at most once).`;
+  return `${ready}${shown} ${IMAGE_INSPECTION}${verdict} Otherwise, before placing it, note to yourself where its focal point and its calm, empty space are, then art-direct the slot: an aspect and crop that serve its job, object-position per breakpoint that keeps the focal point in frame on phones, and text, captions or panels on the calm side or edge, never over the subject.`;
+}
+
+/** Tool result content: the preview image first (when there is one), then the text. */
+export function imageResultContent(text: string, preview: ImagePreview | null): BetaToolResultBlockParam["content"] {
+  if (!preview) return text;
+  return [{ type: "image", source: { type: "base64", media_type: preview.mediaType, data: preview.data } }, { type: "text", text }];
 }
 
 /** Provider HTTP errors and spending-control errors end the run; only malformed streams are retried as a turn. */

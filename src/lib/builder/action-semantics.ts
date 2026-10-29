@@ -53,5 +53,23 @@ export const CHECK_EFFECT = "Check saved result & charge only reads the recorded
 export const PREVIEW_ACTIONS = {
   reload: { label: "Reload preview", effect: "Re-renders this page from the same files. No AI call, no credits." },
   retryPreview: { label: "Try again", effect: "Loads the preview again from the same saved files. No AI call, no credits, nothing regenerated." },
-  fixError: { label: "Fix it", effect: "Asks the builder to fix this error: a new AI request that uses credits." },
+  fixError: { label: "Fix it", effect: "Puts a request to fix this error in the builder chat. Nothing is sent until you choose Send: that is a new AI request that uses credits." },
 } as const;
+
+/** What a preview shows: a saved version, or edits that aren't saved yet. */
+export type PreviewSubject = { version: number; unsaved: boolean };
+export type PreviewProblem = { kind: "build" | "runtime"; message: string };
+
+/** The preview error banner's heading names what failed, so it is never mistaken for another version. */
+export function previewProblemTitle(kind: PreviewProblem["kind"], subject: PreviewSubject | null) {
+  const who = !subject ? "The site" : subject.unsaved ? "Your unsaved edits" : `Version ${subject.version}`;
+  return kind === "build" ? `${who} ${subject?.unsaved ? "have" : "has"} a build error` : `${who} hit an error while running`;
+}
+
+/** The short request "Fix it" puts in the builder composer: the error's first line and where it is. Only text; never sent by itself. */
+export function fixErrorRequest(problem: PreviewProblem, subject: PreviewSubject | null) {
+  const first = problem.message.split("\n").map(line => line.trim()).find(Boolean) ?? "";
+  const detail = first.length > 300 ? `${first.slice(0, 299).trimEnd()}…` : first;
+  const where = !subject ? "the preview" : subject.unsaved ? "my unsaved edits" : `version ${subject.version}`;
+  return `Fix the ${problem.kind === "build" ? "build error" : "error while running"} in ${where}${detail ? `: ${detail}` : "."}`;
+}

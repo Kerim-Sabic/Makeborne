@@ -2,6 +2,7 @@
 import "@/app/studio-refresh.css";
 import { z } from "zod";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { creationStyles, styleConcept } from "@/lib/creation-styles";
@@ -25,6 +26,7 @@ import { useCreationAccount, type CreationAccount } from "./use-creation-account
 import GettingStarted from "./onboarding/getting-started";
 import { api, getPendingCloudWrites, setCloudAccount } from "./cloud-api";
 import SiteBadgeSetting from "./site-badge-setting";
+import AccountDataRights, { AccountDeletionNotice } from "./account-data-rights";
 import StorageLabel from "./storage-label";
 import { SETTINGS_STORAGE } from "@/lib/settings-storage";
 import { createClient } from "@/lib/supabase/client";
@@ -69,7 +71,7 @@ import WebsiteRecordPanel from "./website-record";
 import { WebsiteRecordSchema, reviseWebsiteRecord, type WebsiteRecord } from "@/lib/website-record";
 import { studioSkipTargets } from "@/lib/studio-skip-links";
 import { creationTitle, fallbackProjectTitle, isPlaceholderTitle, placeholderTitle } from "@/lib/projects/project-title";
-import { libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
+import { PENDING_LAYOUT_MS, libraryLayout, projectsWelcome, readLibraryHint, sameLibraryStatus, writeLibraryHint, type AccountLibraryStatus } from "@/lib/projects/library-state";
 import { DRAWER_NAVIGATION_QUERY, FOCUSABLE_SELECTOR, overlayTabTarget, shouldRestoreOverlayFocus } from "@/lib/overlay-focus";
 import { PREVIEW_HISTORY_KEY } from "@/lib/builder/preview-route";
 import { opensAccountProject, readStudioRoute, studioHref, studioTab, type StudioRoute, type AccountProjectRoute, type AccountClientRoute } from "@/lib/studio-navigation";
@@ -161,6 +163,8 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   // Library sort and client filter (account projects). Search, kind, client and sort are mirrored in the URL.
   const [libraryScope, setLibraryScope] = useState<LibraryScope>(DEFAULT_LIBRARY_SCOPE);
   const searchInput = useRef<HTMLInputElement>(null);
+  // Mount point for the account list's controls inside the single library toolbar.
+  const [libraryControls, setLibraryControls] = useState<HTMLDivElement | null>(null);
   const applyLibraryQuery = (search: string) => { const library = readLibraryQuery(search); setSearch(library.q); setFilter(library.kind); setLibraryScope({ sort: library.sort, client: library.client }); };
   const [accountLibrary, setAccountLibrary] = useState<AccountLibraryStatus>({ state: "checking" });
   // Keep the same object while nothing changed, so a re-render does not ripple through the page.
@@ -172,6 +176,15 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     // An unknown account (still checking, or the check failed) may use the last account's answer; signed out uses none.
     setLibraryHint(readLibraryHint(() => localStorage, accountId ?? (next.state === "unavailable" ? null : undefined)));
   }, []);
+  // A first visit waits for the account list before choosing the layout, but never longer than PENDING_LAYOUT_MS (a stalled
+  // list must not hide the welcome), and never when the visit came to create something (a handoff, a create link, home).
+  const [pendingExpired, setPendingExpired] = useState(false);
+  const pendingLayout = libraryLayout(workspace.projects.length, accountLibrary, libraryHint) === "pending";
+  useEffect(() => {
+    if (!pendingLayout || pendingExpired) return;
+    const timer = window.setTimeout(() => setPendingExpired(true), PENDING_LAYOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [pendingLayout, pendingExpired]);
   const [notice, setNotice] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
   const [saveInvalid, setSaveInvalid] = useState(false);
@@ -283,6 +296,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           "Your saved workspace could not be read. Its original data has not been overwritten.",
         );
       }
+      // The first painted layout already uses this device's layout memory (the same rule the list's first status applies),
+      // so a returning user's page does not start prompt-first and then jump.
+      setLibraryHint(current => current ?? readLibraryHint(() => localStorage, undefined));
       setLoaded(true);
       const parameters = new URLSearchParams(window.location.search);
       if (readable) {
@@ -611,7 +627,12 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
   // Open editors hide the navigation rail, so there is nothing to bypass there.
   const projectOpen = Boolean(project || accountRoute?.artifactId || (!loaded && initialProjectOpen));
   // Returning users see their library first; new users (and unknown first visits) keep the prompt-first entry.
-  const libraryFirst = libraryLayout(workspace.projects.length, accountLibrary, libraryHint) === "library-first";
+  const decided = libraryLayout(workspace.projects.length, accountLibrary, libraryHint);
+  const createIntent = Boolean(advisorHandoff) || homeHandoff || directStart || Boolean(creating);
+  const layout = decided === "pending" && (pendingExpired || createIntent) ? "prompt-first" : decided;
+  const libraryFirst = layout === "library-first", layoutPending = layout === "pending";
+  // "Start something new" joins the page below the list only once the list is known, so a loading list never pushes it around.
+  const listSettled = accountLibrary.state !== "checking" && accountLibrary.state !== "loading";
   const skipTargets = studioSkipTargets({ loaded, tab, composerVisible: tab === "projects" && !accountRoute?.artifactId, library: libraryFirst ? "first" : "none" });
   // One creation entry: above the library for new users, below it for returning users.
   const creationEntry = <>
@@ -745,7 +766,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         ref={navigationPanel}
         className={`sidebar ${mobileNav ? "open" : ""}`}
       >
-        <Link className="wordmark" href="/">
+        <Link className="wordmark" href="/" data-label="Makeborne home">
           <BrandMark size={27} />
           Makeborne
         </Link>
@@ -766,6 +787,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
               <button
                 key={String(id)}
                 className={tab === id ? "active" : ""}
+                data-label={String(label)}
                 aria-current={tab === id ? "page" : undefined}
                 onClick={() => navigate(String(id))}
               >
@@ -774,19 +796,20 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
               </button>
             );
           })}
-          <Link href="/chat" className="studio-chat-link"><MessageCircle size={18} />Expert chat</Link>
+          <Link href="/chat" className="studio-chat-link" data-label="Expert chat"><MessageCircle size={18} />Expert chat</Link>
         </nav>
         <div className="sidebar-bottom">
           <button
             className={`sidebar-settings ${tab === "settings" ? "active" : ""}`}
+            data-label="Settings"
             aria-current={tab === "settings" ? "page" : undefined}
             onClick={() => navigate("settings")}
           >
             <Settings size={18} /> Settings
           </button>
-          <Link className="sidebar-home" href="/billing"><CreditCard size={16} /> {unlimitedCredits ? "Unlimited credits" : "Plan & credits"} <ArrowUpRight size={14} /></Link>
-          <Link className="sidebar-home" href="/help"><LifeBuoy size={16} /> Help & guides <ArrowUpRight size={14} /></Link>
-          {isAdmin && <Link className="sidebar-home" href="/admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
+          <Link className="sidebar-home" href="/billing" data-label={unlimitedCredits ? "Unlimited credits" : "Plan & credits"}><CreditCard size={16} /> {unlimitedCredits ? "Unlimited credits" : "Plan & credits"} <ArrowUpRight size={14} /></Link>
+          <Link className="sidebar-home" href="/help" data-label="Help & guides"><LifeBuoy size={16} /> Help & guides <ArrowUpRight size={14} /></Link>
+          {isAdmin && <Link className="sidebar-home" href="/admin" data-label="Admin"><Settings size={16} /> Admin <ArrowUpRight size={14} /></Link>}
           <div className="sidebar-device">
             <span className="sidebar-device-label"><span className="status-dot" /> Device backup & recovery</span>
             <button type="button" onClick={() => navigate("settings")}>Backup & recovery <ArrowUpRight size={12} /></button>
@@ -868,12 +891,23 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
           <main
             id="studio-content"
             tabIndex={-1}
-            className={`workspace-content ${tab === "projects" ? libraryFirst ? "returning-workspace" : "fresh-workspace" : ""}`}
+            className={`workspace-content ${tab === "projects" ? libraryFirst || layoutPending ? "returning-workspace" : "fresh-workspace" : ""}`}
           >
+            {composerAccount.accountId && tab !== "settings" && <AccountDeletionNotice accountId={composerAccount.accountId} onOpenSettings={() => navigate("settings")} />}
             {tab === "projects" && (
               <>
                 {!accountRoute?.artifactId && <>
-                <div className="page-heading">
+                {/* Returning users: one heading and one primary action, then their work. New users keep the prompt-first welcome. */}
+                {libraryFirst ? <div className="page-heading library-heading">
+                  <h1>Projects</h1>
+                  <Link className="button primary" href="/">
+                    <Plus size={17} /> New project
+                  </Link>
+                </div> : layoutPending ? <div className="library-pending library-columns" role="status" aria-busy="true">
+                  {/* A first visit on this device: whether this account has saved work is not known yet, so neither the welcome nor the library is guessed. */}
+                  <span className="sr-only">Loading your projects…</span>
+                  <div className="library-skeleton" aria-hidden="true">{Array.from({ length: 8 }, (_, index) => <span key={index} className="library-skeleton-card"><span className="library-skeleton-thumb" /><span className="library-skeleton-line" /><span className="library-skeleton-line short" /></span>)}</div>
+                </div> : <div className="page-heading">
                   <div>
                     <div className="eyebrow">YOUR CREATION STUDIO</div>
                     <h1>What will you make next?</h1>
@@ -882,37 +916,43 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                   <Link className="button primary" href="/">
                     <Plus size={17} /> New project
                   </Link>
-                </div>
+                </div>}
                 {libraryFirst && <div className="list-toolbar" id="studio-library" tabIndex={-1}>
-                  <div className="filter-tabs">
-                    {["all", "website", "book", "presentation"].map((f) => (
-                      <button
-                        className={filter === f ? "active" : ""}
-                        key={f}
-                        onClick={() => setFilter(f)}
-                      >
-                        {f === "all"
-                          ? "All projects"
-                          : kindLabel[f as Kind] + "s"}
-                      </button>
-                    ))}
-                  </div>
                   <label className="search-field">
-                    <Search size={16} />
+                    <Search size={16} aria-hidden="true" />
                     <input
                       ref={searchInput}
+                      type="search"
                       aria-label="Search projects"
-                      placeholder="Find a project…"
+                      placeholder="Search projects"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                     />
                   </label>
+                  <div className="filter-tabs" role="group" aria-label="Format">
+                    {["all", "website", "book", "presentation"].map((f) => (
+                      <button
+                        type="button"
+                        className={filter === f ? "active" : ""}
+                        aria-pressed={filter === f}
+                        key={f}
+                        onClick={() => setFilter(f)}
+                      >
+                        {f === "all"
+                          ? "All"
+                          : kindLabel[f as Kind] + "s"}
+                      </button>
+                    ))}
+                  </div>
+                  {/* The account list's client, sort, layout and refresh controls join this toolbar. */}
+                  <div className="library-toolbar-controls" ref={setLibraryControls} />
                 </div>}
                 </>}
                 {/* New users start with a brief; the account list keeps one position so it never reloads when the order changes. */}
-                {!accountRoute?.artifactId && !libraryFirst && <div className="studio-create">{creationEntry}</div>}
-                <AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} scope={libraryScope} onScopeChange={setLibraryScope}
-                  onClearSearch={() => { setSearch(""); searchInput.current?.focus(); }} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} />
+                {!accountRoute?.artifactId && layout === "prompt-first" && <div className="studio-create">{creationEntry}</div>}
+                {/* While the layout is pending the list still loads (it decides the layout) but stays out of view, so showing it later moves nothing. */}
+                <div className="account-projects-host" hidden={layoutPending && !accountRoute?.artifactId}><AccountProjects search={search} filter={filter} target={accountRoute} onStatus={reportAccountLibrary} scope={libraryScope} onScopeChange={setLibraryScope} controlsSlot={libraryFirst && !accountRoute?.artifactId ? libraryControls : undefined}
+                  onClearSearch={() => { setSearch(""); searchInput.current?.focus(); }} navigate={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} /></div>
                 {!accountRoute?.artifactId && (workspace.projects.length === 0 ? (projectsWelcome(workspace.projects.length, accountLibrary) !== "welcome" ? null : (
                   <Empty
                     icon={FolderOpen}
@@ -972,8 +1012,15 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                       })}
                   </div>
                 ))}
-                {!accountRoute?.artifactId && libraryFirst && <div className="studio-create">{creationEntry}</div>}
-                {!accountRoute?.artifactId && workspace.projects.length === 0 && (
+                {/* Returning users: creation stays on the page as a secondary destination below their work; inspiration lives in Styles. */}
+                {!accountRoute?.artifactId && libraryFirst && listSettled && <section className="library-secondary" aria-labelledby="library-start-heading">
+                  <div className="library-secondary-heading">
+                    <h2 id="library-start-heading">Start something new</h2>
+                    <button type="button" className="text-link" onClick={() => navigate("styles")}>Browse creative directions <ArrowUpRight size={14} aria-hidden="true" /></button>
+                  </div>
+                  <div className="studio-create">{creationEntry}</div>
+                </section>}
+                {!accountRoute?.artifactId && layout === "prompt-first" && workspace.projects.length === 0 && (
                   <TemplateGallery onChoose={chooseDirection} />
                 )}
               </>
@@ -983,7 +1030,7 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
             }} />}
             {tab === "clients" && !opportunityClient && (
               <AccountClients initialDevice={!!clientDetail} onOpenProject={account => openRoute({ tab: "projects", projectId: null, clientId: null, account })} onCreate={(workspaceId, client, prefill) => {
-                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(prefill?.brief ?? ""); setInitialTitle(prefill?.title ?? ""); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating("website");
+                setInitialWorkspaceId(workspaceId); setInitialClient(client.id); setInitialBrief(prefill?.brief ?? ""); setInitialTitle(prefill?.title ?? ""); setInitialStyle(AUTOMATIC_STYLE.id); setHomeHandoff(false); setCreating(prefill?.kind ?? "website");
               }} target={accountClientRoute} navigate={accountClient => openRoute({ tab: "clients", projectId: null, clientId: null, accountClient })} deviceClients={
               <ClientWorkspace
                 clients={workspace.clients}
@@ -1165,7 +1212,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
                     </button>
                   </section>
                   <SiteBadgeSetting />
+                  <AccountDataRights accountId={composerAccount.accountId} />
                 </div>
+                <nav className="settings-legal" aria-label="Legal documents"><LegalLinks /><Link href="/billing/terms">Billing terms</Link><Link href="/withdraw">Withdraw from a purchase</Link><span>Privacy requests: <a href="mailto:admin@makeborne.com">admin@makeborne.com</a></span></nav>
               </>
             )}
           </main>
@@ -1173,8 +1222,9 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
       </div>
       {creationView}
       {/* First-run welcome and getting-started checklist (signed-in accounts only; out of the way while creating or editing). */}
-      {composerAccount.accountId && composerAccount.workspace && <GettingStarted key={composerAccount.accountId} accountId={composerAccount.accountId} workspaceId={composerAccount.workspace.id} tab={tab}
-        hidden={Boolean(creating) || Boolean(project) || Boolean(accountRoute?.artifactId)}
+      {/* A brand-new member has no workspace until the first project or client creates one: still welcome them. */}
+      {composerAccount.accountId && composerAccount.ready && <GettingStarted key={composerAccount.accountId} accountId={composerAccount.accountId} workspaceId={composerAccount.workspace?.id ?? null} tab={tab}
+        hidden={Boolean(creating) || Boolean(project) || Boolean(accountRoute?.artifactId) || mobileNav}
         onCreate={kind => { setHomeHandoff(false); setCreating(kind); }} onNavigate={next => openRoute({ tab: next, projectId: null, clientId: null })} />}
       {clientModal && (
         <ClientModal

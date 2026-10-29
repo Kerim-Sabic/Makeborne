@@ -6,6 +6,9 @@ import { hash, metrics, toneColors, type Ctx, type SlideScene } from "./scene-ki
 import * as T from "./compose-title";
 import * as C from "./compose-content";
 import * as M from "./compose-media";
+import { RAIL_WIDE, placeImage, placementsFor } from "./compose-image";
+import type { ImagePlacement } from "./schema";
+import { artScene } from "./slide-art";
 
 /** Every deck slide is composed once into absolute primitives on a 1280×720
  * canvas by its art direction. The HTML preview/PDF and the editable PPTX both
@@ -39,6 +42,7 @@ const REGISTRY: Record<CompositionId, Composition> = {
   "closing-centered": { kind: "airy", draw: (ctx, s) => T.coverCentered(ctx, s, true) },
   "closing-split": { kind: "field", draw: T.closingSplit },
   "closing-boxed": { kind: "airy", draw: T.closingBoxed },
+  "closing-next": { kind: "dense", accepts: s => (s.points?.length ?? 0) >= 1, draw: T.closingNext },
   "section-numeral": { kind: "airy", draw: T.sectionNumeral },
   "section-field": { kind: "field", draw: T.sectionField },
   "section-split": { kind: "field", draw: T.sectionSplit },
@@ -90,22 +94,26 @@ const REGISTRY: Record<CompositionId, Composition> = {
 };
 export const compositionKind = (id: CompositionId) => REGISTRY[id].kind;
 
-type DeckLike = Pick<Deck, "title" | "theme" | "assets" | "author"> & { slides?: Slide[] };
+type DeckLike = Pick<Deck, "title" | "theme" | "assets" | "author"> & { slides?: Slide[]; art?: Deck["art"] };
 function context(deck: DeckLike, slide: Slide, index: number, total: number): Ctx {
   const dir = directionOf(deck.theme);
   const sections = (deck.slides ?? []).flatMap((entry, i) => entry.layout === "section" ? [{ index: i, title: entry.title }] : []);
   return { theme: deck.theme, dir, m: metrics(deck.theme), c: toneColors(deck.theme, slide.tone, dir.ground), prims: [], issues: [], index, total, deck, tone: slide.tone, slide,
     seed: hash(`${deck.title}|${slide.id}|${dir.id}`), sections };
 }
-function run(deck: DeckLike, slide: Slide, index: number, total: number, id: CompositionId): SlideScene {
+function run(deck: DeckLike, slide: Slide, index: number, total: number, id: CompositionId, placement?: ImagePlacement, rail?: number): SlideScene {
   const ctx = context(deck, slide, index, total);
+  const placed = placement ? placeImage(ctx, slide, placement, T.treatment(ctx), rail) : undefined;
   REGISTRY[id].draw(ctx, slide);
-  return { background: ctx.c.bg, prims: ctx.prims, issues: [...new Set(ctx.issues)], composition: id };
+  placed?.finish(ctx);
+  return { background: ctx.c.bg, prims: ctx.prims, issues: [...new Set(ctx.issues)], composition: id, ...(placement ? { imagePlacement: placement } : {}) };
 }
 /** Compositions a slide may take in this deck, the direction's preference first. */
 export function candidates(deck: DeckLike, slide: Slide, index: number, total: number): CompositionId[] {
   const ctx = context(deck, slide, index, total), dir = ctx.dir;
   const ok = (id: CompositionId) => REGISTRY[id].accepts?.(slide, ctx) ?? true;
+  // A closing with next steps is composed around them (its image, if any, takes the side rail).
+  if (slide.layout === "closing" && (slide.points?.length ?? 0) >= 1) return ["closing-next"];
   if ((slide.layout === "cover" || slide.layout === "closing") && slide.image) return ["cover-image"];
   const preferred = (dir.compositions[slide.layout] ?? []).filter(ok);
   const rest = (COMPOSITIONS[slide.layout] as readonly CompositionId[]).filter(id => ok(id) && !preferred.includes(id) && id !== "cover-image");
@@ -113,30 +121,62 @@ export function candidates(deck: DeckLike, slide: Slide, index: number, total: n
 }
 
 type Planned = { id: CompositionId; scene: SlideScene };
+/** Compositions that stack their title over the content, so a 46% rail still leaves a readable column. */
+const WIDE_RAIL_COMPOSITIONS = new Set<CompositionId>(["points-rows", "closing-next", "statement-centered", "statement-hero", "statement-hanging", "quote-centered"]);
+const textSizes = (scene: SlideScene) => scene.prims.flatMap(prim => prim.k === "text" ? [{ size: prim.size, title: prim.role === "title", lines: prim.text.split("\n").length, text: prim.text.replace(/\s+/g, " ").trim() }] : []);
+/** The wide-rail scene sets its title at least 90% as large, in no more lines, and no other text smaller than the standard one
+ * (each text against itself: item titles and their supporting text, not just the smallest size on the slide, which is the folio). */
+function keepsSizes(wide: SlideScene, standard: SlideScene) {
+  const [a, b] = [textSizes(wide), textSizes(standard)], title = (sizes: typeof a) => Math.max(0, ...sizes.filter(entry => entry.title).map(entry => entry.size));
+  const lines = (sizes: typeof a) => Math.max(0, ...sizes.filter(entry => entry.title).map(entry => entry.lines));
+  const others = b.filter(entry => !entry.title).every(entry => (a.find(other => !other.title && other.text === entry.text)?.size ?? 0) >= entry.size);
+  return title(a) >= title(b) * 0.9 && lines(a) <= lines(b) && others && Math.min(...a.map(entry => entry.size)) >= Math.min(...b.map(entry => entry.size));
+}
 const plans = new WeakMap<object, { slides: Slide[]; plan: Planned[] }>();
 function choose(deck: DeckLike, slide: Slide, index: number, total: number, previous: Planned | undefined, roleCount: number): Planned {
   const options = candidates(deck, slide, index, total);
   const requiresImage = Boolean(slide.image && (slide.layout === "cover" || slide.layout === "closing"));
   // Image-bearing covers have a semantic image requirement. A decorative
   // variant cannot override that requirement and silently discard a paid asset.
+  // A text, number or chart slide with an image places it on a rail, band or scrim; the composition then keeps to the text zone.
+  const placements = placementsFor(slide), passes: (ImagePlacement | undefined)[] = placements.length ? placements : [undefined];
+  const fitsPass = (id: CompositionId, placement: ImagePlacement | undefined) => placement !== "full" || REGISTRY[id].kind === "airy";
+  const tried: Planned[] = [];
+  const attempt = (id: CompositionId, placement: ImagePlacement | undefined) => {
+    let scene = run(deck, slide, index, total, id, placement);
+    // Short copy in a stacked composition gives the image the wider rail, if it keeps its type sizes there.
+    if (placement === "side" && WIDE_RAIL_COMPOSITIONS.has(id)) {
+      const wide = run(deck, slide, index, total, id, placement, RAIL_WIDE);
+      if (!wide.issues.length && (scene.issues.length || keepsSizes(wide, scene))) scene = wide;
+    }
+    const planned = { id, scene }; tried.push(planned); return scene.issues.length ? undefined : planned;
+  };
+  const best = () => tried.sort((a, b) => a.scene.issues.length - b.scene.issues.length)[0];
+  // Image-bearing covers have a semantic image requirement. A decorative
+  // variant cannot override that requirement and silently discard a paid asset.
   if (slide.variant && (!requiresImage || slide.variant === "cover-image") && (REGISTRY[slide.variant as CompositionId].accepts?.(slide, context(deck, slide, index, total)) ?? true)) {
-    const id = slide.variant as CompositionId;
-    return { id, scene: run(deck, slide, index, total, id) };
+    const id = slide.variant as CompositionId, ways = passes.filter(placement => fitsPass(id, placement));
+    for (const placement of ways.length ? ways : passes.slice(0, 1)) { const ok = attempt(id, placement); if (ok) return ok; }
+    return best();
   }
   // The direction's signature composition comes first; later slides of the same layout cycle through the rest.
-  const start = options.length ? roleCount % options.length : 0;
+  // A cover starts from a composition picked by the deck's own title, so unrelated decks in one direction do not open alike.
+  const shift = slide.layout === "cover" ? hash(`${deck.title}|${directionOf(deck.theme).id}`) % 7 : 0;
+  const start = options.length ? (roleCount + shift) % options.length : 0;
   const order = options.map((_, i) => options[(start + i) % options.length]);
-  const tried: Planned[] = [];
-  for (const id of order) {
-    if (previous && (id === previous.id || (REGISTRY[id].kind === "field" && REGISTRY[previous.id].kind === "field" && order.length > 1))) continue;
-    const scene = run(deck, slide, index, total, id);
-    if (!scene.issues.length) return { id, scene };
-    tried.push({ id, scene });
-  }
-  // Then repeats the rhythm rules allowed, then any other composition of the layout the copy fits.
+  // Then repeats the rhythm rules allowed, then any other composition of the layout the copy fits; a placement is exhausted before the next is tried.
   const others = requiresImage ? [] : (COMPOSITIONS[slide.layout] as readonly CompositionId[]).filter(id => id !== "cover-image" && !order.includes(id) && (REGISTRY[id].accepts?.(slide, context(deck, slide, index, total)) ?? true));
-  for (const id of [...order, ...others]) if (!tried.some(entry => entry.id === id)) { const scene = run(deck, slide, index, total, id); if (!scene.issues.length) return { id, scene }; tried.push({ id, scene }); }
-  return tried.sort((a, b) => a.scene.issues.length - b.scene.issues.length)[0] ?? { id: order[0], scene: run(deck, slide, index, total, order[0]) };
+  for (const placement of passes) {
+    for (const id of order) {
+      if (!fitsPass(id, placement) || (previous && (id === previous.id || (REGISTRY[id].kind === "field" && REGISTRY[previous.id].kind === "field" && order.length > 1)))) continue;
+      const ok = attempt(id, placement); if (ok) return ok;
+    }
+    for (const id of [...order, ...others]) {
+      if (!fitsPass(id, placement) || tried.some(entry => entry.id === id && entry.scene.imagePlacement === placement)) continue;
+      const ok = attempt(id, placement); if (ok) return ok;
+    }
+  }
+  return best() ?? { id: order[0], scene: run(deck, slide, index, total, order[0], passes[0]) };
 }
 /** The composition of every slide in a deck (memoised per deck object). */
 export function planDeck(deck: Deck): Planned[] {
@@ -154,6 +194,9 @@ export function planDeck(deck: Deck): Planned[] {
 }
 
 export function composeSlide(deck: DeckLike, slide: Slide, index: number, total: number): SlideScene {
+  // A full-image slide whose render passed the text gate for its current words (slide-art.ts).
+  const art = artScene(deck, slide, plain => composeSlide(plain, slide, index, total));
+  if (art) return art;
   if (slide.composition && (slide.layout === "cover" || slide.layout === "closing")) return slideCoverScene(deck.theme, slide, deck.assets, deck.author);
   if (deck.slides && deck.slides[index] === slide) return clone(planDeck(deck as Deck)[index].scene);
   // A slide outside its deck (e.g. a draft being checked): plan it after its would-be predecessor.

@@ -43,4 +43,28 @@ await check('claim and source refresh outside configured scope cannot reach a co
   assert.deepEqual(await scopedPublicationControl(async()=>({scope:{workspaceId:workspace}}),config)(name,{},signal),{scope:{workspaceId:workspace}});
  }
 });
+// Entitled scope (schema 3, migration 20261025200000): no local list; the database
+// authority decides per claim/load. Schema/contract must match exactly either way.
+const entitledValue=Object.fromEntries(Object.entries({...value,schemaVersion:3,workspaceScope:'entitled'}).filter(([k])=>k!=='workspaceAllowlist'));
+await check('entitled production schema 3 parses only with the exact scope literal and never with a list',()=>{
+ const c=parse(entitledValue);assert.equal(c.workspaceScope,'entitled');assert.deepEqual(c.workspaceAllowlist,[]);assert(Object.isFrozen(c.workspaceAllowlist));
+ assert.equal(parse().workspaceScope,'allowlist');
+ for(const v of [{...entitledValue,workspaceScope:'all'},{...entitledValue,workspaceScope:true},{...entitledValue,workspaceAllowlist:[workspace]},{...entitledValue,schemaVersion:2},
+  {...value,schemaVersion:3},{...value,workspaceScope:'entitled'},{...entitledValue,namespace:'staging',supabaseProjectRef:STAGING.projectRef}])assert.throws(()=>parse(v));
+});
+await check('entitled attestation must be the v3 contract; list and staging attestations are refused (and vice versa)',()=>{
+ const c=parse(entitledValue),v3={contractVersion:'publication-controller-v3',namespace:'production',workspaceScope:'entitled'};
+ validateNamespaceAttestation(v3,c);
+ for(const a of [attestation,{...v3,contractVersion:'publication-controller-v2'},{...v3,workspaceScope:'allowlist'},{...v3,namespace:'staging'},{...v3,workspaceAllowlist:[workspace]},
+  {contractVersion:'publication-controller-v1',namespace:'staging',qaWorkspaceId:workspace}])assert.throws(()=>validateNamespaceAttestation(a,c));
+ assert.throws(()=>validateNamespaceAttestation(v3,config));
+});
+await check('entitled scope relies on database authority for claims/loads and still stops discovery on scope drift',async()=>{
+ const c=parse(entitledValue),signal=new AbortController().signal;
+ for(const name of ['makeborne_claim_publication_preparation','makeborne_load_publication_preparation'])
+  assert.deepEqual(await scopedPublicationControl(async()=>({scope:{workspaceId:other}}),c)(name,{},signal),{scope:{workspaceId:other}});
+ const calls=[];const raw=async name=>{calls.push(name);return name==='makeborne_publication_worker_attest'?attestation:[];};
+ await assert.rejects(scopedPublicationControl(raw,c)('makeborne_publication_worker_candidates',{p_limit:10},signal));assert.deepEqual(calls,['makeborne_publication_worker_attest']);
+ await assert.rejects(scopedPublicationControl(async()=>({scope:{workspaceId:other}}),config)('makeborne_claim_publication_preparation',{},signal),/WORKSPACE_DENIED/);
+});
 console.log(`${n} production profile groups passed; no network or provider calls`);

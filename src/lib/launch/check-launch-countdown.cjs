@@ -4,12 +4,12 @@ require.extensions[".ts"] = (m, f) => m._compile(ts.transpileModule(fs.readFileS
 const c = require("./countdown.ts");
 let count = 0;
 const check = (name, fn) => { fn(); count++; console.log("PASS " + name); };
-const LAUNCH = Date.parse("2026-10-29T20:00:00Z"), S = 1000, M = 60 * S, H = 60 * M, D = 24 * H;
+const LAUNCH = Date.parse("2026-10-29T00:30:00Z"), S = 1000, M = 60 * S, H = 60 * M, D = 24 * H;
 
-check("default launch is Thursday 29 October 2026, 21:00 Sarajevo (20:00 UTC, CET after the 25 October change)", () => {
+check("default launch is Thursday 29 October 2026, 01:30 Sarajevo (00:30 UTC, CET after the 25 October change)", () => {
   assert.equal(c.parseLaunchAt(undefined), LAUNCH);
   assert.equal(new Date(LAUNCH).getUTCDay(), 4);
-  assert.deepEqual(c.launchDateText(LAUNCH), { date: "Thursday 29 October", time: "21:00 CET", short: "Thu 29 Oct" });
+  assert.deepEqual(c.launchDateText(LAUNCH), { date: "Thursday 29 October", time: "01:30 CET", short: "Thu 29 Oct" });
   for (const bad of ["", "soon", "28/10/2026", "2026-13-45T99:00:00Z", null]) assert.equal(c.parseLaunchAt(bad), LAUNCH);
   assert.equal(c.parseLaunchAt(" 2026-11-02T09:30:00Z "), Date.parse("2026-11-02T09:30:00Z"));
 });
@@ -19,6 +19,18 @@ check('only the exact value "on" shows the countdown; unset uses the branch defa
   assert.equal(c.countdownEnabled("on"), true);
   for (const value of ["off", "ON", "true", "1", "", " on"]) assert.equal(c.countdownEnabled(value), false, value);
   assert.equal(c.countdownEnabled(undefined, "off"), false);
+});
+
+check('past launch time the screen holds until plans are on sale; only "off" opens regardless', () => {
+  assert.equal(c.holdUntilSales(undefined), true);
+  for (const value of ["on", "", "OFF", "false", " off"]) assert.equal(c.holdUntilSales(value), true, value);
+  assert.equal(c.holdUntilSales("off"), false);
+  assert.equal(c.revealReady(true, true), true);
+  for (const unknown of [false, null]) assert.equal(c.revealReady(true, unknown), false, String(unknown));
+  for (const any of [true, false, null]) assert.equal(c.revealReady(false, any), true, String(any));
+  assert.equal(c.HOLD_ANNOUNCEMENT, "Makeborne opens in a moment.");
+  const page = fs.readFileSync(path.join(__dirname, "../../app/page.tsx"), "utf8");
+  assert.match(page, /launch\.phase === "before" \|\| salesOpen === false/, "a late cut-over keeps the screen up on the server too");
 });
 
 check("before, at and after the launch instant, with a 48-hour live window", () => {
@@ -82,7 +94,7 @@ check("clock skew: halfway through the round trip; small differences are trusted
   assert.equal(c.clockOffset({ sentAt: client, receivedAt: client + 400, serverNow: client + 200 - 3 * D }), -3 * D); // client 3 days fast
   assert.equal(c.clockOffset({ sentAt: client, receivedAt: client - 5, serverNow: client }), 0); // clock moved backwards mid-request
   assert.equal(c.clockOffset({ sentAt: client, receivedAt: client + 10, serverNow: NaN }), 0);
-  assert.equal(c.dateHeaderTime("Thu, 29 Oct 2026 20:00:00 GMT"), LAUNCH);
+  assert.equal(c.dateHeaderTime("Thu, 29 Oct 2026 00:30:00 GMT"), LAUNCH);
   assert(Number.isNaN(c.dateHeaderTime(null)));
   assert.equal(c.PAGE_SKEW_TOLERANCE_MS, 60000);
 });
@@ -95,10 +107,10 @@ check("time zones: Sarajevo name follows DST; the visitor's own time is shown on
   assert.equal(c.zoneOffsetMinutes(LAUNCH, "Asia/Kolkata"), 330);
   assert.equal(c.localLaunchText(LAUNCH, "Europe/Sarajevo", "en-GB"), null);
   assert.equal(c.localLaunchText(LAUNCH, "Europe/Berlin", "en-GB"), null); // same offset reads the same
-  assert.equal(c.localLaunchText(LAUNCH, "Europe/London", "en-GB"), "20:00 in your time");
-  assert.equal(c.localLaunchText(LAUNCH, "America/New_York", "en-US"), "4:00 PM in your time");
-  assert.equal(c.localLaunchText(LAUNCH, "Asia/Tokyo", "en-GB"), "Fri 5:00 in your time"); // next day
-  assert.equal(c.localLaunchText(LAUNCH, "Pacific/Auckland", "en-GB"), "Fri 9:00 in your time");
+  assert.equal(c.localLaunchText(LAUNCH, "Europe/London", "en-GB"), "0:30 in your time");
+  assert.equal(c.localLaunchText(LAUNCH, "America/New_York", "en-US"), "Wed 8:30 PM in your time"); // previous evening;
+  assert.equal(c.localLaunchText(LAUNCH, "Asia/Tokyo", "en-GB"), "9:30 in your time")
+  assert.equal(c.localLaunchText(LAUNCH, "Pacific/Auckland", "en-GB"), "13:30 in your time");
   assert.equal(c.localLaunchText(LAUNCH, "Not/AZone", "en-GB"), null);
   assert.equal(c.localLaunchText(LAUNCH, undefined), null);
 });

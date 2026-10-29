@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import BrandMark from "@/components/brand-mark";
 import { ArrowRight, Check, LockKeyhole, LoaderCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -39,6 +40,6 @@ export default function UpdatePasswordForm({ next }: { next: string }) {
       {message && <p className="account-message is-error" role="alert">{message}</p>}
       <div className="auth-mode-switch"><Link href="/login">Back to sign in</Link></div>
     </section></div>
-    <footer className="auth-footer"><span>© 2026 Makeborne</span><span>Websites. Books. Presentations.</span></footer>
+    <footer className="auth-footer"><span>© 2026 Makeborne</span><LegalLinks /></footer>
   </main>;
 }

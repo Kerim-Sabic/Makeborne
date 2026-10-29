@@ -12,6 +12,10 @@ import { aiCostUsdPerCredit } from "./pricing";
 import { logAiStop } from "./website-run";
 import { aiStop } from "../ai/failure";
 import { DocumentEditor, emptyDocument } from "../documents/editor";
+import { bookImagePlanFromBrief, deckModeFromBrief } from "../documents/creation-options";
+import { bookImagePagesEnabled, fullImageSlidesEnabled } from "./features";
+import { artTextModel, newDocumentFormat, type ImageOptions } from "../documents/art-formats";
+import { imageConfiguration } from "./images";
 import { projectDocument, documentAssetIds } from "../documents/project";
 import { wordCount } from "../documents/book-markup";
 import { runDocumentBuilder, type DocBuilderEvent, type DocBuilderRun } from "./docs-agent";
@@ -39,7 +43,13 @@ export type DocumentBuildInput = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: DocBuilderRun["storeImage"];
+  /** The client's image quality and shape from the composer (validated by the route); applied to the document. */
+  imageOptions?: ImageOptions;
+  /** Image models (tests); production reads the allowlist. */
+  imageModels?: string[];
+  continuation?: boolean;
 };
+
 
 /** Model-facing context: brief, style, history, and the current document. */
 export function documentContext(input: Pick<DocumentBuildInput, "artifact" | "project" | "current" | "versions" | "brand">, editor: DocumentEditor, fresh: boolean) {
@@ -73,7 +83,22 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
   const rate = input.operation ? input.operation.rateMicrousd / 1e6 : aiCostUsdPerCredit();
   const measured = () => spend.customerCredits(rate);
   const fresh = !current.content.document;
-  const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId));
+  // A new deck is full-image unless the client chose (or asked for) editable text slides; a new book follows the
+  // image plan from its questions or brief (creation-options.ts). Saved documents keep what they have.
+  const options = `${input.project.brief}
+${input.message}`;
+  const artModel = artTextModel(input.imageModels ?? imageConfiguration().models);
+  const format = newDocumentFormat(artifact.kind, options, input.imageOptions, artModel);
+  // A new full-image deck carries the reference's furniture: a tiny page number on every slide (and the wordmark the designer sets).
+  const editor = new DocumentEditor(current.content.document ?? emptyDocument(artifact.kind === "book" ? "book" : "deck", current.content.title || artifact.title, input.project.styleId,
+    artifact.kind === "book" ? { imagePlan: bookImagePlanFromBrief(options), shape: "shape" in format ? format.shape : undefined, quality: format.quality, bookArt: bookImagePagesEnabled() }
+      // Full-image slides stay off unless MAKEBORNE_DECK_FULL_IMAGE=on: new decks are editable text slides ("live").
+      : { slideMode: fullImageSlidesEnabled() ? deckModeFromBrief(options).mode : "live", aspect: "aspect" in format ? format.aspect : undefined, quality: format.quality, pageNumbers: true }));
+  // A saved document takes the composer's new choices (the route checked they can render).
+  if (current.content.document && input.imageOptions) {
+    if (editor.doc.kind === "deck") editor.setDeckFormat({ aspect: input.imageOptions.aspect, quality: input.imageOptions.quality });
+    else editor.setBookFormat({ shape: input.imageOptions.shape, quality: input.imageOptions.quality });
+  }
   const context = [documentContext(input, editor, fresh), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n");
   const encoder = new TextEncoder();
   const controller = new AbortController();
@@ -93,7 +118,7 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
         let result;
         try {
           result = await runDocumentBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, editor, effort: input.effort,
-            spend, request: input.message, context, attachments: input.attachments, emit, signal: controller.signal, deadline: Date.now() + (input.maxDuration - 20) * 1000,
+            spend, request: input.message, context, attachments: input.attachments, emit, signal: controller.signal, deadline: Date.now() + (input.maxDuration - 20) * 1000, continuation: input.continuation,
             anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage });
         } catch (error) {
           if (!editor.changed || (error as { code?: string }).code === "REFUSED" || aiStop(error)) throw error;
@@ -101,13 +126,21 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
           result = { summary: "Saved the progress made so far. Ask me to continue to finish the remaining parts.", credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, stopped: spend.stopped };
         }
         const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped };
+        if (result.requiresApproval) {
+          if (input.operation) emit(operationTerminal(await finishOperation(input.operation, 0, "failed", { ...detail, code: "OPERATION_BUDGET_REACHED", message: result.summary,
+            version: artifact.current_version, changed: false, finished: false })));
+          else { await releaseRun(hold, 0, "insufficient_art_allowance", detail); emit({ type: "error", code: "OPERATION_BUDGET_REACHED", message: result.summary }); }
+          return;
+        }
         if (!editor.changed) {
           if (input.operation) {
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "incomplete", { ...detail, code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder stopped before a usable change was ready. Your previous saved document is safe.", version: artifact.current_version, changed: false, finished: result.finished })));
+            // Nothing usable saved: never charged (provider cost absorbed). A finished no-change request stays chargeable.
+            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, result.finished ? "incomplete" : "failed", { ...detail, code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder stopped before a usable change was ready. Your previous saved document is safe.", version: artifact.current_version, changed: false, finished: result.finished })));
             return;
           }
-          await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
-          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Your document is unchanged — try a more focused request or a higher effort level." });
+          if (result.finished) await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
+          else await releaseRun(hold, measured(), "incomplete_nothing_saved", { ...detail, kind: "incomplete" });
+          emit({ type: "error", code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder ran out of room before finishing. Nothing was charged. Your document is unchanged — try a more focused request or a higher effort level." });
           return;
         }
         if (input.operation) {

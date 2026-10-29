@@ -1,0 +1,24 @@
+.form{display:grid;gap:14px;margin:8px 0 18px;padding:20px;border:1px solid #e6e2ec;border-radius:14px;background:#fbfafc}
+.form h3,.done h3{margin:0;font-size:17px;font-weight:600}
+.field{display:grid;gap:6px}
+.field label{font-size:14px;font-weight:550;color:#2c2833}
+.field label span{font-weight:400;color:#5d5766}
+.field input,.field select,.field textarea{width:100%;min-width:0;box-sizing:border-box;min-height:44px;padding:10px 12px;border:1px solid #d6d1de;border-radius:10px;background:#fff;color:#2c2833;font:inherit;font-size:16px}
+.field textarea{min-height:88px;resize:vertical}
+.field input:focus-visible,.field select:focus-visible,.field textarea:focus-visible,.primary:focus-visible,.secondary:focus-visible{outline:2px solid #4f46b8;outline-offset:2px}
+.hint{margin:0;color:#5d5766;font-size:14px}
+.statement{padding:12px 14px;border-left:3px solid #4f46b8;background:#f4f2fb;border-radius:0 10px 10px 0}
+.statement span{display:block;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#5d5766}
+.statement p{margin:4px 0 0;overflow-wrap:anywhere}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.primary,.secondary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;border-radius:10px;font:inherit;font-weight:550;cursor:pointer}
+.primary{border:0;background:#2c2833;color:#fff}
+.primary:disabled{opacity:.55;cursor:not-allowed}
+.secondary{border:1px solid #d6d1de;background:#fff;color:#2c2833}
+.error{margin:0;color:#a3172f}
+.done{margin:8px 0 18px;padding:20px;border:1px solid #cfe6d6;border-radius:14px;background:#f3faf5}
+.done dl{display:grid;gap:8px;margin:12px 0}
+.done dl div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px}
+.done dt{color:#5d5766;font-size:14px}
+.done dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:520px){.form,.done{padding:16px}.done dl div{grid-template-columns:1fr;gap:2px}.actions>*{flex:1 1 auto}}

@@ -11,9 +11,9 @@ export const SUPPORT = {
 // Verified in Whop; hidden and out of stock while generation is unavailable.
 // These IDs do not activate selling or grant access by themselves.
 export const CREATION_CATALOG = {
-  create: "plan_qs8XNbKQsowC6",
-  studio: "plan_arwSDewCa8Dvi",
-  scale: "plan_Wf2CTdqqUwufk",
+  create: "plan_ZP50769xuOJp1",
+  studio: "plan_L8g7nPoOyQXRX",
+  scale: "plan_AJDmGRXPbkgV9",
 } as const;
 
 /** Reviewed staging identities, not caller-selected allowlists. Never use a live merchant here. */

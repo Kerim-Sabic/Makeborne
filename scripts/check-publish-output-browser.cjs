@@ -117,6 +117,10 @@ async function main() {
     } finally { await context.close(); }
   }
   const openEditor = async page => { await page.evaluate(() => window.mountEditor()); await page.getByRole("heading", { name: "Ovenbird Bakehouse", level: 1 }).waitFor(); };
+  // Saved/checked/live facts are in the project details popover (the title button), History in Project actions.
+  const openDetails = async page => { const details = page.getByRole("group", { name: "Project details" }); if (!(await details.isVisible())) await page.getByRole("button", { name: "Ovenbird Bakehouse", exact: true }).click(); await details.waitFor(); return details; };
+  const closeDetails = async page => { await page.keyboard.press("Escape"); await page.getByRole("group", { name: "Project details" }).waitFor({ state: "hidden" }); };
+  const openHistory = async page => { await page.getByRole("button", { name: "Project actions" }).click(); await page.getByRole("group", { name: "Project actions" }).getByRole("button", { name: "Version history" }).click(); };
   const openPublish = async page => { await page.getByRole("button", { name: "Publish", exact: true }).click(); await page.getByRole("heading", { name: "Publish website" }).waitFor(); };
   const tag = baseline ? `baseline-${baseline}` : "current";
   async function capture(page, label, locator) {
@@ -135,17 +139,20 @@ async function main() {
   try {
     await scenario("header shows saved, checked and live side by side; History marks Live, Current and Checked", "1 saved/checked/live", {}, async page => {
       await openEditor(page);
-      const facts = page.getByRole("list", { name: "Saved, checked and live versions" });
+      const details = await openDetails(page);
+      const facts = details.getByRole("list", { name: "Saved, checked, live and preview versions" });
       await facts.waitFor();
-      await page.getByText("Live version 2", { exact: true }).waitFor();
-      assert.deepEqual(await facts.locator("li").allInnerTexts(), ["Saved version 3", "Not checked yet", "Live version 2"]);
+      await details.getByText("Live version 2", { exact: true }).waitFor();
+      assert.deepEqual(await facts.locator("li").allInnerTexts(), ["Saved version 3", "Not checked yet", "Live version 2", "Preview: version 3"]);
       assert.equal((await page.locator(".version-facts-notice").innerText()).trim(), "Newer saved changes aren’t live yet: version 3 is saved, version 2 is live. Publish to update the site.");
-      await capture(page, "1-header-not-live", ".cloud-workbench-heading");
+      await capture(page, "1-header-not-live", "[data-editor-chrome=header]");
+      await closeDetails(page);
       await openPublish(page);
       await page.getByRole("button", { name: "Check my site" }).click();
       await page.locator(".ws-checked").waitFor();
-      await page.getByText("Checked version 3 (prepared pages)", { exact: true }).waitFor();
-      await page.getByRole("button", { name: "History", exact: true }).click();
+      await (await openDetails(page)).getByText("Checked version 3 (prepared pages)", { exact: true }).waitFor();
+      await closeDetails(page);
+      await openHistory(page);
       const v3 = page.locator(".cloud-version").filter({ hasText: "Version 3" }).first(), v2 = page.locator(".cloud-version").filter({ hasText: "Version 2" }).first();
       await v3.locator(".cloud-version-checked").waitFor();
       assert.deepEqual(await v3.locator("strong span").allInnerTexts(), ["Checked", "Current"]);
@@ -174,11 +181,13 @@ async function main() {
       // the panel whose prepared iframe has just been removed. Assert the same
       // final state in every engine, without a timing sleep or weaker checks.
       assert.match(await page.getByRole("region", { name: "Publish report" }).locator(".publish-report-heading").innerText(), /Published version 3 · 2 pages/, "the report stays for the published version");
-      await page.getByText("Live version 3", { exact: true }).waitFor();
+      const published = await openDetails(page);
+      await published.getByText("Live version 3", { exact: true }).waitFor();
+      assert.equal(await published.locator(".version-facts-notice").innerText(), "", "nothing newer is waiting once version 3 is live");
+      await closeDetails(page);
       await page.getByRole("button", { name: "Copy link" }).click();
       await page.getByText("Website address copied.").waitFor();
       assert.equal(await page.evaluate(() => window.copied), "https://sites.makeborne.com/ovenbird-test");
-      assert.equal(await page.locator(".version-facts-notice").innerText(), "", "nothing newer is waiting once version 3 is live");
       await capture(page, "2-published-copy-link", ".website-publish");
     });
 

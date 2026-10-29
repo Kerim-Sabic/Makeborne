@@ -106,11 +106,11 @@ export function githubSourceSnapshot(input: SourceVersion, artwork: Artwork, art
   const lower = new Set<string>();
   for (const file of files) {
     const key = file.path.toLowerCase();
-    if (!SourcePathSchema.safeParse(file.path).success || lower.has(key)) throw new RequestError("SOURCE_UNAVAILABLE", "This project contains a file path GitHub sync can't use. Download the source instead.", 409);
+    if (!SourcePathSchema.safeParse(file.path).success || lower.has(key)) throw new RequestError("SOURCE_UNAVAILABLE", "This project contains a file path the GitHub export can't use. Download the source instead.", 409);
     lower.add(key);
   }
   for (const key of lower) if (key.split("/").some((_, index, parts) => index > 0 && lower.has(parts.slice(0, index).join("/")))) {
-    throw new RequestError("SOURCE_UNAVAILABLE", "This project contains a file path GitHub sync can't use. Download the source instead.", 409);
+    throw new RequestError("SOURCE_UNAVAILABLE", "This project contains a file path the GitHub export can't use. Download the source instead.", 409);
   }
   const summary = oneLine(version.changeSummary, 72) || "website source";
   const message = `Makeborne: version ${version.number} — ${summary}\n\nComplete source of saved version ${version.number}, pushed from Makeborne.\n\nMakeborne-Artifact: ${artifactId}\nMakeborne-Version: ${version.id}\nMakeborne-Source: ${sourceHash}\n`;
@@ -202,10 +202,10 @@ export async function pushWebsiteSnapshot(github: GitHubRequest, input: {reposit
   if (head) {
     const commit = await github<{message: string}>(`${prefix}/git/commits/${head.object.sha}`);
     alreadySynced = commit?.message === marker;
-    if (!alreadySynced && head.object.sha !== recordedCommitSha) throw new RequestError("BRANCH_CHANGED", "This GitHub branch has external changes. Your code was not overwritten. Review the branch in GitHub before syncing.", 409);
-  } else if (recordedCommitSha) throw new RequestError("BRANCH_MISSING", "The linked branch was removed. Restore it in GitHub before syncing.", 409);
+    if (!alreadySynced && head.object.sha !== recordedCommitSha) throw new RequestError("BRANCH_CHANGED", "This GitHub branch has external changes. Your code was not overwritten. Review the branch in GitHub before pushing again.", 409);
+  } else if (recordedCommitSha) throw new RequestError("BRANCH_MISSING", "The linked branch was removed. Restore it in GitHub before pushing again.", 409);
   if (!alreadySynced) {
-    const tree = await github<{sha: string}>(`${prefix}/git/trees`, "POST", {tree: [{path: "index.html", mode: "100644", type: "blob", content: html}, {path: "README.md", mode: "100644", type: "blob", content: `# Website exported from Makeborne\n\nPublished version ${version}. Open index.html or deploy this branch as a static site.\n\nThis branch is managed by Makeborne. Copy it to another branch before editing externally. Sync is one-way; external edits are not imported. No backend, credentials, or private project sources are included.\n`}]});
+    const tree = await github<{sha: string}>(`${prefix}/git/trees`, "POST", {tree: [{path: "index.html", mode: "100644", type: "blob", content: html}, {path: "README.md", mode: "100644", type: "blob", content: `# Website exported from Makeborne\n\nPublished version ${version}. Open index.html or deploy this branch as a static site.\n\nThis branch is managed by Makeborne. Copy it to another branch before editing externally. This export is one-way and manual: Makeborne only writes here when someone pushes a version, and external edits are not imported. No backend, credentials, or private project sources are included.\n`}]});
     const commit = await github<{sha: string}>(`${prefix}/git/commits`, "POST", {message: marker, tree: tree!.sha, parents: head ? [head.object.sha] : []});
     commitSha = commit!.sha;
     if (head) await github(`${prefix}/git/refs/heads/${branch}`, "PATCH", {sha: commitSha, force: false});

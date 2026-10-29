@@ -13,7 +13,9 @@ import { autoReviewRounds, reviewCoverageIssue, reviewCreditCeiling } from "@/li
 import { BUILDER_EFFORT } from "@/lib/builder/pricing";
 import { PLAN_CEILING_CREDITS } from "@/lib/builder/plan";
 import type { BuilderEstimates } from "@/lib/builder/credit-estimate";
-import { meterEvent, meterLost, meterRefused, newRunMeter, runReceipt, formatDuration, type RunMeter, type RunReceipt } from "@/lib/builder/run-receipt";
+import type { DocumentImageOffers } from "@/lib/documents/art-formats";
+import DocumentImageControls, { creditImpact, imageOptionsOf, initialImageChoice, type ImageChoice } from "./document-image-controls";
+import { meterEvent, meterLost, meterRefused, newRunMeter, runReceipt, formatDuration, type EnhancedReceipt, type RunMeter, type RunReceipt } from "@/lib/builder/run-receipt";
 import { readCloudImage } from "./cloud-api";
 import PlanCard from "./plan-card";
 import { usePlanMode } from "./use-plan-mode";
@@ -21,12 +23,19 @@ import { useBuilderOperation } from "./use-builder-operation";
 import type { OperationRequest, OperationSnapshot } from "@/lib/builder/operation-contract";
 import { recoveryPreview } from "@/lib/builder/recovery-preview";
 import { CHECK_EFFECT, continueEffect, operationPhase, recoverEffect, stopEffect } from "@/lib/builder/action-semantics";
-import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest, prepareBuilderAttachments, type BuilderAttachment } from "@/lib/builder/attachments";
+import { BUILDER_ATTACHMENT_ACCEPT, serializeBuilderRequest } from "@/lib/builder/attachments";
+import { INGEST_ACCEPT, builderSourceWire, ingestCapabilities, prepareBuilderSources, uploadSourceReference } from "@/lib/ingest/client";
+import type { BuilderSource } from "@/lib/ingest/request";
+import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import { attachmentOwner, projectAttachmentKey, retainBuilderAttachmentSnapshot, bindBuilderAttachmentSnapshot, readBuilderAttachmentSnapshot, type Attachment as StoredAttachment } from "@/lib/attachments";
 import { AttachmentList, useFileAttachments, useSourceReadiness } from "./file-attachments";
-import { sourceIntentIssue } from "@/lib/builder/source-readiness";
+import { omittedSources, sourceIntentIssue } from "@/lib/builder/source-readiness";
 import BriefQuestionsCard from "./brief-questions-card";
-import { briefQuestions, briefWithAnswers, isBriefQuestion, type BriefAnswers, type BriefQuestion } from "@/lib/builder/brief-questions";
+import { briefWithAnswers, designAnswers, isBriefQuestion, mergedQuestions, questionLimit, type BriefAnswers, type BriefQuestion, type DesignAnswers } from "@/lib/builder/brief-questions";
+import EnhancedBriefCard from "./enhanced-brief-card";
+import { useBriefImprovement, type Improvement } from "./use-brief-improvement";
+import { shouldEnhance, type BuildBrief } from "@/lib/builder/enhanced-brief";
+import { FEATURES_OFF, type BuilderFeatures } from "@/lib/builder/features";
 import { clearPendingRequest, pendingRequestKey, planApprovalIdentity, readPendingRequest, savePendingRequest, targetIssue, targetReference, undoIssue, type EditTarget, type PendingRequest } from "@/lib/builder/edit-intent";
 import { useUnsentDraft } from "./use-unsent-draft";
 import UnsentDraftNotice from "./unsent-draft-notice";
@@ -35,8 +44,9 @@ import responsive from "../../infra/project-runtime/responsive-images.cjs";
 
 type Activity = { id: string; kind: "file" | "image" | "note" | "error"; label: string; done: boolean };
 type Shot = { label: string; url: string; viewport: string };
-type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[]; receipt?: RunReceipt };
-type Attachment = BuilderAttachment;
+type Turn = { id: string; role: "user" | "assistant"; text: string; activity: Activity[]; state: "streaming" | "done" | "error"; credits?: number; plan?: { title: string; revision: number } | true; review?: boolean; shots?: Shot[]; receipt?: RunReceipt; enhancedBrief?: BuildBrief };
+type Attachment = BuilderSource;
+type Omitted = ReturnType<typeof omittedSources>;
 type Live = { files: Record<string, string>; assets: { id: string; path: string }[]; document?: DocumentSource; focus?: string };
 type RunResult = { version: number; changed: boolean; touched: number; finished: boolean; operation?: OperationSnapshot };
 export type LiveUpdate = { files: Record<string, string>; assets: { id: string; path: string }[]; building: boolean; document?: DocumentSource; focus?: string };
@@ -52,6 +62,16 @@ function browserStorage() { try { return window.localStorage; } catch { return n
 type Outcome = "done" | "refused" | "uncertain";
 const short = (text: string) => text.length > 90 ? `${text.slice(0, 88).trimEnd()}…` : text;
 
+/** The brief line of a build's receipt. A brief improvement the client asked for keeps its own charge (from its
+ * durable action) whichever brief the build then used; using the original undoes or refunds nothing. */
+function briefReceipt(enhanced: EnhancedReceipt): string {
+  const brief = enhanced.mode === "original" ? "Your own words" : enhanced.mode === "analysis" ? "Your own words, with a brief analysis" : enhanced.mode === "edited" ? "Improved brief, with your edits" : "Improved brief";
+  const improved = enhanced.improved ?? enhanced.mode !== "original";
+  if (!improved) return brief;
+  const charge = enhanced.credits === null ? "its charge is still being confirmed" : `${enhanced.credits} credit${enhanced.credits === 1 ? "" : "s"} charged`;
+  return `${brief} · improving your brief first: ${charge}`;
+}
+
 /** What one request cost and did, from the server's settled charges and the checks that ran. */
 function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "book" | "presentation" }) {
   const changes = kind === "website" ? receipt.files : receipt.items;
@@ -64,6 +84,8 @@ function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "bo
       <div><dt>Time</dt><dd>{formatDuration(receipt.durationMs)}</dd></div>
       <div><dt>Sources sent</dt><dd>{receipt.sources.length ? receipt.sources.join(", ") : "None"}</dd></div>
       {receipt.brief && <div><dt>Brief</dt><dd>From {receipt.brief}</dd></div>}
+      {receipt.concept && <div><dt>Concept</dt><dd>{receipt.concept.chosen}{receipt.concept.runnersUp.length ? ` · also considered: ${receipt.concept.runnersUp.join(", ")}` : ""}</dd></div>}
+      {receipt.enhanced && <div><dt>{receipt.brief ? "Brief used" : "Brief"}</dt><dd>{briefReceipt(receipt.enhanced)}</dd></div>}
       <div><dt>{kind === "website" ? "Files changed" : "Changes"}</dt><dd>{changes.length ? <details><summary>{changes.length} {noun}{changes.length === 1 ? "" : "s"}</summary><ul>{changes.slice(0, 40).map(item => <li key={item}>{item}</li>)}{changes.length > 40 && <li>and {changes.length - 40} more</li>}</ul></details> : "None"}</dd></div>
     </dl>
     {!!receipt.checks.length && <ul className="lb-receipt-checks">{receipt.checks.map(check => <li key={check.label} data-ok={check.ok}>{check.ok ? <Check size={13} aria-label="Passed" /> : <TriangleAlert size={13} aria-label="Needs attention" />}<span>{check.label}</span></li>)}</ul>}
@@ -97,7 +119,7 @@ async function assetDataUrls(assets: Live["assets"], scope: { accountId: string;
  * project, previews them live and saves a new version when finished. After
  * first builds and large changes it looks at the rendered result (desktop and
  * mobile screenshots) and fixes visual problems in a review pass. */
-export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled, disabledReason, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null }: {
+export default function LiveBuilder({ accountId, workspaceId, artifactId, version, history, baseFiles, baseAssets, defaultEffort, disabled: locked, disabledReason, sendBlocked = null, autoStart, autoStartMode, prefill, provenance = null, onProvenance, onLive, onSaved, onUndo, undoBlocked = null, brandKit, kind = "website", baseDocument, estimates = null, features = FEATURES_OFF, imageOffers = null, projectBrief = "" }: {
   accountId: string; workspaceId: string; artifactId: string; version: number;
   /** Text placed in the composer for the user to review, e.g. client feedback or an advisor brief (with its mode and effort). Never sent automatically. */
   prefill?: { key: string; text: string; target?: EditTarget; mode?: "create" | "plan"; effort?: EffortLevel } | null;
@@ -114,7 +136,9 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   baseFiles: Record<string, string>; baseAssets: { id: string; path: string }[];
   defaultEffort?: EffortLevel; disabled?: boolean;
   /** Shown while disabled, when the reason is something the user can act on. */
-  disabledReason?: string; autoStart?: string | null;
+  disabledReason?: string;
+  /** Why a request must wait while typing may go on (e.g. an edit is still saving): blocks sending only, never the text. */
+  sendBlocked?: string | null; autoStart?: string | null;
   /** "plan" starts the first message in Plan mode (from a Plan-first creation). */
   autoStartMode?: "create" | "plan";
   onLive: (update: LiveUpdate | null) => void;
@@ -123,14 +147,31 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   kind?: "website" | "book" | "presentation"; baseDocument?: DocumentSource;
   /** Measured credit ranges from GET /api/build, shown before a first build. */
   estimates?: BuilderEstimates | null;
+  /** Unqualified generation features this deployment turned on (GET /api/build); all off unless the server says so. */
+  features?: BuilderFeatures;
+  /** Books and presentations: what each image quality costs per generated slide or page (GET /api/build). */
+  imageOffers?: DocumentImageOffers | null;
+  /** The project brief: a new document's shape and quality chosen at creation are read from its answer lines. */
+  projectBrief?: string;
 }) {
   const copy = COPY[kind], website = kind === "website";
+  // Every request waits while locked or blocked; only `locked` stops typing.
+  const disabled = Boolean(locked) || Boolean(sendBlocked);
+  const blockedReason = locked ? disabledReason : sendBlocked ?? undefined;
   const [turns, setTurns] = useState<Turn[]>([]);
   const transcript = useChatHistory(accountId, workspaceId, artifactId, turns);
   const previousTurns = transcript.messages;
-  const blockedReason = disabled ? disabledReason : undefined;
   const [draft, setDraft] = useState("");
   const [effort, setEffort] = useState<EffortLevel>(defaultEffort ?? "medium");
+  // Presentations and books: the slide or page shape and image quality, from the saved document (or the brief's answers)
+  // until the client changes them; sent with each new request and saved on the document.
+  const docKind = kind === "website" ? null : kind;
+  // Shown only where images can be made now (features.documentImages: a configured model and open OpenAI spending).
+  // Books: the control picks the generated pages' shape and quality, so it needs MAKEBORNE_BOOK_IMAGE_PAGES too.
+  const imageControls = Boolean(docKind) && features.documentImages && (docKind !== "book" || features.bookImagePages) && !(baseDocument?.kind === "deck" && baseDocument.art?.mode !== "image" && baseDocument.slides.length > 0);
+  const imageTouched = useRef(false);
+  const [imageChoice, setImageChoice] = useState<ImageChoice | null>(() => docKind ? initialImageChoice(docKind, imageOffers, projectBrief, baseDocument) : null);
+  useEffect(() => { if (docKind && !imageTouched.current) setImageChoice(initialImageChoice(docKind, imageOffers, projectBrief, baseDocument)); }, [docKind, imageOffers, projectBrief, baseDocument]);
   const sourceOwner = attachmentOwner(accountId);
   const sourceContext = projectAttachmentKey(`${accountId}:${workspaceId}:${artifactId}`);
   const sources = useFileAttachments(sourceOwner, sourceContext);
@@ -138,6 +179,17 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   const [leftOut, setLeftOut] = useState<ReadonlySet<string>>(() => new Set());
   const readiness = useSourceReadiness(sources.files, leftOut);
   const settleSources = readiness.settle;
+  // Files over the inline limit are stored privately in this project when sent (exact server-named
+  // path, never overwriting) and travel as a reference, not as base64 in the request.
+  const storeLarge = useCallback((file: StoredAttachment, mediaType: string) => uploadSourceReference(file, mediaType,
+    { workspaceId, artifactId, accountHeader: { "X-Makeborne-Account": accountId } },
+    async (objectPath, blob, contentType) => {
+      const { error } = await createBrowserSupabase().storage.from("project-assets").upload(objectPath, blob, { contentType, upsert: false, cacheControl: "0" });
+      return { error: error ? { message: error.message } : null };
+    }), [accountId, artifactId, workspaceId]);
+  // Office and CSV files are offered in the picker only where the server reads them.
+  const [ingestOffered, setIngestOffered] = useState(false);
+  useEffect(() => { let active = true; void ingestCapabilities().then(value => { if (active) setIngestOffered(value.enabled); }); return () => { active = false; }; }, []);
   const [preparingSources, setPreparingSources] = useState(false);
   const sourceLock = useRef(false);
   const sourceSession = useMemo(() => ({ active: true, accountId, workspaceId, artifactId }), [accountId, workspaceId, artifactId]);
@@ -152,6 +204,11 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
   // Questions before the first build, asked once per project session.
   const [asking, setAsking] = useState<{ text: string; mode: "create" | "plan"; questions: readonly BriefQuestion[] | null } | null>(null);
   const asked = useRef(false);
+  /** The optional, free "Improve my brief first" step of a first website build: offered, never automatic (M08, E4). */
+  const improvement = useBriefImprovement({ accountId, workspaceId, artifactId, attachments: sources.files.length, enabled: website && features.briefEnhancer });
+  const enhancing = improvement.item;
+  /** A completed improvement the client set aside (Cancel): its receipt stays visible and is carried into the next first build's receipt. */
+  const [keptImprovement, setKeptImprovement] = useState<{ brief: BuildBrief; charged: number } | null>(null);
   const authorizing = useRef(false);
   const [previewingRecovery, setPreviewingRecovery] = useState<{ runId: string; version: number } | null>(null);
   const [chosenMode, setMode] = useState<"create" | "plan" | null>(null);
@@ -335,6 +392,14 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
               live.document = event.document; live.focus = event.focus;
               onLive({ ...live, building: true });
               break;
+            case "check": {
+              // The vision check on a full-image slide (its text gate) or a generated image.
+              const record = event.record as { target: "slide" | "image"; id: string; outcome: string };
+              const what = record.target === "slide" ? `slide ${record.id}` : `image ${record.id}`;
+              const label = { passed: record.target === "slide" ? `Checked ${what}: every word correct` : `Checked ${what}: looks right`, retry: `Checked ${what}: regenerating to fix it`, fallback: `Kept ${what} as an editable text slide`, dropped: `Removed ${what}: it failed its check`, unchecked: `Kept ${what} unchecked` }[record.outcome] ?? `Checked ${what}`;
+              activity({ kind: "image", label, done: true }, `check:${record.id}:${record.outcome}`);
+              break;
+            }
             case "item_start": activity({ kind: "file", label: event.label, done: false }, `item:${event.key}`); break;
             case "item": activity({ kind: "file", label: event.label, done: true }, `item:${event.key}`); break;
             case "tool_error": activity({ kind: "note", label: "Fixing an issue…", done: true }); break;
@@ -414,7 +479,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     if (receipt) setTurns(current => [...current, { id: newId(), role: "assistant", text: "", activity: [], state: "done", receipt }]);
   }, [unlimited, website]);
 
-  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string }): Promise<Outcome | undefined> => {
+  const send = useCallback(async (text: string, files: Attachment[] = [], options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; operation?: OperationSnapshot; sourceFiles?: StoredAttachment[]; target?: string; brief?: BuildBrief; design?: DesignAnswers; enhanced?: RunMeter["enhanced"]; omitted?: Omitted }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
     const quoteIssue = !options?.operation ? affordability(options?.approvedMaximum ?? BUILDER_EFFORT[options?.effort ?? effort].ceilingCredits, balance) : null;
     if (quoteIssue) { setNotice(quoteIssue); return; }
@@ -423,7 +488,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     const request: PendingRequest | null = options?.operation ? null : { text: text.trim(), mode: "create", baseVersion: version, ...(options?.target ? { target: options.target } : {}), sentAt: Date.now() };
     if (request) holdRequest(request, !options?.plan);
     let outcome: Outcome = "uncertain";
-    const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done" };
+    const userTurn: Turn = { id: newId(), role: "user", text: text.trim() + (files.length ? `\n📎 ${files.map(file => file.name).join(", ")}` : ""), activity: [], state: "done", ...(options?.brief && !options.operation ? { enhancedBrief: options.brief } : {}) };
     const reply: Turn = { id: newId(), role: "assistant", text: "", activity: [], state: "streaming" };
     setTurns(current => [...current, userTurn, reply]);
     const live: Live = { files: { ...baseFiles }, assets: [...baseAssets], document: baseDocument };
@@ -432,6 +497,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
     meter.sources = files.map(file => file.name);
     const brief = options?.operation ? null : pendingBrief;
     if (brief) meter.brief = provenanceLabel(brief.provenance);
+    if (options?.enhanced && !options.operation) meter.enhanced = options.enhanced;
     setSentSources({ names: meter.sources, operationId: options?.operation?.id ?? null });
     try {
       const level = options?.effort ?? effort;
@@ -442,8 +508,14 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         operation: requestOperation,
         // A new request is bound to the maximum shown before sending (the composer limit or the plan approval).
         ...("actionKey" in requestOperation ? { approvedMaximum: options?.approvedMaximum ?? BUILDER_EFFORT[level].ceilingCredits } : {}),
-        attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })), ...(options?.plan ? { plan: options.plan, planRevision: options.planRevision } : {}),
-        ...(brief ? { provenance: brief.provenance } : {}) }, reply.id, live, meter);
+        attachments: files.map(builderSourceWire), ...(options?.omitted?.length ? { omittedSources: options.omitted } : {}), ...(options?.plan ? { plan: options.plan, planRevision: options.planRevision } : {}),
+        ...(brief ? { provenance: brief.provenance } : {}),
+        // The approved enhanced brief and the client's answers start the operation; later stages read them from it.
+        ...("actionKey" in requestOperation && !options?.plan && options?.brief ? { brief: options.brief } : {}),
+        // Design answers also bind an approved plan's build (the plan carries its own direction; the answers keep must-haves and imagery).
+        ...("actionKey" in requestOperation && options?.design && Object.keys(options.design).length ? { design: options.design } : {}),
+        // The client's image shape and quality start the request; the run saves them on the document.
+        ...("actionKey" in requestOperation && docKind && imageChoice && imageControls ? { imageOptions: imageOptionsOf(docKind, imageChoice) } : {}) }, reply.id, live, meter);
       outcome = result ? "done" : lastRefusal.current ? "refused" : "uncertain";
       if (brief && outcome === "done") briefSent(brief);
       if (request) releaseRequest(request, outcome, !options?.plan);
@@ -459,7 +531,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
         refreshBalance();
         const continued: RunResult | null = await stream({ expectedVersion: result.version, effort: level,
           operation: { id: result.operation.id, stepKey: newId(), kind: "continuation" },
-          attachments: files,
+          attachments: files.map(builderSourceWire), ...(options?.omitted?.length ? { omittedSources: options.omitted } : {}),
           message: `Continue the previous request and complete everything that is still missing, then check the project and call finish. The previous request was:
 ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         if (!continued) break;
@@ -507,7 +579,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       if (sourceSession.active) { addReceipt(meter); await finishRun(); }
     }
     return outcome;
-  }, [accountId, balance, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, briefSent, busy, disabled, effort, finishRun, holdRequest, onLive, operationRunning, pendingBrief, pendingScope, planner, previewingRecovery, refreshBalance, releaseRequest, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
+  }, [accountId, balance, addReceipt, artifactId, baseAssets, baseDocument, baseFiles, beginOperation, briefSent, busy, disabled, docKind, effort, imageChoice, imageControls, finishRun, holdRequest, onLive, operationRunning, pendingBrief, pendingScope, planner, previewingRecovery, refreshBalance, releaseRequest, reviewRound, sourceContext, sourceOwner, sourceSession, stream, version, website, workspaceId]);
 
   /** Manual "Review design" for the current saved version. */
   const review = useCallback(async () => {
@@ -523,7 +595,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
 
   /** Plan mode: investigate and propose an editable plan; never writes code.
    * A message while a draft plan is open revises that plan. */
-  const plan = useCallback(async (text: string, files: Attachment[] = []) => {
+  const plan = useCallback(async (text: string, files: Attachment[] = [], omitted: Omitted = []) => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery) return;
     const quoteIssue = affordability(PLAN_CEILING_CREDITS, balance);
     if (quoteIssue) { setNotice(quoteIssue); return; }
@@ -540,7 +612,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     setSentSources({ names: files.map(file => file.name), operationId: null });
     const brief = pendingBrief;
     await planner.run({ turnId: reply.id, message: text.trim(), effort, expectedVersion: version, revise, approvedMaximum: PLAN_CEILING_CREDITS, ...(brief ? { provenance: brief.provenance } : {}),
-      attachments: files.map(({ name, mediaType, data }) => ({ name, mediaType, data })) }, {
+      attachments: files.map(builderSourceWire), omittedSources: omitted }, {
       onText: delta => update(reply.id, turn => ({ ...turn, text: turn.text + delta })),
       onStatus: message => update(reply.id, turn => ({ ...turn, activity: [{ id: "status", kind: "note", label: message, done: false }] })),
       onCredits: credits => update(reply.id, turn => ({ ...turn, credits })),
@@ -552,7 +624,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     setBusy(false);
     refreshBalance();
   }, [balance, briefSent, busy, disabled, draftPlan, effort, holdRequest, operationRunning, pendingBrief, planner, previewingRecovery, refreshBalance, releaseRequest, version]);
-  const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; target?: string }): Promise<Outcome | undefined> => {
+  const submitSources = useCallback(async (text: string, requestMode: "create" | "plan", options?: { approvedMaximum?: number; plan?: SitePlan; planRevision?: number; approval?: { actionKey: string; stepKey: string }; effort?: EffortLevel; target?: string; brief?: BuildBrief; design?: DesignAnswers; enhanced?: RunMeter["enhanced"] }): Promise<Outcome | undefined> => {
     if (!text.trim() || busy || disabled || operationRunning || previewingRecovery || sourceLock.current) return;
     if (!sources.ready || sources.busy) { setNotice("Wait for your source files to finish loading or saving."); return; }
     sourceLock.current = true; setPreparingSources(true); setNotice("");
@@ -563,10 +635,11 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       const issue = sourceIntentIssue(decided);
       if (issue) throw new Error(issue);
       const originals = decided.ready;
-      const files = await prepareBuilderAttachments(originals);
+      const omitted = omittedSources(decided);
+      const files = await prepareBuilderSources(originals, { storeLarge });
       if (!sourceSession.active) return;
-      if (requestMode === "plan") await plan(text, files);
-      else return await send(text, files, { ...options, sourceFiles: originals });
+      if (requestMode === "plan") await plan(text, files, omitted);
+      else return await send(text, files, { ...options, sourceFiles: originals, omitted });
     } catch (error) {
       if (sourceSession.active) { setNotice(error instanceof Error ? error.message : "The source files could not be read."); setDraft(text); }
       return "refused";
@@ -574,7 +647,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       sourceLock.current = false;
       if (sourceSession.active) setPreparingSources(false);
     }
-  }, [busy, disabled, operationRunning, plan, previewingRecovery, send, settleSources, sourceSession, sources.busy, sources.ready]);
+  }, [busy, disabled, operationRunning, plan, previewingRecovery, send, settleSources, sourceSession, sources.busy, sources.ready, storeLarge]);
   /** Questions written for this brief by a small, capped AI call (free to the user). Null on any failure. */
   const tailoredQuestions = useCallback(async (brief: string, attachments: number): Promise<readonly BriefQuestion[] | null> => {
     try {
@@ -586,6 +659,84 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       return Array.isArray(value.questions) && value.questions.every(isBriefQuestion) ? value.questions : null;
     } catch { return null; }
   }, [accountId, artifactId, kind, workspaceId]);
+  /** After the questions: a first website build in Create mode offers the free brief improvement (a short brief only, never automatic); anything else starts as before. */
+  // Deferred starts (after the free reading or the questions) use the latest effort, balance and sources, not the ones
+  // captured when the questions appeared.
+  const submitLatest = useRef(submitSources);
+  useEffect(() => { submitLatest.current = submitSources; }, [submitSources]);
+  /** The brief the questions took out of the composer goes back there whenever a start is refused, so nothing typed is lost. */
+  const restoreBrief = useCallback((text: string, notice?: string) => {
+    setDraft(text); asked.current = false;
+    if (notice) setNotice(notice);
+  }, []);
+  /** A deferred start: a refusal (affordability, busy, sources not ready) returns the brief and answers to the composer. */
+  const startDeferred = useCallback(async (text: string, requestMode: "create" | "plan", options?: Parameters<typeof submitSources>[2]) => {
+    const outcome = await submitLatest.current(text, requestMode, options);
+    if (outcome === undefined || outcome === "refused") restoreBrief(text);
+    return outcome;
+  }, [restoreBrief]);
+  /** Structured design answers chosen before a Plan, kept for the approved plan's build. */
+  const planDesign = useRef<DesignAnswers | null>(null);
+  /** The brief line a first build's receipt carries: which brief it used, and any improvement the client asked for first
+   * (its charge from the durable action; 0 today, null while it is still being confirmed). */
+  const briefUsed = useCallback((mode: EnhancedReceipt["mode"], improved: { charged: number | null } | null): EnhancedReceipt =>
+    improved ? { mode, credits: improved.charged, improved: true } : { mode, credits: 0, improved: false }, []);
+  const proceed = useCallback((text: string, requestMode: "create" | "plan", design: DesignAnswers, original: string) => {
+    // Affordability first: a brief that cannot be built is never offered prompt help, and stays in the composer.
+    const quoteIssue = affordability(BUILDER_EFFORT[effort].ceilingCredits, balance);
+    if (quoteIssue) { restoreBrief(text, quoteIssue); return; }
+    if (!website) { void startDeferred(text, requestMode); return; }
+    if (requestMode !== "create") { planDesign.current = Object.keys(design).length ? design : null; void startDeferred(text, requestMode); return; }
+    // A complete (detailed) brief builds directly from the client's words: no reading or rewrite is sent first.
+    // Prompt help is offered only where the server turned it on (MAKEBORNE_BRIEF_ENHANCER); otherwise every brief builds from the client's words.
+    if (!features.briefEnhancer || !shouldEnhance(original)) {
+      void startDeferred(text, "create", { ...(Object.keys(design).length ? { design } : {}), enhanced: briefUsed("original", keptImprovement) });
+      return;
+    }
+    // A short brief: the client chooses between building now and improving it first (free). Nothing is sent yet.
+    improvement.offer(text, design, original);
+  }, [balance, briefUsed, effort, features.briefEnhancer, improvement, keptImprovement, restoreBrief, startDeferred, website]);
+  const proceedLatest = useRef(proceed);
+  useEffect(() => { proceedLatest.current = proceed; }, [proceed]);
+  const startingBrief = useRef(false);
+  /** Starts the build from the card: the improved brief (or the client's edit of it), or their own words. A refused start puts the card back. */
+  const startEnhanced = async (brief: BuildBrief | null) => {
+    if (!enhancing || startingBrief.current) return;
+    startingBrief.current = true;
+    try {
+      let previous: Improvement = enhancing;
+      let charged: number | null = previous.state.status === "ready" || previous.state.status === "failed" ? previous.state.charged : null;
+      // Building from the original while an improvement is unsettled stops it durably first, then carries its verified charge.
+      if (!brief && previous.key && (previous.state.status === "loading" || previous.state.status === "checking")) {
+        const settled = await improvement.stop();
+        charged = settled?.status === "ready" || settled?.status === "failed" ? settled.charged : null;
+      }
+      const improved = previous.key ? { charged } : keptImprovement;
+      const { text, design } = previous;
+      improvement.close(); setKeptImprovement(null);
+      const outcome = await submitLatest.current(text, "create", { design, ...(brief ? { brief } : {}), enhanced: briefUsed(brief?.mode ?? "original", improved) });
+      if (outcome !== undefined && outcome !== "refused") return;
+      // Refused before it started: the card comes back with the client's edits, and the brief is in the composer too.
+      if (brief && previous.state.status === "ready") previous = { ...previous, state: { ...previous.state, text: brief.text } };
+      improvement.restore(previous); restoreBrief(text);
+    } finally { startingBrief.current = false; }
+  };
+  const cancelEnhanced = async () => {
+    if (!enhancing) return;
+    const current = enhancing;
+    // Cancel stops an unsettled improvement durably; a completed one keeps its result and receipt in the conversation.
+    const settled = current.key && (current.state.status === "loading" || current.state.status === "checking") ? await improvement.stop() : null;
+    const ready = current.state.status === "ready" ? current.state : settled?.status === "ready" ? settled : null;
+    improvement.close();
+    setDraft(current.text); asked.current = false;
+    if (ready) {
+      setKeptImprovement({ brief: { mode: "enhanced", text: ready.text }, charged: ready.charged });
+      setNotice("Your brief is back in the composer. No build was started; the improved brief and its receipt stay in the conversation.");
+    } else if (current.key) {
+      const failed = settled?.status === "failed" ? settled : current.state.status === "failed" ? current.state : null;
+      setNotice(`Your brief is back in the composer. No build was started.${failed?.charged === 0 ? " The improvement was stopped and nothing was charged." : " The improvement's charge is still being confirmed; nothing more will be charged."}`);
+    } else setNotice("Your brief is back in the composer. Nothing was started.");
+  };
   // The first request on an empty project asks what the brief leaves open.
   const firstBuild = !turns.length && !history.length && !planner.restored && version <= 1 && (website ? Object.keys(baseFiles).length === 0 : !baseDocument);
   /** `prepared` is a brief handed over from another screen (project creation): it may ask the free
@@ -595,29 +746,36 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     const issue = sourceIntentIssue(readiness);
     if (issue) { setNotice(issue); setDraft(text); return; }
     if (asking) { setNotice("Answer the questions above, or choose Skip questions."); return; }
+    if (enhancing) { setNotice("Choose how to start with the brief above, or Cancel."); return; }
     if (firstBuild && !asked.current && text.trim()) {
       asked.current = true;
       const brief = text.trim(), attachments = sources.files.length;
-      const local = briefQuestions(kind, brief, { attachments });
+      // A detailed brief has nothing left to ask: it goes straight on to the build (no prompt help is sent).
+      if (!questionLimit(kind, brief)) { if (prepared) { asked.current = false; hold(); } else { setDraft(""); proceedLatest.current(brief, requestMode, {}, brief); } return; }
       setAsking({ text: brief, mode: requestMode, questions: null }); setDraft("");
-      // Tailored questions when the AI is available; otherwise the on-device set.
+      // The on-device design questions for this brief, with AI-tailored business questions merged in when available.
       void tailoredQuestions(brief, attachments).then(tailored => {
-        const questions = tailored ?? local;
-        if (!questions.length) { setAsking(null); if (prepared) hold(); else void submitSources(brief, requestMode); return; }
+        // Creation options the server cannot honour are not asked: full-image slides need MAKEBORNE_DECK_FULL_IMAGE and images;
+        // a book's image count and style need images that can be made now (features.documentImages).
+        const questions = mergedQuestions(kind, brief, tailored, { attachments }).filter(question => question.id === "slides" ? features.fullImageSlides && features.documentImages
+          : question.id === "images" || question.id === "imagestyle" ? features.documentImages : true);
+        if (!questions.length) { setAsking(null); if (prepared) hold(); else proceedLatest.current(brief, requestMode, {}, brief); return; }
         setAsking(current => current && current.text === brief && !current.questions ? { ...current, questions } : current);
       });
       return;
     }
     if (prepared) { hold(); return; }
     void submitSources(text, requestMode, target ? { target } : undefined);
-  }, [asking, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
+  }, [asking, enhancing, features.documentImages, features.fullImageSlides, firstBuild, kind, readiness, sources.files.length, submitSources, tailoredQuestions, website]);
   const answerQuestions = (answers: BriefAnswers | null) => {
     if (!asking) return;
     const { text, mode: requestMode, questions } = asking;
     setAsking(null);
-    void submitSources(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode);
+    // Only chosen answers reach the brief and the design seed (a skipped one never does, F04).
+    proceed(answers && questions ? briefWithAnswers(text, questions, answers) : text, requestMode, answers && questions && website ? designAnswers(questions, answers) : {}, text);
   };
   const submit = (text: string) => {
+    if (disabled) return;
     // A selected element must still be exactly what the user saw; otherwise refuse instead of editing another one.
     const issue = targetIssue(target, text, baseFiles, version);
     if (issue) { setNotice(issue); return; }
@@ -642,6 +800,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       approvals.current.set(identity, approval);
       setMode("create"); setEffort(level);
       const outcome = await submitSources(`Build the approved plan: ${saved.plan.title}`, "create", { plan: saved.plan, planRevision: saved.revision, effort: level, approval, approvedMaximum: maximum,
+        // The structured design answers chosen before the plan still bind its build (must-have sections, imagery, theme).
+        ...(planDesign.current ? { design: planDesign.current } : {}),
         target: `saved plan v${saved.revision} · ${EFFORT_PRESENTATION[level].label} effort` });
       // Only an unknown outcome keeps the identity: building it again then joins the recorded request.
       if (outcome !== "uncertain") approvals.current.delete(identity);
@@ -665,7 +825,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     try {
       // A continuation uses its retained original files, even after selection edits or reload.
       if (buildActionKey) await bindBuilderAttachmentSnapshot(sourceOwner, sourceContext, buildActionKey, operation.id);
-      const files = operation.pendingKind === "review" ? [] : await prepareBuilderAttachments(await readBuilderAttachmentSnapshot(sourceOwner, sourceContext, operation.id));
+      const files = operation.pendingKind === "review" ? [] : await prepareBuilderSources(await readBuilderAttachmentSnapshot(sourceOwner, sourceContext, operation.id), { storeLarge });
       if (!sourceSession.active) return;
       const approved = await authorizeOperation(operation);
       if (!sourceSession.active) return;
@@ -732,6 +892,8 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     : history.length ? `${history.length} earlier change${history.length === 1 ? "" : "s"}` : "Conversation";
   const measured = estimates && effort === estimates.effort && firstBuild ? estimates.firstBuild[kind] : null;
   const ceiling = BUILDER_EFFORT[effort].ceilingCredits;
+  // Prompt help (enhancement or analysis) is free, so the maximum is the build's own ceiling.
+  const shownMaximum = ceiling;
   const canReview = website && Object.keys(baseFiles).length > 0;
   const quoteIssue = affordability(mode === "plan" ? PLAN_CEILING_CREDITS : ceiling, balance);
   return <aside className="lb" aria-label="Builder chat" data-chat-open={chatOpen || undefined} onKeyDown={event => closeSheetOnEscape(event, chatOpen, () => setChatOpen(false), ".lb-log")}>
@@ -742,8 +904,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
     <div className="lb-log" id={`lb-log-${artifactId}`} ref={log} aria-live="polite">
       {empty && !asking && <div className="lb-intro"><Sparkles size={18} /><h3>{copy.title}</h3><p>{copy.intro}</p></div>}
       {asking && <><div className="lb-turn lb-user"><p>{asking.text}</p></div>
-        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</button></div>
+        <div className="lb-turn lb-assistant">{!asking.questions ? <div className="bq bq-loading" role="status"><Loader2 size={14} className="lb-spin" /><span>Reading your brief to see what to ask… (questions are free)</span><button type="button" className="bq-skip" onClick={() => answerQuestions(null)}>{website && features.briefEnhancer && asking.mode === "create" && shouldEnhance(asking.text) ? "Skip questions" : <>Skip questions and start · up to {asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</>}</button></div>
           : <BriefQuestionsCard questions={asking.questions} kind={kind} planning={asking.mode === "plan"} busy={busy || preparingSources || Boolean(disabled)}
+          finalLabel={website && features.briefEnhancer && asking.mode === "create" && shouldEnhance(asking.text) ? "Continue" : undefined}
           limit={`Starting ${asking.mode === "plan" ? "the plan" : "the build"} uses up to ${asking.mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits, with ${sources.files.length ? `your source files: ${sources.files.filter(file => !leftOut.has(file.id)).map(file => file.name).join(", ") || "none"}` : "no source files"}. You pay only for what is used.`}
           onStart={answers => answerQuestions(answers)} onSkip={() => answerQuestions(null)} />}</div></>}
       {!!previousTurns.length && <details className="lb-history" open><summary>Chat history</summary>
@@ -751,6 +914,12 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         {transcript.next && <button type="button" onClick={() => void transcript.older()}>Load older messages</button>}
         {previousTurns.map(turn => <div key={turn.id} className={`lb-turn lb-${turn.role}`}><p>{turn.text}</p></div>)}
       </details>}
+      {keptImprovement && <div className="lb-turn lb-assistant"><p>Improved brief kept for reference · improving it charged {keptImprovement.charged} credit{keptImprovement.charged === 1 ? "" : "s"}. No build was started.</p>
+        <details className="lb-enhanced"><summary>Improved brief</summary><pre>{keptImprovement.brief.text}</pre></details></div>}
+      {enhancing && <><div className="lb-turn lb-user"><p>{enhancing.text}</p></div>
+        <div className="lb-turn lb-assistant"><EnhancedBriefCard key={enhancing.state.status} state={enhancing.state} design={enhancing.design} maximum={ceiling} busy={busy || preparingSources || Boolean(disabled)}
+          onImprove={() => void improvement.improve()} onStart={brief => void startEnhanced(brief)} onOriginal={() => void startEnhanced(null)} onCancel={() => void cancelEnhanced()}
+          onStop={() => void improvement.stop()} onCheck={() => void improvement.check()} /></div></>}
       {!!history.length && <details className="lb-history"><summary>{history.length} earlier change{history.length === 1 ? "" : "s"}</summary>
         <ol>{history.map(item => <li key={item.number}><strong>v{item.number}</strong> {item.summary}</li>)}</ol></details>}
       {planner.restored && <div className="lb-turn lb-assistant">
@@ -763,6 +932,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           // eslint-disable-next-line @next/next/no-img-element -- data URL screenshots, not optimisable
           <li key={shot.label} data-viewport={shot.viewport}><img src={shot.url} alt={`${shot.label} screenshot`} title={shot.label} /></li>)}</ul>}
         {turn.text && <p>{turn.text}</p>}
+        {turn.enhancedBrief && <details className="lb-enhanced"><summary>{turn.enhancedBrief.mode === "edited" ? "Improved brief (your edits)" : turn.enhancedBrief.mode === "analysis" ? "Brief analysis" : "Improved brief"}</summary><pre>{turn.enhancedBrief.text}</pre></details>}
         {turn.plan && planner.active?.turnId === turn.id && planCard(planner.active)}
         {typeof turn.plan === "object" && planner.active?.turnId !== turn.id && <div className="pc pc-collapsed"><ListChecks size={14} /><span>Plan v{turn.plan.revision} · <strong>{turn.plan.title}</strong> — revised below</span></div>}
         {!!turn.activity.length && <ul className="lb-activity">{turn.activity.map(item => <li key={item.id} data-done={item.done}>
@@ -822,7 +992,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         <span><button type="button" disabled={busy || Boolean(draft.trim())} onClick={() => { setDraft(earlier.text); setEarlier(null); if (pendingScope) clearPendingRequest(browserStorage(), pendingScope); }}>Put it back in the composer</button>
         <button type="button" onClick={() => { setEarlier(null); if (pendingScope) clearPendingRequest(browserStorage(), pendingScope); }}>Dismiss</button></span>
       </div>}
-      {target && draft.includes(targetReference(target)) && <p className="lb-target"><span>Editing {target.label} · {targetReference(target)} · selected in version {target.version}</span>
+      {target && draft.includes(targetReference(target)) && <p className="lb-target"><span>Editing {target.label}<small>{targetReference(target)} · selected in version {target.version}</small></span>
         <button type="button" onClick={() => setTarget(null)}>Clear target</button></p>}
       {provenance && <p className="lb-provenance" data-status={provenance.status}><span>{provenance.status === "pending" ? `From ${provenanceLabel(provenance.provenance)} · recorded with your next request. The advice itself changed nothing here.` : `Started from ${provenanceLabel(provenance.provenance)}`}</span>
         {provenance.status === "pending" && onProvenance && <button type="button" disabled={busy} onClick={() => onProvenance(null)}>Don’t record</button>}</p>}
@@ -834,7 +1004,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         note="Saved on this device for this project. Leave out skips a file for this request only; × deletes the saved copy. Continuing uses the original request’s files." />
 
       {sources.error && <p className="lb-notice" role="alert">{sources.error}</p>}
-      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)}
+      <textarea ref={composer} aria-label="Message the builder" placeholder={mode === "plan" ? draftPlan ? "Revise the plan — e.g. add a pricing page, warmer palette" : "What should we plan? Describe the site or the change" : empty ? copy.start : copy.edit} value={draft} rows={3} maxLength={8000} disabled={busy || preparingSources || !sources.ready || sources.busy || locked || operationRunning || Boolean(previewingRecovery)}
         onChange={event => setDraft(event.target.value)}
         onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(draft); } }} />
       <div className="lb-controls">
@@ -842,7 +1012,9 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
           <button type="button" aria-pressed={mode === "create"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("create")} title="Build: edit the website directly"><Hammer size={12} />Build</button>
           <button type="button" aria-pressed={mode === "plan"} disabled={busy || operationRunning || Boolean(previewingRecovery)} onClick={() => setMode("plan")} title="Plan: propose an editable plan first, no code"><ListChecks size={12} />Plan</button>
         </div>}
-        <label className="lb-attach" aria-label="Attach files" title="Attach images, PDF, text or Markdown · up to 5 files, 3 MB total"><Paperclip size={15} /><input type="file" multiple accept={BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
+        <label className="lb-attach" aria-label="Attach files" title={ingestOffered ? "Attach images, PDF, text, Markdown, Word, PowerPoint, Excel or CSV · up to 5 files" : "Attach images, PDF, text or Markdown · up to 5 files, 3 MB total"}><Paperclip size={15} /><input type="file" multiple accept={ingestOffered ? `${BUILDER_ATTACHMENT_ACCEPT},${INGEST_ACCEPT}` : BUILDER_ATTACHMENT_ACCEPT} disabled={busy || preparingSources || !sources.ready || sources.busy || disabled || operationRunning || Boolean(previewingRecovery)} onChange={event => { void sources.add(Array.from(event.target.files ?? [])); event.target.value = ""; }} /></label>
+        {docKind && imageChoice && imageControls && <DocumentImageControls kind={docKind} value={imageChoice} offers={imageOffers} disabled={busy || operationRunning || Boolean(previewingRecovery)}
+          onChange={next => { imageTouched.current = true; setImageChoice(next); }} />}
         <select aria-label="Effort" value={effort} disabled={busy || operationRunning || Boolean(previewingRecovery)} onChange={event => setEffort(event.target.value as EffortLevel)} title={EFFORT_PRESENTATION[effort].purpose}>
           {EFFORT_LEVELS.map(level => <option key={level} value={level}>{EFFORT_PRESENTATION[level].label}</option>)}
         </select>
@@ -858,20 +1030,21 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
       {(busy || operationRunning) && <p className="lb-action-effect" id={`lb-stop-effect-${artifactId}`}>{stopEffect(operation, version, pendingCancel && !operation?.cancelRequested)}</p>}
       <details className="lb-request-details"><summary>Request details <span>Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</span></summary>
       <div className="lb-estimate">
-        {brandKit && <p className="lb-brand">Brand kit: {brandKit}</p>}
-        <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
+        {brandKit !== undefined && <p className="lb-brand">{brandKit ? `Brand kit: ${brandKit}` : "No brand kit"} · used for this request</p>}
+        <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>
         {/* Only measured figures: failed planning is released at zero; explicit Stop settles confirmed usage. */}
         <p className="lb-estimate-detail">{mode === "plan" ? "A failed plan is not charged. If you choose Stop, confirmed usage is charged and unused credits are returned."
           : measured ? `In testing, a first ${kind} at ${EFFORT_PRESENTATION[effort].label} used ${measured.min}–${measured.max} credits (${measured.samples} test ${kind}s, no AI images). You pay only for what is used.`
           : `You pay only for what is used, never more than ${ceiling} credits without your approval.`}</p>
+        {docKind && imageChoice && imageControls && imageOffers && mode !== "plan" && <p className="lb-estimate-detail lb-image-impact">{creditImpact(docKind, imageOffers, imageChoice)}</p>}
         {/* Phones: one line instead of the three above (limit, measured range, balance). */}
-        <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
+        <p className="lb-estimate-compact">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits{mode !== "plan" && measured ? ` · first builds used ${measured.min}–${measured.max} in testing` : ""} · pay for what’s used{balance ? ` · ${balance.unlimited ? "unlimited" : `${balance.available} left`}` : ""}</p>
       </div>
       <p className="lb-plan-note">Attach PNG, JPEG, WebP, GIF, PDF, TXT or Markdown. Up to 5 files, 3 MB combined; text up to 200,000 characters.</p>
-      {blockedReason && <p className="lb-notice">{blockedReason}</p>}
       </details>
       {notice && <p className="lb-notice" role="status">{notice}</p>}
-      {blockedReason && !notice && <p className="lb-availability" role="status" title={blockedReason}>Sending unavailable <span>See request details</span></p>}
+      {/* Why sending is off (AI paused, today's limit, a draft to save) is shown in full, never only behind the collapsed details. */}
+      {blockedReason && !notice && <p className="lb-availability" role="status">{blockedReason}</p>}
     </form>
   </aside>;
 }

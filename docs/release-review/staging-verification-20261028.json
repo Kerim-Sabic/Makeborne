@@ -1,0 +1,39 @@
+{
+  "target": "xzwikrunwpurxnxgkznh",
+  "head": "c5cc9e563d5dc4c0be33a919d3c925382ee05a32",
+  "productionTouched": false,
+  "dryRun": true,
+  "verifiedApplied": 111,
+  "historicalBytePair": [
+    "20261008181217_generation_preview_read_authority.sql",
+    "20261008182736_private_preview_sessions.sql",
+    "20261008190859_saved_website_preview_discovery.sql",
+    "20261008200855_operator_website_qualification_proposal.sql",
+    "20261008210222_operator_website_repair_review.sql",
+    "20261009021050_operator_native_composition_qualification.sql",
+    "20261011120000_artifact_plans.sql",
+    "20261011130000_client_review_links.sql",
+    "20261011140000_hosted_site_bundles.sql",
+    "20261012210033_hosted_site_address_changes.sql",
+    "20261013160000_client_review_view_integrity.sql",
+    "20261013170000_client_review_document_assets.sql",
+    "20261013280000_billing_lifecycle_boundaries.sql",
+    "20261020120000_artifact_title_search.sql",
+    "20261020174011_ai_operation_cancellation.sql",
+    "20261023000417_account_chat_history.sql"
+  ],
+  "pending": [],
+  "applied": [],
+  "before": {
+    "warnings": 11,
+    "errors": 0
+  },
+  "after": {
+    "warnings": 11,
+    "errors": 0,
+    "newActionableFindings": 0,
+    "expectedPrivateTableInfo": 4,
+    "privateTableAclVerified": true,
+    "privateSchemasNotExposed": true
+  }
+}

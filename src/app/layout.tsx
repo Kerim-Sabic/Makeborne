@@ -45,7 +45,8 @@ export default function RootLayout({
   // Launch countdown banner (informational; it never changes sales). Hidden once MAKEBORNE_LAUNCH_COUNTDOWN is not "on".
   const launch = launchState();
   return (
-    <html lang="en" className={`${inter.variable} ${serif.variable}`}>
+    // Large-screen scaling (globals.css --ui-zoom) is off unless the server sets MAKEBORNE_UI_SCALE=on.
+    <html lang="en" className={`${inter.variable} ${serif.variable}`} data-ui-scale={process.env.MAKEBORNE_UI_SCALE === "on" ? "on" : undefined}>
       <body>{launch.enabled && <LaunchBanner launchAt={launch.launchAt} serverPhase={launch.phase} dateShort={launch.text.short} timeText={launch.text.time} testOverrides={launch.testOverrides} />}{children}</body>
     </html>
   );

@@ -1,9 +1,11 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Play, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, MoreHorizontal, Play, X } from "lucide-react";
+import EditorMenu from "./editor-menu";
 import type { Deck, DocumentSource } from "@/lib/documents/schema";
 import { deckHtml } from "@/lib/documents/render-deck";
-import { BOOK_TRIM, bookHtml, chapterLabel } from "@/lib/documents/render-book";
+import { bookHtml, bookTrim, chapterLabel } from "@/lib/documents/render-book";
 import { wordCount } from "@/lib/documents/book-markup";
 
 /** About 230 words a minute, rounded for display. */
@@ -132,7 +134,9 @@ export function FontCoverageNote({ document: doc }: { document: DocumentSource }
 
 /** Live preview for presentations and books. Renders the same HTML the PDF
  * printer uses, inside a script-free sandboxed frame. */
-export default function DocumentPreview({ document: doc, focus, scope, building, savedVersion, canExport }: {
+export default function DocumentPreview({ document: doc, focus, scope, building, savedVersion, canExport, toolbar }: {
+  /** The editor's single preview toolbar: when given, outline, export and present controls render there instead of in this bar. */
+  toolbar?: HTMLElement | null;
   document: DocumentSource;
   focus?: string;
   scope: { accountId: string; workspaceId: string; artifactId: string };
@@ -212,10 +216,12 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
     const page = frame.current?.contentDocument, body = page?.body;
     if (doc.kind !== "book" || !page || !body) return;
     // The frame's own viewport width, excluding its scrollbar.
-    const scale = Math.min(1, page.documentElement.clientWidth / (BOOK_TRIM.width * 96 + 32));
+    // A picture book's spreads show two pages side by side.
+    const pageWidth = bookTrim(doc).width * 96 * (doc.imagePlan?.placement === "picture" ? 2 : 1);
+    const scale = Math.min(1, page.documentElement.clientWidth / (pageWidth + 32));
     if (scale < 0.999) body.style.setProperty("zoom", String(Math.max(0.3, Math.floor(scale * 1000) / 1000)));
     else body.style.removeProperty("zoom");
-  }, [doc.kind]);
+  }, [doc]);
   useEffect(() => {
     const element = frame.current;
     if (!element || typeof ResizeObserver === "undefined") return;
@@ -268,8 +274,30 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
   }
 
   const exportDisabled = !canExport || building || !!exporting;
+  const outlineSelect = outline.length > 1 && <select className="dp-jump" aria-label={doc.kind === "deck" ? "Go to slide" : "Go to chapter"} value={outline.some(item => item.anchor === current) ? current : ""} onChange={event => jump(event.target.value)}>
+    <option value="">{doc.kind === "deck" ? "Start" : "Cover & contents"}</option>
+    {outline.map(item => <option key={item.anchor} value={item.anchor}>{item.label.length > 70 ? `${item.label.slice(0, 68)}…` : item.label}</option>)}
+  </select>;
+  const statusText = building ? "Writing live…" : message || "Live preview";
+  const toolbarControls = toolbar && createPortal(<div className="lp-toolbar dp-toolbar">
+    <span className="dp-stats">{stats}</span>
+    {outlineSelect}
+    <span className="lp-status" role="status" data-idle={statusText === "Live preview" || undefined}>{statusText}</span>
+    <EditorMenu collapse label={`Download and present: saved version ${savedVersion}`} className="lp-tools dp-tools" trigger={<MoreHorizontal size={16} aria-hidden="true" />}>
+      <div className="dp-actions" role="group" aria-label={`Generated outputs from saved version ${savedVersion}`}>
+        <span className="dp-outputs-label" title="Made by Makeborne from the saved version; your uploaded source files are listed with the builder">Generated · v{savedVersion}</span>
+        <button type="button" className="dp-export" data-keep-open disabled={exportDisabled} onClick={() => void download("pdf")} title={canExport ? `Generated output: download saved version ${savedVersion} as PDF` : "Save the document first"}>
+          {exporting === "pdf" ? <Loader2 size={13} className="lb-spin" /> : <Download size={13} />}PDF</button>
+        {doc.kind === "deck" && <button type="button" className="dp-export" data-keep-open disabled={exportDisabled} onClick={() => void download("pptx")} title={`Generated output: download saved version ${savedVersion} as an editable PowerPoint file`}>
+          {exporting === "pptx" ? <Loader2 size={13} className="lb-spin" /> : <Download size={13} />}PPTX</button>}
+        {doc.kind === "deck" && doc.slides.length > 0 && <button type="button" aria-label="Present" title="Present: arrow keys move, Esc exits" onClick={() => setPresenting(true)}><Play size={15} aria-hidden="true" /><span className="editor-menu-label">Present</span></button>}
+        <button type="button" aria-label="Full screen preview" title="Full screen preview" onClick={() => void frame.current?.requestFullscreen?.().catch(() => undefined)}><Maximize2 size={15} aria-hidden="true" /><span className="editor-menu-label">Full screen</span></button>
+      </div>
+      {!canExport && <p className="editor-menu-note">Downloads use the saved version. Wait for saving or building to finish.</p>}
+    </EditorMenu>
+  </div>, toolbar);
   return <section className="lp dp" aria-label={doc.kind === "deck" ? "Presentation preview" : "Book preview"}>
-    <header className="lp-bar">
+    {toolbar ? toolbarControls : <header className="lp-bar">
       <span className="dp-stats">{stats}</span>
       {outline.length > 1 && <select className="dp-jump" aria-label={doc.kind === "deck" ? "Go to slide" : "Go to chapter"} value={outline.some(item => item.anchor === current) ? current : ""} onChange={event => jump(event.target.value)}>
         <option value="">{doc.kind === "deck" ? "Start" : "Cover & contents"}</option>
@@ -285,7 +313,7 @@ export default function DocumentPreview({ document: doc, focus, scope, building,
         {doc.kind === "deck" && doc.slides.length > 0 && <button type="button" aria-label="Present" title="Present: arrow keys move, Esc exits" onClick={() => setPresenting(true)}><Play size={15} /></button>}
         <button type="button" aria-label="Full screen preview" onClick={() => void frame.current?.requestFullscreen?.().catch(() => undefined)}><Maximize2 size={15} /></button>
       </div>
-    </header>
+    </header>}
     <FontCoverageNote document={doc} />
     <div className="lp-stage dp-stage">
       {html ? <iframe ref={frame} title={doc.kind === "deck" ? "Presentation preview" : "Book preview"} sandbox="allow-same-origin" referrerPolicy="no-referrer" srcDoc={html} onLoad={onLoad} style={{ width: "100%" }} />

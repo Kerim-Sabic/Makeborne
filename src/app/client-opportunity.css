@@ -6,7 +6,7 @@
 .co-back:hover { color: #4d43ab; }
 .co-header { margin: 23px 0; }
 .co-kicker { display: inline-flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 650; color: #7565a8; letter-spacing: .1em; }
-.co-header h1 { font-size: clamp(28px, 3.4vw, 40px); font-weight: 550; letter-spacing: -.045em; line-height: 1.2; margin: 12px 0; }
+.co-header h1 { font-size: clamp(28px, calc(3.4vw / var(--ui-zoom, 1)), 40px); font-weight: 550; letter-spacing: -.045em; line-height: 1.2; margin: 12px 0; }
 .co-header p { color: #6c778c; font-size: 14px; line-height: 1.7; }
 .co-local-note { padding: 13px 17px; background: #f0eefb; border: 1px solid #e4e0f4; border-radius: 12px; color: #756a91; font-size: 12px; line-height: 1.7; margin-bottom: 26px; }
 .co-input-panel { max-width: 760px; border: 1px solid #e3e5ee; background: #ffffffc9; border-radius: 20px; padding: 30px; display: grid; gap: 24px; }

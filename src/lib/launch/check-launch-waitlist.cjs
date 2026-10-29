@@ -70,6 +70,11 @@ const valid = { email: "  Ana.Reed@Example.COM ", company: "", source: "utm_sour
     // The invite script signs links exactly as the app verifies them.
     const script = fs.readFileSync(path.join(root, "scripts/waitlist-invite.mjs"), "utf8");
     assert.match(script, /createHmac\("sha256", secret\)\.update\("makeborne-waitlist:unsubscribe:"\)\.update\(id\.toLowerCase\(\)\)/);
+    // The invite copy follows the launch truth rules and names the seller, like the site does.
+    assert.match(script, /turns one brief into/);
+    assert.doesNotMatch(script, /short brief|\bfree\b/i);
+    assert.match(script, /ZORBY&CO d\.o\.o\., Vilsonovo šetalište 10, 71000 Sarajevo, Bosnia and Herzegovina/);
+    assert.match(script, /Refused: this repository has no transactional mail sender/, "--send stays refused");
     assert.match(fs.readFileSync(path.join(__dirname, "waitlist.ts"), "utf8"), /update\(`makeborne-waitlist:\$\{purpose\}:`\)/);
   });
 
@@ -179,9 +184,10 @@ const valid = { email: "  Ana.Reed@Example.COM ", company: "", source: "utm_sour
     const form = fs.readFileSync(path.join(root, "src/components/launch/waitlist-form.tsx"), "utf8");
     assert.match(form, /We&rsquo;ll only use your email to send your launch invite and launch news\. Unsubscribe any time\. See our <Link href="\/privacy" prefetch=\{false\}>Privacy Policy<\/Link>\./);
     assert.match(shared.WAITLIST_CONSENT_TEXT, /^We'll only use your email to send your launch invite and launch news\. Unsubscribe any time\./);
-    const privacy = fs.readFileSync(path.join(root, "src/app/privacy/page.tsx"), "utf8");
-    assert.match(privacy, /\["Launch waitlist", "If you join the launch waitlist/);
-    assert.match(privacy, /deleted 90 days after launch, or sooner on request/);
+    // The Privacy Policy is docs/legal/privacy.md (rendered at /privacy): its data table carries the waitlist row.
+    const privacy = fs.readFileSync(path.join(root, "docs/legal/privacy.md"), "utf8");
+    assert.match(privacy, /^\| Launch waitlist \| Email, when you joined, the notice version you saw/m);
+    assert.match(privacy, /Deleted 90 days after launch, or sooner on request; every waitlist email has an unsubscribe link/);
     assert.match(privacy, /admin@makeborne\.com/);
     assert.match(form, /tabIndex=\{-1\} autoComplete="off"/);
   });

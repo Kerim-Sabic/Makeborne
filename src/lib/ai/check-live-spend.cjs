@@ -568,6 +568,8 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
   await check("unsupported configurations are refused before any provider contact", async () => {
     const base = { model: "claude-opus-5-5", max_tokens: 1000, messages: [], system: [], tools: [], thinking: { type: "adaptive" }, output_config: { effort: "medium" }, cache_control: { type: "ephemeral" }, betas: ["thinking-display-updates-2026-08-18"] };
     prices.assertSupportedTextRequest(base);
+    prices.assertSupportedTextRequest({ ...base, system: [{ type: "text", text: "x", cache_control: { type: "ephemeral" } }] });
+    assert.throws(() => prices.assertSupportedTextRequest({ ...base, system: [{ type: "text", text: "x", cache_control: { type: "ephemeral", ttl: "1h" } }] }), error => error.code === "UNSUPPORTED_AI_CONFIG", "a 1-hour system marker would outrun the 5-minute write bound");
     for (const bad of [{ speed: "fast" }, { inference_geo: "us" }, { fallbacks: "default" }, { service_tier: "priority" }, { betas: ["server-side-fallback-2026-07-01"] },
       { tools: [{ type: "web_search_20260209", name: "web_search" }] }, { cache_control: { type: "ephemeral", ttl: "1h" } }, { output_config: { effort: "high", format: {} } }, { model: "claude-opus-latest" }]) {
       assert.throws(() => prices.assertSupportedTextRequest({ ...base, ...bad }), error => ["UNSUPPORTED_AI_CONFIG", "UNPRICED_MODEL"].includes(error.code), JSON.stringify(bad));
@@ -695,6 +697,7 @@ function websiteRun(hold, spend, anthropic, extra = {}) {
     assert.equal(aiStop(new SpendError("PROVIDER_DISABLED", "x")).code, "AI_PAUSED");
     assert.equal(aiStop(new SpendError("PROVIDER_LIMIT", "x")).code, "AI_DAILY_LIMIT");
     assert.equal(aiStop(new SpendError("SPEND_UNAVAILABLE", "x")).code, "AI_UNAVAILABLE");
+    assert.equal(aiStop(new SpendError("ACCESS_REQUIRED", "x")).code, "MEMBERSHIP_REQUIRED");
     assert.equal(aiStop(new prices.UnpricedModelError("m")).code, "AI_UNAVAILABLE");
     assert.equal(aiStop(new Error("other")), null);
     const hold = billing.hold(50);

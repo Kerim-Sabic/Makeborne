@@ -7,7 +7,7 @@ const source = fs.readFileSync(require.resolve("./auth-flow.ts"), "utf8");
 const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 const context = { exports: {}, URLSearchParams, URL };
 vm.runInNewContext(output, context);
-const { authDestination, emailAuthDestination, passwordRecoveryDestination } = context.exports;
+const { authDestination, emailAuthDestination, passwordRecoveryDestination, billingPlanSelection } = context.exports;
 for (const target of [null, "", "https://example.com", "//example.com", "/\\example.com", "/auth/update-password?next=evil", "/adminevil", "/billingevil", "/studioevil"]) assert.equal(authDestination(target), "/studio");
 for (const target of ["/studio", "/studio/cloud", "/chat", "/billing", "/admin", "/auth/update-password"]) assert.equal(authDestination(target), target);
 assert.equal(authDestination("/admin?role=admin&next=https://evil.example#anything"), "/admin");
@@ -58,4 +58,31 @@ for (const target of ["/portal/", "/portal/admin", "/portal/sites/not-a-uuid", `
 }
 assert.equal(emailAuthDestination(`${origin}/auth/callback?next=${encodeURIComponent(`/portal/join/${portalToken}`)}`, origin), `/portal/join/${portalToken}`);
 assert.equal(emailAuthDestination(`${origin}/auth/callback?next=${encodeURIComponent("/portal/sites/bad")}`, origin), "/studio");
+// A plan chosen before sign-up rides to /billing through allow-listed params, with the brief link nested once.
+const planReturn = `/billing?plan=studio&interval=monthly&next=${encodeURIComponent(`/studio?draft=${workspace}`)}#plans`;
+const planResult = new URL(authDestination(planReturn), "https://makeborne.invalid");
+assert.equal(planResult.searchParams.get("plan"), "studio");
+assert.equal(planResult.searchParams.get("interval"), "monthly");
+assert.equal(planResult.searchParams.get("next"), `/studio?draft=${workspace}`);
+assert.equal(planResult.hash, "#plans");
+assert.deepEqual({ ...billingPlanSelection(planReturn) }, { tier: "studio", interval: "monthly" });
+// Doubly encoded (the login link wraps the billing link): draft and claim survive exactly.
+const nested = `/billing?plan=scale&interval=yearly&next=${encodeURIComponent(draft)}#plans`;
+const login = `/login?mode=signup&next=${encodeURIComponent(nested)}`;
+const unwrapped = new URL(login, "https://makeborne.invalid").searchParams.get("next");
+assert.equal(unwrapped, nested);
+const nestedResult = new URL(authDestination(unwrapped), "https://makeborne.invalid");
+assert.equal(nestedResult.searchParams.get("next"), authDestination(draft));
+assert.equal(new URL(nestedResult.searchParams.get("next"), "https://makeborne.invalid").searchParams.get("claim"), artifact);
+assert.equal(authDestination(authDestination(unwrapped)), authDestination(unwrapped), "already-safe links are stable");
+assert.equal(emailAuthDestination(`${origin}/auth/callback?next=${encodeURIComponent(nested)}`, origin), authDestination(nested), "the email link keeps the plan");
+for (const target of ["/billing?plan=evil&interval=weekly", "/billing?plan=studio", "/billing?interval=monthly", "/billing?plan=studio&interval=weekly", "/billing?plan=STUDIO&interval=monthly"]) {
+  assert.equal(authDestination(target), "/billing", target);
+  assert.equal(billingPlanSelection(target), null, target);
+}
+for (const target of [null, "/studio?draft=x", "/billing#plans", "https://evil.example/billing?plan=studio&interval=monthly"]) assert.equal(billingPlanSelection(target), null, String(target));
+assert.equal(authDestination("/billing#topups"), "/billing#topups");
+assert.equal(authDestination(`/billing?plan=studio&interval=monthly&next=/studio?draft=x#plans`), "/billing?next=%2Fstudio&plan=studio&interval=monthly#plans", "an invalid brief id falls back to /studio; plan and hash are kept");
+// Over-long links fall back to /studio; purchase() drops the nested brief link before that limit.
+assert.equal(authDestination(`/billing?plan=studio&interval=monthly&next=${encodeURIComponent(`/studio?x=${"a".repeat(2500)}`)}`), "/studio");
 console.log("PASS: account, draft, billing, checkout, portal and email return URLs preserved; external and unsupported destinations rejected.");

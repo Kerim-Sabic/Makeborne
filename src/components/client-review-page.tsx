@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type Ref } from "react";
 import { Check, ChevronLeft, ChevronRight, Clock3, Crosshair, Link2Off, MessageSquare, Monitor, RotateCcw, Smartphone, X } from "lucide-react";
 import BrandMark from "./brand-mark";
 import AccountPreview, { PreviewBlock, previewPalette } from "./account-preview";
@@ -12,6 +12,7 @@ import { previewBlocks, previewSlides } from "@/lib/cloud/preview-content";
 import { anchorLabel } from "@/lib/client-review/feedback";
 import { discardReviewDraft, hasReviewDraftText, readReviewDraft, reviewDraftScope, saveReviewDraft } from "@/lib/client-review/unsent-feedback";
 import { reviewDateLabel as dateLabel, reviewTimeLabel as timeLabel } from "@/lib/client-review/date-format";
+import LocalDateTime from "./local-date-time";
 import type { ActiveReview, ReviewAnchor, ReviewComment, ReviewDecision, ReviewPayload } from "@/lib/client-review/contracts";
 import { frameListenersRun, watchFrameScroll } from "@/lib/frame-events";
 import "@/app/account-preview.css";
@@ -79,7 +80,19 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
   const [note, setNote] = useState("");
   const [location, setLocation] = useState(initial.kind === "presentation" ? "slide:0" : initial.kind === "book" ? "page:0" : "page");
   const composer = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { queueMicrotask(() => { const stored = readIdentity(); setIdentity(stored); setIdentityReady(!!stored.name.trim()); }); }, []);
+  const nameField = useRef<HTMLInputElement>(null), emailField = useRef<HTMLInputElement>(null), noteField = useRef<HTMLTextAreaElement>(null);
+  // The restores below run after hydration, and the page is server-rendered: a visitor can already have typed into the
+  // fields, and React keeps that text on screen but not in state, so the next render would wipe it. The fields are read
+  // as they are, typed text is kept (and taken into state), and a restore only fills a field that is still empty.
+  // scripts/check-review-draft-restore-browser.cjs types before hydration in every engine.
+  useEffect(() => {
+    queueMicrotask(() => {
+      const stored = readIdentity(), typedName = nameField.current?.value ?? "", typedEmail = emailField.current?.value ?? "";
+      setIdentity({ name: typedName || stored.name, email: typedEmail || stored.email });
+      // A saved name collapses the fields to "Commenting as", but not under someone typing their own.
+      setIdentityReady(!typedName && !!stored.name.trim());
+    });
+  }, []);
   // Unsent feedback for this link and version survives closing the page; it is only ever put back
   // into the fields, never posted or decided (src/lib/client-review/unsent-feedback.ts).
   const draftScope = useMemo(() => reviewDraftScope(token, initial.version), [token, initial.version]);
@@ -89,11 +102,14 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
     queueMicrotask(() => {
       const storage = browserStorage();
       const draft = storage && readReviewDraft(storage, draftScope, Date.now(), Date.parse(initial.expiresAt));
-      if (draft) {
-        setBody(draft.fields.comment); setPin(draft.fields.pin);
-        if (draft.fields.decision) { setDeciding(draft.fields.decision); setNote(draft.fields.note); }
-        setDraftRestoredAt(draft.savedAt);
-      }
+      const typedComment = composer.current?.value ?? "";
+      if (typedComment) setBody(typedComment);
+      const comment = !typedComment && draft ? draft.fields : null;
+      if (comment) { setBody(comment.comment); setPin(current => current ?? comment.pin); }
+      // A decision panel the visitor has opened since keeps their choice and note.
+      const decision = draft?.fields.decision && !noteField.current ? draft.fields : null;
+      if (decision) { setDeciding(decision.decision); setNote(decision.note); }
+      if (draft && (comment || decision)) setDraftRestoredAt(draft.savedAt);
       setDraftReadFor(draftScope);
     });
   }, [draftScope, initial.expiresAt]);
@@ -190,7 +206,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
       <div className="cr-top-title">
         <span className="cr-shared"><BrandMark size={16} /> Shared for review</span>
         <h1>{initial.title}</h1>
-        <p><span className="cr-chip">Version {initial.version}</span><span>{initial.pinned ? "This exact version" : "Always the latest version"}</span><span aria-hidden="true">·</span><span>Link open until {dateLabel(initial.expiresAt)}</span></p>
+        <p><span className="cr-chip">Version {initial.version}</span><span>{initial.pinned ? "This exact version" : "Always the latest version"}</span><span aria-hidden="true">·</span><span>Link open until <LocalDateTime value={initial.expiresAt} /></span></p>
       </div>
       <div className="cr-top-actions">
         {decision ? <DecisionBadge decision={decision} /> : null}
@@ -204,7 +220,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
         <p>{deciding === "approved" ? "This tells the team the work is ready to deliver. You can add a final note." : "Summarise what you’d like changed. Pinned comments on the page are included too."}</p>
       </div>
       {needsIdentity && <IdentityFields identity={identity} onChange={setIdentity} />}
-      <label className="cr-field">{deciding === "approved" ? "Note (optional)" : "Summary (optional)"}<textarea rows={3} maxLength={2000} value={note} onChange={event => setNote(event.target.value)} placeholder={deciding === "approved" ? "Looks great — ready to go." : "The hero feels too dark, and pricing needs the new tiers."} /></label>
+      <label className="cr-field">{deciding === "approved" ? "Note (optional)" : "Summary (optional)"}<textarea ref={noteField} rows={3} maxLength={2000} value={note} onChange={event => setNote(event.target.value)} placeholder={deciding === "approved" ? "Looks great — ready to go." : "The hero feels too dark, and pricing needs the new tiers."} /></label>
       <div className="cr-decision-actions">
         <button type="button" className="button secondary small" onClick={() => setDeciding(null)} disabled={busy}>Cancel</button>
         <button type="button" className={`button small ${deciding === "approved" ? "primary cr-approve" : "dark"}`} disabled={busy || (deciding === "approved" && !approvalReady)} onClick={() => void decide(deciding)}>{busy ? "Sending…" : deciding === "approved" ? "Approve version " + initial.version : "Send change request"}</button>
@@ -227,7 +243,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
         <form className="cr-composer" onSubmit={send}>
           <h2><MessageSquare size={15} /> Add a comment</h2>
           {draftShown && <p className="cr-draft-restored" role="status">Your unsent feedback from {timeLabel(new Date(draftRestoredAt!).toISOString())} is back. Nothing has been sent. <button type="button" onClick={discardDraft}>Discard</button></p>}
-          {needsIdentity ? <IdentityFields identity={identity} onChange={setIdentity} /> : <p className="cr-as">Commenting as <strong>{identity.name}</strong> <button type="button" onClick={() => setEditingIdentity(true)}>Change</button></p>}
+          {needsIdentity ? <IdentityFields identity={identity} onChange={setIdentity} nameRef={nameField} emailRef={emailField} /> :<p className="cr-as">Commenting as <strong>{identity.name}</strong> <button type="button" onClick={() => setEditingIdentity(true)}>Change</button></p>}
           <div className="cr-anchor-row">
             {pin ? <span className="cr-anchor-chip"><Crosshair size={13} /> {pin.label || "Pinned spot"}<button type="button" aria-label="Remove pin" onClick={() => setPin(null)}><X size={12} /></button></span>
               : <span className="cr-anchor-chip is-general">General comment</span>}
@@ -243,7 +259,7 @@ function ActiveReviewPage({ token, initial }: { token: string; initial: ActiveRe
           <h2>Comments <span>{discussion.length}</span></h2>
           {!comments.length && <p className="cr-empty">No comments yet. Pin one to a spot or leave a general note.</p>}
           <ol>{comments.map(comment => <li key={comment.id} className={`cr-comment cr-comment-${comment.kind}${active === comment.id ? " is-active" : ""}${comment.resolved ? " is-resolved" : ""}`}>
-            <button type="button" className="cr-comment-focus" onClick={() => focusComment(comment)} aria-label={`Show comment from ${comment.authorName}`}>
+            <button type="button" className="cr-comment-focus" onClick={() => focusComment(comment)}>
               <span className="cr-comment-head">
                 {numbered.has(comment.id) ? <span className="cr-pin-number">{numbered.get(comment.id)}</span> : comment.kind === "comment" ? <span className="cr-pin-number is-general"><MessageSquare size={11} /></span> : <span className={`cr-pin-number is-${comment.kind}`}>{comment.kind === "approved" ? <Check size={11} /> : <RotateCcw size={11} />}</span>}
                 <strong>{comment.authorName}</strong>
@@ -268,10 +284,10 @@ function DecisionBadge({ decision }: { decision: ReviewDecision }) {
   </span>;
 }
 
-function IdentityFields({ identity, onChange }: { identity: Identity; onChange: (value: Identity) => void }) {
+function IdentityFields({ identity, onChange, nameRef, emailRef }: { identity: Identity; onChange: (value: Identity) => void; nameRef?: Ref<HTMLInputElement>; emailRef?: Ref<HTMLInputElement> }) {
   return <div className="cr-identity">
-    <label className="cr-field">Your name<input value={identity.name} maxLength={80} autoComplete="name" required onChange={event => onChange({ ...identity, name: event.target.value })} placeholder="Jane Doe" /></label>
-    <label className="cr-field"><span>Email <small>(optional)</small></span><input type="email" value={identity.email} maxLength={254} autoComplete="email" onChange={event => onChange({ ...identity, email: event.target.value })} placeholder="jane@company.com" /></label>
+    <label className="cr-field">Your name<input ref={nameRef} value={identity.name} maxLength={80} autoComplete="name" required onChange={event => onChange({ ...identity, name: event.target.value })} placeholder="Jane Doe" /></label>
+    <label className="cr-field"><span>Email <small>(optional)</small></span><input ref={emailRef} type="email" value={identity.email} maxLength={254} autoComplete="email" onChange={event => onChange({ ...identity, email: event.target.value })} placeholder="jane@company.com" /></label>
   </div>;
 }
 

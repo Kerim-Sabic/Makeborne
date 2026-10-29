@@ -7,6 +7,7 @@ import { activeMembership, fetchMembership, listMembershipPayments } from "@/lib
 import { recordPlanObservation, recordPlanPayment } from "@/lib/credits/server";
 import { authorizedCron } from "@/lib/server/cron-auth";
 import { recoverDueCreationCheckouts } from "@/lib/billing/checkout-recovery";
+import { runConfirmationSweep } from "@/lib/billing/purchase-confirmations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +17,8 @@ const headers = { "Cache-Control": "no-store" };
 
 /**
  * Plan credit reconciliation (Vercel Cron sends GET with the bearer secret).
- * Disabled unless MAKEBORNE_BILLING_RECONCILE_ENABLED=true; production
- * scheduling stays off until reviewed (docs/BILLING_PLAN_CREDITS.md).
+ * Disabled unless MAKEBORNE_BILLING_RECONCILE_ENABLED=true; vercel.json
+ * schedules the enabled job daily (docs/BILLING_PLAN_CREDITS.md).
  * `?health=1` returns the monitoring view without running the job.
  */
 async function handle(request: Request) {
@@ -47,7 +48,9 @@ async function handle(request: Request) {
     recoverCheckouts: recoverDueCreationCheckouts,
     log: event => console.info(JSON.stringify(event)),
   });
-  return Response.json(result, { status: result.status === "failed" ? 500 : 200, headers });
+  // Purchase confirmations and their outbox (independent of the credit job's status; never changes it).
+  const confirmations = await runConfirmationSweep();
+  return Response.json({ ...result, confirmations }, { status: result.status === "failed" ? 500 : 200, headers });
 }
 
 export const GET = handle;

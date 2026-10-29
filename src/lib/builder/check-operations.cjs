@@ -85,6 +85,31 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
       assert.deepEqual(calls.map(call=>call.name),["makeborne_ai_operation_read"]);
     }
   });
+  await check("source choices (“Continue without it” + ingestion references) are recorded once and bind every continuation", async () => {
+    const reference = { sourceId: "inline:" + "d".repeat(64), sha256: "d".repeat(64), extractionVersion: "ingest-2026-10-23.1", format: "docx", status: "complete" };
+    const sources = { omitted: [{ name: "budget.xlsx", reason: "partial" }], references: [reference] };
+    await api.beginOperation(input({ sources }));
+    const context = calls[0].args.p_context;
+    assert.deepEqual(context.sources, { omitted: sources.omitted, references: [reference], sha256: api.sourcesFingerprint(sources) });
+    assert.equal(JSON.stringify(context).includes("private attachment"), false);
+    calls = [];
+    await api.beginOperation(input({ sources: { omitted: [], references: [] } }));
+    assert.equal("sources" in calls[0].args.p_context, false, "no key without choices: older requests keep their exact context");
+    const recorded = { attachmentsSha256: attachmentHash(input().request.attachments), sources: { sha256: api.sourcesFingerprint(sources) } };
+    handler = (name, args) => name === "makeborne_ai_operation_read" ? { data: { ...status(), requestContext: recorded }, error: null } : rpc(name, args);
+    const continued = input({ envelope: { id: operationId, stepKey, kind: "continuation" }, sources });
+    assert.ok((await api.beginOperation(continued)).run, "the same choices continue");
+    for (const changed of [{ ...sources, omitted: [] }, { ...sources, omitted: [{ name: "budget.xlsx", reason: "left-out" }] }, { ...sources, references: [{ ...reference, extractionVersion: "ingest-2026-11-01.1" }] }, null]) {
+      calls = [];
+      await assert.rejects(api.beginOperation({ ...continued, sources: changed }), error => error.code === "OPERATION_SOURCES_CHANGED");
+      assert.deepEqual(calls.map(call => call.name), ["makeborne_ai_operation_read"], "refused before any step or hold");
+    }
+    // An operation recorded without choices continues only without them; a visual-review stage is unaffected.
+    handler = (name, args) => name === "makeborne_ai_operation_read" ? { data: { ...status(), requestContext: { attachmentsSha256: recorded.attachmentsSha256 } }, error: null } : rpc(name, args);
+    await assert.rejects(api.beginOperation(continued), error => error.code === "OPERATION_SOURCES_CHANGED");
+    assert.ok((await api.beginOperation({ ...continued, sources: null })).run);
+    assert.ok((await api.beginOperation(input({ kind: "review", request: { message: "Review", attachments: [], review: { desktop: "new capture" } }, envelope: { id: operationId, stepKey, kind: "review" }, sources }))).run);
+  });
   await check("legacy reference state cannot authorize a silent continuation; status stays private",async()=>{
     handler=(name,args)=>name==="makeborne_ai_operation_read"?{data:{...status(),requestContext:{message:"Legacy"}},error:null}:rpc(name,args);
     await assert.rejects(api.beginOperation(input({envelope:{id:operationId,stepKey,kind:"continuation"}})),error=>error.code==="OPERATION_REFERENCES_UNAVAILABLE");
@@ -119,6 +144,26 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
     handler = () => ({ data: { started: false } });
     await assert.rejects(spend.begin("openai", "image", 10000), error => error.code === "SPEND_UNAVAILABLE");
     assert.equal(spend.pendingMicrousd, 0);
+  });
+  await check("expired membership lease re-verifies once and retries the same SQL ticket; revocation, cancellation and caps stay enforced", async () => {
+    const run = await fresh(); let attempts = 0, refreshed = 0;
+    handler = (name, args) => name === "makeborne_ai_operation_provider_begin" ? (++attempts === 1 ? { error: { code: "42501" } } : { data: { started: true } }) : rpc(name, args);
+    const spend = api.createOperationSpend(run, now + 2000000, async id => { assert.equal(id, actor); refreshed++; });
+    await spend.begin("openai", "image", 10000);
+    const admissions = calls.filter(c => c.name === "makeborne_ai_operation_provider_begin");
+    assert.equal(refreshed, 1); assert.equal(attempts, 2);
+    assert.deepEqual(admissions[0].args, admissions[1].args, "same call id, fence, actor, bound and provider");
+    attempts = 0;
+    const denied = api.createOperationSpend(run, now + 2000000, async () => { throw { code: "MEMBERSHIP_REQUIRED" }; });
+    await assert.rejects(denied.begin("openai", "image", 10000), e => e.code === "ACCESS_REQUIRED");
+    assert.equal(attempts, 1); assert.equal(denied.pendingMicrousd, 0);
+    for (const after of ["MB499", "MB402", "PT409", "42501"]) {
+      attempts = 0; refreshed = 0;
+      handler = () => ({ error: { code: ++attempts === 1 ? "42501" : after } });
+      const refused = api.createOperationSpend(run, now + 2000000, async () => { refreshed++; });
+      await assert.rejects(refused.begin("openai", "image", 10000), e => e.code === ({ MB499: "CANCELLED", MB402: "PROVIDER_LIMIT", PT409: "HOLD_EXPIRED", "42501": "SPEND_UNAVAILABLE" })[after]);
+      assert.equal(attempts, 2); assert.equal(refreshed, 1); assert.equal(refused.pendingMicrousd, 0);
+    }
   });
   await check("atomic finish carries full measured cost and candidate, with no independent save or settlement", async () => {
     const run = await fresh(); const candidate = { content: {}, style: {}, assetIds: [], expectedVersion: 1, summary: "Saved" };
@@ -200,15 +245,25 @@ const plan = { kind: "new_site", title: "Example", summary: "Clear site", goal: 
     const stream = await events(websiteBuildResponse({ ...runnerInput(await fresh()), reviewing: true }));
     assert.equal(stream.at(-1).charged, 2); assert.equal(stream.at(-1).changed, false); assert.equal(stream.at(-1).summary, "No changes needed in the captured views."); assert.equal(finishCall().args.p_outcome, "review_no_change");
   });
-  await check("incomplete unchanged website records confirmed usage without a new version", async () => {
+  await check("a step that saved nothing usable is never charged (released, cost absorbed)", async () => {
     websiteAgent = async () => ({ summary: "", finished: false });
     const stream = await events(websiteBuildResponse(runnerInput(await fresh())));
-    assert.equal(stream.at(-1).code, "BUILD_INCOMPLETE"); assert.equal(stream.at(-1).charged, 2); assert.equal(finishCall().args.p_candidate, null);
+    assert.equal(stream.at(-1).code, "BUILD_INCOMPLETE"); assert.equal(stream.at(-1).charged, 0); assert.equal(finishCall().args.p_outcome, "failed"); assert.equal(finishCall().args.p_candidate, null);
+    assert.match(stream.at(-1).message, /stopped before a usable change was ready\. Nothing was charged/);
   });
   await check("document continuation includes original request and persists truthful finished flag", async () => {
     documentAgent = async input => { assert.match(input.context, /Original authorized request: Build a useful site/); input.editor.apply("write_chapter", { chapter: { id: "intro", title: "Introduction", text: "A useful first draft." } }); return { summary: "First chapter", finished: false }; };
     const stream = await events(documentBuildResponse(runnerInput(await fresh())));
     assert.equal(stream.at(-1).type, "done"); assert.equal(stream.at(-1).finished, false); assert.equal(finishCall().args.p_candidate.content.document.kind, "book");
+  });
+  await check("document continuation needing allowance saves no candidate and charges zero", async () => {
+    documentAgent = async input => { assert.equal(input.continuation, true); return { summary: "Approve additional credits for render and check.", finished: false, requiresApproval: true, credits: 0, usd: 0 }; };
+    const stream = await events(documentBuildResponse({ ...runnerInput(await fresh()), continuation: true }));
+    assert.equal(finishCall().args.p_outcome, "failed");
+    assert.equal(finishCall().args.p_candidate, null);
+    assert.equal(stream.at(-1).code, "OPERATION_BUDGET_REACHED");
+    assert.equal(stream.at(-1).charged, 0);
+    assert.equal(stream.at(-1).changed, false);
   });
   await check("planning stores and charges together; replay includes usable estimates and recommendation", async () => {
     planner = async () => ({ plan });

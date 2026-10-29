@@ -46,11 +46,21 @@ function addGroup(kind: LineKind, lines: string[], blocks: BookBlock[]) {
     case "break": blocks.push({ type: "break" }); return;
     case "heading": for (const line of lines) blocks.push({ type: "subheading", text: line.replace(/^#{1,4}\s+/, "") }); return;
     case "quote": {
-      const body = lines.map(line => line.replace(/^>\s?/, "")).filter(line => line.trim());
+      // Each "> " line keeps its own line (verse, dialogue, an address); a line without ">" continues the one above,
+      // and an empty ">" line separates paragraphs inside the quote.
+      const body: string[] = [];
+      for (const line of lines) {
+        const marked = line.startsWith(">"), value = line.replace(/^>\s?/, "").trim();
+        if (marked && !value) { if (body.length && body[body.length - 1] !== "") body.push(""); continue; }
+        if (!marked && body.length && body[body.length - 1] !== "" && !/^(—|--)\s*\S/.test(value)) body[body.length - 1] += ` ${value}`;
+        else body.push(value);
+      }
+      while (body.length && body[body.length - 1] === "") body.pop();
       if (!body.length) return;
       const last = body[body.length - 1];
       const attribution = body.length > 1 && /^(—|--|-)\s*\S/.test(last) ? last.replace(/^(—|--|-)\s*/, "") : undefined;
-      blocks.push({ type: "quote", text: (attribution ? body.slice(0, -1) : body).join(" ").trim(), ...(attribution ? { attribution } : {}) });
+      const text = (attribution ? body.slice(0, -1) : body).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+      blocks.push({ type: "quote", text, ...(attribution ? { attribution } : {}) });
       return;
     }
     case "bullet": blocks.push({ type: "list", ordered: false, items: lines.map(line => line.replace(/^[-•*]\s+/, "")) }); return;
@@ -71,7 +81,15 @@ function addGroup(kind: LineKind, lines: string[], blocks: BookBlock[]) {
 
 export function parseBookMarkup(source: string): BookBlock[] {
   const blocks: BookBlock[] = [];
-  const chunks = source.replace(/\r\n?/g, "\n").split(/\n{2,}/).map(chunk => chunk.trim()).filter(Boolean);
+  const raw = source.replace(/\r\n?/g, "\n").split(/\n{2,}/).map(chunk => chunk.trim()).filter(Boolean), chunks: string[] = [];
+  // A sidebar may hold paragraphs: a [[note:…]] left open by a blank line runs on to the chunk that closes it.
+  for (let at = 0; at < raw.length; at++) {
+    const chunk = raw[at];
+    const close = /^\[\[note:/.test(chunk) && !/\]\]$/.test(chunk) ? raw.slice(at + 1, at + 9).findIndex(next => /\]\]$/.test(next) && !next.includes("[[")) : -1;
+    if (close < 0) { chunks.push(chunk); continue; }
+    chunks.push(raw.slice(at, at + close + 2).join("\n\n"));
+    at += close + 1;
+  }
   for (const chunk of chunks) {
     const directive = /^\[\[(figure|note|pullquote):([^|\]]*)(?:\|([\s\S]*?))?\]\]$/.exec(chunk);
     if (directive) {
@@ -95,6 +113,31 @@ export function parseBookMarkup(source: string): BookBlock[] {
     if (group.length) addGroup(kind, group, blocks);
   }
   return blocks;
+}
+
+/** A list item written as a checklist entry ("[ ] Call the client", "[x] Done", "☐ …", "☑ …"). */
+export function checkItem(item: string): { done: boolean; text: string } | null {
+  const match = /^(?:\[( |x|X|✓)\]|(☐|☑|✓|✔))\s+(\S[\s\S]*)$/.exec(item);
+  return match ? { done: Boolean((match[1] && match[1] !== " ") || (match[2] && match[2] !== "☐")), text: match[3] } : null;
+}
+export type NoteBlock = { type: "lines"; lines: string[] } | { type: "list"; ordered: boolean; items: string[] };
+/** The body of a [[note:…]] sidebar: paragraphs keep their line breaks, and "- " / "1. " / "[ ] " lines become lists and checklists. */
+export function noteBlocks(text: string): NoteBlock[] {
+  const out: NoteBlock[] = [];
+  for (const paragraph of text.replace(/\r\n?/g, "\n").split(/\n{2,}/)) {
+    for (const raw of paragraph.split("\n").map(line => line.trim()).filter(Boolean)) {
+      const bullet = /^[-•*]\s+(\S.*)$/.exec(raw), ordered = /^\d{1,3}[.)]\s+(\S.*)$/.exec(raw), check = !bullet && !ordered && checkItem(raw) ? raw : null;
+      const item = bullet?.[1] ?? ordered?.[1] ?? check, last = out[out.length - 1];
+      if (item !== null && item !== undefined) {
+        if (last?.type === "list" && last.ordered === Boolean(ordered)) last.items.push(item);
+        else out.push({ type: "list", ordered: Boolean(ordered), items: [item] });
+      } else if (last?.type === "lines") last.lines.push(raw);
+      else out.push({ type: "lines", lines: [raw] });
+    }
+    // A blank line ends the paragraph or list.
+    out.push({ type: "lines", lines: [] });
+  }
+  return out.filter(block => block.type === "list" || block.lines.length);
 }
 
 /** Typographer's punctuation for rendered body text: curly quotes, em dashes and

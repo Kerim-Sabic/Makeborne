@@ -5,7 +5,7 @@
 - Six original concepts generated with the built-in OpenAI image generation tool, stored in `public/gallery`: Field Guide and Better-work handbook books, Form and Solstice websites, Signal and Atlas presentations.
 - Shared homepage/studio gallery uses these images through Next Image with responsive sizing. Concepts are explicitly labelled, not represented as finished templates or customer work. Choosing one retains the existing style/brief workflow.
 - Blue/lavender animated suggestion borders, with reduced-motion and forced-colour handling.
-- `/billing` provides an unavailable balance state, proposed plans, searchable/filterable usage history structure, and disabled purchase controls until integration. No fictional balance, transaction, or price.
+- `/billing` puts plans first for visitors without a plan (measured outcome ranges per card, No surprises promises, one shared includes list) and keeps the balance, usage history and receipts first for members. Purchase stays server-gated and closed until launch. No fictional balance, transaction, price or social proof.
 - Routing contracts and registry for eight future provider/worker slots, with quality, capability, permission, licence, price freshness, and budget gates.
 - Redacted Supabase activation preflight and instructions.
 

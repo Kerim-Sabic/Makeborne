@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { build } from "esbuild";
-import { chromium } from "playwright";
+import { createRequire } from "node:module";
+const { browserType } = createRequire(import.meta.url)("./browser-engine.cjs");
 
 const fixture = `
 import React,{useEffect,useState} from 'react';import{createRoot}from'react-dom/client';
@@ -20,6 +21,9 @@ const bundled = await build({ stdin: { contents: fixture, loader: "jsx", resolve
   builder.onResolve({ filter: /browser-bundler|cloud-api/ }, args => ({ path: args.path, namespace: "mock" }));
   builder.onLoad({ filter: /browser-bundler/, namespace: "mock" }, () => ({ contents: `export async function bundleProject(files){await new Promise(r=>setTimeout(r,40));if(files['src/style.css']==='broken')return{ok:false,error:'Fixture CSS error'};return{ok:true,html:'<html><body><h1>'+files['src/App.tsx'].slice(0,3)+'</h1><style>h1{color:'+files['src/style.css']+'}</style></body></html>'}}`, loader: "js" }));
   builder.onLoad({ filter: /cloud-api/, namespace: "mock" }, () => ({ contents: "export async function readCloudImage(){throw new Error('No assets requested')}", loader: "js" }));
+  // Stylesheets imported through the alias (live-preview imports @/app/visual-editor.css) are not under test here.
+  builder.onResolve({ filter: /^@\/.*\.css$/ }, args => ({ path: args.path, namespace: "empty-css" }));
+  builder.onLoad({ filter: /.*/, namespace: "empty-css" }, () => ({ contents: "", loader: "js" }));
   builder.onResolve({ filter: /^@\// }, args => ({ path: resolve("src", args.path.slice(2) + ".ts") }));
 } }] });
 const server = createServer((request, response) => {
@@ -27,7 +31,7 @@ const server = createServer((request, response) => {
   else { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><div id="root"></div><script src="/fixture.js"></script>'); }
 });
 await new Promise(resolveListen => server.listen(0, "127.0.0.1", resolveListen));
-const browser = await chromium.launch({ headless: true });
+const browser = await browserType.launch({ headless: true });
 try {
   const page = await browser.newPage(); const errors = []; page.on("pageerror", error => errors.push(error.message));
   const base = `http://127.0.0.1:${server.address().port}`;

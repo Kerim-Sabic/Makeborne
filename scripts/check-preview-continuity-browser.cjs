@@ -99,6 +99,8 @@ async function main() {
   const script = await fixtureBundle();
   const css = fs.readFileSync(path.join(root, "src/app/live-builder.css"), "utf8");
   const enquiries = [], foreign = [], apiRequests = [];
+  const chatPath = `/api/cloud/workspaces/${ids.workspace}/artifacts/${ids.artifact}/chat`;
+  let chatReads = 0;
   let builderState = null;
   const json = (res, value, status = 200) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(value)); };
   const server = createServer(async (req, res) => {
@@ -110,6 +112,12 @@ async function main() {
     if (url.pathname === "/api/credits") return json(res, { available: 500, unlimited: false });
     if (url.pathname === "/api/build/questions") return json(res, { questions: [] });
     if (url.pathname === "/api/build/plan") return json(res, { stored: null });
+    // The real builder restores its account transcript. Allow only this fictional GET;
+    // other methods and artifact paths still fail the final network assertion.
+    if (req.method === "GET" && url.pathname === chatPath) { chatReads++; return json(res, { messages: [], next: null }); }
+    // The builder asks which source files it may ingest. Answer exactly this GET as the route does with
+    // MAKEBORNE_SOURCE_INGESTION_ENABLED off (the default); a POST upload still fails the network assertion.
+    if (req.method === "GET" && url.pathname === "/api/build/sources") return json(res, { enabled: false, formats: [], inlineBytes: 3_000_000, referenceBytes: 0 });
     if (url.pathname === "/api/build/operations") { builderState.requests.push(req.method); return builderState.operation ? json(res, { operation: builderState.operation, result: builderState.result, recovery: builderState.recovery }) : json(res, { error: { message: "Not recorded" } }, 404); }
     if (url.pathname.startsWith("/api/")) { foreign.push(req.method + " " + url.pathname); json(res, { error: { message: "Not in fixture" } }, 404); return; }
     res.setHeader("content-type", "text/html");
@@ -369,7 +377,8 @@ async function main() {
         } finally { await context.close(); }
       });
     }
-    assert.deepEqual(foreign.filter(item => !/\/api\/build\/(questions|plan)/.test(item)), [], "no non-local request was attempted");
+    assert.deepEqual(foreign.filter(item => !/\/api\/build\/(questions|plan)/.test(item)), [], "no unmocked API or non-local request was attempted");
+    if (!baseline) assert.ok(chatReads > 0, "current builder restored its fictional account transcript");
   } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 
   const failed = results.filter(result => !result.ok);

@@ -11,8 +11,9 @@ export const AI_STOP_MESSAGES: Readonly<Record<AiStopCode, string>> = Object.fre
 });
 
 /** Maps a spending-control error to its customer-facing stop, or null for other errors. */
-export function aiStop(error: unknown): { code: AiStopCode; message: string; retryable: true } | null {
+export function aiStop(error: unknown): { code: AiStopCode | "MEMBERSHIP_REQUIRED"; message: string; retryable: true } | null {
   const code = (error as { code?: unknown } | null)?.code;
+  if (code === "ACCESS_REQUIRED") return { code: "MEMBERSHIP_REQUIRED", message: "Your membership no longer permits AI creation. Nothing was charged. Review your billing before continuing.", retryable: true };
   const stop: AiStopCode | null = code === "PROVIDER_DISABLED" ? "AI_PAUSED"
     : code === "PROVIDER_LIMIT" ? "AI_DAILY_LIMIT"
     : code === "SPEND_UNAVAILABLE" || code === "UNPRICED_MODEL" || code === "UNSUPPORTED_AI_CONFIG" ? "AI_UNAVAILABLE"

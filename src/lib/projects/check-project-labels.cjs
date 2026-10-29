@@ -23,6 +23,43 @@ check("an unreadable date is not shown as Invalid Date", () => {
   assert.match(shortDate(new Date().toISOString()), /\S/);
   assert.match(shortDate("2019-03-04T00:00:00.000Z"), /2019/, "older years are named");
 });
+check("library dates keep the time of day for today and yesterday, and say so", () => {
+  const { libraryDate } = context.exports;
+  const now = new Date(2026, 9, 21, 18, 0);
+  assert.match(libraryDate(new Date(2026, 9, 21, 14, 34).toISOString(), now), /^today, .*34/);
+  assert.match(libraryDate(new Date(2026, 9, 20, 9, 5).toISOString(), now), /^yesterday, .*05/);
+  assert.doesNotMatch(libraryDate(new Date(2026, 9, 19, 9, 5).toISOString(), now), /today|yesterday|:/, "older dates are the day only");
+  assert.match(libraryDate(new Date(2025, 2, 4).toISOString(), now), /2025/);
+  assert.equal(libraryDate("nope", now), "date unknown");
+  // Two projects saved the same day read differently.
+  assert.notEqual(libraryDate(new Date(2026, 9, 21, 9, 12).toISOString(), now), libraryDate(new Date(2026, 9, 21, 16, 40).toISOString(), now));
+});
+
+check("grid cards say how long ago, in plain words, and what the time measures", () => {
+  const { relativeTime, savedAgo } = context.exports;
+  const now = new Date(2026, 9, 22, 18, 0, 0);
+  const ago = ms => new Date(now.getTime() - ms).toISOString();
+  const minute = 60_000, hour = 60 * minute;
+  assert.equal(relativeTime(ago(0), now), "just now");
+  assert.equal(relativeTime(ago(59_000), now), "just now");
+  assert.equal(relativeTime(ago(minute), now), "1 minute ago");
+  assert.equal(relativeTime(ago(3 * minute + 20_000), now), "3 minutes ago");
+  assert.equal(relativeTime(ago(59 * minute), now), "59 minutes ago");
+  assert.equal(relativeTime(ago(hour), now), "1 hour ago");
+  assert.equal(relativeTime(ago(23 * hour + 59 * minute), now), "23 hours ago", "under a day stays in hours, even across midnight");
+  assert.equal(relativeTime(new Date(2026, 9, 21, 9, 0).toISOString(), now), "yesterday");
+  assert.equal(relativeTime(new Date(2026, 9, 19, 9, 0).toISOString(), now), "3 days ago");
+  assert.equal(relativeTime(new Date(2026, 9, 16, 9, 0).toISOString(), now), "6 days ago");
+  const week = relativeTime(new Date(2026, 9, 15, 9, 0).toISOString(), now);
+  assert.match(week, /^on \S/); assert.doesNotMatch(week, /ago|2026/, "a week or more: the day itself, without this year");
+  assert.match(relativeTime(new Date(2025, 2, 4).toISOString(), now), /^on .*2025/, "another year is named");
+  assert.equal(relativeTime(new Date(now.getTime() + 2 * minute).toISOString(), now), "just now", "a little clock skew is not the future");
+  assert.match(relativeTime(new Date(2026, 9, 30).toISOString(), now), /^on /, "a time well ahead of this clock is named by its day");
+  assert.equal(relativeTime("nope", now), "at an unknown time");
+  assert.deepEqual({ ...savedAgo({ currentVersion: 4, createdAt: ago(9 * hour), updatedAt: ago(5 * minute) }, now) }, { label: "Saved 5 minutes ago", at: ago(5 * minute) });
+  assert.deepEqual({ ...savedAgo({ currentVersion: 0, createdAt: ago(2 * hour), updatedAt: ago(minute) }, now) }, { label: "Created 2 hours ago", at: ago(2 * hour) }, "no saved version: when it was created, never 'saved'");
+  assert.equal(savedAgo({ currentVersion: 2, createdAt: "x", updatedAt: "x" }, now).label, "Saved at an unknown time");
+});
 
 // The guard behind the label: only version saves write public.artifacts.
 const migrations = path.join(__dirname, "..", "..", "..", "supabase", "migrations");
@@ -47,8 +84,11 @@ check("the app never writes the artifact row directly", () => {
 });
 check("account cards render the saved-source label with a machine-readable time", () => {
   const projects = fs.readFileSync("src/components/account-projects.tsx", "utf8");
-  assert.match(projects, /meta = savedSourceMeta\(artifact, shortDate\)/);
-  assert.match(projects, /<time dateTime=\{meta\.at\}>\{meta\.label\}<\/time>/);
+  // Cards use libraryDate: the same label, with the time of day for today and yesterday (similar projects saved the same day stay distinguishable).
+  assert.match(projects, /meta = savedSourceMeta\(artifact, libraryDate\)/);
+  // Grid cards say how long ago ("Saved 5 minutes ago") with the full label as the tooltip; the list view shows the full label.
+  assert.match(projects, /ago = savedAgo\(artifact, now\)/);
+  assert.match(projects, /<time dateTime=\{meta\.at\} title=\{view === "list" \? undefined : meta\.label\}>\{view === "list" \? meta\.label : ago\.label\}<\/time>/);
   assert.doesNotMatch(projects, /"New draft"\}/, "no version-only label left");
 });
 

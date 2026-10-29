@@ -8,20 +8,50 @@ import { z } from "zod";
  */
 
 export type PublicationState = "draft" | "live" | "live-behind";
-/** Publication state from the hosted-site row the Publish panel reads; no row or offline is Draft. */
-export function publicationState(currentVersion: number, site: { live: boolean; version_number: number } | null | undefined): PublicationState {
+/** Publication state from the hosted-site row the Publish panel reads; no row or offline is Draft.
+ * `renamedOnly`: every version saved after the live one only renamed the project (see `sameExceptTitle`), which is not an unpublished change. */
+export function publicationState(currentVersion: number, site: { live: boolean; version_number: number } | null | undefined, renamedOnly = false): PublicationState {
   if (!site?.live) return "draft";
-  return site.version_number >= currentVersion ? "live" : "live-behind";
+  return site.version_number >= currentVersion || renamedOnly ? "live" : "live-behind";
+}
+/** At most this many live projects per card-meta request have their rename-only versions verified; the rest keep the plain version comparison. */
+export const RENAME_VERIFY_MAX = 8;
+type SavedVersion = { content: unknown; style_snapshot: unknown; asset_manifest: unknown };
+const stable = (value: unknown): string => Array.isArray(value) ? `[${value.map(stable).join(",")}]`
+  : value && typeof value === "object" ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(",")}}`
+  : JSON.stringify(value) ?? "null";
+/** Two saved versions that differ at most in `content.title`: same content otherwise, same style and the same assets. */
+export function sameExceptTitle(a: SavedVersion, b: SavedVersion): boolean {
+  const body = (content: unknown) => { if (!content || typeof content !== "object" || Array.isArray(content)) return stable(content); const { title: _title, ...rest } = content as Record<string, unknown>; void _title; return stable(rest); };
+  return body(a.content) === body(b.content) && stable(a.style_snapshot) === stable(b.style_snapshot) && stable(a.asset_manifest) === stable(b.asset_manifest);
 }
 export const PUBLICATION_LABEL: Record<PublicationState, string> = { draft: "Draft", live: "Live", "live-behind": "Live · newer changes not published" };
+/** The same states in a few words, for the badge on a grid card; the full label stays in its tooltip and the list view. */
+export const PUBLICATION_SHORT: Record<PublicationState, string> = { draft: "Draft", live: "Live", "live-behind": "Live · unpublished changes" };
+/** Exact versions behind a state, e.g. for a tooltip: never a guess when the live version is unknown. */
+export function publicationDetail(state: PublicationState, currentVersion: number, liveVersion: number | null): string {
+  if (state === "draft") return "Not published.";
+  if (liveVersion === null) return PUBLICATION_LABEL[state];
+  if (state === "live" && currentVersion > liveVersion) return `Version ${liveVersion} is live. Later versions only rename the project.`;
+  return state === "live" ? `Version ${liveVersion} is live.` : `Version ${liveVersion} is live. Version ${currentVersion} is saved but not published.`;
+}
 
 export const CARD_META_MAX = 50;
+/** A published address is only ever http(s) and only accompanies a live state; a draft never carries one. */
+const LiveAddress = z.string().max(400).url().refine(value => /^https?:\/\//.test(value), "http(s) only");
 export const CardMetaItemSchema = z.object({
   artifactId: z.string().uuid(), currentVersion: z.number().int().nonnegative(),
   client: z.object({ id: z.string().uuid(), name: z.string().min(1).max(300) }).strict().nullable(),
-  publication: z.object({ state: z.enum(["draft", "live", "live-behind"]), liveVersion: z.number().int().nonnegative().nullable() }).strict(),
+  publication: z.object({ state: z.enum(["draft", "live", "live-behind"]), liveVersion: z.number().int().nonnegative().nullable(), address: LiveAddress.nullable() }).strict()
+    .refine(value => value.state !== "draft" || value.address === null, "A draft has no live address"),
 }).strict();
 export type CardMetaItem = z.infer<typeof CardMetaItemSchema>;
+/** The live address a card may copy or open: only from the authorized hosted-site row, only while Live (or Live with newer changes). */
+export function liveAddress(facts: Pick<CardMetaItem, "publication"> | null | undefined): string | null {
+  const publication = facts?.publication;
+  if (!publication || publication.state === "draft" || !publication.address) return null;
+  return LiveAddress.safeParse(publication.address).success ? publication.address : null;
+}
 export const CardMetaResponseSchema = z.object({ workspaceId: z.string().uuid(), items: z.array(CardMetaItemSchema).max(CARD_META_MAX) }).strict();
 
 /** One request per account + workspace + exact id set; an answer for another key is never shown. */

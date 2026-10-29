@@ -26,7 +26,9 @@ check("every Settings section carries exactly one storage label, from the regist
   assert.equal((settings.match(/<h2>/g) ?? []).length, headings.length, "no unlabelled section");
   assert.match(settings, /<SiteBadgeSetting \/>/);
   assert.match(read("components/site-badge-setting.tsx"), /<h2>Website badge <StorageLabel where=\{SETTINGS_STORAGE\.websiteBadge\} \/><\/h2>/);
-  assert.deepEqual(Object.keys(SETTINGS_STORAGE).sort(), ["accountProjects", "deviceWorkspace", "studioSounds", "websiteBadge"]);
+  assert.match(settings, /<AccountDataRights accountId=\{composerAccount\.accountId\} \/>/);
+  assert.match(read("components/account-data-rights.tsx"), /<h2>Your data <StorageLabel where=\{SETTINGS_STORAGE\.yourData\} \/><\/h2>/);
+  assert.deepEqual(Object.keys(SETTINGS_STORAGE).sort(), ["accountProjects", "deviceWorkspace", "studioSounds", "websiteBadge", "yourData"]);
 });
 
 check("each label matches where the code stores that setting", () => {
@@ -41,6 +43,9 @@ check("each label matches where the code stores that setting", () => {
   assert.equal(SETTINGS_STORAGE.websiteBadge, "account"); assert.equal(SETTINGS_STORAGE.accountProjects, "account");
   assert.match(read("components/site-badge-setting.tsx"), /fetch\("\/api\/workspaces\/branding", \{\r?\n?\s*method: "PUT"/);
   assert.match(read("app/api/workspaces/branding/route.ts"), /from\("workspaces"\)\.update\(\{ site_badge: body\.showBadge \}\)/);
+  // Your data: requests and their status live on the server, per account.
+  assert.equal(SETTINGS_STORAGE.yourData, "account");
+  assert.match(read("components/account-data-rights.tsx"), /fetch\("\/api\/account\/data"/);
 });
 
 check("Settings no longer contradicts itself", () => {

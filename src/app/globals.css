@@ -28,7 +28,25 @@
 }
 html {
   scroll-behavior: smooth;
+  zoom: var(--ui-zoom);
 }
+/* Large screens keep the proportions the interface has at about 1600 x 800 px instead of shrinking into the middle of the
+   screen: the whole page scales in steps by width, each step only while the screen is tall enough to leave about 800 px.
+   Viewport units divide by --ui-zoom, so full-height layouts still fit the screen. Below 1700 px nothing changes.
+   Not yet qualified on staging: it applies only when the server sets MAKEBORNE_UI_SCALE=on (data-ui-scale on <html>,
+   src/app/layout.tsx); otherwise --ui-zoom stays 1 at every size. */
+:root { --ui-zoom: 1; }
+@media (min-width: 1700px) and (min-height: 850px) { :root[data-ui-scale="on"] { --ui-zoom: 1.0625; } }
+@media (min-width: 1800px) and (min-height: 900px) { :root[data-ui-scale="on"] { --ui-zoom: 1.125; } }
+@media (min-width: 1920px) and (min-height: 960px) { :root[data-ui-scale="on"] { --ui-zoom: 1.2; } }
+@media (min-width: 2048px) and (min-height: 1024px) { :root[data-ui-scale="on"] { --ui-zoom: 1.28; } }
+@media (min-width: 2240px) and (min-height: 1120px) { :root[data-ui-scale="on"] { --ui-zoom: 1.4; } }
+@media (min-width: 2400px) and (min-height: 1200px) { :root[data-ui-scale="on"] { --ui-zoom: 1.5; } }
+@media (min-width: 2560px) and (min-height: 1280px) { :root[data-ui-scale="on"] { --ui-zoom: 1.6; } }
+@media (min-width: 2880px) and (min-height: 1440px) { :root[data-ui-scale="on"] { --ui-zoom: 1.8; } }
+@media (min-width: 3200px) and (min-height: 1600px) { :root[data-ui-scale="on"] { --ui-zoom: 2; } }
+@media (min-width: 3440px) and (min-height: 1720px) { :root[data-ui-scale="on"] { --ui-zoom: 2.15; } }
+@media (min-width: 3840px) and (min-height: 1920px) { :root[data-ui-scale="on"] { --ui-zoom: 2.4; } }
 body {
   margin: 0;
   background: var(--canvas);
@@ -225,7 +243,7 @@ img {
   z-index: 1;
 }
 .hero h1 {
-  font-size: clamp(48px, 5.1vw, 72px);
+  font-size: clamp(48px, calc(5.1vw / var(--ui-zoom, 1)), 72px);
   line-height: 1.07;
   letter-spacing: -0.055em;
   margin: 25px 0;
@@ -450,7 +468,7 @@ img {
 .workflow-section {
   background: #e9ece4;
   margin: 0 auto;
-  padding: 74px max(44px, calc((100vw - 1192px) / 2));
+  padding: 74px max(44px, calc((calc(100vw / var(--ui-zoom, 1)) - 1192px) / 2));
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 80px;
@@ -522,7 +540,7 @@ img {
 }
 .studio-shell {
   display: flex;
-  min-height: 100vh;
+  min-height: calc(100vh / var(--ui-zoom, 1));
 }
 .sidebar {
   width: 236px;
@@ -1277,7 +1295,7 @@ img {
   padding: 38px;
   max-width: 600px;
   width: 100%;
-  max-height: 90vh;
+  max-height: calc(90vh / var(--ui-zoom, 1));
   overflow-y: auto;
   box-shadow: 0 30px 100px #16181d33;
   position: relative;
@@ -1554,7 +1572,7 @@ label input[type="color"] {
 .editor-workbench {
   display: grid;
   grid-template-columns: 180px minmax(200px, 1fr) 250px;
-  min-height: calc(100vh - 197px);
+  min-height: calc(calc(100vh / var(--ui-zoom, 1)) - 197px);
 }
 .outline-panel {
   background: #fff;
@@ -1957,12 +1975,12 @@ label input[type="color"] {
 }
 .slide-content h2 {
   font-family: var(--artifact-font);
-  font-size: clamp(20px, 2.8vw, 43px);
+  font-size: clamp(20px, calc(2.8vw / var(--ui-zoom, 1)), 43px);
   line-height: 1.13;
   margin: 15px 0;
 }
 .slide-content p {
-  font-size: clamp(12px, 1.1vw, 18px);
+  font-size: clamp(12px, calc(1.1vw / var(--ui-zoom, 1)), 18px);
   color: inherit;
   white-space: pre-wrap;
   line-height: 1.6;
@@ -1995,7 +2013,7 @@ label input[type="color"] {
 }
 .preview-only .artifact-canvas {
   padding: 0 40px 50px;
-  min-height: calc(100vh - 200px);
+  min-height: calc(calc(100vh / var(--ui-zoom, 1)) - 200px);
 }
 .preview-disclaimer {
   max-width: 650px;
@@ -2495,7 +2513,7 @@ label input[type="color"] {
   }
   .modal {
     padding: 29px 22px;
-    max-height: 94vh;
+    max-height: calc(94vh / var(--ui-zoom, 1));
   }
   .modal h2 {
     font-size: 29px;
@@ -2991,7 +3009,7 @@ label input[type="color"] {
 
 /* Fields that drop their own outline show focus on their container instead. */
 .search-field:focus-within { border-radius: 6px; box-shadow: 0 0 0 3px #7c6cf040; }
-.app-error { max-width: 520px; margin: 12vh auto; padding: 0 20px; text-align: center; }
+.app-error { max-width: 520px; margin: calc(12vh / var(--ui-zoom, 1)) auto; padding: 0 20px; text-align: center; }
 .app-error h1 { margin: 0 0 8px; font-size: 24px; }
 .app-error p { margin: 0 0 20px; color: var(--muted); line-height: 1.55; }
 .app-error-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
@@ -3002,3 +3020,9 @@ label input[type="color"] {
 .unsent-draft-notice button:hover { background: #f1f4fb; }
 .unsent-draft-notice button:disabled { opacity: .6; cursor: default; }
 .mk-unsent-draft { justify-content: center; text-align: center; }
+
+/* Phones zoom the whole page when a field under 16px gets focus (iOS Safari), so on touch screens every
+   text field, select and text area is at least 16px. The 6-digit code field stays at its larger size. */
+@media (max-width: 760px) and (pointer: coarse) {
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"]), select, textarea):not(.auth-otp-input) { font-size: 16px !important; }
+}

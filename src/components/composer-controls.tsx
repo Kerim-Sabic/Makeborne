@@ -27,12 +27,14 @@ export default function ComposerControls({ mode, onMode, effort, onEffort }: {
       const viewportRight = viewportLeft + (viewport?.width ?? window.innerWidth);
       const above = Math.max(0, bounds.top - viewportTop - 20);
       const below = Math.max(0, viewportBottom - bounds.bottom - 20);
-      const desiredHeight = element.scrollHeight + 2;
+      // Measured positions are screen pixels; on large screens the page is zoomed (--ui-zoom), so styles are written in page pixels.
+      const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      const desiredHeight = (element.scrollHeight + 2) * zoom;
       // Prefer the space above the composer, without covering the control.
       const opensAbove = above >= desiredHeight || above > below;
-      element.style.maxHeight = `${opensAbove ? above : below}px`;
-      element.style.top = `${opensAbove ? bounds.top - element.offsetHeight - 8 : bounds.bottom + 8}px`;
-      element.style.left = `${Math.max(viewportLeft + 12, Math.min(bounds.left, viewportRight - element.offsetWidth - 12))}px`;
+      element.style.maxHeight = `${(opensAbove ? above : below) / zoom}px`;
+      element.style.top = `${opensAbove ? bounds.top / zoom - element.offsetHeight - 8 : bounds.bottom / zoom + 8}px`;
+      element.style.left = `${Math.max(viewportLeft + 12, Math.min(bounds.left, viewportRight - element.offsetWidth * zoom - 12)) / zoom}px`;
     };
     place();
     window.addEventListener("resize", place);
@@ -56,8 +58,9 @@ export default function ComposerControls({ mode, onMode, effort, onEffort }: {
   }, [open]);
   return <div className="creation-controls">
     <div className="composer-mode" role="group" aria-label="Creation mode">
-      <button type="button" aria-pressed={mode === "create"} onClick={() => onMode("create")}><Sparkles size={14} />Create</button>
-      <button type="button" aria-pressed={mode === "plan"} onClick={() => onMode("plan")}><ListChecks size={14} />Plan</button>
+      {/* Named as modes, so they are never confused with the composer's own "Create this project" / "Plan this project" button. */}
+      <button type="button" aria-pressed={mode === "create"} aria-label="Create mode" title="Create mode: builds straight from your brief" onClick={() => onMode("create")}><Sparkles size={14} aria-hidden="true" />Create</button>
+      <button type="button" aria-pressed={mode === "plan"} aria-label="Plan mode" title="Plan mode: agrees a plan with you before building" onClick={() => onMode("plan")}><ListChecks size={14} aria-hidden="true" />Plan</button>
     </div>
     <button ref={trigger} type="button" className="creation-effort-trigger" aria-haspopup="dialog" aria-controls={open ? `${id}-effort` : undefined} aria-expanded={open} title="Thinking effort" onClick={() => setOpen(!open)} onKeyDown={event => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); } }}><span className="creation-effort-label">Effort</span><span>{EFFORT_PRESENTATION[effort].label}</span><ChevronDown size={14} aria-hidden="true" /></button>
     {open && createPortal(<div ref={panel} className="creation-effort-panel" id={`${id}-effort`} role="dialog" aria-label="Thinking effort" onKeyDown={event => {

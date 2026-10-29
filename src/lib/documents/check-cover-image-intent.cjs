@@ -21,6 +21,6 @@ const make = (layout = "cover", image = "hero") => ({ ...emptyDocument("deck", "
   const bytes = await sharp({ create: { width: 80, height: 60, channels: 3, background: "#246A50" } }).png().toBuffer(), deck = make();
   const html = deckHtml(deck, { hero: `data:image/png;base64,${bytes.toString("base64")}` }); assert(html.includes("<img")); assert(html.includes(bytes.toString("base64")));
   const zip = await JSZip.loadAsync(await deckPptx(deck, { hero: bytes })); const slide = await zip.file("ppt/slides/slide1.xml").async("string");
-  assert(slide.includes("<p:pic>")); assert(slide.includes("Design that starts in the field")); assert(Object.keys(zip.files).some(n => n.startsWith("ppt/media/") && !n.endsWith("/")));
+  assert(slide.includes("<p:pic>")); assert([...slide.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(match => match[1]).join(" ").includes("Design that starts in the field")); assert(Object.keys(zip.files).some(n => n.startsWith("ppt/media/") && !n.endsWith("/")));
   console.log("PASS HTML and native editable PowerPoint retain the image and actual text");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -8,25 +8,19 @@ if (publicSupabaseKey && !publicSupabaseKey.startsWith("sb_publishable_")) {
   );
 }
 
-/** Latin and complementary latin-ext WOFF2 files for every face in DOCUMENT_FACES
- * (checked by src/lib/documents/check-design-quality.cjs). SUBSET is expanded below. */
+/** The files the PDF printer embeds (src/lib/documents/fonts-server.ts), latin and complementary latin-ext:
+ * the static 400/600/700 cuts of every variable face in DOCUMENT_FACES (Chromium embeds variable fonts in
+ * PDFs as Type 3), the single static Instrument Serif file, and the variable Archivo for its condensed
+ * widths, which have no static cut (checked by src/lib/documents/check-design-quality.cjs). SUBSET is expanded below. */
+const PRINT_CUT_FACES = ["fraunces", "playfair-display", "newsreader", "cormorant", "space-grotesk", "bricolage-grotesque", "sora", "geist", "inter", "dm-sans", "plus-jakarta-sans", "outfit", "archivo", "jetbrains-mono"];
 const DOCUMENT_FONT_FILES = [
-  "@fontsource-variable/fraunces/files/fraunces-SUBSET-opsz-*.woff2",
+  ...PRINT_CUT_FACES.flatMap((id) => [400, 600, 700].map((weight) => `@fontsource/${id}/files/${id}-SUBSET-${weight}-*.woff2`)),
   "@fontsource/instrument-serif/files/instrument-serif-SUBSET-400-*.woff2",
-  "@fontsource-variable/playfair-display/files/playfair-display-SUBSET-wght-*.woff2",
-  "@fontsource-variable/newsreader/files/newsreader-SUBSET-wght-*.woff2",
-  "@fontsource-variable/cormorant/files/cormorant-SUBSET-wght-*.woff2",
-  "@fontsource-variable/space-grotesk/files/space-grotesk-SUBSET-wght-*.woff2",
-  "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-SUBSET-opsz-*.woff2",
-  "@fontsource-variable/sora/files/sora-SUBSET-wght-*.woff2",
-  "@fontsource-variable/geist/files/geist-SUBSET-wght-*.woff2",
-  "@fontsource-variable/inter/files/inter-SUBSET-opsz-*.woff2",
-  "@fontsource-variable/dm-sans/files/dm-sans-SUBSET-wght-*.woff2",
-  "@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-SUBSET-wght-*.woff2",
-  "@fontsource-variable/outfit/files/outfit-SUBSET-wght-*.woff2",
   "@fontsource-variable/archivo/files/archivo-SUBSET-wdth-*.woff2",
-  "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-SUBSET-wght-*.woff2",
 ].flatMap((file) => ["latin", "latin-ext"].map((subset) => `./node_modules/${file.replace("SUBSET", subset)}`));
+
+/** Source parsers run in a worker thread loaded by path at run time (src/lib/ingest/worker-host.ts). */
+const INGEST_WORKER_FILES = ["./src/lib/ingest/parse-worker.cjs", "./src/lib/ingest/parsers/*.cjs"];
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
@@ -37,7 +31,12 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // Compile check at the end of a website build (src/lib/builder/compile.ts):
     // the service runs bin/esbuild with node, which loads esbuild.wasm by path.
-    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm"],
+    "/api/build": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm", ...INGEST_WORKER_FILES,
+      // The finish-time render verifier uses the same dynamically loaded browser as PDF export.
+      "./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*"],
+    "/api/build/plan": INGEST_WORKER_FILES,
+    "/api/build/sources": INGEST_WORKER_FILES,
+    "/api/cloud/workspaces/*/artifacts/*/sources": INGEST_WORKER_FILES,
     "/admin": ["./node_modules/esbuild-wasm/package.json", "./node_modules/esbuild-wasm/lib/main.js", "./node_modules/esbuild-wasm/bin/esbuild", "./node_modules/esbuild-wasm/wasm_exec*.js", "./node_modules/esbuild-wasm/esbuild.wasm"],
     // Playwright loads its registry and runtime resources dynamically. Include
     // them explicitly for both export entry points in serverless deployments.
@@ -45,6 +44,12 @@ const nextConfig: NextConfig = {
     // Document PDFs embed their open-licensed faces (src/lib/documents/fonts.ts):
     // the serverless Chromium has only Open Sans, and fonts-server.ts reads these files.
     "/api/cloud/workspaces/*/artifacts/*/document-export": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", ...DOCUMENT_FONT_FILES],
+    // Data reports read the stored spreadsheet in the ingestion worker and render the PDF/PPTX they save.
+    "/api/cloud/workspaces/*/artifacts/*/data-reports": ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**/*", "./node_modules/playwright/**/*", ...DOCUMENT_FONT_FILES, ...INGEST_WORKER_FILES],
+  },
+  // Old and guessed pricing links land on the plans page (308, cached by clients and search engines).
+  async redirects() {
+    return [{ source: "/pricing", destination: "/billing", permanent: true }];
   },
   async headers() {
     return [
@@ -80,7 +85,9 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "private, no-store" },
         ],
       },
-      ...["studio", "chat", "login", "billing", "admin", "auth", "api"].map((route) => ({
+      // /billing and /billing/terms are public pricing pages listed in the sitemap, so only the
+      // checkout return page under /billing is kept out of search here.
+      ...["studio", "chat", "login", "billing/return", "admin", "auth", "api"].map((route) => ({
         source: `/${route}/:path*`,
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       })),

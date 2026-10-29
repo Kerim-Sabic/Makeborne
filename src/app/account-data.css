@@ -1,0 +1,41 @@
+/* Settings > Your data (src/components/account-data-rights.tsx). */
+.data-rights-block { margin-top: 18px; }
+.data-rights-block + .data-rights-block { padding-top: 18px; border-top: 1px dashed var(--line); }
+.data-rights h3 { font-size: 14px; font-weight: 600; margin: 0 0 6px; color: var(--ink); }
+.data-rights h3:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.data-rights .button { margin-top: 6px; }
+.data-rights .button:disabled { opacity: 0.55; cursor: not-allowed; }
+.data-rights .button.data-danger { background: #b42318; color: #fff; }
+.data-rights .button.data-danger:hover:not(:disabled) { background: #912018; }
+.data-exports, .data-blockers, .data-warnings { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.data-export { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+.data-export > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.data-export span { color: var(--text-muted); overflow-wrap: anywhere; }
+.data-export-parts { display: flex; flex-wrap: wrap; gap: 6px; }
+.data-export.is-failed span { color: #912018; }
+.data-blockers li, .data-warnings li { font-size: 12px; line-height: 1.6; }
+.data-blockers li { display: flex; gap: 8px; padding: 10px 12px; border-radius: 8px; background: #fff6ed; border: 1px solid #f9dbaf; color: #5f3a12; }
+.data-blockers li svg { flex: none; margin-top: 3px; }
+.data-blockers .text-link { margin-left: 4px; }
+.data-warnings { list-style: disc; padding-left: 18px; color: var(--text-muted); }
+.data-explained { margin: 10px 0; font-size: 12px; line-height: 1.7; }
+.data-explained summary { cursor: pointer; font-weight: 600; color: var(--ink); min-height: 32px; display: flex; align-items: center; }
+.data-explained h4 { font-size: 12px; margin: 10px 0 4px; }
+.data-explained ul { margin: 0; padding-left: 18px; }
+.data-confirm { display: grid; gap: 8px; margin-top: 12px; max-width: 520px; font-size: 12px; }
+.data-confirm input[type="email"] { min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box; }
+.data-confirm strong { overflow-wrap: anywhere; }
+.data-check { display: flex; gap: 8px; align-items: flex-start; line-height: 1.6; }
+.data-check input { margin-top: 4px; width: 16px; height: 16px; flex: none; }
+.data-confirm .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.data-reauth { padding: 10px 12px; border-radius: 8px; background: #eef4ff; border: 1px solid #c7d7fe; }
+.data-deletion { padding: 12px 14px; border-radius: 8px; border: 1px solid #fecdca; background: #fff5f4; font-size: 12px; }
+.data-deletion.is-processing { border-color: var(--line); background: #f7f7f8; }
+.data-message:empty { display: none; }
+.data-deletion-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid #fecdca; background: #fff5f4; color: #7a271a; font-size: 13px; }
+.data-deletion-notice button { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; text-decoration: underline; color: inherit; min-height: 32px; }
+@media (max-width: 640px) {
+  .data-export { align-items: stretch; }
+  .data-export-parts, .data-export-parts .button, .data-confirm .button-row .button { width: 100%; }
+  .data-rights .button { white-space: normal; }
+}

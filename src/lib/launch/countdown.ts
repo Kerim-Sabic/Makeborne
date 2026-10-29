@@ -3,8 +3,8 @@
  * The countdown is informational only. It never opens or closes sales; plan buttons follow the server's sales state.
  */
 
-/** Thursday 29 October 2026, 21:00 in Sarajevo (CET, UTC+1 after the 25 October change). Moved from Wednesday 28 October 19:00 by the owner on 27 October. */
-export const DEFAULT_LAUNCH_AT = "2026-10-29T20:00:00Z";
+/** Thursday 29 October 2026, 01:30 in Sarajevo (CET, UTC+1 after the 25 October change). Moved from Thursday 21:00 by the owner on 28 October. */
+export const DEFAULT_LAUNCH_AT = "2026-10-29T00:30:00Z";
 /** After launch the banner says "We're live" for this long, then hides itself. */
 export const LIVE_WINDOW_MS = 48 * 60 * 60 * 1000;
 /** The launch is announced in the owner's own zone; visitors also see their local time. */
@@ -27,6 +27,19 @@ export function parseLaunchAt(value: string | undefined | null): number {
 export function countdownEnabled(value: string | undefined | null, fallback = "on"): boolean {
   return (value ?? fallback) === "on";
 }
+
+/** Past launch time the screen holds until plans are on sale; only the exact value "off" lets it open regardless. */
+export function holdUntilSales(value: string | undefined | null): boolean {
+  return value !== "off";
+}
+
+/** Whether the launch screen may open onto the live site: always without the hold, otherwise only once sales are known open. */
+export function revealReady(hold: boolean, salesOpen: boolean | null): boolean {
+  return !hold || salesOpen === true;
+}
+
+/** Spoken while launch time has passed and the doors are not open yet. */
+export const HOLD_ANNOUNCEMENT = "Makeborne opens in a moment.";
 
 export function launchPhase(now: number, launchAt: number): LaunchPhase {
   if (now < launchAt) return "before";
@@ -106,7 +119,7 @@ export function dateHeaderTime(value: string | null | undefined): number {
   return value ? Date.parse(value) : NaN;
 }
 
-/** "Thursday 29 October · 21:00 CET", in the launch zone. Render on the server and pass down, so markup is identical everywhere. */
+/** "Thursday 29 October · 01:30 CET", in the launch zone. Render on the server and pass down, so markup is identical everywhere. */
 export function launchDateText(launchAt: number, timeZone = LAUNCH_TIME_ZONE): { date: string; time: string; short: string } {
   const at = new Date(launchAt);
   const part = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { timeZone, ...options }).format(at);

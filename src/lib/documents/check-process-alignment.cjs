@@ -25,7 +25,7 @@ async function main() {
       await page.setContent(deckHtml(deck, {}, mode)); await page.evaluate(() => document.fonts.ready);
       const measured = await page.evaluate(({labels, details}) => {
         const slide = document.querySelector(".slide").getBoundingClientRect();
-        const read = value => {const element = [...document.querySelectorAll(".t")].find(e => e.textContent === value), box = element.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(element); const ink = [...range.getClientRects()]; return {top: box.top, bottom: Math.max(...ink.map(r => r.bottom)), lines: new Set(ink.map(r => r.top)).size, inside: ink.every(r => r.left >= slide.left - 1 && r.right <= slide.right + 1 && r.top >= slide.top && r.bottom <= slide.bottom - 20)};};
+        const read = value => {const element = [...document.querySelectorAll(".t")].find(e => e.textContent.replace(/\s+/g, " ") === value), box = element.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(element); const ink = [...range.getClientRects()]; return {top: box.top, bottom: Math.max(...ink.map(r => r.bottom)), lines: new Set(ink.map(r => r.top)).size, inside: ink.every(r => r.left >= slide.left - 1 && r.right <= slide.right + 1 && r.top >= slide.top && r.bottom <= slide.bottom - 20)};};
         return {labels: labels.map(read), bodies: details.map(read)};
       }, {labels, details});
       assert(Math.max(...measured.bodies.map(b => b.top)) - Math.min(...measured.bodies.map(b => b.top)) < 1);

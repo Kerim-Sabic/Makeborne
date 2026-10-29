@@ -111,7 +111,7 @@ async function main() {
   const scenario = async (name, run, viewport = { width: 1280, height: 1000 }) => {
     state = { version: 1, requests: [], builds: [], unexpected: [], errors: [], operation: null };
     const current = state, context = await browser.newContext({ viewport }), page = await context.newPage(), errors = [];
-    page.setDefaultTimeout(8000); page.on("pageerror", error => errors.push(error.message));
+    page.setDefaultTimeout(15000); /* parallel three-engine runs (run-browser-checks --jobs 3) can exceed 8 s in WebKit */ page.on("pageerror", error => errors.push(error.message));
     await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/, route => route.abort());
     await page.addInitScript(([key, value]) => { if (!localStorage.getItem(key)) localStorage.setItem(key, value); }, [`makeborne.advisor-chats.v2:${ids.actor}`, JSON.stringify(conversation)]);
     try {
@@ -130,6 +130,14 @@ async function main() {
   };
   const handoffs = page => page.evaluate(() => sessionStorage.getItem("makeborne.advisor-handoff.v1"));
   const posts = current => current.requests.filter(request => request.method !== "GET");
+  // The composer (13b1343) shows the request's maximum in the always-visible "Request details" summary and keeps the
+  // full sentence behind it: the maximum must be on screen before Send, and the full sentence one click away.
+  const requestMaximum = async (page, credits, sentence) => {
+    const summary = page.locator(".lb-request-details > summary");
+    await summary.getByText(`Up to ${credits} credits`, { exact: true }).waitFor();
+    await summary.click();
+    await page.getByText(sentence, { exact: true }).waitFor();
+  };
   try {
     await scenario("brief-drafted-read-only", async (page, current) => {
       await openAdvisor(page);
@@ -214,7 +222,7 @@ async function main() {
       assert.match(draftText, /^Website: Harbour Bakery website/); assert.match(draftText, /Tone: Warm, plain and proud/); assert.match(draftText, /Pages and sections:\n- Home/);
       assert.equal(await page.getByLabel("Effort").inputValue(), "high");
       assert.equal(await page.getByRole("button", { name: "Build", exact: true }).getAttribute("aria-pressed"), "true");
-      await page.getByText("Up to 90 credits for this request, including automatic refinements.").waitFor();
+      await requestMaximum(page, 90, "Up to 90 credits for this request, including automatic refinements.");
       await page.getByText("From Mira’s brief · revision 2 · recorded with your next request. The advice itself changed nothing here.").waitFor();
       assert.equal(await page.evaluate(() => new URLSearchParams(location.search).has("handoff")), false, "the handoff id leaves the address once read");
       assert.equal(await handoffs(page), null, "the handoff is single use");
@@ -254,7 +262,7 @@ async function main() {
       const stored = JSON.parse(await handoffs(page));
       assert.equal(stored.mode, "plan"); assert.equal(stored.maximum, 10);
       await page.goto(`${base}/?view=builder&handoff=${stored.id}`);
-      await page.getByText("Up to 10 credits for this plan.").waitFor();
+      await requestMaximum(page, 10, "Up to 10 credits for this plan.");
       assert.equal(await page.locator(".lb-mode button[aria-pressed='true']").innerText(), "Plan", "the builder opens in Plan mode");
       await page.waitForTimeout(300);
       assert.deepEqual(posts(current).map(request => request.path), ["/api/chat/brief"], "no plan or build request until Plan is pressed");

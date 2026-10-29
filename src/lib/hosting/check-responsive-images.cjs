@@ -97,6 +97,26 @@ check("budget: copies stop before the site host's image count and byte limits", 
   assert.ok(!responsive.variantsFit([asset("public/images/big.webp", undefined, 3_900_000)], [{bytes: 200_000}]), "4 MB of images at most");
 });
 
+check("site limit: a new original is refused before the site could no longer be published (40 files, 6 MB)", () => {
+  assert.ok(responsive.siteImageFits(SOURCE_ASSETS));
+  const files = count => Array.from({length: count}, (_, index) => asset(`public/images/p${index}.webp`, undefined, 10_000));
+  assert.ok(responsive.siteImageFits(files(39)), "the 40th file still fits");
+  assert.ok(!responsive.siteImageFits(files(40)), "no 41st file");
+  assert.ok(!responsive.siteImageFits([asset("public/images/big.webp", undefined, 4_900_000)]), "room is kept for one more image and the site's code");
+  assert.ok(responsive.SITE_IMAGE_LIMITS.images <= 40 && responsive.SITE_IMAGE_LIMITS.bytes < 6_000_000, "never above site-policy.js SITE_LIMITS");
+});
+
+check("website image allowance: every effort level's limit fits the published site's 40 files with responsive copies", () => {
+  const {BUILDER_EFFORT} = load("src/lib/builder/pricing.ts");
+  for (const [level, policy] of Object.entries(BUILDER_EFFORT)) {
+    assert.ok(policy.maxWebsiteImages >= policy.maxImages, `${level}: websites get at least the document allowance`);
+    // Copies stop at 36 files: the first 9 images carry up to 3 copies each, later ones are originals only.
+    const files = Math.min(policy.maxWebsiteImages, 9) * 4 + Math.max(0, policy.maxWebsiteImages - 9);
+    assert.ok(files <= 40, `${level}: ${files} files`);
+  }
+  assert.equal(BUILDER_EFFORT.medium.maxWebsiteImages, 6, "owner, 22 October 2026: image-led sites use about six images at medium");
+});
+
 check("JSX runtime: <img> of a manifest original gets srcset, sizes, size, lazy loading; the hero stays eager", async () => {
   const esbuild = require("esbuild-wasm");
   const code = (await esbuild.transform(responsive.jsxRuntimeModule(MANIFEST), {format: "cjs", loader: "js"})).code;

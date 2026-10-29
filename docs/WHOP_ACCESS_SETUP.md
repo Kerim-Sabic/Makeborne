@@ -1,6 +1,18 @@
 # Whop payment and creation access
 
+## Owner decision — 26 October 2026: seller-managed tax
+
+Production Whop **Tax collection = I handle tax myself**, saved after the owner accepted Whop's three opt-out acknowledgements. Whop will not calculate, collect **or display** tax for Makeborne. This supersedes earlier recommendations to use Whop Collects and Remits. The Inclusive preference remains stored but does not provide a tax calculation in this mode. Consumer catalogue prices remain the owner-approved gross prices; `TAX_NOTE` includes applicable tax and separately discloses any checkout fee.
+
+Makeborne/the seller must arrange tax registration, jurisdiction/rate determination, invoices, records and remittance before opening the affected consumer markets. No Makeborne tax engine has been implemented or qualified by this configuration change. Do not claim all worldwide tax compliance or infer a zero tax liability from `tax_amount: 0` in a Whop payment. Processor and sanctions restrictions still apply even without merchant country-block rules.
+
+The credit-pack adapter currently rejects non-zero Whop tax/refund-tax amounts. That conservative guard remains in place until a real pinned-version fixture proves the allocation; seller-managed tax does not justify guessing or silently treating a gross payment as pre-tax revenue. Opening packs still requires the owner-approved staging journeys and separate production GO. Report: `docs/release-review/consumer-billing-20261026.md`.
+
 ## What works without payment API secrets
+
+**Pricing page (24 Oct 2026).** The $1 coffee support card, its nav item and FAQs are no longer on `/billing`; the `SUPPORT` constant, this route and the terms paragraph stay. The route remains live from old links until `MAKEBORNE_SUPPORT_CHECKOUT_ENABLED=false` is set (recommended owner decision). Signed-out plan CTAs send visitors to `/login?mode=signup&next=/billing?plan=…&interval=…#plans`; `authDestination` keeps only `plan ∈ {create, studio, scale}` and `interval ∈ {monthly, yearly}`. Price wording beside every CTA comes from `TAX_NOTE` (`src/lib/billing/plans.ts`), which mentions tax **and** checkout fees until the owner confirms buyers pay no Whop fee.
+
+**EU/UK prerequisites before consumer sales open** (enforced through Whop country settings and the release-checklist gate row, not by the page): Whop tax-inclusive consumer prices on and `TAX_NOTE` flipped to its tax-inclusive variant; `topup-fulfillment.ts` and the membership webhook verified with **taxed** payments (today a taxed total can differ from the catalogue amount the fulfilment path expects: a fulfilment gap); an EU "order with obligation to pay" final button in Whop; and Whop collecting the immediate-performance consent and withdrawal acknowledgement the terms require "separately at checkout". Without that consent EU/UK consumers keep a 14-day withdrawal right with a proportionate refund even after using credits.
 
 `GET /api/billing/support-checkout` reports whether the verified coffee product is available and whether the visitor is signed in. `POST` requires a server-verified Supabase account, then returns the fixed public Whop product URL:
 
@@ -27,6 +39,7 @@ Never add a public prefix to these variables:
 | `WHOP_API_KEY` | Company-scoped API credential |
 | `WHOP_COMPANY_ID` | `biz_CV9cZg1zFX3h7f` |
 | `WHOP_ACCESS_PLAN_IDS` | Comma-separated creation plan IDs; coffee is rejected |
+| `WHOP_CREATION_CHECKOUT_PLAN_IDS` | Optional exact list for new checkout; retain historical access/credit mappings separately. Empty, duplicate, malformed or unknown IDs close checkout. Omit only where each tier/cadence has one access mapping. |
 | `WHOP_WEBHOOK_SECRET` | Endpoint's literal `ws_...` signing secret |
 | `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key for authoritative billing records |
 | `MAKEBORNE_BILLING_MIGRATIONS_VERIFIED` | Set true only after applying and verifying the billing migration |
@@ -51,6 +64,14 @@ Creation activation has three independent controls:
 Keep all controls closed while AI generation and the promised creation plans are unavailable.
 
 Verified hidden, out-of-stock creation catalog (4 October 2026): Create $29/month `plan_qs8XNbKQsowC6`; Studio $79/month `plan_arwSDewCa8Dvi`; Scale $199/month `plan_Wf2CTdqqUwufk`. The server catalog recognizes only these IDs, and activation still requires the separate environment/database controls. Product creation does not make these memberships available for sale.
+
+**Repriced on 23 Oct 2026** (`docs/RELEASE_DECISIONS.md`):
+- **New prices:** the code now expects Create $20, Studio $49 and Scale $99 a month. Yearly is $192, $470.40 and $950.40.
+- **Old plans:** the three plans above keep their old renewal prices, so `verifiedCreationOffer` refuses them, because a plan's renewal price must equal `planPrice()`. Nobody can be charged an old price by mistake.
+- **To open checkout:**
+  1. The owner creates new hidden plans at the new prices in Whop.
+  2. `CREATION_CATALOG` in `src/lib/billing/config.ts`, `WHOP_PLAN_CREDIT_MAP` and `WHOP_ACCESS_PLAN_IDS` are updated to their IDs.
+  3. `makeborne_private.billing_access_plans` enables them.
 
 ## Authoritative checkout and membership binding
 

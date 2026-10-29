@@ -6,6 +6,8 @@ Updated 2026-10-13. **Implemented locally, closed by default, not qualified for 
 
 An account with a verified creation membership can buy extra account credits without changing its plan. Packs do not buy membership access, seats, storage or hosting allowances. The separate $1/month support contribution does not qualify a customer. There is no recurring refill or automatic charge.
 
+On `/billing` (24 Oct 2026) packs show only to members on a limited allowance, after the plans, with each pack's catalogue label and a plan-versus-plan-plus-pack comparison that links to an "Ask to switch plans" email (a second subscription is blocked, PBC01). The caption says "Preview pack prices…" while packs are closed, and uses `TAX_NOTE.short`. For visitors without a plan, the not-ready box lists "One-time credit packs: planned for members after launch." until `topupCheckoutOpen()` is true.
+
 Preview USD prices before applicable tax:
 
 | Pack ID | Credits | One-time price |

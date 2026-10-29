@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "frozenAt": "2026-10-18",
-  "count": 24,
+  "count": 26,
   "effort": "medium",
   "order": [
     "w01-restaurant-saffron-table",
@@ -27,7 +27,9 @@
     "w19-events-ridgeline-weddings",
     "w20-civic-glen-rise-maths-club",
     "d02-tidewater-seed-pitch",
-    "b02-repair-table"
+    "b02-repair-table",
+    "w21-wellness-north-quay-physio",
+    "w22-trades-spoke-and-sprocket"
   ],
   "sha256": {
     "w01-restaurant-saffron-table": "4777eb7bdc8e49692482628ae40c080d6bf81f109e6d48c306288cf86aad71cb",
@@ -53,7 +55,9 @@
     "w19-events-ridgeline-weddings": "d55f3a284978fc22c6e8aa3a3342d804248fae9e825441a906798c3116ed42d8",
     "w20-civic-glen-rise-maths-club": "0f08dfb9950ae9cc730a190e724dfe6928cfe227a4fb29f3baaee24230fbd1b3",
     "d02-tidewater-seed-pitch": "814113971edbd0bae59a617eb102df4cd321e9761953c78b972dfc7d65d67809",
-    "b02-repair-table": "1bf68afba90e3940f09c2ae52ba32c64513c687e9a1de1d57cb8b75975596358"
+    "b02-repair-table": "1bf68afba90e3940f09c2ae52ba32c64513c687e9a1de1d57cb8b75975596358",
+    "w21-wellness-north-quay-physio": "7ccd87f73d8e9c028df9f776ae3108a438f302eef7401879ab47e28c99d8cad1",
+    "w22-trades-spoke-and-sprocket": "5e39f07d3af3e46a8df2da3d12551856cc406241eca4a9636dc969204f342a91"
   },
   "directions": {
     "restaurant": [
@@ -80,12 +84,14 @@
     ],
     "wellness": [
       "w06-wellness-laurel-creek-dental",
-      "w16-wellness-crux-yard"
+      "w16-wellness-crux-yard",
+      "w21-wellness-north-quay-physio"
     ],
     "trades": [
       "w07-trades-hollis-heating-plumbing",
       "d01-keep-the-wheels-turning",
-      "w17-trades-saltbush-auto"
+      "w17-trades-saltbush-auto",
+      "w22-trades-spoke-and-sprocket"
     ],
     "events": [
       "w08-events-low-ceiling",
@@ -109,6 +115,8 @@
     "w05-ecommerce-good-dog",
     "w06-wellness-laurel-creek-dental",
     "w07-trades-hollis-heating-plumbing",
-    "w08-events-low-ceiling"
+    "w08-events-low-ceiling",
+    "w21-wellness-north-quay-physio",
+    "w22-trades-spoke-and-sprocket"
   ]
 }

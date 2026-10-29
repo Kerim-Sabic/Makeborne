@@ -9,13 +9,15 @@ import {publicationProfile, publicationWorkspaces} from "../../../infra/publicat
 const RecordSchema = z.object({id: z.string().uuid(), workspace_id: z.string().uuid(), project_id: z.string().uuid(),
   object_path: z.string().min(1).max(1024), content_type: z.enum(["image/png", "image/jpeg", "image/webp"]),
   sha256: z.string().regex(/^[a-f0-9]{64}$/)}).strict();
-function locate(value: unknown, context: PublicationDownloadContext, workspaceIds: readonly string[]) {
+// workspaceIds null: entitled production scope; the load RPC's database authority
+// (owner, session, verified plan access, rollout scope) is the workspace check.
+function locate(value: unknown, context: PublicationDownloadContext, workspaceIds: readonly string[] | null) {
   const loaded = z.object({id: z.literal(context.preparationId), state: z.literal("running"), versionId: z.string().uuid(),
     scope: z.object({workspaceId: z.string().uuid(), projectId: z.string().uuid(), artifactId: z.string().uuid()}),
     content: z.object({websiteSource: WebsiteProjectSourceSchema}), assetRecords: z.array(RecordSchema).max(100),
   }).parse(value);
   const workspaceId = loaded.scope.workspaceId;
-  if (!workspaceIds.includes(workspaceId)) throw new Error("PUBLICATION_ASSET_IDENTITY_INVALID");
+  if (workspaceIds !== null && !workspaceIds.includes(workspaceId)) throw new Error("PUBLICATION_ASSET_IDENTITY_INVALID");
   const descriptor = loaded.content.websiteSource.assets.find(asset => asset.id === context.assetId);
   const records = loaded.assetRecords.filter(asset => asset.id === context.assetId), record = records[0];
   if (!descriptor || records.length !== 1 || record.workspace_id !== workspaceId || record.project_id !== loaded.scope.projectId
@@ -45,14 +47,18 @@ export function publicationStorageReader(secret: string, transport: typeof fetch
   };
 }
 
-export function publicationAssetBroker(deps: {secret: string; origin: string; namespace?: "staging" | "production"; workspaceId?: string; workspaceIds?: readonly string[]; now?: () => number;
+export function publicationAssetBroker(deps: {secret: string; origin: string; namespace?: "staging" | "production"; workspaceId?: string; workspaceIds?: readonly string[];
+  workspaceScope?: "allowlist" | "entitled"; now?: () => number;
   load(context: PublicationDownloadContext, signal: AbortSignal): PromiseLike<unknown>;
   read(objectPath: string, maximum: number, signal: AbortSignal): Promise<Uint8Array>}) {
   const {secret, origin} = deps;
   const namespace = deps.namespace ?? "staging";
   if (deps.workspaceId !== undefined && deps.workspaceIds !== undefined) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
-  const workspaceIds = publicationWorkspaces(deps.workspaceIds ?? [deps.workspaceId]);
-  if (namespace === "staging" && workspaceIds.length !== 1) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
+  const entitled = deps.workspaceScope === "entitled";
+  if (deps.workspaceScope !== undefined && deps.workspaceScope !== "allowlist" && !entitled) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
+  if (entitled && (namespace !== "production" || deps.workspaceId !== undefined || deps.workspaceIds !== undefined)) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
+  const workspaceIds = entitled ? null : publicationWorkspaces(deps.workspaceIds ?? [deps.workspaceId]);
+  if (namespace === "staging" && workspaceIds?.length !== 1) throw new Error("PUBLICATION_ASSET_CONFIG_INVALID");
   assertPublicationBrokerSecret(secret); assertPublicationAssetOrigin(origin, namespace);
   return async (request: Request): Promise<Response> => {
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]);

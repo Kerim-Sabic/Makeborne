@@ -74,7 +74,9 @@ export async function runPlanner(run: PlannerRun): Promise<PlannerResult> {
   const models = builderModels(model);
   const rate = aiCostUsdPerCredit();
   const spend = run.spend;
-  const system = [{ type: "text" as const, text: PLANNER_SYSTEM }];
+  // The system prompt carries its own cache marker, so every run (builds, edits,
+  // reviews, every user) reuses it; the automatic breakpoint caches the conversation.
+  const system = [{ type: "text" as const, text: PLANNER_SYSTEM, cache_control: { type: "ephemeral" as const } }];
   const meter = new ContextMeter(async messages => (await anthropic.beta.messages.countTokens({ model, system, tools: [TOOL], messages }, { signal: run.signal, maxRetries: 0, timeout: Math.max(1, Math.min(30_000, spend.timeLeftMs())) })).input_tokens);
   const result = (plan: SitePlan | null): PlannerResult => ({ plan, note: note.trim(), credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6 });
   let note = "";

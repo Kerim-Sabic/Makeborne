@@ -30,12 +30,13 @@ You joined the Makeborne waitlist, so here is your invite: Makeborne is live.
 
 Create your account: ${signupUrl}
 
-Makeborne turns a short brief into a real website, a designed book or a presentation, and keeps your client work in one place. Every request shows its credit limit before it starts.
+Makeborne turns one brief into a real website, a designed book or a presentation, and keeps your client work in one place. Every request shows its credit limit before it starts.
 
 If you make something you're proud of, reply and show us. We read every message.
 
 The Makeborne team
 makeborne.com · instagram.com/makeborne
+ZORBY&CO d.o.o., Vilsonovo šetalište 10, 71000 Sarajevo, Bosnia and Herzegovina
 
 You're getting this one email because you joined the launch waitlist at makeborne.com.
 Unsubscribe: ${unsubscribeUrl}

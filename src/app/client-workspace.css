@@ -704,7 +704,7 @@
 .cw-workspace { --cw-border: #e5e8ef; --cw-muted: #687286; color: #253047; max-width: 1280px; }
 .cw-header { margin-bottom: 28px; align-items: flex-end; }
 .cw-eyebrow { font-size: 10px; font-weight: 650; letter-spacing: .13em; color: #757e95; }
-.cw-header h1 { font-size: clamp(30px, 3vw, 40px); font-weight: 550; margin: 8px 0 9px; }
+.cw-header h1 { font-size: clamp(30px, calc(3vw / var(--ui-zoom, 1)), 40px); font-weight: 550; margin: 8px 0 9px; }
 .cw-primary { border: 1px solid #625cdd; border-radius: 12px; background: linear-gradient(135deg, #6159d9, #7564e1); box-shadow: 0 3px 8px #6259d921; }
 .cw-primary:hover { background: #5a51c9; }
 .cw-secondary { border-radius: 10px; }
@@ -799,14 +799,14 @@
   .cw-activity-list time { margin-left: 16px; }
 }
 .crm-panel { background: #ffffffc9; border: 1px solid var(--cw-border); border-radius: 16px; padding: 23px; margin-bottom: 28px; }
-.crm-subtitle { font-size: 11px; color: #7b8497; line-height: 1.7; margin: 6px 0 0; }
+.crm-subtitle { font-size: 11px; color: #697285; line-height: 1.7; margin: 6px 0 0; }
 .crm-panel form { display: grid; gap: 16px; }
 .crm-panel label { display: grid; gap: 7px; font-size: 12px; color: #657087; margin: 0; }
 .crm-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .crm-panel input, .crm-panel select, .crm-panel textarea, .crm-stage-filter select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #dfe3ee; background: #fcfcff; border-radius: 9px; padding: 10px 12px; color: #37435a; font: inherit; font-size: 12px; margin: 0; min-height: 42px; }
 .crm-panel textarea { resize: vertical; line-height: 1.7; }
 .crm-panel form > button { justify-self: start; }
-.crm-stage { display: inline-flex; border-radius: 6px; padding: 5px 9px; color: #76639f; background: #f0edf9; font-size: 11px; white-space: nowrap; }
+.crm-stage { display: inline-flex; border-radius: 6px; padding: 5px 9px; color: #725f9b; background: #f0edf9; font-size: 11px; white-space: nowrap; }
 .crm-log, .crm-history { border-top: 1px solid #e9eaf1; padding-top: 18px; margin-top: 22px; }
 .crm-panel h3 { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 550; margin: 0 0 13px; }
 .crm-log-fields { display: flex; gap: 8px; }

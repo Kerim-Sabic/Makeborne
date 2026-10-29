@@ -1,11 +1,14 @@
 "use client";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
+import { LEGAL_VERSION, SIGNUP_TERMS_LINE } from "@/lib/legal/versions";
 import BrandMark from "./brand-mark";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, LockKeyhole, Mail, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { accountError, authDestination, passwordRecoveryDestination } from "@/lib/supabase/auth-flow";
+import { accountError, authDestination, billingPlanSelection, passwordRecoveryDestination } from "@/lib/supabase/auth-flow";
+import { CREATION_PLANS, planPrice, usd } from "@/lib/billing/plans";
 
 type Mode = "login" | "signup" | "recovery";
 type Notice = { text: string; error: boolean };
@@ -32,6 +35,8 @@ export default function AccountForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [retryAt, setRetryAt] = useState(0);
   const [retryIn, setRetryIn] = useState(0);
+  /** Set only when the return link is a /billing plan: shows the choice, opens code entry and continues after the code. */
+  const [planChoice, setPlanChoice] = useState<{ name: string; price: string; credits: string } | null>(null);
 
   function returnDestination() {
     return authDestination(new URLSearchParams(window.location.search).get("next"));
@@ -62,6 +67,12 @@ export default function AccountForm() {
     queueMicrotask(() => {
       const query = new URLSearchParams(window.location.search);
       if (query.get("mode") === "signup") setMode("signup");
+      const selection = billingPlanSelection(query.get("next"));
+      const plan = selection && CREATION_PLANS.find(item => item.id === selection.tier);
+      if (plan && selection && (selection.interval === "monthly" || selection.interval === "yearly")) {
+        const price = planPrice(plan.id, selection.interval, false);
+        setPlanChoice({ name: plan.name, price: `${usd(price.standardCents)} a ${selection.interval === "yearly" ? "year" : "month"}`, credits: `${plan.monthlyCredits.toLocaleString("en-US")} credits` });
+      }
       const error = query.get("error");
       if (error) {
         setNotice({ error: true, text: error === "cloud-unavailable"
@@ -112,7 +123,8 @@ export default function AccountForm() {
         const { data, error } = await client.auth.signUp({
           email: address,
           password,
-          options: { emailRedirectTo: redirectUrl() },
+          // The accepted Terms version and time, beside the clickwrap line under "Create account".
+          options: { emailRedirectTo: redirectUrl(), data: { terms_version: LEGAL_VERSION, terms_accepted_at: new Date().toISOString() } },
         });
         if (error) throw error;
         setPassword("");
@@ -183,6 +195,8 @@ export default function AccountForm() {
       if (error) throw error;
       clearPendingEmail();
       setCode("");
+      // Only on the plan path: the code proves the email, so go straight back to the plan to pay.
+      if (planChoice && verification !== "recovery") { router.replace(returnDestination()); router.refresh(); return; }
       setVerified(true);
     } catch (error) {
       setNotice({ error: true, text: accountError(error) });
@@ -237,6 +251,7 @@ export default function AccountForm() {
           <h1 id="account-heading">{verified ? verification === "recovery" ? "You’re verified" : "Email confirmed" : verification ? "Check your inbox" : mode === "signup" ? "Make room for your ideas" : mode === "recovery" ? "Reset your password" : "Welcome back"}</h1>
           <p>{verified ? "You’re ready to continue." : verification ? verification === "recovery" ? "If an account uses this email, a reset link is on its way." : "Follow the confirmation link in your email to finish signing up." : mode === "signup" ? "Your next website, book or presentation starts here." : mode === "recovery" ? "We’ll help you get back to your projects." : "Pick up where your ideas left off."}</p>
         </div>
+        {planChoice && !verified && verification !== "recovery" && mode !== "recovery" && <p className="auth-plan-strip">{planChoice.name} · {planChoice.price} · {planChoice.credits}. Create your account, then pay in secure Whop checkout.</p>}
         {enabled === null ? <div className="auth-loading" role="status"><LoaderCircle className="auth-spinner" size={17} />Getting things ready…</div> : !enabled ? <>
           <div className="inline-info"><LockKeyhole size={20} /><p>Account access is temporarily unavailable.</p></div>
           <Link className="button primary" href="/">Back to home <ArrowRight size={16} /></Link>
@@ -245,7 +260,7 @@ export default function AccountForm() {
           <p className="auth-verification-footnote">Your projects, all in one place.</p>
         </> : verification ? <>
           <div className="auth-email-address"><Mail size={16} aria-hidden="true" /><strong>{email}</strong><button type="button" onClick={changeEmail} disabled={busy}>Change</button></div>
-          <details className="auth-code-entry">
+          <details className="auth-code-entry" open={planChoice !== null && verification !== "recovery"}>
             <summary>Have a verification code?</summary>
             <form onSubmit={verifyCode}>
               <label htmlFor="account-code">Code from your email</label>
@@ -269,6 +284,8 @@ export default function AccountForm() {
             </div>}
             <button className="button primary" disabled={busy || (mode === "recovery" && retryIn > 0)} type="submit">{busy ? <><LoaderCircle className="auth-spinner" size={16} />Please wait…</> : <>{mode === "signup" ? "Create account" : mode === "recovery" ? retryIn > 0 ? `Try again in ${retryIn}s` : "Send reset link" : "Sign in"}<ArrowRight size={16} /></>}</button>
           </form>
+          {mode === "signup" && <TermsLine />}
+          {mode === "login" && (google || github) && <p className="auth-legal-line">New here? Continuing with Google or GitHub creates an account. <TermsLine inline /></p>}
           <div className="auth-mode-switch">{mode === "recovery" ? <button disabled={busy} onClick={() => changeMode("login")}><ArrowLeft size={14} />Back to sign in</button> : <><span>{mode === "signup" ? "Already have an account?" : "New to Makeborne?"}</span><button disabled={busy} onClick={() => changeMode(mode === "signup" ? "login" : "signup")}>{mode === "signup" ? "Sign in" : "Create an account"}</button></>}</div>
           {mode === "login" && <details className="auth-help"><summary>Waiting for a confirmation email?</summary><p>Enter your email above, then request a new link.</p><button type="button" className="text-link" disabled={busy || !email.trim() || retryIn > 0} onClick={() => void resend("signup")}>{retryIn > 0 ? `Resend in ${retryIn}s` : "Resend confirmation email"}</button></details>}
         </>}
@@ -276,6 +293,12 @@ export default function AccountForm() {
       </section>
       {!verification && <p className="auth-caption">A little space for your next big thing.</p>}
     </div>
-    <footer className="auth-footer"><span>© 2026 Makeborne</span><Link href="/privacy">Privacy</Link></footer>
+    <footer className="auth-footer"><span>© 2026 Makeborne</span><LegalLinks /></footer>
   </main>;
+}
+
+/** Clickwrap: links, never a pre-ticked box. The version is stored with email sign-up (LEGAL_VERSION). */
+function TermsLine({ inline = false }: { inline?: boolean }) {
+  const text = <>{SIGNUP_TERMS_LINE.before}<Link href="/terms">{SIGNUP_TERMS_LINE.terms}</Link>{SIGNUP_TERMS_LINE.middle}<Link href="/privacy">{SIGNUP_TERMS_LINE.privacy}</Link>{SIGNUP_TERMS_LINE.after}</>;
+  return inline ? <span>{text}</span> : <p className="auth-legal-line" id="signup-terms">{text}</p>;
 }

@@ -29,7 +29,7 @@ export type HelpArticle = {
 };
 
 export const HELP_CATEGORIES: { id: HelpCategory; label: string; blurb: string }[] = [
-  { id: "create", label: "Create", blurb: "Websites, books and presentations from a short brief." },
+  { id: "create", label: "Create", blurb: "Websites, books and presentations from one brief." },
   { id: "clients", label: "Clients & outreach", blurb: "Your CRM, new leads, personal emails and follow-ups." },
   { id: "grow", label: "Grow your business", blurb: "Win clients: prospecting, outreach, follow-ups, pricing and approvals." },
   { id: "compare", label: "Comparisons", blurb: "How Makeborne compares with other AI builders, checked against their official docs." },
@@ -48,7 +48,7 @@ const CORE_ARTICLES: HelpArticle[] = [
     answer: "Choose Website, describe your business, who it is for and what visitors should do, then press Create. Makeborne plans the pages, writes the copy and designs each section while you watch a live preview. When it is done, ask for changes in plain words, then publish it to a Makeborne web address.",
     steps: [
       { name: "Choose Website", text: "On the home page or in the studio, pick Website in the format switch." },
-      { name: "Write a short brief", text: "Say what the business does, who it serves, the pages you need and the one action visitors should take, such as booking or ordering." },
+      { name: "Write your brief", text: "Say what the business does, who it serves, the pages you need and the one action visitors should take, such as booking or ordering." },
       { name: "Pick a style and effort (optional)", text: "Choose a visual style from the gallery, and an effort level from Light to Ultra. Higher effort gives more planning and review." },
       { name: "Press Create", text: "Makeborne plans the pages and builds them. The preview fills in section by section." },
       { name: "Edit by asking", text: "Type a change such as “make the hero warmer and add opening hours” and it is applied to the live preview." },
@@ -186,10 +186,10 @@ const CORE_ARTICLES: HelpArticle[] = [
     title: "How to share work with a client for review and approval",
     description: "Send a review link so your client can comment and approve a website, book or presentation, with no account needed. Approval marks the project Delivered.",
     keywords: ["review", "approval", "feedback", "share", "client link", "comments", "approve", "sign off", "proof"],
-    answer: "Open the project and choose Share for review, then copy the link and send it to your client. They can view the latest version (or a specific one), leave comments and approve it or request changes, without creating an account. Approval marks the project Delivered; a change request marks it Changes requested.",
+    answer: "Open the project, choose Client review in the ••• menu at the top right, create a review link, then copy it and send it to your client. They can view the latest version (or a specific one), leave comments and approve it or request changes, without creating an account. Approval marks the project Delivered; a change request marks it Changes requested.",
     steps: [
       { name: "Open the project", text: "Go to the website, book or presentation." },
-      { name: "Share for review", text: "Choose the latest version or a specific one." },
+      { name: "Choose Client review", text: "In the project’s ••• menu at the top right. Pick the latest version or a specific one, then Create review link." },
       { name: "Copy and send the link", text: "Email or message it to your client." },
       { name: "Read feedback", text: "Comments and the client’s decision appear on the project, and you can resolve comments as you act on them." },
     ],
@@ -266,7 +266,7 @@ const CORE_ARTICLES: HelpArticle[] = [
     title: "How to send a personalised email to each lead with AI",
     description: "Select leads, choose Write personal emails, and AI writes a different email for each person from their public profile. Review, edit and send from your inbox.",
     keywords: ["personalised email", "personalized email", "cold email", "outreach", "bulk email", "ai email", "write emails", "email campaign", "send emails", "email my clients", "email clients", "email leads"],
-    answer: "Tick the leads you want to reach in Clients and choose Write personal emails. Pick an angle, keep Read public profiles on, and AI (Claude Haiku) reads each lead’s public page and writes a different email for each person. Review and edit them, then send from your connected Gmail or Outlook. Writing uses a small amount of credits; sending is free.",
+    answer: "Tick the leads you want to reach in Clients and choose Write personal emails. Pick an angle, keep Read public profiles on, and AI (Claude Haiku) reads each lead’s public page and writes a different email for each person. Review and edit them, then send from your connected Gmail. Writing uses a small amount of credits; sending is free.",
     steps: [
       { name: "Select leads", text: "Tick them in the client list." },
       { name: "Write personal emails", text: "Choose the outreach angle and add any notes about your offer." },
@@ -282,20 +282,20 @@ const CORE_ARTICLES: HelpArticle[] = [
   },
   {
     slug: "connect-gmail-or-outlook", category: "clients", updated: UPDATED, demo: "connect-email",
-    title: "How to connect Gmail or Outlook and manage follow-ups",
-    description: "Connect your Gmail or Outlook to send emails from Makeborne. Gmail is currently send-only, and automated sequence sending is disabled for launch.",
+    title: "How to connect Gmail and manage follow-ups",
+    description: "Connect Gmail to send emails from Makeborne. Gmail is currently send-only, Outlook isn’t available yet, and automated sequences are off for launch.",
     keywords: ["gmail", "outlook", "microsoft 365", "connect email", "mailbox", "sequence", "follow-up", "automation", "automate", "automatic follow", "automate follow ups", "drip", "reply tracking", "warm up"],
-    answer: "In Clients, open Email and choose Connect Gmail or Connect Outlook, then approve access with your provider. Emails are sent from your own address. Gmail is currently send-only: read replies in Gmail and update the client yourself. Automated sequence sending is disabled for the current launch. Use CRM follow-up dates and send reviewed messages manually.",
+    answer: "In Clients, open Email and choose Connect Gmail, then approve access with Google. Emails are sent from your own address. Outlook connections aren’t available yet. Gmail is currently send-only: read replies in Gmail and update the client yourself. Automated sequence sending is disabled for the current launch. Use CRM follow-up dates and send reviewed messages manually.",
     steps: [
       { name: "Open Email", text: "In Clients, switch to the Email view." },
-      { name: "Connect your mailbox", text: "Choose Gmail or Outlook and approve access on your provider’s screen." },
+      { name: "Connect your mailbox", text: "Choose Connect Gmail and approve sending access on Google’s screen." },
       { name: "Send one-to-one", text: "From any client’s Email tab, write or generate an email and send it." },
       { name: "Plan a manual follow-up", text: "Set a follow-up date in the CRM and review your inbox before sending. Automated sequence sending is disabled for launch." },
     ],
     sections: [{ heading: "Sending limits and warm-up", paragraphs: ["To protect your sender reputation, new mailboxes start with a few emails a day and the limit rises over the following days, up to the mailbox’s daily maximum. Emails are spaced out rather than sent in one burst."] }],
     faqs: [
       { q: "Is sending free?", a: "Sending uses no credits. Only AI writing does. Gmail reply tracking is unavailable and automated sequence sending is disabled for launch." },
-      { q: "Can I disconnect?", a: "Yes. Disconnect the mailbox in Email, and you can also revoke access in your Google or Microsoft account." },
+      { q: "Can I disconnect?", a: "Yes. Disconnect the mailbox in Email, and you can also revoke access in your Google account." },
       { q: "What happens when someone replies?", a: "Gmail is send-only, so replies stay in Gmail and you update the client yourself. Reply handling depends on your mailbox’s supported connection. Automated sequence sending is disabled for launch; check your inbox before each manual follow-up." },
     ],
     related: ["send-personal-outreach-emails", "manage-clients-and-follow-ups"],
@@ -319,11 +319,11 @@ const CORE_ARTICLES: HelpArticle[] = [
   {
     slug: "credits-and-pricing", category: "account", updated: UPDATED,
     title: "How credits and plans work in Makeborne",
-    description: "Plans include monthly credits for AI work. Sending email, publishing and the CRM use none. Unused credits carry over for two months.",
+    description: "Plans from US$20 a month include monthly credits for AI work. Sending email, publishing and the CRM use none. Unused credits carry over for two months.",
     keywords: ["credits", "pricing", "plans", "cost", "subscription", "billing", "top up", "credit pack", "refund", "carry over", "how much"],
-    answer: "Every plan includes monthly credits for AI work: creating and editing projects, personalised emails, lead finding and advisor answers. Sending email, publishing and the CRM itself use no credits. Automated sequence sending is disabled for the current launch. Unused plan credits carry over for two months, and one-time credit packs add more without changing your plan.",
+    answer: "Every plan includes everything; plans differ only in monthly credits for AI work: creating and editing projects, personalised emails, lead finding and advisor answers. Sending email, publishing and the CRM itself use no credits. Automated sequence sending is disabled for the current launch. Unused plan credits carry over for two months. One-time credit packs are planned for members after launch.",
     sections: [
-      { heading: "Plans", list: ["Create: US$29 per month, 300 credits.", "Studio: US$79 per month, 850 credits.", "Scale: US$199 per month, 2,200 credits.", "Yearly billing is 20% below twelve monthly payments. Prices are before tax."] },
+      { heading: "Plans", list: ["Create: US$20 per month, 300 credits.", "Studio: US$49 per month, 750 credits.", "Scale: US$99 per month, 1,550 credits.", "Prices are in US dollars. Any tax or checkout fee is shown by Whop before you pay.", "Yearly plans, when offered at checkout, cost 20% less than twelve monthly payments. They are billed once a year upfront, and their credits are released each month."] },
       { heading: "What uses credits", list: ["Creating and editing websites, books and presentations (more for larger work and higher effort).", "Advisor answers: Standard usually under one credit; Genius more.", "Personal emails: a fraction of a credit each.", "Lead finding: 0.2 credits per delivered lead plus confirmed AI ranking, with the combined total rounded up once. Creator discovery is temporarily unavailable."] },
       { heading: "What is free", list: ["Sending emails. Gmail is currently send-only; automated sequence sending is disabled for launch.", "Publishing and hosting websites (fair use).", "The CRM, client reviews and lead research of a single profile."] },
     ],
