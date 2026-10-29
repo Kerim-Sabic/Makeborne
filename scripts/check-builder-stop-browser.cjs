@@ -21,7 +21,15 @@ async function main(){
   if(pathname==='/api/credits')return json(res,{available:500,unlimited:false});
   if(pathname==='/api/build/questions')return json(res,{questions:[]});
   if(pathname==='/api/build/plan'&&req.method==='GET')return json(res,{stored:null});
+  // Pre-Send source inspection (stage 2): the switch is off here, so the builder keeps today's attachment behaviour.
+  if(pathname==='/api/build/sources'){current.side.push(`${req.method} sources`);assert.equal(req.method,'GET','capabilities only; no file is inspected in this fixture');return json(res,{enabled:false,formats:[],inlineBytes:3000000,referenceBytes:0});}
   let text='';for await(const chunk of req)text+=chunk;const body=text?JSON.parse(text):null;
+  // Account chat history (main 13b1343): it may load and save turns; it never starts, stops or charges a build.
+  if(pathname===`/api/cloud/workspaces/${ids.workspace}/artifacts/${ids.artifact}/chat`){
+   current.side.push(`${req.method} chat`);assert.equal(req.headers['x-makeborne-account'],ids.actor);
+   if(req.method==='GET')return json(res,{messages:[],next:null});
+   assert.equal(req.method,'POST');return json(res,{saved:(body?.messages??[]).map(message=>message.id)});
+  }
   if(pathname==='/api/build/operations'){
    current.requests.push({method:req.method,body});
    if(!current.operation)return json(res,{error:{message:'Not recorded'}},404);
@@ -52,7 +60,7 @@ async function main(){
  let passed=0;
  try{
   for(const name of ['before-id','mid-run-double-stop','reload-during-stop','lost-stop-reply','late-operation-event']){
-   state={requests:[],builds:[],errors:[],operation:null,result:null,stream:null,initialDelay:name==='before-id'?1500:0,charge:name==='before-id'?0:1,finishOnStop:name!=='reload-during-stop',lostReply:name==='lost-stop-reply',finish:()=>{throw Error('Build not started');}};
+   state={requests:[],builds:[],side:[],errors:[],operation:null,result:null,stream:null,initialDelay:name==='before-id'?1500:0,charge:name==='before-id'?0:1,finishOnStop:name!=='reload-during-stop',lostReply:name==='lost-stop-reply',finish:()=>{throw Error('Build not started');}};
    state.staleEvent=name==='late-operation-event';
    const current=state,context=await browser.newContext({viewport:{width:375,height:900}}),page=await context.newPage(),errors=[];
    page.setDefaultTimeout(15000);collectPageErrors(page,errors);
@@ -80,6 +88,7 @@ async function main(){
     assert.equal(await page.getByRole('button',{name:'Approve allowance & continue'}).count(),0);
     assert.ok(await page.getByRole('textbox',{name:'Message the builder'}).isEnabled(),'new message allowed after settled Stop');
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'375px controls fit');
+    assert.ok(current.side.every(entry=>/^(GET sources|GET chat|POST chat)$/.test(entry)),`only capability and chat-history requests besides the build (${current.side.join(', ')})`);
     assert.deepEqual(errors,[]);assert.deepEqual(current.errors,[]);console.log('PASS Stop browser: '+name);passed++;
    }finally{current.stream?.destroy();await context.close();}
   }

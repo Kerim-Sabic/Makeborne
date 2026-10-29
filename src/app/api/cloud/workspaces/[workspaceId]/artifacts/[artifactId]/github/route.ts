@@ -28,7 +28,7 @@ export async function POST(request:Request,context:Context) {
     const body=await cloudBody(request,z.object({repositoryId:z.number().int().positive().safe(),version:z.number().int().positive(),acknowledged:z.literal(true)}).strict(),1000);
     const {workspaceId,artifactId}=await context.params;validId(artifactId);
     const {user,workspace,client}=await cloudContext(workspaceId,true);
-    if(workspace?.role!=="owner")throw new RequestError("OWNER_REQUIRED","Only the workspace owner can sync website code.",403);
+    if(workspace?.role!=="owner")throw new RequestError("OWNER_REQUIRED","Only the workspace owner can push website code to GitHub.",403);
     // React source projects push the saved version's complete project; static
     // websites keep pushing their published HTML snapshot.
     const {data:row,error:versionError}=await client.from("artifact_versions").select("*").eq("workspace_id",workspaceId).eq("artifact_id",artifactId).eq("version_number",body.version).maybeSingle();databaseError(versionError);
@@ -44,7 +44,7 @@ export async function POST(request:Request,context:Context) {
       snapshot=githubSourceSnapshot(version,artwork,artifactId);
     }else{
       const {data:site,error:siteError}=await client.from("hosted_sites").select("html,version_number,live").eq("workspace_id",workspaceId).eq("artifact_id",artifactId).maybeSingle();databaseError(siteError);
-      if(!site?.live||site.version_number!==body.version)throw new RequestError("PUBLISH_FIRST","Publish this saved version before syncing its public website code.",409);
+      if(!site?.live||site.version_number!==body.version)throw new RequestError("PUBLISH_FIRST","Publish this saved version before pushing its public website code.",409);
       html=site.html as string;
     }
     const {token}=await githubConnection(user.id);
@@ -61,7 +61,7 @@ export async function POST(request:Request,context:Context) {
     let update=db.from("github_website_links").update({commit_sha:result.commitSha,version_number:body.version,repository_name:repository.full_name,updated_at:new Date().toISOString()}).eq("artifact_id",artifactId).eq("user_id",user.id);
     update=recordedCommitSha?update.eq("commit_sha",recordedCommitSha):update.is("commit_sha",null);
     const {data:link,error}=await update.select(columns).maybeSingle();databaseError(error);
-    if(!link)throw new RequestError("SYNC_STATUS_CHANGED","The sync status changed. Refresh to see the latest result.",409);
+    if(!link)throw new RequestError("SYNC_STATUS_CHANGED","The GitHub status changed. Refresh to see the latest result.",409);
     return linkJson(link as Link,{kind:snapshot?"source":"snapshot",alreadySynced:result.alreadySynced,...(snapshot?{files:snapshot.files.length}:{})});
   }catch(error){return cloudError(error);}
 }

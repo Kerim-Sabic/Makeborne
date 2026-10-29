@@ -9,7 +9,7 @@ const JSZip = require("jszip"), sharp = require("sharp");
 const { chromium } = require("playwright");
 const { DocumentSourceSchema, FONT_PAIRINGS, MOTIFS, SLIDE_LAYOUTS } = require("./schema.ts");
 const { FONTS, MOTIF_NOTES } = require("./theme.ts");
-const { DOCUMENT_FACES, FACE_SUBSETS, faceFile, faceStyles, fontFaceCss } = require("./fonts.ts");
+const { DOCUMENT_FACES, FACE_SUBSETS, PRINT_WEIGHTS, faceFile, faceStyles, fontFaceCss, hasStaticCuts, staticFaceFile } = require("./fonts.ts");
 const { embeddedFontSources } = require("./fonts-server.ts");
 const { composeSlide, W, H } = require("./slide-scene.ts");
 const { deckHtml, deckFaces } = require("./render-deck.ts"), { bookHtml } = require("./render-book.ts"), { deckPptx, PPTX_MONO } = require("./pptx.ts");
@@ -93,16 +93,30 @@ const textShapes = xml => [...xml.matchAll(/<p:sp>([\s\S]*?)<\/p:sp>/g)].map(([,
 
   await check("every pairing embeds open-licensed faces so the serverless PDF never falls back to Open Sans", async () => {
     const catalog = JSON.parse(fs.readFileSync(path.join(repo, "infra/project-runtime/font-catalog.json"), "utf8"));
-    const config = fs.readFileSync(path.join(repo, "next.config.ts"), "utf8");
+    // The export route traces exactly the files the PDF printer reads: the static print cuts of variable faces
+    // (Chromium embeds variable fonts as Type 3), the variable file only for condensed widths, single static files as they are.
+    const traced = require(path.join(repo, "next.config.ts")).default.outputFileTracingIncludes["/api/cloud/workspaces/*/artifacts/*/document-export"]
+      .map(glob => new RegExp(`^${glob.replace(/^\.\//, "").replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\0").replace(/\*/g, "[^/]*").replace(/\0/g, ".*")}$`));
+    const isTraced = file => traced.some(glob => glob.test(file));
     for (const [id, face] of Object.entries(DOCUMENT_FACES)) {
       const entry = catalog.find(font => font.id === id);
       assert.ok(entry, `${id} is in the website font catalogue, so public/builder-runtime/fonts serves it`);
       assert.deepEqual([entry.family, entry.axis, entry.weight, entry.italic], [face.family, face.axis, face.weight, face.italic], `${id} matches the catalogue`);
       for (const style of faceStyles(id)) for (const subset of FACE_SUBSETS) {
-        assert.ok(fs.existsSync(path.join(modulesRoot, "node_modules", face.pkg, id, "files", faceFile(id, style, subset))), `${id} ${style} ${subset} file installed`);
-        assert.ok(config.includes(`${face.pkg}/${id}/files/${id}-SUBSET-${face.axis}-*.woff2`), `${id} traced into the export route (latin and latin-ext)`);
+        const screen = `node_modules/${face.pkg}/${id}/files/${faceFile(id, style, subset)}`;
+        assert.ok(fs.existsSync(path.join(modulesRoot, screen)), `${id} ${style} ${subset} file installed`);
+        assert.equal(isTraced(screen), !hasStaticCuts(id) || "stretch" in face, `${screen}: traced only where the printer reads it`);
+        if (hasStaticCuts(id)) for (const weight of PRINT_WEIGHTS) {
+          const cut = `node_modules/@fontsource/${id}/files/${staticFaceFile(id, style, weight, subset)}`;
+          assert.ok(fs.existsSync(path.join(modulesRoot, cut)), `${cut} installed`);
+          assert.ok(isTraced(cut), `${cut} traced into the export route`);
+        }
       }
     }
+    // Only the print weights are traced: no other static cut ships with the route.
+    const cutsDir = id => path.join(modulesRoot, "node_modules/@fontsource", id, "files");
+    for (const id of Object.keys(DOCUMENT_FACES).filter(hasStaticCuts)) for (const file of fs.readdirSync(cutsDir(id)))
+      assert.equal(isTraced(`node_modules/@fontsource/${id}/files/${file}`), /^[a-z-]+-latin(-ext)?-(400|600|700)-(normal|italic)\.woff2$/.test(file) && file.startsWith(`${id}-latin`), `${id}/${file}`);
     for (const fonts of FONT_PAIRINGS) {
       const pairing = FONTS[fonts];
       for (const stack of [pairing.heading, pairing.body]) {

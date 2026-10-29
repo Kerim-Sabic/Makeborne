@@ -16,6 +16,10 @@ import EnquiryLeads from "./enquiry-leads";
 import BrandKits from "./brand-kits";
 import LeadRedesign from "./lead-redesign";
 import ClientPortalPanel from "./client-portal-panel";
+import ClientKnowledge from "./client-knowledge";
+import ClientResearch from "./client-research";
+import CrmInsights from "./crm/crm-insights";
+import ClientCrm from "./crm/client-crm";
 const LeadFinder = dynamic(() => import("./leads/lead-finder"), { ssr: false });
 import ClientCommandPalette, { type PaletteAction } from "./client-command-palette";
 import { addDays, nextMonday, quickUpdate, type QuickChange } from "./client-quick-actions";
@@ -44,7 +48,7 @@ const readDevicePreference = () => { try { return typeof window !== "undefined" 
 const writeDevicePreference = (value: boolean) => { try { window.sessionStorage.setItem(DEVICE_PREFERENCE, value ? "1" : "0"); } catch { /* private mode */ } };
 
 /** Account changes unmount every client draft and invalidate outstanding reads. */
-type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient, prefill?: { brief: string; title: string }) => void };
+type ClientCreation = { onOpenProject: (route: AccountProjectRoute) => void; onCreate: (workspaceId: string, client: CloudClient, prefill?: { brief: string; title: string; kind?: "website" | "book" | "presentation" }) => void };
 type ClientNavigation = { target: AccountClientRoute | null; navigate: (route: AccountClientRoute | null) => void };
 export default function AccountClients({ deviceClients, target, navigate, onCreate, onOpenProject, initialDevice = false }: ClientNavigation & ClientCreation & { deviceClients: ReactNode; initialDevice?: boolean }) {
   const [account, setAccount] = useState<string | null>(null);
@@ -199,10 +203,14 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const [palette, setPalette] = useState(false);
   const [finding, setFinding] = useState(false);
   const [finderSeed, setFinderSeed] = useState<LeadFinderSeed | null>(null);
+  // A requested action (welcome, checklist) that needs the client workspace: a brand-new account has none yet,
+  // so it is set up as part of the same request instead of asking for a separate "Set up" click.
+  const [setupRequested, setSetupRequested] = useState(false);
   // Requests from the getting-started checklist: open the lead finder, or show Email.
   useEffect(() => {
     const apply = (request: ClientsRequest | null) => {
-      if (request?.action === "find-leads") { setLayout("list"); setFinderSeed(request.seed ?? null); setFinding(true); }
+      if (request?.action === "find-leads") { setLayout("list"); setFinderSeed(request.seed ?? null); setFinding(true); setSetupRequested(true); }
+      else if (request?.action === "add-client") { setLayout("list"); setAdding(true); setSetupRequested(true); }
       else if (request?.action === "email") { setLayout("email"); try { window.localStorage.setItem(LAYOUT_KEY, "email"); } catch { /* storage unavailable */ } }
     };
     const timer = window.setTimeout(() => apply(takeClientsAction()), 0);
@@ -304,19 +312,34 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
       setMessage(cause instanceof Error ? cause.message : "Client could not be saved.");
     } finally { writeLock.current = false; savingChanged(false); if (version === generation.current) setBusy(false); }
   }
+  /** Creates the account's first workspace (as the first project would) and opens it. True once it is shown. */
   async function createWorkspace() {
-    if (writeLock.current || workspaces.length) return;
-    if (getPendingCloudWrites(accountId).some(item => item.path === "/api/workspaces")) { setMessage("Resolve your unconfirmed workspace request below before creating another."); return; }
+    if (writeLock.current || workspaces.length) return false;
+    if (getPendingCloudWrites(accountId).some(item => item.path === "/api/workspaces")) { setMessage("Resolve your unconfirmed workspace request below before creating another."); return false; }
     writeLock.current = true; savingChanged(true); setBusy(true); setMessage("");
     const version = ++generation.current;
     try {
       const result = await api<{ workspace: CloudWorkspace }>("/api/workspaces", { name: "My workspace" });
-      if (version !== generation.current) return;
+      if (version !== generation.current) return false;
       setWorkspaces([result.workspace]);
       const data = await api<Snapshot>(`/api/cloud/workspaces/${result.workspace.id}`);
-      if (version === generation.current) { snapshotWorkspace.current = result.workspace.id; setSnapshot(data); }
-    } catch (cause) { if (version === generation.current) setMessage(cause instanceof Error ? cause.message : "Could not prepare your workspace."); }
+      if (version === generation.current) { snapshotWorkspace.current = result.workspace.id; setSnapshot(data); return true; }
+      return false;
+    } catch (cause) { if (version === generation.current) setMessage(cause instanceof Error ? cause.message : "Could not prepare your workspace."); return false; }
     finally { writeLock.current = false; savingChanged(false); setBusy(false); }
+  }
+  // Once the account is known to have no workspace, a requested action sets one up in the same step.
+  const needsWorkspace = !busy && !snapshot && !workspaces.length && !message && !requestedWorkspace;
+  useEffect(() => {
+    if (!setupRequested || !needsWorkspace) return;
+    const timer = window.setTimeout(() => { setSetupRequested(false); void createWorkspace(); }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- createWorkspace is re-created each render; the request and the loaded state decide.
+  }, [setupRequested, needsWorkspace]);
+  /** First client from an empty account: one click sets up the workspace and opens the form (or the lead finder). */
+  async function startClients(next: "add" | "find") {
+    if (!(await createWorkspace())) return;
+    if (next === "add") { chooseLayout("list"); setAdding(true); } else setFinding(true);
   }
   const canEdit = snapshot?.workspace.role !== "reviewer";
   const summary = (client: CloudClient) => client.outreachSummary ?? client.outreach;
@@ -400,7 +423,9 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   const tabs: { id: ClientView; label: string }[] = [{ id: "outreach", label: "Outreach & activity" }, { id: "email", label: "Email" }, { id: "details", label: "Contact details" }, { id: "brand", label: "Brand & client access" }, { id: "projects", label: "Projects" }, { id: "reviews", label: "Client reviews" }];
 
   // The lead finder opens from the list header, the command palette, the checklist, or "Find more like this" on a client.
-  const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }} onAdded={(count, tag) => {
+  // While lead finding can't start, the finder offers the paths that work without AI.
+  const finderView = finding && snapshot ? <LeadFinder key={finderSeed?.url ?? finderSeed?.name ?? "finder"} accountId={accountId} workspaceId={snapshot.workspace.id} seed={finderSeed} onClose={() => { setFinding(false); setFinderSeed(null); }}
+    instead={canEdit ? { add: () => { setFinding(false); setFinderSeed(null); if (clientId) backToList(); chooseLayout("list"); setAdding(true); }, import: clientId ? undefined : () => { setFinding(false); setFinderSeed(null); importInput.current?.click(); } } : undefined} onAdded={(count, tag) => {
     setFinding(false); setFinderSeed(null); if (clientId) backToList(); chooseLayout("list"); if (tag) setTagFilter(tag); setRefreshKey(key => key + 1); refreshOnboarding();
     setMessage(`Added ${count} new lead${count === 1 ? "" : "s"} to your clients${tag ? `, tagged “${tag}”` : ""}. Select them and choose “Write personal emails” to reach out.`);
   }} /> : null;
@@ -413,6 +438,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
         <button className="button primary" disabled={saving} onClick={() => onCreate(snapshot.workspace.id, opened)}><Plus size={16} /> Create for this client</button></div>}</header>
     {redesigning && opened && snapshot && <LeadRedesign accountId={accountId} workspaceId={snapshot.workspace.id} client={{ id: opened.id, name: opened.company || opened.name, website: opened.website }}
       onClose={() => setRedesigning(false)} onCreate={(brief, title) => { setRedesigning(false); onCreate(snapshot.workspace.id, opened, { brief, title }); }} />}
+    {opened && snapshot && canEdit && <ClientResearch key={`research:${opened.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={opened.id} onCreate={prefill => onCreate(snapshot.workspace.id, opened, prefill)} />}
     {message && <p role="status">{message}</p>}
     {openError && <div className="ac-notice" role="alert"><p>{openError}</p><button className="button secondary small" onClick={backToList}>Back to clients</button></div>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />
@@ -421,12 +447,14 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
       {!full || !snapshot || fresh !== full.id ? !openError && <DetailSkeleton /> : <>
         {view === "outreach" && <LeadProfileCard key={`lead:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} clientWebsite={full.website} lead={leadMeta.leads[full.id]}
           stage={String(full.outreach?.stage ?? "Lead")} hasEmail={!!full.email} overdue={followUpBucket(full.outreach, today) === "overdue"} canEdit={canEdit} onChange={lead => leadMeta.update(full.id, lead)} />}
+        {view === "outreach" && <ClientCrm key={`crm:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} onOpenClient={open} onOpenEmail={() => setView("email")} />}
         {view === "outreach" && canEdit && <ClientFollowUpDraft accountId={accountId} workspaceId={snapshot.workspace.id} client={full} onLogged={client => { saved(client); setOutreachRevision(value => value + 1); setMessage("Logged as sent. The next follow-up is scheduled."); }} />}
         {view === "outreach" && <CloudClientOutreach embedded key={`${full.id}:${outreachRevision}`} initialClient={full} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={backToList} onSaved={saved} />}
         {view === "details" && <ClientDetails key={full.id} client={full} onSaving={savingChanged} workspaceId={snapshot.workspace.id} canEdit={canEdit} close={backToList} notify={setMessage} saved={async () => {
           try { const detail = await api<{ client: CloudClient }>(`/api/cloud/workspaces/${snapshot.workspace.id}/clients/${full.id}`); saved(detail.client); setMessage("Client details saved to your account."); }
           catch { setMessage("Client details saved. Refresh to see the latest version."); }
         }} />}
+        {view === "details" && <ClientKnowledge key={`knowledge:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.company || full.name} />}
         {view === "brand" && <BrandKits key={`brand:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} />}
         {view === "brand" && <ClientPortalPanel key={`portal:${full.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.company || full.name} contactName={full.name} clientEmail={full.email} canEdit={canEdit} />}
         {view === "reviews" && <ClientReviewFeed key={`${snapshot.workspace.id}:${full.id}:reviews`} accountId={accountId} workspaceId={snapshot.workspace.id} clientId={full.id} clientName={full.name} canEdit={canEdit} onOpenProject={onOpenProject} />}
@@ -459,7 +487,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
   return <section className="ac-workspace" aria-label="Account clients" ref={root}>
     <header className="ac-heading"><div><span className="eyebrow">YOUR CLIENT RELATIONSHIPS</span><h1>Good work starts with people.</h1><p>Keep every conversation, next step, and project together.</p></div>
       <div className="ac-heading-actions">
-        {snapshot && <button type="button" className="ac-palette-hint" onClick={() => setPalette(true)} aria-label="Find a client or action (Ctrl+K)"><Search size={14} />Find<kbd>{shortcutKey}K</kbd></button>}
+        {snapshot && <button type="button" className="ac-palette-hint" onClick={() => setPalette(true)} title="Find a client or action"><Search size={14} />Find<kbd>{shortcutKey}K</kbd></button>}
         {snapshot && canEdit && <button type="button" className="button secondary ac-find-leads" disabled={busy} onClick={() => setFinding(true)}><Sparkles size={15} />Find leads</button>}
         {snapshot && canEdit && <button className="button primary" disabled={busy || adding} onClick={() => setAdding(true)}><Plus size={16} /> Add client</button>}
       </div></header>
@@ -485,6 +513,8 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
     {message && <p role="status" className="ac-message">{message}</p>}
     {directory.error && <p role="alert">{directory.error}</p>}
     <PendingCloudWrites accountId={accountId} refresh={async () => { setUncertain(false); await refresh(); }} />
+    {snapshot && layout === "list" && !adding && !importing && <CrmInsights key={`crm:${accountId}:${snapshot.workspace.id}`} accountId={accountId} workspaceId={snapshot.workspace.id} refreshKey={refreshKey} onOpenClient={open}
+      onAdded={text => { setMessage(text); setRefreshKey(key => key + 1); refreshOnboarding(); }} />}
     {snapshot && snapshot.workspace.role === "owner" && layout !== "email" && !adding && !importing && <EnquiryLeads key={`${accountId}:${snapshot.workspace.id}:${refreshKey}`} accountId={accountId} workspaceId={snapshot.workspace.id}
       onAdded={text => { setMessage(text); setRefreshKey(key => key + 1); refreshOnboarding(); }} />}
     {importing && <section className="ac-import" aria-labelledby="ac-import-title">
@@ -517,7 +547,7 @@ function SavedClients({ accountId, onSaving, target, navigate, onCreate, onOpenP
           </div>}
         </div>;
       })}</div>
-      {!busy && !directory.busy && !directory.error && !clients.length && !message && <div className="ac-empty"><Users size={28} /><h2>{snapshot ? (filtered ? "No clients match this view." : "A place for your next client.") : "Start your client workspace."}</h2><p>{snapshot ? (filtered ? "Adjust your filters, or add a client." : "Add a client, or import your list from a CSV file.") : "Keep client relationships and their projects saved to your account."}</p>{snapshot && filtered && <button className="button secondary" onClick={() => { setSearch(""); setStage("All stages"); setFollowUp("all"); }}>Clear filters</button>}{snapshot && !filtered && canEdit && <button className="button secondary" onClick={() => importInput.current?.click()}><Upload size={15} /> Import CSV</button>}{!snapshot && !workspaces.length && <button onClick={() => void createWorkspace()} className="button primary">Set up client workspace</button>}</div>}
+      {!busy && !directory.busy && !directory.error && !clients.length && !message && <div className="ac-empty"><Users size={28} /><h2>{snapshot ? (filtered ? "No clients match this view." : "A place for your next client.") : "A place for your first client."}</h2><p>{snapshot ? (filtered ? "Adjust your filters, or add a client." : "Add a client, or import your list from a CSV file.") : "Clients are saved to your account. Your client workspace is set up when you add the first one."}</p>{snapshot && filtered && <button className="button secondary" onClick={() => { setSearch(""); setStage("All stages"); setFollowUp("all"); }}>Clear filters</button>}{snapshot && !filtered && canEdit && <button className="button secondary" onClick={() => importInput.current?.click()}><Upload size={15} /> Import CSV</button>}{!snapshot && !workspaces.length && <div className="button-row"><button type="button" onClick={() => void startClients("add")} className="button primary"><Plus size={16} /> Add your first client</button><button type="button" onClick={() => void startClients("find")} className="button secondary"><Sparkles size={15} />Find leads</button></div>}</div>}
       {tagFilter && <p className="small-note" aria-live="polite">{tagged?.tag === tagFilter ? `${clients.length} client${clients.length === 1 ? "" : "s"} tagged “${tagFilter}”` : "Loading tagged clients…"}</p>}
       {!tagFilter && directory.data?.pagination.nextOffset != null && !directory.stale && <button className="button secondary small" disabled={directory.busy} onClick={() => void directory.more()}>Load more clients</button>}
       {!tagFilter && directory.data && <p className="small-note" aria-live="polite">{directory.stale ? "Updating…" : `Showing ${clients.length} of ${directory.data.pagination.total} matching clients · Search and filters cover the whole workspace.`}</p>}

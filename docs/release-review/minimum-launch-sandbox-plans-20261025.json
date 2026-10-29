@@ -1,0 +1,87 @@
+{
+  "sandboxOnly": true,
+  "productionTouched": false,
+  "offers": [
+    {
+      "id": "plan_29gEGs9xNdIEj",
+      "title": null,
+      "company": "biz_e4w3EGe3izP67k",
+      "renewal_price": 950.4,
+      "billing_period": 365,
+      "initial_price": 0,
+      "trial_period_days": null,
+      "visibility": "hidden",
+      "tier": "scale",
+      "interval": "yearly",
+      "monthlyCredits": 1550
+    },
+    {
+      "id": "plan_Ge244bwRTLV7x",
+      "title": null,
+      "company": "biz_e4w3EGe3izP67k",
+      "renewal_price": 99,
+      "billing_period": 30,
+      "initial_price": 0,
+      "trial_period_days": null,
+      "visibility": "hidden",
+      "tier": "scale",
+      "interval": "monthly",
+      "monthlyCredits": 1550
+    },
+    {
+      "id": "plan_DtmF9u0J9U0Zw",
+      "title": null,
+      "company": "biz_e4w3EGe3izP67k",
+      "renewal_price": 470.4,
+      "billing_period": 365,
+      "initial_price": 0,
+      "trial_period_days": null,
+      "visibility": "hidden",
+      "tier": "studio",
+      "interval": "yearly",
+      "monthlyCredits": 750
+    },
+    {
+      "id": "plan_6MX7m5Fp2rkb6",
+      "title": null,
+      "company": "biz_e4w3EGe3izP67k",
+      "renewal_price": 49,
+      "billing_period": 30,
+      "initial_price": 0,
+      "trial_period_days": null,
+      "visibility": "hidden",
+      "tier": "studio",
+      "interval": "monthly",
+      "monthlyCredits": 750
+    },
+    {
+      "id": "plan_7eWh1fU9rYvxm",
+      "title": null,
+      "company": "biz_e4w3EGe3izP67k",
+      "renewal_price": 192,
+      "billing_period": 365,
+      "initial_price": 0,
+      "trial_period_days": null,
+      "visibility": "hidden",
+      "tier": "create",
+      "interval": "yearly",
+      "monthlyCredits": 300
+    },
+    {
+      "id": "plan_gZzqsdRbnaqfg",
+      "title": null,
+      "company": "biz_e4w3EGe3izP67k",
+      "renewal_price": 20,
+      "billing_period": 30,
+      "initial_price": 0,
+      "trial_period_days": null,
+      "visibility": "hidden",
+      "tier": "create",
+      "interval": "monthly",
+      "monthlyCredits": 300
+    }
+  ],
+  "WHOP_ACCESS_PLAN_IDS": "plan_29gEGs9xNdIEj,plan_Ge244bwRTLV7x,plan_DtmF9u0J9U0Zw,plan_6MX7m5Fp2rkb6,plan_7eWh1fU9rYvxm,plan_gZzqsdRbnaqfg",
+  "WHOP_PLAN_CREDIT_MAP": "plan_29gEGs9xNdIEj:scale:yearly,plan_Ge244bwRTLV7x:scale:monthly,plan_DtmF9u0J9U0Zw:studio:yearly,plan_6MX7m5Fp2rkb6:studio:monthly,plan_7eWh1fU9rYvxm:create:yearly,plan_gZzqsdRbnaqfg:create:monthly",
+  "qualification": "Provider readback only; credit delivery and staging not yet qualified"
+}

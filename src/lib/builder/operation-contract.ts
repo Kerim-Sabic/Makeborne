@@ -7,14 +7,17 @@ export const OperationRequestSchema = z.union([
 ]);
 export type OperationRequest = z.infer<typeof OperationRequestSchema>;
 const credits = z.number().int().nonnegative();
+/** Agency task kinds (migration 20261023200000). Each runs only steps of its own kind. */
+export const AGENCY_OPERATION_KINDS = ["ingest", "research", "image_edit", "independent_review", "data_report"] as const;
+export const OPERATION_KINDS = ["build", "review", "plan", ...AGENCY_OPERATION_KINDS] as const;
 export const OperationSnapshotSchema = z.object({
   id: z.string().uuid(), revision: credits,
-  kind: z.enum(["build", "review", "plan"]), effort: z.enum(["light", "medium", "high", "super_high", "ultra"]),
+  kind: z.enum(OPERATION_KINDS), effort: z.enum(["light", "medium", "high", "super_high", "ultra"]),
   authorizedCredits: credits, chargedCredits: credits, reservedCredits: credits, remainingCredits: credits,
   maximumAdditionalCredits: credits,
   status: z.enum(["active", "running", "paused", "completed", "expired", "cancelled"]),
   cancelRequested: z.boolean().optional(),
-  pendingKind: z.enum(["continuation", "review", "plan"]).nullable(),
+  pendingKind: z.enum(["continuation", "review", "plan", ...AGENCY_OPERATION_KINDS]).nullable(),
   lastVersion: credits, canContinue: z.boolean(), recoverable: z.boolean(), expiresAt: z.string(),
 });
 export type OperationSnapshot = z.infer<typeof OperationSnapshotSchema>;
@@ -22,7 +25,11 @@ export type OperationEvent = { type: "operation"; operation: OperationSnapshot }
 export const OperationResultSchema = z.object({
   runId: z.string().uuid().optional(), version: credits.optional(), summary: z.string().optional(),
   changed: z.boolean().optional(), finished: z.boolean().optional(), charged: credits,
+  compFidelity: z.enum(["passed", "failed", "not_checked"]).optional(),
+  compCoverage: z.object({ measured: z.array(z.string().max(120)).max(8), notChecked: z.array(z.string().max(120)).max(12) }).optional(),
   code: z.string().optional(), message: z.string().optional(), stored: z.unknown().optional(), persisted: z.boolean().optional(),
+  /** An agency task's typed data result and the project revision it was produced against. */
+  data: z.unknown().optional(), basedOnVersion: credits.optional(),
 });
 export type OperationResult = z.infer<typeof OperationResultSchema>;
 export const OperationStatusSchema = z.object({

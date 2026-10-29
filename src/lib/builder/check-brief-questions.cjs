@@ -62,19 +62,30 @@ check("AI-tailored questions merge in after the top design questions, without de
   const merged = mergedQuestions("website", "bakery site", tailored);
   assert.deepEqual(merged.map(question => question.id), ["vibe", "goal", "sections", "ordering", "signature"], "at most two tailored, design topics dropped, five in total");
   assert.deepEqual(mergedQuestions("website", "bakery site", null).map(question => question.id), ids("website", "bakery site"), "on-device set when the AI is unavailable");
-  assert.deepEqual(mergedQuestions("presentation", "deck", tailored.slice(0, 1)).map(question => question.id), ["ordering"], "other kinds keep the tailored set");
+  assert.deepEqual(mergedQuestions("presentation", "deck", tailored.slice(0, 1)).map(question => question.id), ["ordering", "slides"], "other kinds keep the tailored set, plus the slide-style option");
+  assert.deepEqual(mergedQuestions("book", "A cookbook", [{ id: "pics", question: "Do you want photos of each recipe?", why: "x", topic: "Photos", custom: "x", options: [] }, tailored[0]]).map(question => question.id), ["images", "ordering", "imagestyle"], "a tailored picture question gives way to the image-plan options");
   for (const question of merged) assert.ok(isBriefQuestion(question), question.id);
 });
 
-check("presentations ask about purpose, delivery, look and length", () => {
-  assert.deepEqual(ids("presentation", "Deck about our water sensors"), ["purpose", "delivery", "style", "length"]);
-  assert.deepEqual(ids("presentation", "10-slide investor pitch I'll present live, bold and modern"), []);
-  assert.deepEqual(ids("presentation", "Sales proposal we will email to the client"), ["style", "length"]);
+check("presentations ask about purpose, delivery, look and length, then offer the slide style", () => {
+  assert.deepEqual(ids("presentation", "Deck about our water sensors"), ["purpose", "delivery", "style", "length", "slides"]);
+  assert.deepEqual(ids("presentation", "10-slide investor pitch I'll present live, bold and modern"), ["slides"]);
+  assert.deepEqual(ids("presentation", "Sales proposal we will email to the client"), ["style", "length", "slides"]);
+  assert.deepEqual(ids("presentation", "Sales proposal we will email, editable in PowerPoint"), ["style", "length"], "a brief that asks for editable slides is not asked again");
+  const slides = standardQuestion("presentation", "slides");
+  assert.deepEqual(slides.options.map(option => option.label), ["Full-image slides", "Editable text slides", "You choose"]);
+  assert.ok(isBriefQuestion(slides));
 });
 
-check("books ask about kind, reader, tone and length", () => {
-  assert.deepEqual(ids("book", "Something about personal finance"), ["type", "reader", "tone", "length"]);
-  assert.deepEqual(ids("book", "A short, friendly guide for freelancers on cash flow"), []);
+check("books ask how many pictures first and their style last, besides kind, reader, tone and length", () => {
+  assert.deepEqual(ids("book", "Something about personal finance"), ["images", "type", "reader", "tone", "length", "imagestyle"]);
+  assert.deepEqual(ids("book", "A short, friendly guide for freelancers on cash flow"), ["images", "imagestyle"]);
+  assert.deepEqual(ids("book", "A short, friendly guide for freelancers on cash flow, no images"), [], "no images: neither image question");
+  assert.deepEqual(ids("book", "A short, friendly guide for freelancers on cash flow, one picture every 4 pages in watercolour"), []);
+  const images = standardQuestion("book", "images"), style = standardQuestion("book", "imagestyle");
+  assert.deepEqual(images.options.map(option => option.value), ["none", "cover", "openers", "every6", "every3", "rich", "picture"]);
+  assert.deepEqual(style.options.map(option => option.value), ["photo", "illustration", "technique", "auto"]);
+  for (const question of [images, style]) assert.ok(isBriefQuestion(question), question.id);
 });
 
 check("answers are written into the brief in plain words; skipped questions are left out", () => {
@@ -92,7 +103,7 @@ check("answers are written into the brief in plain words; skipped questions are 
 check("every question is complete and option values are unique", () => {
   for (const kind of ["website", "presentation", "book"]) for (const question of briefQuestions(kind, "")) {
     assert.ok(question.question.endsWith("?") && question.why && question.topic && question.custom, `${kind}/${question.id}`);
-    assert.ok(question.options.length >= (question.color ? 2 : 3) && question.options.length <= (question.multi ? 8 : 6), question.id);
+    assert.ok(question.options.length >= (question.color ? 2 : 3) && question.options.length <= (question.multi ? 8 : 7), question.id);
     assert.equal(new Set(question.options.map(option => option.value)).size, question.options.length);
     assert.ok(isBriefQuestion(question), `${kind}/${question.id} passes the client-side check`);
   }

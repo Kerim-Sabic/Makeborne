@@ -9,7 +9,7 @@ function fixture(fault = () => null) {
   const accounts = ["blocked", "healthy"].map(id => ({ id, workspace_id: "workspace", user_id: "owner", provider: "google", granted_scopes: [config.GMAIL_SEND_SCOPE, config.GMAIL_READ_SCOPE], email: `${id}@sender.test`, display_name: "Owner",
     status: "active", daily_limit: 50, warmup_started_at: "2026-01-01T00:00:00Z", last_sent_at: null, last_synced_at: null }));
   const clients = accounts.map(account => ({ id: `client-${account.id}`, workspace_id: "workspace", name: account.id, email: `${account.id}@client.test`, company: "", website: "", outreach: null, updated_at: at.toISOString() }));
-  const tables = { mail_accounts: accounts, clients, mail_messages: [], mail_sequences: [{ id: "sequence", stop_on_reply: true, archived: false, steps: [{ delayDays: 0, subject: "Hello", body: "Hi {{first_name}}" }] }],
+  const tables = { crm_suppressions: [], mail_accounts: accounts, clients, mail_messages: [], mail_sequences: [{ id: "sequence", stop_on_reply: true, archived: false, steps: [{ delayDays: 0, subject: "Hello", body: "Hi {{first_name}}" }] }],
     mail_enrollments: accounts.map(account => ({ id: `enrollment-${account.id}`, workspace_id: "workspace", account_id: account.id, client_id: `client-${account.id}`, sequence_id: "sequence", status: "active", next_step: 0, next_send_at: at.toISOString(), created_at: at.toISOString(), created_by: "owner" })) };
   let nextId = 0;
   const queries = [];
@@ -89,6 +89,24 @@ module.exports = async function offlineEngineChecks(check) {
   const keys = ["MAKEBORNE_GOOGLE_MAIL_CLIENT_ID", "MAKEBORNE_GOOGLE_MAIL_CLIENT_SECRET", "MAKEBORNE_MICROSOFT_MAIL_CLIENT_ID", "MAKEBORNE_MICROSOFT_MAIL_CLIENT_SECRET"], saved = keys.map(key => process.env[key]);
   keys.forEach(key => { process.env[key] = "offline-fixture"; });
   try {
+    await check("do-not-contact is workspace scoped, covers domain descendants and rechecks after token access", async () => {
+      const isolated=fixture();isolated.tables.crm_suppressions.push({workspace_id:"other",kind:"email",value:"blocked@client.test"});
+      assert.equal((await engine.sendEmail(isolated.deps,isolated.request)).status,"sent");
+      const descendant=fixture();descendant.request.client.email="BLOCKED@sub.client.test";descendant.tables.crm_suppressions.push({workspace_id:"workspace",kind:"domain",value:"client.test"});
+      assert.equal((await engine.sendEmail(descendant.deps,descendant.request)).status,"failed");assert.equal(descendant.sent.length,0);
+      const changed=fixture(),rpc=changed.db.rpc;changed.db.rpc=async(...args)=>{changed.tables.crm_suppressions.push({workspace_id:"workspace",kind:"email",value:"blocked@client.test"});return rpc(...args);};
+      assert.equal((await engine.sendEmail(changed.deps,changed.request)).status,"failed");assert.equal(changed.sent.length,0);
+      const sequence=fixture();sequence.tables.crm_suppressions.push({workspace_id:"workspace",kind:"domain",value:"client.test"});
+      const result=await engine.processDueEnrollments(sequence.deps,{accountIds:["blocked"]});assert.equal(result.sent,0);assert.equal(sequence.tables.mail_enrollments[0].status,"stopped");
+    });
+    await check("engine do-not-contact blocks manual and sequence sends before provider access", async () => {
+      for (const automated of [false,true]) for (const entry of [{kind:"email",value:"blocked@client.test"},{kind:"domain",value:"client.test"}]) {
+        const f=fixture();f.tables.crm_suppressions.push({...entry,workspace_id:"workspace"});
+        const result=await engine.sendEmail(f.deps,{...f.request,automated});assert.equal(result.status,"failed");assert.match(result.error,/do-not-contact/);assert.equal(f.sent.length,0);assert.equal(f.tables.mail_messages.length,0);
+      }
+      const f=fixture(({table})=>table==="crm_suppressions"?{message:"unavailable"}:null);
+      const result=await engine.sendEmail(f.deps,f.request);assert.equal(result.status,"failed");assert.equal(f.sent.length,0);
+    });
     await check("engine offline: provider success then receipt/history failure stays unknown, retains IDs, never resends the claimed step", async () => {
       for (const failAt of ["receipt", "history", "recovery"]) {
         const f = fixture(({ table, op, values }) => {

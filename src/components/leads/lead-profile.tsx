@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AtSign, Flame, Plus, Search, Sparkles, Tag, Users, X } from "lucide-react";
 import { compactCount, countValue, CURRENCIES, LEAD_SOURCES, normalizeTag, scoreLead, type Lead } from "@/lib/leads";
 import { leadApi } from "./lead-api";
+import { LEAD_FINDER } from "@/lib/leads/finder-types";
 
 /** Lead profile on a client page: score, tags, deal value, source, and what research and the AI found. */
 export default function LeadProfileCard({ accountId, workspaceId, clientId, clientName = "", clientWebsite = "", lead, stage, hasEmail, overdue, canEdit, onChange }: {
@@ -57,7 +58,8 @@ export default function LeadProfileCard({ accountId, workspaceId, clientId, clie
 
     <div className="lp-research">
       <div className="lp-research-head"><span><Search size={13} />What we know about them</span>
-        {canEdit && clientName && <button type="button" className="button ghost small" title="Find new leads similar to this client" onClick={() => requestClientsAction("find-leads", {
+        {/* Look-alike discovery is off until search spending is qualified; the finder says so too. */}
+        {canEdit && clientName && LEAD_FINDER.discoveryAvailable && <button type="button" className="button ghost small" title="Find new leads similar to this client" onClick={() => requestClientsAction("find-leads", {
           name: clientName, url: research?.url || clientWebsite, about: (lead?.profile.insight?.niche || research?.bio || "").slice(0, 400) })}><Sparkles size={13} />Find more like this</button>}
         {canEdit && <button type="button" className="button secondary small" disabled={!!busy} onClick={() => void runResearch()}>{busy === "research" ? "Reading…" : research ? "Refresh research" : "Research (free)"}</button>}</div>
       {research ? <div className="lp-facts">

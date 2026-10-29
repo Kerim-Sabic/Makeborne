@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import BrandMark from "@/components/brand-mark";
+import LegalLinks from "@/components/legal/legal-links";
 import styles from "./page.module.css";
 
 /** Header and footer shared by the help center pages. */
@@ -13,7 +14,7 @@ export function HelpHeader() {
 
 export function HelpFooter() {
   return <footer className={styles.footer}><span>© 2026 Makeborne</span>
-    <nav aria-label="Footer navigation"><Link href="/">Home</Link><Link href="/help">Help center</Link><Link href="/billing">Pricing</Link><Link href="/billing/terms">Subscriptions &amp; refunds</Link><Link href="/privacy">Privacy</Link></nav>
+    <nav aria-label="Footer navigation"><Link href="/">Home</Link><Link href="/help">Help center</Link><Link href="/billing">Pricing</Link><Link href="/billing/terms">Subscriptions &amp; refunds</Link><LegalLinks /></nav>
   </footer>;
 }
 

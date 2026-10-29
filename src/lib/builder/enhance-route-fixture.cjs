@@ -273,12 +273,14 @@ function loadRoute({ store, provider: p, context }) {
 }
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 
-/** The route's environment for every check: live builder on, no key ever used, network forbidden, fast Stop polling. */
+/** The route's environment for every check: live builder and brief enhancer on, no key ever used, network forbidden, fast Stop polling. */
 function offlineEnvironment() {
   globalThis.fetch = async () => { throw new Error("Network forbidden"); };
   process.env.MAKEBORNE_LIVE_BUILDER_ENABLED = "true";
   process.env.ANTHROPIC_API_KEY = "sk-offline-never-sent";
   process.env.MAKEBORNE_ENHANCE_STOP_POLL_MS = "25";
+  // The enhancer is not yet qualified for production and is off by default (lib/builder/features.ts); these checks run it on.
+  process.env.MAKEBORNE_BRIEF_ENHANCER = "on";
 }
 
 /** HTTP helpers bound to one project. */

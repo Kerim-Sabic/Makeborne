@@ -44,7 +44,7 @@ export const CAPABILITY_CONFIG_VERSION = "capabilities-20261022";
 
 export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvidence[]>[
   {
-    provider: "anthropic", model: "claude-opus-5-5", label: "Claude Opus 5.5", verifiedAt: "2026-10-12",
+    provider: "anthropic", model: "claude-opus-5-5", label: "Claude Opus 5.5", verifiedAt: "2026-10-25",
     idSource: "https://platform.claude.com/docs/en/about-claude/models/overview (Claude API ID column)",
     priceSources: ["https://platform.claude.com/docs/en/about-claude/pricing (Model pricing table)",
       "https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback (Billing and rate limits)"],
@@ -62,7 +62,7 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
       verifiedAt: "2026-10-22", source: "claude-api skill model table and migration notes (cached 2026-10-06); pricing page checked 2026-10-22" },
   },
   {
-    provider: "anthropic", model: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", verifiedAt: "2026-10-12",
+    provider: "anthropic", model: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", verifiedAt: "2026-10-25",
     idSource: "https://platform.claude.com/docs/en/about-claude/models/overview (Claude API ID column)",
     priceSources: ["https://platform.claude.com/docs/en/about-claude/pricing (Model pricing table)"],
     components: { input: 2, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.1, output: 10 },
@@ -77,7 +77,7 @@ export const PRICE_EVIDENCE: readonly PriceEvidence[] = Object.freeze(<PriceEvid
       verifiedAt: "2026-10-22", source: "claude-api skill model table and migration notes (cached 2026-10-06); pricing page checked 2026-10-22" },
   },
   {
-    provider: "anthropic", model: "claude-haiku-5-5", label: "Claude Haiku 5.5", verifiedAt: "2026-10-13",
+    provider: "anthropic", model: "claude-haiku-5-5", label: "Claude Haiku 5.5", verifiedAt: "2026-10-25",
     idSource: "https://platform.claude.com/docs/en/about-claude/models/overview (Claude API ID column)",
     priceSources: ["https://platform.claude.com/docs/en/about-claude/pricing (Model pricing table, \"Claude Haiku 5.5 (for prompts up to 100,000 tokens)\")"],
     components: { input: 0.1, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01, output: 0.5 },
@@ -147,8 +147,12 @@ export const TEXT_PRICES: Readonly<Record<string, TextPrice>> = Object.freeze(Ob
  * never request it, but bounds assume it so an account default cannot overrun. */
 export const GEO_MULTIPLIER = 1.1;
 
-export type ImageQuality = "low" | "medium" | "high";
-export type ImageSize = "1024x1024" | "1024x1536" | "1536x1024";
+/** "xhigh" exists only on the 2.5 models (image-generation guide, checked 2026-10-26); like every cell it is refused
+ * until MEASURED_IMAGE_OUTPUT_TOKENS lists it. "max" and "auto" are never requested (no bound). */
+export type ImageQuality = "low" | "medium" | "high" | "xhigh";
+/** WIDTHxHEIGHT. The 2.5 models take custom sizes within SIZE_RULES (image-cells.ts); a size is still refused until
+ * its (quality, size) cell is measured. */
+export type ImageSize = `${number}x${number}`;
 /** Output tokens per image by quality and size, from the cited guide table. */
 export type ImagePrice = { textInput: number; imageInput: number; imageOutput: number; outputTokens: Partial<Record<ImageQuality, Partial<Record<ImageSize, number>>>> };
 type OutputTokens = ImagePrice["outputTokens"];
@@ -164,13 +168,21 @@ type OutputTokens = ImagePrice["outputTokens"];
  * (image-call.ts); an excess stops routing to that model until reviewed (image-health.ts).
  * Partial images (+100 output tokens each) are never requested.
  */
+/**
+ * Second measurement, 2026-10-26 (owner, Kerim: "approved quality test, OpenAI $9.20, Claude $19", scope
+ * quality-v14-20261026): the sizes and qualities the client's document shapes and the website comps want, one call
+ * per cell on sunburst (21 calls, $1.70; outputs/eval/image-cells/quality-v14-20261026/results.jsonl). The three flare
+ * parity cells (high 2560x1440, high 1536x2304, xhigh 2048x1536) returned exactly the sunburst counts, so these cells
+ * apply to both models like the first measurement's.
+ */
 export const MEASURED_IMAGE_OUTPUT_TOKENS: Readonly<Record<string, { evidence: string; observed: OutputTokens }>> = Object.freeze(Object.fromEntries(
   ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"].map(model => [model, {
-    evidence: "outputs/eval/image-research/20261020/results.jsonl (owner-approved research, ledger kind openai-image-research)",
+    evidence: "outputs/eval/image-research/20261020/results.jsonl (owner-approved research, ledger kind openai-image-research); outputs/eval/image-cells/quality-v14-20261026/results.jsonl (scope quality-v14-20261026, ledger kind openai-image-cells)",
     observed: {
       low: { "1024x1024": 196, "1536x1024": 158 },
       medium: { "1024x1024": 439, "1024x1536": 343, "1536x1024": 343 },
-      high: { "1536x1024": 1372 },
+      high: { "1536x1024": 1372, "2560x1440": 1843, "2048x1536": 2223, "1920x1920": 3276, "1440x2560": 1843, "1536x2304": 2127, "2560x1280": 1520, "1600x1280": 1846, "2880x1152": 1213, "1152x2496": 1288 },
+      xhigh: { "2560x1440": 3276, "2048x1536": 3952, "1920x1920": 5823, "1440x2560": 3276, "1536x2304": 3811, "2560x1280": 2702, "1600x1280": 3304, "2880x1152": 2213, "1152x2496": 2341 },
     },
   }])));
 export const MEASURED_HEADROOM = 1.5;
@@ -301,9 +313,13 @@ export function assertSupportedImageRequest(request: { model: string; quality: s
   const price = imagePrice(request.model);
   if (request.background !== undefined && request.background !== "opaque" && request.background !== "transparent") throw new UnsupportedConfigurationError(`image background "${request.background}"`);
   if (request.background === "transparent" && !supportsTransparentImages(request.model)) throw new UnsupportedConfigurationError(`transparent background on "${request.model}"`);
-  // Low and medium; high only when the router asks for it (small text), never xhigh or max (no bound).
-  if (!(request.quality === "medium" || request.quality === "low" || (request.quality === "high" && request.allowHigh))) throw new UnsupportedConfigurationError(`image quality "${request.quality}"`);
+  // Low and medium; high and xhigh only when the caller asks for them (small text, a chosen document quality) and the
+  // cell is measured below; never max or auto (no bound).
+  if (!(request.quality === "medium" || request.quality === "low" || ((request.quality === "high" || request.quality === "xhigh") && request.allowHigh))) throw new UnsupportedConfigurationError(`image quality "${request.quality}"`);
+  if (!/^[1-9]\d{2,3}x[1-9]\d{2,3}$/.test(request.size)) throw new UnsupportedConfigurationError(`image size "${request.size}"`);
   if ((request.n ?? 1) !== 1) throw new UnsupportedConfigurationError("more than one image per call");
+  // Image input is refused on every generation path. The only path that may send an image is the
+  // separately priced and qualified edit path (image-edit-prices.ts / image-edit-call.ts).
   if (request.hasImageInput) throw new UnsupportedConfigurationError("image input");
   if (!price.outputTokens[request.quality as ImageQuality]?.[request.size as ImageSize]) throw new UnsupportedConfigurationError(`image size "${request.size}" at quality "${request.quality}"`);
 }

@@ -33,6 +33,12 @@ export async function resolveDocumentSourceAssets(client: SupabaseClient, scopeI
   return {artwork, descriptors: artwork.map(asset => SourceAssetSchema.parse({...asset, bytes: asset.bytes.byteLength}))};
 }
 
+/** Resolve specific registered project images (same checks as above: RLS-bound client, scoped rows, sha256, size,
+ * still-raster decode). Used by the server-side review capture to serve a project's own images. */
+export async function resolveProjectImages(client: SupabaseClient, scopeInput: unknown, references: OriginalReference[], limits = {individual: 20_000_000, total: 40_000_000}) {
+  return resolveOriginalAssets(client, scopeInput, references, limits);
+}
+
 type OriginalReference = {id: string; path?: string; sha256?: string; mediaType?: string; bytes?: number};
 async function resolveOriginalAssets(client: SupabaseClient, scopeInput: unknown, references: OriginalReference[], limits: {individual: number; total: number}) {
   const scope = ScopeSchema.parse(scopeInput);

@@ -64,6 +64,6 @@
 .ve-confirm { display:inline-flex; gap:6px; }
 @media (max-width:900px) {
   .lp-body { flex-direction:column; }
-  .ve { flex:0 0 auto; max-height:46dvh; border-left:0; border-top:1px solid #ebe8ef; }
+  .ve { flex:0 0 auto; max-height:calc(46dvh / var(--ui-zoom, 1)); border-left:0; border-top:1px solid #ebe8ef; }
 }
 @media (prefers-reduced-motion: reduce) { .ve * { transition:none !important; } }

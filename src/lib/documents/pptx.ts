@@ -4,7 +4,8 @@ import JSZip from "jszip";
 import sharp from "sharp";
 import type { Deck } from "./schema";
 import { FONTS } from "./theme";
-import { composeSlide, H, W, type ArtPrim, type ChartPrim, type ImagePrim, type PathPrim, type Prim } from "./slide-scene";
+import { ART_COMPOSITION, PAGE_HEIGHT, PLATE_COMPOSITION, artAlt, deckAspect } from "./slide-art";
+import { composeSlide, H, W, type ArtPrim, type ChartPrim, type ImagePrim, type PathPrim, type Prim, type TextPrim } from "./slide-scene";
 
 /** Office face for monospaced labels (the preview and PDF embed JetBrains Mono). */
 export const PPTX_MONO = "Consolas";
@@ -32,12 +33,14 @@ function addChart(pptx: PptxGenJS, slide: PptxGenJS.Slide, prim: ChartPrim, font
   const { chart, colors } = prim, multi = chart.series.length > 1;
   const data = chart.series.map(series => ({ name: series.name, labels: chart.categories, values: series.values }));
   const pointColors = chart.categories.map((_, index) => color(chart.highlight === undefined ? colors.series[0] : index === chart.highlight ? colors.highlight : colors.dim));
+  // The preview's label scale (chart-svg.ts), in whole points; the donut keeps its own sizes there too.
+  const k = chart.type === "donut" ? 1 : prim.style?.text ?? 1, size = (points: number) => Math.round(points * k);
   const common = {
     x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h),
-    showLegend: multi, legendPos: "t" as const, legendFontFace: fonts.body, legendFontSize: 11, legendColor: color(colors.ink),
-    catAxisLabelColor: color(colors.muted), catAxisLabelFontFace: fonts.body, catAxisLabelFontSize: 11,
-    valAxisLabelColor: color(colors.muted), valAxisLabelFontFace: fonts.body, valAxisLabelFontSize: 10,
-    dataLabelColor: color(colors.ink), dataLabelFontFace: fonts.body, dataLabelFontSize: 11, dataLabelFontBold: true,
+    showLegend: multi, legendPos: "t" as const, legendFontFace: fonts.body, legendFontSize: size(11), legendColor: color(colors.ink),
+    catAxisLabelColor: color(colors.muted), catAxisLabelFontFace: fonts.body, catAxisLabelFontSize: size(11),
+    valAxisLabelColor: color(colors.muted), valAxisLabelFontFace: fonts.body, valAxisLabelFontSize: size(10),
+    dataLabelColor: color(colors.ink), dataLabelFontFace: fonts.body, dataLabelFontSize: size(11), dataLabelFontBold: true,
     dataLabelFormatCode: numberFormat(chart), valAxisLabelFormatCode: numberFormat(chart),
     altText: `${chart.type} chart: ${chart.categories.join(", ")}`,
   };
@@ -82,6 +85,18 @@ async function cropped(image: Buffer, prim: ImagePrim) {
   return `data:image/jpeg;base64,${bytes.toString("base64")}`;
 }
 
+/** A full-image slide at its generated resolution (never enlarged), cut to 16:9, as JPEG under `maxBytes` (the export
+ * artwork limits: 3 MB per image, 12 MB for a deck's slide images together). */
+async function fullSlide(image: Buffer, maxBytes = 3_000_000) {
+  const meta = await sharp(image, { limitInputPixels: 40_000_000 }).metadata();
+  let width = Math.min(1920, meta.width ?? 1536), bytes: Buffer;
+  for (let quality = 90; ; quality -= 8) {
+    bytes = await sharp(image, { limitInputPixels: 40_000_000 }).rotate().resize(width, Math.round(width * H / W), { fit: "cover", position: "centre" }).jpeg({ quality, mozjpeg: true }).toBuffer();
+    if (bytes.length <= maxBytes || quality <= 58) { if (bytes.length <= maxBytes || width <= 960) break; width = Math.round(width * 0.8); quality = 98; }
+  }
+  return `data:image/jpeg;base64,${bytes.toString("base64")}`;
+}
+
 /** Generative artwork (gradients, patterns) has no native PPTX equivalent: embed it rendered at 2×. */
 async function artImage(prim: ArtPrim) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(prim.w * 2)}" height="${Math.round(prim.h * 2)}" viewBox="0 0 ${prim.w} ${prim.h}"><g opacity="${prim.opacity ?? 1}">${prim.svg}</g></svg>`;
@@ -98,25 +113,53 @@ function geometry(prim: PathPrim) {
 }
 
 /** Native, editable PPTX: real text boxes, shapes and charts at the same
- * geometry as the preview; images are cropped to their frames. */
-export async function deckPptx(deck: Deck, images: Record<string, Buffer | undefined>) {
+ * geometry as the preview; images are cropped to their frames. An image that
+ * is not available is left out (never a grey stand-in) and its name is pushed
+ * to `missing` so the caller can report it. */
+export async function deckPptx(deck: Deck, images: Record<string, Buffer | undefined>, missing: string[] = []) {
   const pptx = new PptxGenJS();
-  pptx.defineLayout({ name: "MAKEBORNE_16x9", width: W / IN, height: H / IN });
-  pptx.layout = "MAKEBORNE_16x9";
+  // The slide size follows the deck's shape (always 1280 px = 13.333 in wide); editable layouts are 1280x720 and are
+  // moved down to sit centred on a taller slide, exactly as in the preview and PDF.
+  const pageHeight = PAGE_HEIGHT[deckAspect(deck)], offset = (pageHeight - H) / 2;
+  const layout = `MAKEBORNE_${deckAspect(deck).replace(":", "x")}`;
+  pptx.defineLayout({ name: layout, width: W / IN, height: pageHeight / IN });
+  pptx.layout = layout;
   pptx.title = deck.title;
   pptx.author = deck.author || "Makeborne";
   pptx.subject = deck.subtitle ?? "";
   const fonts = FONTS[deck.theme.fonts];
   const total = deck.slides.length;
+  const marks: Marks[] = [];
+  const artSlides = Math.max(1, deck.slides.filter((slide, index) => composeSlide(deck, slide, index, total).composition === ART_COMPOSITION).length);
   for (const [index, source] of deck.slides.entries()) {
     const scene = composeSlide(deck, source, index, total);
     const slide = pptx.addSlide();
+    // Accessibility: one shape per slide is the slide title (a title placeholder, see accessible()); capitals are formatting, not baked text.
+    const title = slideTitle(scene.prims, source.title), mark: Marks = new Map();
+    marks.push(mark);
+    let shape = 0;
     slide.background = { color: color(scene.background) };
-    for (const prim of scene.prims as Prim[]) {
+    if (scene.composition === ART_COMPOSITION) {
+      // A full-image slide: the verified picture full-bleed at its own resolution, its exact words as the picture's
+      // description and at the top of the speaker notes, and the title in a title placeholder just below the slide
+      // (Microsoft's documented way to give a slide an accessible title that is not shown or printed).
+      const prim = scene.prims[0] as ImagePrim, bytes = images[prim.name], words = artAlt(source);
+      if (bytes) slide.addImage({ data: await fullSlide(bytes, Math.min(3_000_000, Math.floor(12_000_000 / artSlides))), x: 0, y: 0, w: inch(W), h: inch(pageHeight), altText: words, objectName: `Image ${prim.name}` });
+      else if (!missing.includes(prim.name)) missing.push(prim.name);
+      slide.addText(source.title, { objectName: "Title", x: 0, y: inch(pageHeight) + 0.15, w: inch(W), h: 0.6, margin: 0, fontFace: fonts.pptxHeading, fontSize: 20, color: color(deck.theme.palette.ink) });
+      slide.addNotes(`Slide text: ${words}
+
+${source.notes}`);
+      continue;
+    }
+    // On a taller slide the editable layout moves down onto the centred band; its plate (made in the slide's shape) fills the slide.
+    const platePrim = offset && scene.composition?.startsWith(`${PLATE_COMPOSITION}-`) && scene.prims[0]?.k === "image" ? scene.prims[0] : null;
+    const placed = offset ? [...(platePrim ? [{ ...platePrim, y: 0, h: pageHeight }] : []), ...shiftScene((platePrim ? scene.prims.slice(1) : scene.prims) as Prim[], offset)] : scene.prims;
+    for (const prim of placed as Prim[]) {
       switch (prim.k) {
         case "rect":
-          slide.addShape(prim.radius ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h),
-            fill: prim.noFill ? { type: "none" } : { color: color(prim.fill), transparency: transparency(prim.fade ? (prim.opacity ?? 1) * 0.85 : prim.opacity) },
+          slide.addShape(prim.radius ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), ...(prim.fade ? { objectName: prim.fade === "up" ? FADE : `${FADE} ${prim.fade}` } : {}),
+            fill: prim.noFill ? { type: "none" } : { color: color(prim.fill), transparency: transparency(prim.opacity) },
             line: prim.stroke ? { color: color(prim.stroke), width: pt(prim.strokeWidth ?? 1) } : { type: "none" },
             // pptxgenjs takes the corner radius in inches.
             ...(prim.radius ? { rectRadius: inch(Math.min(prim.radius, Math.min(prim.w, prim.h) / 2)) } : {}) });
@@ -128,7 +171,8 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
             line: prim.stroke ? { color: color(prim.stroke), width: pt(prim.strokeWidth ?? 1), transparency: transparency(prim.opacity) } : { type: "none" } });
           break;
         case "art":
-          slide.addImage({ data: await artImage(prim), x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), altText: "" });
+          // Decorative: accessible() marks it so and clears pptxgenjs's "preencoded.png" description.
+          slide.addImage({ data: await artImage(prim), x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), altText: DECORATIVE });
           break;
         case "ellipse":
           slide.addShape(pptx.ShapeType.ellipse, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h),
@@ -142,8 +186,8 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
           break;
         case "image": {
           const bytes = images[prim.name];
-          if (bytes) slide.addImage({ data: await cropped(bytes, prim), x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), altText: prim.alt, ...(prim.round ? { rounding: true } : {}) });
-          else slide.addShape(prim.round ? pptx.ShapeType.ellipse : pptx.ShapeType.rect, { x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), fill: { color: "D9D6CF" }, line: { type: "none" } });
+          if (bytes) slide.addImage({ data: await cropped(bytes, prim), x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), altText: prim.alt || prim.name.replace(/-/g, " "), objectName: `Image ${prim.name}`, ...(prim.round ? { rounding: true } : {}) });
+          else if (!missing.includes(prim.name)) missing.push(prim.name);
           break;
         }
         case "chart":
@@ -156,7 +200,9 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
           const bold = heading && fonts.pptxHeadingBold !== undefined ? prim.weight > fonts.headingWeight || fonts.pptxHeadingBold : legacyBold;
           // The preview tracks headings tighter by default; PowerPoint needs the same spacing or titles run wider and rewrap.
           const tracking = prim.tracking ?? (heading ? parseFloat(fonts.headingTracking) || 0 : 0);
-          slide.addText(prim.upper ? prim.text.toUpperCase() : prim.text, {
+          const objectName = prim === title ? "Title" : `Text ${++shape}`;
+          if (prim.upper || prim.list) mark.set(objectName, { ...(prim.upper ? { caps: true } : {}), ...(prim.list ? { bullet: color(prim.list.color) } : {}) });
+          const options: PptxGenJS.TextPropsOptions = { objectName,
             x: inch(prim.x), y: inch(prim.y), w: inch(prim.w), h: inch(prim.h), margin: 0,
             fontFace: heading ? fonts.pptxHeading : prim.font === "mono" ? PPTX_MONO : fonts.pptxBody, fontSize: pt(prim.size), color: color(prim.color),
             bold, italic: prim.italic ?? false,
@@ -166,23 +212,77 @@ export async function deckPptx(deck: Deck, images: Record<string, Buffer | undef
             align: prim.align, valign: prim.valign, lineSpacing: pt(prim.size * prim.lh),
             ...(tracking ? { charSpacing: Math.round(tracking * prim.size * 0.75 * 10) / 10 } : {}),
             fit: "shrink", paraSpaceBefore: 0, paraSpaceAfter: 0,
-          });
+          };
+          // Explicit breaks (balanced titles) are soft line breaks inside one paragraph, as in the preview.
+          const lines = prim.text.split("\n"), list = prim.list;
+          // A list is one text box of bulleted paragraphs (hanging indent, the preview's item gap after each).
+          if (list) slide.addText(lines.map((line, i) => ({ text: line, options: { ...options, bullet: { characterCode: list.marker === "dash" ? "2013" : "25A0", indent: pt(list.indent) },
+            paraSpaceAfter: i < lines.length - 1 ? pt(list.gap) : 0, breakLine: i < lines.length - 1 } })), options);
+          else slide.addText(lines.length > 1 ? lines.map((line, i) => ({ text: line, options: { ...options, ...(i ? { softBreakBefore: true } : {}) } })) : prim.text, options);
           break;
         }
       }
     }
     slide.addNotes(source.notes);
   }
-  return withTransitions(Buffer.from(await pptx.write({ outputType: "nodebuffer" }) as ArrayBuffer));
+  return withTransitions(Buffer.from(await pptx.write({ outputType: "nodebuffer" }) as ArrayBuffer), marks);
+}
+
+/** An editable layout moved down by `dy` px (a 1280x720 layout centred on a taller slide). */
+export function shiftScene(prims: Prim[], dy: number): Prim[] {
+  return prims.map(prim => {
+    switch (prim.k) {
+      case "line": return { ...prim, y1: prim.y1 + dy, y2: prim.y2 + dy };
+      case "path": return { ...prim, y: prim.y + dy, d: prim.d.map(seg => seg.op === "Z" ? seg : seg.op === "C" ? { ...seg, y: seg.y + dy, y1: seg.y1 + dy, y2: seg.y2 + dy } : { ...seg, y: seg.y + dy }) };
+      default: return { ...prim, y: prim.y + dy };
+    }
+  });
+}
+
+const DECORATIVE = "makeborne:decorative", FADE = "Scrim fade";
+/** The shape that carries the slide title: the display text that states it, else the first display text. */
+function slideTitle(prims: Prim[], title: string) {
+  const texts = prims.filter((prim): prim is TextPrim => prim.k === "text");
+  const norm = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
+  return texts.find(prim => prim.role === "title" && norm(prim.text) === norm(title)) ?? texts.find(prim => prim.role === "title");
+}
+const DECORATIVE_EXT = '<a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst>';
+/** Accessibility in the package XML (pptxgenjs has no API for these):
+ * - the title shape becomes the slide's title placeholder, so the outline, screen readers and the accessibility checker see a title;
+ * - text set in capitals keeps its own case with all-caps formatting (cap="all"), so it reads and copies as written;
+ * - artwork and shapes without text are marked decorative, and artwork loses pptxgenjs's "preencoded.png" description. */
+/** Per-slide text shapes needing package-level formatting: all-caps, and the bullet colour of a list. */
+export type Marks = Map<string, { caps?: boolean; bullet?: string }>;
+export function accessible(xml: string, marks: Marks) {
+  return xml.replace(/<p:(sp|pic)>([\s\S]*?)<\/p:\1>/g, (whole, kind: string, body: string) => {
+    const name = /<p:cNvPr id="\d+" name="([^"]*)"/.exec(body)?.[1] ?? "";
+    if (kind === "pic") return whole.replace(`descr="${DECORATIVE}">`, `descr="">${DECORATIVE_EXT}`);
+    if (!/<a:t>[^<]/.test(body)) {
+      // Scrim fades are a gradient to the scrim's opacity, as in the preview (pptxgenjs writes only solid fills):
+      // "up" is transparent at the top, "right" at the right edge, "left" at the left edge.
+      const angle = name === FADE ? 5400000 : name === `${FADE} right` ? 10800000 : name === `${FADE} left` ? 0 : null;
+      const faded = angle !== null ? whole.replace(/<a:solidFill><a:srgbClr val="([0-9A-F]{6})"><a:alpha val="(\d+)"\/><\/a:srgbClr><\/a:solidFill>/, (_m, hex: string, alpha: string) =>
+        `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${hex}"><a:alpha val="0"/></a:srgbClr></a:gs><a:gs pos="55000"><a:srgbClr val="${hex}"><a:alpha val="${Math.round(Number(alpha) * 0.75)}"/></a:srgbClr></a:gs><a:gs pos="100000"><a:srgbClr val="${hex}"><a:alpha val="${alpha}"/></a:srgbClr></a:gs></a:gsLst><a:lin ang="${angle}" scaled="0"/></a:gradFill>`) : whole;
+      return faded.replace(/(<p:cNvPr id="\d+" name="[^"]*">)(<\/p:cNvPr>)/, `$1${DECORATIVE_EXT}$2`);
+    }
+    let out = whole;
+    if (name === "Title") out = out.replace("<p:nvPr></p:nvPr>", '<p:nvPr><p:ph type="title"/></p:nvPr>');
+    const mark = marks.get(name);
+    // List markers take the list's accent colour (pptxgenjs writes them in the text colour).
+    if (mark?.bullet) out = out.split('<a:buSzPct ').join(`<a:buClr><a:srgbClr val="${mark.bullet}"/></a:buClr><a:buSzPct `);
+    if (mark?.caps) out = out.replace(/<a:rPr lang=/g, '<a:rPr cap="all" lang=');
+    return out;
+  });
 }
 
 /** A gentle fade between slides, matching the presenter view. PptxGenJS has no
  * transition API; <p:transition> is plain PresentationML and must follow
  * <p:clrMapOvr> inside <p:sld>. It changes no geometry, text or fonts. */
-export async function withTransitions(bytes: Buffer) {
+export async function withTransitions(bytes: Buffer, marks: Marks[] = []) {
   const zip = await JSZip.loadAsync(bytes);
   for (const name of Object.keys(zip.files).filter(entry => /^ppt\/slides\/slide\d+\.xml$/.test(entry))) {
-    const xml = await zip.file(name)!.async("string");
+    const xml = accessible(await zip.file(name)!.async("string"), marks[Number(/(\d+)\.xml$/.exec(name)![1]) - 1] ?? new Map());
+    zip.file(name, xml);
     if (xml.includes("<p:transition") || !xml.endsWith("</p:clrMapOvr></p:sld>")) continue;
     zip.file(name, xml.replace(/<\/p:clrMapOvr><\/p:sld>$/, '</p:clrMapOvr><p:transition spd="med"><p:fade/></p:transition></p:sld>'));
   }

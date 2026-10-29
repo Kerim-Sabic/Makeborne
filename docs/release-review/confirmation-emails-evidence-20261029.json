@@ -1,0 +1,135 @@
+{
+  "date": "2026-10-29",
+  "productionTouched": false,
+  "cloudAppQualified": false,
+  "realWhopPurchase": false,
+  "liveModuleCode": "d5b9abe13db0fd910d055d2d989b028a18e8686f",
+  "providerRequests": 6,
+  "distinctEmails": 4,
+  "checks": [
+    {
+      "name": "real SQL creates plan and pack confirmations with immutable consent",
+      "passed": true
+    },
+    {
+      "name": "disabled sender leaves queued mail untouched",
+      "passed": true
+    },
+    {
+      "name": "actual app sender and service-role SQL settle both provider receipts",
+      "passed": true
+    },
+    {
+      "name": "fulfilment replay creates no second record or email",
+      "passed": true
+    },
+    {
+      "name": "provider idempotency replay returns the identical email ID",
+      "passed": true
+    },
+    {
+      "name": "withdrawal acknowledgement includes server reference and received timestamp",
+      "passed": true
+    },
+    {
+      "name": "real provider credential refusal records retry/backoff without a false sent receipt",
+      "passed": true
+    },
+    {
+      "name": "second fenced attempt recovers using the valid staging sending key",
+      "passed": true
+    },
+    {
+      "name": "four durable sent rows exactly match provider receipt IDs and content hashes",
+      "passed": true
+    },
+    {
+      "name": "four durable sent rows exactly match provider receipt IDs, content hashes, prices, credits and consent",
+      "passed": true
+    }
+  ],
+  "outbox": [
+    {
+      "kind": "purchase_confirmation",
+      "status": "sent",
+      "attempts": 1,
+      "providerId": "01a18509-1538-70fa-8dad-cb538fd951cc"
+    },
+    {
+      "kind": "purchase_confirmation",
+      "status": "sent",
+      "attempts": 1,
+      "providerId": "01a18509-1b5e-724f-896f-6acde7e4b202"
+    },
+    {
+      "kind": "withdrawal_ack",
+      "status": "sent",
+      "attempts": 1,
+      "providerId": "01a18509-2a8d-7c2c-aaca-fcf9a61de769"
+    },
+    {
+      "kind": "withdrawal_ack",
+      "status": "sent",
+      "attempts": 2,
+      "providerId": "01a18509-3b8a-733c-b39a-2f5822a192dd"
+    }
+  ],
+  "delivery": {
+    "verifiedAt": "2026-10-29T00:25:27.500Z",
+    "source": "Authenticated Resend delivery dashboard",
+    "emails": [
+      {
+        "id": "01a18509-1538-70fa-8dad-cb538fd951cc",
+        "status": "Delivered",
+        "recipient": "admin@makeborne.com",
+        "subject": "Your Makeborne purchase confirmation: credit pack, 100 credits"
+      },
+      {
+        "id": "01a18509-1b5e-724f-896f-6acde7e4b202",
+        "status": "Delivered",
+        "recipient": "admin@makeborne.com",
+        "subject": "Your Makeborne purchase confirmation: Create plan, monthly"
+      },
+      {
+        "id": "01a18509-2a8d-7c2c-aaca-fcf9a61de769",
+        "status": "Delivered",
+        "recipient": "admin@makeborne.com",
+        "subject": "We received your withdrawal notice (WD-7E31E2D8)"
+      },
+      {
+        "id": "01a18509-3b8a-733c-b39a-2f5822a192dd",
+        "status": "Delivered",
+        "recipient": "admin@makeborne.com",
+        "subject": "We received your withdrawal notice (WD-CDBCF351)"
+      }
+    ]
+  },
+  "collectorCorrection": "Read-only completion after correcting provider_id to provider_message_id; no additional email sends",
+  "staging": {
+    "vercelProject": "prj_c9h8fuyEmVAT8F3NHFMvzFR1BnLc",
+    "secretVariable": "RESEND_API_KEY",
+    "secretTarget": [
+      "preview"
+    ],
+    "secretType": "sensitive",
+    "automaticSendingEnabled": false
+  },
+  "costs": {
+    "paidAiCalls": 0,
+    "publishingVms": 0,
+    "newDeployments": 0,
+    "newSubscriptions": 0
+  },
+  "verification": {
+    "offlineHarnesses": {
+      "passed": 232,
+      "total": 232
+    },
+    "typecheck": "passed",
+    "lint": {
+      "errors": 0,
+      "existingWarnings": 1
+    },
+    "build": "passed"
+  }
+}

@@ -1,6 +1,6 @@
 # Billing view adapter contract
 
-`/billing` currently renders an explicitly unavailable view. There is no authenticated balance loader or checkout action attached to this screen. Do not interpret the screen as enabled billing.
+`/billing` (24 Oct 2026) is the pricing page and the account dashboard. Signed-out and plan-less visitors (`plansFirst` in `src/app/billing/page.tsx`) see plans, the No surprises promises, FAQ and the collapsed cost table first; members keep balance → usage → receipts → controls → plans → packs. The balance loads from `/api/credits` and usage history from `loadUsageHistory`; plan checkout is server-gated (`/api/billing/availability`, `/api/billing/checkout`) and stays closed until the plan gate opens. The `unavailable` view below is still what renders when a read fails.
 
 ## Exact amounts
 
@@ -17,9 +17,9 @@ The accepted magnitude matches `ExactAmountSchema`: `0` through `922337203685477
 5. Map ledger rows to positive exact `credits` magnitudes and explicit statuses (`Charged`, `Refunded`). Map active holds/releases from reservation events to `Reserved`/`Released`; those events are not charges. Preserve immutable event IDs and project/model provenance. Do not invent ledger records from a quote.
 6. Map supported capabilities to visible categories: website/book/presentation creation to `Creation`; image/video/clipping/transcription to `Media`; deployment/runtime to `Hosting`; research to `Research`. Unknown capabilities need an explicit mapping before display.
 7. Keep unavailable data null. Do not replace failed fetches or unauthenticated state with a zero balance or a success-shaped empty account. Use the unavailable state until the server adapter and failure UI are implemented.
-8. Before enabling checkout, replace proposed cards with a server-approved product catalogue, authoritative price IDs, explicit currency/interval/tax presentation, and authenticated checkout/portal actions. Validate payment webhooks and reconcile ledger funding independently of redirect success.
+8. Checkout uses the server-verified creation offers; cards show catalogue prices from `CREATION_PLANS`, renewal and `TAX_NOTE` wording under each CTA, and never submit a price. Payment webhooks and ledger funding are reconciled independently of redirect success (WHOP_ACCESS_SETUP.md).
 
-The `ready` view now renders connected usage copy, while purchase and portal controls stay disabled independently. `src/lib/billing/view.ts` validates the display boundary: ready balances must all be exact strings, a period is required, event IDs must be unique, and invalid snapshots become unavailable with no rows. This validation does not authenticate or authorise data; the server adapter is still required.
+The `ready` view renders connected usage copy; plan purchase is gated separately by availability. `src/lib/billing/view.ts` validates the display boundary: ready balances must all be exact strings, a period is required, event IDs must be unique, and invalid snapshots become unavailable with no rows. This validation does not authenticate or authorise data; the server adapter is still required.
 
 The usage download is JSON to retain exact credit strings. It exports only loaded entries matching the selected category/search, labels that limited coverage, and is not an invoice or complete account ledger. It is disabled when unavailable or no matching entries exist. No client-side sum is used to infer a funded balance.
 

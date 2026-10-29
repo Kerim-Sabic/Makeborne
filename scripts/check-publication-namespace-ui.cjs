@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict');
 const {createServer}=require('node:http');
 const {build}=require('esbuild');
-const {chromium}=require('playwright');
+const {browserType}=require('./browser-engine.cjs');
 const ids={account:'11111111-1111-4111-8111-111111111111',workspace:'22222222-2222-4222-8222-222222222222',artifact:'33333333-3333-4333-8333-333333333333',prep:'44444444-4444-4444-8444-444444444444'};
 const labels=['release-check','release-check-renamed'];
 const staging=()=>({enabled:true,allowedSlugs:labels,reservedSlugs:[]});
@@ -18,7 +18,7 @@ async function main(){
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  let browser,count=0;
  try{
-  browser=await chromium.launch({headless:true});
+  browser=await browserType.launch({headless:true});
   const prepare=page=>page.getByRole('button',{name:'Prepare saved website',exact:true});
   const address=page=>page.getByRole('textbox',{name:'Website address'});
   const refresh=page=>page.getByRole('button',{name:'Refresh publishing status'}).click();

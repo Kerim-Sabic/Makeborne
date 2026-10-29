@@ -300,6 +300,13 @@ function fakeFetch(routes) {
     assert.match(block, /\[Unreadable\] https:\/\/x\.test\/: The page answered 403\./);
   });
 
+  await check("research excludes truncated script/style tails using linear scanners", () => {
+    const { extractPageFacts } = require("./research.ts");
+    for (const tail of ["<script>private_script_tail", "<style>private_style_tail", "<SCRIPT private_script_tail"]) {
+      const facts = extractPageFacts("<title>Business</title><p>Public facts</p>" + tail, new URL("https://business.test/"));
+      assert.match(facts.text, /Public facts/); assert.doesNotMatch(facts.text, /private_.*_tail/);
+    }
+  });
   await check("personalised email brief: campaign goal and style reference, strict no-invention rules, delimited record and research, notes format", () => {
     const { buildEmailBrief, CAMPAIGNS } = require("./personalize.ts");
     const client = { name: "Maya Green", company: "", website: "", notes: "Met at a plant fair", outreach: { stage: "Lead", channel: "Instagram", profileUrl: "https://instagram.com/maya.plants", lastContact: null, nextFollowUp: null, notes: "", activity: [] } };

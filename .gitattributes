@@ -20,5 +20,22 @@ supabase/migrations/20261020231225_billing_ux_details_and_limits.sql text eol=lf
 # Preserve the exact LF bytes qualified and applied to staging on 21 October.
 supabase/migrations/20261021125359_checkout_payment_recovery.sql text eol=lf
 supabase/migrations/20261021133151_billing_financial_reconcile_freshness.sql text eol=lf
+supabase/migrations/20261025200000_paying_workspace_publication.sql text eol=lf
+supabase/release-review/rollback-paying-workspace-publication.sql text eol=lf
 # Durable brief-enhancement actions: not applied to staging yet; freeze canonical LF.
 supabase/migrations/20261022100000_brief_enhancement_actions.sql text eol=lf
+supabase/migrations/20261026013451_prevent_unsupported_creation_repurchase.sql text eol=lf
+# Full-version staging (26 Oct): not applied to staging yet; freeze canonical LF before the apply script hashes them.
+supabase/migrations/20261023130000_project_source_uploads.sql text eol=lf
+supabase/migrations/20261023200000_agency_operation_contract.sql text eol=lf
+supabase/migrations/20261023210000_client_knowledge.sql text eol=lf
+supabase/migrations/20261024010000_client_research.sql text eol=lf
+supabase/migrations/20261024020000_data_report_files.sql text eol=lf
+supabase/migrations/20261025300000_crm_research.sql text eol=lf
+supabase/migrations/20261026100000_account_data_rights.sql text eol=lf
+supabase/migrations/20261026120000_crm_server_writes.sql text eol=lf
+supabase/migrations/20261026120100_research_daily_limits.sql text eol=lf
+
+# Launch mail delivery fence: preserve reviewed canonical SQL bytes.
+supabase/migrations/20261028213151_transactional_mail_delivery_fencing.sql text eol=lf
+supabase/check-transactional-mail-fencing.sql text eol=lf

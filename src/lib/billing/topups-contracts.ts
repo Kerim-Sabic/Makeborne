@@ -9,7 +9,7 @@ const integer = /^(0|[1-9][0-9]{0,18})$/;
 const positiveAmount = ExactAmountSchema.refine(value => /^[1-9][0-9]{0,18}$/.test(value), "Amount must be positive.");
 
 /** The browser may choose a pack, never its price, credits, owner or entitlement. */
-export const CreditTopupInputSchema = z.object({ packId, requestId: uuid }).strict();
+export const CreditTopupInputSchema = z.object({ packId, requestId: uuid, withdrawalConsent: z.string().max(80).optional() }).strict();
 
 /** A future server adapter binds a verified one-time Whop checkout to this row. */
 export const CreditTopupPurchaseSchema = z.object({

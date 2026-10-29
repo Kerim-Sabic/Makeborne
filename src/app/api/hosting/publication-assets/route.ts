@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     assertPublicationBrokerSecret(secret); assertPublicationAssetOrigin(origin);
     const profile = publicationBrokerProfile(process.env);
     // Instantiate privileged access lazily, only after request authentication.
-    return await publicationAssetBroker({secret, origin, namespace: profile.namespace, workspaceIds: profile.workspaceIds,
+    return await publicationAssetBroker({secret, origin, namespace: profile.namespace, workspaceIds: profile.workspaceIds, workspaceScope: profile.workspaceScope,
       async load(context, signal) {
         const {data, error} = await billingDatabase().rpc("makeborne_load_publication_preparation", {
           p_preparation: context.preparationId, p_worker: context.workerId, p_fence: context.fence,

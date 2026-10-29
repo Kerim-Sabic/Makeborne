@@ -145,14 +145,24 @@ export function graphic(ctx: Ctx, kind: GraphicKind, b: Box, variant = 0, grid?:
       return;
     }
     case "arches": {
-      const aw = Math.min(b.w * 0.62, b.h * 0.62), ah = Math.min(b.h * 0.92, aw * 1.55), ax = b.x + b.w * (0.18 + rand() * 0.16), ay = b.y + b.h - ah;
-      const field = contrast(p.accent2, c.bg) > 1.4 ? p.accent2 : p.dark;
+      // The seed (deck title, slide and direction) picks the arrangement, so unrelated decks in this direction do not share one cover:
+      // one tall arch or a pair, the sun left, right or set low as a half disc, and the stone on either side.
+      const layout = Math.floor(rand() * 6), pair = layout % 2 === 1, sunAt = Math.floor(layout / 2) % 3;
+      const aw = Math.min(b.w * (pair ? 0.46 : 0.62), b.h * (pair ? 0.5 : 0.62)), ah = Math.min(b.h * 0.92, aw * 1.55), ax = b.x + b.w * (pair ? 0.1 + rand() * 0.08 : 0.18 + rand() * 0.16), ay = b.y + b.h - ah;
+      const field = contrast(p.accent2, c.bg) > 1.4 ? p.accent2 : p.dark, second = contrast(p.dark, c.bg) > 1.4 && p.dark !== field ? p.dark : mix(field, c.bg, 0.4);
+      if (pair) {
+        const bw = aw * 0.78, bh = ah * 0.72, bx = ax + aw * 0.72;
+        path(ctx, archPath({ x: bx, y: b.y + b.h - bh, w: bw, h: bh }), { fill: second });
+      }
       path(ctx, archPath({ x: ax, y: ay, w: aw, h: ah }), { fill: field });
       path(ctx, archPath({ x: ax + aw * 0.16, y: ay + aw * 0.16, w: aw * 0.68, h: ah - aw * 0.16 }), { stroke: mix(field, "#FFFFFF", 0.35), strokeWidth: 2 });
-      const sun = aw * 0.42;
-      ellipse(ctx, { x: ax + aw * 0.62, y: ay - sun * 0.28, w: sun, h: sun, fill: c.signal });
-      path(ctx, blobPath(ax - aw * 0.1, b.y + b.h - aw * 0.16, aw * 0.3, aw * 0.16, rand), { fill: mix(p.surface, p.accent, 0.12) });
-      line(ctx, Math.max(b.x, ax - aw * 0.45), b.y + b.h, Math.min(b.x + b.w, ax + aw * 1.45), b.y + b.h, c.ink, 2);
+      const sun = aw * (sunAt === 2 ? 0.6 : 0.42);
+      if (sunAt === 0) ellipse(ctx, { x: ax + aw * 0.62, y: ay - sun * 0.28, w: sun, h: sun, fill: c.signal });
+      else if (sunAt === 1) ellipse(ctx, { x: ax - sun * 0.45, y: ay + ah * 0.18, w: sun, h: sun, fill: c.signal });
+      else path(ctx, halfPath({ x: Math.min(b.x + b.w - sun, ax + aw * (pair ? 1.55 : 1.05)), y: b.y + b.h - sun / 2, w: sun, h: sun / 2 }, 0), { fill: c.signal });
+      const stoneLeft = sunAt === 2 || rand() < 0.5;
+      path(ctx, blobPath(stoneLeft ? ax - aw * 0.1 : ax + aw * 0.8, b.y + b.h - aw * 0.16, aw * 0.3, aw * 0.16, rand), { fill: mix(p.surface, p.accent, 0.12) });
+      line(ctx, Math.max(b.x, ax - aw * 0.45), b.y + b.h, Math.min(b.x + b.w, ax + aw * (pair ? 1.9 : 1.45)), b.y + b.h, c.ink, 2);
       return;
     }
     case "glow": {
@@ -183,11 +193,13 @@ export function graphic(ctx: Ctx, kind: GraphicKind, b: Box, variant = 0, grid?:
     }
     case "stripes": {
       // Parallel slanted bars kept wholly inside the box.
-      const band = Math.max(18, Math.min(56, b.w / 9)), slant = Math.min(b.h * 0.55, b.w * 0.35), step = band * 1.9;
+      // The seed sets the slant direction, bar weight and which bar is set in ink, so each deck's band differs.
+      const weight = 0.75 + rand() * 0.5, lean = rand() < 0.5 ? 1 : -1, inkEvery = 2 + Math.floor(rand() * 3), inkOffset = Math.floor(rand() * inkEvery);
+      const band = Math.max(16, Math.min(60, b.w / 9 * weight)), slant = Math.min(b.h * 0.55, b.w * 0.35), step = band * (1.6 + rand() * 0.6);
       const n = Math.max(1, Math.floor((b.w - slant - band) / step) + 1), x0 = b.x + (b.w - slant - band - (n - 1) * step) / 2;
       for (let i = 0; i < n; i++) {
-        const x = x0 + i * step;
-        path(ctx, poly([[x + slant, b.y], [x + slant + band, b.y], [x + band, b.y + b.h], [x, b.y + b.h]]), { fill: i % 3 === 2 ? c.ink : c.signal });
+        const x = x0 + i * step, top = lean > 0 ? x + slant : x, bottom = lean > 0 ? x : x + slant;
+        path(ctx, poly([[top, b.y], [top + band, b.y], [bottom + band, b.y + b.h], [bottom, b.y + b.h]]), { fill: i % inkEvery === inkOffset ? c.ink : c.signal });
       }
       return;
     }
@@ -213,22 +225,23 @@ export function graphic(ctx: Ctx, kind: GraphicKind, b: Box, variant = 0, grid?:
     }
     case "dots": {
       dotField(ctx, b, c.muted, 0.5, false, 22);
-      const r = Math.min(b.w, b.h) * 0.36;
-      ellipse(ctx, { x: b.x + b.w * 0.55 - r, y: b.y + b.h * 0.5 - r, w: r * 2, h: r * 2, stroke: c.accent, strokeWidth: 3 });
-      ellipse(ctx, { x: b.x + b.w * 0.55 - 7, y: b.y + b.h * 0.5 - 7, w: 14, h: 14, fill: c.accent });
+      // Ring size and position follow the seed.
+      const r = Math.min(b.w, b.h) * (0.28 + rand() * 0.14), fx = 0.4 + rand() * 0.3, fy = 0.38 + rand() * 0.24;
+      ellipse(ctx, { x: b.x + b.w * fx - r, y: b.y + b.h * fy - r, w: r * 2, h: r * 2, stroke: c.accent, strokeWidth: 3 });
+      ellipse(ctx, { x: b.x + b.w * fx - 7, y: b.y + b.h * fy - 7, w: 14, h: 14, fill: c.accent });
       return;
     }
     case "blocks": {
-      const s = Math.min(b.w * 0.5, b.h * 0.62), w = ctx.dir.rule?.width ?? 4;
+      const s = Math.min(b.w * 0.5, b.h * 0.62) * (0.8 + rand() * 0.2), w = ctx.dir.rule?.width ?? 4;
       rect(ctx, { x: b.x + b.w - s - 8, y: b.y + 8, w: s, h: s, fill: c.signal, stroke: c.ink, strokeWidth: w });
       rect(ctx, { x: b.x + b.w - s * 1.45, y: b.y + s * 0.5, w: s * 0.8, h: s * 0.8, fill: c.bg, noFill: true, stroke: c.ink, strokeWidth: w });
       path(ctx, arrowPath(b.x + b.w - s * 1.45 + s * 0.1, b.y + s * 0.6, s * 0.6, 45), { fill: c.ink });
       return;
     }
     case "rings": {
-      const r = Math.min(b.w, b.h) * 0.48, cx = b.x + b.w * 0.6, cy = b.y + b.h * 0.5;
+      const r = Math.min(b.w, b.h) * (0.4 + rand() * 0.08), cx = b.x + b.w * (0.5 + rand() * 0.2), cy = b.y + b.h * 0.5, moon = rand() * Math.PI * 2;
       for (let i = 0; i < 4; i++) ellipse(ctx, { x: cx - r + i * r * 0.18, y: cy - r + i * r * 0.18, w: (r - i * r * 0.18) * 2, h: (r - i * r * 0.18) * 2, stroke: i === 0 ? c.accent : c.rule, strokeWidth: i === 0 ? 2 : 1 });
-      ellipse(ctx, { x: cx + r * 0.5, y: cy - r * 0.88, w: r * 0.26, h: r * 0.26, fill: c.signal });
+      ellipse(ctx, { x: cx + r * Math.cos(moon) - r * 0.13, y: cy + r * Math.sin(moon) - r * 0.13, w: r * 0.26, h: r * 0.26, fill: c.signal });
       return;
     }
   }

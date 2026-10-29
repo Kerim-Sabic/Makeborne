@@ -141,7 +141,7 @@ function open(value, userId) {
   return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
 }
 const userId = "70000000-0000-4000-8000-000000000002";
-const RECONNECT = "Your GitHub connection has ended. Reconnect GitHub to keep syncing.";
+const RECONNECT = "Your GitHub connection has ended. Reconnect GitHub to push again.";
 const iso = ms => new Date(Date.now() + ms).toISOString();
 
 /** Store a connection row exactly as the callback does, with chosen expiries. */

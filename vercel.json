@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run lint && npm run build",
+  "crons": [
+    { "path": "/api/cron/billing-reconcile", "schedule": "17 3 * * *" }
+  ],
   "regions": [
     "fra1"
   ],

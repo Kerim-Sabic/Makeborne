@@ -1,10 +1,12 @@
 "use client";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, useRef, useState } from "react";
 import { ArrowUp, ArrowUpRight, BookOpen, Check, Globe2, Menu, Presentation, X } from "lucide-react";
 import ComposerControls from "./composer-controls";
+import DocumentImageControls, { imageChoiceLines, initialImageChoice, useDocumentImageOffers, type ImageChoice } from "./document-image-controls";
 import GenerationPermissions, {useGenerationConsent} from "./generation-permissions";
 import StudioAccount from "./studio-account";
 import { DEFAULT_EFFORT, type EffortLevel } from "@/lib/routing/effort";
@@ -51,6 +53,12 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
   const [kind, setKind] = useState<Kind>("website");
   const [mode, setMode] = useState<"create" | "plan">("create");
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_EFFORT);
+  // Presentations and books: the slide or page shape and image quality, written into the brief as the client's answers.
+  const { offers: imageOffers, bookPages } = useDocumentImageOffers();
+  const [imageChoices, setImageChoices] = useState<{ presentation?: ImageChoice; book?: ImageChoice }>({});
+  const docKind = kind === "website" ? null : kind;
+  // No image controls (and no image answer lines in the brief) while images can't be made now: offers stay null then.
+  const imageChoice = docKind && imageOffers && (docKind !== "book" || bookPages) ? imageChoices[docKind] ?? initialImageChoice(docKind, imageOffers) : null;
   const [brief, setBrief] = useState("");
   const [selectedStyles, setSelectedStyles] = useState<Partial<Record<Kind, Style>>>({});
   const selectedStyle = selectedStyles[kind];
@@ -98,7 +106,8 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
       const requestId = crypto.randomUUID();
       const nonce = crypto.randomUUID();
       const generationConsent=immediateWebsite?permissions.consent??undefined:undefined;
-      const draft = { kind, brief: brief.trim(), styleId: selectedStyle?.id ?? AUTOMATIC_STYLE.id, style: selectedStyle, mode, effort, requestId, attachmentOwner: owner, generationConsent };
+      const withChoices = docKind && imageChoice ? `${brief.trim()}\n\n${imageChoiceLines(docKind, imageChoice)}` : brief.trim();
+      const draft = { kind, brief: withChoices.slice(0, 20000), styleId: selectedStyle?.id ?? AUTOMATIC_STYLE.id, style: selectedStyle, mode, effort, requestId, attachmentOwner: owner, generationConsent };
       await saveCreationDraft(owner, requestId, nonce, draft);
       sessionStorage.setItem("makeborne.creation-draft.v1", JSON.stringify(draft));
       unsent.submitted();
@@ -124,9 +133,9 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
     <main className="mk-home">
       <header className="mk-nav">
         <Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={30} /><span>Makeborne</span></Link>
-        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
+        <nav className="mk-nav-middle" aria-label="Main navigation"><Link href="/studio">Studio</Link><a href="#templates">Templates</a><Link href="/chat">Expert chat</Link><Link href="/billing">Pricing</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">For client work <ArrowUpRight size={13} /></Link></nav>
         <div className="mk-nav-actions"><StudioAccount variant="home" initialEmail={initialEmail} enabled={accountsEnabled} /><Link className="mk-nav-cta" href="/studio">Open studio <ArrowUpRight size={14} /></Link><button className="mk-menu-toggle" aria-label={menu ? "Close navigation" : "Open navigation"} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X size={20} /> : <Menu size={20} />}</button></div>
-        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
+        {menu && <nav className="mk-mobile-menu" aria-label="Mobile navigation"><Link href="/studio">Studio</Link><a href="#templates" onClick={() => setMenu(false)}>Templates</a><Link href="/chat">Expert chat</Link><Link href="/billing">Pricing</Link><Link href="/help">Help</Link><Link href="/studio?tab=clients">Client work</Link><StudioAccount variant="home-mobile" initialEmail={initialEmail} enabled={accountsEnabled} /></nav>}
       </header>
       <section className="mk-hero" aria-labelledby="creation-heading">
         <div className="mk-atmosphere" aria-hidden="true"><span /><span /><span /></div>
@@ -147,6 +156,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
             <div className="mk-composer-bottom">
               <AttachFilesButton onFiles={attachments.add} disabled={!attachments.ready || busy} busy={attachments.busy} />
               <ComposerControls mode={mode} onMode={setMode} effort={effort} onEffort={setEffort} />
+              {docKind && imageChoice && <DocumentImageControls className="mk-image-controls" kind={docKind} value={imageChoice} offers={imageOffers} disabled={busy} onChange={next => setImageChoices(previous => ({ ...previous, [docKind]: next }))} />}
               <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim() || !accessReady || immediateWebsite&&!permissions.consent} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
             </div>
           </form>
@@ -155,7 +165,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
           {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
           <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>
-          <p className="mk-availability">{immediateWebsite ? "Your project opens with this brief ready to send. Building starts, and credits are used, only when you press Send there, after its maximum is shown." : trialCredits ? `Start free — confirmed accounts get ${trialCredits} trial credits to build their first website.` : "Every creation plan includes monthly credits to build with."}</p>
+          <p className="mk-availability">{immediateWebsite ? "Your project opens with this brief ready to send. Building starts, and credits are used, only when you press Send there, after its maximum is shown." : trialCredits ? `Start free — confirmed accounts get ${trialCredits} trial credits to build their first website.` : <>Every <Link href="/billing#plans">creation plan</Link> includes monthly credits to build with.</>}</p>
         </div>
         <div className="mk-hero-foot"><span>ONE IDEA, EVERY POSSIBILITY.</span><span>DESIGNED TO BE YOURS <span className="mk-tiny-star">✳</span></span></div>
       </section>
@@ -179,7 +189,7 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
       <footer className="mk-footer">
         <div className="mk-footer-main">
           <div className="mk-footer-brand"><Link href="/" className="mk-wordmark" aria-label="Makeborne home"><BrandMark size={25} /><span>Makeborne</span></Link><p>Make something worth sharing.</p></div>
-          <nav aria-label="Footer navigation"><Link href="/studio">Studio</Link><Link href="/chat">Expert chat</Link><a href="#templates">Styles</a><Link href="/billing">Plans &amp; credits</Link><Link href="/help">Getting started</Link><Link href="/privacy">Privacy</Link></nav>
+          <nav aria-label="Footer navigation"><Link href="/studio">Studio</Link><Link href="/chat">Expert chat</Link><a href="#templates">Styles</a><Link href="/billing">Plans &amp; credits</Link><Link href="/help">Getting started</Link><LegalLinks /></nav>
         </div>
         <div className="mk-footer-bottom"><span>© 2026 Makeborne</span><a href="#creation-heading">Back to top <ArrowUp size={13} aria-hidden="true" /></a></div>
       </footer>

@@ -563,10 +563,12 @@ export function scopeAllowance(ledger, scope) {
 
 /**
  * Records an owner-approved scoped allowance once: appends its capApprovals record and raises the ledger-wide
- * cap by totalUsd. The ledger-wide provider caps are carried over unchanged (an allowance limits its own providers
- * through `allowance.providerCapsUsd`). Entries are never touched; the result must validate. Dry unless `write`.
+ * cap by totalUsd. A ledger-wide provider cap rises by the allowance's cap for that provider (as the recorded
+ * deck and docs allowances did: OpenAI +$2 and +$1.50); providers without a ledger-wide cap stay uncapped there
+ * (an allowance limits its own providers through `allowance.providerCapsUsd`). Entries are never touched; the
+ * result must validate. Dry unless `write`.
  */
-export async function recordScopedAllowance({ scope, approval, totalUsd, providerCapsUsd, write = false }) {
+export async function recordScopedAllowance({ scope, approval, totalUsd, providerCapsUsd, write = false, raise = false }) {
   if (!SCOPE_NAME.test(String(scope)) || scope === DESIGN_SCOPE) throw new Error(`Invalid scope ${JSON.stringify(scope)}`);
   if (typeof approval !== 'string' || approval.trim().length < 10) throw new Error('A scoped allowance needs the owner approval text');
   if (!(typeof totalUsd === 'number' && Number.isFinite(totalUsd) && totalUsd > 0)) throw new Error('totalUsd must be a positive amount');
@@ -576,10 +578,18 @@ export async function recordScopedAllowance({ scope, approval, totalUsd, provide
     const file = ledgerFile();
     const ledger = load();
     const existing = scopeAllowance(ledger, scope);
-    if (existing) return { written: false, already: true, file: display(file), record: existing };
+    // A raise (a new owner approval for the same scope) appends a record with the new totals; the scope's latest
+    // record is its allowance, and the ledger-wide caps rise only by the difference. Nothing is ever lowered here.
+    if (existing && !raise) return { written: false, already: true, file: display(file), record: existing };
+    if (!existing && raise) throw new LedgerError(`No approved allowance for scope ${JSON.stringify(scope)} to raise`, 'EVAL_SCOPE_UNAPPROVED');
+    const previous = existing?.allowance ?? { totalUsd: 0, providerCapsUsd: {} };
+    if (raise && (totalUsd < previous.totalUsd || Object.entries(previous.providerCapsUsd).some(([provider, cap]) => !((providerCapsUsd[provider] ?? 0) >= cap))))
+      throw new Error('A raise never lowers the allowance or a provider cap');
     const before = JSON.stringify(ledger.entries);
-    const wideCap = Math.round((ledger.hardCapUsd + totalUsd) * 100) / 100;
-    const record = { capUsd: wideCap, previousCapUsd: ledger.hardCapUsd, providerCapsUsd: ledgerApproval(ledger)?.providerCapsUsd ?? PROVIDER_CAPS_USD, approval, scope,
+    const wideCap = Math.round((ledger.hardCapUsd + totalUsd - previous.totalUsd) * 100) / 100;
+    const wideProviderCaps = Object.fromEntries(Object.entries(ledgerApproval(ledger)?.providerCapsUsd ?? PROVIDER_CAPS_USD)
+      .map(([provider, cap]) => [provider, Math.round((cap + (providerCapsUsd[provider] ?? 0) - (previous.providerCapsUsd[provider] ?? 0)) * 100) / 100]));
+    const record = { capUsd: wideCap, previousCapUsd: ledger.hardCapUsd, providerCapsUsd: wideProviderCaps, approval, scope,
       allowance: { totalUsd, providerCapsUsd }, recordedAt: new Date().toISOString() };
     const raised = { ...ledger, hardCapUsd: wideCap, capApprovals: [...ledger.capApprovals, record] };
     const problems = validateLedger(raised);
@@ -807,6 +817,15 @@ export async function selfTest({ processes = 32, readers = 4, boundUsd = 1.8, lo
       check('scoped allowance: raises the ledger-wide cap by its total, keeps entries and the design record, validates', recorded.written && after.hardCapUsd === HARD_CAP_USD + 5 && validateLedger(after).length === 0
         && JSON.stringify(after.entries) === JSON.stringify([designRow]) && after.capApprovals.some(isDesignApproval));
       check('scoped allowance: recording it twice is a no-op', (await recordScopedAllowance({ scope: 'test-scope', approval: 'test: owner approved $5 Claude', totalUsd: 5, providerCapsUsd: { anthropic: 5 }, write: true })).already === true && readJson(path.join(root, 'budget', 'ledger.json')).hardCapUsd === HARD_CAP_USD + 5);
+      const images = await recordScopedAllowance({ scope: 'test-images', approval: 'test: owner approved $1.50 Claude / $0.50 OpenAI', totalUsd: 2, providerCapsUsd: { anthropic: 1.5, openai: 0.5 }, write: true });
+      const imagesLedger = readJson(path.join(root, 'budget', 'ledger.json'));
+      check('scoped allowance: a ledger-wide provider cap rises by the allowance for that provider; others stay uncapped', images.written && imagesLedger.hardCapUsd === HARD_CAP_USD + 7
+        && imagesLedger.capApprovals.at(-1).providerCapsUsd.openai === Math.round((PROVIDER_CAPS_USD.openai + 0.5) * 100) / 100 && imagesLedger.capApprovals.at(-1).providerCapsUsd.anthropic === undefined && validateLedger(imagesLedger).length === 0);
+      const raised = await recordScopedAllowance({ scope: 'test-images', approval: 'test: owner moved $1 Claude / $0.20 OpenAI here', totalUsd: 3.2, providerCapsUsd: { anthropic: 2.5, openai: 0.7 }, write: true, raise: true });
+      const raisedLedger = readJson(path.join(root, 'budget', 'ledger.json'));
+      check('scoped allowance: a raise appends a record with the new totals; the ledger-wide caps rise by the difference only', raised.written && raisedLedger.hardCapUsd === HARD_CAP_USD + 8.2
+        && scopeAllowance(raisedLedger, 'test-images').allowance.totalUsd === 3.2 && raisedLedger.capApprovals.at(-1).providerCapsUsd.openai === Math.round((PROVIDER_CAPS_USD.openai + 0.7) * 100) / 100 && validateLedger(raisedLedger).length === 0);
+      check('scoped allowance: a raise never lowers a cap', await refuses(() => recordScopedAllowance({ scope: 'test-images', approval: 'test: lower it', totalUsd: 1, providerCapsUsd: { anthropic: 1 }, write: true, raise: true })));
       const first = await reserveScoped({ scope: 'test-scope', kind: 'test-routing', ref: 'a', boundUsd: 3 });
       check('scoped reserve: a call inside the allowance is booked with its scope', ledgerEntries({ kind: 'test-routing' })[0]?.scope === 'test-scope' && Math.abs(scopeSummary('test-scope').committedUsd - 3) < 1e-9);
       check('scoped reserve: scoped rows never count against the design cap', Math.abs(summary().committedUsd - 2) < 1e-9);
@@ -893,10 +912,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     // --record-scope <scope> --total <usd> --provider-cap <provider>=<usd> [...] --approval "<owner approval>" [--write]
     const value = name => rest.includes(name) ? rest[rest.indexOf(name) + 1] : undefined;
     const caps = Object.fromEntries(rest.flatMap((item, index) => item === '--provider-cap' ? [rest[index + 1].split('=')] : []).map(([provider, cap]) => [provider, Number(cap)]));
-    recordScopedAllowance({ scope: rest[0], approval: value('--approval'), totalUsd: Number(value('--total')), providerCapsUsd: caps, write: rest.includes('--write') })
+    recordScopedAllowance({ scope: rest[0], approval: value('--approval'), totalUsd: Number(value('--total')), providerCapsUsd: caps, write: rest.includes('--write'), raise: rest.includes('--raise') })
       .then(result => { console.log(JSON.stringify(result, null, 2)); if (!result.written && !result.already) console.log('Dry run: pass --write to record the allowance.'); }, error => { console.error(error.message); process.exitCode = 1; });
   } else {
-    console.log('Usage: node scripts/eval/lib/budget.mjs --selftest | --summary [--scope <scope>] | --rebuild [--write] | --raise-cap [--write] | --record-scope <scope> --total <usd> --provider-cap <provider>=<usd> --approval "<text>" [--write]');
+    console.log('Usage: node scripts/eval/lib/budget.mjs --selftest | --summary [--scope <scope>] | --rebuild [--write] | --raise-cap [--write] | --record-scope <scope> --total <usd> --provider-cap <provider>=<usd> --approval "<text>" [--raise] [--write]');
     process.exitCode = 2;
   }
 }

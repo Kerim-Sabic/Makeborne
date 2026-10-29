@@ -8,6 +8,7 @@ import { REVIEW_IDENTITY_NOTE, anchorLabel, builderRequestFromFeedback, reviewDe
 import { deliveryStageLabels, type ProjectDeliveryStage } from "@/lib/project-delivery";
 import type { ReviewViews } from "@/lib/client-review/views";
 import LinkViewStats from "./client-review-views";
+import LocalDateTime from "./local-date-time";
 
 type Kind = "website" | "book" | "presentation";
 type Overview = { currentVersion: number; kind: Kind; title: string; links: ReviewLink[]; comments: StudioReviewComment[]; snapshots: number[]; client: { id: string; name: string; email: string; stage: string } | null; deliveryStage?: ProjectDeliveryStage; views?: ReviewViews };
@@ -186,7 +187,7 @@ export default function ClientReviewPanel({ accountId, workspaceId, artifactId, 
           <div><span className={`crp-state is-${state}`}>{state === "active" ? "Active" : state === "expired" ? "Expired" : "Off"}</span>
             {link.decision && <span className={`crp-state is-${link.decision}`} title={REVIEW_IDENTITY_NOTE}>{reviewDecisionLabel(link.decision, link.decisionName)}</span>}
             <strong>{link.recipientName || "Client"}</strong></div>
-          <small>{link.version === null ? "Latest version" : `Version ${link.version}`} · sent {day(link.createdAt)} · {state === "active" ? `expires ${day(link.expiresAt)}` : state === "expired" ? `expired ${day(link.expiresAt)}` : `off since ${day(link.revokedAt!)}`}{views?.available ? "" : ` · ${link.viewCount} ${link.viewCount === 1 ? "view" : "views"}`}</small>
+          <small>{link.version === null ? "Latest version" : `Version ${link.version}`} · sent {day(link.createdAt)} · {state === "active" ? <>expires <LocalDateTime value={link.expiresAt} /></> : state === "expired" ? <>expired <LocalDateTime value={link.expiresAt} /></> : `off since ${day(link.revokedAt!)}`}{views?.available ? "" : ` · ${link.viewCount} ${link.viewCount === 1 ? "view" : "views"}`}</small>
           {views?.available && <LinkViewStats summary={views.byLink[link.id] ?? null} kind={data.kind} linkLabel={link.recipientName || "this link"} />}
           {canEdit && state === "active" && <button type="button" className="crp-icon-button" aria-label={`Turn off link for ${link.recipientName || "client"}`} title="Turn off link" disabled={busy} onClick={() => void revoke(link)}><X size={14} /></button>}
         </li>;

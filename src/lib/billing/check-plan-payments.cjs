@@ -9,11 +9,12 @@ function load(file, modules) {
 }
 const plain = value => JSON.parse(JSON.stringify(value));
 const whopTime = value => { const ms = typeof value === "number" ? value * 1000 : Date.parse(value); return Number.isFinite(ms) ? new Date(ms).toISOString() : null; };
-let providerBody = null; const rpcCalls = []; let rpcError = null;
+let providerBody = null; const rpcCalls = []; let rpcError = null; const confirmed = [];
 const payments = load("./plan-payments.ts", {
   "@/lib/server/http": { RequestError }, "./config": { billingConfig: () => ({ companyId: "biz_fixture" }) },
   "./database": { billingDatabase: () => ({ rpc: async (name, args) => { rpcCalls.push({ name, args: plain(args) }); return rpcError ? { data: null, error: rpcError } : { data: { outcome: "updated", state: "reversed" }, error: null }; } }) },
   "./whop": { whopGet: async () => providerBody, whopTime },
+  "./purchase-confirmations": { confirmAfterFulfillment: async id => { confirmed.push(id); } },
 });
 // Shape of the real sandbox subscription payment after a full dashboard refund (2026-10-19 observation):
 // status stays "paid", substatus "refunded", total 29, refunded 29, billing_reason subscription_create.
@@ -61,7 +62,12 @@ const PE = error => error.code === "PLAN_PAYMENT_UNVERIFIED";
   await payments.reconcilePlanPayment("account_fixture", { ...membership, renewal_period_start: null }, full);
   assert.equal(rpcCalls.at(-1).args.p_period_start, null, "no period hint without a valid live period");
   await assert.rejects(payments.reconcilePlanPayment("account_fixture", { ...membership, id: "mem_other" }, full), PE);
+  assert.deepEqual(confirmed, [], "a refunded payment is never confirmed");
+  const paidPayment = { ...full, status: "paid", refundedPrincipalCents: "0" };
+  await payments.reconcilePlanPayment("account_fixture", membership, paidPayment);
+  assert.deepEqual(confirmed, [paidPayment.id], "a recorded paid payment is offered for confirmation on every path (webhook, billing reconcile, checkout recovery)");
   rpcError = { code: "PT409" };
-  await assert.rejects(payments.reconcilePlanPayment("account_fixture", membership, full), error => error.code === "PLAN_PAYMENT_STORAGE_UNAVAILABLE" && error.status === 503);
-  console.log("PASS plan payments: real refunded-subscription shape, partial/tax/dispute/unpaid mapping, strict refusal of inconsistent evidence, event payment ids, merchant check, reconcile RPC with live period hints, retryable storage failure");
+  await assert.rejects(payments.reconcilePlanPayment("account_fixture", membership, paidPayment), error => error.code === "PLAN_PAYMENT_STORAGE_UNAVAILABLE" && error.status === 503);
+  assert.equal(confirmed.length, 1, "no confirmation when the payment could not be recorded");
+  console.log("PASS plan payments: confirmation only after a recorded paid payment; real refunded-subscription shape, partial/tax/dispute/unpaid mapping, strict refusal of inconsistent evidence, event payment ids, merchant check, reconcile RPC with live period hints, retryable storage failure");
 })().catch(error => { console.error(error); process.exitCode = 1; });

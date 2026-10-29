@@ -11,7 +11,7 @@ Status 2026-10-13: **DISABLED and not implemented.** No founder checkout exists 
 5. Automatic renewal follows at the disclosed standard price.
 6. The founding discount applies to the first term only.
 
-The existing copy (`billing/terms`, `founding-plans.tsx`, `billing-workspace.tsx`) describes exactly this. The offer it describes is not purchasable.
+Superseded: the 23 Oct launch prices carry no founding discount (`FOUNDING_DISCOUNT_PERCENT = 0`), and the 24 Oct pricing page (`creation-plans.tsx`) shows no founding copy, strike-through or countdown; `check-plans.cjs` fails if founding wording returns.
 
 ## What Whop documents (docs.whop.com, read 2026-10-13)
 

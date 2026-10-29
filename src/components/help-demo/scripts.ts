@@ -6,7 +6,7 @@ export type DemoId = typeof DEMO_IDS[number];
 /** Every demo, in plain data: what the cursor does and what each moment explains. */
 export const DEMO_SCRIPTS: Record<DemoId, DemoScript> = {
   "create-website": {
-    id: "create-website", title: "Create a website from a short brief", address: "makeborne.com",
+    id: "create-website", title: "Create a website from one brief", address: "makeborne.com",
     initial: { format: "website", brief: "", effort: "medium", effortOpen: false, view: "compose", build: 0, edit: "", edited: false },
     steps: [
       { caption: "Choose what to make: a website.", do: "click", target: "fmt-website" },
@@ -100,21 +100,21 @@ export const DEMO_SCRIPTS: Record<DemoId, DemoScript> = {
       { do: "wait", ms: 800, patch: { gen: 2 } }, { do: "wait", ms: 800, patch: { gen: 3 } },
       { caption: "Every email uses their real details. Edit anything before it goes.", do: "move", target: "email-1" },
       { do: "wait", ms: 1200 },
-      { caption: "Send from your own Gmail or Outlook. Sending is free.", do: "click", target: "send-all", patch: { sent: true } },
+      { caption: "Send from your own Gmail. Sending is free.", do: "click", target: "send-all", patch: { sent: true } },
       { do: "wait", ms: 1600 },
     ],
   },
   "connect-email": {
-    id: "connect-email", title: "Connect Gmail or Outlook and automate follow-ups", address: "makeborne.com/studio?tab=clients",
+    id: "connect-email", title: "Connect Gmail and plan follow-ups", address: "makeborne.com/studio?tab=clients",
     initial: { tab: "list", sheet: false, connected: false, seq: false },
     steps: [
       { caption: "In Clients, open Email.", do: "click", target: "tab-email", patch: { tab: "email" } },
-      { caption: "Connect Gmail or Outlook, then approve access with your provider.", do: "click", target: "connect-gmail", patch: { sheet: true } },
+      { caption: "Connect Gmail, then allow Makeborne to send email for you.", do: "click", target: "connect-gmail", patch: { sheet: true } },
       { do: "wait", ms: 900 },
       { do: "click", target: "allow", patch: { sheet: false, connected: true } },
       { caption: "New mailboxes warm up: a few emails a day at first, rising gradually.", do: "move", target: "quota" },
       { do: "wait", ms: 1100 },
-      { caption: "Add a follow-up sequence. It stops by itself when someone replies.", do: "click", target: "new-sequence", patch: { seq: true } },
+      { caption: "Set follow-up dates. Automatic sequences are off for now, so you send each follow-up yourself.", do: "click", target: "new-sequence", patch: { seq: true } },
       { do: "wait", ms: 1700 },
     ],
   },
@@ -134,7 +134,7 @@ export const DEMO_SCRIPTS: Record<DemoId, DemoScript> = {
     id: "review-link", title: "Share work with a client for review", address: "makeborne.com/studio",
     initial: { panel: false, copied: false, view: "studio", comment: "", posted: false, approved: false, status: "In progress" },
     steps: [
-      { caption: "Open the project and choose Share for review.", do: "click", target: "share", patch: { panel: true } },
+      { caption: "Open the project and choose Client review.", do: "click", target: "share", patch: { panel: true } },
       { caption: "Copy the link and send it. Your client doesn't need an account.", do: "click", target: "copy", patch: { copied: true } },
       { caption: "Your client comments on the work and approves it.", do: "wait", ms: 700, patch: { view: "client" } },
       { do: "type", target: "comment", field: "comment", text: "Love it! Could the logo be a little larger?" },

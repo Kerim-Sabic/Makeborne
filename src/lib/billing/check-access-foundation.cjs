@@ -159,8 +159,9 @@ async function lifecycleChecks() {
   let revoked = false, revokedError = false;
   let sessionUser = "account_test", databaseAccess = true;
   const databaseCalls = [], trials = [], grants = [];
+  let isAdmin = true;
   const access = load("./access.ts", env, {
-    "@/lib/account/privileges": { getAccountPrivileges: async () => ({ isAdmin: true, unlimitedCredits: true }) },
+    "@/lib/account/privileges": { getAccountPrivileges: async () => ({ isAdmin, unlimitedCredits: isAdmin }) },
     "next/navigation": {}, "@/lib/supabase/auth-server": {}, "@/lib/supabase/auth-flow": {}, "@/lib/server/http": { RequestError }, "./config": config, "./database": { billingDatabase: () => db },
     "@/lib/supabase/server": { createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: sessionUser } }, error: null }) }, rpc: async name => { databaseCalls.push(name); return { data: databaseAccess, error: null }; } }) },
     "@/lib/credits/server": { ensureTrialCredits: async id => { trials.push(id); }, recordPlanObservation: async (...args) => { grants.push(JSON.parse(JSON.stringify(args))); return { outcome: "recorded", granted: 0 }; } },
@@ -193,8 +194,23 @@ async function lifecycleChecks() {
   assert.equal(await access.hasCreationAccess({ id: "account_test" }), true);
   assert.equal(trials.length, 1);
   env.WHOP_CREATION_ENABLED = "false";
+  isAdmin = false;
+  const readsBeforeClosedSales = readIds.length;
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }), true);
+  assert.ok(readIds.length > readsBeforeClosedSales, "closed checkout still verifies an ordinary paid subscriber with Whop");
   assert.equal(await access.verifyCreationAccess({ id: "account_test" }, "ch_canceled"), false);
+  let lookedUp, lookupUser = { id: "account_test", email: "fixture@example.invalid", email_confirmed_at: new Date().toISOString(), is_anonymous: false };
+  db.auth = { admin: { getUserById: async id => { lookedUp = id; return { data: { user: lookupUser }, error: null }; } } };
+  await access.refreshCreationAccessForActor("account_test");
+  assert.equal(lookedUp, "account_test");
+  revoked = true;
+  await assert.rejects(access.refreshCreationAccessForActor("account_test"), error => error.code === "MEMBERSHIP_REQUIRED");
+  revoked = false; lookupUser = { ...lookupUser, banned_until: new Date(Date.now() + 60000).toISOString() };
+  await assert.rejects(access.refreshCreationAccessForActor("account_test"), error => error.code === "MEMBERSHIP_REQUIRED");
+  lookupUser = { ...lookupUser, id: "other_account" };
+  await assert.rejects(access.refreshCreationAccessForActor("account_test"), error => error.code === "MEMBERSHIP_UNAVAILABLE");
+  env.MAKEBORNE_BILLING_MIGRATIONS_VERIFIED = "false";
+  assert.equal(await access.verifyCreationAccess({ id: "account_test" }), false, "qualification gate still applies with checkout closed");
   console.log("PASS: coffee exclusion, configuration gates, signatures/replay, membership lifecycle, exact checkout binding, plan credit self-heal, database-first creation access with trial grant, refund/dispute reconciliation and redirect validation. No live services called.");
 }
 void lifecycleChecks().catch(error => { console.error(error); process.exitCode = 1; });

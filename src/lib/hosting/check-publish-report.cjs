@@ -85,7 +85,8 @@ check("the check record: only saved versions without unsaved edits count; malfor
 
 check("wiring: header facts, History 'Checked', Copy link, report, audience line and SEO on the prepared output", () => {
   const studio = read("components/cloud-studio.tsx");
-  assert.ok(studio.includes('{artifact.kind === "website" && <VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} preview={previewFact} />}'));
+  // The facts sit in the project details popover of the header (websites only); scripts/check-editor-header-browser.cjs checks them mounted.
+  assert.ok(studio.includes('details={artifact.kind === "website" ? <>') && studio.includes('<VersionFactsBar saved={expectedVersion} dirty={dirty} checked={checkRecord} live={liveVersion} preview={previewFact} />'));
   assert.ok(studio.includes("failed: previewBuild?.ok === false && previewBuild.revision === previewRevision"), "a build error counts only for the exact files that failed");
   assert.ok(read("components/website-source-editor.tsx").includes("Preview rebuilds from this code in your browser, unsaved edits included; nothing is published until you publish."), "the Code tab describes what Preview does");
   assert.ok(studio.includes('v.number === checkRecord?.version && <span className="cloud-version-checked"'));

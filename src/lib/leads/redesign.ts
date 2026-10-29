@@ -5,7 +5,12 @@
  *
  * Everything taken from the site is material, never instructions: text is
  * stripped of angle brackets, bounded, and delimited in the brief.
+ *
+ * Fetched HTML is untrusted and large, so tags, comments and elements are
+ * found with the linear scanners in html/scan.ts (same matches as the
+ * patterns they name, without re-reading the page from every start).
  */
+import { elements, firstElement, jsonLdBlocks, replaceElements, stripComments, stripTags, tags, tagTest } from "../html/scan";
 import { extractEmails, extractSocials } from "./enrich";
 
 export type SiteContent = {
@@ -22,7 +27,7 @@ const decode = (value: string) => value.replace(/&nbsp;/g, " ").replace(/&amp;/g
   .replace(/&ldquo;|&rdquo;/g, "\"").replace(/&ndash;/g, "–").replace(/&mdash;/g, "—").replace(/&pound;/g, "£").replace(/&euro;/g, "€").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
   .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code))).replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)));
 /** Visible text of an HTML fragment: tags removed, entities decoded, no angle brackets left. */
-export const textOf = (html: string) => decode(html.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " ")).replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
+export const textOf = (html: string) => decode(stripTags(html.replace(/<br\s*\/?>/gi, " "))).replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
 const attr = (tag: string, name: string) => { const match = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(tag); return match ? decode(match[1] ?? match[2] ?? match[3] ?? "") : ""; };
 const clip = (value: string, max: number) => value.length > max ? `${value.slice(0, max - 1).replace(/\s+\S*$/, "")}…` : value;
 const unique = (values: string[], max: number) => {
@@ -33,15 +38,16 @@ const unique = (values: string[], max: number) => {
 const BOILERPLATE = /cookie|privacy policy|all rights reserved|javascript|your browser|skip to (main )?content|accept all|terms (and|&) conditions|powered by|sign up for our newsletter|log ?in|cart \(\d/i;
 
 /** The page without scripts, styles, SVGs, forms' option lists and comments. */
+const INVISIBLE = ["script", "style", "noscript", "svg", "template", "select", "iframe"];
 function visibleHtml(html: string) {
-  return html.replace(/<!--[\s\S]*?-->/g, " ").replace(/<(script|style|noscript|svg|template|select|iframe)\b[\s\S]*?<\/\1>/gi, " ");
+  return replaceElements(stripComments(html), INVISIBLE, { open: "name" });
 }
 
 function jsonLd(html: string) {
   const out: Record<string, unknown>[] = [];
-  for (const match of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+  for (const block of jsonLdBlocks(html)) {
     try {
-      const value = JSON.parse(match[1].trim());
+      const value = JSON.parse(block.trim());
       const queue = Array.isArray(value) ? value : [value];
       for (const item of queue) {
         if (item && typeof item === "object") { out.push(item as Record<string, unknown>); if (Array.isArray((item as { "@graph"?: unknown })["@graph"])) queue.push(...(item as { "@graph": unknown[] })["@graph"]); }
@@ -76,19 +82,19 @@ function businessFacts(html: string) {
 
 export function readSiteContent(html: string, base: URL): SiteContent {
   const visible = visibleHtml(html);
-  const title = textOf(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "");
-  const metaDescription = (() => { for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) if (/^(description|og:description)$/i.test(attr(tag, "name") || attr(tag, "property"))) return attr(tag, "content"); return ""; })();
-  const headings = unique([...visible.matchAll(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi)].map(match => clip(textOf(match[2]), 140)).filter(text => text.length >= 2 && !BOILERPLATE.test(text)), 40);
-  const paragraphs = unique([...visible.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map(match => textOf(match[1])).filter(text => text.length >= 40 && !BOILERPLATE.test(text)).map(text => clip(text, 600)), 40);
-  const main = /<main\b[\s\S]*?<\/main>/i.exec(visible)?.[0] ?? visible.replace(/<(nav|header|footer)\b[\s\S]*?<\/\1>/gi, " ");
-  const items = unique([...main.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].map(match => textOf(match[1])).filter(text => text.length >= 3 && text.length <= 200 && !BOILERPLATE.test(text)), 60);
+  const title = textOf(firstElement(html, ["title"], { open: "tag", boundary: false })?.content ?? "");
+  const metaDescription = (() => { for (const tag of tags(html, ["meta"])) if (/^(description|og:description)$/i.test(attr(tag, "name") || attr(tag, "property"))) return attr(tag, "content"); return ""; })();
+  const headings = unique(elements(visible, ["h1", "h2", "h3"], { open: "tag" }).map(match => clip(textOf(match.content), 140)).filter(text => text.length >= 2 && !BOILERPLATE.test(text)), 40);
+  const paragraphs = unique(elements(visible, ["p"], { open: "tag" }).map(match => textOf(match.content)).filter(text => text.length >= 40 && !BOILERPLATE.test(text)).map(text => clip(text, 600)), 40);
+  const main = firstElement(visible, ["main"], { open: "name" })?.raw ?? replaceElements(visible, ["nav", "header", "footer"], { open: "name" });
+  const items = unique(elements(main, ["li"], { open: "tag" }).map(match => textOf(match.content)).filter(text => text.length >= 3 && text.length <= 200 && !BOILERPLATE.test(text)), 60);
   const facts = businessFacts(html);
   const phones = unique([facts.telephone, ...[...html.matchAll(/href=["']tel:([^"']{5,30})["']/gi)].map(match => decode(match[1]).replace(/[^\d+()\s-]/g, "").trim())].filter(phone => (phone.match(/\d/g) ?? []).length >= 7), 3);
   const socials = Object.values(extractSocials(html)).filter(Boolean);
   const nav: SiteContent["nav"] = [];
-  const navHtml = [...html.matchAll(/<(nav|header)\b[\s\S]*?<\/\1>/gi)].map(match => match[0]).join(" ") || html;
-  for (const match of navHtml.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)) {
-    const href = attr(match[0], "href"), label = clip(textOf(match[0]), 40);
+  const navHtml = elements(html, ["nav", "header"], { open: "name" }).map(match => match.raw).join(" ") || html;
+  for (const match of elements(navHtml, ["a"], { open: "tag" })) {
+    const href = attr(match.raw, "href"), label = clip(textOf(match.raw), 40);
     if (!href || !label || href.startsWith("#") || /^(mailto|tel|javascript):/i.test(href)) continue;
     try {
       const url = new URL(href, base); url.hash = "";
@@ -97,7 +103,7 @@ export function readSiteContent(html: string, base: URL): SiteContent {
     } catch { /* not a link */ }
     if (nav.length === 20) break;
   }
-  const words = textOf(visible.replace(/<(nav|footer)\b[\s\S]*?<\/\1>/gi, " ")).split(/\s+/).filter(Boolean).length;
+  const words = textOf(replaceElements(visible, ["nav", "footer"], { open: "name" })).split(/\s+/).filter(Boolean).length;
   return { url: base.href, title: clip(title, 140), description: clip(textOf(metaDescription), 300), headings, paragraphs, items, phones, emails: extractEmails(html, base.hostname), address: facts.address, hours: facts.hours, priceRange: facts.priceRange, socials, nav, words };
 }
 
@@ -115,26 +121,30 @@ export function pagesToRead(nav: SiteContent["nav"], limit = 3) {
 const ACTION = /\b(book|call|contact|get (a |your )?(quote|started|in touch)|order|reserve|enquire|inquire|appointment|buy|shop now|schedule|request|join|sign up|apply)\b/i;
 const GENERATORS: [RegExp, string][] = [[/wix\.com|wixstatic/i, "Wix"], [/squarespace/i, "Squarespace"], [/wp-content|wordpress/i, "WordPress"], [/godaddy|websitebuilder|img1\.wsimg/i, "GoDaddy"], [/weebly/i, "Weebly"], [/shopify/i, "Shopify"], [/jimdo/i, "Jimdo"]];
 
+// Sticky (`y`) so tagTest can try each one at a tag start.
+const VIEWPORT = /<meta[^>]+name=["']viewport["']/iy;
+const OLD_TABLE = /<table[^>]+(width|bgcolor)=/iy;
+
 /** Plain-English problems with the current site, most important first. */
 export function auditSite(input: { html: string; finalUrl: string; content: SiteContent; now?: Date }): AuditFinding[] {
   const { html, content } = input, findings: AuditFinding[] = [];
   const add = (id: string, level: AuditFinding["level"], title: string, detail: string) => findings.push({ id, level, title, detail });
   const year = (input.now ?? new Date()).getUTCFullYear();
   if (!/^https:/i.test(input.finalUrl)) add("https", "high", "Not secure", "The site loads without https, so browsers show a “Not secure” warning to every visitor.");
-  if (!/<meta[^>]+name=["']viewport["']/i.test(html)) add("mobile", "high", "Not built for phones", "There's no mobile layout, so on a phone the page shows as a shrunken desktop site.");
+  if (!tagTest(html, "meta", false, VIEWPORT)) add("mobile", "high", "Not built for phones", "There's no mobile layout, so on a phone the page shows as a shrunken desktop site.");
   const visible = visibleHtml(html);
-  const actions = [...visible.matchAll(/<(a|button)\b[^>]*>([\s\S]*?)<\/\1>/gi)].map(match => textOf(match[2])).filter(text => ACTION.test(text));
+  const actions = elements(visible, ["a", "button"], { open: "tag" }).map(match => textOf(match.content)).filter(text => ACTION.test(text));
   const telLinks = /href=["']tel:/i.test(html);
   if (!actions.length && !telLinks) add("cta", "high", "No clear next step", "Visitors aren't asked to book, call or get in touch anywhere on the page.");
   if (!/<form\b/i.test(html)) add("form", "medium", "No enquiry form", "People can't send a message from the site, so some leave instead of picking up the phone.");
   if (!telLinks && content.phones.length === 0) add("phone", "medium", "No tap-to-call number", "There's no phone link, so phone visitors can't call with one tap.");
   const copyright = [...html.matchAll(/(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?(\d{4})/gi)].map(match => Number(match[1])).filter(value => value > 1995 && value <= year);
   if (copyright.length && Math.max(...copyright) <= year - 2) add("dated", "medium", "Looks out of date", `The footer still says © ${Math.max(...copyright)}, which makes the business look inactive.`);
-  if (/<(font|marquee|center|frameset)\b|<table[^>]+(width|bgcolor)=/i.test(html) || (/\.swf\b|flash/i.test(html.slice(0, 200_000)) && /<(object|embed)\b/i.test(html))) add("legacy", "medium", "Built with outdated techniques", "The page uses old layout code that is slow, hard to update and breaks on modern phones.");
+  if (/<(font|marquee|center|frameset)\b/i.test(html) || tagTest(html, "table", false, OLD_TABLE) ||(/\.swf\b|flash/i.test(html.slice(0, 200_000)) && /<(object|embed)\b/i.test(html))) add("legacy", "medium", "Built with outdated techniques", "The page uses old layout code that is slow, hard to update and breaks on modern phones.");
   const h1 = (visible.match(/<h1\b/gi) ?? []).length;
   if (h1 === 0) add("h1", "low", "No main headline", "Search engines and visitors can't tell at a glance what the business does.");
   if (!content.description) add("description", "low", "No search description", "Google has no summary to show under the link, so it picks random text from the page.");
-  const images = visible.match(/<img\b[^>]*>/gi) ?? [], unlabelled = images.filter(tag => !attr(tag, "alt").trim()).length;
+  const images = tags(visible, ["img"]), unlabelled = images.filter(tag => !attr(tag, "alt").trim()).length;
   if (images.length >= 4 && unlabelled / images.length > 0.5) add("alt", "low", "Images aren't described", `${unlabelled} of ${images.length} images have no description for screen readers or Google Images.`);
   if (content.words < 150) add("thin", "low", "Very little text", "There's not much on the page for visitors or search engines to understand the services.");
   if (html.length > 1_500_000 || (html.match(/<script\b/gi) ?? []).length > 45) add("heavy", "low", "Heavy page", "The page loads a lot of code, which makes it slow on phones and mobile data.");

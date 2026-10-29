@@ -33,6 +33,23 @@ check("public review dates are identical across server/browser locales and timez
   assert.doesNotMatch(page, /toLocale(?:Date)?String|suppressHydrationWarning/);
 });
 
+check("a review link's expiry reads the same for the client and the owner: their own local time, with the zone named (journey audit C7)", () => {
+  const dates = require("./date-format.ts");
+  // The audit's case: created 00:57 in UTC+1, so the UTC date (8 Nov) and the owner's date (9 Nov) differed with no zone shown.
+  assert.equal(dates.localDateTimeLabel("2026-11-08T23:57:06Z", "Europe/Sarajevo"), "9 Nov 2026, 00:57 CET");
+  assert.equal(dates.localDateTimeLabel("2026-11-08T23:57:06Z", "America/New_York"), "8 Nov 2026, 18:57 GMT-5");
+  assert.equal(dates.reviewUtcDateTimeLabel("2026-11-08T23:57:06Z"), "8 Nov 2026, 23:57 UTC", "server render and hydration: UTC, also named");
+  assert.equal(dates.localDateTimeLabel("invalid"), "Date unavailable");
+  const component = fs.readFileSync(require("node:path").join(__dirname, "../../components/local-date-time.tsx"), "utf8");
+  assert.match(component, /\{local \?\? reviewUtcDateTimeLabel\(value\)\}/, "hydration-safe: UTC on the server and while hydrating");
+  assert.match(component, /window\.setTimeout\(\(\) => setLocal\(localDateTimeLabel\(value\)\), 0\)/, "local time once the page is live, after its own restores (check-review-draft-restore-browser)");
+  const page = fs.readFileSync(require("node:path").join(__dirname, "../../components/client-review-page.tsx"), "utf8");
+  const panel = fs.readFileSync(require("node:path").join(__dirname, "../../components/client-review-panel.tsx"), "utf8");
+  assert.match(page, /Link open until <LocalDateTime value=\{initial\.expiresAt\} \/>/);
+  assert.match(panel, /expires <LocalDateTime value=\{link\.expiresAt\} \/>/);
+  assert.doesNotMatch(panel, /expires \$\{day\(link\.expiresAt\)\}/, "no zone-less local date for the owner");
+});
+
 check("tokens are 256-bit base64url and match the SQL format", () => {
   for (let i = 0; i < 200; i++) {
     const token = crypto.randomBytes(32).toString("base64url");

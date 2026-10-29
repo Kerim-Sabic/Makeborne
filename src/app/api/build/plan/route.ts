@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { BuilderAttachmentsSchema, builderAttachmentBlocks, MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
+import { MAX_BUILDER_REQUEST_BYTES } from "@/lib/builder/attachments";
+import { BuilderSourcesSchema, OmittedSourcesSchema } from "@/lib/ingest/request";
+import { prepareBuilderSources } from "@/lib/ingest/builder-sources";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cloudContext, databaseError, validId } from "@/lib/cloud/server";
@@ -35,7 +37,10 @@ const PlanRequest = z.object({
   expectedRevision: z.number().int().nonnegative(),
   message: z.string().trim().min(1).max(8000),
   effort: EffortLevelSchema.default("medium"),
-  attachments: BuilderAttachmentsSchema.default([]),
+  attachments: BuilderSourcesSchema.default([]),
+  /** Attached files the user explicitly chose to continue without (named to the model; never automatic).
+   * Optional rather than defaulted so requests without it keep their exact input hash. */
+  omittedSources: OmittedSourcesSchema.optional(),
   /** The plan being revised; the message is feedback on it. */
   previousPlan: SitePlanSchema.optional(),
   operation: OperationRequestSchema.optional(),
@@ -158,11 +163,15 @@ export async function POST(request: Request) {
     if (routeIssue(routeStage({ stage: "plan", effort: body.effort }))) throw new RequestError("MODEL_UNSUPPORTED", "The configured AI model cannot run this step, so the builder is unavailable.", 503);
     // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
     await requireProviderCapacity("anthropic");
+    // Source files are read before admission (see /api/build): an unreadable file stops here.
+    const prepared = await prepareBuilderSources(body.attachments, body.omittedSources ?? [],
+      { client, scope: { workspaceId: body.workspaceId, projectId: artifact.project_id }, signal: request.signal });
     // Resolved before admission and fingerprinted into the request (see /api/build).
     const brand = await projectBrandKit(client, body.workspaceId, project);
     const { operation: envelope, ...requestBody } = body;
     const admitted = await beginOperation({ actor: user.id, workspaceId: body.workspaceId, artifactId: body.artifactId,
-      expectedVersion: body.expectedVersion, effort: body.effort, kind: "plan", ceiling: PLAN_CEILING_CREDITS, envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) } }).catch(error => {
+      expectedVersion: body.expectedVersion, effort: body.effort, kind: "plan", ceiling: PLAN_CEILING_CREDITS, envelope, request: { ...requestBody, brandKit: brandKitFingerprint(brand) },
+      sources: { omitted: body.omittedSources ?? [], references: prepared.references } }).catch(error => {
       // SQL refuses a stale base version without saying so; name the versions instead.
       if (error instanceof OperationError && error.code === "OPERATION_CONFLICT" && body.expectedVersion !== artifact.current_version)
         throw new RequestError("VERSION_CONFLICT", staleBaseMessage(body.expectedVersion, artifact.current_version), 409);
@@ -199,7 +208,7 @@ export async function POST(request: Request) {
       // Planning reads the code to ground the plan; very large projects are capped.
       snapshot ? `<current_files>\n${snapshot.length > 160_000 ? `${snapshot.slice(0, 160_000)}\n…(remaining files omitted for planning)` : snapshot}\n</current_files>` : "<current_files>(empty — no website yet: plan a new site)</current_files>",
     ].filter(Boolean).join("\n");
-    const attachments: BetaContentBlockParam[] = builderAttachmentBlocks(body.attachments);
+    const attachments: BetaContentBlockParam[] = prepared.blocks;
 
     // Provider dollars: the planning ceiling, independent of the customer's credits (admins included).
     const spend = createOperationSpend(operation, Date.now() + (maxDuration - 20) * 1000);

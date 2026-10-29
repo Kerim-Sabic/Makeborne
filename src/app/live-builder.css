@@ -184,7 +184,7 @@
 .dp-present-bar button:focus-visible { outline:2px solid #a99cf7; outline-offset:1px; }
 .dp-present-bar span { min-width:54px; text-align:center; }
 @media (prefers-reduced-motion:reduce) { .dp-present-bar { transition:none; } }
-.dp-empty { min-height:60vh; }
+.dp-empty { min-height:calc(60vh / var(--ui-zoom, 1)); }
 /* Advisor brief provenance (audit M14): recorded with the next new request, never sent by itself. */
 .lb-provenance { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin:0 0 6px; color:#4c3e57; font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
 .lb-provenance span { min-width:0; flex:1 1 auto; }
@@ -196,8 +196,7 @@
 .lb-request-details > summary { cursor:pointer; padding:9px 2px 2px; display:flex; justify-content:space-between; gap:8px; }
 .lb-request-details > summary span { opacity:.8; }
 .lb-request-details[open] > summary { margin-bottom:8px; }
-.lb-availability { margin:7px 2px 0; font-size:11px; color:var(--text-muted); }
-.lb-availability span { opacity:.75; margin-left:6px; }
+.lb-availability { margin:7px 2px 0; font-size:12px; line-height:1.4; color:var(--text-muted); }
 .lb-history > .lb-turn:first-of-type { margin-top:12px; }
 .lb-history > p { font-size:11px; margin:0 0 12px; }
 

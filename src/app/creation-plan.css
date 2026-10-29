@@ -47,7 +47,7 @@
 .prompt-style-composition { position:absolute; inset:0; padding:12% 10%; display:flex; flex-direction:column; gap:10%; overflow:hidden; }
 .prompt-style-composition > i { position:absolute; width:55%; aspect-ratio:1; border-radius:50%; opacity:.17; right:-12%; bottom:-22%; }
 .prompt-style-composition > small { font:5px Arial,sans-serif; letter-spacing:1px; z-index:1; }
-.prompt-style-composition > b { font-size:clamp(16px,2.3vw,27px); font-weight:400; line-height:1.1; max-width:85%; z-index:1; }
+.prompt-style-composition > b { font-size:clamp(16px,calc(2.3vw / var(--ui-zoom, 1)),27px); font-weight:400; line-height:1.1; max-width:85%; z-index:1; }
 .prompt-style-composition > span { width:22%; height:3px; margin-top:auto; }
 .prompt-style-composition > em { font-size:6px; font-style:normal; z-index:1; }
 .composition-book { inset:7% 22%; box-shadow:-3px 3px 12px #0002; border-left:2px solid #ffffff40; padding:12% 8%; }

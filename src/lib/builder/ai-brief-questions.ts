@@ -26,7 +26,7 @@ const AiReply = z.object({ questions: z.array(z.unknown()).max(8) });
 
 export function questionsPrompt(kind: BriefKind, brief: string, attachments: number) {
   const noun = NOUN[kind];
-  const baseline = briefQuestions(kind, "").map(question => `- ${question.id}: ${question.question}`).join("\n");
+  const baseline = briefQuestions(kind, "").filter(question => !["slides", "images", "imagestyle"].includes(question.id)).map(question => `- ${question.id}: ${question.question}`).join("\n");
   return `A client is about to have Makeborne build a ${noun}. Before building, ask the few questions whose answers would most improve the design and content of THIS ${noun}. Ask only what the brief leaves open and what a top studio would ask on a first call. Never ask for things you can decide well yourself (exact colours, fonts, section order), and never ask more than ${MAX_AI_QUESTIONS}.
 
 Make questions specific to the subject: for a bakery, "Do people order ahead, walk in, or both?"; for an investor deck, "What round and amount are you raising?"; for a cookbook, "Are the recipes weeknight-quick or weekend projects?". Write in plain, friendly English. Each question gets 3 to 6 short answer options when the likely answers are predictable, otherwise none (a free-text answer only).
@@ -34,7 +34,9 @@ Make questions specific to the subject: for a bakery, "Do people order ahead, wa
 If the brief already answers everything that matters, return no questions.
 
 ${kind === "website" ? "Makeborne already asks its own one-click design questions (look and feel, light or dark, photos or illustration, the main action, must-have sections, brand colour). Do not ask about any of those: ask only what is specific to this business and changes the content (\"Pickup, delivery or both?\", \"Do you take walk-ins?\"). Return no questions if nothing like that is open." : `Generic questions the on-device fallback would ask (use one only if it truly matters here; use the same id "style" if you ask about the look and feel, and the app will show colour swatches):
-${baseline}`}
+${baseline}
+
+Makeborne always asks its own one-click ${kind === "book" ? "questions about how many pictures the book has and their style" : "question about full-image versus editable slides"}; do not ask about ${kind === "book" ? "images" : "that"}.`}
 
 Reply with JSON only, no prose:
 {"questions":[{"id":"short-kebab-id","question":"…?","why":"one short sentence on how the answer changes the ${noun}","topic":"2–5 word label for the answer","placeholder":"example of a free-text answer","options":[{"label":"…","hint":"optional few-word detail"}]}]}

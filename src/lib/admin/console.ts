@@ -72,6 +72,22 @@ export async function adminHealth(actor: string, days: number) {
     top: data.errors.top.map(item => ({ ...item, count: Number(item.count), total: Number(item.total) })) } };
 }
 
+export type AdminLegalRequests = {
+  generatedAt: string;
+  withdrawals: { reference: string; received_at: string; source: string; email: string; name: string | null; payment_reference: string | null;
+    payment_id: string | null; payment_kind: string | null; acknowledgement: string; statement: string; message: string | null; mail: string }[];
+  mail: { pending: number; failed: number; retrying: number; sent7d: number; oldestPendingAt: string | null };
+  problems: { kind: string; recipient: string; status: string; attempts: number; last_error: string | null; created_at: string; next_attempt_at: string }[];
+  confirmations7d: number;
+};
+
+/** Withdrawal notices and the confirmation/acknowledgement outbox (20261028100000). */
+export async function adminLegalRequests(actor: string) {
+  const data = await call<AdminLegalRequests>("makeborne_admin_legal_requests", { p_actor: actor });
+  return { ...data, mail: { ...data.mail, pending: Number(data.mail?.pending ?? 0), failed: Number(data.mail?.failed ?? 0), retrying: Number(data.mail?.retrying ?? 0), sent7d: Number(data.mail?.sent7d ?? 0) },
+    confirmations7d: Number(data.confirmations7d ?? 0) };
+}
+
 async function call<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await billingDatabase().rpc(fn, args);
   if (error) {

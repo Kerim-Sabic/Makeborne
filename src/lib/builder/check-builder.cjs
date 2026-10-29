@@ -158,6 +158,8 @@ check("font catalogue is complete and documented in the prompt", () => {
 });
 check("design prompt keeps the motion, no-JS and anti-generic contracts", () => {
   const {MOTION_PATTERN} = require("./prompt.ts");
+  // The site verifier's mobile-menu-escape check failed on every saved site built from the old wording (22 October).
+  assert.match(BUILDER_SYSTEM, /<details> menu on mobile that closes on Escape \(onKeyDown on the <details>: if the key is Escape and it is open, close it and focus its <summary>\) and when one of its links is chosen/);
   // Reveal states are gated twice: html.js (the static snapshot strips it) and no-preference.
   assert.ok(BUILDER_SYSTEM.includes(MOTION_PATTERN), "the motion pattern is embedded verbatim");
   assert.match(MOTION_PATTERN, /classList\.add\("js"\)/);

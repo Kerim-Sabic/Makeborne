@@ -202,10 +202,10 @@ async function checkAdmin() {
       const customers = adminModule("customers");
       let overviewReads = 0;
       const page = load("src/app/admin/page.tsx", {
-        "./format": format, "./customers": customers, "./money": adminModule("money"), "./overview": adminModule("overview"), "./system": adminModule("system"), "./health": adminModule("health"), "@/lib/builder/compile": {compilerSelfTest: async () => ({ok: true, ms: 1, bytes: 1})},
+        "./format": format, "./customers": customers, "./money": adminModule("money"), "./overview": adminModule("overview"), "./system": adminModule("system"), "./health": adminModule("health"), "./requests": adminModule("requests"), "@/lib/mail/transactional": {transactionalMailEnabled: () => false}, "@/lib/builder/compile": {compilerSelfTest: async () => ({ok: true, ms: 1, bytes: 1})},
         "@/lib/admin/console": {CUSTOMER_FILTERS: ["all", "subscribed", "admin", "unconfirmed"],
           adminOverview: async actor => { overviewReads++; assert.equal(actor, "verified-user"); return {...ADMIN_OVERVIEW, revenue: revenue.subscriptionRevenue(ADMIN_OVERVIEW.subscriptions)}; },
-          adminCustomers: async () => { throw new Error("customers not requested"); }, adminCustomer: async () => null, adminCustomerPayments: async () => null},
+          adminCustomers: async () => { throw new Error("customers not requested"); }, adminCustomer: async () => null, adminCustomerPayments: async () => null, adminLegalRequests: async () => { throw new Error("requests not requested"); }},
         "react/jsx-runtime": require("react/jsx-runtime"),
         "next/link": {default: ({children, ...props}) => React.createElement("a", props, children)},
         "next/navigation": {redirect: value => {throw new Error(`redirect:${value}`);}, notFound: () => {throw new Error("not_found");}},
