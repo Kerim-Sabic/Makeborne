@@ -3,7 +3,7 @@ const fs = require("node:fs"), path = require("node:path"), ts = require("typesc
 const root = path.join(__dirname, "..", "..", "..");
 require.extensions[".ts"] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
 const { parseMarkdown, plainText } = require("./markdown.ts");
-const { LEGAL_DOCUMENTS, LEGAL_VERSION, LEGAL_UPDATED, WITHDRAWAL_CONSENT_TEXT, WITHDRAWAL_CONSENT_VERSION, SIGNUP_TERMS_LINE } = require("./versions.ts");
+const { LEGAL_DOCUMENTS, LEGAL_VERSION, LEGAL_UPDATED, PRIVACY_VERSION, PRIVACY_UPDATED, WITHDRAWAL_CONSENT_TEXT, WITHDRAWAL_CONSENT_VERSION, SIGNUP_TERMS_LINE } = require("./versions.ts");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const docs = Object.fromEntries(LEGAL_DOCUMENTS.map(doc => [doc.file, parseMarkdown(read(`docs/legal/${doc.file}`))]));
 const text = file => plainText(docs[file]);
@@ -17,7 +17,7 @@ check("every legal document has one title, the current version and date, and no 
     const blocks = docs[doc.file];
     assert.equal(blocks.filter(block => block.kind === "heading" && block.level === 1).length, 1, doc.file);
     assert.equal(blocks[0].kind === "heading" && blocks[0].text, doc.title, doc.file);
-    assert.match(text(doc.file), new RegExp(`Last updated ${LEGAL_UPDATED} · Version ${LEGAL_VERSION}`), doc.file);
+    assert.match(text(doc.file), new RegExp(`Last updated ${doc.file === "privacy.md" ? PRIVACY_UPDATED : LEGAL_UPDATED} · Version ${doc.file === "privacy.md" ? PRIVACY_VERSION : LEGAL_VERSION}`), doc.file);
     assert.doesNotMatch(read(`docs/legal/${doc.file}`), /\{\{|TODO|\bpreview notice\b|current Makeborne preview/i, doc.file);
   }
 });

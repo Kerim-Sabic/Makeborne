@@ -1,9 +1,11 @@
-/** Legal documents: one version for the Terms, Privacy Policy, DPA and legal notice (docs/legal/*.md).
- * Bump LEGAL_VERSION and LEGAL_UPDATED together whenever any of those documents changes. */
+/** Terms, DPA and legal notice share the accepted legal version. Privacy disclosures have
+ * their own revision so an analytics disclosure never changes recorded checkout consent. */
 export { WITHDRAWAL_CONSENT_VERSION } from "../billing/plans";
 
 export const LEGAL_VERSION = "2026-10-26";
 export const LEGAL_UPDATED = "26 October 2026";
+export const PRIVACY_VERSION = "2026-10-30";
+export const PRIVACY_UPDATED = "30 October 2026";
 export const LEGAL_CONTACT = "admin@makeborne.com";
 
 /** The legal pages, in footer order. `file` is the source in docs/legal. */
