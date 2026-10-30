@@ -22,7 +22,7 @@ const { operationApiError } = require("./operation-server.ts");
 const { emptyDocument } = require("../documents/editor.ts");
 const style = { name: "CUSTOM_BRAND_NAME", description: "CUSTOM_BRAND_DESCRIPTION", colors: { canvas: "#0A1B2C", ink: "#D3E4F5", accent: "#C23F81" }, typography: { headingFont: "CUSTOM_HEADING", bodyFont: "CUSTOM_BODY" }, referenceAssetIds: ["11111111-1111-4111-8111-111111111111"] };
 const input = (kind, styleId, existing = false) => ({
-  client: { rpc() { throw Error("Unexpected database call"); } }, hold: {}, spend: { customerCredits: () => 0, calls: [], providerMicrousd: 0, confirmedMicrousd: 0, uncertainMicrousd: 0, stopped: null }, workspaceId: "workspace",
+  client: { rpc() { throw Error("Unexpected database call"); } }, hold: {}, spend: { customerCredits: () => 0, usageByModel: () => ({}), calls: [], providerMicrousd: 0, confirmedMicrousd: 0, uncertainMicrousd: 0, stopped: null }, workspaceId: "workspace",
   artifact: { id: "artifact", project_id: "project", kind, title: "A real brief", current_version: existing ? 1 : 0 },
   project: { brief: "An expressive makeup brand for stage performers. Use tomato red and condensed lettering; never pale pink.", styleId },
   current: { number: existing ? 1 : 0, assetIds: [], content: { title: "A real brief", sections: [], ...(existing ? { document: emptyDocument(kind === "book" ? "book" : "deck", "Existing document", styleId) } : {}) }, style },

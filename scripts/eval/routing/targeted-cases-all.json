@@ -1,0 +1,78 @@
+{
+  "note": "Targeted edits for the model-orchestrator qualification: e01-e06 (edit-cases.json, frozen 2026-10-22) and t07-t12 (targeted-cases-2.json).",
+  "frozenAt": "2026-10-23",
+  "cases": [
+    {
+      "id": "e01-saffron-reservation-heading",
+      "kind": "copy + colour, picked element",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w01-restaurant-saffron-table",
+      "request": "Change the <h2> \"Ask us for a table.\" in src/App.tsx (line 230): make it read \"Book a table with us\", and give the whole reservation section a subtle saffron-tinted background so it stands out from the section above."
+    },
+    {
+      "id": "e02-mira-commission-steps",
+      "kind": "add a small section",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w04-creator-mira-objects",
+      "request": "Add a short \"How a commission works\" strip with three numbered steps (enquire, agree the shape and glaze, collect or have it posted) between the collection and the commission enquiry form, in the site's existing style."
+    },
+    {
+      "id": "e03-gooddog-launch-button",
+      "kind": "button copy + reassurance line, picked element",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w05-ecommerce-good-dog",
+      "request": "Change the button \"Join the launch list\" in src/components/Rest.tsx (line 81) to \"Get launch news\", and add one short line under the form saying we send at most one email a month and you can unsubscribe any time."
+    },
+    {
+      "id": "e04-elmwood-hours-table",
+      "kind": "restructure content",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w10-civic-elmwood-pantry",
+      "request": "In the footer, show the pantry opening hours as a clear two-column table (day, hours) with a visible heading row, instead of the current list. Keep the same days and times."
+    },
+    {
+      "id": "e05-ledgerline-pricing-mobile",
+      "kind": "copy + responsive layout",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w12-saas-ledgerline",
+      "request": "In the pricing section, add the note \"Cancel any time from your account page.\" under the prices, and on phones stack the pricing items vertically with more space between them."
+    },
+    {
+      "id": "e06-ridgeline-package-cards",
+      "kind": "component restyle",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w19-events-ridgeline-weddings",
+      "request": "Make the packages easier to compare: show each package as its own card with the price at the top of the card, and give the cards equal height on desktop."
+    },
+    {
+      "id": "t07-ovenbird-contact-cards",
+      "kind": "layout, named part",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w11-restaurant-ovenbird-bakehouse",
+      "request": "In the pre-order section, show the phone and email options as two side-by-side cards on desktop, stacked on phones, each with its own heading."
+    },
+    {
+      "id": "t08-fernhill-popular-badge",
+      "kind": "emphasis, named part",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w13-professional-fernhill-books-tax",
+      "request": "In the packages section, mark the Books + Tax package as the most popular one with a small badge and a stronger border, so it stands out from the others."
+    },
+    {
+      "id": "t09-crux-first-visit",
+      "kind": "new block, named part",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w16-wellness-crux-yard",
+      "request": "Under the opening hours, add a short \"First visit?\" note with three bullet points: bring clean indoor shoes, arrive ten minutes early for the safety talk, and the first taster session is free."
+    },
+    {
+      "id": "t10-relay-pricing-align",
+      "kind": "layout, named part",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w02-saas-relay-operations",
+      "request": "Make the pricing cards the same height on desktop, with each card's button lined up at the bottom of the card."
+    },
+    {
+      "id": "t11-hisaburja-times-table",
+      "kind": "table, named part",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w18-property-hisa-burja",
+      "request": "In the stay information, show check-in, check-out and breakfast times as a small two-column table (what, when) with a visible heading row."
+    },
+    {
+      "id": "t12-glenrise-bring-row",
+      "kind": "layout, named part",
+      "site": "outputs/eval/runs/live-20261021T202136Z/w20-civic-glen-rise-maths-club",
+      "request": "In the \"Bring three things.\" section, show the three things in a row on desktop, each with a simple inline SVG icon above its label, and stacked on phones."
+    }
+  ]
+}

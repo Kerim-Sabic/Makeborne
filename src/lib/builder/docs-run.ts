@@ -9,7 +9,9 @@ import type { RunSpend } from "../ai/run-spend";
 import type { AnthropicLike } from "../ai/anthropic-call";
 import type { ImageClientLike } from "../ai/image-call";
 import { aiCostUsdPerCredit } from "./pricing";
-import { logAiStop } from "./website-run";
+import { logAiStop, logRoute } from "./website-run";
+import { routeDetail, type AttemptRole, type ModelRoute, type RouteRecord } from "../ai/model-routing";
+import { routedDocumentStage } from "./document-stage";
 import { aiStop } from "../ai/failure";
 import { DocumentEditor, emptyDocument } from "../documents/editor";
 import { bookImagePlanFromBrief, deckModeFromBrief } from "../documents/creation-options";
@@ -43,6 +45,8 @@ export type DocumentBuildInput = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: DocBuilderRun["storeImage"];
+  /** The stage's model route (../ai/model-routing.ts). Absent: the builder model, one attempt, as before. */
+  route?: ModelRoute;
   /** The client's image quality and shape from the composer (validated by the route); applied to the document. */
   imageOptions?: ImageOptions;
   /** Image models (tests); production reads the allowlist. */
@@ -82,6 +86,8 @@ export function documentBuildResponse(input: DocumentBuildInput): Response {
   const { client, hold, spend, artifact, current } = input;
   const rate = input.operation ? input.operation.rateMicrousd / 1e6 : aiCostUsdPerCredit();
   const measured = () => spend.customerCredits(rate);
+  let routeRecord: RouteRecord | null = null, routeLogged = false;
+  const logRouteOnce = () => { if (!routeLogged) { routeLogged = true; logRoute(hold.reference, "document", routeRecord); } };
   const fresh = !current.content.document;
   // A new deck is full-image unless the client chose (or asked for) editable text slides; a new book follows the
   // image plan from its questions or brief (creation-options.ts). Saved documents keep what they have.
@@ -116,16 +122,28 @@ ${input.message}`;
         if (input.operation) emit({ type: "operation", operation: input.operation.operation });
         emit({ type: "status", message: fresh ? `Planning your ${artifact.kind}…` : `Reading your ${artifact.kind}…` });
         let result;
+        const stageDeadline = Date.now() + (input.maxDuration - 20) * 1000;
+        // A repair continues from the current document (its context re-read); every attempt is a new conversation.
+        const attempt = (plan: { role: AttemptRole; model?: string; deadline: number; repairNotes: string[] }) => runDocumentBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, editor, effort: input.effort,
+          spend, request: plan.role === "repair" ? `${input.message}\n\nRepair: the previous attempt stopped before the document was complete and checked. Continue from the current document, complete what is missing, then call finish.${plan.repairNotes.length ? `\n- ${plan.repairNotes.join("\n- ")}` : ""}` : input.message,
+          context: plan.role === "repair" ? [documentContext(input, editor, false), input.operation?.originalMessage ? `Original authorized request: ${input.operation.originalMessage}` : ""].filter(Boolean).join("\n") : context,
+          attachments: input.attachments, emit, signal: controller.signal, deadline: plan.deadline, continuation: input.continuation,
+          anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage, ...(plan.model ? { model: plan.model } : {}) });
         try {
-          result = await runDocumentBuilder({ client, scope: { workspaceId: input.workspaceId, projectId: artifact.project_id }, editor, effort: input.effort,
-            spend, request: input.message, context, attachments: input.attachments, emit, signal: controller.signal, deadline: Date.now() + (input.maxDuration - 20) * 1000, continuation: input.continuation,
-            anthropic: input.anthropic, imageClient: input.imageClient, storeImage: input.storeImage });
+          if (!input.route) result = await attempt({ role: "initial", deadline: stageDeadline, repairNotes: [] });
+          else {
+            const routed = await routedDocumentStage({ route: input.route, editor, spend, deadline: stageDeadline, signal: controller.signal, emit, attempt });
+            result = routed.result; routeRecord = routed.record;
+          }
         } catch (error) {
+          routeRecord = (error as { route?: RouteRecord } | null)?.route ?? routeRecord;
           if (!editor.changed || (error as { code?: string }).code === "REFUSED" || aiStop(error)) throw error;
           emit({ type: "status", message: "Saving the work finished so far…" });
           result = { summary: "Saved the progress made so far. Ask me to continue to finish the remaining parts.", credits: measured(), usd: spend.providerMicrousd / 1e6, finished: false, stopped: spend.stopped };
         }
-        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped };
+        logRouteOnce();
+        const detail = { calls: spend.calls.length, providerMicrousd: spend.providerMicrousd, uncertainMicrousd: spend.uncertainMicrousd, stopped: spend.stopped, usage: spend.usageByModel(),
+          ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) };
         if (result.requiresApproval) {
           if (input.operation) emit(operationTerminal(await finishOperation(input.operation, 0, "failed", { ...detail, code: "OPERATION_BUDGET_REACHED", message: result.summary,
             version: artifact.current_version, changed: false, finished: false })));
@@ -135,7 +153,7 @@ ${input.message}`;
         if (!editor.changed) {
           if (input.operation) {
             // Nothing usable saved: never charged (provider cost absorbed). A finished no-change request stays chargeable.
-            emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, result.finished ? "incomplete" : "failed", { ...detail, code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder stopped before a usable change was ready. Your previous saved document is safe.", version: artifact.current_version, changed: false, finished: result.finished })));
+            emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, result.finished ? "incomplete" : "failed", { ...detail, code: "BUILD_INCOMPLETE", message: result.finished ? "Nothing changed." : "The builder stopped before a usable change was ready. Your previous saved document is safe.", version: artifact.current_version, changed: false, finished: result.finished })));
             return;
           }
           if (result.finished) await settleRun(hold, measured(), { ...detail, kind: "incomplete" });
@@ -146,7 +164,7 @@ ${input.message}`;
         if (input.operation) {
           const doc = editor.doc;
           const summary = result.summary || (result.finished ? `Updated the ${artifact.kind}.` : "Saved the progress made so far. Continue to finish the remaining parts.");
-          emit(operationTerminal(await finishOperation(input.operation, spend.confirmedMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished }, {
+          emit(operationTerminal(await finishOperation(input.operation, spend.chargeableMicrousd, "saved", { ...detail, summary, changed: true, finished: result.finished }, {
             content: { schemaVersion: 1, kind: artifact.kind, title: builtTitle(current.content.title, doc.title, input.project.brief, artifact.kind).slice(0, 200), sections: projectDocument(doc), document: doc },
             style: current.style, assetIds: [...new Set([...current.assetIds, ...documentAssetIds(doc)])],
             summary: `${input.message.slice(0, 600)} → ${summary}`.slice(0, 2000), expectedVersion: artifact.current_version,
@@ -175,15 +193,18 @@ ${input.message}`;
         const settled = await settleRun(hold, measured(), { ...detail, kind: "saved" });
         emit({ type: "done", version: saved.data.version.version_number ?? artifact.current_version + 1, summary, charged: settled.charged, changed: true, finished: result.finished } as Record<string, unknown>);
       } catch (error) {
+        routeRecord = (error as { route?: RouteRecord } | null)?.route ?? routeRecord;
+        logRouteOnce();
         if (input.operation) {
           const stop = logAiStop(hold.reference, error);
           let candidate: OperationCandidate | undefined;
           if (editor.changed) try { candidate = { content: { schemaVersion: 1, kind: artifact.kind, title: builtTitle(current.content.title, editor.doc.title, input.project.brief, artifact.kind).slice(0, 200), sections: projectDocument(editor.doc), document: editor.doc }, style: current.style,
             assetIds: [...new Set([...current.assetIds, ...documentAssetIds(editor.doc)])], summary: "Recovered the work completed before the builder stopped.", expectedVersion: artifact.current_version }; } catch { /* An invalid partial result must not become recoverable source. */ }
-          emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false }, candidate));
+          emit(await operationFailure(input.operation, spend, { code: stop?.code ?? "BUILD_FAILED", message: stop?.message ?? "The builder stopped. Check the saved result and credit charge below.", stopped: spend.stopped, finished: false,
+            ...(routeRecord ? { route: routeDetail(routeRecord) } : {}) }, candidate));
           return;
         }
-        await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped }).catch(() => undefined);
+        await releaseRun(hold, measured(), "build_failed", { code: (error as { code?: string })?.code ?? null, stopped: spend.stopped, usage: spend.usageByModel() }).catch(() => undefined);
         const stop = logAiStop(hold.reference, error);
         if (!stop) console.error("document build failed", error instanceof Error ? error.message : error);
         if (stop) emit({ type: "error", code: stop.code, message: stop.message, retryable: true });

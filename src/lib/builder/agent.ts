@@ -13,12 +13,13 @@ import responsive from "../../../infra/project-runtime/responsive-images.cjs";
 import { BUILDER_EFFORT, aiCostUsdPerCredit } from "./pricing";
 import { ContextMeter, budgetedStream, builderModels, type AnthropicLike } from "../ai/anthropic-call";
 import { startBudgetedImage, type ImageClientLike } from "../ai/image-call";
-import { UnpricedModelError, imageCallBoundMicrousd, supportsTransparentImages } from "../ai/prices";
+import { UnpricedModelError, imageCallBoundMicrousd, supportsTransparentImages, textCapabilities } from "../ai/prices";
 import { IMAGE_KINDS, TEXT_IMAGE_MODELS, routeImage } from "./image-router";
 import { designCompsEnabled } from "./features";
 import { SpendError, type RunSpend } from "../ai/run-spend";
 import { BUILDER_SYSTEM } from "./prompt";
 import { qualityProblems, type QualityInput } from "./quality-gates";
+import { FIRST_STEP_LOW, type FirstStepRule } from "../ai/model-routing";
 import { BLOCKING_PROBLEM } from "./contrast-gate-rules";
 import { CONCEPT_TOOL, CompReadingSchema, MAX_COMPS, checkConcept, compPlan, compsFromSource, compsNextStep, imagePlanNote, sitePlanNote, withConceptComment, type CompReadingValues, type ConceptRecord, type DesignComp } from "./concept";
 import { storeProjectImage } from "./images";
@@ -110,6 +111,9 @@ export type BuilderRun = {
   spend: RunSpend;
   request: string;
   context: string;
+  /** The cached site snapshot (./site-snapshot.ts): first in the request with its own cache marker; the context then
+   * carries only what changed since. */
+  snapshot?: string;
   attachments: BetaContentBlockParam[];
   emit: (event: BuilderEvent) => void;
   signal: AbortSignal;
@@ -134,11 +138,27 @@ export type BuilderRun = {
   storeComp?: (bytes: Buffer, provenance: Record<string, unknown>) => Promise<{ id: string; data?: Buffer }>;
   /** Compile check at finish (tests inject one); production bundles with esbuild. */
   compile?: (files: ReadonlyMap<string, string>) => Promise<CompileVerdict>;
+  /** The model this stage runs on (see ../ai/model-routing.ts); default: the builder model. */
+  model?: string;
+  /** The first step of an empty project (routing policy rule; default first-step-low-v1: effort low, no extra cap). */
+  firstStep?: FirstStepRule;
+  /** The effort this attempt runs at (a routing cell, never above the requested level); default: the effort level's intensity. */
+  intensity?: "low" | "medium" | "high" | "xhigh" | "max";
 };
+
+/** How the steps that run while the project is still empty are sized: a routing-policy rule (../ai/model-routing.ts). */
+export type { FirstStepRule };
 
 /** credits: customer-chargeable usage (confirmed cost); usd: provider cost incl. unconfirmed bounds.
  * build: the finish-time compile verdict when the run finished, null otherwise. */
-export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null; concept?: ConceptRecord | null; compFidelity?: "passed" | "failed" | "not_checked"; compCoverage?: { measured: string[]; notChecked: string[] } };
+export type BuilderResult = { summary: string; title?: string; credits: number; usd: number; finished: boolean; build: "passed" | "unverified" | null; stopped: string | null; concept?: ConceptRecord | null;
+  /** What the finish checks established: the rendered-contrast check ran and passed, or could not run (null: no finish). */
+  contrast?: "passed" | "failed" | "not_checked" | null;
+  /** The distinct finish-gate problems this stage saw (for routing evidence; never shown to the customer). */
+  problems?: string[];
+  /** Gate findings waived on repeat at the accepted finish (still failed evidence for routing). */
+  waived?: string[];
+  compFidelity?: "passed" | "failed" | "not_checked"; compCoverage?: { measured: string[]; notChecked: string[] } };
 
 /** Preserve the approved photo plan's slots, rather than reserving unused policy maxima. */
 export function pendingPhotoSlots(limit: number, used: number, planned?: number) {
@@ -149,7 +169,9 @@ export function pendingPhotoSlots(limit: number, used: number, planned?: number)
  * calls finish with a project that passes static checks and compiles, or the budget runs out. */
 export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const policy = { ...BUILDER_EFFORT[run.effort], ...run.limits };
-  const model = builderModel();
+  const model = run.model ?? builderModel();
+  // Progress notes between tool calls where the model offers them (not on Claude Haiku 5.5, which then runs without them).
+  const progressNotes = textCapabilities(model).thinkingDisplayUpdates;
   const models = builderModels(model);
   const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 600_000 }) as unknown as AnthropicLike);
   const rate = aiCostUsdPerCredit();
@@ -184,7 +206,10 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const replaceOnly = Boolean(run.limits?.replaceOnly);
   // Quality gates block a finish once per distinct problem; a repeat is accepted, so a false positive can never strand the work.
   const qualityReported = new Set<string>();
-  let build: BuilderResult["build"] = null;
+  let build: BuilderResult["build"] = null, contrast: BuilderResult["contrast"] = null;
+  const seenProblems = new Set<string>();
+  let waived: string[] = [];
+  const firstStep = run.firstStep ?? FIRST_STEP_LOW;
   // The system prompt carries its own cache marker, so every run (builds, edits,
   // reviews, every user) reuses it; the automatic breakpoint caches the conversation.
   const system = [{ type: "text" as const, text: BUILDER_SYSTEM, cache_control: { type: "ephemeral" as const } }];
@@ -204,6 +229,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
   const usage = () => run.emit({ type: "usage", credits: spend.customerCredits(rate) });
 
   const messages: BetaMessageParam[] = [{ role: "user", content: [
+    // Stable across runs: the snapshot, then everything that changes per request (attachments, context, request).
+    ...(run.snapshot ? [{ type: "text" as const, text: run.snapshot, cache_control: { type: "ephemeral" as const } }] : []),
     ...run.attachments,
     { type: "text", text: `${run.context}\n\nImage generation: ${imageLimit > 0 ? (replaceOnly
       ? `available only to regenerate ${imageLimit === 1 ? "one existing image" : `up to ${imageLimit} existing images`} that crop and placement cannot fix (pass replaces and rejected); it comes back to you as a picture to inspect`
@@ -217,7 +244,10 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     // Size each step to the time left so it ends (and its files are kept)
     // before the limit, instead of being cut off mid-response.
     const secondsLeft = (deadline - Date.now()) / 1000 - 25;
-    const turnTokens = Math.min(policy.maxTokens, Math.max(8_000, Math.floor(secondsLeft * OUTPUT_TOKENS_PER_SECOND)));
+    const empty = run.files.files.size === 0;
+    const sized = Math.min(policy.maxTokens, Math.max(8_000, Math.floor(secondsLeft * OUTPUT_TOKENS_PER_SECOND)));
+    // The first-step rule (routing policy): its effort and, when set, a cap that keeps the first step to a bounded share.
+    const turnTokens = empty && firstStep.maxOutputTokens ? Math.min(sized, firstStep.maxOutputTokens) : sized;
 
     const announced = new Set<number>();
     const partial = new Map<number, { name: string; json: string }>();
@@ -256,7 +286,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
         // First make a recoverable project. Unbounded first-turn deliberation
         // can consume the entire request without producing a single file.
         // Later refinement retains the user's requested reasoning intensity.
-        params: { betas: ["thinking-display-updates-2026-08-18"], thinking: { type: "adaptive", display: "updates" }, output_config: { effort: run.files.files.size === 0 ? "low" : policy.intensity },
+        params: { ...(progressNotes ? { betas: ["thinking-display-updates-2026-08-18"], thinking: { type: "adaptive" as const, display: "updates" as const } } : { thinking: { type: "adaptive" as const } }), output_config: { effort: empty ? (firstStep.effort === "policy" ? run.intensity ?? policy.intensity : firstStep.effort) : run.intensity ?? policy.intensity },
           cache_control: { type: "ephemeral" }, system, tools: toolList, messages } }));
     } catch (error) {
       usage();
@@ -453,6 +483,13 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
           case "finish": {
             const input = ToolInputs.finish.parse(use.input);
             const problems = run.files.problems();
+            // Repeated gate findings are waived so a false positive cannot strand the work; they stay failed evidence for routing.
+            const waivedNow: string[] = [];
+            // A finish sent alongside a failed edit would save the project without that change (and claim it was made).
+            // Only file edits count: a refused read_comp or image call changes nothing the summary could claim.
+            const edits = new Set(uses.filter(other => other.name === "write_file" || other.name === "edit_file" || other.name === "delete_file").map(other => other.id));
+            const failedTools = results.filter(result => result.is_error && edits.has(result.tool_use_id)).length;
+            if (failedTools) problems.unshift(`${failedTools === 1 ? "A tool call" : `${failedTools} tool calls`} in this step failed, so ${failedTools === 1 ? "that change was" : "those changes were"} not applied. Fix ${failedTools === 1 ? "it" : "them"} using the tool results, check the result, then call finish again.`);
             // A first build records its concepts before it can finish (once: a repeat is accepted).
             const noConcept = "Before finishing a first build, call the concept tool once with 2-3 genuinely distinct concepts, scored on the rubric, and keep building the strongest.";
             if (run.concept && !concept && !qualityReported.has(noConcept)) { qualityReported.add(noConcept); problems.push(noConcept); }
@@ -467,7 +504,7 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
             if (input.routes?.length) run.files.routes = input.routes.some(route => route.path === "/") ? input.routes : [{ path: "/", title: "Home" }, ...input.routes];
             if (input.design) run.files.design = input.design;
             if (!problems.length) for (const problem of qualityProblems({ files: run.files.files, changed: run.files.changed, routes: run.files.routes, required: run.required })) {
-              if (BLOCKING_PROBLEM.test(problem) || !qualityReported.has(problem)) { qualityReported.add(problem); problems.push(problem); }
+              if (BLOCKING_PROBLEM.test(problem) || !qualityReported.has(problem)) { qualityReported.add(problem); problems.push(problem); } else waivedNow.push(problem);
             }
             if (!problems.length) { try { run.files.toSource(); } catch (error) { problems.push((error as Error).message); } }
             // A saved version must build: compile once the static checks pass.
@@ -484,20 +521,24 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
               // no new image call merely to measure an already-approved comp.
               const readings = (comps.length ? comps : compsFromSource(run.files.files.get("src/App.tsx"))).map(comp => comp.reading).filter((reading): reading is CompReadingValues => Boolean(reading));
               const findings = await run.contrastCheck(run.files.files, readings.length ? { comps: readings } : undefined).catch(() => null);
+              contrast = findings === null ? "not_checked" : findings.length ? "failed" : "passed";
               if (readings.length) compFidelity = findings === null ? "not_checked" : findings.some(finding => /^Comp fidelity:/.test(finding)) ? "failed" : "passed";
               // Covered text, content past the edge, page overflow and wrapped bands block every time; the rest once.
               const blocking = (findings ?? []).filter(finding => BLOCKING_PROBLEM.test(finding));
               if (findings) { layoutDefects = blocking; if (!blocking.length) cleanFiles = new Map(run.files.files); }
               // A once-only problem is the same problem when only its measured numbers moved (a fidelity reading
               // re-measured after a partial fix blocked w01 three times in round G2 and cost the build its finish).
+              // A repeat is waived (accepted) but stays failed evidence for routing.
               for (const finding of findings ?? []) {
                 const key = BLOCKING_PROBLEM.test(finding) ? null : finding.replace(/[0-9]+(?:\.[0-9]+)?/g, "#");
-                if (key === null || !qualityReported.has(key)) { if (key) qualityReported.add(key); problems.push(finding); }
+                if (key === null || !qualityReported.has(key)) { if (key) qualityReported.add(key); problems.push(finding); } else waivedNow.push(finding);
               }
             }
+            for (const problem of problems) seenProblems.add(problem.slice(0, 300));
             if (problems.length) { fail(`Not finished yet. Fix these problems, then call finish again:\n- ${problems.join("\n- ")}`); break; }
             // An unavailable compiler is not the model's to fix: keep the work and report it as unverified.
             if (verdict?.status === "unverified") run.emit({ type: "status", message: "The build check could not run. Saving this version as not yet verified…" });
+            waived = waivedNow;
             summary = input.summary; title = input.title; finished = true; build = verdict?.status === "passed" ? "passed" : "unverified";
             results.push({ type: "tool_result", tool_use_id: use.id, content: "Saved." });
             break;
@@ -551,7 +592,8 @@ export async function runBuilder(run: BuilderRun): Promise<BuilderResult> {
     summary = `${summary}${summary ? "\n\n" : ""}Design comp comparison: ${compFidelity === "passed" ? `passed — measured ${compCoverage.measured.join(", ")}; this final measurement supersedes any earlier estimates in the builder notes` : compFidelity === "failed" ? "failed — the saved progress still differs from its design reference" : missing.length ? `not checked for ${missing.join(", ")} — those references were not generated` : "not checked — the desktop/phone render comparison was unavailable"}.`;
     if (compFidelity === "failed") finished = false;
   }
-  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept, compFidelity, compCoverage };
+  return { summary, title, credits: spend.customerCredits(rate), usd: spend.providerMicrousd / 1e6, finished, build, stopped: spend.stopped, concept,
+    contrast: finished ? contrast ?? "not_checked" : null, problems: [...seenProblems], waived, compFidelity, compCoverage };
 }
 
 /** Tool result for a design comp: how to read it and what to build from it. */

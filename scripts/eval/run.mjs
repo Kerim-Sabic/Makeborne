@@ -12,6 +12,9 @@
 //   --enhance (with --live, websites in Create mode): the studio's enhanced-brief step first: POST /api/build/enhance
 //     (its own eval reservation, kind runner-enhancer, at the 1-credit hold; settled from the provider-call ledger by the
 //     durable action's Idempotency-Key), then the build with { brief: { mode: "enhanced", text } }, as the studio's Start building does.
+//   --route <class>=<model>[,...] (with --live): the server runs with MAKEBORNE_MODEL_ROUTING=on and MAKEBORNE_ROUTE_<CLASS>=<model>
+//     (src/lib/ai/model-routing.ts); without it routing is explicitly off. --scope <scope>: every reservation is booked inside that
+//     owner-approved scoped allowance of the shared ledger (lib/budget.mjs reserveScoped) instead of the design cap.
 //
 // The live path drives the same HTTP routes, in the same order, with the same
 // bodies as the studio (src/components/live-builder.tsx): plan -> approved
@@ -65,6 +68,11 @@ export function setEffort(value) {
 let BUNDLER = 'turbopack';
 /** --image-models: the ordered image allowlist for this run's server (MAKEBORNE_IMAGE_MODELS), when .env.local names none. */
 let IMAGE_MODELS = '';
+/** --route: per-class model routes for this run's server ({ 'new-site': 'claude-sonnet-5-5' }); null = routing off. */
+let ROUTES = null;
+/** --scope: the scoped allowance every reservation is booked in; null = the design cap. */
+let SCOPE = null;
+const routeEnv = () => ROUTES ? { MAKEBORNE_MODEL_ROUTING: 'on', ...Object.fromEntries(Object.entries(ROUTES).map(([taskClass, model]) => [`MAKEBORNE_ROUTE_${taskClass.toUpperCase().replace(/-/g, '_')}`, model])) } : { MAKEBORNE_MODEL_ROUTING: 'off' };
 /**
  * The .env.local the runner reads ANTHROPIC_API_KEY / OPENAI_API_KEY / MAKEBORNE_IMAGE_MODEL from
  * (only into its own server process). A git worktree has none of its own: EVAL_ENV_LOCAL names the
@@ -797,6 +805,7 @@ export function serverEnv(stack, { images, rate }, { read = readEnvFile, value =
     MAKEBORNE_CLOUD_ENABLED: 'true', MAKEBORNE_CLOUD_MIGRATIONS_VERIFIED: 'true', MAKEBORNE_LIVE_BUILDER_ENABLED: 'true',
     NEXT_PUBLIC_SUPABASE_URL: stack.apiUrl, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: stack.publishableKey, SUPABASE_SECRET_KEY: stack.secretKey,
     MAKEBORNE_HOSTING_NAMESPACE: 'local', MAKEBORNE_PUBLICATION_ASSET_BROKER_ENABLED: 'false',
+    MAKEBORNE_BUILDER_MODEL: '', ...routeEnv(),
   });
 }
 
@@ -1539,7 +1548,7 @@ async function enhancerLedger(actionKey) {
 
 async function runBrief({ session, browser, brief, runDir, runId, pricing, images, rerun, withPlan = false, enhance = false, answers = false, control, deps = {} }) {
   // deps: injected fakes for the self-test; the defaults are the real functions.
-  const { reserveFn = reserve, setLimits = setProviderLimits, settleBriefFn = settleBrief, settleFn = settle, save = saveOutputs, midnight = midnightWaitMs, now = Date.now, sleep = delay } = deps;
+  const { reserveFn = SCOPE ? args => reserveScoped({ ...args, scope: SCOPE }) : reserve, setLimits = setProviderLimits, settleBriefFn = settleBrief, settleFn = settle, save = saveOutputs, midnight = midnightWaitMs, now = Date.now, sleep = delay } = deps;
   const kind = brief.kind;
   const boundUsd = boundFor(kind, pricing, withPlan);
   // The studio's enhanced-brief step (first website build in Create mode): its own 1-credit hold.
@@ -1567,7 +1576,7 @@ async function runBrief({ session, browser, brief, runDir, runId, pricing, image
   const itemJson = { id: brief.id, kind, title: brief.title, direction: brief.direction, briefId: brief.id, brief: brief.brief, briefSha256: brief.sha256,
     origin: { type: 'live', stack: `release-auth:${DB_PORT}`, workspaceId: session.workspaceId, projectId: null, artifactId: null, version: null, path: null },
     generation: { effort: EFFORT, styleId: 'automatic', mode: kind === 'website' ? (withPlan ? 'plan' : 'create') : 'create', plan: kind === 'website' ? (withPlan ? 'approved as proposed' : 'none (Create mode, the studio default)') : 'none (documents have no plan mode)', reviewRounds: kind === 'website' ? pricing.autoReviewRounds : 0,
-      briefQuestions: 'skipped (as "Skip questions"; the studio would make a separate small AI call)', images: images ? 'on' : 'off' } };
+      briefQuestions: 'skipped (as "Skip questions"; the studio would make a separate small AI call)', images: images ? 'on' : 'off', routing: ROUTES ? { on: true, routes: ROUTES } : { on: false }, ...(SCOPE ? { scope: SCOPE } : {}) } };
   const cost = { boundUsd, reservationId, actualUsd: null, calls: [], credits: item.credits, operations: [] };
   item.beforeStage = name => control.assertRunning(`${brief.id}: before ${name}`);
   let limitsFailure = null;
@@ -1838,7 +1847,7 @@ export async function runLive({ report, approval, only, max, images, rerun = fal
   const runId = `live-${stamp()}`;
   const runDir = ensureDir(path.join(RUNS, runId));
   const startedAt = new Date().toISOString();
-  writeJson(path.join(runDir, 'approval.json'), { approval: approval.trim(), envApproved: true, at: startedAt, capUsd: capUsd(), remainingUsd: report.budget.remainingUsd, briefs: selected.map(brief => brief.id), images: Boolean(images), rerun: Boolean(rerun), websiteMode: plan ? 'plan' : 'create', ...(BUDGET_SCOPE ? { budgetScope: BUDGET_SCOPE } : {}) });
+  writeJson(path.join(runDir, 'approval.json'), { approval: approval.trim(), envApproved: true, at: startedAt, capUsd: capUsd(), remainingUsd: report.budget.remainingUsd, briefs: selected.map(brief => brief.id), images: Boolean(images), rerun: Boolean(rerun), websiteMode: plan ? 'plan' : 'create', routes: ROUTES, scope: SCOPE, ...(BUDGET_SCOPE ? { budgetScope: BUDGET_SCOPE } : {}) });
   const items = [];
   let stopped = null, fatal = null, identity = null;
   const control = createLiveControl({ runDir, runId, deps: {
@@ -1878,7 +1887,7 @@ export async function runLive({ report, approval, only, max, images, rerun = fal
         // The server must still be ours (alive, isolated build) before every paid brief.
         identity = await verifyServerIdentity({ child: control.server, expectedApi: stack.apiUrl });
         const bound = boundFor(brief.kind, report.pricing, plan);
-        if (!fits(bound)) { stopped = `cap reached before ${brief.id} (bound ${money(bound)}, remaining ${money(budgetSummary().remainingUsd)})`; break; }
+        if (!(SCOPE ? fitsScoped(SCOPE, bound) : fits(bound))) { stopped = `cap reached before ${brief.id} (bound ${money(bound)}, remaining ${money(SCOPE ? scopeSummary(SCOPE).remainingUsd : budgetSummary().remainingUsd)})`; break; }
         // Checked again right before the brief reserves (runBrief re-checks before reserving and before enabling limits).
         if (control.stopping) { stopped = stopReason(); break; }
         console.log(`\n  ${brief.id} (${brief.kind}, bound ${money(bound)})`);
@@ -2318,7 +2327,7 @@ async function liveSelfTest() {
 function cli(argv) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     fixtures: { type: 'boolean' }, 'include-redesign': { type: 'boolean' }, live: { type: 'boolean' }, approval: { type: 'string' }, rerun: { type: 'boolean' },
-    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, 'image-models': { type: 'string' }, plan: { type: 'boolean' }, enhance: { type: 'boolean' }, briefs: { type: 'string' }, answers: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+    only: { type: 'string', multiple: true }, max: { type: 'string' }, effort: { type: 'string' }, bundler: { type: 'string' }, images: { type: 'boolean' }, 'image-models': { type: 'string' }, plan: { type: 'boolean' }, enhance: { type: 'boolean' }, route: { type: 'string' }, scope: { type: 'string' }, briefs: { type: 'string' }, answers: { type: 'boolean' }, 'skip-self-test': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     'selftest-live': { type: 'boolean' }, 'selftest-watchdog-parent': { type: 'boolean' },
   }, strict: true });
   const max = values.max === undefined ? null : Number(values.max);
@@ -2342,6 +2351,14 @@ async function main() {
   if (options['image-models'] !== undefined) {
     if (!/^[a-z0-9.-]+(?:,[a-z0-9.-]+)*$/.test(options['image-models'])) throw new Error('--image-models takes a comma-separated list of model ids');
     IMAGE_MODELS = options['image-models'];
+  }
+  if (options.route !== undefined) {
+    if (!/^[a-z-]+=[a-z0-9.-]+(?:,[a-z-]+=[a-z0-9.-]+)*$/.test(options.route)) throw new Error('--route takes <class>=<model>[,<class>=<model>...]');
+    ROUTES = Object.fromEntries(options.route.split(',').map(item => item.split('=')));
+  }
+  if (options.scope !== undefined) {
+    if (!/^[a-z0-9][a-z0-9-]{2,63}$/.test(options.scope)) throw new Error('--scope must be a scoped allowance name');
+    SCOPE = options.scope;
   }
   if (options.help) { console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 10).join('\n')); return 0; }
   if (options['selftest-live']) { console.log('run.mjs live-path self-test (fakes only: no DB writes, no server, no provider)'); return liveSelfTest(); }

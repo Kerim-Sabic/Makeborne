@@ -86,6 +86,7 @@ function Receipt({ receipt, kind }: { receipt: RunReceipt; kind: "website" | "bo
       {receipt.brief && <div><dt>Brief</dt><dd>From {receipt.brief}</dd></div>}
       {receipt.concept && <div><dt>Concept</dt><dd>{receipt.concept.chosen}{receipt.concept.runnersUp.length ? ` · also considered: ${receipt.concept.runnersUp.join(", ")}` : ""}</dd></div>}
       {receipt.enhanced && <div><dt>{receipt.brief ? "Brief used" : "Brief"}</dt><dd>{briefReceipt(receipt.enhanced)}</dd></div>}
+      {!!receipt.tasks?.length && <div><dt>Task</dt><dd>{receipt.tasks.join("; ")}</dd></div>}
       <div><dt>{kind === "website" ? "Files changed" : "Changes"}</dt><dd>{changes.length ? <details><summary>{changes.length} {noun}{changes.length === 1 ? "" : "s"}</summary><ul>{changes.slice(0, 40).map(item => <li key={item}>{item}</li>)}{changes.length > 40 && <li>and {changes.length - 40} more</li>}</ul></details> : "None"}</dd></div>
     </dl>
     {!!receipt.checks.length && <ul className="lb-receipt-checks">{receipt.checks.map(check => <li key={check.label} data-ok={check.ok}>{check.ok ? <Check size={13} aria-label="Passed" /> : <TriangleAlert size={13} aria-label="Needs attention" />}<span>{check.label}</span></li>)}</ul>}
@@ -325,6 +326,7 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
       return { ...turn, activity: [...turn.activity, { id: key ?? newId(), ...item }] };
     });
     const touched = new Set<string>();
+    let attemptTouched = new Set<string>();
     let result: RunResult | null = null, finished = false, refused = false;
     let latestOperation: OperationSnapshot | null = null;
     const envelope = payload.operation as OperationRequest | undefined;
@@ -366,6 +368,8 @@ export default function LiveBuilder({ accountId, workspaceId, artifactId, versio
           if (meter) meterEvent(meter, event);
           switch (event.type) {
             case "operation": break;
+            // An escalated retry restarts the step from its saved files (the server re-sends what it put back).
+            case "route": if (event.role === "escalation") { touched.clear(); for (const path of attemptTouched) touched.add(path); } else if (event.role !== "repair") attemptTouched = new Set(touched); break;
             case "text": update(replyId, turn => ({ ...turn, text: turn.text + event.delta })); break;
             case "status": activity({ kind: "note", label: event.message, done: false }, "status"); break;
             case "file_start": activity({ kind: "file", label: `${event.op === "edit" ? "Editing" : "Writing"} ${event.path}`, done: false }, `file:${event.path}`); break;
@@ -1028,7 +1032,7 @@ ${text.trim().slice(0, 6000)}` }, next.id, live, meter);
         </button> : <button type="submit" className="lb-send" aria-label={mode === "plan" ? "Plan" : "Send"} disabled={busy || preparingSources || !sources.ready || sources.busy || readiness.checking || disabled || operationRunning || Boolean(previewingRecovery) || !draft.trim()}>{busy ? <Loader2 size={16} className="lb-spin" /> : <ArrowUp size={16} />}</button>}
       </div>
       {(busy || operationRunning) && <p className="lb-action-effect" id={`lb-stop-effect-${artifactId}`}>{stopEffect(operation, version, pendingCancel && !operation?.cancelRequested)}</p>}
-      <details className="lb-request-details"><summary>Request details <span>Up to {mode === "plan" ? PLAN_CEILING_CREDITS : ceiling} credits</span></summary>
+      <details className="lb-request-details"><summary>Request details <span>Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits</span></summary>
       <div className="lb-estimate">
         {brandKit !== undefined && <p className="lb-brand">{brandKit ? `Brand kit: ${brandKit}` : "No brand kit"} · used for this request</p>}
         <p className="lb-limit">Up to {mode === "plan" ? PLAN_CEILING_CREDITS : shownMaximum} credits for this {mode === "plan" ? "plan" : "request, including automatic refinements"}.</p>

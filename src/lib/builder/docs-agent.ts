@@ -61,6 +61,8 @@ export type DocBuilderRun = {
   anthropic?: AnthropicLike;
   imageClient?: ImageClientLike;
   storeImage?: (request: { name: string; prompt: string; model: string }, bytes: Buffer) => ReturnType<typeof storeGeneratedImage>;
+  /** The model this stage runs on (see ../ai/model-routing.ts); default: the builder model. */
+  model?: string;
   /** Image models to route among (tests); production reads the allowlist (imageConfiguration). */
   imageModels?: string[];
   /** Server-derived operation kind; never inferred from the user's prose. */
@@ -127,7 +129,7 @@ const artName = (id: string) => `art-${id}`.slice(0, 49).replace(/-+$/, "");
  * to the model as images to check; finish validates. */
 export async function runDocumentBuilder(run: DocBuilderRun): Promise<DocBuilderResult> {
   const policy = BUILDER_EFFORT[run.effort];
-  const model = builderModel();
+  const model = run.model ?? builderModel();
   const models = builderModels(model);
   const anthropic = run.anthropic ?? (new Anthropic({ maxRetries: 0, timeout: 600_000 }) as unknown as AnthropicLike);
   const rate = aiCostUsdPerCredit();

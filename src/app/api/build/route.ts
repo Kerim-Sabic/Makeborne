@@ -19,6 +19,7 @@ import { BUILDER_EFFORT, aiCostUsdPerCredit } from "@/lib/builder/pricing";
 import { builderEstimates } from "@/lib/builder/credit-estimate";
 import { ReviewInputSchema, reviewAttachments, reviewRequest } from "@/lib/builder/review";
 import { REVIEW_MAX_TURNS, reviewCreditCeiling, reviewImageLimit } from "@/lib/builder/review-policy";
+import { snapshotAnchor, snapshotVersion } from "@/lib/builder/site-snapshot";
 import { designCompBlocks } from "@/lib/builder/design-comps";
 import { OperationRequestSchema } from "@/lib/builder/operation-contract";
 import { OperationError, beginOperation, brandKitFingerprint, createOperationSpend, finishOperation, operationApiError, operationReplayResponse, type OperationRun } from "@/lib/builder/operation-server";
@@ -28,6 +29,8 @@ import { providerCapacity, requireProviderCapacity } from "@/lib/ai/live-run";
 import { builderAvailability } from "@/lib/builder/availability";
 import { builderFeatures } from "@/lib/builder/features";
 import { requirePricedModel } from "@/lib/ai/model-check";
+import { routeIssue, routeModels, routeStage, type RouteInput } from "@/lib/ai/model-routing";
+import { buildTaskContract } from "@/lib/builder/task-contract";
 import { SitePlanSchema, StoredPlanSchema, planToBrief } from "@/lib/builder/plan";
 import { approvedMaximumIssue, approvedPlanIssue, staleBaseMessage } from "@/lib/builder/edit-intent";
 import { websiteBrandBlock } from "@/lib/brand/kit";
@@ -143,6 +146,17 @@ export async function POST(request: Request) {
     if (quoteIssue) throw new RequestError("QUOTE_CHANGED", quoteIssue, 409);
     // Unknown pricing fails closed before anything is reserved or sent.
     requirePricedModel(builderModel());
+    // The stage's routing decision (MAKEBORNE_MODEL_ROUTING off by default = today's behaviour). Every model it may call
+    // must be priced and support the stage before any hold exists; the decision is re-taken below with the operation's state.
+    const routeInput = (extra: Partial<RouteInput> = {}): RouteInput => artifact.kind === "website"
+      ? { stage: reviewing ? "review" : body.operation && "kind" in body.operation && body.operation.kind === "continuation" ? "continuation" : "build", artifact: "website",
+        request: body.message, files: current.content.websiteSource?.files.length ?? 0, projectBytes: (current.content.websiteSource?.files ?? []).reduce((sum, file) => sum + file.content.length, 0),
+        effort: body.effort, attachments: body.attachments.length, plan: Boolean(body.plan),
+        verification: { compile: true, contrast: process.env.MAKEBORNE_CONTRAST_GATE !== "off" }, ...extra }
+      : { stage: "document", artifact: artifact.kind === "book" ? "book" : "deck", emptyDocument: !current.content.document, effort: body.effort, ...extra };
+    for (const model of routeModels(routeStage(routeInput()))) requirePricedModel(model);
+    const routeProblem = routeIssue(routeStage(routeInput()));
+    if (routeProblem) throw new RequestError("MODEL_UNSUPPORTED", "The configured AI model cannot run this step, so the builder is unavailable.", 503);
     // Paused or exhausted provider spending: a retryable 503 before any credit hold exists.
     await requireProviderCapacity("anthropic");
     // An approved plan is bound to the exact saved revision the customer reviewed,
@@ -185,6 +199,9 @@ export async function POST(request: Request) {
     const outline = current.content.websiteSource ? "" : current.content.sections.map(section => [section.title, ...section.blocks.map(block => block.text)].filter(Boolean).join("\n")).join("\n\n").slice(0, 20_000);
     const history = versions.filter(version => version.number <= artifact.current_version).slice(0, 6).reverse()
       .map(version => `v${version.number}: ${version.changeSummary}`).join("\n");
+    // Websites send the site as a cached snapshot ahead of everything that changes per request (lib/builder/site-snapshot.ts).
+    const snapshot = artifact.kind === "website" && files.files.size
+      ? snapshotAnchor(versions.filter(version => version.number <= artifact.current_version).map(snapshotVersion), artifact.current_version) : null;
     const approvedPlan = body.plan ?? operation.originalPlan;
     // Bound to the operation: a continuation uses exactly the brief and answers the request was authorized with.
     const approvedBrief = reviewing ? undefined : body.brief ?? operation.originalBrief;
@@ -215,7 +232,8 @@ export async function POST(request: Request) {
       operation.originalMessage ? `Original authorized request: ${operation.originalMessage}` : "",
       "</project>",
       approvedPlan ? `<approved_plan>\nThe client reviewed and approved this plan. Build exactly this: the same pages and section order, content, type pairing, palette hex values, layout ideas, imagery and signature interaction. Do not add or drop pages or sections unless the request says so. Where the plan names fonts the toolchain cannot load, use the closest permitted stack.\n\n${planToBrief(approvedPlan)}\n</approved_plan>` : "",
-      files.files.size
+      // With a snapshot, the website run adds what changed since it (per attempt, from the working copy).
+      snapshot ? "" : files.files.size
         ? `<current_files>\n${files.snapshot()}\n</current_files>\nExisting images: ${[...files.assets.values()].map(asset => `/${asset.path.slice(7)}`).join(", ") || "none"}`
         : "<current_files>(empty — build the complete website from scratch)</current_files>",
     ].filter(Boolean).join("\n");
@@ -229,17 +247,27 @@ export async function POST(request: Request) {
 
     // Provider dollars: the effort ceiling, independent of the customer's credits (admins included).
     const spend = createOperationSpend(operation, Date.now() + (maxDuration - 20) * 1000);
+    // The decision with the operation's durable state: parent ids, input revision, earlier runs' repair/escalation counts.
+    // The task contract (scope and acceptance checks are router inputs; its limits can only lower the router's).
+    const picked = /([\w./-]+\.(?:tsx|ts|css|html|json|svg|md)) \(line (\d+)\)/.exec(body.message);
+    const contract = buildTaskContract({ artifact: artifact.kind === "website" ? "website" : artifact.kind === "book" ? "book" : "presentation",
+      objective: reviewing ? "refine" : files.files.size || current.content.document ? "edit" : "create", message: body.message,
+      plan: approvedPlan ? planToBrief(approvedPlan) : null, brief: approvedBrief ? { text: approvedBrief.text } : null, design: design ?? null,
+      revision: { expectedVersion: body.expectedVersion }, target: picked ? { file: picked[1], line: Number(picked[2]), label: "" } : null,
+      limits: { capCredits: ceiling, repairs: 1, escalations: 1 } });
+    const route = routeStage(routeInput({ operation: { id: operation.operation.id, runId: operation.id, revision: body.expectedVersion }, previous: operation.priorRoute ?? null,
+      allowanceMicrousd: spend.allowanceMicrousd, deadlineMs: spend.timeLeftMs(), contract }));
 
     // Books and presentations: structured document builder (same credits, versions and SSE contract).
     if (artifact.kind === "book" || artifact.kind === "presentation") {
       const response = documentBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, project, current, versions, brand,
-        message: body.message, effort: body.effort, attachments, maxDuration, continuation: Boolean(envelope && "id" in envelope && envelope.kind === "continuation"), ...(body.imageOptions ? { imageOptions: body.imageOptions } : {}) });
+        message: body.message, effort: body.effort, attachments, continuation: Boolean(envelope && "id" in envelope && envelope.kind === "continuation"), ...(body.imageOptions ? { imageOptions: body.imageOptions } : {}), maxDuration, route });
       reserved = null;
       return response;
     }
 
-    const response = websiteBuildResponse({ client, hold, spend, operation, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
-      message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, attachments,
+    const response = websiteBuildResponse({ client, hold, spend, operation, route, workspaceId: body.workspaceId, artifact, current, files, reviewing: Boolean(reviewing), projectBrief: project.brief,
+      message: body.message, effort: body.effort, request: reviewing ? reviewRequest(reviewing) : body.message, context, snapshot, attachments,
       limits: reviewing ? { maxTurns: Math.min(REVIEW_MAX_TURNS, policy.maxTurns), maxImages: reviewImages, replaceOnly: true } : design?.imagery === "type" ? { maxImages: 0 } : undefined, maxDuration,
       // First build: the concept step (2-3 concepts scored on the rubric, the strongest built) inside this run.
       concept: Boolean(seed),
