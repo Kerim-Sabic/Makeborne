@@ -2,6 +2,7 @@
 import {useEffect,useEffectEvent,useRef,useState} from "react";
 import {Sparkles,Square,RefreshCw} from "lucide-react";
 import {continueGeneration,generationProgress,generationStorageKey,readGenerationReference,saveGenerationReference,GenerationBrowserError,type GenerationReference} from "@/lib/generation/browser-request";
+import GenerationPermissions from "./generation-permissions";
 import type {GenerationProgress} from "@/lib/generation/submission-contract";
 
 const labels:Record<GenerationProgress["state"],string>={queued:"Waiting to start",working:"Creating your website",building:"Building your website",awaiting_review:"Build complete · review pending",ready:"Website ready",failed:"Creation stopped",cancelled:"Creation cancelled",cancelling:"Confirming cancellation",needs_attention:"Creation needs attention"};
@@ -11,7 +12,6 @@ export default function WebsiteGeneration({accountId,workspaceId,projectId,artif
 }) {
   const [reference,setReference]=useState<GenerationReference|null>(null),[job,setJob]=useState<GenerationProgress|null>(null);
   const [enabled,setEnabled]=useState(false),[loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
-  const [processing,setProcessing]=useState(false),[rights,setRights]=useState(false);
   const lifetime=useRef<AbortController|null>(null),running=useRef(false);
   const autoStarted=useRef(false);
   const scope={workspaceId,projectId,artifactId},storageKey=generationStorageKey(accountId,scope);
@@ -59,7 +59,7 @@ export default function WebsiteGeneration({accountId,workspaceId,projectId,artif
         if(action==="cancel") {if(!saved)throw Error("Reopen the original request to cancel it.");setJob(await generationProgress(saved,boundary(),true));return;}
         if(!canStart)throw Error("Save or resolve your current draft before continuing creation.");
         if(!saved) {
-          if(!enabled||!baseVersionId||!processing||!rights)throw Error("Save this project and confirm processing and source permissions before creating.");
+          if(!enabled||!baseVersionId)throw Error("Save this project before creating.");
           saved={version:1,accountId,requestKey:crypto.randomUUID(),prepared:null,jobId:null,
             input:{scope,baseVersionId,sourceIds,processingConsent:true,externalProcessingConsent:true,sourceRightsConfirmed:true}};
           saveGenerationReference(localStorage,saved);
@@ -82,12 +82,9 @@ export default function WebsiteGeneration({accountId,workspaceId,projectId,artif
   if(!loaded||!enabled&&!reference&&!message)return null;
   return <section className="website-generation" aria-label="Website creation" aria-busy={busy}>
     <div className="website-generation-heading"><Sparkles size={17}/><strong>{job?labels[job.state]:reference?"Continue your website":"Build from your saved brief"}</strong></div>
-    {!reference&&<div className="website-generation-permissions">
-      <label><input type="checkbox" checked={processing} onChange={e=>setProcessing(e.target.checked)}/>Allow our AI service providers to process this brief and its selected sources.</label>
-      <label><input type="checkbox" checked={rights} onChange={e=>setRights(e.target.checked)}/>I have permission to use the supplied content and artwork.</label>
-    </div>}
+    {!reference&&<GenerationPermissions/>}
     <div className="website-generation-actions">
-      {!job&&<button type="button" className="button primary small" disabled={busy||!canStart||!reference&&(!enabled||!baseVersionId||!processing||!rights)} onClick={()=>void act("continue")}><Sparkles size={14}/>{busy?"Confirming request…":reference?"Retry saved request":"Build website"}</button>}
+      {!job&&<button type="button" className="button primary small" disabled={busy||!canStart||!reference&&(!enabled||!baseVersionId)} onClick={()=>void act("continue")}><Sparkles size={14}/>{busy?"Confirming request…":reference?"Retry saved request":"Build website"}</button>}
       {job?.canCancel&&<button type="button" className="button secondary small" disabled={busy} onClick={()=>void act("cancel")}><Square size={12}/>Cancel creation</button>}
       {job?.outputVersionId&&<button type="button" className="button secondary small" onClick={onOpenLatest}>Open latest saved version</button>}
       {job&&terminal(job)&&<button type="button" className="button secondary small" disabled={busy} onClick={()=>void act("new")}><RefreshCw size={14}/>New request</button>}

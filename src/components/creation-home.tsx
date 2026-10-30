@@ -99,13 +99,12 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
     if (!owner || !attachments.ready) { setError(account.error || attachments.error || "Checking your account and file storage. Try again in a moment."); return; }
     if (!brief.trim()) { promptRef.current?.focus(); return; }
     if (!accessReady) { setError("Checking creation availability. Your brief is preserved."); return; }
-    if (immediateWebsite && !permissions.consent) { setError("Confirm processing and source permissions beside your prompt before creating."); return; }
     if (brief.trim().length > 20000) { setError("Keep your brief under 20,000 characters."); return; }
     starting.current = true; setBusy(true);
     try {
       const requestId = crypto.randomUUID();
       const nonce = crypto.randomUUID();
-      const generationConsent=immediateWebsite?permissions.consent??undefined:undefined;
+      const generationConsent=immediateWebsite?permissions.authorizeSubmission():undefined;
       const withChoices = docKind && imageChoice ? `${brief.trim()}\n\n${imageChoiceLines(docKind, imageChoice)}` : brief.trim();
       const draft = { kind, brief: withChoices.slice(0, 20000), styleId: selectedStyle?.id ?? AUTOMATIC_STYLE.id, style: selectedStyle, mode, effort, requestId, attachmentOwner: owner, generationConsent };
       await saveCreationDraft(owner, requestId, nonce, draft);
@@ -157,11 +156,11 @@ export default function CreationHome({ initialEmail, accountsEnabled, trialCredi
               <AttachFilesButton onFiles={attachments.add} disabled={!attachments.ready || busy} busy={attachments.busy} />
               <ComposerControls mode={mode} onMode={setMode} effort={effort} onEffort={setEffort} />
               {docKind && imageChoice && <DocumentImageControls className="mk-image-controls" kind={docKind} value={imageChoice} offers={imageOffers} disabled={busy} onChange={next => setImageChoices(previous => ({ ...previous, [docKind]: next }))} />}
-              <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim() || !accessReady || immediateWebsite&&!permissions.consent} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
+              <button className="mk-send" type="submit" disabled={busy || attachments.busy || !brief.trim() || !accessReady} aria-label={mode === "plan" ? "Plan this project" : "Create this project"}><span>{busy ? "Opening…" : mode === "plan" ? "Plan" : "Create"}</span><ArrowUp size={17} strokeWidth={2} /></button>
             </div>
           </form>
           <UnsentDraftNotice restoredAt={unsent.restoredAt} storageRefused={unsent.storageRefused} onDiscard={unsent.discard} disabled={busy} className="mk-unsent-draft" />
-          {immediateWebsite&&<GenerationPermissions value={permissions} disabled={busy}/>}
+          {immediateWebsite&&<GenerationPermissions/>}
           {attachments.error && <p className="attachment-error" role="alert">{attachments.error}</p>}
           {error && <p className="mk-error" role="alert">{error}</p>}
           <div className="mk-idea-chips" aria-label="Ideas to get started">{ideas[kind].map(idea => <button key={idea.label} onClick={() => addIdea(idea.text)}>{idea.label}<ArrowUpRight size={13} /></button>)}</div>

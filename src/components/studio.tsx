@@ -204,10 +204,10 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
     apply: next => { setDraftKind(next.kind); setCreationMode(next.mode); setCreationEffort(next.effort); setDraftBrief(next.text); },
   });
   function startStudioPrompt() {
-    if(!draftBrief.trim()||!composerAccount.ready||!composerAccount.accountId||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent)return;
+    if(!draftBrief.trim()||!composerAccount.ready||!composerAccount.accountId||!composerPermissions.ready)return;
     const requestId=crypto.randomUUID(),owner=attachmentOwner(composerAccount.accountId);
     if(appliedHandoff)rememberCreationHandoff(requestId,draftKind,appliedHandoff.provenance);else forgetCreationHandoff();
-    const consent=immediateWebsite?composerPermissions.consent:null;
+    const consent=immediateWebsite?composerPermissions.authorizeSubmission():null;
     const draft={kind:draftKind,brief:draftBrief.trim(),mode:creationMode,effort:creationEffort,
       styleId:AUTOMATIC_STYLE.id,requestId,attachmentOwner:owner,generationConsent:consent??undefined};
     try {
@@ -679,14 +679,14 @@ export default function Studio({ isAdmin = false, unlimitedCredits = false, init
         <ComposerControls mode={creationMode} onMode={setCreationMode} effort={creationEffort} onEffort={setCreationEffort} />
         <button
           className="button primary"
-          disabled={!draftBrief.trim()||!composerAccount.ready||!composerPermissions.ready||immediateWebsite&&!composerPermissions.consent}
+          disabled={!draftBrief.trim()||!composerAccount.ready||!composerPermissions.ready}
           aria-label={creationMode === "plan" ? "Plan this project" : "Create this project"}
           onClick={startStudioPrompt}
         >
           <ArrowUp size={19} />
         </button>
       </div>
-      {immediateWebsite&&<GenerationPermissions value={composerPermissions}/>}
+      {immediateWebsite&&<GenerationPermissions/>}
     </section>
     <div className="composer-note">
       {immediateWebsite?"Your brief is saved and waits in the builder. Nothing is sent or charged until you press Send there.":"Your brief becomes a saved project. Available generation controls appear in its editor."}
@@ -1451,7 +1451,7 @@ function CreationWizard({
   accountCreated: (workspaceId: string, artifact: CloudArtifact, generationStaged?: boolean) => void;
 }) {
   const clients = account.accountId ? account.clients : deviceClients;
-  const permissions=useGenerationConsent(account.accountId,initialGenerationConsent);
+  const permissions=useGenerationConsent(account.accountId);
   const willGenerate=kind==="website"&&(permissions.enabled||!!initialGenerationConsent);
   const sourceAttachments = useFileAttachments(initialAttachmentOwner, `draft:${requestId}`);
   const sourceReadiness = useSourceReadiness(sourceAttachments.files, NO_SOURCE_EXCLUSIONS);
@@ -1459,7 +1459,7 @@ function CreationWizard({
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState("");
   const [uncertain, setUncertain] = useState(false);
-  const needsPermissions=willGenerate&&!permissions.consent&&!uncertain;
+  const needsCreateAction=willGenerate&&!initialGenerationConsent&&!uncertain;
   const [creationId, setCreationId] = useState(() => directStart && z.string().uuid().safeParse(requestId).success ? requestId : crypto.randomUUID());
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => { const controller = new AbortController(); lifetime.current = controller; return () => { controller.abort(); }; }, []);
@@ -1624,14 +1624,14 @@ function CreationWizard({
           current,
           expectedWorkspaceId: initialWorkspaceId ?? undefined,
           prepare: async () => {
-            if (!permissions.ready || needsPermissions) throw new Error("Confirm processing and source permissions before creating.");
+            if (!permissions.ready) throw new Error("Wait for your account to finish loading before creating.");
             if (initialWorkspaceId && account.workspace?.id !== initialWorkspaceId) throw new Error("The selected client workspace is unavailable. Reopen this form from Clients.");
             if (getPendingCloudWrites(accountId).some(item => item.path.endsWith("/studio-projects"))) throw new Error("An earlier project save needs confirmation. Retry that exact request in Projects before creating another project.");
             if (values.clientId && !account.clients.some(client => client.id === values.clientId)) throw new Error("Choose an available account client before saving.");
             if (!selectedStyle || selectedStyle.id !== values.styleId) throw new Error("Choose an available style before creating.");
             const body = buildCreationPayload(values, selectedStyle);
             const target = account.workspace ?? (await api<{ workspace: CloudWorkspace }>("/api/workspaces", { name: "My workspace" }, "POST", { idempotencyKey: creationId })).workspace;
-            return { workspaceId: target.id, body, generationConsent: willGenerate ? permissions.consent ?? undefined : undefined };
+            return { workspaceId: target.id, body, generationConsent: willGenerate ? initialGenerationConsent ?? permissions.authorizeSubmission() : undefined };
           },
           submit: async reference => (await api<{ artifact: CloudArtifact }>(`/api/cloud/workspaces/${reference.workspaceId}/studio-projects`, reference.body, "POST", { idempotencyKey: reference.requestKey })).artifact,
         });
@@ -1666,9 +1666,9 @@ function CreationWizard({
   const started = useRef(false);
   const startDirect = useEffectEvent(() => { void submitProject(); });
   useEffect(() => {
-    if (!directStart || mode !== "create" || !draftLoaded || !draftWritable || !account.ready || !permissions.ready || needsPermissions || started.current) return;
+    if (!directStart || mode !== "create" || !draftLoaded || !draftWritable || !account.ready || !permissions.ready || needsCreateAction || started.current) return;
     started.current = true; startDirect();
-  }, [directStart, mode, draftLoaded, draftWritable, account.ready, permissions.ready, needsPermissions]);
+  }, [directStart, mode, draftLoaded, draftWritable, account.ready, permissions.ready, needsCreateAction]);
   return (
     <Frame close={() => { if (!savingRef.current) close(); }} title="Create a project">
       <p className="small-note" role="status">{account.error || (!account.ready ? "Checking your account…" : account.accountId ? `Saving to ${account.workspace?.name ?? "your new account workspace"}` : "Saved on this device. Sign in to save new projects to your account.")}</p>
@@ -1723,7 +1723,7 @@ function CreationWizard({
         </>}
         {aiPlan && <div className="creation-plan"><h3>Plan before building</h3><p>When your project opens, Makeborne studies your brief and proposes a complete plan: sitemap, sections, design direction with palette and type, and a credit estimate. You edit and approve it before any code is written. Planning costs at most 10 credits.</p></div>}
         {mode === "plan" && !aiPlan && <div className="creation-plan"><h3>Your starting plan</h3><label className="creation-outline">Sections to include<textarea rows={6} maxLength={2000} value={outline ?? plan.structure.join("\n")} onChange={e => setOutline(e.target.value)} /></label><p>Edit one section, chapter, or slide per line. This is a starter outline, not AI research. Confirming saves it with your brief.</p></div>}
-        {willGenerate&&!initialGenerationConsent&&!uncertain&&<GenerationPermissions value={permissions} disabled={saving}/>}
+        {willGenerate&&!initialGenerationConsent&&!uncertain&&<GenerationPermissions/>}
         <p className="creation-plan-note">{willGenerate ? "Your brief is saved first, then its website request continues in the workspace. Attached files remain separate on this device." : "Your brief and source text will be saved in an editable project. Public AI generation remains paused."}</p>
       </div>
       <div className="modal-actions">
@@ -1736,7 +1736,7 @@ function CreationWizard({
         </button>
         <button
           className="button primary"
-          disabled={saving || (directStart && mode === "create" && !saveError && draftWritable) || !account.ready || !permissions.ready || needsPermissions || (!brief.trim() && !content.trim()) || !draftLoaded || needsPlanAnswers}
+          disabled={saving || (directStart && mode === "create" && !needsCreateAction && !saveError && draftWritable) || !account.ready || !permissions.ready || (!brief.trim() && !content.trim()) || !draftLoaded || needsPlanAnswers}
           onClick={() => void submitProject()}
         >
           {saving ? "Saving project…" : uncertain ? "Retry the same save" : mode === "plan" ? "Confirm plan & create" : "Create project"}

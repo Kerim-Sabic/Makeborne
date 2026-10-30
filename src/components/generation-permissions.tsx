@@ -3,11 +3,9 @@ import {useEffect,useState} from "react";
 import type {GenerationConsent} from "@/lib/generation/submission-contract";
 import "@/app/generation-permissions.css";
 
-/** Account-bound declarations; changing accounts never carries another account's consent. */
-export function useGenerationConsent(accountId:string|null,initial:GenerationConsent|null=null) {
+/** Creating explicitly authorizes this request; mounting or restoring a draft does not. */
+export function useGenerationConsent(accountId:string|null) {
   const [access,setAccess]=useState<{accountId:string;enabled:boolean}|null>(null);
-  const [permissions,setPermissions]=useState(()=>({accountId,processing:initial?.processingConsent===true,
-    external:initial?.externalProcessingConsent??false,rights:initial?.sourceRightsConfirmed===true}));
   useEffect(()=>{
     if(!accountId)return;
     const controller=new AbortController();
@@ -19,21 +17,14 @@ export function useGenerationConsent(accountId:string|null,initial:GenerationCon
     });
     return()=>controller.abort();
   },[accountId]);
-  const processing=permissions.accountId===accountId&&permissions.processing;
-  const rights=permissions.accountId===accountId&&permissions.rights;
-  function update(field:"processing"|"rights",value:boolean) {
-    setPermissions(previous=>({...(previous.accountId===accountId?previous:{accountId,processing:false,external:false,rights:false}),
-      [field]:value,...(field==="processing"?{external:value}:{})}));
+  const ready=!accountId||access?.accountId===accountId;
+  function authorizeSubmission():GenerationConsent {
+    if(!accountId||!ready)throw new Error("Wait for your account to finish loading before creating.");
+    return {processingConsent:true,externalProcessingConsent:true,sourceRightsConfirmed:true};
   }
-  const consent:GenerationConsent|null=accountId&&processing&&rights?{processingConsent:true,externalProcessingConsent:permissions.external,sourceRightsConfirmed:true}:null;
-  return {ready:!accountId||access?.accountId===accountId,enabled:!!accountId&&access?.accountId===accountId&&access.enabled,
-    processing,rights,consent,setProcessing:(value:boolean)=>update("processing",value),setRights:(value:boolean)=>update("rights",value)};
+  return {ready,enabled:!!accountId&&access?.accountId===accountId&&access.enabled,authorizeSubmission};
 }
 
-export default function GenerationPermissions({value,disabled=false}:{value:ReturnType<typeof useGenerationConsent>;disabled?:boolean}) {
-  return <div className="generation-permissions" role="group" aria-label="Creation permissions">
-    <label className="generation-permission"><input type="checkbox" checked={value.processing} disabled={disabled} onChange={event=>value.setProcessing(event.target.checked)}/>Allow our AI service providers to process this brief.</label>
-    <label className="generation-permission"><input type="checkbox" checked={value.rights} disabled={disabled} onChange={event=>value.setRights(event.target.checked)}/>I have permission to use the supplied content and artwork.</label>
-    <p>Creating uses credits. Attached files stay on this device until separately approved for AI processing.</p>
-  </div>;
+export default function GenerationPermissions() {
+  return <p className="generation-permissions">By creating, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</p>;
 }
