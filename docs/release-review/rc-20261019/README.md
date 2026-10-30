@@ -3,7 +3,11 @@
 **Candidate:** branch `release/rc-20261019` (local, not pushed), code frozen at
 `a6e70c6f577aa5bf7654e72cd8d85b9977bd247e`. LF release archive (`git -c core.autocrlf=false archive a6e70c6`)
 sha256 `a9612e107dfb20e96ce54bee401feebc3b415e904cdb0981817f958c21c06f37`.
-**Written:** 2026-10-19 by the release-engineer session. No merge, push, production change or paid AI call was made.
+**Written:** 2026-10-19 by the release-engineer session. No paid AI call was made.
+**Released (owner-approved, 2026-10-19):** migration applied to production 12:02Z after a verified backup; PR
+[Kerim-Sabic/Makeborne#5](https://github.com/Kerim-Sabic/Makeborne/pull/5) merged as `d14bf303` 12:22Z; production
+deployment `dpl_BSTNcBDmzcEHDWSvoTV1pPpjq6cW` READY 12:26Z; post-deploy checks and the 30-minute watch passed.
+Record: `production/README.md`.
 
 ## Verdict
 
