@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Source_Serif_4 } from "next/font/google";
 import { SITE } from "@/lib/site-metadata";
+import SiteAnalytics from "@/components/site-analytics";
 import LaunchBanner from "@/components/launch/launch-banner";
 import { launchState } from "@/lib/launch/config";
 import "./globals.css";
@@ -47,7 +48,7 @@ export default function RootLayout({
   return (
     // Large-screen scaling (globals.css --ui-zoom) is off unless the server sets MAKEBORNE_UI_SCALE=on.
     <html lang="en" className={`${inter.variable} ${serif.variable}`} data-ui-scale={process.env.MAKEBORNE_UI_SCALE === "on" ? "on" : undefined}>
-      <body>{launch.enabled && <LaunchBanner launchAt={launch.launchAt} serverPhase={launch.phase} dateShort={launch.text.short} timeText={launch.text.time} testOverrides={launch.testOverrides} />}{children}</body>
+      <body>{launch.enabled && <LaunchBanner launchAt={launch.launchAt} serverPhase={launch.phase} dateShort={launch.text.short} timeText={launch.text.time} testOverrides={launch.testOverrides} />}{children}{process.env.VERCEL_ENV === "production" && <SiteAnalytics />}</body>
     </html>
   );
 }

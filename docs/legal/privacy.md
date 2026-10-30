@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated 26 October 2026 · Version 2026-10-26
+Last updated 30 October 2026 · Version 2026-10-30
 
 ## 1. Who is responsible
 
@@ -28,7 +28,7 @@ We have not appointed a data protection officer, because our core activities do 
 | Showcasing your work | The work you choose | Consent (opt-in) | Until you withdraw consent |
 | Launch waitlist | Email, when you joined, the notice version you saw, a campaign tag if your link carried one, one-way keyed hashes of your IP address and browser (the IP itself is not stored) | Consent (you ask to join) | Deleted 90 days after launch, or sooner on request; every waitlist email has an unsubscribe link |
 
-**Service quality.** Our own servers count visits to the home, pricing, sign-in, studio, client portal and help pages, once per browser per page per day, as a one-way hash of your IP address and browser details combined with a random value for that day. Each day's random value is deleted when the first visit is counted two or more days later; after that, stored hashes can no longer be matched to you. Browsers sending Global Privacy Control or Do Not Track are not counted. Error reports are scrubbed of email addresses, IDs, long tokens, long numbers and link query strings before they are stored. This is pattern matching, so other text in an error message can remain. Visit counts and error reports are deleted after about 400 days. No third-party analytics is used.
+**Service quality.** Our own servers count visits to the home, pricing, sign-in, studio, client portal and help pages, once per browser per page per day, as a one-way hash of your IP address and browser details combined with a random value for that day. Each day's random value is deleted when the first visit is counted two or more days later; after that, stored hashes can no longer be matched to you. Browsers sending Global Privacy Control or Do Not Track are not counted. Error reports are scrubbed of email addresses, IDs, long tokens, long numbers and link query strings before they are stored. This is pattern matching, so other text in an error message can remain. Visit counts and error reports are deleted after about 400 days. We also use Vercel Web Analytics for aggregate page views on selected public pages and the Studio entry page of makeborne.com. It reports page paths, referring sites, approximate location, browser and device information without analytics cookies or a persistent visitor identifier. We remove URL query strings and fragments, exclude private portal, review, admin and callback routes, and do not send project contents, account IDs or custom event data. Browsers sending Global Privacy Control or Do Not Track are not counted. The standard Pro reporting window is 12 months.
 
 We do not sell personal data, do not use it for advertising, and do not use your content to train AI models. Data exports you request are deleted after 72 hours. Backups are overwritten on their normal cycle.
 
@@ -37,7 +37,7 @@ We do not sell personal data, do not use it for advertising, and do not use your
 | Recipient | Role | Location and safeguard |
 |---|---|---|
 | Supabase (database, sign-in, files) | Processor | EU (Frankfurt); provider entity outside the EU, SCCs |
-| Vercel (app hosting; site builds) | Processor | EU (Frankfurt) for the app; builds in the US; SCCs |
+| Vercel (app hosting; site builds; aggregate web analytics) | Processor | EU (Frankfurt) for the app; builds in the US; SCCs |
 | Cloudflare (published sites, forms, storage) | Processor | Global network; EU-US Data Privacy Framework and SCCs |
 | DigitalOcean (publishing server) | Processor | United Kingdom (adequacy decision) |
 | Anthropic (AI text) | Processor | US; SCCs; no training on API data |
