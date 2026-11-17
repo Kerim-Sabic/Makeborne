@@ -4,8 +4,8 @@ export { WITHDRAWAL_CONSENT_VERSION } from "../billing/plans";
 
 export const LEGAL_VERSION = "2026-10-26";
 export const LEGAL_UPDATED = "26 October 2026";
-export const PRIVACY_VERSION = "2026-10-30";
-export const PRIVACY_UPDATED = "30 October 2026";
+export const PRIVACY_VERSION = "2026-11-17";
+export const PRIVACY_UPDATED = "17 November 2026";
 export const LEGAL_CONTACT = "admin@makeborne.com";
 
 /** The legal pages, in footer order. `file` is the source in docs/legal. */

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Inter, Source_Serif_4 } from "next/font/google";
 import { SITE } from "@/lib/site-metadata";
 import SiteAnalytics from "@/components/site-analytics";
+import AdMeasurement from "@/components/ad-measurement";
 import LaunchBanner from "@/components/launch/launch-banner";
 import { launchState } from "@/lib/launch/config";
 import "./globals.css";
@@ -45,10 +47,13 @@ export default function RootLayout({
 }) {
   // Launch countdown banner (informational; it never changes sales). Hidden once MAKEBORNE_LAUNCH_COUNTDOWN is not "on".
   const launch = launchState();
+  // Opt-in Whop Pixel: production only; MAKEBORNE_AD_MEASUREMENT_TEST_HOST (e.g. localhost) exercises it in local checks.
+  const production = process.env.VERCEL_ENV === "production";
+  const adTestHost = production ? undefined : process.env.MAKEBORNE_AD_MEASUREMENT_TEST_HOST || undefined;
   return (
     // Large-screen scaling (globals.css --ui-zoom) is off unless the server sets MAKEBORNE_UI_SCALE=on.
     <html lang="en" className={`${inter.variable} ${serif.variable}`} data-ui-scale={process.env.MAKEBORNE_UI_SCALE === "on" ? "on" : undefined}>
-      <body>{launch.enabled && <LaunchBanner launchAt={launch.launchAt} serverPhase={launch.phase} dateShort={launch.text.short} timeText={launch.text.time} testOverrides={launch.testOverrides} />}{children}{process.env.VERCEL_ENV === "production" && <SiteAnalytics />}</body>
+      <body>{launch.enabled && <LaunchBanner launchAt={launch.launchAt} serverPhase={launch.phase} dateShort={launch.text.short} timeText={launch.text.time} testOverrides={launch.testOverrides} />}{children}{production && <SiteAnalytics />}{(production || adTestHost) && <Suspense fallback={null}><AdMeasurement testHost={adTestHost} /></Suspense>}</body>
     </html>
   );
 }
