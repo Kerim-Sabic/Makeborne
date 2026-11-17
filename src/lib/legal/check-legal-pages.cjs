@@ -47,8 +47,8 @@ check("Privacy Policy has purposes with legal bases and retention, recipients, t
   const heads = tables.map(table => table.head.map(cell => cell.map(part => part.text).join("")).join("|"));
   assert.ok(heads.includes("Purpose|Data|Legal basis|Kept"), heads.join(" / "));
   for (const provider of ["Supabase", "Vercel", "Cloudflare", "DigitalOcean", "Anthropic", "OpenAI", "Resend", "Whop", "Google", "GitHub", "OpenStreetMap"]) assert.match(body, new RegExp(provider), provider);
-  for (const right of [/access/, /portability/, /correction/, /deletion/, /restrict/, /object/, /withdraw consent/, /complain to a supervisory authority/, /Personal Data Protection Agency/, /ICO/, /ANPD/, /do not sell or share/]) assert.match(body, right);
-  for (const needle of [/EU representative \(GDPR Art\. 27\): to be appointed/, /data protection officer/, /no EU adequacy decision/, /Standard Contractual Clauses/, /aged 18 or over/, /Lead finder/, /customer, who is the controller/, /no consent banner is required/i, /Limited Use/]) assert.match(body, needle);
+  for (const right of [/access/, /portability/, /correction/, /deletion/, /restrict/, /object/, /withdraw consent/, /complain to a supervisory authority/, /Personal Data Protection Agency/, /ICO/, /ANPD/, /do not sell personal information/, /cross-context advertising \(our ad measurement\) only if you allow it/]) assert.match(body, right);
+  for (const needle of [/EU representative \(GDPR Art\. 27\): to be appointed/, /data protection officer/, /no EU adequacy decision/, /Standard Contractual Clauses/, /aged 18 or over/, /Lead finder/, /customer, who is the controller/, /needs no consent/, /Ad measurement \(only with your consent\)/, /Do Not Track or Global Privacy Control/, /Limited Use/]) assert.match(body, needle);
 });
 
 check("DPA has Art. 28 duties, breach notice, sub-processors with objection, SCC module 2 and three annexes", () => {

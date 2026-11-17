@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated 30 October 2026 · Version 2026-10-30
+Last updated 17 November 2026 · Version 2026-11-17
 
 ## 1. Who is responsible
 
@@ -26,11 +26,12 @@ We have not appointed a data protection officer, because our core activities do 
 | Visit counts | One-way daily hash of IP and browser (no cookies) | Legitimate interest | Counts about 400 days (see below) |
 | Account emails | Email address | Contract | As account |
 | Showcasing your work | The work you choose | Consent (opt-in) | Until you withdraw consent |
+| Ad measurement (only if you allow it) | The Whop Pixel's cookie ID, the public Makeborne pages you visit and when, the referring site, browser, device, language and time zone, a browser fingerprint, and Meta ad cookie values if your browser already has them | Consent | Until you withdraw it; the cookie lasts up to two years, and Whop keeps what it receives under its own policy |
 | Launch waitlist | Email, when you joined, the notice version you saw, a campaign tag if your link carried one, one-way keyed hashes of your IP address and browser (the IP itself is not stored) | Consent (you ask to join) | Deleted 90 days after launch, or sooner on request; every waitlist email has an unsubscribe link |
 
 **Service quality.** Our own servers count visits to the home, pricing, sign-in, studio, client portal and help pages, once per browser per page per day, as a one-way hash of your IP address and browser details combined with a random value for that day. Each day's random value is deleted when the first visit is counted two or more days later; after that, stored hashes can no longer be matched to you. Browsers sending Global Privacy Control or Do Not Track are not counted. Error reports are scrubbed of email addresses, IDs, long tokens, long numbers and link query strings before they are stored. This is pattern matching, so other text in an error message can remain. Visit counts and error reports are deleted after about 400 days. We also use Vercel Web Analytics for aggregate page views on selected public pages and the Studio entry page of makeborne.com. It reports page paths, referring sites, approximate location, browser and device information without analytics cookies or a persistent visitor identifier. We remove URL query strings and fragments, exclude private portal, review, admin and callback routes, and do not send project contents, account IDs or custom event data. Browsers sending Global Privacy Control or Do Not Track are not counted. The standard Pro reporting window is 12 months.
 
-We do not sell personal data, do not use it for advertising, and do not use your content to train AI models. Data exports you request are deleted after 72 hours. Backups are overwritten on their normal cycle.
+We do not sell personal data and do not use your content to train AI models. We use personal data for advertising only to measure our own ads, and only if you allow it (see section 6). Data exports you request are deleted after 72 hours. Backups are overwritten on their normal cycle.
 
 ## 3. Who receives data
 
@@ -43,7 +44,7 @@ We do not sell personal data, do not use it for advertising, and do not use your
 | Anthropic (AI text) | Processor | US; SCCs; no training on API data |
 | OpenAI (AI images, when switched on) | Processor | US; SCCs; no training on API data |
 | Resend (account emails) | Processor | Sent from the EU; US company; Data Privacy Framework and SCCs |
-| Whop (checkout and subscriptions) | Independent controller | US; its own privacy policy; SCCs for data it shares with us |
+| Whop (checkout and subscriptions; ad measurement if you allow it) | Independent controller | US; its own privacy policy; SCCs for data it shares with us |
 | Google, GitHub (sign-in; Gmail or repository access only if you connect them) | Independent controllers | Their own policies; we follow Google's API User Data Policy, including Limited Use |
 | OpenStreetMap services (Nominatim, Overpass and community mirrors) | Receive lead-finder search terms only | Not your personal data |
 
@@ -59,13 +60,15 @@ We make no decisions with legal or similarly significant effects by automated me
 
 ## 6. Cookies and browser storage
 
-We use only what Makeborne needs to work, so no consent banner is required:
+Apart from ad measurement below, we use only what Makeborne needs to work, which needs no consent:
 
 - Sign-in cookies set by Supabase after you sign in;
 - a short-lived (20-minute) cookie on private preview addresses, when previews are on;
 - browser storage (local storage and IndexedDB) for drafts, attachments, layout and checkout choices, kept on your device until you clear it.
 
-Published Makeborne sites set no cookies of ours. We will ask for consent before adding any analytics or advertising cookies.
+**Ad measurement (only with your consent).** On our public pages (home, plans, sign-in, templates, help and these legal pages) we ask whether we may measure our ads. Only if you choose Allow does the Whop Pixel load. It sets cookies such as _wuid that last up to two years, records the public pages you visit, the referring site, browser, device, language and time zone, may compute a browser fingerprint, and reads Meta's ad cookies if your browser already has them, so that Whop can tell us which ads brought visitors. It never runs in the studio, your projects, client portals, review links or sign-in callbacks, never on a page address carrying anything but campaign tags, and never for browsers sending Do Not Track or Global Privacy Control. Your choice is kept in this browser for six months. You can change it at any time under [Your ad measurement choice](/privacy#ad-measurement) on this page, which also removes the pixel's cookies from our site.
+
+Published Makeborne sites set no cookies of ours. We will ask for consent before adding any other analytics or advertising cookies.
 
 ## 7. Your rights
 
@@ -77,7 +80,7 @@ You can complain to a supervisory authority: in Bosnia and Herzegovina, the Pers
 |---|---|
 | Bosnia and Herzegovina | Rights under the Law on Personal Data Protection (2025), as above |
 | United Kingdom, Switzerland | The same rights under UK GDPR and the Swiss FADP; complain to the ICO or the FDPIC |
-| United States (state laws such as California's) | Know, access, correct and delete; we do not sell or share personal information for cross-context advertising; no discrimination for using your rights; you may use an authorised agent and appeal a refusal by emailing us |
+| United States (state laws such as California's) | Know, access, correct and delete; we do not sell personal information, and share it for cross-context advertising (our ad measurement) only if you allow it, which you can withdraw at any time on this page; no discrimination for using your rights; you may use an authorised agent and appeal a refusal by emailing us |
 | Brazil (LGPD) | Confirmation, access, correction, anonymisation, portability, deletion, information about sharing, and complaint to the ANPD |
 | Canada, Australia | Access and correction, and complaint to the Privacy Commissioner (OPC or OAIC) |
 

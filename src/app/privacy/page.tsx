@@ -1,4 +1,5 @@
 import LegalDocument from "@/components/legal/legal-document";
+import { AdMeasurementSettings } from "@/components/ad-measurement";
 import { LEGAL_DOCUMENTS } from "@/lib/legal/versions";
 import { publicPageMetadata } from "@/lib/site-metadata";
 
@@ -7,5 +8,8 @@ export const metadata = publicPageMetadata(doc.path, doc.title, doc.description)
 
 /** Source: docs/legal/privacy.md (version and date in src/lib/legal/versions.ts). */
 export default function Page() {
-  return <LegalDocument file={doc.file} />;
+  return <LegalDocument file={doc.file}>
+    <h2 id="ad-measurement">Your ad measurement choice</h2>
+    <AdMeasurementSettings />
+  </LegalDocument>;
 }

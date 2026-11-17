@@ -1,0 +1,39 @@
+/* Opt-in ad measurement banner: bottom corner, both choices equally prominent. */
+.banner {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  z-index: 80;
+  display: grid;
+  gap: 12px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 12px 32px rgb(22 24 29 / 0.14);
+  font: var(--type-control) / 1.5 var(--sans);
+}
+.banner p { margin: 0; color: var(--muted); }
+.banner strong { display: block; margin-bottom: 4px; color: var(--ink); font-size: var(--type-body); }
+.banner a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions button {
+  flex: 1 1 0;
+  min-height: 40px;
+  padding: 0 12px;
+  white-space: nowrap;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 var(--type-control) / 1 var(--sans);
+  cursor: pointer;
+}
+.actions button:hover { background: var(--canvas); }
+.actions button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.settings { display: grid; gap: 12px; margin: 8px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.settings p { margin: 0; }
+.settings .actions { justify-content: flex-start; }
+.settings .actions button { flex: 0 1 auto; }
